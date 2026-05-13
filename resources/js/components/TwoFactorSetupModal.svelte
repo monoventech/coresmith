@@ -7,7 +7,7 @@
     import { Spinner } from '@/components/ui/spinner'
     import { createTwoFactorAuth } from '@/lib/two-factor-auth.svelte'
     import { Form } from '@inertiajs/svelte'
-    import { Check, Copy, ScanLine } from 'lucide-svelte'
+    import { Check, Copy, ScanLine } from '@lucide/svelte'
     import { tick } from 'svelte'
 
     interface Props {

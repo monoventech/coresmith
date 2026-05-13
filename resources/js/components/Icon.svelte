@@ -1,5 +1,5 @@
 <script lang="ts">
-    import * as icons from 'lucide-svelte'
+    import * as icons from '@lucide/svelte'
 
     interface Props {
         name: string

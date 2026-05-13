@@ -3,7 +3,7 @@
     import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
     import type { User } from '@/types'
     import { Link, router } from '@inertiajs/svelte'
-    import { LogOut, Settings } from 'lucide-svelte'
+    import { LogOut, Settings } from '@lucide/svelte'
 
     interface Props {
         user: User

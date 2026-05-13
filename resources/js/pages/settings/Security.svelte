@@ -20,7 +20,7 @@
     import { Label } from '@/components/ui/label'
     import { twoFactorAuthState } from '@/lib/twoFactorAuth.svelte'
     import { Form } from '@inertiajs/svelte'
-    import ShieldCheck from 'lucide-svelte/icons/shield-check'
+    import ShieldCheck from '@lucide/svelte/icons/shield-check'
     import { onDestroy } from 'svelte'
 
     let {

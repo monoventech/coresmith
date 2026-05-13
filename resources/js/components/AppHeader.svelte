@@ -13,7 +13,7 @@
     import type { BreadcrumbItem } from '@/types'
     import { Link, page } from '@inertiajs/svelte'
     import { cva } from 'class-variance-authority'
-    import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-svelte'
+    import { BookOpen, Folder, LayoutGrid, Menu, Search } from '@lucide/svelte'
 
     interface NavItem {
         title: string
