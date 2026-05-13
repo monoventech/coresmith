@@ -11,3 +11,8 @@ test('welcome page renders Coresmith branding', function () {
     $response->assertStatus(200);
     expect($response->getContent())->toContain('Coresmith');
 });
+
+test('telescope routes are removed', function () {
+    $response = $this->get('/telescope');
+    $response->assertStatus(404);
+});
