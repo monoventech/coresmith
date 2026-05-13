@@ -1,5 +1,9 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
+    "name": "coresmith",
+    "version": "0.1.0",
+    "description": "Coresmith — self-hostable server management and deployment platform",
+    "license": "Elastic-2.0",
     "private": true,
     "type": "module",
     "scripts": {

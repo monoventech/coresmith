@@ -1,13 +1,16 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "oseughu/larasvelte",
+    "name": "monoventech/coresmith",
     "type": "project",
-    "description": "An opinionated laravel starter kit built with bun, sqlite, svelte 5, inertia 2 and shadcn-svelte",
+    "description": "Coresmith — self-hostable server management and deployment platform",
     "keywords": [
+        "coresmith",
+        "deployment",
+        "server-management",
         "laravel",
-        "framework"
+        "svelte"
     ],
-    "license": "MIT",
+    "license": "Elastic-2.0",
     "require": {
         "php": "^8.3",
         "inertiajs/inertia-laravel": "^3.0",

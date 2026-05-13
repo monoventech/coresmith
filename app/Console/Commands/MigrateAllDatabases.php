@@ -25,7 +25,7 @@ class MigrateAllDatabases extends Command
     public function handle(): void
     {
         // Get APP_NAME and generate SQLite database names
-        $appName = Str::snake(env('APP_NAME', 'larasvelte')); // Default to "laravel" if APP_NAME is not set
+        $appName = Str::snake(env('APP_NAME', 'coresmith')); // Default to "laravel" if APP_NAME is not set
         $databasePath = database_path("{$appName}.sqlite");
         $queuePath = database_path("{$appName}_queue.sqlite");
         $cachePath = database_path("{$appName}_cache.sqlite");
