@@ -16,3 +16,21 @@ test('telescope routes are removed', function () {
     $response = $this->get('/telescope');
     $response->assertStatus(404);
 });
+
+test('coresmith config has billing_enabled false by default', function () {
+    expect(config('coresmith.billing_enabled'))->toBeFalse();
+});
+
+test('coresmith config exposes vault_key entry', function () {
+    expect(config('coresmith'))->toHaveKey('vault_key');
+});
+
+test('inertia shares appName, billingEnabled, vaultKeyConfigured', function () {
+    $response = $this->get('/');
+    $response->assertInertia(
+        fn ($page) => $page
+            ->where('appName', 'Coresmith')
+            ->where('billingEnabled', false)
+            ->where('vaultKeyConfigured', false)
+    );
+});

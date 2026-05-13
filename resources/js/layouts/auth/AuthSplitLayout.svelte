@@ -12,7 +12,7 @@
         children?: Snippet;
     } = $props();
 
-    const name = $derived(page.props.name);
+    const appName = $derived(page.props.appName);
 </script>
 
 <div
@@ -27,7 +27,7 @@
             class="relative z-20 flex items-center text-lg font-medium"
         >
             <AppLogoIcon class="mr-2 size-8 fill-current text-white" />
-            {name}
+            {appName}
         </Link>
     </div>
     <div class="lg:p-8">
