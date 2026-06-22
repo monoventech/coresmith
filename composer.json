@@ -14,12 +14,20 @@
     "require": {
         "php": "^8.3",
         "inertiajs/inertia-laravel": "^3.0",
+        "laravel/cashier": "^16.5",
         "laravel/fortify": "^1.34",
         "laravel/framework": "^13.7",
+        "laravel/horizon": "^5.47",
+        "laravel/reverb": "^1.10",
         "laravel/sanctum": "^4.2.0",
         "laravel/tinker": "^3.0",
+        "phpseclib/phpseclib": "~3.0",
+        "pragmarx/google2fa-laravel": "^3.0",
         "resend/resend-php": "^0.15.2",
-        "tightenco/ziggy": "^2.5.3"
+        "sentry/sentry-laravel": "^4.25",
+        "spatie/laravel-activitylog": "^5.0",
+        "tightenco/ziggy": "^2.5.3",
+        "valorin/pwned-validator": "^1.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.24",
