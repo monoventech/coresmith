@@ -31,6 +31,12 @@ test('inertia shares appName, billingEnabled, vaultKeyConfigured', function () {
         fn ($page) => $page
             ->where('appName', 'Coresmith')
             ->where('billingEnabled', false)
-            ->where('vaultKeyConfigured', false)
+            ->where('vaultKeyConfigured', true)
     );
+});
+
+test('vaultKeyConfigured is false when no vault key is set', function () {
+    config(['coresmith.vault_key' => null]);
+
+    $this->get('/')->assertInertia(fn ($page) => $page->where('vaultKeyConfigured', false));
 });

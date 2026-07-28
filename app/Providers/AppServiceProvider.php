@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(
+            VaultEncryptor::class,
+            fn (): VaultEncryptor => new VaultEncryptor(config('coresmith.vault_key')),
+        );
     }
 
     /**
