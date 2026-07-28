@@ -16,4 +16,9 @@ final class SSHAuthenticationException extends RuntimeException
     {
         return new self("SSH authentication failed for {$user}@{$ipAddress}.");
     }
+
+    public static function notAPrivateKey(string $ipAddress): self
+    {
+        return new self("The stored credential for {$ipAddress} is not a usable SSH private key.");
+    }
 }

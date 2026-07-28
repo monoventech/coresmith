@@ -1,0 +1,110 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Models\Server;
+use App\Services\Runtime\AsdfManager;
+use App\Services\Runtime\BuildDependencies;
+use App\Services\SSH\SSHConnection;
+use Tests\Support\FakeSSHTransport;
+
+function asdfConnection(FakeSSHTransport $transport): SSHConnection
+{
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+
+    return (new SSHConnection($server, $transport))->connect();
+}
+
+test('binary paths resolve into the shared install directory', function () {
+    $asdf = new AsdfManager;
+
+    expect($asdf->binaryPath('php', '8.5.5'))->toBe('/opt/asdf-data/installs/php/8.5.5/bin/php')
+        ->and($asdf->binaryPath('ruby', '3.3.6'))->toBe('/opt/asdf-data/installs/ruby/3.3.6/bin/ruby')
+        ->and($asdf->fpmBinaryPath('8.5.5'))->toBe('/opt/asdf-data/installs/php/8.5.5/sbin/php-fpm');
+});
+
+test('the nodejs runtime resolves to the node binary', function () {
+    expect((new AsdfManager)->binaryPath('nodejs', '24.15.0'))
+        ->toBe('/opt/asdf-data/installs/nodejs/24.15.0/bin/node');
+});
+
+test('an explicit binary name overrides the default', function () {
+    expect((new AsdfManager)->binaryPath('nodejs', '24.15.0', 'npm'))
+        ->toBe('/opt/asdf-data/installs/nodejs/24.15.0/bin/npm');
+});
+
+test('detects an installed version', function () {
+    $connection = asdfConnection((new FakeSSHTransport)->queueResult("yes\n", 0));
+
+    expect((new AsdfManager)->isInstalled($connection, 'php', '8.5.5'))->toBeTrue();
+});
+
+test('detects a missing version', function () {
+    $connection = asdfConnection((new FakeSSHTransport)->queueResult("no\n", 0));
+
+    expect((new AsdfManager)->isInstalled($connection, 'php', '8.5.5'))->toBeFalse();
+});
+
+test('installing an already present version does no work', function () {
+    $transport = (new FakeSSHTransport)->queueResult("yes\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+
+    expect($transport->commands())->toHaveCount(1);
+});
+
+test('installing a missing version installs build dependencies first then asdf installs it', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+
+    $commands = $transport->commands();
+
+    expect($commands[1])->toContain('apt-get install -y')
+        ->and($commands[1])->toContain("'libonig-dev'")
+        ->and($commands[2])->toContain('sudo -u coresmith')
+        ->and($commands[2])->toContain('asdf install php 8.5.5');
+});
+
+test('runtime installs run as the coresmith user, never root directly', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'nodejs', '24.15.0');
+
+    $commands = $transport->commands();
+
+    expect(end($commands))->toContain('sudo -u coresmith bash -lc');
+});
+
+test('installed versions are listed and sorted', function () {
+    $connection = asdfConnection((new FakeSSHTransport)->queueResult("8.5.5\n8.4.17\n\n", 0));
+
+    expect((new AsdfManager)->installedVersions($connection, 'php'))->toBe(['8.4.17', '8.5.5']);
+});
+
+test('an empty runtime directory yields no versions', function () {
+    $connection = asdfConnection((new FakeSSHTransport)->queueResult('', 0));
+
+    expect((new AsdfManager)->installedVersions($connection, 'php'))->toBe([]);
+});
+
+test('orphaned versions exclude those still in use', function () {
+    $connection = asdfConnection((new FakeSSHTransport)->queueResult("8.5.5\n8.4.17\n", 0));
+
+    expect((new AsdfManager)->orphanedVersions($connection, 'php', ['8.5.5']))->toBe(['8.4.17']);
+});
+
+test('build dependencies are distro specific', function () {
+    expect(BuildDependencies::for('php', 'ubuntu'))->toContain('libonig-dev')
+        ->and(BuildDependencies::for('php', 'rocky'))->toContain('oniguruma-devel')
+        ->and(BuildDependencies::for('ruby', 'debian'))->toContain('zlib1g-dev')
+        ->and(BuildDependencies::for('ruby', 'fedora'))->toContain('zlib-devel');
+});
+
+test('a runtime with no build dependencies yields an empty list', function () {
+    expect(BuildDependencies::for('bun', 'ubuntu'))->toBe([])
+        ->and(BuildDependencies::for('php', null))->toBe([]);
+});

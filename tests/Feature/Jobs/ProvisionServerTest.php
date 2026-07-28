@@ -57,19 +57,34 @@ test('phase 2 installs base packages through the abstraction', function () {
         ->and($commands)->toContain("'build-essential'");
 });
 
-test('both phases are recorded', function () {
+test('every implemented phase is recorded', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
 
     provision($server, provisioningTransport());
 
-    expect($server->fresh()->provisioning_phase)->toBe(2);
+    expect($server->fresh()->provisioning_phase)->toBe(3);
+});
+
+test('phase 3 installs asdf as the coresmith user and adds every plugin', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport();
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('useradd --system')
+        ->and($commands)->toContain('asdf-vm/asdf.git')
+        ->and($commands)->toContain('asdf plugin add php')
+        ->and($commands)->toContain('asdf plugin add bun')
+        ->and($commands)->toContain('sudo -u coresmith');
 });
 
 test('a re-run skips already completed phases', function () {
     $server = Server::factory()->create([
         'host_key_fingerprint' => null,
         'os_name' => 'ubuntu',
-        'provisioning_phase' => 2,
+        'provisioning_phase' => 3,
     ]);
     $transport = new FakeSSHTransport;
 

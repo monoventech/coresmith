@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\ServerStatus;
 use App\Models\Server;
+use App\Services\Runtime\AsdfInstaller;
 use App\Services\Server\BasePackages;
 use App\Services\Server\OsDetector;
 use App\Services\Server\PackageManagerFactory;
@@ -42,6 +43,7 @@ final class ProvisionServer implements ShouldQueue
         try {
             $this->phase(1, fn () => $this->detectOperatingSystem($connection, $detector));
             $this->phase(2, fn () => $this->installBasePackages($connection));
+            $this->phase(3, fn () => app(AsdfInstaller::class)->install($connection));
         } catch (Throwable $e) {
             $this->fail_($e);
 

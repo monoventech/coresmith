@@ -12,6 +12,7 @@ use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\SSHAuthenticationException;
 use App\Models\Server;
 use App\Services\SSH\Contracts\SSHTransport;
+use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Crypt\PublicKeyLoader;
 use RuntimeException;
 
@@ -26,6 +27,11 @@ final class SSHConnection
         private readonly SSHTransport $transport,
     ) {}
 
+    public function server(): Server
+    {
+        return $this->server;
+    }
+
     public function connect(): static
     {
         if ($this->authenticated) {
@@ -37,6 +43,10 @@ final class SSHConnection
         $this->verifyHostKey();
 
         $key = PublicKeyLoader::load($this->server->ssh_private_key);
+
+        if (!$key instanceof PrivateKey) {
+            throw SSHAuthenticationException::notAPrivateKey($this->server->ip_address);
+        }
 
         if (!$this->transport->login($this->server->ssh_user, $key)) {
             throw SSHAuthenticationException::forServer($this->server->ip_address, $this->server->ssh_user);
