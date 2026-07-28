@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { Breadcrumb, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, Item } from '@/components/ui/breadcrumb'
     import { Link } from '@inertiajs/svelte'
+    import { Breadcrumb, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator, Item } from '@/components/ui/breadcrumb'
 
     interface BreadcrumbItem {
         title: string

@@ -1,10 +1,10 @@
 <script lang="ts">
-    import UserInfo from '@/components/UserInfo.svelte'
-    import UserMenuContent from '@/components/UserMenuContent.svelte'
-    import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-    import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
     import { page } from '@inertiajs/svelte'
     import { ChevronsUpDown } from '@lucide/svelte'
+    import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+    import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
+    import UserInfo from '@/components/UserInfo.svelte'
+    import UserMenuContent from '@/components/UserMenuContent.svelte'
 
     const user = $derived(page.props.auth.user)
 </script>

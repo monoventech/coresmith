@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { Link, page } from '@inertiajs/svelte'
+    import { BookOpen, Folder, LayoutGrid, Menu, Search } from '@lucide/svelte'
+    import { cva } from 'class-variance-authority'
     import AppLogo from '@/components/AppLogo.svelte'
     import AppLogoIcon from '@/components/AppLogoIcon.svelte'
     import Breadcrumbs from '@/components/Breadcrumbs.svelte'
@@ -11,9 +14,6 @@
     import UserMenuContent from '@/components/UserMenuContent.svelte'
     import { getInitials } from '@/hooks/useInitials'
     import type { BreadcrumbItem } from '@/types'
-    import { Link, page } from '@inertiajs/svelte'
-    import { cva } from 'class-variance-authority'
-    import { BookOpen, Folder, LayoutGrid, Menu, Search } from '@lucide/svelte'
 
     interface NavItem {
         title: string
@@ -55,12 +55,12 @@
     const rightNavItems: NavItem[] = [
         {
             title: 'Repository',
-            href: 'https://github.com/oseughu/svelte-starter-kit',
+            href: 'https://github.com/monoven/coresmith',
             icon: Folder
         },
         {
             title: 'Documentation',
-            href: 'https://laravel.com/docs/starter-kits',
+            href: 'https://coresmith.io/docs',
             icon: BookOpen
         }
     ]
@@ -86,7 +86,7 @@
                                 {#each mainNavItems as item (item.title)}
                                     <a
                                         href={item.href}
-                                        class="flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent {activeItemStyles(
+                                        class="flex items-center gap-x-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent {activeItemStyles(
                                             item.href
                                         )}"
                                     >

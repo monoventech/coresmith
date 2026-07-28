@@ -1,11 +1,11 @@
 <script lang="ts">
-    import { themeState } from '@/lib/theme.svelte'
-    import { cn } from '@/lib/utils'
-    import type { Appearance } from '@/types'
     import Monitor from '@lucide/svelte/icons/monitor'
     import Moon from '@lucide/svelte/icons/moon'
     import Sun from '@lucide/svelte/icons/sun'
     import type { Component, SvelteComponent } from 'svelte'
+    import { themeState } from '@/lib/theme.svelte'
+    import { cn } from '@/lib/utils'
+    import type { Appearance } from '@/types'
 
     const { appearance, updateAppearance } = themeState()
 

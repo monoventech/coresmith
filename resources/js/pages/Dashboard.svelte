@@ -10,12 +10,12 @@
 </script>
 
 <script lang="ts">
+    import { page } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import Heading from '@/components/Heading.svelte'
     import BlueprintRack from '@/components/illustrations/BlueprintRack.svelte'
     import { Button } from '@/components/ui/button'
-    import { page } from '@inertiajs/svelte'
 
     const user = $derived(page.props.auth.user)
     const firstName = $derived(user.name.split(' ')[0])
@@ -24,7 +24,7 @@
 <AppHead title="Dashboard" />
 
 <div class="px-6 py-8">
-    <Heading title="Welcome back, {firstName}" description="Everything you have provisioned lives here." />
+    <Heading title="Welcome back, {firstName}" mark={firstName} description="Everything you have provisioned lives here." />
 
     <EmptyState
         title="No servers yet"

@@ -2,8 +2,8 @@
     // Copyright 2026 Monoven Ltd. All rights reserved.
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
-    import { cn } from '@/lib/utils'
     import type { Snippet } from 'svelte'
+    import { cn } from '@/lib/utils'
 
     let {
         title,

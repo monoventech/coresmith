@@ -1,11 +1,11 @@
 <script lang="ts">
+    import { Link } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
     import Heading from '@/components/Heading.svelte'
     import { Separator } from '@/components/ui/separator'
     import { currentUrlState } from '@/lib/currentUrl.svelte'
     import { cn } from '@/lib/utils'
     import type { NavItem } from '@/types'
-    import { Link } from '@inertiajs/svelte'
-    import type { Snippet } from 'svelte'
 
     let {
         children
@@ -32,7 +32,7 @@
 </script>
 
 <div class="px-6 py-8">
-    <Heading title="Settings" description="Manage your profile and account settings" />
+    <Heading title="Settings" mark="Settings" description="Manage your profile and account settings" />
 
     <div class="flex flex-col gap-10 lg:flex-row lg:gap-16">
         <aside class="w-full lg:w-52 lg:shrink-0">

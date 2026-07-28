@@ -1,4 +1,5 @@
 <script lang="ts">
+    import type { Snippet } from 'svelte'
     import AppContent from '@/components/AppContent.svelte'
     import AppShell from '@/components/AppShell.svelte'
     import AppSidebar from '@/components/AppSidebar.svelte'
@@ -6,7 +7,6 @@
     import MonovenMark from '@/components/MonovenMark.svelte'
     import { Toaster } from '@/components/ui/sonner'
     import type { BreadcrumbItem } from '@/types'
-    import type { Snippet } from 'svelte'
 
     let {
         breadcrumbs = [],

@@ -1,9 +1,9 @@
 <script lang="ts">
+    import { Link } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
     import AppLogoIcon from '@/components/AppLogoIcon.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
-    import { Link } from '@inertiajs/svelte'
-    import type { Snippet } from 'svelte'
 
     let {
         title = '',

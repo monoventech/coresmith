@@ -1,11 +1,11 @@
 <script lang="ts">
+    import { Link, page } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import AppLogoIcon from '@/components/AppLogoIcon.svelte'
     import BlueprintRack from '@/components/illustrations/BlueprintRack.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
     import { Button } from '@/components/ui/button'
-    import { Link, page } from '@inertiajs/svelte'
 
     let {
         canRegister = true

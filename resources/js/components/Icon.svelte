@@ -13,6 +13,7 @@
 
     const Component = $derived(() => {
         const iconName = name.charAt(0).toUpperCase() + name.slice(1)
+
         return (icons as Record<string, any>)[iconName]
     })
 

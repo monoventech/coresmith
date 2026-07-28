@@ -8,14 +8,14 @@
     "dir": "ltr",
     "lang": "en",
     "prefer_related_applications": false,
-    "background_color": "#ffffff",
-    "theme_color": "#000000",
+    "background_color": "#fefcf9",
+    "theme_color": "#2b73c8",
     "display": "standalone",
     "display_override": ["windows-controls-overlay"],
-    "orientation": "portrait",
+    "orientation": "any",
     "status_bar": "black-translucent",
-    "categories": ["productivity"],
-    "features": ["Cross Platform", "laravel svelte pwa starter"],
+    "categories": ["productivity", "developer"],
+    "features": ["Cross Platform"],
     "icons": [
         {
             "src": "/images/icons/icon-72x72.png",
@@ -80,9 +80,9 @@
     },
     "shortcuts": [
         {
-            "name": "Shortcut Link 1",
-            "description": "Shortcut Link 1 Description",
-            "url": "/shortcutlink1",
+            "name": "Dashboard",
+            "description": "Your servers and deployments",
+            "url": "/dashboard",
             "icons": [
                 {
                     "src": "/images/icons/icon-72x72.png",
@@ -91,9 +91,9 @@
             ]
         },
         {
-            "name": "Shortcut Link 2",
-            "description": "Shortcut Link 2 Description",
-            "url": "/shortcutlink2"
+            "name": "Settings",
+            "description": "Manage your profile and account",
+            "url": "/settings/profile"
         }
     ],
     "edge_side_panel": [],

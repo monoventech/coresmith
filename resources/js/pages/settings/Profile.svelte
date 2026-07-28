@@ -10,6 +10,7 @@
 </script>
 
 <script lang="ts">
+    import { Form, page } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import DeleteUser from '@/components/DeleteUser.svelte'
     import Heading from '@/components/Heading.svelte'
@@ -18,7 +19,6 @@
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
-    import { Form, page } from '@inertiajs/svelte'
 
     let {
         mustVerifyEmail,

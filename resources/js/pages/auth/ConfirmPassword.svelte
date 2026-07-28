@@ -6,13 +6,13 @@
 </script>
 
 <script lang="ts">
+    import { Form } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import InputError from '@/components/InputError.svelte'
     import PasswordInput from '@/components/PasswordInput.svelte'
     import { Button } from '@/components/ui/button'
     import { Label } from '@/components/ui/label'
     import { Spinner } from '@/components/ui/spinner'
-    import { Form } from '@inertiajs/svelte'
 </script>
 
 <AppHead title="Confirm password" />

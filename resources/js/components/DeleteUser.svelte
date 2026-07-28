@@ -1,11 +1,11 @@
 <script lang="ts">
+    import { Form } from '@inertiajs/svelte'
     import Heading from '@/components/Heading.svelte'
     import InputError from '@/components/InputError.svelte'
     import PasswordInput from '@/components/PasswordInput.svelte'
     import { Button } from '@/components/ui/button'
     import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
     import { Label } from '@/components/ui/label'
-    import { Form } from '@inertiajs/svelte'
 </script>
 
 <div class="space-y-6">

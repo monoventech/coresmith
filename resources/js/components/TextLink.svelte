@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { cn } from '@/lib/utils'
     import type { LinkComponentBaseProps, Method } from '@inertiajs/core'
     import { Link } from '@inertiajs/svelte'
     import type { Snippet } from 'svelte'
+    import { cn } from '@/lib/utils'
 
     let {
         href,

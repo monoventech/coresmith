@@ -10,8 +10,7 @@
 <span class="relative inline-block">
     {@render children?.()}
     <svg
-        class="pointer-events-none absolute -bottom-1 left-0 w-full"
-        height="10"
+        class="pointer-events-none absolute bottom-[-0.07em] left-0 h-[0.26em] w-full"
         viewBox="0 0 200 10"
         preserveAspectRatio="none"
         fill="none"

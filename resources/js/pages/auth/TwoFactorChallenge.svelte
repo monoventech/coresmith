@@ -1,10 +1,10 @@
 <script lang="ts">
+    import { Form, setLayoutProps } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import InputError from '@/components/InputError.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
-    import { Form, setLayoutProps } from '@inertiajs/svelte'
 
     let showRecoveryInput = $state(false)
     let code = $state('')

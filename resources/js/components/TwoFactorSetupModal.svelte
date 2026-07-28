@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { Form } from '@inertiajs/svelte'
+    import { Check, Copy, ScanLine } from '@lucide/svelte'
+    import { tick } from 'svelte'
     import AlertError from '@/components/AlertError.svelte'
     import InputError from '@/components/InputError.svelte'
     import { Button } from '@/components/ui/button'
@@ -6,9 +9,6 @@
     import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
     import { Spinner } from '@/components/ui/spinner'
     import { createTwoFactorAuth } from '@/lib/two-factor-auth.svelte'
-    import { Form } from '@inertiajs/svelte'
-    import { Check, Copy, ScanLine } from '@lucide/svelte'
-    import { tick } from 'svelte'
 
     interface Props {
         isOpen?: boolean
@@ -81,6 +81,7 @@
     $effect(() => {
         if (!isOpen) {
             resetModalState()
+
             return
         }
 

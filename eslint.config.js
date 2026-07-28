@@ -1,7 +1,7 @@
 import js from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
 import prettier from 'eslint-config-prettier/flat';
-import importPlugin from 'eslint-plugin-import';
+import importX from 'eslint-plugin-import-x';
 import svelte from 'eslint-plugin-svelte';
 import ts from 'typescript-eslint';
 
@@ -42,10 +42,10 @@ export default ts.config(
     },
     {
         plugins: {
-            import: importPlugin,
+            'import-x': importX,
         },
         settings: {
-            'import/resolver': {
+            'import-x/resolver': {
                 typescript: {
                     alwaysTryTypes: true,
                     project: './tsconfig.json',
@@ -55,6 +55,7 @@ export default ts.config(
         },
         rules: {
             'no-undef': 'off',
+            'svelte/no-navigation-without-resolve': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-vars': [
                 'error',
@@ -70,17 +71,7 @@ export default ts.config(
                     fixStyle: 'separate-type-imports',
                 },
             ],
-            'import/order': [
-                'error',
-                {
-                    groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-                    alphabetize: {
-                        order: 'asc',
-                        caseInsensitive: true,
-                    },
-                },
-            ],
-            'import/consistent-type-specifier-style': [
+            'import-x/consistent-type-specifier-style': [
                 'error',
                 'prefer-top-level',
             ],

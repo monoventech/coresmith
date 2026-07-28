@@ -1,8 +1,8 @@
 <script lang="ts">
-    import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
-    import type { NavItem } from '@/types'
-    import { currentUrlState } from '@/lib/currentUrl.svelte'
     import { Link } from '@inertiajs/svelte'
+    import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
+    import { currentUrlState } from '@/lib/currentUrl.svelte'
+    import type { NavItem } from '@/types'
 
     interface Props {
         items: NavItem[]

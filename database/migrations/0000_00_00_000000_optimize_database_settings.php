@@ -15,7 +15,7 @@ return new class extends Migration
         foreach ($connections as $connection) {
             $database = config("database.connections.{$connection}.database");
 
-            if ($database && $database !== ':memory:' && ! file_exists($database)) {
+            if ($database && $database !== ':memory:' && !file_exists($database)) {
                 touch($database);
             }
 

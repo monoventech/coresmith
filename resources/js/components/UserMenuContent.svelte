@@ -1,9 +1,9 @@
 <script lang="ts">
-    import UserInfo from '@/components/UserInfo.svelte'
-    import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
-    import type { User } from '@/types'
     import { Link, router } from '@inertiajs/svelte'
     import { LogOut, Settings } from '@lucide/svelte'
+    import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
+    import UserInfo from '@/components/UserInfo.svelte'
+    import type { User } from '@/types'
 
     interface Props {
         user: User
