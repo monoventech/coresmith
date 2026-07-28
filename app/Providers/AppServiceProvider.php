@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\SSH\SSHConnectionManager;
 use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -20,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
             VaultEncryptor::class,
             fn (): VaultEncryptor => new VaultEncryptor(config('coresmith.vault_key')),
         );
+
+        $this->app->singleton(SSHConnectionManager::class);
     }
 
     /**

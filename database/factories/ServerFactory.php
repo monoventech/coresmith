@@ -11,6 +11,8 @@ namespace Database\Factories;
 use App\Enums\ServerStatus;
 use App\Models\Server;
 use App\Models\Team;
+use App\Services\SSH\KeyPair;
+use App\Services\SSH\KeyPairGenerator;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,19 +20,23 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class ServerFactory extends Factory
 {
+    private static ?KeyPair $keyPair = null;
+
     /**
      * @return array<string, mixed>
      */
     public function definition(): array
     {
+        $keyPair = static::$keyPair ??= (new KeyPairGenerator)->generate();
+
         return [
             'team_id' => Team::factory(),
             'name' => fake()->domainWord().'-'.fake()->numberBetween(1, 99),
             'ip_address' => fake()->ipv4(),
             'ssh_port' => 22,
             'ssh_user' => 'root',
-            'ssh_private_key' => "-----BEGIN OPENSSH PRIVATE KEY-----\n".fake()->sha256()."\n-----END OPENSSH PRIVATE KEY-----",
-            'ssh_public_key' => 'ssh-ed25519 '.fake()->sha256(),
+            'ssh_private_key' => $keyPair->privateKey,
+            'ssh_public_key' => $keyPair->publicKey,
         ];
     }
 
