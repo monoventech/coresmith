@@ -65,7 +65,8 @@ test('installing a missing version installs build dependencies first then asdf i
     expect($commands[1])->toContain('apt-get install -y')
         ->and($commands[1])->toContain("'libonig-dev'")
         ->and($commands[2])->toContain('sudo -u coresmith')
-        ->and($commands[2])->toContain('asdf install php 8.5.5');
+        ->and($commands[2])->toContain("CORESMITH_VERSION='8.5.5'")
+        ->and($commands[2])->toContain('asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"');
 });
 
 test('runtime installs run as the coresmith user, never root directly', function () {
@@ -76,7 +77,7 @@ test('runtime installs run as the coresmith user, never root directly', function
 
     $commands = $transport->commands();
 
-    expect(end($commands))->toContain('sudo -u coresmith bash -lc');
+    expect(end($commands))->toContain('sudo -u coresmith env ');
 });
 
 test('installed versions are listed and sorted', function () {

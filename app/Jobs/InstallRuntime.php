@@ -27,6 +27,8 @@ final class InstallRuntime implements ShouldQueue
         private readonly string $runtime,
         private readonly string $version,
     ) {
+        AsdfManager::assertValid($runtime, $version);
+
         $this->onQueue('provisioning');
     }
 
