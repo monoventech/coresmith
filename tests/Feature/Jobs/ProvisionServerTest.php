@@ -62,7 +62,7 @@ test('every implemented phase is recorded', function () {
 
     provision($server, provisioningTransport());
 
-    expect($server->fresh()->provisioning_phase)->toBe(3);
+    expect($server->fresh()->provisioning_phase)->toBe(4);
 });
 
 test('phase 3 installs asdf as the coresmith user and adds every plugin', function () {
@@ -84,7 +84,7 @@ test('a re-run skips already completed phases', function () {
     $server = Server::factory()->create([
         'host_key_fingerprint' => null,
         'os_name' => 'ubuntu',
-        'provisioning_phase' => 3,
+        'provisioning_phase' => 4,
     ]);
     $transport = new FakeSSHTransport;
 
@@ -136,4 +136,20 @@ test('an unsupported distribution fails provisioning cleanly', function () {
 
     expect($server->fresh()->status)->toBe(ServerStatus::Failed)
         ->and($server->fresh()->provisioning_phase)->toBeNull();
+});
+
+test('phase 4 creates the coresmith directory tree with locked down secret dirs', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport();
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('mkdir -p /var/coresmith/apps')
+        ->and($commands)->toContain('chmod 750 /var/coresmith/apps')
+        ->and($commands)->toContain('mkdir -p /etc/coresmith/env')
+        ->and($commands)->toContain('chown root:root /etc/coresmith/env')
+        ->and($commands)->toContain('chmod 700 /etc/coresmith/env')
+        ->and($commands)->toContain('chmod 700 /etc/coresmith/deploy-keys');
 });
