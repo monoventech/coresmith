@@ -22,7 +22,7 @@
     {#if showAvatar}
         <AvatarImage src={user.avatar!} alt={user.name} />
     {/if}
-    <AvatarFallback class="rounded-lg text-black dark:text-white">
+    <AvatarFallback class="rounded-lg">
         {getInitials(user.name)}
     </AvatarFallback>
 </Avatar>

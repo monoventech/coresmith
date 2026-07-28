@@ -11,24 +11,33 @@
 
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
-    import PlaceholderPattern from '@/components/PlaceholderPattern.svelte'
+    import EmptyState from '@/components/EmptyState.svelte'
+    import Heading from '@/components/Heading.svelte'
+    import BlueprintRack from '@/components/illustrations/BlueprintRack.svelte'
+    import { Button } from '@/components/ui/button'
+    import { page } from '@inertiajs/svelte'
+
+    const user = $derived(page.props.auth.user)
+    const firstName = $derived(user.name.split(' ')[0])
 </script>
 
 <AppHead title="Dashboard" />
 
-<div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-    <div class="grid auto-rows-min gap-4 md:grid-cols-3">
-        <div class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-            <PlaceholderPattern />
-        </div>
-        <div class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-            <PlaceholderPattern />
-        </div>
-        <div class="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-            <PlaceholderPattern />
-        </div>
-    </div>
-    <div class="relative min-h-screen flex-1 rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border">
-        <PlaceholderPattern />
-    </div>
+<div class="px-6 py-8">
+    <Heading title="Welcome back, {firstName}" description="Everything you have provisioned lives here." />
+
+    <EmptyState
+        title="No servers yet"
+        description="Connect your first server and Coresmith will provision it, keep it patched, and deploy to it."
+    >
+        {#snippet illustration()}
+            <BlueprintRack />
+        {/snippet}
+        {#snippet action()}
+            <div class="space-y-2">
+                <Button disabled>Connect a server</Button>
+                <p class="text-xs text-muted-foreground">Provisioning arrives with the servers release.</p>
+            </div>
+        {/snippet}
+    </EmptyState>
 </div>

@@ -1,7 +1,7 @@
 <script module lang="ts">
     export const layout = {
         title: 'Confirm your password',
-        description: 'This is a secure area of the application. Please confirm your password before continuing.'
+        description: 'This is a protected area. Confirm your password to continue.'
     }
 </script>
 

@@ -1,7 +1,7 @@
 <script module lang="ts">
     export const layout = {
         title: 'Forgot password',
-        description: 'Enter your email to receive a password reset link'
+        description: 'Tell us your email and we will send a reset link.'
     }
 </script>
 
@@ -25,7 +25,7 @@
 <AppHead title="Forgot password" />
 
 {#if status}
-    <div class="mb-4 text-center text-sm font-medium text-green-600">
+    <div class="mb-6 text-sm font-medium text-success">
         {status}
     </div>
 {/if}
@@ -42,14 +42,14 @@
             <div class="my-6 flex items-center justify-start">
                 <Button type="submit" class="w-full" disabled={processing} data-test="email-password-reset-link-button">
                     {#if processing}<Spinner />{/if}
-                    Email password reset link
+                    Send reset link
                 </Button>
             </div>
         {/snippet}
     </Form>
 
-    <div class="space-x-1 text-center text-sm text-muted-foreground">
-        <span>Or, return to</span>
-        <TextLink href={route('login')}>log in</TextLink>
+    <div class="space-x-1 text-sm text-muted-foreground">
+        <span>Or go back to</span>
+        <TextLink href={route('login')}>sign in</TextLink>
     </div>
 </div>

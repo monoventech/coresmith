@@ -78,14 +78,12 @@
                 <div>
                     <p class="-mt-4 text-sm text-muted-foreground">
                         Your email address is unverified.
-                        <TextLink href={route('verification.send')} as="button">
-                            Click here to resend the verification email.
-                        </TextLink>
+                        <TextLink href={route('verification.send')} as="button">Resend the verification email</TextLink>.
                     </p>
 
                     {#if status === 'verification-link-sent'}
-                        <div class="mt-2 text-sm font-medium text-green-600">
-                            A new verification link has been sent to your email address.
+                        <div class="mt-2 text-sm font-medium text-success">
+                            We sent a new verification link to your email address.
                         </div>
                     {/if}
                 </div>

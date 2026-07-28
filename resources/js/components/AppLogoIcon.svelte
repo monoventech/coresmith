@@ -3,21 +3,23 @@
         class: className = '',
         ...rest
     }: {
-        class?: string;
-        [key: string]: unknown;
-    } = $props();
+        class?: string
+        [key: string]: unknown
+    } = $props()
 </script>
 
 <svg
     xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 40 42"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
     class={className}
     {...rest}
 >
-    <path
-        fill="currentColor"
-        fill-rule="evenodd"
-        clip-rule="evenodd"
-        d="M17.2 5.633 8.6.855 0 5.633v26.51l16.2 9 16.2-9v-8.442l7.6-4.223V9.856l-8.6-4.777-8.6 4.777V18.3l-5.6 3.111V5.633ZM38 18.301l-5.6 3.11v-6.157l5.6-3.11V18.3Zm-1.06-7.856-5.54 3.078-5.54-3.079 5.54-3.078 5.54 3.079ZM24.8 18.3v-6.157l5.6 3.111v6.158L24.8 18.3Zm-1 1.732 5.54 3.078-13.14 7.302-5.54-3.078 13.14-7.3v-.002Zm-16.2 7.89 7.6 4.222V38.3L2 30.966V7.92l5.6 3.111v16.892ZM8.6 9.3 3.06 6.222 8.6 3.143l5.54 3.08L8.6 9.3Zm21.8 15.51-13.2 7.334V38.3l13.2-7.334v-6.156ZM9.6 11.034l5.6-3.11v14.6l-5.6 3.11v-14.6Z"
-    />
+    <path d="M2.9 7.9h13.4c2.4 0 4.2 1 5.2 2.5-1.6 1-3.4 1.5-5.4 1.5H2.9Z" />
+    <path d="M8.9 11.9v2.6c0 1-.7 1.9-2 2.6h10.2c-1.3-.7-2-1.6-2-2.6v-2.6" />
+    <path d="M5.6 17.1h12.8c.7 0 1.1.5 1.1 1.2v.8H4.5v-.8c0-.7.4-1.2 1.1-1.2Z" />
 </svg>

@@ -2,20 +2,16 @@
     let {
         title,
         description = '',
-        variant = 'default',
+        variant = 'default'
     }: {
-        title: string;
-        description?: string;
-        variant?: 'default' | 'small';
-    } = $props();
+        title: string
+        description?: string
+        variant?: 'default' | 'small'
+    } = $props()
 </script>
 
-<header class={variant === 'small' ? '' : 'mb-8 space-y-0.5'}>
-    <h2
-        class={variant === 'small'
-            ? 'mb-0.5 text-base font-medium'
-            : 'text-xl font-semibold tracking-tight'}
-    >
+<header class={variant === 'small' ? 'space-y-1' : 'mb-10 space-y-1.5'}>
+    <h2 class={variant === 'small' ? 'text-xl font-semibold' : 'text-2xl font-semibold tracking-[-0.01em]'}>
         {title}
     </h2>
     {#if description}

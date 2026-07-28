@@ -1,7 +1,7 @@
 <script module lang="ts">
     export const layout = {
-        title: 'Log in to your account',
-        description: 'Enter your email and password below to log in'
+        title: 'Sign in',
+        description: 'Use your email and password to continue.'
     }
 </script>
 
@@ -28,10 +28,10 @@
     } = $props()
 </script>
 
-<AppHead title="Log in" />
+<AppHead title="Sign in" />
 
 {#if status}
-    <div class="mb-4 text-center text-sm font-medium text-green-600">
+    <div class="mb-6 text-sm font-medium text-success">
         {status}
     </div>
 {/if}
@@ -65,14 +65,14 @@
 
             <Button type="submit" class="mt-4 w-full" disabled={processing} data-test="login-button">
                 {#if processing}<Spinner />{/if}
-                Log in
+                Sign in
             </Button>
         </div>
 
         {#if canRegister}
-            <div class="text-center text-sm text-muted-foreground">
-                Don't have an account?
-                <TextLink href={route('register')}>Sign up</TextLink>
+            <div class="text-sm text-muted-foreground">
+                New here?
+                <TextLink href={route('register')}>Create an account</TextLink>
             </div>
         {/if}
     {/snippet}

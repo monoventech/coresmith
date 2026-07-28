@@ -1,16 +1,16 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte';
-    import AuthLayout from '@/layouts/auth/AuthSimpleLayout.svelte';
+    import AuthLayout from '@/layouts/auth/AuthSplitLayout.svelte'
+    import type { Snippet } from 'svelte'
 
     let {
         title = '',
         description = '',
-        children,
+        children
     }: {
-        title?: string;
-        description?: string;
-        children?: Snippet;
-    } = $props();
+        title?: string
+        description?: string
+        children?: Snippet
+    } = $props()
 </script>
 
 <AuthLayout {title} {description}>

@@ -1,45 +1,39 @@
 <script lang="ts">
-    import { Link } from '@inertiajs/svelte';
-    import type { Snippet } from 'svelte';
-    import AppLogoIcon from '@/components/AppLogoIcon.svelte';
+    import AppLogoIcon from '@/components/AppLogoIcon.svelte'
+    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
+    import MonovenMark from '@/components/MonovenMark.svelte'
+    import { Link } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
+
     let {
         title = '',
         description = '',
-        children,
+        children
     }: {
-        title?: string;
-        description?: string;
-        children?: Snippet;
-    } = $props();
+        title?: string
+        description?: string
+        children?: Snippet
+    } = $props()
 </script>
 
-<div
-    class="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10"
->
+<div class="flex min-h-svh flex-col items-center justify-center gap-10 bg-background p-6 md:p-10">
     <div class="w-full max-w-sm">
-        <div class="flex flex-col gap-8">
-            <div class="flex flex-col items-center gap-4">
-                <Link
-                    href={route('home')}
-                    class="flex flex-col items-center gap-2 font-medium"
-                >
-                    <div
-                        class="mb-1 flex h-9 w-9 items-center justify-center rounded-md"
-                    >
-                        <AppLogoIcon
-                            class="size-9 fill-current text-(--foreground) dark:text-white"
-                        />
-                    </div>
-                    <span class="sr-only">{title}</span>
-                </Link>
-                <div class="space-y-2 text-center">
-                    <h1 class="text-xl font-medium">{title}</h1>
-                    <p class="text-center text-sm text-muted-foreground">
-                        {description}
-                    </p>
-                </div>
-            </div>
-            {@render children?.()}
+        <Link href={route('home')} class="mb-10 flex w-fit items-center gap-2.5">
+            <AppLogoIcon class="size-7 text-primary" />
+            <span class="sr-only">{title}</span>
+        </Link>
+
+        <div class="mb-8 space-y-2">
+            <h1 class="text-3xl leading-tight font-semibold tracking-[-0.01em]">
+                <MarkerUnderline>{title}</MarkerUnderline>
+            </h1>
+            {#if description}
+                <p class="text-base text-muted-foreground">{description}</p>
+            {/if}
         </div>
+
+        {@render children?.()}
     </div>
+
+    <MonovenMark />
 </div>

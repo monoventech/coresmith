@@ -1,41 +1,43 @@
 <script lang="ts">
-    import Monitor from '@lucide/svelte/icons/monitor';
-    import Moon from '@lucide/svelte/icons/moon';
-    import Sun from '@lucide/svelte/icons/sun';
-    import type { Component, SvelteComponent } from 'svelte';
-    import { themeState } from '@/lib/theme.svelte';
-    import type { Appearance } from '@/types';
+    import { themeState } from '@/lib/theme.svelte'
+    import { cn } from '@/lib/utils'
+    import type { Appearance } from '@/types'
+    import Monitor from '@lucide/svelte/icons/monitor'
+    import Moon from '@lucide/svelte/icons/moon'
+    import Sun from '@lucide/svelte/icons/sun'
+    import type { Component, SvelteComponent } from 'svelte'
 
-    const { appearance, updateAppearance } = themeState();
+    const { appearance, updateAppearance } = themeState()
 
-    type IconComponent =
-        | Component<{ class?: string }>
-        | (new (...args: any[]) => SvelteComponent<{ class?: string }>);
+    type IconComponent = Component<{ class?: string }> | (new (...args: any[]) => SvelteComponent<{ class?: string }>)
 
     const tabs: { value: Appearance; Icon: IconComponent; label: string }[] = [
         { value: 'light', Icon: Sun, label: 'Light' },
         { value: 'dark', Icon: Moon, label: 'Dark' },
-        { value: 'system', Icon: Monitor, label: 'System' },
-    ];
+        { value: 'system', Icon: Monitor, label: 'System' }
+    ]
 
     function handleAppearanceChange(value: Appearance) {
-        updateAppearance(value);
+        updateAppearance(value)
     }
 </script>
 
-<div
-    class="inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800"
->
+<div class="inline-flex gap-1 rounded-md bg-muted p-1" role="group" aria-label="Appearance">
     {#each tabs as { value, Icon, label } (value)}
         <button
+            type="button"
             onclick={() => handleAppearanceChange(value)}
-            class="flex items-center rounded-md px-3.5 py-1.5 transition-colors {appearance.value ===
-            value
-                ? 'bg-white shadow-xs dark:bg-neutral-700 dark:text-neutral-100'
-                : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-700/60'}"
+            aria-pressed={appearance.value === value}
+            class={cn(
+                'flex items-center rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors outline-none',
+                'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                appearance.value === value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+            )}
         >
-            <Icon class="-ml-1 h-4 w-4" />
-            <span class="ml-1.5 text-sm">{label}</span>
+            <Icon class="-ml-1 size-4" />
+            <span class="ml-1.5">{label}</span>
         </button>
     {/each}
 </div>

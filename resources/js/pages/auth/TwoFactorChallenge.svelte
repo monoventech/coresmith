@@ -14,14 +14,14 @@
             return {
                 title: 'Recovery code',
                 description: 'Please confirm access to your account by entering one of your emergency recovery codes.',
-                buttonText: 'login using an authentication code'
+                buttonText: 'use an authentication code instead'
             }
         }
 
         return {
             title: 'Authentication code',
             description: 'Enter the authentication code provided by your authenticator application.',
-            buttonText: 'login using a recovery code'
+            buttonText: 'use a recovery code instead'
         }
     })
 
@@ -65,7 +65,7 @@
                     <span>or you can </span>
                     <button
                         type="button"
-                        class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                        class="rounded-sm text-primary underline decoration-primary/40 underline-offset-4 transition-colors outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         onclick={() => toggleRecoveryMode(clearErrors)}
                     >
                         {authConfigContent.buttonText}
@@ -84,7 +84,7 @@
                     <span>or you can </span>
                     <button
                         type="button"
-                        class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                        class="rounded-sm text-primary underline decoration-primary/40 underline-offset-4 transition-colors outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         onclick={() => toggleRecoveryMode(clearErrors)}
                     >
                         {authConfigContent.buttonText}

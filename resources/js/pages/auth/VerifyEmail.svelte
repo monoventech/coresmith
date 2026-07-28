@@ -1,7 +1,7 @@
 <script module lang="ts">
     export const layout = {
         title: 'Verify email',
-        description: 'Please verify your email address by clicking on the link we just emailed to you.'
+        description: 'We emailed you a verification link. Open it to finish setting up.'
     }
 </script>
 
@@ -22,18 +22,18 @@
 <AppHead title="Email verification" />
 
 {#if status === 'verification-link-sent'}
-    <div class="mb-4 text-center text-sm font-medium text-green-600">
-        A new verification link has been sent to the email address you provided during registration.
+    <div class="mb-6 text-sm font-medium text-success">
+        We sent a new verification link to your email address.
     </div>
 {/if}
 
-<Form method="post" action={route('verification.send')} class="space-y-6 text-center">
+<Form method="post" action={route('verification.send')} class="space-y-6">
     {#snippet children({ processing })}
         <Button type="submit" disabled={processing} variant="secondary">
             {#if processing}<Spinner />{/if}
             Resend verification email
         </Button>
 
-        <TextLink href={route('logout')} as="button" class="mx-auto block text-sm">Log out</TextLink>
+        <TextLink href={route('logout')} as="button" class="block text-sm">Sign out</TextLink>
     {/snippet}
 </Form>

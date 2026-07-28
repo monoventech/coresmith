@@ -1,7 +1,7 @@
 <script module lang="ts">
     export const layout = {
         title: 'Create an account',
-        description: 'Enter your details below to create your account'
+        description: 'A few details and your forge is ready.'
     }
 </script>
 
@@ -17,7 +17,7 @@
     import { Form } from '@inertiajs/svelte'
 </script>
 
-<AppHead title="Register" />
+<AppHead title="Create an account" />
 
 <Form method="post" action={route('register')} resetOnSuccess={['password', 'password_confirmation']} class="flex flex-col gap-6">
     {#snippet children({ errors, processing })}
@@ -58,9 +58,9 @@
             </Button>
         </div>
 
-        <div class="text-center text-sm text-muted-foreground">
+        <div class="text-sm text-muted-foreground">
             Already have an account?
-            <TextLink href={route('login')} class="underline underline-offset-4">Log in</TextLink>
+            <TextLink href={route('login')}>Sign in</TextLink>
         </div>
     {/snippet}
 </Form>
