@@ -22,6 +22,9 @@ final class FakeSSHTransport implements SSHTransport
     /** @var list<array{output: string, exitCode: int}> */
     private array $queued = [];
 
+    /** @var array<string, array{output: string, exitCode: int}> */
+    private array $matched = [];
+
     /** @var list<string> */
     private array $commands = [];
 
@@ -45,6 +48,13 @@ final class FakeSSHTransport implements SSHTransport
     public function queueResult(string $output, int $exitCode): self
     {
         $this->queued[] = ['output' => $output, 'exitCode' => $exitCode];
+
+        return $this;
+    }
+
+    public function respondTo(string $needle, string $output, int $exitCode = 0): self
+    {
+        $this->matched[$needle] = ['output' => $output, 'exitCode' => $exitCode];
 
         return $this;
     }
@@ -92,7 +102,17 @@ final class FakeSSHTransport implements SSHTransport
     {
         $this->commands[] = $command;
 
-        $next = array_shift($this->queued) ?? ['output' => '', 'exitCode' => 0];
+        $next = null;
+
+        foreach ($this->matched as $needle => $response) {
+            if (str_contains($command, $needle)) {
+                $next = $response;
+
+                break;
+            }
+        }
+
+        $next ??= array_shift($this->queued) ?? ['output' => '', 'exitCode' => 0];
         $this->exitStatus = $next['exitCode'];
 
         if ($onOutput !== null) {

@@ -9,13 +9,17 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ServerStatus;
+use App\Events\ServerProvisioned;
 use App\Models\Server;
 use App\Services\Caddy\CaddyInstaller;
 use App\Services\Runtime\AsdfInstaller;
 use App\Services\Server\BasePackages;
 use App\Services\Server\DirectoryStructure;
+use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\OsDetector;
 use App\Services\Server\PackageManagerFactory;
+use App\Services\Server\ProvisioningVerifier;
+use App\Services\Server\SecurityHardening;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Closure;
@@ -42,12 +46,17 @@ final class ProvisionServer implements ShouldQueue
 
         $this->server->forceFill(['status' => ServerStatus::Provisioning])->save();
 
+        $startedAt = now();
+
         try {
             $this->phase(1, fn () => $this->detectOperatingSystem($connection, $detector));
             $this->phase(2, fn () => $this->installBasePackages($connection));
             $this->phase(3, fn () => app(AsdfInstaller::class)->install($connection));
             $this->phase(4, fn () => app(DirectoryStructure::class)->create($connection));
             $this->phase(5, fn () => app(CaddyInstaller::class)->install($connection));
+            $this->phase(6, fn () => app(FirewallConfigurator::class)->configure($connection));
+            $this->phase(7, fn () => app(SecurityHardening::class)->harden($connection));
+            $this->phase(8, fn () => $this->finalize($connection, (int) $startedAt->diffInSeconds(now())));
         } catch (Throwable $e) {
             $this->fail_($e);
 
@@ -55,6 +64,23 @@ final class ProvisionServer implements ShouldQueue
         } finally {
             $connections->disconnect($this->server);
         }
+    }
+
+    private function finalize(SSHConnection $connection, int $durationSeconds): void
+    {
+        app(ProvisioningVerifier::class)->verify($connection);
+
+        $this->server->forceFill([
+            'status' => ServerStatus::Active,
+            'last_connected_at' => now(),
+        ])->save();
+
+        activity()
+            ->performedOn($this->server)
+            ->withProperties(['duration_seconds' => $durationSeconds])
+            ->log('server_provisioned');
+
+        ServerProvisioned::dispatch($this->server, $durationSeconds);
     }
 
     private function detectOperatingSystem(SSHConnection $connection, OsDetector $detector): void
