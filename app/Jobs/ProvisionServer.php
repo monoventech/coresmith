@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\ServerStatus;
 use App\Models\Server;
+use App\Services\Caddy\CaddyInstaller;
 use App\Services\Runtime\AsdfInstaller;
 use App\Services\Server\BasePackages;
 use App\Services\Server\DirectoryStructure;
@@ -46,6 +47,7 @@ final class ProvisionServer implements ShouldQueue
             $this->phase(2, fn () => $this->installBasePackages($connection));
             $this->phase(3, fn () => app(AsdfInstaller::class)->install($connection));
             $this->phase(4, fn () => app(DirectoryStructure::class)->create($connection));
+            $this->phase(5, fn () => app(CaddyInstaller::class)->install($connection));
         } catch (Throwable $e) {
             $this->fail_($e);
 

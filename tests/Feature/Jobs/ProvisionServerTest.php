@@ -62,7 +62,7 @@ test('every implemented phase is recorded', function () {
 
     provision($server, provisioningTransport());
 
-    expect($server->fresh()->provisioning_phase)->toBe(4);
+    expect($server->fresh()->provisioning_phase)->toBe(5);
 });
 
 test('phase 3 installs asdf as the coresmith user and adds every plugin', function () {
@@ -84,7 +84,7 @@ test('a re-run skips already completed phases', function () {
     $server = Server::factory()->create([
         'host_key_fingerprint' => null,
         'os_name' => 'ubuntu',
-        'provisioning_phase' => 4,
+        'provisioning_phase' => 5,
     ]);
     $transport = new FakeSSHTransport;
 
@@ -152,4 +152,30 @@ test('phase 4 creates the coresmith directory tree with locked down secret dirs'
         ->and($commands)->toContain('chown root:root /etc/coresmith/env')
         ->and($commands)->toContain('chmod 700 /etc/coresmith/env')
         ->and($commands)->toContain('chmod 700 /etc/coresmith/deploy-keys');
+});
+
+test('phase 5 installs caddy and verifies the admin api responds on localhost', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport();
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain("apt-get install -y --no-install-recommends 'caddy'")
+        ->and($commands)->toContain('systemctl enable caddy')
+        ->and($commands)->toContain('http://localhost:2019/config/');
+});
+
+test('phase 5 uploads a bootstrap caddyfile that never grows with apps', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport();
+
+    provision($server, $transport);
+
+    $uploads = $transport->uploads();
+
+    expect($uploads)->toHaveKey('/etc/caddy/Caddyfile')
+        ->and($uploads['/etc/caddy/Caddyfile'])->toContain('respond 444')
+        ->and($uploads['/etc/caddy/Caddyfile'])->not->toContain('/var/coresmith/apps');
 });
