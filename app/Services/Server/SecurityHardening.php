@@ -18,6 +18,8 @@ final class SecurityHardening
 
     public const FAIL2BAN_JAIL = '/etc/fail2ban/jail.d/coresmith-ssh.conf';
 
+    public const AUDIT_RULES = '/etc/audit/rules.d/coresmith.rules';
+
     public function harden(SSHConnection $connection): void
     {
         $this->hardenSsh($connection);
@@ -26,6 +28,46 @@ final class SecurityHardening
         $this->configureAutomaticUpdates($connection);
         $this->setTimezone($connection);
         $this->checkAppArmor($connection);
+        $this->configureAuditd($connection);
+    }
+
+    private function configureAuditd(SSHConnection $connection): void
+    {
+        if (!$connection->server()->audit_logging_enabled) {
+            return;
+        }
+
+        $packages = PackageManagerFactory::for($connection->server());
+
+        $connection->execute(
+            'command -v auditctl >/dev/null 2>&1 || { '.$packages->install(['auditd']).'; }',
+            sudo: true,
+        )->throw();
+
+        $connection->execute('mkdir -p /etc/audit/rules.d', sudo: true)->throw();
+        $connection->uploadContent($this->auditRules(), self::AUDIT_RULES);
+        $connection->execute('systemctl enable --now auditd && augenrules --load || true', sudo: true)->throw();
+    }
+
+    public function auditRules(): string
+    {
+        return <<<'RULES'
+        -w /etc/sudoers -p wa -k sudoers
+        -w /etc/sudoers.d/ -p wa -k sudoers
+
+        -w /etc/ssh/sshd_config -p wa -k sshd_config
+        -w /etc/ssh/sshd_config.d/ -p wa -k sshd_config
+
+        -w /etc/passwd -p wa -k identity
+        -w /etc/group -p wa -k identity
+        -w /etc/shadow -p wa -k identity
+
+        -w /etc/coresmith/ -p wa -k coresmith_config
+
+        -w /etc/crontab -p wa -k crontab
+        -w /var/spool/cron/ -p wa -k crontab
+
+        RULES;
     }
 
     private function hardenSsh(SSHConnection $connection): void

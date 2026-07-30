@@ -27,6 +27,16 @@ final class UnsafeNameException extends InvalidArgumentException
         return new self("[{$value}] is not a valid database name or user. SQL identifiers cannot be parameterised, so only letters, digits and underscores are accepted.");
     }
 
+    public static function cronSchedule(string $value): self
+    {
+        return new self("[{$value}] is not a valid cron schedule expression.");
+    }
+
+    public static function cronCommand(string $value): self
+    {
+        return new self('A cron command cannot contain a newline, which would inject additional crontab entries.');
+    }
+
     public static function systemUser(string $value): self
     {
         return new self("[{$value}] is not a valid system user name.");

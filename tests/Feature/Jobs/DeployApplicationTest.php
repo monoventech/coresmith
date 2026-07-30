@@ -228,3 +228,37 @@ test('a php app reloads fpm rather than restarting a web unit', function () {
     expect($commands)->toContain('systemctl reload php-fpm-coresmith-app-abcd')
         ->and($commands)->not->toContain('systemctl restart coresmith-app-my-app-web');
 });
+
+test('a custom blueprint replaces the built in dependency, build and migrate phases', function () {
+    $deployment = Deployment::factory()->for(deployableApp([
+        'custom_blueprint' => "set -e\necho building\n",
+    ]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('bash /var/coresmith/apps/my-app/releases/'.TIMESTAMP.'/.coresmith-blueprint.sh')
+        ->and($commands)->not->toContain('composer install')
+        ->and($commands)->not->toContain('artisan config:cache')
+        ->and($commands)->not->toContain('artisan migrate');
+});
+
+test('a custom blueprint still gets the atomic symlink swap', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['custom_blueprint' => "echo hi\n"]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    expect(implode("\n", $transport->commands()))->toContain('mv -Tf');
+});
+
+test('a failing custom blueprint never reaches the symlink swap', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['custom_blueprint' => "exit 1\n"]))->create();
+    $transport = healthyDeployTransport()->respondTo('.coresmith-blueprint.sh', "build failed\n", 1);
+
+    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('current.tmp');
+});

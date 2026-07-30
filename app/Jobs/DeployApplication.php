@@ -12,7 +12,9 @@ use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Events\DeploymentSucceeded;
 use App\Exceptions\DeploymentAborted;
+use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Process\ProcessManager;
@@ -69,12 +71,18 @@ final class DeployApplication implements ShouldQueue
             ])->save();
 
             $this->prepare($connection, $paths, $release);
-            $this->installDependencies($connection, $commands, $release);
-            $this->build($connection, $commands, $release);
-            $this->migrate($connection, $commands, $release);
+
+            if ($this->hasCustomBlueprint($application)) {
+                $this->runBlueprint($connection, $commands, $release, $application);
+            } else {
+                $this->installDependencies($connection, $commands, $release);
+                $this->build($connection, $commands, $release);
+                $this->migrate($connection, $commands, $release);
+            }
             $this->swapSymlink($connection, $paths, $release);
             app(ProcessManager::class)->install($connection, $application);
             $this->restartProcesses($connection, $commands);
+            $this->writeCrontab($connection, $application);
             $this->pruneOldReleases($connection, $paths);
 
             $this->deployment->forceFill([
@@ -156,6 +164,41 @@ final class DeployApplication implements ShouldQueue
         foreach ($commands->restart($this->deployment->application) as $command) {
             $connection->execute($command, sudo: true)->throw();
         }
+    }
+
+    private function hasCustomBlueprint(Application $application): bool
+    {
+        return trim((string) $application->custom_blueprint) !== '';
+    }
+
+    private function runBlueprint(SSHConnection $connection, DeploymentCommands $commands, string $release, Application $application): void
+    {
+        $script = $release.'/.coresmith-blueprint.sh';
+
+        $connection->uploadContent((string) $application->custom_blueprint, $script);
+
+        $result = $connection->execute(
+            'cd '.$release.' && '.$commands->pathPrefix($application).'bash '.$script,
+        );
+
+        $this->appendLog($result->output);
+
+        $result->throw();
+
+        $connection->execute('rm -f '.$script);
+    }
+
+    private function writeCrontab(SSHConnection $connection, Application $application): void
+    {
+        $builder = app(CrontabBuilder::class);
+        $crontab = $builder->build($application);
+
+        $connection->uploadContent($crontab, '/tmp/coresmith-cron-'.$application->slug);
+        $connection->execute(
+            'cat /tmp/coresmith-cron-'.$application->slug.' | '.$builder->install($application)
+            .' && rm -f /tmp/coresmith-cron-'.$application->slug,
+            sudo: true,
+        )->throw();
     }
 
     private function pruneOldReleases(SSHConnection $connection, ReleasePaths $paths): void
