@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
+use App\Exceptions\BackupNotFoundException;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\ManagedDatabase;
@@ -13,6 +14,7 @@ use App\Services\Database\MysqlDriver;
 use App\Services\Database\PostgresDriver;
 use App\Services\Database\SqliteDriver;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakeSSHTransport;
 
 function databaseManager(): DatabaseManager
@@ -184,4 +186,49 @@ test('a sqlite backup uses the consistent snapshot command', function () {
     $command = (new SqliteDriver)->backup($application, '/var/coresmith/backups/my-app/db.sqlite');
 
     expect($command)->toContain('.backup')->and($command)->toContain('gzip');
+});
+
+test('restoring pipes the compressed backup back into the database', function () {
+    $transport = new FakeSSHTransport;
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
+
+    databaseManager()->restore(databaseConnection($transport), $database, '/var/coresmith/backups/app_db/app_db-1.sql.gz');
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('gunzip -c')->and($commands)->toContain('| mysql');
+});
+
+test('restoring a postgres database uses psql', function () {
+    $transport = new FakeSSHTransport;
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Postgresql, 'name' => 'app_db']);
+
+    databaseManager()->restore(databaseConnection($transport), $database, '/tmp/app_db.sql.gz');
+
+    expect(implode("\n", $transport->commands()))->toContain('sudo -u postgres psql');
+});
+
+test('restoring refuses when the backup file is missing rather than truncating the database', function () {
+    $transport = (new FakeSSHTransport)->respondTo('test -f', '', 1);
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
+
+    expect(fn () => databaseManager()->restore(databaseConnection($transport), $database, '/tmp/missing.sql.gz'))
+        ->toThrow(BackupNotFoundException::class);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('gunzip');
+});
+
+test('a backup can be uploaded to the configured s3 disk', function () {
+    Storage::fake('s3');
+    $transport = (new FakeSSHTransport)->respondTo('cat ', "dump-bytes\n", 0);
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
+
+    $key = databaseManager()->uploadBackupToS3(
+        databaseConnection($transport),
+        $database,
+        '/var/coresmith/backups/app_db/app_db-1.sql.gz',
+    );
+
+    expect($key)->toContain('app_db-1.sql.gz');
+    Storage::disk('s3')->assertExists($key);
 });

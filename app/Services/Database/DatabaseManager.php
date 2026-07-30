@@ -10,9 +10,11 @@ namespace App\Services\Database;
 
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
+use App\Exceptions\BackupNotFoundException;
 use App\Models\ManagedDatabase;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 final class DatabaseManager
@@ -95,6 +97,38 @@ final class DatabaseManager
         }
 
         return $destination;
+    }
+
+    public function restore(SSHConnection $connection, ManagedDatabase $database, string $source): void
+    {
+        $name = (string) $database->name;
+
+        $exists = $connection->execute('test -f '.escapeshellarg($source));
+
+        if ($exists->failed()) {
+            throw BackupNotFoundException::at($source);
+        }
+
+        $command = match ($database->type) {
+            DatabaseType::Mysql => $this->mysql->restore($name, $source),
+            DatabaseType::Postgresql => $this->postgres->restore($name, $source),
+            DatabaseType::Redis => null,
+        };
+
+        if ($command !== null) {
+            $connection->execute($command, sudo: true)->throw();
+        }
+    }
+
+    public function uploadBackupToS3(SSHConnection $connection, ManagedDatabase $database, string $remotePath): string
+    {
+        $disk = Storage::disk('s3');
+        $contents = $connection->execute('cat '.escapeshellarg($remotePath), sudo: true)->throw()->output;
+        $key = 'backups/'.$database->getKey().'/'.basename($remotePath);
+
+        $disk->put($key, $contents);
+
+        return $key;
     }
 
     private function createMysql(SSHConnection $connection, string $name, string $user, string $password, PrivilegeLevel $level): void
