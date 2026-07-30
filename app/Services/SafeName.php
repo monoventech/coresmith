@@ -18,6 +18,8 @@ final class SafeName
 
     public const SYSTEM_USER_PATTERN = '/^[a-z_][a-z0-9_-]{0,31}$/';
 
+    public const DATABASE_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/';
+
     public static function isSlug(?string $value): bool
     {
         return $value !== null && preg_match(self::SLUG_PATTERN, $value) === 1;
@@ -31,6 +33,20 @@ final class SafeName
     public static function isSystemUser(?string $value): bool
     {
         return $value !== null && preg_match(self::SYSTEM_USER_PATTERN, $value) === 1;
+    }
+
+    public static function isDatabaseIdentifier(?string $value): bool
+    {
+        return $value !== null && preg_match(self::DATABASE_PATTERN, $value) === 1;
+    }
+
+    public static function assertDatabaseIdentifier(?string $value): string
+    {
+        if (!self::isDatabaseIdentifier($value)) {
+            throw UnsafeNameException::databaseIdentifier((string) $value);
+        }
+
+        return (string) $value;
     }
 
     public static function assertSlug(?string $value): string

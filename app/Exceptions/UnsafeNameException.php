@@ -22,6 +22,11 @@ final class UnsafeNameException extends InvalidArgumentException
         return new self("[{$value}] is not a valid process name. Process names are lowercase letters, digits and hyphens only.");
     }
 
+    public static function databaseIdentifier(string $value): self
+    {
+        return new self("[{$value}] is not a valid database name or user. SQL identifiers cannot be parameterised, so only letters, digits and underscores are accepted.");
+    }
+
     public static function systemUser(string $value): self
     {
         return new self("[{$value}] is not a valid system user name.");
