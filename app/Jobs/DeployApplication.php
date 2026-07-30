@@ -15,6 +15,7 @@ use App\Exceptions\DeploymentAborted;
 use App\Models\Deployment;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -72,6 +73,7 @@ final class DeployApplication implements ShouldQueue
             $this->build($connection, $commands, $release);
             $this->migrate($connection, $commands, $release);
             $this->swapSymlink($connection, $paths, $release);
+            app(ProcessManager::class)->install($connection, $application);
             $this->restartProcesses($connection, $commands);
             $this->pruneOldReleases($connection, $paths);
 
