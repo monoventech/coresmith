@@ -10,6 +10,7 @@ namespace App\Services\Caddy;
 
 use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
+use App\Services\Server\PortAllocator;
 
 final class RouteConfigValidator
 {
@@ -85,7 +86,15 @@ final class RouteConfigValidator
         $host = substr($dial, 0, $separator);
         $port = (int) substr($dial, $separator + 1);
 
-        if (!in_array($host, self::LOOPBACK, true) || !in_array($port, $allowedPorts, true)) {
+        if (!in_array($host, self::LOOPBACK, true)) {
+            throw InvalidRouteConfigException::upstream($dial);
+        }
+
+        if (!PortAllocator::isInAllocatableRange($port)) {
+            throw InvalidRouteConfigException::upstream($dial);
+        }
+
+        if (!in_array($port, $allowedPorts, true)) {
             throw InvalidRouteConfigException::upstream($dial);
         }
     }

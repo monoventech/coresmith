@@ -15,7 +15,7 @@ function phpApp(array $attributes = []): Application
         'slug' => 'my-app',
         'domain' => 'app.example.com',
         'type' => ApplicationType::Php,
-        'base_port' => 13000,
+        'base_port' => 8000,
         'directory' => '/',
         'web_directory' => '/public',
     ], $attributes));
@@ -52,11 +52,11 @@ test('a php app is served over its own fpm socket', function () {
 });
 
 test('a js app reverse proxies to its allocated loopback port', function () {
-    $route = (new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Js, 'base_port' => 13100]));
+    $route = (new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Js, 'base_port' => 8100]));
     $handlers = $route['handle'][0]['routes'][1]['handle'];
     $proxy = collect($handlers)->firstWhere('handler', 'reverse_proxy');
 
-    expect($proxy['upstreams'])->toBe([['dial' => '127.0.0.1:13100']]);
+    expect($proxy['upstreams'])->toBe([['dial' => '127.0.0.1:8100']]);
 });
 
 test('a static app is served by the file server only', function () {
@@ -98,17 +98,17 @@ test('an upstream pointing off box is refused', function () {
 })->throws(InvalidRouteConfigException::class);
 
 test('an upstream outside the allocated port block is refused', function () {
-    $app = phpApp(['type' => ApplicationType::Js, 'base_port' => 13100]);
+    $app = phpApp(['type' => ApplicationType::Js, 'base_port' => 8100]);
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:13200']];
+    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:8200']];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->throws(InvalidRouteConfigException::class);
 
 test('a port inside the allocated block is allowed', function () {
-    $app = phpApp(['type' => ApplicationType::Js, 'base_port' => 13100]);
+    $app = phpApp(['type' => ApplicationType::Js, 'base_port' => 8100]);
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:13109']];
+    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:8109']];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->throwsNoExceptions();
