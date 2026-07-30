@@ -13,6 +13,7 @@ use App\Models\Application;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
+use App\Services\SafeName;
 
 final class FpmPoolBuilder
 {
@@ -22,18 +23,18 @@ final class FpmPoolBuilder
 
     public function poolPath(Application $application): string
     {
-        return '/etc/php-fpm.d/coresmith-app-'.$application->slug.'.conf';
+        return '/etc/php-fpm.d/coresmith-app-'.SafeName::assertSlug($application->slug).'.conf';
     }
 
     public function unitName(Application $application): string
     {
-        return 'coresmith-app-'.$application->slug.'-fpm';
+        return 'coresmith-app-'.SafeName::assertSlug($application->slug).'-fpm';
     }
 
     public function pool(Application $application): string
     {
-        $slug = $application->slug;
-        $user = $application->system_user;
+        $slug = SafeName::assertSlug($application->slug);
+        $user = SafeName::assertSystemUser($application->system_user);
         $socket = (new CaddyRouteBuilder)->fpmSocket($application);
         $size = $this->size($application);
         $maxChildren = $size->maxChildren();

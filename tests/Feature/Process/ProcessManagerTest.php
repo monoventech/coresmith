@@ -160,7 +160,7 @@ test('sleeping stops every unit and records the state', function () {
 
     processManager()->sleep(processConnection($transport), $app);
 
-    expect(implode("\n", $transport->commands()))->toContain('systemctl stop coresmith-app-my-app-fpm')
+    expect(implode("\n", $transport->commands()))->toContain("systemctl stop 'coresmith-app-my-app-fpm'")
         ->and($app->fresh()->power_state)->toBe(PowerState::Sleeping);
 });
 
@@ -170,7 +170,7 @@ test('waking starts every unit and records the request time', function () {
 
     processManager()->wake(processConnection($transport), $app);
 
-    expect(implode("\n", $transport->commands()))->toContain('systemctl enable --now coresmith-app-my-app-fpm')
+    expect(implode("\n", $transport->commands()))->toContain("systemctl enable --now 'coresmith-app-my-app-fpm'")
         ->and($app->fresh()->power_state)->toBe(PowerState::Active)
         ->and($app->fresh()->last_request_at)->not->toBeNull();
 });

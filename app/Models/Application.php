@@ -12,6 +12,7 @@ use App\Casts\Vaulted;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
+use App\Services\SafeName;
 use Database\Factories\ApplicationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -28,6 +29,20 @@ class Application extends Model
     protected $guarded = ['id'];
 
     protected $hidden = ['env_variables'];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $application): void {
+            SafeName::assertSlug($application->slug);
+            SafeName::assertSystemUser($application->system_user);
+
+            foreach ((array) $application->processes as $process) {
+                if (is_array($process) && isset($process['name'])) {
+                    SafeName::assertProcess((string) $process['name']);
+                }
+            }
+        });
+    }
 
     public function server(): BelongsTo
     {

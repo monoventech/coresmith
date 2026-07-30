@@ -13,6 +13,7 @@ use App\Enums\AppSize;
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
+use App\Services\SafeName;
 
 final class SystemdUnitBuilder
 {
@@ -22,7 +23,7 @@ final class SystemdUnitBuilder
 
     public function unitName(Application $application, string $process): string
     {
-        return 'coresmith-app-'.$application->slug.'-'.$process;
+        return 'coresmith-app-'.SafeName::assertSlug($application->slug).'-'.SafeName::assertProcess($process);
     }
 
     public function unitPath(Application $application, string $process): string

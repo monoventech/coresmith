@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Deployment;
 
 use App\Models\Application;
+use App\Services\SafeName;
 
 final class ReleasePaths
 {
@@ -20,7 +21,7 @@ final class ReleasePaths
 
     public function base(): string
     {
-        return self::ROOT.'/'.$this->application->slug;
+        return self::ROOT.'/'.SafeName::assertSlug($this->application->slug);
     }
 
     public function releases(): string
@@ -50,7 +51,7 @@ final class ReleasePaths
 
     public function envFile(): string
     {
-        return '/etc/coresmith/env/'.$this->application->slug.'.env';
+        return '/etc/coresmith/env/'.SafeName::assertSlug($this->application->slug).'.env';
     }
 
     public function webRoot(string $releasePath): string

@@ -10,6 +10,7 @@ namespace App\Services\Caddy;
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\SafeName;
 
 final class CaddyRouteBuilder
 {
@@ -122,7 +123,7 @@ final class CaddyRouteBuilder
 
     public function documentRoot(Application $application): string
     {
-        $base = self::APPS_ROOT.'/'.$application->slug.'/current';
+        $base = self::APPS_ROOT.'/'.SafeName::assertSlug($application->slug).'/current';
         $directory = trim((string) $application->directory, '/');
         $web = trim((string) $application->web_directory, '/');
 
@@ -141,6 +142,6 @@ final class CaddyRouteBuilder
 
     public function fpmSocket(Application $application): string
     {
-        return "/var/run/php/coresmith-app-{$application->slug}-fpm.sock";
+        return '/var/run/php/coresmith-app-'.SafeName::assertSlug($application->slug).'-fpm.sock';
     }
 }
