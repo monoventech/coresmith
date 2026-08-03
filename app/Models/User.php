@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\Ability;
+use App\Enums\TeamRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -21,6 +23,31 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasUlids, Notifiable, TwoFactorAuthenticatable;
+
+    public function roleIn(?Team $team): ?TeamRole
+    {
+        if ($team === null) {
+            return null;
+        }
+
+        $membership = $this->teams->firstWhere('id', $team->getKey());
+
+        if ($membership === null) {
+            return null;
+        }
+
+        return TeamRole::tryFrom((string) $membership->pivot->role);
+    }
+
+    public function belongsToTeam(?Team $team): bool
+    {
+        return $this->roleIn($team) !== null;
+    }
+
+    public function hasTeamAbility(?Team $team, Ability $ability): bool
+    {
+        return $this->roleIn($team)?->can($ability) ?? false;
+    }
 
     public function teams(): BelongsToMany
     {
