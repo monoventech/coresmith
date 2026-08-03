@@ -33,15 +33,15 @@ final class RouteConfigValidator
      */
     private function validateDomains(array $config, Application $application): void
     {
-        $domain = $application->domain;
+        $allowed = $application->allDomains();
 
-        if ($domain === null || $domain === '') {
+        if ($allowed === []) {
             throw InvalidRouteConfigException::missingDomain();
         }
 
         foreach ($this->collect($config, 'host') as $hosts) {
             foreach ((array) $hosts as $host) {
-                if ($host !== $domain) {
+                if (!in_array($host, $allowed, true)) {
                     throw InvalidRouteConfigException::domain((string) $host);
                 }
             }

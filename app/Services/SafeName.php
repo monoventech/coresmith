@@ -20,6 +20,8 @@ final class SafeName
 
     public const DATABASE_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/';
 
+    public const DOMAIN_PATTERN = '/^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i';
+
     public static function isSlug(?string $value): bool
     {
         return $value !== null && preg_match(self::SLUG_PATTERN, $value) === 1;
@@ -44,6 +46,22 @@ final class SafeName
     {
         if (!self::isDatabaseIdentifier($value)) {
             throw UnsafeNameException::databaseIdentifier((string) $value);
+        }
+
+        return (string) $value;
+    }
+
+    public static function isDomain(?string $value): bool
+    {
+        return $value !== null
+            && strlen($value) <= 253
+            && preg_match(self::DOMAIN_PATTERN, $value) === 1;
+    }
+
+    public static function assertDomain(?string $value): string
+    {
+        if (!self::isDomain($value)) {
+            throw UnsafeNameException::domain((string) $value);
         }
 
         return (string) $value;

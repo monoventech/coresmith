@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Caddy;
 
 use App\Enums\ApplicationType;
+use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
 use App\Services\SafeName;
 
@@ -29,7 +30,7 @@ final class CaddyRouteBuilder
         return [
             '@id' => self::routeId($application),
             'match' => [
-                ['host' => [$application->domain]],
+                ['host' => $this->domains($application)],
             ],
             'handle' => [
                 [
@@ -42,6 +43,28 @@ final class CaddyRouteBuilder
             ],
             'terminal' => true,
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function domains(Application $application): array
+    {
+        $domains = $application->allDomains();
+
+        if ($domains === []) {
+            throw InvalidRouteConfigException::missingDomain();
+        }
+
+        return array_map(SafeName::assertDomain(...), $domains);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function tlsPolicy(): array
+    {
+        return ['protocol' => ['minimum_version' => 'tls1.2']];
     }
 
     /**
@@ -86,8 +109,10 @@ final class CaddyRouteBuilder
                     'X-Content-Type-Options' => ['nosniff'],
                     'X-XSS-Protection' => ['1; mode=block'],
                     'Referrer-Policy' => ['strict-origin-when-cross-origin'],
+                    'Permissions-Policy' => ['camera=(), microphone=(), geolocation=()'],
+                    'Strict-Transport-Security' => ['max-age=31536000; includeSubDomains; preload'],
                 ],
-                'deferred' => ['delete' => ['Server']],
+                'deferred' => ['delete' => ['Server', 'X-Powered-By']],
             ],
         ];
     }

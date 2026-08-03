@@ -73,7 +73,7 @@ test('security headers are set and the Server header is removed', function () {
 
     expect($headers['response']['set']['X-Content-Type-Options'])->toBe(['nosniff'])
         ->and($headers['response']['set']['X-Frame-Options'])->toBe(['SAMEORIGIN'])
-        ->and($headers['response']['deferred']['delete'])->toBe(['Server']);
+        ->and($headers['response']['deferred']['delete'])->toBe(['Server', 'X-Powered-By']);
 });
 
 test('a subdirectory app resolves its document root', function () {

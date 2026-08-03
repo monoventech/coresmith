@@ -37,6 +37,11 @@ final class UnsafeNameException extends InvalidArgumentException
         return new self('A cron command cannot contain a newline, which would inject additional crontab entries.');
     }
 
+    public static function domain(string $value): self
+    {
+        return new self("[{$value}] is not a valid domain name.");
+    }
+
     public static function systemUser(string $value): self
     {
         return new self("[{$value}] is not a valid system user name.");

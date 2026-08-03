@@ -41,7 +41,31 @@ class Application extends Model
                     SafeName::assertProcess((string) $process['name']);
                 }
             }
+
+            foreach ($application->allDomains() as $domain) {
+                SafeName::assertDomain($domain);
+            }
         });
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allDomains(): array
+    {
+        $domains = [];
+
+        if ($this->domain !== null && $this->domain !== '') {
+            $domains[] = (string) $this->domain;
+        }
+
+        foreach ((array) $this->additional_domains as $domain) {
+            if (is_string($domain) && $domain !== '') {
+                $domains[] = $domain;
+            }
+        }
+
+        return array_values(array_unique($domains));
     }
 
     public function server(): BelongsTo
@@ -74,6 +98,7 @@ class Application extends Model
             'type' => ApplicationType::class,
             'status' => ApplicationStatus::class,
             'power_state' => PowerState::class,
+            'additional_domains' => 'array',
             'toggles' => 'array',
             'processes' => 'array',
             'cron_jobs' => 'array',
