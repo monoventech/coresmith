@@ -32,16 +32,16 @@ final class DetectStaleDeployments implements ShouldQueue
 
     public function handle(): void
     {
-        $cutoff = now()->subMinutes(self::STALE_AFTER_MINUTES);
-
         Deployment::query()
             ->where('status', DeploymentStatus::Running->value)
-            ->where('started_at', '<', $cutoff)
+            ->where('started_at', '<', now()->subMinutes(self::STALE_AFTER_MINUTES))
+            ->get()
             ->each(function (Deployment $deployment): void {
                 $deployment->forceFill([
                     'status' => DeploymentStatus::Failed,
                     'finished_at' => now(),
-                    'log' => trim((string) $deployment->log."\nDeployment timed out (no response in ".self::STALE_AFTER_MINUTES.' minutes). Likely SSH connection failure.'),
+                    'log' => trim((string) $deployment->log."\nDeployment timed out with no response for "
+                        .self::STALE_AFTER_MINUTES.' minutes. The SSH connection most likely dropped.'),
                 ])->save();
 
                 Cache::lock('deploy:'.$deployment->application_id)->forceRelease();
