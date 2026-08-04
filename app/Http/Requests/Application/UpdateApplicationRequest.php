@@ -26,20 +26,22 @@ final class UpdateApplicationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', Rule::enum(ApplicationType::class)],
-            'js_runtime' => ['nullable', Rule::in(['bun', 'node', 'deno'])],
-            'framework' => ['nullable', 'string', 'max:64'],
-            'domain' => ['nullable', 'string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
-            'repository_url' => ['nullable', 'url', 'max:2048'],
-            'repository_branch' => ['required', 'string', 'max:255'],
-            'php_version' => ['nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
-            'node_version' => ['nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
-            'ruby_version' => ['nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
-            'directory' => ['required', 'string', 'max:255'],
-            'web_directory' => ['required', 'string', 'max:255'],
-            'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
-            'run_migrations' => ['boolean'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'type' => ['sometimes', 'required', Rule::enum(ApplicationType::class)],
+            'js_runtime' => ['sometimes', 'nullable', Rule::in(['bun', 'node', 'deno'])],
+            'framework' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'domain' => ['sometimes', 'nullable', 'string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
+            'additional_domains' => ['sometimes', 'nullable', 'array'],
+            'additional_domains.*' => ['string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
+            'repository_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'repository_branch' => ['sometimes', 'required', 'string', 'max:255'],
+            'php_version' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'node_version' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'ruby_version' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'directory' => ['sometimes', 'required', 'string', 'max:255'],
+            'web_directory' => ['sometimes', 'required', 'string', 'max:255'],
+            'app_size' => ['sometimes', 'required', Rule::in(['small', 'medium', 'large', 'custom'])],
+            'run_migrations' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -48,6 +50,9 @@ final class UpdateApplicationRequest extends FormRequest
      */
     public function messages(): array
     {
-        return ['domain.regex' => 'Enter a valid domain name, for example app.example.com.'];
+        return [
+            'domain.regex' => 'Enter a valid domain name, for example app.example.com.',
+            'additional_domains.*.regex' => 'Each additional domain must be a valid domain name.',
+        ];
     }
 }

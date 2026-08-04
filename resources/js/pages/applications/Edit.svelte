@@ -33,12 +33,6 @@
                 <InputError message={errors.domain} />
             </div>
 
-            <input type="hidden" name="type" value={application.type} />
-            <input type="hidden" name="app_size" value={application.app_size} />
-            <input type="hidden" name="repository_branch" value={application.repository_branch ?? 'main'} />
-            <input type="hidden" name="directory" value={application.directory ?? '/'} />
-            <input type="hidden" name="web_directory" value={application.web_directory ?? '/public'} />
-
             <Button type="submit" disabled={processing}>
                 {#if processing}<Spinner />{/if}
                 Save changes

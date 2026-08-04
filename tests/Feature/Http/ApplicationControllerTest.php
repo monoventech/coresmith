@@ -233,3 +233,45 @@ test('the slug generator never produces an invalid system user', function () {
             ->and(SafeName::isSystemUser($slugs->systemUser($slug)))->toBeTrue();
     }
 });
+
+test('an update may send only the fields that changed', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create([
+        'name' => 'Before',
+        'app_size' => 'large',
+        'web_directory' => '/dist',
+    ]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'After'])
+        ->assertRedirect();
+
+    $fresh = $application->fresh();
+
+    expect($fresh->name)->toBe('After')
+        ->and($fresh->app_size)->toBe('large')
+        ->and($fresh->web_directory)->toBe('/dist');
+});
+
+test('a partial update still validates the fields it does send', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['domain' => 'evil.com, other.com'])
+        ->assertSessionHasErrors('domain');
+});
+
+test('additional domains are validated one by one', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), [
+            'additional_domains' => ['ok.example.com', 'not a domain'],
+        ])
+        ->assertSessionHasErrors('additional_domains.1');
+});
