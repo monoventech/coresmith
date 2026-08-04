@@ -16,6 +16,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnection;
@@ -93,7 +94,7 @@ final class DeployApplication implements ShouldQueue
             DeploymentSucceeded::dispatch($this->deployment);
         } catch (Throwable $e) {
             $this->cleanUpFailedRelease($connection, $release);
-            $this->markFailed($e->getMessage());
+            $this->markFailed(app(LogSanitizer::class)->sanitize($e->getMessage(), $this->deployment->application));
 
             throw $e;
         } finally {
@@ -242,8 +243,10 @@ final class DeployApplication implements ShouldQueue
             return;
         }
 
+        $clean = app(LogSanitizer::class)->sanitize($output, $this->deployment->application);
+
         $this->deployment->forceFill([
-            'log' => trim((string) $this->deployment->log."\n".$output),
+            'log' => trim((string) $this->deployment->log."\n".$clean),
         ])->save();
     }
 
