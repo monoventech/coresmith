@@ -1,9 +1,12 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\ServerController;
+use App\Http\Controllers\SshKeyController;
+use App\Http\Controllers\TeamMemberController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -29,6 +32,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.env.show');
     Route::put('servers/{server}/applications/{application}/env', [EnvController::class, 'update'])
         ->name('servers.applications.env.update');
+
+    Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update']);
+    Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
+        ->name('servers.databases.backup');
+
+    Route::resource('ssh-keys', SshKeyController::class)->only(['index', 'store', 'destroy']);
+
+    Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
+    Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
+    Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
 });
 
 require __DIR__.'/settings.php';
