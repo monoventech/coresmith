@@ -10,10 +10,12 @@ namespace Database\Seeders;
 
 use App\Enums\ApplicationType;
 use App\Enums\ServerStatus;
+use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -91,6 +93,13 @@ final class E2ESeeder extends Seeder
         ManagedDatabase::factory()->for($team)->for($server)->create([
             'name' => 'storefront_production',
             'db_user' => 'storefront_user',
+        ]);
+
+        SourceProvider::factory()->for($team)->create([
+            'type' => SourceProviderType::GitHubApp->value,
+            'name' => 'oseughu',
+            'access_token' => 'ghs_e2e_never_rendered',
+            'token_expires_at' => now()->addMinutes(102),
         ]);
 
         Server::factory()->for($team)->create([

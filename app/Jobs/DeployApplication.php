@@ -144,7 +144,7 @@ final class DeployApplication implements ShouldQueue
             $connection->execute($fetch)->throw();
         } finally {
             if ($private) {
-                $connection->execute($keys->removeCommand($application), sudo: true);
+                $connection->execute($keys->removeCommand($application));
             }
         }
 
@@ -190,16 +190,9 @@ final class DeployApplication implements ShouldQueue
     {
         $application = $keys->ensure($application);
 
-        foreach ($keys->installCommands($application) as $index => $command) {
-            if ($index === 0) {
-                $connection->execute($command, sudo: true)->throw();
-                $connection->uploadContent((string) $application->deploy_key_private, $keys->keyPath($application));
-
-                continue;
-            }
-
-            $connection->execute($command, sudo: true)->throw();
-        }
+        $connection->execute($keys->prepareDirectory($application), sudo: true)->throw();
+        $connection->execute($keys->reserveFile($application))->throw();
+        $connection->uploadContent((string) $application->deploy_key_private, $keys->keyPath($application));
     }
 
     private function hasCustomBlueprint(Application $application): bool

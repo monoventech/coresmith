@@ -33,6 +33,10 @@
         {
             title: 'SSH keys',
             href: route('ssh-keys.index')
+        },
+        {
+            title: 'Source providers',
+            href: route('source-providers.index')
         }
     ]
 

@@ -39,17 +39,25 @@ final class DeployKeyManager
         return self::KEY_DIR.'/'.SafeName::assertSlug($application->slug);
     }
 
+    public function prepareDirectory(Application $application): string
+    {
+        $dir = escapeshellarg(self::KEY_DIR);
+        $owner = escapeshellarg(SafeName::assertSystemUser($application->server->ssh_user));
+
+        return "mkdir -p {$dir} && chown {$owner} {$dir} && chmod 700 {$dir}";
+    }
+
+    public function reserveFile(Application $application): string
+    {
+        return 'install -m 600 /dev/null '.escapeshellarg($this->keyPath($application));
+    }
+
     /**
      * @return list<string>
      */
     public function installCommands(Application $application): array
     {
-        $path = escapeshellarg($this->keyPath($application));
-
-        return [
-            'mkdir -p '.escapeshellarg(self::KEY_DIR).' && chmod 700 '.escapeshellarg(self::KEY_DIR),
-            'chmod 600 '.$path,
-        ];
+        return [$this->prepareDirectory($application), $this->reserveFile($application)];
     }
 
     public function removeCommand(Application $application): string

@@ -290,7 +290,25 @@ test('the deploy key is uploaded to the server and then removed', function () {
 
     expect($transport->uploads())->toHaveKey('/etc/coresmith/deploy-keys/my-app')
         ->and($transport->uploads()['/etc/coresmith/deploy-keys/my-app'])->toContain('BEGIN OPENSSH PRIVATE KEY')
+        ->and($commands)->toContain("install -m 600 /dev/null '/etc/coresmith/deploy-keys/my-app'")
         ->and($commands)->toContain("rm -f '/etc/coresmith/deploy-keys/my-app'");
+});
+
+test('the key file exists with tight permissions before its contents are written', function () {
+    $deployment = Deployment::factory()->for(deployableApp([
+        'repository_url' => 'git@github.com:monoven/example.git',
+    ]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = $transport->commands();
+    $reserve = array_search("install -m 600 /dev/null '/etc/coresmith/deploy-keys/my-app'", $commands, true);
+    $harden = array_search("mkdir -p '/etc/coresmith/deploy-keys' && chown 'root' '/etc/coresmith/deploy-keys' && chmod 700 '/etc/coresmith/deploy-keys'", $commands, true);
+
+    expect($harden)->not->toBeFalse()
+        ->and($reserve)->not->toBeFalse()
+        ->and($harden)->toBeLessThan($reserve);
 });
 
 test('the deploy key does not outlive a failed clone', function () {

@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\SourceProviderConnectController;
+use App\Http\Controllers\Settings\SourceProviderController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
@@ -21,4 +23,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
+
+    Route::get('settings/source-providers', [SourceProviderController::class, 'index'])->name('source-providers.index');
+    Route::get('settings/source-providers/{type}/connect', [SourceProviderConnectController::class, 'redirect'])
+        ->middleware('throttle:10,1')
+        ->name('source-providers.connect');
+    Route::get('settings/source-providers/{type}/callback', [SourceProviderConnectController::class, 'callback'])
+        ->middleware('throttle:10,1')
+        ->name('source-providers.callback');
+    Route::delete('settings/source-providers/{sourceProvider}', [SourceProviderController::class, 'destroy'])->name('source-providers.destroy');
 });

