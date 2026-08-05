@@ -18,6 +18,7 @@ use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Git\DeployKeyManager;
 use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
@@ -121,14 +122,32 @@ final class DeployApplication implements ShouldQueue
         $repo = $paths->repo();
         $url = escapeshellarg((string) $application->repository_url);
         $branch = escapeshellarg($application->repository_branch);
+        $keys = app(DeployKeyManager::class);
+        $private = $keys->usesDeployKey($application);
 
         $connection->execute('mkdir -p '.$paths->releases().' '.$paths->shared())->throw();
 
-        $connection->execute(
-            "test -d {$repo} || git clone --bare {$url} {$repo}",
-        )->throw();
+        if ($private) {
+            $this->installDeployKey($connection, $keys, $application);
+        }
 
-        $connection->execute("git --git-dir={$repo} fetch --all --prune")->throw();
+        try {
+            $clone = $private
+                ? $keys->withKey($application, "git clone --bare {$url} {$repo}")
+                : "git clone --bare {$url} {$repo}";
+
+            $fetch = $private
+                ? $keys->withKey($application, "git --git-dir={$repo} fetch --all --prune")
+                : "git --git-dir={$repo} fetch --all --prune";
+
+            $connection->execute("test -d {$repo} || {$clone}")->throw();
+            $connection->execute($fetch)->throw();
+        } finally {
+            if ($private) {
+                $connection->execute($keys->removeCommand($application), sudo: true);
+            }
+        }
+
         $connection->execute('mkdir -p '.$release)->throw();
         $connection->execute("git --git-dir={$repo} archive {$branch} | tar -x -C {$release}")->throw();
 
@@ -163,6 +182,22 @@ final class DeployApplication implements ShouldQueue
     private function restartProcesses(SSHConnection $connection, DeploymentCommands $commands): void
     {
         foreach ($commands->restart($this->deployment->application) as $command) {
+            $connection->execute($command, sudo: true)->throw();
+        }
+    }
+
+    private function installDeployKey(SSHConnection $connection, DeployKeyManager $keys, Application $application): void
+    {
+        $application = $keys->ensure($application);
+
+        foreach ($keys->installCommands($application) as $index => $command) {
+            if ($index === 0) {
+                $connection->execute($command, sudo: true)->throw();
+                $connection->uploadContent((string) $application->deploy_key_private, $keys->keyPath($application));
+
+                continue;
+            }
+
             $connection->execute($command, sudo: true)->throw();
         }
     }

@@ -28,7 +28,7 @@ class Application extends Model
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['env_variables'];
+    protected $hidden = ['env_variables', 'deploy_key_private'];
 
     protected static function booted(): void
     {
@@ -95,6 +95,7 @@ class Application extends Model
     {
         return [
             'env_variables' => Vaulted::class,
+            'deploy_key_private' => Vaulted::class,
             'type' => ApplicationType::class,
             'status' => ApplicationStatus::class,
             'power_state' => PowerState::class,

@@ -262,3 +262,68 @@ test('a failing custom blueprint never reaches the symlink swap', function () {
 
     expect(implode("\n", $transport->commands()))->not->toContain('current.tmp');
 });
+
+test('a private repository is cloned with its own deploy key', function () {
+    $deployment = Deployment::factory()->for(deployableApp([
+        'repository_url' => 'git@github.com:monoven/example.git',
+    ]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $clone = collect($transport->commands())->first(fn (string $c) => str_contains($c, 'git clone --bare'));
+
+    expect($clone)->toContain('GIT_SSH_COMMAND=')
+        ->and($clone)->toContain('/etc/coresmith/deploy-keys/my-app')
+        ->and($clone)->toContain('IdentitiesOnly=yes');
+});
+
+test('the deploy key is uploaded to the server and then removed', function () {
+    $deployment = Deployment::factory()->for(deployableApp([
+        'repository_url' => 'git@github.com:monoven/example.git',
+    ]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($transport->uploads())->toHaveKey('/etc/coresmith/deploy-keys/my-app')
+        ->and($transport->uploads()['/etc/coresmith/deploy-keys/my-app'])->toContain('BEGIN OPENSSH PRIVATE KEY')
+        ->and($commands)->toContain("rm -f '/etc/coresmith/deploy-keys/my-app'");
+});
+
+test('the deploy key does not outlive a failed clone', function () {
+    $deployment = Deployment::factory()->for(deployableApp([
+        'repository_url' => 'git@github.com:monoven/example.git',
+    ]))->create();
+    $transport = healthyDeployTransport()->respondTo('git clone --bare', 'Permission denied (publickey).', 128);
+
+    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect(implode("\n", $transport->commands()))->toContain("rm -f '/etc/coresmith/deploy-keys/my-app'")
+        ->and($deployment->fresh()->status)->toBe(DeploymentStatus::Failed);
+});
+
+test('a public repository is cloned without ever writing a key to the server', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->not->toContain('GIT_SSH_COMMAND')
+        ->and($commands)->not->toContain('/etc/coresmith/deploy-keys')
+        ->and(array_keys($transport->uploads()))->not->toContain('/etc/coresmith/deploy-keys/my-app');
+});
+
+test('the private deploy key never reaches the deployment log', function () {
+    $application = deployableApp(['repository_url' => 'git@github.com:monoven/example.git']);
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = healthyDeployTransport()->respondTo('composer install', 'failed', 1);
+
+    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect((string) $deployment->fresh()->log)->not->toContain('BEGIN OPENSSH PRIVATE KEY');
+});

@@ -13,6 +13,7 @@ use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Git\DeployKeyManager;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use Illuminate\Http\RedirectResponse;
@@ -83,6 +84,10 @@ final class ApplicationController extends Controller
                 'php_version' => $application->php_version,
                 'node_version' => $application->node_version,
                 'ruby_version' => $application->ruby_version,
+                'uses_deploy_key' => app(DeployKeyManager::class)->usesDeployKey($application),
+                'deploy_key_public' => app(DeployKeyManager::class)->usesDeployKey($application)
+                    ? app(DeployKeyManager::class)->ensure($application)->deploy_key_public
+                    : null,
             ],
             'deployments' => $application->deployments()
                 ->latest()

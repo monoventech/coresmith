@@ -33,7 +33,7 @@ final class UpdateApplicationRequest extends FormRequest
             'domain' => ['sometimes', 'nullable', 'string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
             'additional_domains' => ['sometimes', 'nullable', 'array'],
             'additional_domains.*' => ['string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
-            'repository_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'repository_url' => ['sometimes', 'nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
             'repository_branch' => ['sometimes', 'required', 'string', 'max:255'],
             'php_version' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
             'node_version' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],

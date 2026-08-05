@@ -36,7 +36,7 @@ final class StoreApplicationRequest extends FormRequest
             'js_runtime' => ['nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['nullable', 'string', 'max:64'],
             'domain' => ['nullable', 'string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
-            'repository_url' => ['nullable', 'url', 'max:2048'],
+            'repository_url' => ['nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
             'repository_branch' => ['required', 'string', 'max:255'],
             'php_version' => ['nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
             'node_version' => ['nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],
@@ -53,6 +53,9 @@ final class StoreApplicationRequest extends FormRequest
      */
     public function messages(): array
     {
-        return ['domain.regex' => 'Enter a valid domain name, for example app.example.com.'];
+        return [
+            'domain.regex' => 'Enter a valid domain name, for example app.example.com.',
+            'repository_url.regex' => 'Use an https:// URL for public repositories, or git@host:owner/repo.git for private ones.',
+        ];
     }
 }

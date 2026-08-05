@@ -88,6 +88,17 @@
         </section>
     </div>
 
+    {#if application.uses_deploy_key && application.deploy_key_public}
+        <section class="mt-6 rounded-xl border border-border bg-card p-6">
+            <h3 class="mb-4 text-base font-semibold">Deploy key</h3>
+            <p class="mb-4 text-sm leading-relaxed text-muted-foreground">
+                Add this as a read-only deploy key on the repository. It is used only for cloning, and only for this
+                application — no access token is ever used for git.
+            </p>
+            <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs break-all whitespace-pre-wrap">{application.deploy_key_public}</pre>
+        </section>
+    {/if}
+
     <section class="mt-6 rounded-xl border border-border bg-card p-6">
         <h3 class="mb-4 text-base font-semibold">Recent deployments</h3>
 

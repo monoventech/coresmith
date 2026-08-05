@@ -77,6 +77,17 @@ final class E2ESeeder extends Seeder
             'base_port' => 8000,
         ]);
 
+        Application::factory()->for($team)->for($server)->create([
+            'name' => 'Internal API',
+            'slug' => 'internal-api',
+            'system_user' => 'coresmith-app-internal-api',
+            'type' => ApplicationType::Php,
+            'framework' => 'laravel',
+            'domain' => 'api.example.com',
+            'repository_url' => 'git@github.com:monoven/internal-api.git',
+            'base_port' => 8010,
+        ]);
+
         ManagedDatabase::factory()->for($team)->for($server)->create([
             'name' => 'storefront_production',
             'db_user' => 'storefront_user',

@@ -75,7 +75,7 @@ let filesToCache = [
     '../build/assets/zilla-slab-600-normal-BRgn6X7z.woff2',
     '../build/assets/zilla-slab-600-normal-DTnoEnY3.woff',
     '../build/assets/zilla-slab-600-normal-iLPAhCz6.woff',
-    '../build/assets/app-C8TZxY0C.css',
+    '../build/assets/app-BneAf9nF.css',
     '../build/assets/app-C3ssm0U6.js',
     '../build/assets/Dashboard-aqfBZeW-.js',
     '../build/assets/Welcome-D_NF8nyI.js',
