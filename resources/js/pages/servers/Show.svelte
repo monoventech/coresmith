@@ -3,7 +3,7 @@
     import Heading from '@/components/Heading.svelte'
     import ServerStatusBadge from '@/components/ServerStatusBadge.svelte'
     import { Button } from '@/components/ui/button'
-    import { router } from '@inertiajs/svelte'
+    import { Link, router } from '@inertiajs/svelte'
 
     interface ServerDetail {
         id: string
@@ -55,6 +55,8 @@
 
         <div class="flex items-center gap-3">
             <ServerStatusBadge status={server.status} />
+            <Link href="/servers/{server.id}/applications"><Button variant="outline">Applications</Button></Link>
+            <Link href="/servers/{server.id}/databases"><Button variant="outline">Databases</Button></Link>
             {#if can.update}
                 <Button variant="outline" onclick={() => router.post(`/servers/${server.id}/test-connection`)}>Test connection</Button>
                 <Button onclick={() => router.post(`/servers/${server.id}/provision`)}>Provision</Button>
