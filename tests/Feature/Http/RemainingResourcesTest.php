@@ -232,3 +232,60 @@ test('adding someone twice is refused', function () {
         ->post(route('teams.members.store', $team), ['email' => $existing->email, 'role' => 'member'])
         ->assertStatus(422);
 });
+
+test('the team page lists members with their roles', function () {
+    $team = Team::factory()->create(['name' => 'Monoven']);
+    $owner = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Member);
+
+    $this->actingAs($owner)
+        ->get(route('teams.show', $team))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('settings/Team')
+            ->where('team.name', 'Monoven')
+            ->has('members', 2)
+            ->where('can.manageMembers', true)
+            ->where('can.grantOwner', true));
+});
+
+test('an admin sees member management but cannot grant owner', function () {
+    $team = Team::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->get(route('teams.show', $team))
+        ->assertInertia(fn ($page) => $page
+            ->where('can.manageMembers', true)
+            ->where('can.grantOwner', false));
+});
+
+test('a member sees the roster but no management controls', function () {
+    $team = Team::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Member))
+        ->get(route('teams.show', $team))
+        ->assertInertia(fn ($page) => $page->where('can.manageMembers', false));
+});
+
+test('another teams page cannot be opened', function () {
+    $outsider = joined(Team::factory()->create(), TeamRole::Owner);
+
+    $this->actingAs($outsider)
+        ->get(route('teams.show', Team::factory()->create()))
+        ->assertForbidden();
+});
+
+test('the team index resolves the users own team', function () {
+    $team = Team::factory()->create(['name' => 'Monoven']);
+
+    $this->actingAs(joined($team, TeamRole::Owner))
+        ->get(route('teams.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('team.name', 'Monoven'));
+});
+
+test('a user with no team gets a not found rather than an error', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('teams.index'))
+        ->assertNotFound();
+});

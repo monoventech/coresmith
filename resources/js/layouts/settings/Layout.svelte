@@ -25,6 +25,14 @@
         {
             title: 'Appearance',
             href: route('appearance.edit')
+        },
+        {
+            title: 'Team',
+            href: route('teams.index')
+        },
+        {
+            title: 'SSH keys',
+            href: route('ssh-keys.index')
         }
     ]
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\SshKeyController;
+use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamMemberController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
@@ -39,6 +40,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::resource('ssh-keys', SshKeyController::class)->only(['index', 'store', 'destroy']);
 
+    Route::get('teams', [TeamController::class, 'index'])->name('teams.index');
+    Route::get('teams/{team}', [TeamController::class, 'show'])->name('teams.show');
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');

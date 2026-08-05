@@ -7,6 +7,7 @@ const PAGES = [
     ['/servers/create', 'Add a server'],
     ['/ssh-keys', 'SSH keys'],
     ['/settings/profile', 'Profile settings'],
+    ['/teams', 'Team management'],
 ]
 
 test.describe('Accessibility', () => {
