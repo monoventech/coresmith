@@ -11,13 +11,13 @@
         deploying: 'bg-primary/10 text-primary',
         provisioning: 'bg-primary/10 text-primary',
         running: 'bg-primary/10 text-primary',
-        active: 'bg-success/10 text-success',
-        succeeded: 'bg-success/10 text-success',
-        failed: 'bg-destructive/10 text-destructive',
+        active: 'bg-success/10 text-success-strong',
+        succeeded: 'bg-success/10 text-success-strong',
+        failed: 'bg-destructive/10 text-destructive-strong',
         cancelled: 'bg-muted text-muted-foreground',
-        stopped: 'bg-warning/10 text-warning',
-        sleeping: 'bg-warning/10 text-warning',
-        disconnected: 'bg-warning/10 text-warning'
+        stopped: 'bg-warning/10 text-warning-strong',
+        sleeping: 'bg-warning/10 text-warning-strong',
+        disconnected: 'bg-warning/10 text-warning-strong'
     }
 
     const key = $derived(status ?? 'pending')

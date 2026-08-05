@@ -20,9 +20,9 @@
         {
             pending: 'bg-muted text-muted-foreground',
             provisioning: 'bg-primary/10 text-primary',
-            active: 'bg-success/10 text-success',
-            failed: 'bg-destructive/10 text-destructive',
-            disconnected: 'bg-warning/10 text-warning'
+            active: 'bg-success/10 text-success-strong',
+            failed: 'bg-destructive/10 text-destructive-strong',
+            disconnected: 'bg-warning/10 text-warning-strong'
         }[status ?? 'pending'] ?? 'bg-muted text-muted-foreground'
     )
 </script>

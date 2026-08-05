@@ -35,9 +35,11 @@
         <SidebarMenu>
             <SidebarMenuItem>
                 <SidebarMenuButton size="lg">
-                    <Link href={route('dashboard')}>
-                        <AppLogo />
-                    </Link>
+                    {#snippet child({ props })}
+                        <Link href={route('dashboard')} {...props}>
+                            <AppLogo />
+                        </Link>
+                    {/snippet}
                 </SidebarMenuButton>
             </SidebarMenuItem>
         </SidebarMenu>

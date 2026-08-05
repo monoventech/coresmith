@@ -2,7 +2,7 @@
     "$schema": "https://www.schemastore.org/package.json",
     "name": "coresmith",
     "version": "0.1.0",
-    "description": "Coresmith \u2014 self-hostable server management and deployment platform",
+    "description": "Coresmith — self-hostable server management and deployment platform",
     "license": "Elastic-2.0",
     "private": true,
     "type": "module",
@@ -22,6 +22,7 @@
         "e2e:refresh": "php artisan migrate:fresh --seed --seeder=E2ESeeder --env=e2e --force"
     },
     "devDependencies": {
+        "@axe-core/playwright": "^4.12.1",
         "@eslint/js": "^10.0.1",
         "@inertiajs/svelte": "^3.3.0",
         "@inertiajs/vite": "^3.3.0",
@@ -35,6 +36,7 @@
         "@tanstack/table-core": "^8.21.3",
         "@tsconfig/svelte": "^5.0.8",
         "@types/node": "^25.9.1",
+        "axe-core": "^4.12.1",
         "bits-ui": "^2.18.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",

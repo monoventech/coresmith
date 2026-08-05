@@ -25,6 +25,8 @@ final class E2ESeeder extends Seeder
 
     public const MEMBER_EMAIL = 'member@coresmith.test';
 
+    public const SIGNOUT_EMAIL = 'signout@coresmith.test';
+
     public const PASSWORD = 'password-for-e2e';
 
     public function run(): void
@@ -43,7 +45,15 @@ final class E2ESeeder extends Seeder
             'email_verified_at' => now(),
         ]);
 
+        $signOut = User::factory()->create([
+            'name' => 'Cy SignOut',
+            'email' => self::SIGNOUT_EMAIL,
+            'password' => Hash::make(self::PASSWORD),
+            'email_verified_at' => now(),
+        ]);
+
         $team = Team::factory()->create(['name' => 'Monoven', 'owner_id' => $owner->id]);
+        $team->members()->attach($signOut, ['role' => TeamRole::Member->value]);
         $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
         $team->members()->attach($member, ['role' => TeamRole::Member->value]);
 

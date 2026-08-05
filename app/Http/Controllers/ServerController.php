@@ -33,6 +33,7 @@ final class ServerController extends Controller
                 ->latest()
                 ->get()
                 ->map(fn (Server $server): array => $this->summarise($server)),
+            'can' => ['create' => $request->user()?->can('create', Server::class) ?? false],
         ]);
     }
 

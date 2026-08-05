@@ -26,7 +26,7 @@ final class ManagedDatabasePolicy
 
     public function create(User $user): bool
     {
-        return $user->teams()->exists();
+        return $user->hasAbilityInAnyTeam(Ability::CreateDatabase);
     }
 
     public function update(User $user, ManagedDatabase $managedDatabase): bool

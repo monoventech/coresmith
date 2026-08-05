@@ -49,6 +49,13 @@ class User extends Authenticatable
         return $this->roleIn($team)?->can($ability) ?? false;
     }
 
+    public function hasAbilityInAnyTeam(Ability $ability): bool
+    {
+        return $this->teams->contains(
+            fn (Team $team): bool => TeamRole::tryFrom((string) $team->pivot->role)?->can($ability) ?? false,
+        );
+    }
+
     public function teams(): BelongsToMany
     {
         return $this->belongsToMany(Team::class)->withPivot('role')->withTimestamps();

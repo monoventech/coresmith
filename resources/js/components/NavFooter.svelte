@@ -16,15 +16,15 @@
             {#each items as item, index (index)}
                 <SidebarMenuItem>
                     <SidebarMenuButton class="text-muted-foreground hover:text-foreground">
-                        <a href={item.href} target="_blank" rel="noopener noreferrer" class="block w-full">
-                            <div class="flex items-center gap-2 w-full">
+                        {#snippet child({ props })}
+                            <a href={item.href} target="_blank" rel="noopener noreferrer" {...props}>
                                 {#if item.icon}
                                     {@const Icon = item.icon}
                                     <Icon class="h-4 w-4 shrink-0" />
                                 {/if}
                                 <span>{item.title}</span>
-                            </div>
-                        </a>
+                            </a>
+                        {/snippet}
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             {/each}

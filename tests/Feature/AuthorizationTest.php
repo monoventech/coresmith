@@ -164,3 +164,19 @@ test('role resolution returns null outside the team', function () {
     expect($user->roleIn(Team::factory()->create()))->toBeNull()
         ->and($user->belongsToTeam(Team::factory()->create()))->toBeFalse();
 });
+
+test('a member cannot reach the create screen for any resource', function (string $model) {
+    $team = Team::factory()->create();
+
+    expect(memberOf($team, TeamRole::Member)->can('create', $model))->toBeFalse();
+})->with([Server::class, Application::class, ManagedDatabase::class]);
+
+test('an admin can reach the create screen for any resource', function (string $model) {
+    $team = Team::factory()->create();
+
+    expect(memberOf($team, TeamRole::Admin)->can('create', $model))->toBeTrue();
+})->with([Server::class, Application::class, ManagedDatabase::class]);
+
+test('a user in no team cannot create anything', function () {
+    expect(User::factory()->create()->can('create', Server::class))->toBeFalse();
+});

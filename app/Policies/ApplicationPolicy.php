@@ -26,7 +26,7 @@ final class ApplicationPolicy
 
     public function create(User $user): bool
     {
-        return $user->teams()->exists();
+        return $user->hasAbilityInAnyTeam(Ability::CreateApplication);
     }
 
     public function update(User $user, Application $application): bool

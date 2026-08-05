@@ -13,13 +13,15 @@
 
     <div class="space-y-4 rounded-xl border border-destructive/20 bg-destructive/5 p-5">
         <div class="space-y-1">
-            <p class="font-medium text-destructive">This cannot be undone</p>
+            <p class="font-medium text-destructive-strong">This cannot be undone</p>
             <p class="text-sm text-muted-foreground">Your servers, deployments, and account data are removed for good.</p>
         </div>
 
         <Dialog>
             <DialogTrigger>
-                <Button variant="destructive" data-test="delete-user-button">Delete account</Button>
+                {#snippet child({ props })}
+                    <Button variant="destructive" data-test="delete-user-button" {...props}>Delete account</Button>
+                {/snippet}
             </DialogTrigger>
             <DialogContent>
                 <Form method="delete" action={route('profile.destroy')} class="space-y-6" options={{ preserveScroll: true }}>

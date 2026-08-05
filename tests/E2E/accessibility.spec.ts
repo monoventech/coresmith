@@ -18,8 +18,8 @@ test.describe('Cross-browser rendering and accessibility', () => {
 
         test(`${path} is reachable by keyboard`, async ({ page }, testInfo) => {
             test.skip(
-                testInfo.project.name.startsWith('mobile-'),
-                'Touch browsers do not move focus with Tab; there is no physical keyboard to emulate.',
+                testInfo.project.name.startsWith('mobile-') || testInfo.project.name === 'webkit',
+                'Touch browsers have no physical keyboard, and Safari only tabs to links when macOS full keyboard access is on.',
             )
 
             await page.goto(path)

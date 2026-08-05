@@ -44,6 +44,10 @@ class HandleInertiaRequests extends Middleware
             'appName' => config('app.name'),
             'billingEnabled' => (bool) config('coresmith.billing_enabled'),
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+            ],
         ];
     }
 }

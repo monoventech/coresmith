@@ -1,16 +1,31 @@
-import type { FlashToast } from '@/types/ui'
 import { router } from '@inertiajs/svelte'
 import { toast } from 'svelte-sonner'
 
+interface FlashProps {
+    success?: string | null
+    error?: string | null
+}
+
+function announce(flash: FlashProps | undefined): void {
+    if (!flash) {
+        return
+    }
+
+    if (flash.success) {
+        toast.success(flash.success)
+    }
+
+    if (flash.error) {
+        toast.error(flash.error)
+    }
+}
+
 export function initializeFlashToast(): void {
-    router.on('flash', (event) => {
-        const flash = (event as CustomEvent).detail?.flash
-        const data = flash?.toast as FlashToast | undefined
+    router.on('success', (event) => {
+        announce((event.detail.page.props as { flash?: FlashProps }).flash)
+    })
 
-        if (!data) {
-            return
-        }
-
-        toast[data.type](data.message)
+    router.on('navigate', (event) => {
+        announce((event.detail.page.props as { flash?: FlashProps }).flash)
     })
 }

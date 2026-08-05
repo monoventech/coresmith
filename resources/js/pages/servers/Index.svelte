@@ -17,7 +17,10 @@
         team: { id: string; name: string | null }
     }
 
-    let { servers = [] }: { servers: ServerSummary[] } = $props()
+    let {
+        servers = [],
+        can = { create: false }
+    }: { servers: ServerSummary[]; can?: { create: boolean } } = $props()
 
     const columnClass = 'h-12 px-4 text-left align-middle text-xs font-medium tracking-[0.01em] text-muted-foreground'
 </script>
@@ -28,7 +31,7 @@
     <div class="mb-10 flex items-start justify-between gap-6">
         <Heading title="Servers" description="Every machine Coresmith manages for your teams." />
 
-        {#if servers.length > 0}
+        {#if servers.length > 0 && can.create}
             <Link href="/servers/create"><Button>Add a server</Button></Link>
         {/if}
     </div>
@@ -42,7 +45,9 @@
                 <BlueprintRack class="text-muted-foreground" />
             {/snippet}
             {#snippet action()}
-                <Link href="/servers/create"><Button>Connect a server</Button></Link>
+                {#if can.create}
+                    <Link href="/servers/create"><Button>Connect a server</Button></Link>
+                {/if}
             {/snippet}
         </EmptyState>
     {:else}

@@ -26,7 +26,7 @@ final class ServerPolicy
 
     public function create(User $user): bool
     {
-        return $user->teams()->exists();
+        return $user->hasAbilityInAnyTeam(Ability::CreateServer);
     }
 
     public function update(User $user, Server $server): bool
