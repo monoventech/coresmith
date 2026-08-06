@@ -25,6 +25,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.provision');
 
     Route::resource('servers.applications', ApplicationController::class);
+    Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
+        ->name('servers.applications.deployments.show');
     Route::post('servers/{server}/applications/{application}/deploy', [DeploymentController::class, 'deploy'])
         ->name('servers.applications.deploy');
     Route::post('servers/{server}/applications/{application}/rollback', [DeploymentController::class, 'rollback'])

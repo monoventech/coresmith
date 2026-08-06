@@ -9,10 +9,12 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Enums\ApplicationType;
+use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Models\Application;
+use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -69,7 +71,7 @@ final class E2ESeeder extends Seeder
             'last_connected_at' => now(),
         ]);
 
-        Application::factory()->for($team)->for($server)->create([
+        $storefront = Application::factory()->for($team)->for($server)->create([
             'name' => 'Storefront',
             'slug' => 'storefront',
             'system_user' => 'coresmith-app-storefront',
@@ -93,6 +95,23 @@ final class E2ESeeder extends Seeder
         ManagedDatabase::factory()->for($team)->for($server)->create([
             'name' => 'storefront_production',
             'db_user' => 'storefront_user',
+        ]);
+
+        Deployment::factory()->for($storefront)->create([
+            'status' => DeploymentStatus::Succeeded,
+            'commit_hash' => 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
+            'commit_message' => 'Add the checkout summary',
+            'log' => "Cloning into bare repository\ncomposer install --no-dev\nnpm run build\nDeployment finished",
+            'started_at' => now()->subMinutes(4),
+            'finished_at' => now()->subMinutes(3),
+        ]);
+
+        Deployment::factory()->for($storefront)->create([
+            'status' => DeploymentStatus::Running,
+            'commit_hash' => 'ff00aa11bb22cc33dd44ee55ff66007788990011',
+            'commit_message' => 'Speed up the cart query',
+            'log' => "Cloning into bare repository\ncomposer install --no-dev",
+            'started_at' => now()->subSeconds(20),
         ]);
 
         SourceProvider::factory()->for($team)->create([

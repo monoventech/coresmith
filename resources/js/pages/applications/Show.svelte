@@ -107,12 +107,17 @@
         {:else}
             <ul class="divide-y divide-border">
                 {#each deployments as deployment (deployment.id)}
-                    <li class="flex items-center justify-between gap-4 py-3">
-                        <div class="min-w-0">
-                            <p class="truncate text-sm">{deployment.commit_message ?? 'No commit message'}</p>
-                            <p class="font-mono text-xs text-muted-foreground">{deployment.commit_hash?.slice(0, 8) ?? '—'}</p>
-                        </div>
-                        <StatusBadge status={deployment.status} />
+                    <li>
+                        <Link
+                            href={route('servers.applications.deployments.show', [server.id, application.id, deployment.id])}
+                            class="flex items-center justify-between gap-4 rounded-md py-3 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <div class="min-w-0">
+                                <p class="truncate text-sm">{deployment.commit_message ?? 'No commit message'}</p>
+                                <p class="font-mono text-xs text-muted-foreground">{deployment.commit_hash?.slice(0, 8) ?? '—'}</p>
+                            </div>
+                            <StatusBadge status={deployment.status} />
+                        </Link>
                     </li>
                 {/each}
             </ul>

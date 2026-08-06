@@ -11,6 +11,7 @@ namespace App\Jobs;
 use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Events\DeploymentSucceeded;
+use App\Events\DeploymentUpdated;
 use App\Exceptions\DeploymentAborted;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -72,6 +73,8 @@ final class DeployApplication implements ShouldQueue
                 'started_at' => now(),
             ])->save();
 
+            DeploymentUpdated::dispatch($this->deployment);
+
             $this->prepare($connection, $paths, $release);
 
             if ($this->hasCustomBlueprint($application)) {
@@ -92,6 +95,7 @@ final class DeployApplication implements ShouldQueue
                 'finished_at' => now(),
             ])->save();
 
+            DeploymentUpdated::dispatch($this->deployment);
             DeploymentSucceeded::dispatch($this->deployment);
         } catch (Throwable $e) {
             $this->cleanUpFailedRelease($connection, $release);
@@ -276,6 +280,8 @@ final class DeployApplication implements ShouldQueue
         $this->deployment->forceFill([
             'log' => trim((string) $this->deployment->log."\n".$clean),
         ])->save();
+
+        DeploymentUpdated::dispatch($this->deployment);
     }
 
     private function markFailed(string $message): void
@@ -286,6 +292,7 @@ final class DeployApplication implements ShouldQueue
             'log' => trim((string) $this->deployment->log."\n".$message),
         ])->save();
 
+        DeploymentUpdated::dispatch($this->deployment);
         DeploymentFailed::dispatch($this->deployment);
     }
 }
