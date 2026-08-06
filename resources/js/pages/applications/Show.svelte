@@ -26,6 +26,9 @@
     } = $props()
 
     const base = $derived(`/servers/${server.id}/applications/${application.id}`)
+    const stopped = $derived(application.power_state === 'stopped')
+    const maintenance = $derived(Boolean(application.toggles?.maintenance_mode))
+    const offline = $derived(stopped || maintenance)
 </script>
 
 <AppHead title={application.name} />
@@ -39,12 +42,30 @@
             {#if can.manageEnvironment}
                 <Link href="{base}/env"><Button variant="outline">Environment</Button></Link>
             {/if}
+            {#if can.update}
+                {#if stopped}
+                    <Button variant="outline" onclick={() => router.post(`${base}/start`)}>Start</Button>
+                {:else}
+                    <Button variant="outline" onclick={() => router.post(`${base}/stop`)}>Stop</Button>
+                {/if}
+            {/if}
             {#if can.deploy}
                 <Button variant="outline" onclick={() => router.post(`${base}/rollback`)}>Roll back</Button>
                 <Button onclick={() => router.post(`${base}/deploy`)}>Deploy</Button>
             {/if}
         </div>
     </div>
+
+    {#if offline}
+        <p class="mb-6 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-warning-strong" role="status" data-testid="offline-banner">
+            {#if stopped}
+                This application is stopped. Visitors see a maintenance page instead of the site.
+            {:else}
+                Maintenance mode is on. Visitors see a maintenance page, but the processes keep running so you can still
+                debug.
+            {/if}
+        </p>
+    {/if}
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-xl border border-border bg-card p-6">
@@ -96,6 +117,30 @@
                 application — no access token is ever used for git.
             </p>
             <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs break-all whitespace-pre-wrap">{application.deploy_key_public}</pre>
+        </section>
+    {/if}
+
+    {#if can.update}
+        <section class="mt-6 rounded-xl border border-border bg-card p-6">
+            <h3 class="mb-1 text-base font-semibold">Maintenance page</h3>
+            <p class="mb-4 text-sm text-muted-foreground">
+                Serve a holding page to visitors while leaving your processes running, so you can still reach the app
+                over SSH to debug it.
+            </p>
+            <label class="flex items-center gap-3 text-sm">
+                <input
+                    type="checkbox"
+                    class="size-4 accent-primary"
+                    checked={maintenance}
+                    disabled={stopped}
+                    onchange={(event) =>
+                        router.put(`${base}/maintenance`, { enabled: event.currentTarget.checked }, { preserveScroll: true })}
+                />
+                Show a maintenance page to all visitors
+            </label>
+            {#if stopped}
+                <p class="mt-2 text-xs text-muted-foreground">The application is stopped, so visitors already see one.</p>
+            {/if}
         </section>
     {/if}
 

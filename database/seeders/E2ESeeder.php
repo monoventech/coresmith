@@ -10,6 +10,7 @@ namespace Database\Seeders;
 
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
+use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
@@ -95,6 +96,17 @@ final class E2ESeeder extends Seeder
         ManagedDatabase::factory()->for($team)->for($server)->create([
             'name' => 'storefront_production',
             'db_user' => 'storefront_user',
+        ]);
+
+        Application::factory()->for($team)->for($server)->create([
+            'name' => 'Retired Blog',
+            'slug' => 'retired-blog',
+            'system_user' => 'coresmith-app-retired-blog',
+            'type' => ApplicationType::Php,
+            'framework' => 'laravel',
+            'domain' => 'blog.example.com',
+            'power_state' => PowerState::Stopped,
+            'base_port' => 8020,
         ]);
 
         Deployment::factory()->for($storefront)->create([

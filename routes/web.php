@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\EnvController;
@@ -27,6 +28,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('servers.applications', ApplicationController::class);
     Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
         ->name('servers.applications.deployments.show');
+    Route::post('servers/{server}/applications/{application}/stop', [ApplicationPowerController::class, 'stop'])
+        ->name('servers.applications.stop');
+    Route::post('servers/{server}/applications/{application}/start', [ApplicationPowerController::class, 'start'])
+        ->name('servers.applications.start');
+    Route::put('servers/{server}/applications/{application}/maintenance', [ApplicationPowerController::class, 'maintenance'])
+        ->name('servers.applications.maintenance');
     Route::post('servers/{server}/applications/{application}/deploy', [DeploymentController::class, 'deploy'])
         ->name('servers.applications.deploy');
     Route::post('servers/{server}/applications/{application}/rollback', [DeploymentController::class, 'rollback'])

@@ -84,6 +84,8 @@ final class ApplicationController extends Controller
                 'php_version' => $application->php_version,
                 'node_version' => $application->node_version,
                 'ruby_version' => $application->ruby_version,
+                'power_state' => $application->power_state->value,
+                'toggles' => (object) ((array) $application->toggles),
                 'uses_deploy_key' => app(DeployKeyManager::class)->usesDeployKey($application),
                 'deploy_key_public' => app(DeployKeyManager::class)->usesDeployKey($application)
                     ? app(DeployKeyManager::class)->ensure($application)->deploy_key_public
