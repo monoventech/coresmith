@@ -31,6 +31,8 @@ final class MetricsCollector
             'load_1m' => $values['load1'],
             'load_5m' => $values['load5'],
             'load_15m' => $values['load15'],
+            'network_rx_bytes' => $values['rx'],
+            'network_tx_bytes' => $values['tx'],
             'recorded_at' => now(),
         ]);
     }
@@ -89,11 +91,12 @@ final class MetricsCollector
             "free -m | awk '/^Mem:/ {printf \"memory=%.1f\\n\", (\$3/\$2)*100}'",
             "df -P / | awk 'NR==2 {gsub(/%/,\"\",\$5); print \"disk=\" \$5}'",
             "awk '{print \"load=\" \$1 \",\" \$2 \",\" \$3}' /proc/loadavg",
+            "awk '/^ *(eth|ens|enp|eno)[0-9]/ {rx+=\$2; tx+=\$10} END {print \"net=\" rx+0 \",\" tx+0}' /proc/net/dev",
         ]);
     }
 
     /**
-     * @return array{cpu: float, memory: float, disk: float, load1: float, load5: float, load15: float}
+     * @return array{cpu: float, memory: float, disk: float, load1: float, load5: float, load15: float, rx: ?int, tx: ?int}
      */
     public function parse(string $output): array
     {
@@ -107,6 +110,14 @@ final class MetricsCollector
             $load = [(float) $matches[1], (float) $matches[2], (float) $matches[3]];
         }
 
+        $rx = null;
+        $tx = null;
+
+        if (preg_match('/net=([0-9]+),([0-9]+)/', $output, $matches) === 1) {
+            $rx = (int) $matches[1];
+            $tx = (int) $matches[2];
+        }
+
         return [
             'cpu' => $cpu,
             'memory' => $memory,
@@ -114,6 +125,8 @@ final class MetricsCollector
             'load1' => $load[0],
             'load5' => $load[1],
             'load15' => $load[2],
+            'rx' => $rx,
+            'tx' => $tx,
         ];
     }
 

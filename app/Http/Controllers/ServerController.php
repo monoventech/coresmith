@@ -14,6 +14,7 @@ use App\Http\Requests\Server\UpdateServerRequest;
 use App\Jobs\ProvisionServer;
 use App\Jobs\TestSSHConnection;
 use App\Models\Server;
+use App\Models\ServerMetric;
 use App\Services\SSH\KeyPairGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -74,12 +75,46 @@ final class ServerController extends Controller
                 'installed_runtimes' => $server->installed_runtimes,
                 'meta' => $server->meta,
             ],
+            'metrics' => $this->metrics($server),
             'can' => [
                 'update' => $this->can('update', $server),
                 'delete' => $this->can('delete', $server),
                 'manageFirewall' => $this->can('manageFirewall', $server),
             ],
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function metrics(Server $server): array
+    {
+        $history = $server->metrics()
+            ->where('recorded_at', '>=', now()->subHour())
+            ->orderBy('recorded_at')
+            ->get(['cpu_percent', 'memory_percent', 'disk_percent', 'load_1m', 'network_rx_bytes', 'network_tx_bytes', 'recorded_at']);
+
+        $latest = $history->last();
+
+        return [
+            'latest' => $latest === null ? null : [
+                'cpu_percent' => round((float) $latest->cpu_percent, 1),
+                'memory_percent' => round((float) $latest->memory_percent, 1),
+                'disk_percent' => round((float) $latest->disk_percent, 1),
+                'load_1m' => round((float) $latest->load_1m, 2),
+                'network_rx_bytes' => $latest->network_rx_bytes,
+                'network_tx_bytes' => $latest->network_tx_bytes,
+                'recorded_at' => $latest->recorded_at?->toIso8601String(),
+            ],
+            'history' => $history->map(fn (ServerMetric $metric): array => [
+                'cpu_percent' => round((float) $metric->cpu_percent, 1),
+                'memory_percent' => round((float) $metric->memory_percent, 1),
+                'disk_percent' => round((float) $metric->disk_percent, 1),
+                'load_1m' => round((float) $metric->load_1m, 2),
+                'recorded_at' => $metric->recorded_at?->toIso8601String(),
+            ])->values(),
+            'cores' => (int) (((array) $server->meta)['cpu_cores'] ?? 0),
+        ];
     }
 
     public function edit(Server $server): Response

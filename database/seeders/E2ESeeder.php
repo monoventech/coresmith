@@ -18,6 +18,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\ServerMetric;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
@@ -71,6 +72,21 @@ final class E2ESeeder extends Seeder
             'meta' => ['cpu_cores' => 4, 'memory_mb' => 8192, 'disk_gb' => 80],
             'last_connected_at' => now(),
         ]);
+
+        foreach (range(29, 0) as $minutesAgo) {
+            ServerMetric::create([
+                'server_id' => $server->id,
+                'cpu_percent' => 18 + ($minutesAgo % 7) * 2.5,
+                'memory_percent' => 41 + ($minutesAgo % 5) * 1.5,
+                'disk_percent' => 63.0,
+                'load_1m' => 0.4 + ($minutesAgo % 4) * 0.15,
+                'load_5m' => 0.5,
+                'load_15m' => 0.6,
+                'network_rx_bytes' => 1048576 * (30 - $minutesAgo),
+                'network_tx_bytes' => 524288 * (30 - $minutesAgo),
+                'recorded_at' => now()->subMinutes($minutesAgo),
+            ]);
+        }
 
         $storefront = Application::factory()->for($team)->for($server)->create([
             'name' => 'Storefront',
