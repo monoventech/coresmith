@@ -1,11 +1,11 @@
 <script lang="ts">
-    import { Link, page } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import AppLogoIcon from '@/components/AppLogoIcon.svelte'
     import BlueprintRack from '@/components/illustrations/BlueprintRack.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
     import { Button } from '@/components/ui/button'
+    import { Link, page } from '@inertiajs/svelte'
 
     let {
         canRegister = true
@@ -47,8 +47,8 @@
                 </h1>
 
                 <p class="mt-6 max-w-lg text-lg leading-relaxed text-muted-foreground">
-                    {appName} sets up your servers, keeps them patched, and deploys your applications straight to them. No Docker. No
-                    lock-in. No monthly rent on someone else's hardware.
+                    {appName} sets up your servers, keeps them patched, and deploys your applications straight to them. No
+                    Docker. No lock-in. No monthly rent on someone else's hardware.
                 </p>
 
                 <div class="mt-10">

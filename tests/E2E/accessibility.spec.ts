@@ -17,14 +17,32 @@ test.describe('Cross-browser rendering and accessibility', () => {
         })
 
         test(`${path} is reachable by keyboard`, async ({ page }, testInfo) => {
-            test.skip(
-                testInfo.project.name.startsWith('mobile-') || testInfo.project.name === 'webkit',
-                'Touch browsers have no physical keyboard, and Safari only tabs to links when macOS full keyboard access is on.',
-            )
+            const webkit = testInfo.project.name === 'webkit' || testInfo.project.name === 'mobile-safari'
 
             await page.goto(path)
             await page.waitForLoadState('networkidle')
             await expect(page.locator('h1, h2').first()).toBeVisible()
+
+            if (webkit) {
+                // WebKit tabs to links only when macOS full keyboard access is on, so assert focusability directly.
+                const reachable = await page.evaluate(() => {
+                    const first = document.querySelector<HTMLElement>(
+                        'a[href], button, input:not([type=hidden]), select, textarea',
+                    )
+
+                    if (!first) {
+                        return 'NONE'
+                    }
+
+                    first.focus()
+
+                    return document.activeElement === first ? first.tagName : 'UNFOCUSABLE'
+                })
+
+                expect(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA']).toContain(reachable)
+
+                return
+            }
 
             await page.keyboard.press('Tab')
 
