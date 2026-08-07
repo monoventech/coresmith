@@ -71,6 +71,8 @@ final class ServerController extends Controller
                 ...$this->summarise($server),
                 'ssh_public_key' => $server->ssh_public_key,
                 'host_key_fingerprint' => $server->host_key_fingerprint,
+                'pending_host_key_fingerprint' => $server->pending_host_key_fingerprint,
+                'host_key_changed_at' => $server->host_key_changed_at?->toIso8601String(),
                 'provisioning_log' => $server->provisioning_log,
                 'installed_runtimes' => $server->installed_runtimes,
                 'meta' => $server->meta,

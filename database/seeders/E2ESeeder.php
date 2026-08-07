@@ -149,6 +149,19 @@ final class E2ESeeder extends Seeder
             'token_expires_at' => now()->addMinutes(102),
         ]);
 
+        $rekeyed = ['rekeyed-server', 'rekeyed-chromium', 'rekeyed-firefox', 'rekeyed-webkit', 'rekeyed-mobile-chrome', 'rekeyed-mobile-safari'];
+
+        foreach ($rekeyed as $index => $name) {
+            Server::factory()->for($team)->create([
+                'name' => $name,
+                'ip_address' => '203.0.113.'.(20 + $index),
+                'status' => ServerStatus::Active,
+                'host_key_fingerprint' => 'SHA256:AAAAoriginalkeyfingerprintAAAAAAAAAAAAAAAAAA',
+                'pending_host_key_fingerprint' => 'SHA256:BBBBimpostorkeyfingerprintBBBBBBBBBBBBBBBBBB',
+                'host_key_changed_at' => now()->subMinutes(9),
+            ]);
+        }
+
         Server::factory()->for($team)->create([
             'name' => 'empty-server',
             'ip_address' => '203.0.113.11',

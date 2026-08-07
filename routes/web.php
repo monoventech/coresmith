@@ -6,6 +6,7 @@ use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\ServerController;
+use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamMemberController;
@@ -26,6 +27,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.provision');
 
     Route::resource('servers.applications', ApplicationController::class);
+    Route::post('servers/{server}/host-key/accept', [ServerHostKeyController::class, 'accept'])
+        ->name('servers.host-key.accept');
+    Route::post('servers/{server}/host-key/reject', [ServerHostKeyController::class, 'reject'])
+        ->name('servers.host-key.reject');
     Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
         ->name('servers.applications.deployments.show');
     Route::post('servers/{server}/applications/{application}/stop', [ApplicationPowerController::class, 'stop'])

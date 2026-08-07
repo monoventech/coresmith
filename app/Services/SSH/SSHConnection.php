@@ -112,6 +112,11 @@ final class SSHConnection
             return;
         }
 
+        $this->server->forceFill([
+            'pending_host_key_fingerprint' => $fingerprint,
+            'host_key_changed_at' => now(),
+        ])->save();
+
         activity()
             ->performedOn($this->server)
             ->withProperties(['expected' => $known, 'actual' => $fingerprint])

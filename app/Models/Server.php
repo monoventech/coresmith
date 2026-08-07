@@ -59,6 +59,7 @@ class Server extends Model
             'meta' => 'array',
             'audit_logging_enabled' => 'boolean',
             'last_connected_at' => 'datetime',
+            'host_key_changed_at' => 'datetime',
         ];
     }
 }

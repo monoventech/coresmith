@@ -1,6 +1,7 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
     import Heading from '@/components/Heading.svelte'
+    import HostKeyAlert from '@/components/HostKeyAlert.svelte'
     import MetricTile from '@/components/MetricTile.svelte'
     import ServerStatusBadge from '@/components/ServerStatusBadge.svelte'
     import { Button } from '@/components/ui/button'
@@ -19,6 +20,8 @@
         provisioning_log: string | null
         ssh_public_key: string
         host_key_fingerprint: string | null
+        pending_host_key_fingerprint: string | null
+        host_key_changed_at: string | null
         installed_runtimes: Record<string, string[]> | null
         meta: { cpu_cores?: number; memory_mb?: number; disk_gb?: number } | null
         last_connected_at: string | null
@@ -104,6 +107,16 @@
 <AppHead title={server.name} />
 
 <div class="px-6 py-8">
+    {#if server.pending_host_key_fingerprint}
+        <HostKeyAlert
+            serverId={server.id}
+            expected={server.host_key_fingerprint}
+            observed={server.pending_host_key_fingerprint}
+            changedAt={server.host_key_changed_at}
+            canManage={can.update}
+        />
+    {/if}
+
     <div class="mb-10 flex items-start justify-between gap-6">
         <Heading title={server.name} description="{server.ssh_user}@{server.ip_address}:{server.ssh_port}" />
 
