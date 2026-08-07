@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
@@ -23,6 +24,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
+
+    Route::get('settings/api-tokens', [ApiTokenController::class, 'index'])->name('api-tokens.index');
+    Route::post('settings/api-tokens', [ApiTokenController::class, 'store'])->name('api-tokens.store');
+    Route::delete('settings/api-tokens/{token}', [ApiTokenController::class, 'destroy'])->name('api-tokens.destroy');
 
     Route::get('settings/source-providers', [SourceProviderController::class, 'index'])->name('source-providers.index');
     Route::get('settings/source-providers/{type}/connect', [SourceProviderConnectController::class, 'redirect'])

@@ -37,6 +37,10 @@
         {
             title: 'Source providers',
             href: route('source-providers.index')
+        },
+        {
+            title: 'API tokens',
+            href: route('api-tokens.index')
         }
     ]
 

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\ApiToken;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -30,6 +32,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Sanctum::usePersonalAccessTokenModel(ApiToken::class);
+
         $this->configureDefaults();
     }
 
