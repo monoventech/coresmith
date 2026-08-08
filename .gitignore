@@ -35,3 +35,5 @@ yarn-error.log
 /tests/E2E/.auth
 /playwright-report
 /test-results
+/database/e2e-install.sqlite
+/storage/app/e2e-setup-token

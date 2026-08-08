@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Middleware\EnforceTokenAbility;
+use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequireSetupToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,7 +21,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        $middleware->alias(['token.can' => EnforceTokenAbility::class]);
+        $middleware->alias([
+            'token.can' => EnforceTokenAbility::class,
+            'setup.token' => RequireSetupToken::class,
+        ]);
+
+        $middleware->web(prepend: [EnsureInstalled::class]);
+        $middleware->api(prepend: [EnsureInstalled::class]);
 
         $middleware->web(append: [
             HandleAppearance::class,

@@ -9,4 +9,5 @@ declare(strict_types=1);
 return [
     'billing_enabled' => (bool) env('CORESMITH_BILLING_ENABLED', false),
     'vault_key' => env('CORESMITH_VAULT_KEY'),
+    'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/etc/coresmith/setup-token'),
 ];

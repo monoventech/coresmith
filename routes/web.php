@@ -5,6 +5,7 @@ use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\EnvController;
+use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\SshKeyController;
@@ -62,3 +63,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 require __DIR__.'/settings.php';
+
+Route::middleware('setup.token')->group(function () {
+    Route::get('install', [InstallationController::class, 'show'])->name('install.show');
+    Route::post('install', [InstallationController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('install.store');
+});

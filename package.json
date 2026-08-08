@@ -2,7 +2,7 @@
     "$schema": "https://www.schemastore.org/package.json",
     "name": "coresmith",
     "version": "0.1.0",
-    "description": "Coresmith — self-hostable server management and deployment platform",
+    "description": "Coresmith \u2014 self-hostable server management and deployment platform",
     "license": "Elastic-2.0",
     "private": true,
     "type": "module",
@@ -19,7 +19,8 @@
         "shadcn:update": "bunx shadcn-svelte update --all",
         "test:e2e": "playwright test",
         "test:e2e:ui": "playwright test --ui",
-        "e2e:refresh": "php artisan migrate:fresh --seed --seeder=E2ESeeder --env=e2e --force"
+        "e2e:refresh": "php artisan migrate:fresh --seed --seeder=E2ESeeder --env=e2e --force",
+        "e2e:install-refresh": "php artisan migrate:fresh --env=e2e-install --force && php artisan coresmith:setup-token --env=e2e-install --force"
     },
     "devDependencies": {
         "@axe-core/playwright": "^4.12.1",

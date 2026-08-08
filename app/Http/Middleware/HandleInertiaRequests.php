@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\InstanceSetting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -41,7 +42,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => !$request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
-            'appName' => config('app.name'),
+            'appName' => InstanceSetting::get('instance_name', config('app.name')),
             'billingEnabled' => (bool) config('coresmith.billing_enabled'),
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
             'flash' => [
