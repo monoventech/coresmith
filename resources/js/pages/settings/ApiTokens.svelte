@@ -4,6 +4,7 @@
     import Heading from '@/components/Heading.svelte'
     import InputError from '@/components/InputError.svelte'
     import { Button } from '@/components/ui/button'
+    import { Checkbox } from '@/components/ui/checkbox'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
 
@@ -65,19 +66,19 @@
             <fieldset class="space-y-2">
                 <legend class="text-sm font-medium">Abilities</legend>
                 {#each abilities as ability (ability.value)}
-                    <label class="flex items-center gap-3 text-sm">
-                        <input
-                            type="checkbox"
-                            class="size-4 accent-primary"
+                    <div class="flex items-center gap-3">
+                        <Checkbox
+                            id="ability-{ability.value}"
                             name="abilities[]"
                             value={ability.value}
                             disabled={!ability.granted}
+                            aria-label={ability.value}
                         />
-                        <span class="font-mono text-xs">{ability.value}</span>
+                        <Label for="ability-{ability.value}" class="font-mono text-xs font-normal">{ability.value}</Label>
                         {#if !ability.granted}
                             <span class="text-xs text-muted-foreground">Your role does not grant this</span>
                         {/if}
-                    </label>
+                    </div>
                 {/each}
                 <InputError message={errors.abilities} />
             </fieldset>

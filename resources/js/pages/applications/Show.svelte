@@ -3,6 +3,8 @@
     import Heading from '@/components/Heading.svelte'
     import StatusBadge from '@/components/StatusBadge.svelte'
     import { Button } from '@/components/ui/button'
+    import { Label } from '@/components/ui/label'
+    import { Switch } from '@/components/ui/switch'
     import { Link, router } from '@inertiajs/svelte'
 
     interface Deployment {
@@ -127,17 +129,15 @@
                 Serve a holding page to visitors while leaving your processes running, so you can still reach the app
                 over SSH to debug it.
             </p>
-            <label class="flex items-center gap-3 text-sm">
-                <input
-                    type="checkbox"
-                    class="size-4 accent-primary"
+            <div class="flex items-center gap-3">
+                <Switch
+                    id="maintenance-mode"
                     checked={maintenance}
                     disabled={stopped}
-                    onchange={(event) =>
-                        router.put(`${base}/maintenance`, { enabled: event.currentTarget.checked }, { preserveScroll: true })}
+                    onCheckedChange={(enabled) => router.put(`${base}/maintenance`, { enabled }, { preserveScroll: true })}
                 />
-                Show a maintenance page to all visitors
-            </label>
+                <Label for="maintenance-mode" class="text-sm font-normal">Show a maintenance page to all visitors</Label>
+            </div>
             {#if stopped}
                 <p class="mt-2 text-xs text-muted-foreground">The application is stopped, so visitors already see one.</p>
             {/if}

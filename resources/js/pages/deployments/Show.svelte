@@ -5,6 +5,8 @@
     import Heading from '@/components/Heading.svelte'
     import StatusBadge from '@/components/StatusBadge.svelte'
     import { Button } from '@/components/ui/button'
+    import { Checkbox } from '@/components/ui/checkbox'
+    import { Label } from '@/components/ui/label'
     import { realtime, realtimeConfigured } from '@/lib/echo'
 
     type Deployment = {
@@ -161,10 +163,10 @@
                         Refreshing every {POLL_MS / 1000}s · {lines} lines
                     {/if}
                 </p>
-                <label class="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" bind:checked={follow} class="size-3.5 accent-primary" />
-                    Follow output
-                </label>
+                <div class="flex items-center gap-2">
+                    <Checkbox id="follow-output" bind:checked={follow} aria-label="Follow output" />
+                    <Label for="follow-output" class="text-xs font-normal text-muted-foreground">Follow output</Label>
+                </div>
             </div>
         </header>
 
