@@ -1,0 +1,122 @@
+name: Installer
+
+# The only place the package, Caddy, systemd and firewall paths are actually exercised.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/install.sh'
+      - '.github/workflows/installer.yml'
+  pull_request:
+    paths:
+      - 'scripts/install.sh'
+      - '.github/workflows/installer.yml'
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: Install on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Give the checkout a branch the installer can clone
+        run: git branch --force installer-under-test HEAD
+
+      - name: Run the installer
+        env:
+          CORESMITH_REPO: ${{ github.workspace }}
+        run: |
+          sudo --preserve-env=CORESMITH_REPO bash scripts/install.sh \
+            --unattended \
+            --db sqlite \
+            --branch installer-under-test \
+            --verbose
+
+      - name: The instance has a setup token, readable only by its owner
+        run: |
+          test -f /etc/coresmith/setup-token
+          test "$(sudo stat -c '%a' /etc/coresmith/setup-token)" = "600"
+          test "$(sudo cat /etc/coresmith/setup-token | wc -c)" -gt 32
+
+      - name: Secrets are not world readable
+        run: |
+          test "$(sudo stat -c '%a' /opt/coresmith/app/.env)" = "600"
+          test "$(sudo stat -c '%a' /var/lib/coresmith/database.sqlite)" = "600"
+          test "$(sudo stat -c '%a' /etc/coresmith/env)" = "700"
+          test "$(sudo stat -c '%a' /etc/coresmith/deploy-keys)" = "700"
+
+      - name: The environment says what the panel needs it to say
+        run: |
+          sudo grep -q '^APP_ENV=production' /opt/coresmith/app/.env
+          sudo grep -q '^APP_DEBUG=false' /opt/coresmith/app/.env
+          sudo grep -q '^CORESMITH_ALLOW_REGISTRATION=false' /opt/coresmith/app/.env
+          sudo grep -q '^CORESMITH_SETUP_TOKEN_PATH=/etc/coresmith/setup-token' /opt/coresmith/app/.env
+          sudo grep -qE '^CORESMITH_VAULT_KEY=[0-9a-f]{64}$' /opt/coresmith/app/.env
+
+      - name: Services are running
+        run: |
+          for service in caddy coresmith-horizon coresmith-reverb; do
+            systemctl is-active --quiet "$service" || {
+              echo "::error::$service is not running"
+              sudo journalctl -u "$service" -n 40 --no-pager
+              exit 1
+            }
+          done
+          systemctl is-active --quiet coresmith-scheduler.timer
+
+      - name: The panel answers, and guards its setup page
+        run: |
+          host="$(sudo grep '^APP_URL=' /opt/coresmith/app/.env | cut -d/ -f3)"
+
+          for _ in $(seq 1 15); do
+            if curl -fsSk --resolve "${host}:443:127.0.0.1" "https://${host}/up" >/dev/null; then
+              break
+            fi
+            sleep 4
+          done
+
+          curl -fsSk --resolve "${host}:443:127.0.0.1" "https://${host}/up" >/dev/null
+
+          status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/install")"
+          test "$status" = "403" || { echo "::error::/install without a token returned $status, expected 403"; exit 1; }
+
+          token="$(sudo cat /etc/coresmith/setup-token)"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/install?token=${token}")"
+          test "$status" = "200" || { echo "::error::/install with the token returned $status, expected 200"; exit 1; }
+
+      - name: An unconfigured instance holds the door rather than showing the app
+        run: |
+          host="$(sudo grep '^APP_URL=' /opt/coresmith/app/.env | cut -d/ -f3)"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/dashboard")"
+          test "$status" = "503" || { echo "::error::/dashboard returned $status on a fresh instance, expected 503"; exit 1; }
+
+      - name: Running it twice changes nothing and breaks nothing
+        env:
+          CORESMITH_REPO: ${{ github.workspace }}
+        run: |
+          sudo --preserve-env=CORESMITH_REPO bash scripts/install.sh \
+            --unattended --db sqlite --branch installer-under-test
+          systemctl is-active --quiet caddy
+          systemctl is-active --quiet coresmith-horizon
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          sudo journalctl -u caddy -n 100 --no-pager || true
+          sudo journalctl -u coresmith-horizon -n 100 --no-pager || true
+          sudo tail -n 200 /var/log/coresmith-install.log || true
+          sudo tail -n 100 /opt/coresmith/app/storage/logs/laravel.log || true

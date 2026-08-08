@@ -462,6 +462,10 @@ create_user_and_dirs() {
 install_coresmith_app() {
     log "Phase 4/8: installing the Coresmith application..."
 
+    # Git refuses to clone a directory owned by another user unless it is marked safe.
+    git config --system --add safe.directory "$CORESMITH_REPO" 2>/dev/null || true
+    git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
+
     if [ -d "$INSTALL_DIR/.git" ]; then
         log "Existing installation found; updating to the latest ${CORESMITH_BRANCH}..."
         sudo -u coresmith git -C "$INSTALL_DIR" fetch --depth 1 origin "$CORESMITH_BRANCH"
@@ -483,20 +487,20 @@ install_coresmith_app() {
 # ── Phase 5: environment ─────────────────────────────────────────────────────
 
 update_env() {
-    local key="$1" value="$2" file="$INSTALL_DIR/.env"
+    local key="$1" value="$2" file="$INSTALL_DIR/.env" tmp
 
-    if grep -q "^${key}=" "$file"; then
-        # Values are written with a delimiter that cannot appear in a shell-safe env value.
-        python3 - "$file" "$key" "$value" <<'PY' 2>/dev/null || sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-import sys
-path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
-lines = open(path).read().splitlines()
-out = [f'{key}={value}' if line.startswith(f'{key}=') else line for line in lines]
-open(path, 'w').write('\n'.join(out) + '\n')
-PY
-    else
-        printf '%s=%s\n' "$key" "$value" >>"$file"
-    fi
+    tmp="$(mktemp)"
+
+    # Values reach awk through the environment, so none of it is ever read as a pattern.
+    KEY="$key" VALUE="$value" awk '
+        BEGIN { key = ENVIRON["KEY"]; value = ENVIRON["VALUE"]; replaced = 0 }
+        index($0, key "=") == 1 { print key "=" value; replaced = 1; next }
+        { print }
+        END { if (!replaced) print key "=" value }
+    ' "$file" >"$tmp"
+
+    cat "$tmp" >"$file"
+    rm -f "$tmp"
 }
 
 configure_environment() {

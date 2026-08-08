@@ -178,3 +178,59 @@ test('every phase the installer announces is actually defined', function () {
             ->and($body)->toContain("\n    {$function}\n");
     }
 });
+
+test('writing the environment survives a password full of shell metacharacters', function () {
+    $directory = sys_get_temp_dir().'/coresmith-env-'.getmypid();
+    @mkdir($directory, 0700, true);
+
+    file_put_contents($directory.'/.env', "APP_ENV=local\nDB_PASSWORD=\nKEEP=me\n");
+
+    preg_match('/^update_env\(\) \{.*?^\}$/ms', installScriptBody(), $matches);
+    $function = $matches[0] ?? '';
+
+    expect($function)->not->toBeEmpty();
+
+    $password = 'p|ss&w"rd$with\\slashes/and|pipes';
+    $script = 'INSTALL_DIR='.escapeshellarg($directory)."\n{$function}\n"
+        ."update_env APP_ENV 'production'\n"
+        .'update_env DB_PASSWORD '.escapeshellarg($password)."\n"
+        ."update_env NEW_KEY 'added'\n";
+
+    $process = new Process(['bash', '-c', $script]);
+    $process->run();
+
+    $result = (string) file_get_contents($directory.'/.env');
+
+    @unlink($directory.'/.env');
+    @rmdir($directory);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($result)->toContain('APP_ENV=production')
+        ->and($result)->toContain('DB_PASSWORD='.$password)
+        ->and($result)->toContain('KEEP=me')
+        ->and($result)->toContain('NEW_KEY=added')
+        ->and(substr_count($result, 'APP_ENV='))->toBe(1);
+});
+
+test('the continuous integration workflows are present and valid', function () {
+    foreach (['ci.yml', 'installer.yml'] as $workflow) {
+        expect(is_file(base_path('.github/workflows/'.$workflow)))->toBeTrue("{$workflow} is missing");
+    }
+
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+
+    foreach (['pint --test', 'lint:check', 'lint:sh', 'format:check', 'types:check', 'bun run build', 'php artisan test', 'test:e2e'] as $gate) {
+        expect($ci)->toContain($gate);
+    }
+});
+
+test('the installer workflow proves the instance it built actually works', function () {
+    $workflow = (string) file_get_contents(base_path('.github/workflows/installer.yml'));
+
+    expect($workflow)->toContain('bash scripts/install.sh')
+        ->and($workflow)->toContain('ubuntu-22.04')
+        ->and($workflow)->toContain('ubuntu-24.04')
+        ->and($workflow)->toContain('/etc/coresmith/setup-token')
+        ->and($workflow)->toContain('expected 403')
+        ->and($workflow)->toContain('expected 503');
+});
