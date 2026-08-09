@@ -87,43 +87,41 @@
             {/snippet}
         </EmptyState>
     {:else}
-        <div class="grid gap-4 sm:grid-cols-3">
+        <div class="grid divide-y divide-border overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {#each tiles as tile (tile.label)}
                 <Link
                     href={tile.href}
                     data-testid="count-{tile.label.toLowerCase()}"
-                    class="rounded-xl border border-border bg-card p-5 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    class="px-6 py-5 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 >
-                    <p class="text-xs text-muted-foreground">{tile.label}</p>
-                    <p class="mt-1 text-3xl font-semibold">{tile.value}</p>
+                    <p class="text-xs font-medium tracking-[0.02em] text-muted-foreground uppercase">{tile.label}</p>
+                    <p class="mt-2 font-display text-4xl leading-none font-semibold tracking-[-0.02em]">{tile.value}</p>
                 </Link>
             {/each}
         </div>
 
         {#if attention.length > 0}
-            <section class="mt-8">
-                <h2 class="mb-3 text-base font-semibold">Needs your attention</h2>
-                <ul class="space-y-2" data-testid="attention">
+            <section class="mt-12">
+                <h2 class="mb-4 text-xl font-semibold tracking-[-0.01em]">Needs your attention</h2>
+                <ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" data-testid="attention">
                     {#each attention as item (item.title)}
                         <li>
                             <Link
                                 href={item.href}
-                                class={cn(
-                                    'block rounded-xl border p-4 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                                    item.severity === 'critical'
-                                        ? 'border-destructive/40 bg-destructive/5 hover:bg-destructive/10'
-                                        : 'border-warning/40 bg-warning/10 hover:bg-warning/15'
-                                )}
+                                class="flex items-start gap-3 px-5 py-4 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                             >
-                                <p
+                                <span
                                     class={cn(
-                                        'text-sm font-medium',
-                                        item.severity === 'critical' ? 'text-destructive-strong' : 'text-warning-strong'
+                                        'mt-1.5 size-2 shrink-0 rounded-full',
+                                        item.severity === 'critical' ? 'bg-destructive' : 'bg-warning'
                                     )}
-                                >
-                                    {item.title}
-                                </p>
-                                <p class="mt-0.5 text-sm text-muted-foreground">{item.detail}</p>
+                                    aria-hidden="true"
+                                ></span>
+                                <span class="min-w-0">
+                                    <span class="block text-sm font-medium">{item.title}</span>
+                                    <span class="mt-0.5 block text-sm text-muted-foreground">{item.detail}</span>
+                                </span>
+                                <span class="sr-only">{item.severity}</span>
                             </Link>
                         </li>
                     {/each}
@@ -137,18 +135,20 @@
             </section>
         {/if}
 
-        <section class="mt-8 rounded-xl border border-border bg-card p-6">
-            <h2 class="mb-4 text-base font-semibold">Recent deployments</h2>
+        <section class="mt-12">
+            <h2 class="mb-4 text-xl font-semibold tracking-[-0.01em]">Recent deployments</h2>
 
             {#if deployments.length === 0}
-                <p class="text-sm text-muted-foreground">Nothing has been deployed yet.</p>
+                <p class="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                    Nothing has been deployed yet.
+                </p>
             {:else}
-                <ul class="divide-y divide-border">
+                <ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
                     {#each deployments as deployment (deployment.id)}
                         <li>
                             <Link
                                 href={deployment.href}
-                                class="flex items-center justify-between gap-4 rounded-md py-3 outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+                                class="flex items-center justify-between gap-4 px-5 py-4 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                             >
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-medium">{deployment.application}</p>
