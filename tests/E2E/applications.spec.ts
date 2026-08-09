@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test'
 test.describe('Applications', () => {
     test('applications are listed for a server', async ({ page }) => {
         await page.goto('/servers')
-        await page.getByRole('link', { name: 'web-1' }).click()
-        await page.getByRole('link', { name: 'Applications' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
 
         await expect(page.getByRole('heading', { name: 'Applications' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Storefront' })).toBeVisible()
@@ -12,8 +12,8 @@ test.describe('Applications', () => {
 
     test('an application detail page shows source, runtime and deployments', async ({ page }) => {
         await page.goto('/servers')
-        await page.getByRole('link', { name: 'web-1' }).click()
-        await page.getByRole('link', { name: 'Applications' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
         await page.getByRole('link', { name: 'Storefront' }).click()
 
         await expect(page.getByRole('heading', { name: 'Storefront' })).toBeVisible()
@@ -25,8 +25,8 @@ test.describe('Applications', () => {
 
     test('an empty server offers the empty state rather than a bare table', async ({ page }) => {
         await page.goto('/servers')
-        await page.getByRole('link', { name: 'empty-server' }).click()
-        await page.getByRole('link', { name: 'Applications' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'empty-server' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
 
         await expect(page.getByText('Nothing deployed here yet')).toBeVisible()
         await expect(page.getByRole('link', { name: 'Create an application' })).toBeVisible()

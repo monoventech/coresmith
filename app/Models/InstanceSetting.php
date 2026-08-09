@@ -16,6 +16,8 @@ class InstanceSetting extends Model
 {
     public const CACHE_KEY = 'coresmith:instance-settings';
 
+    public const CACHE_SECONDS = 60;
+
     protected $primaryKey = 'key';
 
     protected $keyType = 'string';
@@ -26,8 +28,14 @@ class InstanceSetting extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => Cache::forget(self::CACHE_KEY));
-        static::deleted(fn () => Cache::forget(self::CACHE_KEY));
+        static::saved(fn () => Cache::forget(self::cacheKey()));
+        static::deleted(fn () => Cache::forget(self::cacheKey()));
+    }
+
+    public static function cacheKey(): string
+    {
+        // Environments that share a cache store must not share each other's settings.
+        return self::CACHE_KEY.':'.config('app.env');
     }
 
     public static function get(string $key, ?string $default = null): ?string
@@ -47,7 +55,7 @@ class InstanceSetting extends Model
      */
     public static function values(): array
     {
-        return Cache::rememberForever(self::CACHE_KEY, function (): array {
+        return Cache::remember(self::cacheKey(), self::CACHE_SECONDS, function (): array {
             try {
                 return self::query()->pluck('value', 'key')->all();
             } catch (QueryException) {

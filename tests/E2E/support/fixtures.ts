@@ -15,25 +15,25 @@ export { expect }
 
 export async function gotoServer(page: Page, name = 'web-1') {
     await page.goto('/servers')
-    await page.getByRole('link', { name }).click()
+    await page.getByRole('main').getByRole('link', { name }).click()
     await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
 }
 
 export async function gotoApplications(page: Page, server = 'web-1') {
     await gotoServer(page, server)
-    await page.getByRole('link', { name: 'Applications' }).click()
+    await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
     await page.waitForURL(/\/applications$/)
 }
 
 export async function gotoApplication(page: Page, name = 'Storefront') {
     await gotoApplications(page)
-    await page.getByRole('link', { name, exact: true }).click()
+    await page.getByRole('main').getByRole('link', { name, exact: true }).click()
     await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
 }
 
 export async function gotoDatabases(page: Page, server = 'web-1') {
     await gotoServer(page, server)
-    await page.getByRole('link', { name: 'Databases' }).click()
+    await page.getByRole('main').getByRole('link', { name: 'Databases' }).click()
     await page.waitForURL(/\/databases$/)
 }
 

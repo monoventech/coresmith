@@ -8,9 +8,9 @@
 
     const tones: Record<string, string> = {
         pending: 'bg-muted text-muted-foreground',
-        deploying: 'bg-primary/10 text-primary',
-        provisioning: 'bg-primary/10 text-primary',
-        running: 'bg-primary/10 text-primary',
+        deploying: 'bg-primary/10 text-primary-strong',
+        provisioning: 'bg-primary/10 text-primary-strong',
+        running: 'bg-primary/10 text-primary-strong',
         active: 'bg-success/10 text-success-strong',
         succeeded: 'bg-success/10 text-success-strong',
         failed: 'bg-destructive/10 text-destructive-strong',

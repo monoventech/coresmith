@@ -2,10 +2,12 @@
 
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationPowerController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\InstallationController;
+use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\SshKeyController;
@@ -19,7 +21,9 @@ Route::inertia('/', 'Welcome', [
 ])->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'Dashboard')->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('applications', [OverviewController::class, 'applications'])->name('applications.index');
+    Route::get('databases', [OverviewController::class, 'databases'])->name('databases.index');
 
     Route::resource('servers', ServerController::class);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])

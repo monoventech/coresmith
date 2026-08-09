@@ -1,6 +1,6 @@
 <script lang="ts">
     import { Link } from '@inertiajs/svelte'
-    import { BookOpen, Folder, LayoutGrid } from '@lucide/svelte'
+    import { BookOpen, Database, Folder, LayoutGrid, LayoutTemplate, Server } from '@lucide/svelte'
     import NavFooter from '@/components/NavFooter.svelte'
     import NavMain from '@/components/NavMain.svelte'
     import NavUser from '@/components/NavUser.svelte'
@@ -11,8 +11,23 @@
     const mainNavItems: NavItem[] = [
         {
             title: 'Dashboard',
-            href: '/dashboard',
+            href: route('dashboard'),
             icon: LayoutGrid
+        },
+        {
+            title: 'Servers',
+            href: route('servers.index'),
+            icon: Server
+        },
+        {
+            title: 'Applications',
+            href: route('applications.index'),
+            icon: LayoutTemplate
+        },
+        {
+            title: 'Databases',
+            href: route('databases.index'),
+            icon: Database
         }
     ]
 

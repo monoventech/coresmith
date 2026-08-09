@@ -21,7 +21,7 @@ asMember.describe('What a member may do', () => {
 
     asMember('a member is not offered provisioning controls', async ({ page }) => {
         await page.goto('/servers')
-        await page.getByRole('link', { name: 'web-1' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
 
         await expect(page.getByRole('button', { name: 'Provision' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Test connection' })).toHaveCount(0)
@@ -29,8 +29,8 @@ asMember.describe('What a member may do', () => {
 
     asMember('a member can still deploy but cannot open the environment', async ({ page }) => {
         await page.goto('/servers')
-        await page.getByRole('link', { name: 'web-1' }).click()
-        await page.getByRole('link', { name: 'Applications' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
         await page.getByRole('link', { name: 'Storefront', exact: true }).click()
 
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
@@ -39,8 +39,8 @@ asMember.describe('What a member may do', () => {
 
     asMember('a member cannot reach the environment page directly', async ({ page }) => {
         await page.goto('/servers')
-        await page.getByRole('link', { name: 'web-1' }).click()
-        await page.getByRole('link', { name: 'Applications' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
+        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
         await page.getByRole('link', { name: 'Storefront', exact: true }).click()
         await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
 

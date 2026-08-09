@@ -19,7 +19,7 @@
     const tone = $derived(
         {
             pending: 'bg-muted text-muted-foreground',
-            provisioning: 'bg-primary/10 text-primary',
+            provisioning: 'bg-primary/10 text-primary-strong',
             active: 'bg-success/10 text-success-strong',
             failed: 'bg-destructive/10 text-destructive-strong',
             disconnected: 'bg-warning/10 text-warning-strong'

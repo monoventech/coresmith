@@ -130,6 +130,7 @@
                                 </div>
                             {:else}
                                 <div class="relative z-10 overflow-hidden border p-5">
+                                    <!-- monoven-allow: a QR code needs true white behind true black or scanners fail -->
                                     <div class="aspect-square w-full justify-center rounded-lg bg-white p-2 [&_svg]:size-full">
                                         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                                         {@html twoFactorAuth.qrCodeSvg}

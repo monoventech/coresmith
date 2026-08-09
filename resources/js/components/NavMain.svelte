@@ -13,7 +13,7 @@
     const url = currentUrlState()
 </script>
 
-<SidebarGroup class="px-2 py-0">
+<SidebarGroup class="px-2 py-0" data-testid="main-nav">
     <SidebarGroupLabel>Platform</SidebarGroupLabel>
     <SidebarMenu>
         {#each items as item (item.title)}
