@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\PowerState;
+use App\Enums\ServerStatus;
 use App\Models\InstanceSetting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -45,11 +47,31 @@ class HandleInertiaRequests extends Middleware
             'appName' => InstanceSetting::get('instance_name', config('app.name')),
             'billingEnabled' => (bool) config('coresmith.billing_enabled'),
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
+            'fleet' => fn (): ?array => $this->fleet($request),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'plainTextToken' => $request->session()->get('plainTextToken'),
             ],
+        ];
+    }
+
+    /**
+     * @return array{servers: int, active: int, attention: int}|null
+     */
+    private function fleet(Request $request): ?array
+    {
+        $team = $request->user()?->teams()->first();
+
+        if ($team === null) {
+            return null;
+        }
+
+        return [
+            'servers' => $team->servers()->count(),
+            'active' => $team->servers()->where('status', ServerStatus::Active->value)->count(),
+            'attention' => $team->servers()->whereNotNull('pending_host_key_fingerprint')->count()
+                + $team->applications()->where('power_state', PowerState::Stopped->value)->count(),
         ];
     }
 }

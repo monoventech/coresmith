@@ -1,7 +1,6 @@
 <script lang="ts">
     import { Link } from '@inertiajs/svelte'
-    import { BookOpen, Database, Folder, LayoutGrid, LayoutTemplate, Server } from '@lucide/svelte'
-    import NavFooter from '@/components/NavFooter.svelte'
+    import { Database, LayoutGrid, LayoutTemplate, Server } from '@lucide/svelte'
     import NavMain from '@/components/NavMain.svelte'
     import NavUser from '@/components/NavUser.svelte'
     import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
@@ -31,21 +30,9 @@
         }
     ]
 
-    const footerNavItems: NavItem[] = [
-        {
-            title: 'Repository',
-            href: 'https://github.com/monoven/coresmith',
-            icon: Folder
-        },
-        {
-            title: 'Documentation',
-            href: 'https://coresmith.io/docs',
-            icon: BookOpen
-        }
-    ]
 </script>
 
-<Sidebar collapsible="icon" variant="inset">
+<Sidebar collapsible="icon" variant="sidebar">
     <SidebarHeader>
         <SidebarMenu>
             <SidebarMenuItem>
@@ -65,7 +52,6 @@
     </SidebarContent>
 
     <SidebarFooter>
-        <NavFooter items={footerNavItems} class="mt-auto" />
         <NavUser />
     </SidebarFooter>
 </Sidebar>
