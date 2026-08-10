@@ -178,7 +178,7 @@
             role="log"
             aria-live="polite"
             aria-label="Deployment output"
-            class="max-h-[28rem] overflow-auto px-5 py-4 font-mono text-xs leading-relaxed whitespace-pre-wrap">{live.log ||
+            class="terminal max-h-[28rem] whitespace-pre-wrap">{live.log ||
                 'Waiting for the deployment to start…'}</pre>
     </section>
 </div>

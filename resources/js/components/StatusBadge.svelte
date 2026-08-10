@@ -6,23 +6,38 @@
 
     let { status, class: className }: { status: string | null; class?: string } = $props()
 
-    const tones: Record<string, string> = {
-        pending: 'bg-muted text-muted-foreground',
-        deploying: 'bg-primary/10 text-primary-strong',
-        provisioning: 'bg-primary/10 text-primary-strong',
-        running: 'bg-primary/10 text-primary-strong',
-        active: 'bg-success/10 text-success-strong',
-        succeeded: 'bg-success/10 text-success-strong',
-        failed: 'bg-destructive/10 text-destructive-strong',
-        cancelled: 'bg-muted text-muted-foreground',
-        stopped: 'bg-warning/10 text-warning-strong',
-        sleeping: 'bg-warning/10 text-warning-strong',
-        disconnected: 'bg-warning/10 text-warning-strong'
+    type Tone = { badge: string; dot: string; motion?: 'pulse' | 'working' }
+
+    const tones: Record<string, Tone> = {
+        pending: { badge: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
+        deploying: { badge: 'bg-primary/10 text-primary-strong', dot: 'bg-primary', motion: 'working' },
+        provisioning: { badge: 'bg-primary/10 text-primary-strong', dot: 'bg-primary', motion: 'working' },
+        running: { badge: 'bg-primary/10 text-primary-strong', dot: 'bg-primary', motion: 'working' },
+        active: { badge: 'bg-success/10 text-success-strong', dot: 'bg-success', motion: 'pulse' },
+        succeeded: { badge: 'bg-success/10 text-success-strong', dot: 'bg-success' },
+        failed: { badge: 'bg-destructive/10 text-destructive-strong', dot: 'bg-destructive' },
+        cancelled: { badge: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
+        stopped: { badge: 'border border-border text-muted-foreground', dot: '' },
+        sleeping: { badge: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground/60' },
+        disconnected: { badge: 'bg-warning/10 text-warning-strong', dot: 'bg-warning' }
     }
 
     const key = $derived(status ?? 'pending')
     const label = $derived(key.charAt(0).toUpperCase() + key.slice(1))
-    const tone = $derived(tones[key] ?? 'bg-muted text-muted-foreground')
+    const tone = $derived(tones[key] ?? tones.pending)
 </script>
 
-<span class={cn('inline-flex w-fit items-center rounded-md px-2 py-0.5 text-xs font-medium', tone, className)}>{label}</span>
+<span class={cn('inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium', tone.badge, className)}>
+    {#if tone.dot}
+        <span
+            class={cn(
+                'size-1.5 shrink-0 rounded-full',
+                tone.dot,
+                tone.motion === 'pulse' && 'status-dot-pulse',
+                tone.motion === 'working' && 'status-dot-working'
+            )}
+            aria-hidden="true"
+        ></span>
+    {/if}
+    {label}
+</span>
