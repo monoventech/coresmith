@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\ApplicationDeploymentsController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\EnvController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\ServerController;
+use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
@@ -32,6 +34,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.provision');
 
     Route::resource('servers.applications', ApplicationController::class);
+    Route::get('servers/{server}/firewall', [ServerFirewallController::class, 'index'])
+        ->name('servers.firewall.index');
+    Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
+        ->name('servers.firewall.store');
+
+    Route::get('servers/{server}/applications/{application}/deployments', [ApplicationDeploymentsController::class, 'index'])
+        ->name('servers.applications.deployments.index');
+    Route::get('servers/{server}/applications/{application}/features', [ApplicationDeploymentsController::class, 'features'])
+        ->name('servers.applications.features');
+
     Route::post('servers/{server}/host-key/accept', [ServerHostKeyController::class, 'accept'])
         ->name('servers.host-key.accept');
     Route::post('servers/{server}/host-key/reject', [ServerHostKeyController::class, 'reject'])

@@ -123,7 +123,10 @@ final class ServerController extends Controller
     {
         $this->authorize('update', $server);
 
-        return Inertia::render('servers/Edit', ['server' => $this->summarise($server)]);
+        return Inertia::render('servers/Edit', [
+            'server' => $this->summarise($server),
+            'can' => ['update' => $this->can('update', $server)],
+        ]);
     }
 
     public function update(UpdateServerRequest $request, Server $server): RedirectResponse

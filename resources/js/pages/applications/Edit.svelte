@@ -1,5 +1,6 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
+    import ApplicationTabs from '@/components/ApplicationTabs.svelte'
     import Heading from '@/components/Heading.svelte'
     import InputError from '@/components/InputError.svelte'
     import { Button } from '@/components/ui/button'
@@ -10,14 +11,21 @@
 
     let {
         server,
-        application
-    }: { server: { id: string; name: string }; application: Record<string, any> } = $props()
+        application,
+        can
+    }: {
+        server: { id: string; name: string }
+        application: Record<string, any>
+        can: { update: boolean; manageEnvironment: boolean }
+    } = $props()
 </script>
 
 <AppHead title="Edit {application.name}" />
 
 <div class="px-6 py-8">
     <Heading title="Edit {application.name}" description="The slug and system user are fixed once an application exists." />
+
+    <ApplicationTabs serverId={server.id} applicationId={application.id} canManageEnvironment={can.manageEnvironment} canUpdate={can.update} />
 
     <Form method="put" action="/servers/{server.id}/applications/{application.id}" class="max-w-xl space-y-6">
         {#snippet children({ errors, processing })}

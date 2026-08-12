@@ -28,6 +28,7 @@ final class DatabaseController extends Controller
             'databases' => $server->databases()->latest()->get()->map(
                 fn (ManagedDatabase $database): array => $this->summarise($database),
             ),
+            'can' => ['update' => auth()->user()?->can('update', $server) ?? false],
         ]);
     }
 

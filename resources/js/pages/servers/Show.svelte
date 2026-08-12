@@ -2,10 +2,11 @@
     import AppHead from '@/components/AppHead.svelte'
     import Heading from '@/components/Heading.svelte'
     import HostKeyAlert from '@/components/HostKeyAlert.svelte'
+    import ServerTabs from '@/components/ServerTabs.svelte'
     import MetricTile from '@/components/MetricTile.svelte'
     import ServerStatusBadge from '@/components/ServerStatusBadge.svelte'
     import { Button } from '@/components/ui/button'
-    import { Link, router } from '@inertiajs/svelte'
+    import { router } from '@inertiajs/svelte'
 
     interface ServerDetail {
         id: string
@@ -117,19 +118,19 @@
         />
     {/if}
 
-    <div class="mb-10 flex items-start justify-between gap-6">
-        <Heading title={server.name} description="{server.ssh_user}@{server.ip_address}:{server.ssh_port}" />
+    <div class="flex items-start justify-between gap-6">
+        <Heading title={server.name} description="{server.ssh_user}@{server.ip_address}:{server.ssh_port}" variant="small" />
 
         <div class="flex items-center gap-3">
             <ServerStatusBadge status={server.status} />
-            <Link href="/servers/{server.id}/applications"><Button variant="outline">Applications</Button></Link>
-            <Link href="/servers/{server.id}/databases"><Button variant="outline">Databases</Button></Link>
             {#if can.update}
                 <Button variant="outline" onclick={() => router.post(`/servers/${server.id}/test-connection`)}>Test connection</Button>
                 <Button onclick={() => router.post(`/servers/${server.id}/provision`)}>Provision</Button>
             {/if}
         </div>
     </div>
+
+    <ServerTabs serverId={server.id} canUpdate={can.update} />
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-xl border border-border bg-card p-6">

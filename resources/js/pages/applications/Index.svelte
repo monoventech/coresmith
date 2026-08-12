@@ -1,5 +1,6 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
+    import ServerTabs from '@/components/ServerTabs.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import Heading from '@/components/Heading.svelte'
     import BlueprintRack from '@/components/illustrations/BlueprintRack.svelte'
@@ -19,8 +20,13 @@
 
     let {
         server,
-        applications = []
-    }: { server: { id: string; name: string }; applications: AppSummary[] } = $props()
+        applications = [],
+        can
+    }: {
+        server: { id: string; name: string }
+        applications: AppSummary[]
+        can: { update: boolean }
+    } = $props()
 
     const columnClass = 'h-12 px-4 text-left align-middle text-xs font-medium tracking-[0.01em] text-muted-foreground'
 </script>
@@ -28,12 +34,14 @@
 <AppHead title="Applications on {server.name}" />
 
 <div class="px-6 py-8">
-    <div class="mb-10 flex items-start justify-between gap-6">
+    <div class="flex items-start justify-between gap-6">
         <Heading title="Applications" description="Everything deployed on {server.name}." />
         {#if applications.length > 0}
             <Link href="/servers/{server.id}/applications/create"><Button>New application</Button></Link>
         {/if}
     </div>
+
+    <ServerTabs serverId={server.id} canUpdate={can.update} />
 
     {#if applications.length === 0}
         <EmptyState

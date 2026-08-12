@@ -1,4 +1,12 @@
+import type { Page } from '@playwright/test'
 import { asMember, expect, gotoApplication, test } from './support/fixtures'
+
+// The maintenance toggle lives on the Features tab per CORESMITH_SPEC section 18.
+async function gotoFeatures(page: Page, application: string) {
+    await gotoApplication(page, application)
+    await page.getByRole('link', { name: 'Features' }).click()
+    await page.waitForURL(/\/features$/)
+}
 
 test.describe('stopping and starting an application', () => {
     test('a running application offers Stop and shows no banner', async ({ page }) => {
@@ -18,18 +26,18 @@ test.describe('stopping and starting an application', () => {
     })
 
     test('the maintenance toggle is disabled while the application is stopped', async ({ page }) => {
-        await gotoApplication(page, 'Retired Blog')
+        await gotoFeatures(page, 'Retired Blog')
 
-        const toggle = page.getByRole('switch', { name: 'Show a maintenance page to all visitors' })
+        const toggle = page.getByRole('switch', { name: 'Maintenance page' })
 
         await expect(toggle).toBeDisabled()
         await expect(page.getByText('The application is stopped, so visitors already see one.')).toBeVisible()
     })
 
     test('maintenance mode can be turned on and off and is remembered', async ({ page }) => {
-        await gotoApplication(page, 'Storefront')
+        await gotoFeatures(page, 'Storefront')
 
-        const toggle = page.getByRole('switch', { name: 'Show a maintenance page to all visitors' })
+        const toggle = page.getByRole('switch', { name: 'Maintenance page' })
 
         await expect(toggle).not.toBeChecked()
 
@@ -37,21 +45,21 @@ test.describe('stopping and starting an application', () => {
         await expect(page.getByTestId('offline-banner')).toContainText('Maintenance mode is on')
 
         await page.reload()
-        await expect(page.getByRole('switch', { name: 'Show a maintenance page to all visitors' })).toBeChecked()
+        await expect(page.getByRole('switch', { name: 'Maintenance page' })).toBeChecked()
 
-        await page.getByRole('switch', { name: 'Show a maintenance page to all visitors' }).uncheck()
+        await page.getByRole('switch', { name: 'Maintenance page' }).uncheck()
         await page.reload()
-        await expect(page.getByRole('switch', { name: 'Show a maintenance page to all visitors' })).not.toBeChecked()
+        await expect(page.getByRole('switch', { name: 'Maintenance page' })).not.toBeChecked()
         await expect(page.getByTestId('offline-banner')).toHaveCount(0)
     })
 
     test('the maintenance banner explains that processes keep running', async ({ page }) => {
-        await gotoApplication(page, 'Storefront')
+        await gotoFeatures(page, 'Storefront')
 
-        await page.getByRole('switch', { name: 'Show a maintenance page to all visitors' }).check()
+        await page.getByRole('switch', { name: 'Maintenance page' }).check()
         await expect(page.getByTestId('offline-banner')).toContainText('the processes keep running')
 
-        await page.getByRole('switch', { name: 'Show a maintenance page to all visitors' }).uncheck()
+        await page.getByRole('switch', { name: 'Maintenance page' }).uncheck()
         await expect(page.getByTestId('offline-banner')).toHaveCount(0)
     })
 
@@ -76,7 +84,7 @@ asMember.describe('power controls as a member', () => {
 
         await expect(page.getByRole('button', { name: 'Start' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(0)
-        await expect(page.getByRole('switch', { name: 'Show a maintenance page to all visitors' })).toHaveCount(0)
+        await expect(page.getByRole('switch', { name: 'Maintenance page' })).toHaveCount(0)
     })
 
     asMember('a member can still see that the application is stopped', async ({ page }) => {

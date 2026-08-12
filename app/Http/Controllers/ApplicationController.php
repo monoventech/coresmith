@@ -32,6 +32,7 @@ final class ApplicationController extends Controller
                 ->latest()
                 ->get()
                 ->map(fn (Application $application): array => $this->summarise($application)),
+            'can' => ['update' => auth()->user()?->can('update', $server) ?? false],
         ]);
     }
 
@@ -119,6 +120,10 @@ final class ApplicationController extends Controller
         return Inertia::render('applications/Edit', [
             'server' => ['id' => $server->id, 'name' => $server->name],
             'application' => $this->summarise($application),
+            'can' => [
+                'update' => true,
+                'manageEnvironment' => auth()->user()?->can('manageEnvironment', $application) ?? false,
+            ],
         ]);
     }
 

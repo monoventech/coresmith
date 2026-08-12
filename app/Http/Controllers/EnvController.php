@@ -24,6 +24,10 @@ final class EnvController extends Controller
         abort_unless($application->server_id === $server->id, 404);
 
         return Inertia::render('applications/Env', [
+            'can' => [
+                'update' => auth()->user()?->can('update', $application) ?? false,
+                'manageEnvironment' => true,
+            ],
             'server' => ['id' => $server->id, 'name' => $server->name],
             'application' => ['id' => $application->id, 'name' => $application->name],
             'env' => (string) $application->env_variables,

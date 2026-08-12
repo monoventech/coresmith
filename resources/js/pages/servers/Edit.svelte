@@ -1,5 +1,6 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
+    import ServerTabs from '@/components/ServerTabs.svelte'
     import Heading from '@/components/Heading.svelte'
     import InputError from '@/components/InputError.svelte'
     import { Button } from '@/components/ui/button'
@@ -10,9 +11,11 @@
     import { Form } from '@inertiajs/svelte'
 
     let {
-        server
+        server,
+        can
     }: {
         server: { id: string; name: string; ssh_port: number; audit_logging_enabled: boolean }
+        can: { update: boolean }
     } = $props()
 </script>
 
@@ -20,6 +23,8 @@
 
 <div class="px-6 py-8">
     <Heading title="Edit {server.name}" description="The IP address and SSH user are fixed once a server is added." />
+
+    <ServerTabs serverId={server.id} canUpdate={can.update} />
 
     <Form method="put" action="/servers/{server.id}" class="max-w-xl space-y-6">
         {#snippet children({ errors, processing })}

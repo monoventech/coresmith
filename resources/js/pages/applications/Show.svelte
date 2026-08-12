@@ -1,10 +1,10 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
     import Heading from '@/components/Heading.svelte'
+    import ApplicationOfflineBanner from '@/components/ApplicationOfflineBanner.svelte'
+    import ApplicationTabs from '@/components/ApplicationTabs.svelte'
     import StatusBadge from '@/components/StatusBadge.svelte'
     import { Button } from '@/components/ui/button'
-    import { Label } from '@/components/ui/label'
-    import { Switch } from '@/components/ui/switch'
     import { Link, router } from '@inertiajs/svelte'
 
     interface Deployment {
@@ -30,20 +30,16 @@
     const base = $derived(`/servers/${server.id}/applications/${application.id}`)
     const stopped = $derived(application.power_state === 'stopped')
     const maintenance = $derived(Boolean(application.toggles?.maintenance_mode))
-    const offline = $derived(stopped || maintenance)
 </script>
 
 <AppHead title={application.name} />
 
 <div class="px-6 py-8">
     <div class="mb-10 flex items-start justify-between gap-6">
-        <Heading title={application.name} description={application.domain ?? 'No domain assigned yet'} />
+        <Heading title={application.name} description={application.domain ?? 'No domain assigned yet'} variant="small" />
 
         <div class="flex items-center gap-3">
             <StatusBadge status={application.status} />
-            {#if can.manageEnvironment}
-                <Link href="{base}/env"><Button variant="outline">Environment</Button></Link>
-            {/if}
             {#if can.update}
                 {#if stopped}
                     <Button variant="outline" onclick={() => router.post(`${base}/start`)}>Start</Button>
@@ -58,16 +54,9 @@
         </div>
     </div>
 
-    {#if offline}
-        <p class="mb-6 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-warning-strong" role="status" data-testid="offline-banner">
-            {#if stopped}
-                This application is stopped. Visitors see a maintenance page instead of the site.
-            {:else}
-                Maintenance mode is on. Visitors see a maintenance page, but the processes keep running so you can still
-                debug.
-            {/if}
-        </p>
-    {/if}
+    <ApplicationTabs serverId={server.id} applicationId={application.id} canManageEnvironment={can.manageEnvironment} canUpdate={can.update} />
+
+    <ApplicationOfflineBanner {stopped} {maintenance} />
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-xl border border-border bg-card p-6">
@@ -122,30 +111,16 @@
         </section>
     {/if}
 
-    {#if can.update}
-        <section class="mt-6 rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-1 text-base font-semibold">Maintenance page</h3>
-            <p class="mb-4 text-sm text-muted-foreground">
-                Serve a holding page to visitors while leaving your processes running, so you can still reach the app
-                over SSH to debug it.
-            </p>
-            <div class="flex items-center gap-3">
-                <Switch
-                    id="maintenance-mode"
-                    checked={maintenance}
-                    disabled={stopped}
-                    onCheckedChange={(enabled) => router.put(`${base}/maintenance`, { enabled }, { preserveScroll: true })}
-                />
-                <Label for="maintenance-mode" class="text-sm font-normal">Show a maintenance page to all visitors</Label>
-            </div>
-            {#if stopped}
-                <p class="mt-2 text-xs text-muted-foreground">The application is stopped, so visitors already see one.</p>
-            {/if}
-        </section>
-    {/if}
-
     <section class="mt-6 rounded-xl border border-border bg-card p-6">
-        <h3 class="mb-4 text-base font-semibold">Recent deployments</h3>
+        <div class="mb-4 flex items-baseline justify-between gap-4">
+            <h3 class="text-base font-semibold">Recent deployments</h3>
+            <Link
+                href={route('servers.applications.deployments.index', [server.id, application.id])}
+                class="text-xs text-muted-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            >
+                See all
+            </Link>
+        </div>
 
         {#if deployments.length === 0}
             <p class="text-sm text-muted-foreground">Nothing deployed yet.</p>
