@@ -39,7 +39,7 @@
     <ApplicationOfflineBanner {stopped} {maintenance} />
 
     <section class="max-w-2xl">
-        <h2 class="text-xl font-semibold tracking-[-0.01em]">Site settings</h2>
+        <h2 class="type-h3">Site settings</h2>
 
         <div class="mt-4 rounded-xl border border-border bg-card p-5">
             <div class="flex items-start justify-between gap-6">
@@ -68,7 +68,7 @@
     </section>
 
     <section class="mt-10 max-w-2xl">
-        <h2 class="text-xl font-semibold tracking-[-0.01em]">Processes</h2>
+        <h2 class="type-h3">Processes</h2>
 
         {#if application.processes && application.processes.length > 0}
             <ul class="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
@@ -89,7 +89,7 @@
     </section>
 
     <section class="mt-10 max-w-2xl">
-        <h2 class="text-xl font-semibold tracking-[-0.01em]">Scheduled commands</h2>
+        <h2 class="type-h3">Scheduled commands</h2>
 
         {#if application.cron_jobs && application.cron_jobs.length > 0}
             <ul class="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">

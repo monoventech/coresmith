@@ -21,11 +21,7 @@
     const after = $derived(markIndex >= 0 ? title.slice(markIndex + mark.length) : '')
 
     const tag = $derived(variant === 'small' ? 'h2' : 'h1')
-    const size = $derived(
-        variant === 'small'
-            ? 'font-display text-2xl leading-[1.2] font-semibold tracking-[-0.01em]'
-            : 'font-display text-3xl leading-[1.15] font-semibold tracking-[-0.015em]'
-    )
+    const size = $derived(variant === 'small' ? 'type-h2' : 'type-h1')
 </script>
 
 <header class={variant === 'small' ? 'space-y-1.5' : 'mb-10 space-y-2'}>
@@ -33,6 +29,6 @@
         {before}{#if markIndex >= 0}<MarkerUnderline>{mark}</MarkerUnderline>{/if}{after}
     </svelte:element>
     {#if description}
-        <p class="max-w-2xl text-base leading-relaxed text-muted-foreground">{description}</p>
+        <p class="type-body max-w-[68ch] text-muted-foreground">{description}</p>
     {/if}
 </header>

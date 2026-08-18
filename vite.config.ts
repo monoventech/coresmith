@@ -17,9 +17,6 @@ export default defineConfig({
                 }),
                 bunny('JetBrains Mono', {
                     weights: [400, 500]
-                }),
-                bunny('Zilla Slab', {
-                    weights: [500, 600]
                 })
             ]
         }),

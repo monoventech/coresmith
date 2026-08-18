@@ -60,7 +60,7 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Source</h3>
+            <h3 class="type-h3 mb-4">Source</h3>
             <dl class="space-y-3 text-sm">
                 <div class="flex justify-between gap-4">
                     <dt class="text-muted-foreground">Repository</dt>
@@ -78,7 +78,7 @@
         </section>
 
         <section class="rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Runtime</h3>
+            <h3 class="type-h3 mb-4">Runtime</h3>
             <dl class="space-y-3 text-sm">
                 <div class="flex justify-between gap-4">
                     <dt class="text-muted-foreground">Stack</dt>
@@ -102,7 +102,7 @@
 
     {#if application.uses_deploy_key && application.deploy_key_public}
         <section class="mt-6 rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Deploy key</h3>
+            <h3 class="type-h3 mb-4">Deploy key</h3>
             <p class="mb-4 text-sm leading-relaxed text-muted-foreground">
                 Add this as a read-only deploy key on the repository. It is used only for cloning, and only for this
                 application — no access token is ever used for git.
@@ -113,7 +113,7 @@
 
     <section class="mt-6 rounded-xl border border-border bg-card p-6">
         <div class="mb-4 flex items-baseline justify-between gap-4">
-            <h3 class="text-base font-semibold">Recent deployments</h3>
+            <h3 class="type-h3">Recent deployments</h3>
             <Link
                 href={route('servers.applications.deployments.index', [server.id, application.id])}
                 class="text-xs text-muted-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"

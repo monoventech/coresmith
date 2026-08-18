@@ -102,7 +102,7 @@
 
         {#if attention.length > 0}
             <section class="mt-12">
-                <h2 class="mb-4 text-xl font-semibold tracking-[-0.01em]">Needs your attention</h2>
+                <h2 class="type-h3 mb-4">Needs your attention</h2>
                 <ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card" data-testid="attention">
                     {#each attention as item (item.title)}
                         <li>
@@ -136,7 +136,7 @@
         {/if}
 
         <section class="mt-12">
-            <h2 class="mb-4 text-xl font-semibold tracking-[-0.01em]">Recent deployments</h2>
+            <h2 class="type-h3 mb-4">Recent deployments</h2>
 
             {#if deployments.length === 0}
                 <p class="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">

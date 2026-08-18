@@ -76,7 +76,7 @@
         </Form>
     {/if}
 
-    <h2 class="mb-4 text-xl font-semibold tracking-[-0.01em]">Changes Coresmith applied</h2>
+    <h2 class="type-h3 mb-4">Changes Coresmith applied</h2>
 
     {#if changes.length === 0}
         <p class="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">

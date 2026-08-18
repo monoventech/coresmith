@@ -28,7 +28,7 @@
     {/if}
 
     <div class="max-w-md space-y-2">
-        <p class="text-xl font-semibold tracking-[-0.01em]">{title}</p>
+        <p class="type-h3">{title}</p>
         {#if description}
             <p class="text-sm leading-relaxed text-muted-foreground">{description}</p>
         {/if}

@@ -40,7 +40,7 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Connection</h3>
+            <h3 class="type-h3 mb-4">Connection</h3>
             <dl class="space-y-3 text-sm">
                 <div class="flex justify-between gap-4">
                     <dt class="text-muted-foreground">Host</dt>
@@ -64,7 +64,7 @@
         </section>
 
         <section class="rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Access</h3>
+            <h3 class="type-h3 mb-4">Access</h3>
             <dl class="space-y-3 text-sm">
                 <div class="flex justify-between gap-4">
                     <dt class="text-muted-foreground">Privilege level</dt>

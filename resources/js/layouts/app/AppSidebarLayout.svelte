@@ -21,7 +21,7 @@
     <AppSidebar />
     <AppContent variant="sidebar" class="overflow-x-hidden">
         <AppSidebarHeader {breadcrumbs} />
-        <div class="mx-auto w-full max-w-[80rem] flex-1">
+        <div class="mx-auto w-full max-w-[1200px] flex-1">
             {@render children?.()}
         </div>
         <footer class="mt-auto border-t border-border px-6 py-6">

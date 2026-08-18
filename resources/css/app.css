@@ -1,6 +1,21 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@font-face {
+    font-family: 'Bespoke Slab';
+    src: url('../fonts/BespokeSlab-Variable.woff2') format('woff2');
+    font-weight: 300 800;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Bespoke Slab';
+    src: url('../fonts/BespokeSlab-VariableItalic.woff2') format('woff2');
+    font-weight: 300 800;
+    font-style: italic;
+    font-display: swap;
+}
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
@@ -40,7 +55,7 @@
     --radius: 0.5rem;
 
     --font-sans: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
-    --font-display: 'Zilla Slab', 'Hanken Grotesk', Georgia, serif;
+    --font-display: 'Bespoke Slab', 'Hanken Grotesk', Georgia, serif;
     --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
     --shadow-sm: 0 1px 2px oklch(0.2 0.02 60 / 0.05);
@@ -257,4 +272,93 @@
     border-radius: var(--radius);
     padding: 1rem 1.25rem;
     overflow: auto;
+}
+
+/* Modular type scale, lifted verbatim from the Monoven design system. */
+.type-display-xl {
+    font-family: var(--font-display);
+    font-size: 4.5rem;
+    line-height: 1.02;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+.type-display-lg {
+    font-family: var(--font-display);
+    font-size: 3.25rem;
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+.type-display-md {
+    font-family: var(--font-display);
+    font-size: 2.25rem;
+    line-height: 1.1;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+}
+.type-h1 {
+    font-family: var(--font-display);
+    font-size: 1.875rem;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+.type-h2 {
+    font-family: var(--font-sans);
+    font-size: 1.5rem;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+.type-h3 {
+    font-family: var(--font-sans);
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 600;
+}
+.type-body-lg {
+    font-family: var(--font-sans);
+    font-size: 1.125rem;
+    line-height: 1.6;
+    font-weight: 400;
+}
+.type-body {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    font-weight: 400;
+}
+.type-body-sm {
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    font-weight: 400;
+}
+.type-label {
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+.type-caption {
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+.type-mono {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    font-weight: 400;
+}
+
+/* The focus ring — the most-seen Monoven signature, per the design system. */
+.focus-ring:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 2px var(--background),
+        0 0 0 4px var(--ring);
 }

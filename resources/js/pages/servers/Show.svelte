@@ -134,7 +134,7 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Public key</h3>
+            <h3 class="type-h3 mb-4">Public key</h3>
             <p class="mb-4 text-sm leading-relaxed text-muted-foreground">
                 Add this to <span class="font-mono text-xs">~/.ssh/authorized_keys</span> for
                 <span class="font-mono text-xs">{server.ssh_user}</span> on the server, then test the connection.
@@ -144,7 +144,7 @@
         </section>
 
         <section class="rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Details</h3>
+            <h3 class="type-h3 mb-4">Details</h3>
             <dl class="space-y-3 text-sm">
                 <div class="flex justify-between gap-4">
                     <dt class="text-muted-foreground">Operating system</dt>
@@ -177,7 +177,7 @@
 
         <section class="mt-6">
             <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-                <h3 class="text-base font-semibold">Resources</h3>
+                <h3 class="type-h3">Resources</h3>
                 <p class="text-xs text-muted-foreground" data-testid="metrics-freshness">
                     {#if metrics.latest}
                         {`Last read ${new Date(metrics.latest.recorded_at).toLocaleTimeString()} · sparklines cover the last hour`}
@@ -255,7 +255,7 @@
 
     {#if server.provisioning_log}
         <section class="mt-6 rounded-xl border border-border bg-card p-6">
-            <h3 class="mb-4 text-base font-semibold">Provisioning log</h3>
+            <h3 class="type-h3 mb-4">Provisioning log</h3>
             <pre class="max-h-80 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap">{server.provisioning_log}</pre>
         </section>
     {/if}
