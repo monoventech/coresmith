@@ -69,11 +69,11 @@ final class CaddyInstaller
         $connection->uploadContent($this->panelSite(), self::PANEL_FILE);
 
         $connection->execute(
-            'test -f '.self::CONFIG_FILE.' || echo "{}" > '.self::CONFIG_FILE,
+            'test -f ' . self::CONFIG_FILE . ' || echo "{}" > ' . self::CONFIG_FILE,
             sudo: true,
         )->throw();
 
-        $connection->execute('chmod 644 '.self::CADDYFILE.' '.self::PANEL_FILE, sudo: true)->throw();
+        $connection->execute('chmod 644 ' . self::CADDYFILE . ' ' . self::PANEL_FILE, sudo: true)->throw();
     }
 
     private function enableService(SSHConnection $connection): void
@@ -85,7 +85,7 @@ final class CaddyInstaller
     private function verifyAdminApi(SSHConnection $connection): void
     {
         $connection->execute(
-            'curl -fsS --max-time 10 http://localhost:'.CaddyApiClient::ADMIN_PORT.'/config/ >/dev/null',
+            'curl -fsS --max-time 10 http://localhost:' . CaddyApiClient::ADMIN_PORT . '/config/ >/dev/null',
         )->throw();
     }
 

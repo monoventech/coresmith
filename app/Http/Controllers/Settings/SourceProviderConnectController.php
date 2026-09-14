@@ -13,6 +13,8 @@ use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Controller;
 use App\Models\SourceProvider;
 use App\Models\Team;
+use App\Services\Teams\TeamContext;
+use App\Services\Teams\TeamUrls;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -22,9 +24,14 @@ final class SourceProviderConnectController extends Controller
 {
     public const STATE_KEY = 'source_provider_state';
 
-    public function redirect(Request $request, string $type): RedirectResponse
+    public function redirect(Request $request, string $type, TeamContext $context, TeamUrls $urls): RedirectResponse
     {
         $provider = $this->type($type);
+
+        if ($context->viaHost()) {
+            return redirect()->away($urls->canonical(route('source-providers.connect', $provider->value, false)));
+        }
+
         $team = $this->team($request);
 
         abort_unless($this->isConfigured($provider), 404);
@@ -68,7 +75,7 @@ final class SourceProviderConnectController extends Controller
         }
 
         return redirect()->route('source-providers.index')
-            ->with('success', $provider->label().' connected. Cloning still uses each application\'s own deploy key.');
+            ->with('success', $provider->label() . ' connected. Cloning still uses each application\'s own deploy key.');
     }
 
     private function store(SourceProviderType $provider, Team $team, string $code, ?string $installationId): void
@@ -98,11 +105,11 @@ final class SourceProviderConnectController extends Controller
             'client_secret' => (string) config("services.{$this->configKey($provider)}.client_secret"),
             'code' => $code,
             'grant_type' => 'authorization_code',
-            'redirect_uri' => route('source-providers.callback', $provider->value),
+            'redirect_uri' => $this->callbackUrl($provider),
         ]);
 
         if ($response->failed() || $response->json('access_token') === null) {
-            throw new GitProviderException($provider->label().' would not complete the connection. Nothing was saved.');
+            throw new GitProviderException($provider->label() . ' would not complete the connection. Nothing was saved.');
         }
 
         return [
@@ -122,7 +129,7 @@ final class SourceProviderConnectController extends Controller
         };
 
         if ($response === null || $response->failed()) {
-            return $provider->label().' account';
+            return $provider->label() . ' account';
         }
 
         foreach (['login', 'username', 'nickname', 'display_name'] as $key) {
@@ -133,30 +140,35 @@ final class SourceProviderConnectController extends Controller
             }
         }
 
-        return $provider->label().' account';
+        return $provider->label() . ' account';
     }
 
     private function authorizeUrl(SourceProviderType $provider, string $state): string
     {
-        $redirect = route('source-providers.callback', $provider->value);
+        $redirect = $this->callbackUrl($provider);
 
         return match ($provider) {
-            SourceProviderType::GitHubApp => 'https://github.com/apps/'.rawurlencode((string) config('services.github.app_slug', 'coresmith')).'/installations/new?'
-                .http_build_query(['state' => $state]),
-            SourceProviderType::GitLab => 'https://gitlab.com/oauth/authorize?'.http_build_query([
+            SourceProviderType::GitHubApp => 'https://github.com/apps/' . rawurlencode((string) config('services.github.app_slug', 'coresmith')) . '/installations/new?'
+                . http_build_query(['state' => $state]),
+            SourceProviderType::GitLab => 'https://gitlab.com/oauth/authorize?' . http_build_query([
                 'client_id' => (string) config('services.gitlab.client_id'),
                 'redirect_uri' => $redirect,
                 'response_type' => 'code',
                 'state' => $state,
                 'scope' => implode(' ', $provider->scopes()),
             ]),
-            SourceProviderType::Bitbucket => 'https://bitbucket.org/site/oauth2/authorize?'.http_build_query([
+            SourceProviderType::Bitbucket => 'https://bitbucket.org/site/oauth2/authorize?' . http_build_query([
                 'client_id' => (string) config('services.bitbucket.client_id'),
                 'response_type' => 'code',
                 'state' => $state,
             ]),
             SourceProviderType::Custom => throw new GitProviderException('A custom provider is connected with an SSH deploy key, not OAuth.'),
         };
+    }
+
+    private function callbackUrl(SourceProviderType $provider): string
+    {
+        return app(TeamUrls::class)->canonical(route('source-providers.callback', $provider->value, false));
     }
 
     private function tokenUrl(SourceProviderType $provider): string
@@ -195,7 +207,7 @@ final class SourceProviderConnectController extends Controller
 
     private function team(Request $request): Team
     {
-        $team = $request->user()->teams()->first();
+        $team = $this->currentTeam();
 
         abort_if($team === null, 404);
         $this->authorize('update', $team);

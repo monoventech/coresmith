@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::call(function (): void {
     Server::query()
         ->where('status', ServerStatus::Active->value)
-        ->each(fn (Server $server) => CollectServerMetrics::dispatch($server));
+        ->each(fn(Server $server) => CollectServerMetrics::dispatch($server));
 })->everyMinute()->name('coresmith:collect-metrics')->withoutOverlapping();
 
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
@@ -18,3 +18,7 @@ Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idl
 Schedule::job(new DetectStaleDeployments)->everyFiveMinutes()->name('coresmith:detect-stale-deployments');
 
 Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresmith:prune-metrics')->withoutOverlapping();
+
+Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup')->withoutOverlapping();
+
+Schedule::command('coresmith:weekly-digest')->weeklyOn(1, '08:00')->name('coresmith:weekly-digest')->withoutOverlapping();

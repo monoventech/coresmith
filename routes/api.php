@@ -3,8 +3,13 @@
 use App\Http\Controllers\Api\ApplicationApiController;
 use App\Http\Controllers\Api\DeploymentApiController;
 use App\Http\Controllers\Api\ServerApiController;
+use App\Http\Controllers\CaddyAskController;
 use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('caddy/ask', CaddyAskController::class)
+    ->middleware('throttle:240,1')
+    ->name('caddy.ask');
 
 Route::post('webhooks/{webhook}/deploy', [WebhookController::class, 'deploy'])
     ->middleware('throttle:30,1')

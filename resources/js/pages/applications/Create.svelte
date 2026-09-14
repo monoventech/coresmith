@@ -1,88 +1,152 @@
+<script module lang="ts">
+    export const layout = { detail: true }
+</script>
+
 <script lang="ts">
+    import { Form } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
-    import Heading from '@/components/Heading.svelte'
-    import InputError from '@/components/InputError.svelte'
+    import BackLink from '@/components/BackLink.svelte'
+    import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
-    import { Spinner } from '@/components/ui/spinner'
-    import { Form } from '@inertiajs/svelte'
+    import { NativeSelect } from '@/components/ui/native-select'
 
-    let { server }: { server: { id: string; name: string } } = $props()
+    let { server }: { server: { id: string; name: string; href: string } } = $props()
 
-    const selectClass =
-        'h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = {
+        php: [
+            { value: 'laravel', label: 'Laravel' },
+            { value: 'symfony', label: 'Symfony' },
+            { value: '', label: 'Plain PHP' }
+        ],
+        js: [
+            { value: 'sveltekit', label: 'SvelteKit' },
+            { value: 'nextjs', label: 'Next.js' },
+            { value: 'nuxt', label: 'Nuxt' },
+            { value: 'astro', label: 'Astro' },
+            { value: '', label: 'API or other' }
+        ],
+        ruby: [
+            { value: 'rails', label: 'Rails' },
+            { value: 'sinatra', label: 'Sinatra' }
+        ],
+        static: [{ value: '', label: 'No framework' }]
+    }
+
+    const STEPS = [
+        { name: 'Clone release', desc: 'fetched with a read-only deploy key' },
+        { name: 'Install dependencies', desc: 'composer, bun or bundler' },
+        { name: 'Build assets', desc: 'into a new timestamped directory' },
+        { name: 'Run migrations', desc: 'against the new release' },
+        { name: 'Health check', desc: 'before anything goes live' },
+        { name: 'Symlink swap', desc: 'atomic, the old release kept for rollback' }
+    ]
+
+    let type = $state('php')
+    let framework = $derived(FRAMEWORKS[type]?.[0]?.value ?? '')
 </script>
 
-<AppHead title="New application" />
+<AppHead title="Add an app" />
 
-<div class="px-6 py-8">
-    <Heading title="New application" description="Deploying to {server.name}. Coresmith allocates the port block and system user for you." />
+<BackLink href={server.href} label={server.name} />
 
-    <Form method="post" action="/servers/{server.id}/applications" class="max-w-xl space-y-6">
-        {#snippet children({ errors, processing })}
-            <div class="grid gap-2">
-                <Label for="name">Name</Label>
-                <Input id="name" name="name" required placeholder="My Svelte App" />
-                <InputError message={errors.name} />
-            </div>
+<h1 class="type-h1 m-0 mb-1.5">Add an app</h1>
+<p class="type-body-sm mb-7 text-muted-foreground">
+    It runs on <span class="font-mono text-[13px]">{server.name}</span> as its own Linux user, with its own port block and env file.
+</p>
 
-            <div class="grid gap-6 sm:grid-cols-2">
-                <div class="grid gap-2">
-                    <Label for="type">Type</Label>
-                    <select id="type" name="type" class={selectClass} required>
-                        <option value="php">PHP</option>
-                        <option value="js">JavaScript</option>
-                        <option value="ruby">Ruby</option>
-                        <option value="static">Static</option>
-                    </select>
-                    <InputError message={errors.type} />
+<div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
+    <div class="rounded-xl border border-border bg-card p-6">
+        <Form method="post" action={route('servers.applications.store', server.id)}>
+            {#snippet children({ errors, processing })}
+                <input type="hidden" name="directory" value="/" />
+                <div class="flex flex-col gap-4">
+                    <div>
+                        <Label for="name" class="mb-1.5">Name</Label>
+                        <Input id="name" name="name" required placeholder="atlas" autocomplete="off" aria-invalid={errors.name ? true : undefined} />
+                        <FieldError message={errors.name} />
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <Label for="type" class="mb-1.5">Language</Label>
+                            <NativeSelect
+                                id="type"
+                                name="type"
+                                bind:value={type}
+                                options={[
+                                    { value: 'php', label: 'PHP' },
+                                    { value: 'js', label: 'JavaScript' },
+                                    { value: 'ruby', label: 'Ruby' },
+                                    { value: 'static', label: 'Static site' }
+                                ]}
+                            />
+                        </div>
+                        <div>
+                            <Label for="framework" class="mb-1.5">Framework</Label>
+                            <NativeSelect id="framework" name="framework" bind:value={framework} options={FRAMEWORKS[type] ?? []} />
+                        </div>
+                    </div>
+                    {#if type === 'js'}
+                        <div>
+                            <Label for="js_runtime" class="mb-1.5">Runtime</Label>
+                            <NativeSelect id="js_runtime" name="js_runtime" value="bun" options={[{ value: 'bun', label: 'Bun' }, { value: 'node', label: 'Node' }, { value: 'deno', label: 'Deno' }]} />
+                        </div>
+                    {/if}
+                    <div>
+                        <Label for="repository_url" class="mb-1.5">Repository</Label>
+                        <Input id="repository_url" name="repository_url" placeholder="git@github.com:you/atlas.git" autocomplete="off" class="font-mono text-[13px]" aria-invalid={errors.repository_url ? true : undefined} />
+                        <FieldError message={errors.repository_url} />
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <Label for="repository_branch" class="mb-1.5">Branch</Label>
+                            <Input id="repository_branch" name="repository_branch" value="main" required class="font-mono text-[13px]" aria-invalid={errors.repository_branch ? true : undefined} />
+                            <FieldError message={errors.repository_branch} />
+                        </div>
+                        <div>
+                            <Label for="web_directory" class="mb-1.5">Web root</Label>
+                            <Input id="web_directory" name="web_directory" value="/public" required class="font-mono text-[13px]" aria-invalid={errors.web_directory ? true : undefined} />
+                            <FieldError message={errors.web_directory} />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <Label for="domain" class="mb-1.5">Domain</Label>
+                            <Input id="domain" name="domain" placeholder="app.example.com" autocomplete="off" aria-invalid={errors.domain ? true : undefined} />
+                            <FieldError message={errors.domain} />
+                        </div>
+                        <div>
+                            <Label for="app_size" class="mb-1.5">Size</Label>
+                            <NativeSelect
+                                id="app_size"
+                                name="app_size"
+                                value="small"
+                                options={[
+                                    { value: 'small', label: 'Small, side projects' },
+                                    { value: 'medium', label: 'Medium, production' },
+                                    { value: 'large', label: 'Large, heavy traffic' }
+                                ]}
+                            />
+                        </div>
+                    </div>
+                    <p class="-mt-1 text-[12px] text-muted-foreground">Point the domain's A record at this server first. Caddy issues the certificate on the first request.</p>
+                    <Button type="submit" class="w-full" disabled={processing}>Add the app</Button>
                 </div>
+            {/snippet}
+        </Form>
+    </div>
 
-                <div class="grid gap-2">
-                    <Label for="app_size">Size</Label>
-                    <select id="app_size" name="app_size" class={selectClass} required>
-                        <option value="small">Small — side projects, staging</option>
-                        <option value="medium">Medium — production traffic</option>
-                        <option value="large">Large — high traffic</option>
-                    </select>
-                    <InputError message={errors.app_size} />
-                </div>
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="domain">Domain</Label>
-                <Input id="domain" name="domain" placeholder="app.example.com" />
-                <InputError message={errors.domain} />
-                <p class="text-xs text-muted-foreground">Point an A record at this server first. Caddy issues the certificate automatically.</p>
-            </div>
-
-            <div class="grid gap-2">
-                <Label for="repository_url">Repository</Label>
-                <Input id="repository_url" name="repository_url" placeholder="https://github.com/you/project.git" />
-                <InputError message={errors.repository_url} />
-            </div>
-
-            <div class="grid gap-6 sm:grid-cols-2">
-                <div class="grid gap-2">
-                    <Label for="repository_branch">Branch</Label>
-                    <Input id="repository_branch" name="repository_branch" value="main" required />
-                    <InputError message={errors.repository_branch} />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="web_directory">Web root</Label>
-                    <Input id="web_directory" name="web_directory" value="/public" required />
-                    <InputError message={errors.web_directory} />
-                </div>
-            </div>
-
-            <input type="hidden" name="directory" value="/" />
-
-            <Button type="submit" disabled={processing}>
-                {#if processing}<Spinner />{/if}
-                Create application
-            </Button>
-        {/snippet}
-    </Form>
+    <div class="rounded-xl border border-border bg-card p-6">
+        <h3 class="type-h3 m-0 mb-1">What a deploy does</h3>
+        <p class="mb-4 text-[12.5px] text-muted-foreground">The current release keeps serving traffic until the last step.</p>
+        <ol class="m-0 flex list-none flex-col gap-0.5 p-0">
+            {#each STEPS as step, index (step.name)}
+                <li class="flex items-baseline gap-3 py-1.75">
+                    <span class="w-4 flex-none font-mono text-[12px] text-primary">{index + 1}</span>
+                    <span class="text-[13.5px]"><span class="font-medium">{step.name}</span><span class="text-muted-foreground">{`, ${step.desc}`}</span></span>
+                </li>
+            {/each}
+        </ol>
+    </div>
 </div>

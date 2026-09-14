@@ -1,0 +1,147 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\ServerStatus;
+use App\Enums\TeamRole;
+use App\Http\Controllers\ServerTabsController;
+use App\Models\Application;
+use App\Models\Server;
+use App\Models\Team;
+use App\Models\User;
+use Illuminate\Support\Collection;
+
+function serverTabMember(Team $team, TeamRole $role = TeamRole::Member): User
+{
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => $role->value]);
+
+    return $user->fresh();
+}
+
+function serverTabServer(Team $team, array $attributes = []): Server
+{
+    return Server::factory()->for($team)->create(array_merge([
+        'name' => 'web-1',
+        'status' => ServerStatus::Active,
+        'ip_address' => '203.0.113.10',
+        'ssh_port' => 2222,
+        'ssh_user' => 'deploy',
+        'host_key_fingerprint' => 'SHA256:Xl/jKyuvKrFTpjRJe7mfKlKvBCANaqbn86pG1sf2G4k',
+        'audit_logging_enabled' => true,
+    ], $attributes));
+}
+
+test('the hardening tab lists the isolation layers, hardening, firewall and access details', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('servers/Hardening')
+            ->where('server.id', $server->id)
+            ->where('server.tabs.hardening', route('servers.hardening', $server))
+            ->where('server.can.update', false)
+            ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
+            ->where('hardening', ServerTabsController::HARDENING)
+            ->where('firewall.open', [2222, 80, 443])
+            ->where('firewall.ssh_port', 2222)
+            ->where('firewall.changes', [])
+            ->where('access', [
+                'ssh' => 'deploy@203.0.113.10:2222',
+                'fingerprint' => 'SHA256:Xl/jKyuvKrFTpjRJe7mfKlKvBCANaqbn86pG1sf2G4k',
+                'public_key' => $server->ssh_public_key,
+                'audit_logging' => true,
+            ]));
+});
+
+test('the default ssh port is not listed twice among the open ports', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['ssh_port' => 22]);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page->where('firewall.open', [22, 80, 443]));
+});
+
+test('firewall changes are this servers own, newest first', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team);
+    $other = serverTabServer($team, ['name' => 'web-2']);
+
+    activity()->performedOn($server)->withProperties(['action' => 'allow', 'port' => 6379, 'from' => '203.0.113.5'])->log('firewall_rule_changed');
+    activity()->performedOn($server)->withProperties(['action' => 'deny', 'port' => 8080])->log('firewall_rule_changed');
+    activity()->performedOn($other)->withProperties(['action' => 'allow', 'port' => 9000])->log('firewall_rule_changed');
+    activity()->performedOn($server)->withProperties(['action' => 'allow', 'port' => 1])->log('server_rebooted');
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page
+            ->has('firewall.changes', 2)
+            ->where('firewall.changes.0.action', 'deny')
+            ->where('firewall.changes.0.port', 8080)
+            ->where('firewall.changes.0.from', null)
+            ->where('firewall.changes.1.action', 'allow')
+            ->where('firewall.changes.1.port', 6379)
+            ->where('firewall.changes.1.from', '203.0.113.5'));
+});
+
+test('at most twenty five firewall changes are listed', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team);
+
+    Collection::times(27, fn(int $port) => activity()->performedOn($server)->withProperties(['action' => 'allow', 'port' => $port])->log('firewall_rule_changed'));
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page->has('firewall.changes', 25)->where('firewall.changes.0.port', 27));
+});
+
+test('the private key never reaches the hardening tab', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['ssh_private_key' => 'PRIVATE-KEY-MATERIAL']);
+
+    $response = $this->actingAs(serverTabMember($team, TeamRole::Owner))->get(route('servers.hardening', $server));
+
+    expect($response->getContent())->not->toContain('PRIVATE-KEY-MATERIAL')
+        ->and($response->getContent())->not->toContain('ssh_private_key');
+});
+
+test('the activity tab shows the feed for this server and its applications only', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team);
+    $application = Application::factory()->for($team)->for($server)->create(['name' => 'shop']);
+    $other = serverTabServer($team, ['name' => 'web-2']);
+
+    activity()->performedOn($server)->log('server_rebooted');
+    activity()->performedOn($application)->log('application_started');
+    activity()->performedOn($other)->log('server_rebooted');
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.activity', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('servers/Activity')
+            ->where('server.name', 'web-1')
+            ->has('activity', 2)
+            ->where('activity', fn($rows) => collect($rows)->map(fn($row) => implode('', array_column($row['parts'], 'text')))->sort()->values()->all() === [
+                'shop started again',
+                'web-1 rebooted, apps came back via systemd',
+            ]));
+});
+
+test('another team cannot open a servers tabs', function (string $route) {
+    $server = serverTabServer(Team::factory()->create());
+
+    $this->actingAs(serverTabMember(Team::factory()->create(), TeamRole::Owner))
+        ->get(route($route, $server))
+        ->assertForbidden();
+})->with(['servers.hardening', 'servers.activity']);
+
+test('the server tabs require authentication', function (string $route) {
+    $server = serverTabServer(Team::factory()->create());
+
+    $this->get(route($route, $server))->assertRedirect(route('login'));
+})->with(['servers.hardening', 'servers.activity']);

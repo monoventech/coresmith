@@ -25,8 +25,8 @@ class SshKeyFactory extends Factory
         return [
             'user_id' => User::factory(),
             'name' => fake()->words(2, true),
-            'public_key' => 'ssh-ed25519 '.fake()->sha256(),
-            'fingerprint' => 'SHA256:'.fake()->sha256(),
+            'public_key' => 'ssh-ed25519 ' . fake()->sha256(),
+            'fingerprint' => 'SHA256:' . fake()->sha256(),
         ];
     }
 }

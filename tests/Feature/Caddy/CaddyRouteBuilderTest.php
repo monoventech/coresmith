@@ -24,7 +24,7 @@ function phpApp(array $attributes = []): Application
 test('the route carries a targetable id and the app domain', function () {
     $route = (new CaddyRouteBuilder)->build($app = phpApp());
 
-    expect($route['@id'])->toBe('app-'.$app->id)
+    expect($route['@id'])->toBe('app-' . $app->id)
         ->and($route['match'][0]['host'])->toBe(['app.example.com'])
         ->and($route['terminal'])->toBeTrue();
 });

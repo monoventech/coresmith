@@ -64,7 +64,7 @@ test('updating a site patches by route id', function () {
     caddyClient()->updateSite(caddyConnection($transport), $app);
 
     expect($transport->commands()[0])->toContain('-X PATCH')
-        ->and($transport->commands()[0])->toContain('/id/app-'.$app->id);
+        ->and($transport->commands()[0])->toContain('/id/app-' . $app->id);
 });
 
 test('removing a site deletes by route id and sends no payload', function () {
@@ -74,7 +74,7 @@ test('removing a site deletes by route id and sends no payload', function () {
     caddyClient()->removeSite(caddyConnection($transport), $app);
 
     expect($transport->commands()[0])->toContain('-X DELETE')
-        ->and($transport->commands()[0])->toContain('/id/app-'.$app->id)
+        ->and($transport->commands()[0])->toContain('/id/app-' . $app->id)
         ->and($transport->commands()[0])->not->toContain('-d ');
 });
 
@@ -87,7 +87,7 @@ test('a mutation is followed by a config persist', function () {
 
     expect($commands)->toHaveCount(2)
         ->and($commands[1])->toContain('-X GET')
-        ->and($commands[1])->toContain('> '.CaddyInstaller::CONFIG_FILE);
+        ->and($commands[1])->toContain('> ' . CaddyInstaller::CONFIG_FILE);
 });
 
 test('an invalid route is never pushed to caddy', function () {

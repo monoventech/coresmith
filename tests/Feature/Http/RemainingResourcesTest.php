@@ -125,7 +125,7 @@ test('the database password is never sent to the browser', function () {
 
 test('a user can add an ssh key and it is fingerprinted', function () {
     $user = User::factory()->create();
-    $key = 'ssh-ed25519 '.base64_encode('fake-key-material').' me@laptop';
+    $key = 'ssh-ed25519 ' . base64_encode('fake-key-material') . ' me@laptop';
 
     $this->actingAs($user)->post(route('ssh-keys.store'), ['name' => 'Laptop', 'public_key' => $key])->assertRedirect();
 
@@ -241,7 +241,7 @@ test('the team page lists members with their roles', function () {
     $this->actingAs($owner)
         ->get(route('teams.show', $team))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
+        ->assertInertia(fn($page) => $page
             ->component('settings/Team')
             ->where('team.name', 'Monoven')
             ->has('members', 2)
@@ -254,7 +254,7 @@ test('an admin sees member management but cannot grant owner', function () {
 
     $this->actingAs(joined($team, TeamRole::Admin))
         ->get(route('teams.show', $team))
-        ->assertInertia(fn ($page) => $page
+        ->assertInertia(fn($page) => $page
             ->where('can.manageMembers', true)
             ->where('can.grantOwner', false));
 });
@@ -264,7 +264,7 @@ test('a member sees the roster but no management controls', function () {
 
     $this->actingAs(joined($team, TeamRole::Member))
         ->get(route('teams.show', $team))
-        ->assertInertia(fn ($page) => $page->where('can.manageMembers', false));
+        ->assertInertia(fn($page) => $page->where('can.manageMembers', false));
 });
 
 test('another teams page cannot be opened', function () {
@@ -281,7 +281,7 @@ test('the team index resolves the users own team', function () {
     $this->actingAs(joined($team, TeamRole::Owner))
         ->get(route('teams.index'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('team.name', 'Monoven'));
+        ->assertInertia(fn($page) => $page->where('team.name', 'Monoven'));
 });
 
 test('a user with no team gets a not found rather than an error', function () {

@@ -2,16 +2,15 @@
 	import { type VariantProps, tv } from "tailwind-variants";
 
 	export const badgeVariants = tv({
-		base: "gap-1 rounded-md border border-transparent px-2 py-0.5 text-xs font-medium transition-[color,background-color,border-color,opacity,transform] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:size-3! focus-visible:border-ring focus-visible:ring-ring aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive group/badge inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>svg]:pointer-events-none",
+		base: "inline-flex w-fit shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-2 py-0.5 font-sans text-[12px] leading-[1.4] font-medium tracking-[0.02em]",
 		variants: {
 			variant: {
-				default: "bg-muted text-muted-foreground [a]:hover:bg-muted/80",
-				accent: "bg-primary/10 text-primary [a]:hover:bg-primary/15",
-				secondary: "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-				destructive: "bg-destructive/10 [a]:hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive-strong dark:bg-destructive/20",
-				outline: "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
-				ghost: "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-				link: "text-primary underline-offset-4 hover:underline",
+				default: "bg-muted text-muted-foreground",
+				accent: "badge-accent",
+				success: "badge-success",
+				warning: "badge-warning",
+				destructive: "badge-destructive",
+				outline: "border-border bg-transparent text-foreground",
 			},
 		},
 		defaultVariants: {
@@ -20,31 +19,40 @@
 	});
 
 	export type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
+	export const badgeDots: Record<string, string> = {
+		accent: "bg-primary",
+		success: "bg-success",
+		warning: "bg-warning",
+		destructive: "bg-destructive",
+	};
 </script>
 
 <script lang="ts">
-	import type { HTMLAnchorAttributes } from "svelte/elements";
+	import type { HTMLAttributes } from "svelte/elements";
 	import { cn, type WithElementRef } from "@/lib/utils.js";
 
 	let {
 		ref = $bindable(null),
-		href,
 		class: className,
 		variant = "default",
+		dot = false,
+		pulse = false,
 		children,
 		...restProps
-	}: WithElementRef<HTMLAnchorAttributes> & {
+	}: WithElementRef<HTMLAttributes<HTMLSpanElement>> & {
 		variant?: BadgeVariant;
+		dot?: boolean;
+		pulse?: boolean;
 	} = $props();
 </script>
 
-<svelte:element
-	this={href ? "a" : "span"}
-	bind:this={ref}
-	data-slot="badge"
-	{href}
-	class={cn(badgeVariants({ variant }), className)}
-	{...restProps}
->
+<span bind:this={ref} data-slot="badge" class={cn(badgeVariants({ variant }), className)} {...restProps}>
+	{#if dot}
+		<span
+			class={cn("size-1.5 shrink-0 rounded-full", badgeDots[variant ?? "default"] ?? "bg-muted-foreground", pulse && "status-dot-pulse")}
+			aria-hidden="true"
+		></span>
+	{/if}
 	{@render children?.()}
-</svelte:element>
+</span>

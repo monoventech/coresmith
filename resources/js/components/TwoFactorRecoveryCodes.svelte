@@ -1,124 +1,58 @@
 <script lang="ts">
-    import { Form } from '@inertiajs/svelte';
-    import Eye from '@lucide/svelte/icons/eye';
-    import EyeOff from '@lucide/svelte/icons/eye-off';
-    import LockKeyhole from '@lucide/svelte/icons/lock-keyhole';
-    import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-    import { onMount, tick } from 'svelte';
-    import AlertError from '@/components/AlertError.svelte';
-    import { Button } from '@/components/ui/button';
-    import {
-        Card,
-        CardContent,
-        CardDescription,
-        CardHeader,
-        CardTitle,
-    } from '@/components/ui/card';
-    import { twoFactorAuthState } from '@/lib/twoFactorAuth.svelte';
-    const twoFactorAuth = twoFactorAuthState();
-    let isRecoveryCodesVisible = $state(false);
-    let recoveryCodeSectionRef = $state<HTMLDivElement | undefined>();
+    import { Form } from '@inertiajs/svelte'
+    import { onMount } from 'svelte'
+    import { Button } from '@/components/ui/button'
+    import { twoFactorAuthState } from '@/lib/twoFactorAuth.svelte'
 
-    async function toggleRecoveryCodesVisibility() {
-        if (
-            !isRecoveryCodesVisible &&
-            !twoFactorAuth.state.recoveryCodesList.length
-        ) {
-            await twoFactorAuth.fetchRecoveryCodes();
+    const twoFactorAuth = twoFactorAuthState()
+
+    let visible = $state(false)
+
+    async function toggle() {
+        if (!visible && twoFactorAuth.state.recoveryCodesList.length === 0) {
+            await twoFactorAuth.fetchRecoveryCodes()
         }
 
-        isRecoveryCodesVisible = !isRecoveryCodesVisible;
-
-        if (isRecoveryCodesVisible) {
-            await tick();
-            recoveryCodeSectionRef?.scrollIntoView({ behavior: 'smooth' });
-        }
+        visible = !visible
     }
 
-    onMount(async () => {
-        if (!twoFactorAuth.state.recoveryCodesList.length) {
-            await twoFactorAuth.fetchRecoveryCodes();
+    onMount(() => {
+        if (twoFactorAuth.state.recoveryCodesList.length === 0) {
+            void twoFactorAuth.fetchRecoveryCodes()
         }
-    });
+    })
 </script>
 
-<Card class="w-full">
-    <CardHeader>
-        <CardTitle class="flex gap-3">
-            <LockKeyhole class="size-4" />2FA recovery codes
-        </CardTitle>
-        <CardDescription>
-            Recovery codes let you regain access if you lose your 2FA device.
-            Store them in a secure password manager.
-        </CardDescription>
-    </CardHeader>
-    <CardContent>
-        <div
-            class="flex flex-col gap-3 select-none sm:flex-row sm:items-center sm:justify-between"
-        >
-            <Button onclick={toggleRecoveryCodesVisibility} class="w-fit">
-                {#if isRecoveryCodesVisible}
-                    <EyeOff class="size-4" />
-                {:else}
-                    <Eye class="size-4" />
-                {/if}
-                {isRecoveryCodesVisible ? 'Hide' : 'View'} recovery codes
-            </Button>
-
-            {#if isRecoveryCodesVisible && twoFactorAuth.state.recoveryCodesList.length}
-                <Form
-                    method="post" action={route('two-factor.regenerate-recovery-codes')}
-                    options={{ preserveScroll: true }}
-                    onSuccess={() => twoFactorAuth.fetchRecoveryCodes()}
-                >
+<div class="w-full border-t border-border pt-4" data-testid="recovery-codes">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+            <div class="text-[14px] font-medium">Recovery codes</div>
+            <p class="mt-0.5 text-[12.5px] text-muted-foreground">Each one signs you in once if you lose your phone. Keep them in a password manager.</p>
+        </div>
+        <div class="flex gap-2">
+            {#if visible && twoFactorAuth.state.recoveryCodesList.length > 0}
+                <Form method="post" action={route('two-factor.regenerate-recovery-codes')} options={{ preserveScroll: true }} onSuccess={() => twoFactorAuth.fetchRecoveryCodes()}>
                     {#snippet children({ processing })}
-                        <Button
-                            variant="secondary"
-                            type="submit"
-                            disabled={processing}
-                        >
-                            <RefreshCw class="size-4" /> Regenerate codes
-                        </Button>
+                        <Button variant="ghost" size="sm" type="submit" disabled={processing}>Replace them</Button>
                     {/snippet}
                 </Form>
             {/if}
+            <Button variant="outline" size="sm" onclick={toggle}>{visible ? 'Hide codes' : 'Show codes'}</Button>
         </div>
-        <div
-            class="relative overflow-hidden transition-all duration-300 {isRecoveryCodesVisible
-                ? 'h-auto opacity-100'
-                : 'h-0 opacity-0'}"
-        >
-            {#if twoFactorAuth.state.errors.length}
-                <div class="mt-6">
-                    <AlertError errors={twoFactorAuth.state.errors} />
-                </div>
-            {:else}
-                <div class="mt-3 space-y-3">
-                    <div
-                        bind:this={recoveryCodeSectionRef}
-                        class="grid gap-1 rounded-lg bg-muted p-4 font-mono text-sm"
-                    >
-                        {#if !twoFactorAuth.state.recoveryCodesList.length}
-                            <div class="space-y-2">
-                                {#each { length: 8 } as _, n (n)}
-                                    <div
-                                        class="h-4 animate-pulse rounded bg-muted-foreground/20"
-                                    ></div>
-                                {/each}
-                            </div>
-                        {:else}
-                            {#each twoFactorAuth.state.recoveryCodesList as code, index (index)}
-                                <div>{code}</div>
-                            {/each}
-                        {/if}
-                    </div>
-                    <p class="text-xs text-muted-foreground select-none">
-                        Each recovery code can be used once to access your
-                        account and will be removed after use. If you need more,
-                        click <span class="font-bold">Regenerate codes</span> above.
-                    </p>
-                </div>
-            {/if}
-        </div>
-    </CardContent>
-</Card>
+    </div>
+
+    {#if visible}
+        {#if twoFactorAuth.state.errors.length > 0}
+            <p class="tint-destructive mt-3 rounded-md border px-3.5 py-2.5 text-[13px]" role="alert">The recovery codes couldn't be loaded. Reload the page and try again.</p>
+        {:else}
+            <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-md bg-muted px-4 py-3 font-mono text-[12.5px] max-sm:grid-cols-1">
+                {#each twoFactorAuth.state.recoveryCodesList as recoveryCode (recoveryCode)}
+                    <div>{recoveryCode}</div>
+                {:else}
+                    <div class="text-muted-foreground">Loading…</div>
+                {/each}
+            </div>
+            <p class="mt-2 text-[12px] text-muted-foreground">A code stops working once it's used. Replacing them makes every old code useless.</p>
+        {/if}
+    {/if}
+</div>

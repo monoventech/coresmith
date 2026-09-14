@@ -26,7 +26,7 @@ class CloudProviderFactory extends Factory
         return [
             'team_id' => Team::factory(),
             'type' => 'hetzner',
-            'name' => fake()->company().' Hetzner',
+            'name' => fake()->company() . ' Hetzner',
             'api_token' => Str::random(48),
         ];
     }

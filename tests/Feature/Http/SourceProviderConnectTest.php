@@ -86,7 +86,7 @@ test('a callback without matching state is refused and nothing is stored', funct
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'the-real-state', 'type' => 'gitlab', 'team' => $team->getKey()]])
-        ->get(route('source-providers.callback', 'gitlab').'?code=abc&state=forged')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=abc&state=forged')
         ->assertRedirect(route('source-providers.index'))
         ->assertSessionHas('error');
 
@@ -100,7 +100,7 @@ test('a callback with no state in the session at all is refused', function () {
     $team = Team::factory()->create();
 
     $this->actingAs(connector($team, TeamRole::Owner))
-        ->get(route('source-providers.callback', 'gitlab').'?code=abc&state=anything')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=abc&state=anything')
         ->assertSessionHas('error');
 
     expect(SourceProvider::count())->toBe(0);
@@ -114,7 +114,7 @@ test('state issued for one provider cannot be replayed against another', functio
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'shared', 'type' => 'gitlab', 'team' => $team->getKey()]])
-        ->get(route('source-providers.callback', 'bitbucket').'?code=abc&state=shared')
+        ->get(route('source-providers.callback', 'bitbucket') . '?code=abc&state=shared')
         ->assertSessionHas('error');
 
     expect(SourceProvider::count())->toBe(0);
@@ -128,11 +128,11 @@ test('the state is single use', function () {
     $session = [SourceProviderConnectController::STATE_KEY => ['state' => 'once', 'type' => 'gitlab', 'team' => $team->getKey()]];
 
     $this->actingAs($user)->withSession($session)
-        ->get(route('source-providers.callback', 'gitlab').'?code=abc&state=once')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=abc&state=once')
         ->assertSessionHas('success');
 
     $this->actingAs($user)
-        ->get(route('source-providers.callback', 'gitlab').'?code=abc&state=once')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=abc&state=once')
         ->assertSessionHas('error');
 
     expect(SourceProvider::count())->toBe(1);
@@ -145,7 +145,7 @@ test('a user who declined at the provider gets a plain message and nothing is st
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'ok', 'type' => 'gitlab', 'team' => $team->getKey()]])
-        ->get(route('source-providers.callback', 'gitlab').'?error=access_denied&state=ok')
+        ->get(route('source-providers.callback', 'gitlab') . '?error=access_denied&state=ok')
         ->assertSessionHas('error');
 
     expect(SourceProvider::count())->toBe(0);
@@ -162,7 +162,7 @@ test('a successful callback stores the tokens encrypted with the granted scopes'
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'ok', 'type' => 'gitlab', 'team' => $team->getKey()]])
-        ->get(route('source-providers.callback', 'gitlab').'?code=the-code&state=ok')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=the-code&state=ok')
         ->assertRedirect(route('source-providers.index'))
         ->assertSessionHas('success');
 
@@ -183,7 +183,7 @@ test('a provider that refuses the code exchange stores nothing', function () {
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'ok', 'type' => 'gitlab', 'team' => $team->getKey()]])
-        ->get(route('source-providers.callback', 'gitlab').'?code=bad&state=ok')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=bad&state=ok')
         ->assertSessionHas('error');
 
     expect(SourceProvider::count())->toBe(0);
@@ -200,7 +200,7 @@ test('reconnecting replaces the stored credentials rather than piling up connect
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'ok', 'type' => 'gitlab', 'team' => $team->getKey()]])
-        ->get(route('source-providers.callback', 'gitlab').'?code=c&state=ok');
+        ->get(route('source-providers.callback', 'gitlab') . '?code=c&state=ok');
 
     expect(SourceProvider::count())->toBe(1)
         ->and(SourceProvider::first()->access_token)->toBe('at-second');
@@ -214,7 +214,7 @@ test('a callback naming a team the user has left is refused', function () {
 
     $this->actingAs(connector($team, TeamRole::Owner))
         ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'ok', 'type' => 'gitlab', 'team' => $other->getKey()]])
-        ->get(route('source-providers.callback', 'gitlab').'?code=c&state=ok')
+        ->get(route('source-providers.callback', 'gitlab') . '?code=c&state=ok')
         ->assertForbidden();
 
     expect(SourceProvider::count())->toBe(0);

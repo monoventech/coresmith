@@ -1,17 +1,72 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte';
-    import AppLayout from '@/layouts/app/AppSidebarLayout.svelte';
-    import type { BreadcrumbItem } from '@/types';
+    import { page } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
+    import { onMount } from 'svelte'
+    import AccountDialog from '@/components/panel/AccountDialog.svelte'
+    import CommandPalette from '@/components/panel/CommandPalette.svelte'
+    import MobileNav from '@/components/panel/MobileNav.svelte'
+    import Sidebar from '@/components/panel/Sidebar.svelte'
+    import Toast from '@/components/panel/Toast.svelte'
+    import Wordmark from '@/components/panel/Wordmark.svelte'
+    import { getInitials } from '@/lib/initials'
+    import { initializeSidebar } from '@/lib/sidebar.svelte'
 
     let {
-        breadcrumbs = [],
-        children,
+        detail = false,
+        children
     }: {
-        breadcrumbs?: BreadcrumbItem[];
-        children?: Snippet;
-    } = $props();
+        detail?: boolean
+        children?: Snippet
+    } = $props()
+
+    let palette = $state(false)
+    let account = $state(false)
+
+    const user = $derived(page.props.auth.user)
+
+    onMount(() => {
+        initializeSidebar()
+
+        const onKey = (event: KeyboardEvent) => {
+            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+                event.preventDefault()
+                palette = !palette
+            }
+        }
+
+        window.addEventListener('keydown', onKey)
+
+        return () => window.removeEventListener('keydown', onKey)
+    })
 </script>
 
-<AppLayout {breadcrumbs}>
-    {@render children?.()}
-</AppLayout>
+<div class="panel flex h-dvh overflow-hidden bg-background font-sans text-foreground">
+    <Sidebar onSearch={() => (palette = true)} onAccount={() => (account = true)} />
+
+    <main id="main" class="grain relative min-w-0 flex-1 overflow-y-auto" data-testid="panel-main">
+        <div class="mx-auto max-w-[1208px] px-[18px] pt-3 pb-24 sm:px-11 sm:pt-9 sm:pb-16">
+            {#if !detail}
+                <div class="mt-2 mb-0.5 flex items-center justify-between gap-3 sm:hidden">
+                    <Wordmark size="compact" />
+                    <button
+                        type="button"
+                        class="focus-ring inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-transparent"
+                        aria-label="Account"
+                        onclick={() => (account = true)}
+                    >
+                        <span class="inline-flex size-7 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+                            {getInitials(user.name)}
+                        </span>
+                    </button>
+                </div>
+            {/if}
+
+            {@render children?.()}
+        </div>
+    </main>
+
+    <MobileNav />
+    <CommandPalette bind:open={palette} />
+    <AccountDialog bind:open={account} />
+    <Toast />
+</div>

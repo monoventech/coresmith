@@ -26,13 +26,12 @@ final class UpdateApplicationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
             'type' => ['sometimes', 'required', Rule::enum(ApplicationType::class)],
             'js_runtime' => ['sometimes', 'nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['sometimes', 'nullable', 'string', 'max:64'],
-            'domain' => ['sometimes', 'nullable', 'string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
+            'domain' => ['sometimes', 'nullable', 'string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
             'additional_domains' => ['sometimes', 'nullable', 'array'],
-            'additional_domains.*' => ['string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
+            'additional_domains.*' => ['string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
             'repository_url' => ['sometimes', 'nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
             'repository_branch' => ['sometimes', 'required', 'string', 'max:255'],
             'php_version' => ['sometimes', 'nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],

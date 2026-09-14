@@ -32,7 +32,7 @@ final class ApiTokenController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $team = $user->teams()->first();
+        $team = $this->currentTeam();
 
         abort_if($team === null, 404);
 
@@ -43,7 +43,7 @@ final class ApiTokenController extends Controller
                 ->where('tokenable_id', $user->getKey())
                 ->latest()
                 ->get()
-                ->map(fn (ApiToken $token): array => [
+                ->map(fn(ApiToken $token): array => [
                     'id' => $token->getKey(),
                     'name' => $token->name,
                     'abilities' => array_values((array) $token->abilities),
@@ -51,7 +51,7 @@ final class ApiTokenController extends Controller
                     'created_at' => $token->created_at?->toIso8601String(),
                     'team_id' => $token->team_id,
                 ])->values(),
-            'abilities' => collect(self::OFFERED)->map(fn (string $value): array => [
+            'abilities' => collect(self::OFFERED)->map(fn(string $value): array => [
                 'value' => $value,
                 'granted' => $user->hasTeamAbility($team, Ability::from($value)),
             ])->values(),
@@ -61,7 +61,7 @@ final class ApiTokenController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
-        $team = $user->teams()->first();
+        $team = $this->currentTeam();
 
         abort_if($team === null, 404);
 
@@ -73,7 +73,7 @@ final class ApiTokenController extends Controller
 
         $granted = array_values(array_filter(
             $validated['abilities'],
-            fn (string $value): bool => $user->hasTeamAbility($team, Ability::from($value)),
+            fn(string $value): bool => $user->hasTeamAbility($team, Ability::from($value)),
         ));
 
         if ($granted === []) {
@@ -85,7 +85,7 @@ final class ApiTokenController extends Controller
         ApiToken::whereKey($token->accessToken->getKey())->update(['team_id' => $team->getKey()]);
 
         return back()->with([
-            'success' => 'Token created. Copy it now — it is not shown again.',
+            'success' => 'Token created. Copy it now, it can\'t be shown again.',
             'plainTextToken' => $token->plainTextToken,
         ]);
     }

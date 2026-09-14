@@ -33,8 +33,8 @@ class ApplicationFactory extends Factory
             'slug' => fake()->unique()->slug(2),
             'type' => ApplicationType::Php,
             'framework' => 'laravel',
-            'repository_url' => 'https://github.com/'.fake()->userName().'/'.fake()->slug(1),
-            'system_user' => 'coresmith-app-'.fake()->unique()->bothify('????'),
+            'repository_url' => 'https://github.com/' . fake()->userName() . '/' . fake()->slug(1),
+            'system_user' => 'coresmith-app-' . fake()->unique()->bothify('????'),
             'base_port' => fake()->unique()->numberBetween(800, 999) * 10,
             'php_version' => '8.5.5',
         ];

@@ -28,14 +28,14 @@ class InstanceSetting extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => Cache::forget(self::cacheKey()));
-        static::deleted(fn () => Cache::forget(self::cacheKey()));
+        static::saved(fn() => Cache::forget(self::cacheKey()));
+        static::deleted(fn() => Cache::forget(self::cacheKey()));
     }
 
     public static function cacheKey(): string
     {
         // Environments that share a cache store must not share each other's settings.
-        return self::CACHE_KEY.':'.config('app.env');
+        return self::CACHE_KEY . ':' . config('app.env');
     }
 
     public static function get(string $key, ?string $default = null): ?string

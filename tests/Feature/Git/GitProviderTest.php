@@ -17,7 +17,7 @@ function provider(SourceProviderType $type, array $attributes = []): SourceProvi
 {
     return SourceProvider::factory()->create(array_merge([
         'type' => $type->value,
-        'access_token' => 'token-'.$type->value,
+        'access_token' => 'token-' . $type->value,
         'token_expires_at' => now()->addHour(),
     ], $attributes));
 }
@@ -67,7 +67,7 @@ test('github deploy keys are always created read only', function () {
 
     expect($id)->toBe('42');
 
-    Http::assertSent(fn ($request) => $request['read_only'] === true);
+    Http::assertSent(fn($request) => $request['read_only'] === true);
 });
 
 test('github webhooks are created with tls verification on and a secret', function () {
@@ -76,7 +76,7 @@ test('github webhooks are created with tls verification on and a secret', functi
     client(provider(SourceProviderType::GitHubApp))
         ->createWebhook('monoven/coresmith', 'https://coresmith.io/webhooks/x', 's3cret');
 
-    Http::assertSent(fn ($request) => $request['config']['insecure_ssl'] === '0'
+    Http::assertSent(fn($request) => $request['config']['insecure_ssl'] === '0'
         && $request['config']['secret'] === 's3cret'
         && $request['events'] === ['push']);
 });
@@ -97,7 +97,7 @@ test('a live github token is reused rather than reminted', function () {
 
     client(provider(SourceProviderType::GitHubApp, ['token_expires_at' => now()->addHour()]))->listRepositories();
 
-    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'access_tokens'));
+    Http::assertNotSent(fn($request) => str_contains($request->url(), 'access_tokens'));
 });
 
 test('an expiring github token is reminted from the app private key', function () {
@@ -115,7 +115,7 @@ test('an expiring github token is reminted from the app private key', function (
     client($source)->listRepositories();
 
     expect($source->fresh()->access_token)->toBe('ghs_fresh');
-    Http::assertSent(fn ($request) => str_contains($request->url(), 'access_tokens'));
+    Http::assertSent(fn($request) => str_contains($request->url(), 'access_tokens'));
 });
 
 test('a github connection with no app credentials fails loudly instead of clone failing later', function () {
@@ -156,7 +156,7 @@ test('gitlab deploy keys cannot push', function () {
 
     client(provider(SourceProviderType::GitLab))->createDeployKey('group/project', 'ssh-ed25519 AAAA', 'Coresmith');
 
-    Http::assertSent(fn ($request) => $request['can_push'] === false);
+    Http::assertSent(fn($request) => $request['can_push'] === false);
 });
 
 test('gitlab commit states are mapped to gitlab vocabulary', function (string $given, string $expected) {
@@ -165,7 +165,7 @@ test('gitlab commit states are mapped to gitlab vocabulary', function (string $g
     client(provider(SourceProviderType::GitLab))
         ->updateCommitStatus('group/project', 'abc123', $given, 'https://coresmith.io/d/1', 'Deploying');
 
-    Http::assertSent(fn ($request) => $request['state'] === $expected);
+    Http::assertSent(fn($request) => $request['state'] === $expected);
 })->with([
     ['failure', 'failed'],
     ['error', 'failed'],
@@ -199,7 +199,7 @@ test('bitbucket commit states are mapped to bitbucket vocabulary', function (str
     client(provider(SourceProviderType::Bitbucket))
         ->updateCommitStatus('monoven/coresmith', 'abc123', $given, 'https://coresmith.io/d/1', 'Deploying');
 
-    Http::assertSent(fn ($request) => $request['state'] === $expected);
+    Http::assertSent(fn($request) => $request['state'] === $expected);
 })->with([
     ['failure', 'FAILED'],
     ['pending', 'INPROGRESS'],

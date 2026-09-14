@@ -52,7 +52,7 @@ class User extends Authenticatable
     public function hasAbilityInAnyTeam(Ability $ability): bool
     {
         return $this->teams->contains(
-            fn (Team $team): bool => TeamRole::tryFrom((string) $team->pivot->role)?->can($ability) ?? false,
+            fn(Team $team): bool => TeamRole::tryFrom((string) $team->pivot->role)?->can($ability) ?? false,
         );
     }
 
@@ -82,6 +82,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'notification_preferences' => 'array',
         ];
     }
 }

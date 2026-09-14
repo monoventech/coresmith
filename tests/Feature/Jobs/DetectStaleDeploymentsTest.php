@@ -53,9 +53,9 @@ test('the stale deployment lock is force released so the app can deploy again', 
         'started_at' => now()->subMinutes(20),
     ]);
 
-    Cache::lock('deploy:'.$deployment->application_id, 600)->get();
+    Cache::lock('deploy:' . $deployment->application_id, 600)->get();
 
     (new DetectStaleDeployments)->handle();
 
-    expect(Cache::lock('deploy:'.$deployment->application_id, 600)->get())->toBeTrue();
+    expect(Cache::lock('deploy:' . $deployment->application_id, 600)->get())->toBeTrue();
 });

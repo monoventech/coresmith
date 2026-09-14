@@ -13,22 +13,27 @@ use App\Jobs\BackupDatabase;
 use App\Jobs\CreateDatabase;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Services\Panel\ServerPresenter;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class DatabaseController extends Controller
 {
-    public function index(Server $server): Response
+    public function index(Request $request, Server $server, ServerPresenter $presenter): Response
     {
         $this->authorize('view', $server);
 
-        return Inertia::render('databases/Index', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
-            'databases' => $server->databases()->latest()->get()->map(
-                fn (ManagedDatabase $database): array => $this->summarise($database),
-            ),
-            'can' => ['update' => auth()->user()?->can('update', $server) ?? false],
+        return Inertia::render('servers/Databases', [
+            'server' => $presenter->header($server, $request->user()),
+            'databases' => $server->databases()->orderBy('name')->get()->map(
+                fn(ManagedDatabase $database): array => [
+                    ...$this->summarise($database),
+                    'href' => route('servers.databases.show', [$server, $database]),
+                ],
+            )->values(),
+            'can' => ['create' => $request->user()->can('create', ManagedDatabase::class)],
         ]);
     }
 
@@ -37,7 +42,7 @@ final class DatabaseController extends Controller
         $this->authorize('view', $server);
 
         return Inertia::render('databases/Create', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.databases.index', $server)],
         ]);
     }
 
@@ -62,7 +67,7 @@ final class DatabaseController extends Controller
         $this->assertBelongsTo($server, $database);
 
         return Inertia::render('databases/Show', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.databases.index', $server)],
             'database' => $this->summarise($database),
             'can' => [
                 'viewCredentials' => auth()->user()?->can('viewCredentials', $database) ?? false,

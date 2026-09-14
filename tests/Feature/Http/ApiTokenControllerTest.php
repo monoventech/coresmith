@@ -22,9 +22,9 @@ test('the page offers only abilities the role actually grants', function () {
     $this->actingAs(tokenPageUser($team, TeamRole::Member))
         ->get(route('api-tokens.index'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
+        ->assertInertia(fn($page) => $page
             ->component('settings/ApiTokens')
-            ->where('abilities', fn ($abilities) => collect($abilities)
+            ->where('abilities', fn($abilities) => collect($abilities)
                 ->firstWhere('value', Ability::UpdateApplication->value)['granted'] === false
                 && collect($abilities)->firstWhere('value', Ability::DeployApplication->value)['granted'] === true));
 });
@@ -109,7 +109,7 @@ test('the page lists only your own tokens', function () {
 
     $this->actingAs($mine)
         ->get(route('api-tokens.index'))
-        ->assertInertia(fn ($page) => $page->has('tokens', 1)->where('tokens.0.name', 'mine'));
+        ->assertInertia(fn($page) => $page->has('tokens', 1)->where('tokens.0.name', 'mine'));
 });
 
 test('a token can be revoked', function () {

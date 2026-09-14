@@ -33,8 +33,12 @@ test('the list only shows servers from the users own teams', function () {
 
     $this->actingAs($user)
         ->get(route('servers.index'))
-        ->assertInertia(fn ($page) => $page
-            ->component('servers/Index')
+        ->assertRedirect(route('dashboard'));
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn($page) => $page
+            ->component('Dashboard')
             ->has('servers', 1)
             ->where('servers.0.id', $visible->id));
 });
@@ -53,18 +57,18 @@ test('a member of the owning team can view the server', function () {
     $this->actingAs(teamMember($team, TeamRole::Member))
         ->get(route('servers.show', $server))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('servers/Show')->where('server.id', $server->id));
+        ->assertInertia(fn($page) => $page->component('servers/Show')->where('server.id', $server->id));
 });
 
-test('the private key is never sent to the browser', function () {
+test('the private key is never sent to the browser', function (string $route) {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create(['ssh_private_key' => 'PRIVATE-KEY-MATERIAL']);
 
-    $response = $this->actingAs(teamMember($team, TeamRole::Admin))->get(route('servers.show', $server));
+    $response = $this->actingAs(teamMember($team, TeamRole::Admin))->get(route($route, $server))->assertOk();
 
     expect($response->getContent())->not->toContain('PRIVATE-KEY-MATERIAL')
         ->and($response->getContent())->not->toContain('ssh_private_key');
-});
+})->with(['servers.show', 'servers.databases.index', 'servers.hardening', 'servers.activity']);
 
 test('a member cannot create a server', function () {
     $team = Team::factory()->create();
@@ -159,7 +163,7 @@ test('an admin can delete a server', function () {
 
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->delete(route('servers.destroy', $server))
-        ->assertRedirect(route('servers.index'));
+        ->assertRedirect(route('dashboard'));
 
     expect(Server::find($server->id))->toBeNull()
         ->and(Server::withTrashed()->find($server->id))->not->toBeNull();
@@ -167,11 +171,26 @@ test('an admin can delete a server', function () {
 
 test('a member cannot update a server', function () {
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1']);
 
     $this->actingAs(teamMember($team, TeamRole::Member))
-        ->put(route('servers.update', $server), ['name' => 'renamed', 'ssh_port' => 22])
+        ->put(route('servers.update', $server), ['name' => 'renamed'])
         ->assertForbidden();
+
+    expect($server->fresh()->name)->toBe('web-1');
+});
+
+test('an admin can rename a server without resending its other settings', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'ssh_port' => 2222]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->put(route('servers.update', $server), ['name' => 'web-renamed'])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($server->fresh()->name)->toBe('web-renamed')
+        ->and($server->fresh()->ssh_port)->toBe(2222);
 });
 
 test('provisioning another teams server is refused and queues nothing', function () {
@@ -219,8 +238,10 @@ test('every server route requires authentication', function (string $method, str
     ['get', 'servers.index'],
     ['get', 'servers.create'],
     ['get', 'servers.show'],
-    ['get', 'servers.edit'],
+    ['put', 'servers.update'],
     ['delete', 'servers.destroy'],
     ['post', 'servers.provision'],
     ['post', 'servers.test-connection'],
+    ['post', 'servers.reboot'],
+    ['post', 'servers.prune-releases'],
 ]);

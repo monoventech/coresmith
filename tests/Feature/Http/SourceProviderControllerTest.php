@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
+use App\Models\Application;
+use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
+use App\Models\WebhookEndpoint;
+use App\Services\Git\DeployKeyManager;
+use App\Services\SSH\HostKeyFingerprint;
 use Illuminate\Support\Facades\Http;
 
 function providerUser(Team $team, TeamRole $role): User
@@ -31,8 +36,8 @@ test('the page lists the teams connections without leaking any credential', func
         ->get(route('source-providers.index'))
         ->assertOk();
 
-    $response->assertInertia(fn ($page) => $page
-        ->component('settings/SourceProviders')
+    $response->assertInertia(fn($page) => $page
+        ->component('settings/Git')
         ->has('providers', 1)
         ->where('providers.0.name', 'oseughu')
         ->where('providers.0.label', 'GitHub')
@@ -43,12 +48,40 @@ test('the page lists the teams connections without leaking any credential', func
         ->and($response->getContent())->not->toContain('BEGIN RSA PRIVATE KEY');
 });
 
+test('the page lists the teams deploy keys and webhooks without leaking either secret', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = app(DeployKeyManager::class)->ensure(Application::factory()->for($team)->for($server)->create([
+        'name' => 'Storefront',
+        'repository_url' => 'git@github.com:monoven/storefront.git',
+    ]));
+    WebhookEndpoint::factory()->for($application)->create(['secret' => 'whsec_supersecret']);
+    WebhookEndpoint::factory()->for($application)->create(['active' => false]);
+    app(DeployKeyManager::class)->ensure(Application::factory()->for(Team::factory())->create(['name' => 'Someone Elses']));
+
+    $response = $this->actingAs(providerUser($team, TeamRole::Member))
+        ->get(route('source-providers.index'))
+        ->assertOk();
+
+    $response->assertInertia(fn($page) => $page
+        ->component('settings/Git')
+        ->has('deployKeys', 1)
+        ->where('deployKeys.0.name', 'Storefront')
+        ->where('deployKeys.0.repository', 'monoven/storefront')
+        ->where('deployKeys.0.fingerprint', HostKeyFingerprint::fromPublicKey((string) $application->deploy_key_public))
+        ->where('webhooks.count', 1));
+
+    expect($response->getContent())->not->toContain('BEGIN OPENSSH PRIVATE KEY')
+        ->and($response->getContent())->not->toContain('whsec_supersecret')
+        ->and($response->getContent())->not->toContain('Someone Elses');
+});
+
 test('the page advertises the exact scopes each provider asks for', function () {
     $team = Team::factory()->create();
 
     $this->actingAs(providerUser($team, TeamRole::Owner))
         ->get(route('source-providers.index'))
-        ->assertInertia(fn ($page) => $page
+        ->assertInertia(fn($page) => $page
             ->has('connectable', 3)
             ->where('connectable.0.scopes', SourceProviderType::GitHubApp->scopes())
             ->where('connectable.1.scopes', ['read_repository', 'read_api', 'api'])
@@ -61,7 +94,7 @@ test('a provider whose token was cleared is shown as disconnected', function () 
 
     $this->actingAs(providerUser($team, TeamRole::Owner))
         ->get(route('source-providers.index'))
-        ->assertInertia(fn ($page) => $page->where('providers.0.connected', false));
+        ->assertInertia(fn($page) => $page->where('providers.0.connected', false));
 });
 
 test('a member sees the connections but gets no management controls', function () {
@@ -70,7 +103,7 @@ test('a member sees the connections but gets no management controls', function (
 
     $this->actingAs(providerUser($team, TeamRole::Member))
         ->get(route('source-providers.index'))
-        ->assertInertia(fn ($page) => $page->where('can.manage', false)->has('providers', 1));
+        ->assertInertia(fn($page) => $page->where('can.manage', false)->has('providers', 1));
 });
 
 test('a member cannot disconnect a provider', function () {
@@ -117,7 +150,7 @@ test('disconnecting revokes the token at the provider and erases it locally', fu
         ->and($trashed->refresh_token)->toBeNull()
         ->and($trashed->token_expires_at)->toBeNull();
 
-    Http::assertSent(fn ($request) => str_contains($request->url(), 'oauth/revoke'));
+    Http::assertSent(fn($request) => str_contains($request->url(), 'oauth/revoke'));
 });
 
 test('a provider that refuses the revoke call is still disconnected locally', function () {

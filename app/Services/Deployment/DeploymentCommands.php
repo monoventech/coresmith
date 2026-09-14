@@ -32,7 +32,7 @@ final class DeploymentCommands
             $directories[] = dirname($this->asdf->binaryPath('ruby', $application->ruby_version));
         }
 
-        return $directories === [] ? '' : 'PATH='.implode(':', $directories).':$PATH ';
+        return $directories === [] ? '' : 'PATH=' . implode(':', $directories) . ':$PATH ';
     }
 
     /**
@@ -80,6 +80,23 @@ final class DeploymentCommands
     }
 
     /**
+     * @return array<string, string>
+     */
+    public function healthChecks(Application $application, ReleasePaths $paths, string $release): array
+    {
+        $root = $paths->webRoot($release);
+        $web = trim((string) $application->web_directory, '/');
+        $base = rtrim($release . '/' . trim((string) $application->directory, '/'), '/');
+
+        return match ($application->type) {
+            ApplicationType::Php => [($web === '' ? '' : $web . '/') . 'index.php' => 'test -f ' . escapeshellarg($root . '/index.php')],
+            ApplicationType::Static => [($web === '' ? 'the release root' : $web . '/') => 'test -d ' . escapeshellarg($root)],
+            ApplicationType::Js => ['package.json' => 'test -f ' . escapeshellarg($base . '/package.json')],
+            ApplicationType::Ruby => ['Gemfile' => 'test -f ' . escapeshellarg($base . '/Gemfile')],
+        };
+    }
+
+    /**
      * @return list<string>
      */
     public function restart(Application $application): array
@@ -87,13 +104,13 @@ final class DeploymentCommands
         $slug = $application->slug;
 
         $units = match ($application->type) {
-            ApplicationType::Php => ['systemctl reload php-fpm-'.$application->system_user],
+            ApplicationType::Php => ['systemctl reload php-fpm-' . $application->system_user],
             ApplicationType::Static => [],
-            default => ['systemctl restart coresmith-app-'.$slug.'-web'],
+            default => ['systemctl restart coresmith-app-' . $slug . '-web'],
         };
 
         if ($application->processes !== null && $application->processes !== []) {
-            $units[] = 'systemctl restart coresmith-app-'.$slug.'-worker';
+            $units[] = 'systemctl restart coresmith-app-' . $slug . '-worker';
         }
 
         return $units;

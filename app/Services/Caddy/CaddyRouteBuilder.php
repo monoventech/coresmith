@@ -20,7 +20,7 @@ final class CaddyRouteBuilder
 
     public static function routeId(Application $application): string
     {
-        return 'app-'.$application->getKey();
+        return 'app-' . $application->getKey();
     }
 
     /**
@@ -208,7 +208,7 @@ final class CaddyRouteBuilder
             default => [
                 [
                     'handler' => 'reverse_proxy',
-                    'upstreams' => [['dial' => '127.0.0.1:'.$application->base_port]],
+                    'upstreams' => [['dial' => '127.0.0.1:' . $application->base_port]],
                 ],
             ],
         };
@@ -216,18 +216,18 @@ final class CaddyRouteBuilder
 
     public function documentRoot(Application $application): string
     {
-        $base = self::APPS_ROOT.'/'.SafeName::assertSlug($application->slug).'/current';
+        $base = self::APPS_ROOT . '/' . SafeName::assertSlug($application->slug) . '/current';
         $directory = trim((string) $application->directory, '/');
         $web = trim((string) $application->web_directory, '/');
 
         $path = $base;
 
         if ($directory !== '') {
-            $path .= '/'.$directory;
+            $path .= '/' . $directory;
         }
 
         if ($web !== '') {
-            $path .= '/'.$web;
+            $path .= '/' . $web;
         }
 
         return $path;
@@ -235,6 +235,6 @@ final class CaddyRouteBuilder
 
     public function fpmSocket(Application $application): string
     {
-        return '/var/run/php/coresmith-app-'.SafeName::assertSlug($application->slug).'-fpm.sock';
+        return '/var/run/php/coresmith-app-' . SafeName::assertSlug($application->slug) . '-fpm.sock';
     }
 }

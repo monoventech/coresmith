@@ -8,7 +8,12 @@ declare(strict_types=1);
 
 namespace App\Services\Server;
 
+use App\Enums\TeamRole;
+use App\Models\Server;
+use App\Models\SshKey;
+use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use InvalidArgumentException;
 
 final class SecurityHardening
 {
@@ -20,8 +25,17 @@ final class SecurityHardening
 
     public const AUDIT_RULES = '/etc/audit/rules.d/coresmith.rules';
 
+    public const PUBLIC_KEY_PATTERN = '/^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+) [A-Za-z0-9+\/=]+( [^\x00-\x1F\x7F]*)?\z/';
+
+    public const MANAGED_KEYS_BEGIN = '# coresmith-managed-keys begin';
+
+    public const MANAGED_KEYS_END = '# coresmith-managed-keys end';
+
+    private const STRIP_MANAGED_KEYS = '$0 == start { printf "%s", held; held = ""; inside = 1; next } $0 == stop { held = ""; inside = 0; next } inside { held = held $0 ORS; next } { print } END { printf "%s", held }';
+
     public function harden(SSHConnection $connection): void
     {
+        $this->syncUserKeys($connection);
         $this->hardenSsh($connection);
         $this->installFail2ban($connection);
         $this->applySysctls($connection);
@@ -40,7 +54,7 @@ final class SecurityHardening
         $packages = PackageManagerFactory::for($connection->server());
 
         $connection->execute(
-            'command -v auditctl >/dev/null 2>&1 || { '.$packages->install(['auditd']).'; }',
+            'command -v auditctl >/dev/null 2>&1 || { ' . $packages->install(['auditd']) . '; }',
             sudo: true,
         )->throw();
 
@@ -70,13 +84,85 @@ final class SecurityHardening
         RULES;
     }
 
+    public function syncUserKeys(SSHConnection $connection): int
+    {
+        $server = $connection->server();
+        $keys = $this->userKeys($server);
+
+        $connection->execute($this->authorizedKeysSyncCommand((string) $server->ssh_user, $keys))->throw();
+
+        return count($keys);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function userKeys(Server $server): array
+    {
+        $team = $server->team;
+
+        if ($team === null) {
+            return [];
+        }
+
+        $managers = $team->members()
+            ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value])
+            ->pluck('users.id');
+
+        return SshKey::query()
+            ->whereIn('user_id', $managers)
+            ->orderBy('created_at')
+            ->pluck('public_key')
+            ->map(fn(mixed $key): string => trim((string) $key))
+            ->filter(fn(string $key): bool => preg_match(self::PUBLIC_KEY_PATTERN, $key) === 1)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    public function authorizedKeysSyncCommand(string $sshUser, array $keys): string
+    {
+        $user = SafeName::assertSystemUser($sshUser);
+        $home = $user === 'root' ? '/root' : '/home/' . $user;
+        $directory = escapeshellarg($home . '/.ssh');
+        $file = escapeshellarg($home . '/.ssh/authorized_keys');
+
+        foreach ($keys as $key) {
+            if (preg_match(self::PUBLIC_KEY_PATTERN, $key) !== 1) {
+                throw new InvalidArgumentException('Only single line OpenSSH public keys can go in the managed block.');
+            }
+        }
+
+        $rewrite = ['awk -v start=' . escapeshellarg(self::MANAGED_KEYS_BEGIN) . ' -v stop=' . escapeshellarg(self::MANAGED_KEYS_END) . ' ' . escapeshellarg(self::STRIP_MANAGED_KEYS) . ' ' . $file . ' > "$tmp"'];
+
+        if ($keys !== []) {
+            $rewrite[] = "printf '%s\\n' " . implode(' ', array_map(escapeshellarg(...), [self::MANAGED_KEYS_BEGIN, ...$keys, self::MANAGED_KEYS_END])) . ' >> "$tmp"';
+        }
+
+        $steps = [
+            'tmp=$(mktemp ' . escapeshellarg($home . '/.ssh/authorized_keys.XXXXXX') . ')',
+            '{ ' . implode(' && ', [...$rewrite, 'chmod 600 "$tmp"', 'mv -f "$tmp" ' . $file]) . ' || { rm -f "$tmp"; false; }; }',
+            'chmod 700 ' . $directory,
+            'chown -R ' . escapeshellarg($user . ':') . ' ' . $directory,
+        ];
+
+        if ($keys === []) {
+            return 'if [ -f ' . $file . ' ]; then ' . implode(' && ', $steps) . '; fi';
+        }
+
+        return implode(' && ', ['mkdir -p ' . $directory, 'touch ' . $file, ...$steps]);
+    }
+
     private function hardenSsh(SSHConnection $connection): void
     {
         $connection->execute('mkdir -p /etc/ssh/sshd_config.d', sudo: true)->throw();
 
         $connection->uploadContent($this->sshdConfig($connection->server()->ssh_port), self::SSHD_CONFIG);
 
-        $connection->execute('chmod 600 '.self::SSHD_CONFIG, sudo: true)->throw();
+        $connection->execute('chmod 600 ' . self::SSHD_CONFIG, sudo: true)->throw();
 
         $connection->execute('sshd -t', sudo: true)->throw();
         $connection->execute('systemctl reload sshd || systemctl reload ssh', sudo: true)->throw();
@@ -87,7 +173,7 @@ final class SecurityHardening
         $packages = PackageManagerFactory::for($connection->server());
 
         $connection->execute(
-            'command -v fail2ban-server >/dev/null 2>&1 || { '.$packages->install(['fail2ban']).'; systemctl enable --now fail2ban; }',
+            'command -v fail2ban-server >/dev/null 2>&1 || { ' . $packages->install(['fail2ban']) . '; systemctl enable --now fail2ban; }',
             sudo: true,
         )->throw();
 
@@ -108,8 +194,8 @@ final class SecurityHardening
         $packages = PackageManagerFactory::for($server);
 
         $command = match ($server->os_name) {
-            'ubuntu', 'debian' => $packages->install(['unattended-upgrades']).' && systemctl enable --now unattended-upgrades',
-            default => $packages->install(['dnf-automatic']).' && systemctl enable --now dnf-automatic.timer',
+            'ubuntu', 'debian' => $packages->install(['unattended-upgrades']) . ' && systemctl enable --now unattended-upgrades',
+            default => $packages->install(['dnf-automatic']) . ' && systemctl enable --now dnf-automatic.timer',
         };
 
         $connection->execute($command, sudo: true)->throw();
@@ -144,7 +230,7 @@ final class SecurityHardening
         $decoded = json_decode($output, true);
 
         if (is_array($decoded) && isset($decoded['profiles']) && is_array($decoded['profiles'])) {
-            return count(array_filter($decoded['profiles'], static fn (mixed $mode): bool => $mode === 'complain'));
+            return count(array_filter($decoded['profiles'], static fn(mixed $mode): bool => $mode === 'complain'));
         }
 
         return preg_match('/(\d+) profiles are in complain mode/', $output, $matches) === 1

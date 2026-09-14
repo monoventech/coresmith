@@ -23,12 +23,12 @@ final class SystemdUnitBuilder
 
     public function unitName(Application $application, string $process): string
     {
-        return 'coresmith-app-'.SafeName::assertSlug($application->slug).'-'.SafeName::assertProcess($process);
+        return 'coresmith-app-' . SafeName::assertSlug($application->slug) . '-' . SafeName::assertProcess($process);
     }
 
     public function unitPath(Application $application, string $process): string
     {
-        return self::UNIT_DIR.'/'.$this->unitName($application, $process).'.service';
+        return self::UNIT_DIR . '/' . $this->unitName($application, $process) . '.service';
     }
 
     public function build(Application $application, string $process, string $command): string
@@ -37,13 +37,13 @@ final class SystemdUnitBuilder
         $name = $application->name;
         $user = $application->system_user;
         $size = AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small;
-        $workingDirectory = ReleasePaths::ROOT.'/'.$slug.'/current';
-        $envFile = '/etc/coresmith/env/'.$slug.'.env';
-        $logFile = '/var/coresmith/logs/'.$slug.'/'.$process.'.log';
+        $workingDirectory = ReleasePaths::ROOT . '/' . $slug . '/current';
+        $envFile = '/etc/coresmith/env/' . $slug . '.env';
+        $logFile = '/var/coresmith/logs/' . $slug . '/' . $process . '.log';
         $path = $this->pathFor($application);
         $memoryMax = $size->memoryMaxMb();
         $memoryHigh = $size->memoryHighMb();
-        $appRoot = ReleasePaths::ROOT.'/'.$slug;
+        $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
 
         return <<<UNIT
@@ -91,7 +91,7 @@ final class SystemdUnitBuilder
         return match ($application->type) {
             ApplicationType::Js => $this->jsCommand($application),
             ApplicationType::Ruby => $this->asdf->binaryPath('ruby', (string) $application->ruby_version, 'bundle')
-                .' exec puma -p '.$application->base_port,
+                . ' exec puma -p ' . $application->base_port,
             default => null,
         };
     }
@@ -105,7 +105,7 @@ final class SystemdUnitBuilder
             ? $this->asdf->binaryPath('nodejs', (string) $version)
             : $this->asdf->binaryPath($runtime, (string) $version);
 
-        return $binary.' server.js';
+        return $binary . ' server.js';
     }
 
     private function pathFor(Application $application): string

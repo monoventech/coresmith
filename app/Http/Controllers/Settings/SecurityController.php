@@ -21,8 +21,8 @@ class SecurityController extends Controller implements HasMiddleware
     {
         return Features::canManageTwoFactorAuthentication()
             && Features::optionEnabled(Features::twoFactorAuthentication(), 'confirmPassword')
-                ? [new Middleware('password.confirm', only: ['edit'])]
-                : [];
+            ? [new Middleware('password.confirm', only: ['edit'])]
+            : [];
     }
 
     /**
@@ -41,7 +41,7 @@ class SecurityController extends Controller implements HasMiddleware
             $props['requiresConfirmation'] = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirm');
         }
 
-        return Inertia::render('settings/Security', $props);
+        return Inertia::render('account/Security', $props);
     }
 
     /**
@@ -53,8 +53,6 @@ class SecurityController extends Controller implements HasMiddleware
             'password' => $request->password,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
-
-        return back();
+        return back()->with('success', 'Saved. Your new password works from the next sign-in.');
     }
 }

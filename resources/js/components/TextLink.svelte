@@ -28,11 +28,7 @@
     {tabindex}
     {method}
     {as}
-    class={cn(
-        'rounded-sm text-primary underline decoration-primary/40 underline-offset-4 transition-colors outline-none',
-        'hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        className
-    )}
+    class={cn('focus-ring cursor-pointer rounded-sm bg-transparent p-0 font-medium text-primary no-underline underline-offset-4 hover:underline', className)}
     {...rest}
 >
     {@render children?.()}

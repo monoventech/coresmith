@@ -23,7 +23,7 @@ enum TeamRole: string
             self::Owner => Ability::cases(),
             self::Admin => array_values(array_filter(
                 Ability::cases(),
-                static fn (Ability $ability): bool => !in_array($ability, [
+                static fn(Ability $ability): bool => !in_array($ability, [
                     Ability::DeleteTeam,
                     Ability::TransferOwnership,
                     Ability::ManageBilling,
@@ -37,6 +37,15 @@ enum TeamRole: string
                 Ability::ViewApplicationLogs,
                 Ability::ViewDatabase,
             ],
+        };
+    }
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Owner => 'Owner',
+            self::Admin => 'Admin',
+            self::Member => 'Deployer',
         };
     }
 

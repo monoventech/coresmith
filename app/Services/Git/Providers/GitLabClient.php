@@ -56,7 +56,7 @@ final class GitLabClient extends OAuthGitClient
 
     public function deleteWebhook(string $repository, string $hookId): void
     {
-        $this->delete("/projects/{$this->id($repository)}/hooks/".rawurlencode($hookId));
+        $this->delete("/projects/{$this->id($repository)}/hooks/" . rawurlencode($hookId));
     }
 
     public function createDeployKey(string $repository, string $publicKey, string $title): string
@@ -72,12 +72,12 @@ final class GitLabClient extends OAuthGitClient
 
     public function deleteDeployKey(string $repository, string $keyId): void
     {
-        $this->delete("/projects/{$this->id($repository)}/deploy_keys/".rawurlencode($keyId));
+        $this->delete("/projects/{$this->id($repository)}/deploy_keys/" . rawurlencode($keyId));
     }
 
     public function latestCommit(string $repository, string $branch): array
     {
-        $commit = $this->get("/projects/{$this->id($repository)}/repository/commits/".rawurlencode($branch))->json();
+        $commit = $this->get("/projects/{$this->id($repository)}/repository/commits/" . rawurlencode($branch))->json();
 
         return [
             'sha' => (string) ($commit['id'] ?? ''),
@@ -88,7 +88,7 @@ final class GitLabClient extends OAuthGitClient
 
     public function updateCommitStatus(string $repository, string $sha, string $state, string $targetUrl, string $description): void
     {
-        $this->post("/projects/{$this->id($repository)}/statuses/".rawurlencode($sha), [
+        $this->post("/projects/{$this->id($repository)}/statuses/" . rawurlencode($sha), [
             'state' => match ($state) {
                 'error', 'failure' => 'failed',
                 'pending' => 'running',
@@ -102,19 +102,19 @@ final class GitLabClient extends OAuthGitClient
 
     public function revoke(): void
     {
-        Http::asForm()->withOptions(self::NO_REDIRECTS)->timeout(20)->post($this->host().'/oauth/revoke', array_merge($this->credentials(), [
+        Http::asForm()->withOptions(self::NO_REDIRECTS)->timeout(20)->post($this->host() . '/oauth/revoke', array_merge($this->credentials(), [
             'token' => $this->currentToken(),
         ]));
     }
 
     protected function apiRoot(): string
     {
-        return $this->host().'/api/v4';
+        return $this->host() . '/api/v4';
     }
 
     protected function tokenEndpoint(): string
     {
-        return $this->host().'/oauth/token';
+        return $this->host() . '/oauth/token';
     }
 
     /**

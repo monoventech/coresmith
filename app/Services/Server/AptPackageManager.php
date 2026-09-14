@@ -16,7 +16,7 @@ final class AptPackageManager implements PackageManager
 
     public function update(): string
     {
-        return self::NON_INTERACTIVE.' apt-get update -y';
+        return self::NON_INTERACTIVE . ' apt-get update -y';
     }
 
     public function install(array $packages): string
@@ -25,16 +25,16 @@ final class AptPackageManager implements PackageManager
             return 'true';
         }
 
-        return self::NON_INTERACTIVE.' apt-get install -y --no-install-recommends '.PackageList::escape($packages);
+        return self::NON_INTERACTIVE . ' apt-get install -y --no-install-recommends ' . PackageList::escape($packages);
     }
 
     public function isInstalled(string $package): string
     {
-        return "dpkg-query -W -f='\${Status}' ".escapeshellarg($package)." 2>/dev/null | grep -q 'ok installed'";
+        return "dpkg-query -W -f='\${Status}' " . escapeshellarg($package) . " 2>/dev/null | grep -q 'ok installed'";
     }
 
     public function addRepository(string $repo): string
     {
-        return self::NON_INTERACTIVE.' add-apt-repository -y '.escapeshellarg($repo);
+        return self::NON_INTERACTIVE . ' add-apt-repository -y ' . escapeshellarg($repo);
     }
 }

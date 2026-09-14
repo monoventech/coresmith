@@ -26,8 +26,8 @@ class SourceProviderFactory extends Factory
         return [
             'team_id' => Team::factory(),
             'type' => 'github_app',
-            'name' => fake()->company().' GitHub',
-            'access_token' => 'ghs_'.Str::random(36),
+            'name' => fake()->company() . ' GitHub',
+            'access_token' => 'ghs_' . Str::random(36),
             'installation_id' => (string) fake()->numberBetween(1000, 99999),
             'scopes' => ['repo'],
             'token_expires_at' => now()->addHour(),

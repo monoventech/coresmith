@@ -14,9 +14,16 @@ use App\Models\WebhookEndpoint;
 use App\Services\Webhook\SignatureVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 final class WebhookController extends Controller
 {
+    public const REPLAY_WINDOW_HOURS = 24;
+
+    private const DELIVERY_HEADERS = ['X-GitHub-Delivery', 'X-Gitlab-Event-UUID', 'X-Request-UUID', 'X-Coresmith-Delivery'];
+
+    private const EVENT_HEADERS = ['X-GitHub-Event', 'X-Gitlab-Event', 'X-Event-Key', 'X-Coresmith-Event'];
+
     public function deploy(Request $request, WebhookEndpoint $webhook, SignatureVerifier $signatures): JsonResponse
     {
         if (!$webhook->active) {
@@ -29,19 +36,25 @@ final class WebhookController extends Controller
                 ->withProperties(['provider' => $webhook->provider, 'ip' => $request->ip()])
                 ->log('webhook_signature_rejected');
 
-            return response()->json(['message' => 'Invalid signature.'], 401);
+            return $this->respond($webhook, $request, 401, 'Invalid signature.');
+        }
+
+        $delivery = $this->header($request, self::DELIVERY_HEADERS);
+
+        if ($delivery !== null && !Cache::add('webhook-delivery:' . $webhook->getKey() . ':' . $delivery, true, now()->addHours(self::REPLAY_WINDOW_HOURS))) {
+            return $this->respond($webhook, $request, 409, 'This delivery was already processed.');
         }
 
         $application = $webhook->application;
 
         if ($application === null) {
-            return response()->json(['message' => 'This webhook has no application.'], 404);
+            return $this->respond($webhook, $request, 404, 'This webhook has no application.');
         }
 
         $branch = $signatures->branchFromPayload($request);
 
         if ($branch !== null && $branch !== $application->repository_branch) {
-            return response()->json(['message' => 'Branch ignored.'], 202);
+            return $this->respond($webhook, $request, 202, 'Branch ignored.');
         }
 
         $deployment = Deployment::create([
@@ -50,8 +63,36 @@ final class WebhookController extends Controller
             'commit_message' => $request->input('head_commit.message'),
         ]);
 
-        DeployApplication::dispatch($deployment, now()->format('YmdHis'));
+        DeployApplication::dispatch($deployment, now()->format('Ymd-His'));
 
-        return response()->json(['message' => 'Deployment queued.'], 202);
+        return $this->respond($webhook, $request, 202, 'Deployment queued.');
+    }
+
+    private function respond(WebhookEndpoint $webhook, Request $request, int $status, string $message): JsonResponse
+    {
+        $webhook->forceFill([
+            'last_delivery_id' => $this->header($request, self::DELIVERY_HEADERS),
+            'last_event' => $this->header($request, self::EVENT_HEADERS, '/^[A-Za-z0-9:._ -]{1,64}$/'),
+            'last_status' => $status,
+            'last_delivered_at' => now(),
+        ])->save();
+
+        return response()->json(['message' => $message], $status);
+    }
+
+    /**
+     * @param  list<string>  $names
+     */
+    private function header(Request $request, array $names, string $pattern = '/^[A-Za-z0-9:._-]{1,64}$/'): ?string
+    {
+        foreach ($names as $name) {
+            $value = $request->header($name);
+
+            if (is_string($value) && preg_match($pattern, $value) === 1) {
+                return $value;
+            }
+        }
+
+        return null;
     }
 }

@@ -49,7 +49,7 @@ final class ApplicationApiController extends ApiController
             'triggered_by' => $request->user()->id,
         ]);
 
-        DeployApplication::dispatch($deployment, now()->format('YmdHis'));
+        DeployApplication::dispatch($deployment, now()->format('Ymd-His'));
 
         $deployment->refresh();
 

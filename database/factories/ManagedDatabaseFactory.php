@@ -38,7 +38,7 @@ class ManagedDatabaseFactory extends Factory
 
     public function postgres(): static
     {
-        return $this->state(fn (array $attributes): array => [
+        return $this->state(fn(array $attributes): array => [
             'type' => DatabaseType::Postgresql,
             'port' => 5432,
         ]);

@@ -10,7 +10,7 @@ use Tests\Support\FakeSSHTransport;
 
 function runInstallRuntime(Server $server, FakeSSHTransport $transport, string $runtime, string $version): void
 {
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         (new InstallRuntime($server, $runtime, $version))->handle(app(SSHConnectionManager::class), new AsdfManager);

@@ -31,8 +31,8 @@ final class SlugGenerator
         }
 
         do {
-            $suffix = '-'.Str::lower(Str::random(3));
-            $candidate = $this->normalise(Str::substr($base, 0, self::MAX_SLUG_LENGTH - strlen($suffix)).$suffix);
+            $suffix = '-' . Str::lower(Str::random(3));
+            $candidate = $this->normalise(Str::substr($base, 0, self::MAX_SLUG_LENGTH - strlen($suffix)) . $suffix);
         } while ($this->taken($candidate));
 
         return $candidate;
@@ -40,7 +40,7 @@ final class SlugGenerator
 
     public function systemUser(string $slug): string
     {
-        return self::USER_PREFIX.SafeName::assertSlug($slug);
+        return self::USER_PREFIX . SafeName::assertSlug($slug);
     }
 
     private function normalise(string $value): string
@@ -53,7 +53,7 @@ final class SlugGenerator
 
     private function randomName(): string
     {
-        return self::ADJECTIVES[array_rand(self::ADJECTIVES)].'-'.self::NOUNS[array_rand(self::NOUNS)];
+        return self::ADJECTIVES[array_rand(self::ADJECTIVES)] . '-' . self::NOUNS[array_rand(self::NOUNS)];
     }
 
     private function taken(string $slug): bool

@@ -9,6 +9,8 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Git\DeployKeyManager;
+use App\Services\Panel\Formats;
+use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
 use Illuminate\Support\Facades\DB;
 
@@ -73,7 +75,7 @@ test('each application gets its own key so one leak cannot reach another reposit
 test('the key file is written per application under the root only directory', function () {
     $application = Application::factory()->create(['slug' => 'my-app']);
 
-    expect(deployKeys()->keyPath($application))->toBe(DeployKeyManager::KEY_DIR.'/my-app');
+    expect(deployKeys()->keyPath($application))->toBe(DeployKeyManager::KEY_DIR . '/my-app');
 });
 
 test('the key directory is closed to other users before the key is written', function () {
@@ -132,13 +134,18 @@ test('the public deploy key is offered for an ssh repository', function () {
     $server = Server::factory()->for($team)->create();
     $application = deployKeyApp($team, $server, 'git@github.com:monoven/coresmith.git');
 
-    $this->actingAs(deployKeyMember($team, TeamRole::Admin))
-        ->get(route('servers.applications.show', [$server, $application]))
-        ->assertInertia(fn ($page) => $page
-            ->where('application.uses_deploy_key', true)
-            ->where('application.deploy_key_public', fn (string $key) => str_starts_with($key, 'ssh-ed25519 ')));
+    $response = $this->actingAs(deployKeyMember($team, TeamRole::Admin))
+        ->get(route('servers.applications.show', [$server, $application]));
 
-    expect($application->fresh()->deploy_key_public)->toStartWith('ssh-ed25519 ');
+    $public = (string) $application->fresh()->deploy_key_public;
+
+    expect($public)->toStartWith('ssh-ed25519 ');
+
+    $response->assertInertia(fn($page) => $page
+        ->where('application.deploy_key.public_key', $public)
+        ->where('application.deploy_key.fingerprint', HostKeyFingerprint::fromPublicKey($public))
+        ->where('application.deploy_key.short', Formats::fingerprint(HostKeyFingerprint::fromPublicKey($public)))
+        ->where('application.deploy_key.repository', 'monoven/coresmith'));
 });
 
 test('a public repository is offered no deploy key', function () {
@@ -148,9 +155,7 @@ test('a public repository is offered no deploy key', function () {
 
     $this->actingAs(deployKeyMember($team, TeamRole::Admin))
         ->get(route('servers.applications.show', [$server, $application]))
-        ->assertInertia(fn ($page) => $page
-            ->where('application.uses_deploy_key', false)
-            ->where('application.deploy_key_public', null));
+        ->assertInertia(fn($page) => $page->where('application.deploy_key', null));
 
     expect($application->fresh()->deploy_key_private)->toBeNull();
 });

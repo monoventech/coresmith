@@ -1,30 +1,36 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
-    import AppLogoIcon from '@/components/AppLogoIcon.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
+    import Wordmark from '@/components/panel/Wordmark.svelte'
 </script>
 
 <AppHead title="Setup required" />
 
-<div class="flex min-h-svh flex-col items-center justify-center gap-10 bg-background px-6 py-12">
-    <main class="w-full max-w-md text-center">
-        <div class="mb-6 flex items-center justify-center gap-2.5">
-            <AppLogoIcon class="size-7 text-primary" />
-            <span class="font-display text-lg leading-none font-semibold tracking-[-0.01em]">Coresmith</span>
+<div class="panel grain relative flex min-h-dvh flex-col bg-background font-sans text-foreground">
+    <header class="relative z-10 mx-auto flex w-full max-w-[1200px] items-center px-10 py-5.5 max-sm:px-5">
+        <Wordmark />
+    </header>
+
+    <main class="relative z-10 mx-auto w-full max-w-[1200px] flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
+        <div class="max-w-[520px]">
+            <h1 class="type-h1 m-0 mb-1.5">Installed, not yet <MarkerUnderline>configured</MarkerUnderline></h1>
+            <p class="type-body-sm mb-7 text-muted-foreground">
+                No account exists on this instance yet. Open the setup link the installer printed in your terminal, it carries a one-time token, and
+                this page can't create an account without it.
+            </p>
+            <div class="rounded-xl border border-border bg-card p-6">
+                <h3 class="type-h3 m-0 mb-1">Lost the link?</h3>
+                <p class="mb-3 text-[12.5px] text-muted-foreground">Run this on the server to issue a new one. The old token stops working.</p>
+                <pre class="terminal m-0 text-[12.5px]">php artisan coresmith:setup-token --force</pre>
+            </div>
         </div>
-
-        <h1 class="text-2xl font-semibold tracking-[-0.01em]">Installed, but not yet <MarkerUnderline>configured</MarkerUnderline></h1>
-        <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-            No account exists on this instance yet. Open the setup link printed by the installer in your terminal — it
-            carries a one-time token, and this page cannot create an account without it.
-        </p>
-
-        <p class="mt-4 text-xs text-muted-foreground">
-            Lost the link? Run <code class="rounded bg-muted px-1.5 py-0.5 font-mono">php artisan coresmith:setup-token --force</code>
-            on the server to issue a new one.
-        </p>
     </main>
 
-    <MonovenMark />
+    <footer class="relative z-10 border-t border-border">
+        <div class="mx-auto flex w-full max-w-[1200px] flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
+            <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
+            <MonovenMark class="ml-auto" />
+        </div>
+    </footer>
 </div>

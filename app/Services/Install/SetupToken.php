@@ -35,7 +35,7 @@ final class SetupToken
             mkdir($directory, 0700, true);
         }
 
-        file_put_contents($this->path(), $token.PHP_EOL);
+        file_put_contents($this->path(), $token . PHP_EOL);
         chmod($this->path(), 0600);
 
         return $token;

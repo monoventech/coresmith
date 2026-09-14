@@ -1,84 +1,150 @@
 import type { Page } from '@playwright/test'
-import { asMember, expect, gotoApplication, test } from './support/fixtures'
+import { asMember, expect, gotoApplication, isMobile, nav, noSidewaysScroll, own, test, toast } from './support/fixtures'
 
-async function gotoDeployment(page: Page, message: string) {
-    await gotoApplication(page, 'Storefront')
-    await page.getByRole('link', { name: new RegExp(message) }).click()
-    await page.waitForURL(/\/deployments\/[A-Za-z0-9]+$/)
+async function gotoDeployments(page: Page, mobile: boolean) {
+    await page.goto('/dashboard')
+    await nav(page).getByRole('link', { name: mobile ? 'Deploys' : 'Deployments', exact: true }).click()
+    await page.waitForURL(/\/deployments$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Deployments' })).toBeVisible()
 }
 
-test.describe('deployment output', () => {
-    test('a deployment on the application page opens its own log', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
+function filters(page: Page) {
+    return page.getByRole('navigation', { name: 'Filter deployments' })
+}
 
-        await expect(page.getByRole('heading', { name: 'Deployment' })).toBeVisible()
-        await expect(page.getByLabel('Deployment output')).toContainText('composer install --no-dev')
-        await expect(page.getByLabel('Deployment output')).toContainText('Deployment finished')
+function rows(page: Page) {
+    return page.getByTestId('deployment-row')
+}
+
+test.describe('the deployments list', () => {
+    test('every deploy across the fleet is listed with the running one pinned on top', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
+
+        await expect(filters(page).getByRole('link', { name: /^All\s*\d+$/ })).toHaveAttribute('aria-current', 'page')
+        await expect(rows(page).first()).toContainText('atlas-staging')
+        await expect(rows(page).first()).toContainText('Running')
+        await expect(rows(page).first()).toContainText('Watch')
     })
 
-    test('a finished deployment says so rather than claiming to be streaming', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
+    test('the failed filter shows only failures, and says they had no impact', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
 
-        await expect(page.getByTestId('log-transport')).toContainText('Finished')
-        await expect(page.getByTestId('log-transport')).toContainText('4 lines')
+        await filters(page).getByRole('link', { name: /^Failed\s*\d+$/ }).click()
+        await page.waitForURL(/status=failed/)
+
+        await expect(rows(page).filter({ hasText: 'storefront' })).toHaveCount(1)
+
+        for (const row of await rows(page).all()) {
+            await expect(row).toContainText('Failed')
+        }
     })
 
-    test('a running deployment reports that it is refreshing when no socket is configured', async ({ page }) => {
-        await gotoDeployment(page, 'Speed up the cart query')
+    test('the running filter shows the deploy in progress', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
 
-        await expect(page.getByTestId('log-transport')).toContainText('Refreshing every 3s')
-        await expect(page.getByTestId('log-transport')).toContainText('2 lines')
+        await filters(page).getByRole('link', { name: /^Running\s*\d+$/ }).click()
+        await page.waitForURL(/status=running/)
+
+        await expect(rows(page)).toHaveCount(1)
+        await expect(rows(page).first()).toContainText('atlas-staging')
     })
 
-    test('the commit and status are shown alongside the output', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
+    test('a row opens its deploy and the back link returns to the list', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
 
-        await expect(page.getByText('a1b2c3d4', { exact: true })).toBeVisible()
-        await expect(page.getByText('Add the checkout summary')).toBeVisible()
-        await expect(page.getByText('Succeeded', { exact: true })).toBeVisible()
+        await rows(page).filter({ hasText: 'ledger' }).first().click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Deploying ledger' })).toBeVisible()
+        await expect(page.getByTestId('back-link')).toHaveText('← Deployments')
+
+        await page.getByTestId('back-link').click()
+        await page.waitForURL(/\/deployments$/)
     })
 
-    test('the output region is reachable by keyboard so it can be scrolled', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
+    test('the list does not scroll sideways', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
 
-        const log = page.getByLabel('Deployment output')
-
-        await log.focus()
-        await expect(log).toBeFocused()
-    })
-
-    test('following output can be turned off', async ({ page }) => {
-        await gotoDeployment(page, 'Speed up the cart query')
-
-        const follow = page.getByRole('checkbox', { name: 'Follow output' })
-
-        await expect(follow).toBeChecked()
-        await follow.uncheck()
-        await expect(follow).not.toBeChecked()
-    })
-
-    test('the page returns to the application', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
-
-        await page.getByRole('link', { name: 'Back to application' }).click()
-        await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
-
-        await expect(page.getByRole('heading', { name: 'Storefront' })).toBeVisible()
-    })
-
-    test('a long log does not scroll the page sideways', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
-
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-
-        expect(overflow).toBeLessThanOrEqual(1)
+        await noSidewaysScroll(page)
     })
 })
 
-asMember.describe('deployment output as a member', () => {
-    asMember('a member can read the deployment log', async ({ page }) => {
-        await gotoDeployment(page, 'Add the checkout summary')
+test.describe('a deploy', () => {
+    test('a running deploy shows each phase and refreshes without a socket', async ({ page }) => {
+        await page.goto('/dashboard')
+        await page.getByTestId('live-deploy').click()
 
-        await expect(page.getByLabel('Deployment output')).toContainText('Deployment finished')
+        await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
+        await expect(page.getByTestId('deployment-status')).toHaveText('Running')
+
+        const rail = page.getByTestId('phase-rail')
+
+        await expect(rail.locator('[data-phase]')).toHaveCount(6)
+        await expect(rail.locator('[data-phase="clone"]')).toHaveAttribute('data-state', 'done')
+        await expect(rail.locator('[data-phase][data-state="running"]')).toHaveCount(1)
+        await expect(rail.locator('[data-phase="migrate"]')).toHaveAttribute('data-state', 'running')
+        await expect(page.getByLabel('Deployment output')).toContainText('migrate: running migrations')
+        await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
+    })
+
+    test('a failed deploy says which phase failed and that nothing changed', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'storefront')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        await expect(page.getByTestId('deployment-status')).toContainText('Failed')
+        await expect(page.getByTestId('failure-banner')).toContainText('The build failed, so nothing changed.')
+        await expect(page.getByTestId('failure-banner')).toContainText('users never saw an error page')
+        await expect(page.getByTestId('phase-rail').locator('[data-phase="build"]')).toHaveAttribute('data-state', 'failed')
+        await expect(page.getByLabel('Deployment output')).toContainText('deploy failed. the current release is untouched.')
+        await expect(page.getByTestId('log-transport')).toHaveText('Finished')
+    })
+
+    test('a failed deploy can be retried', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'deploy')
+
+        await gotoApplication(page, 'bench-01', name)
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+        await page.getByRole('button', { name: 'Retry deploy' }).click()
+
+        await expect(toast(page)).toContainText(`Deploying ${name}.`)
+        await expect(page.getByTestId('deployment-status')).toHaveText('Queued')
+        await expect(page.getByLabel('Deployment output')).toContainText('Waiting for a worker to pick up the deploy')
+    })
+
+    test('a finished deploy links to the releases it made', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
+
+        await filters(page).getByRole('link', { name: /^Deployed\s*\d+$/ }).click()
+        await rows(page).filter({ hasText: 'warehouse' }).first().click()
+
+        await expect(page.getByTestId('deployment-status')).toHaveText('Deployed')
+        await page.getByRole('link', { name: 'View releases' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Releases · warehouse' })).toBeVisible()
+    })
+
+    test('the output can be focused so it scrolls from the keyboard', async ({ page }) => {
+        await page.goto('/dashboard')
+        await page.getByTestId('live-deploy').click()
+
+        const output = page.getByLabel('Deployment output')
+
+        await output.focus()
+        await expect(output).toBeFocused()
+    })
+
+    test('a long log does not scroll the page sideways', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'storefront')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        await noSidewaysScroll(page)
+    })
+})
+
+asMember.describe('deploys as a member', () => {
+    asMember('a member can read a deploy log', async ({ page }) => {
+        await page.goto('/dashboard')
+        await page.getByTestId('live-deploy').click()
+
+        await expect(page.getByLabel('Deployment output')).toContainText('clone: fetching via deploy key')
     })
 })

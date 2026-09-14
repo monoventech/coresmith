@@ -23,12 +23,12 @@ final class FpmPoolBuilder
 
     public function poolPath(Application $application): string
     {
-        return '/etc/php-fpm.d/coresmith-app-'.SafeName::assertSlug($application->slug).'.conf';
+        return '/etc/php-fpm.d/coresmith-app-' . SafeName::assertSlug($application->slug) . '.conf';
     }
 
     public function unitName(Application $application): string
     {
-        return 'coresmith-app-'.SafeName::assertSlug($application->slug).'-fpm';
+        return 'coresmith-app-' . SafeName::assertSlug($application->slug) . '-fpm';
     }
 
     public function pool(Application $application): string
@@ -38,7 +38,7 @@ final class FpmPoolBuilder
         $socket = (new CaddyRouteBuilder)->fpmSocket($application);
         $size = $this->size($application);
         $maxChildren = $size->maxChildren();
-        $base = ReleasePaths::ROOT.'/'.$slug;
+        $base = ReleasePaths::ROOT . '/' . $slug;
         $chdir = (new CaddyRouteBuilder)->documentRoot($application);
         $installs = AsdfManager::INSTALL_DIR;
         $disabled = self::DISABLED_FUNCTIONS;
@@ -71,7 +71,7 @@ final class FpmPoolBuilder
         $name = $application->name;
         $binary = $this->asdf->fpmBinaryPath((string) $application->php_version);
         $pool = $this->poolPath($application);
-        $base = ReleasePaths::ROOT.'/'.$slug;
+        $base = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
 
         return <<<UNIT

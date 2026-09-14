@@ -8,26 +8,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\TeamRole;
+use App\Jobs\SyncAuthorizedKeys;
 use App\Models\SshKey;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 
 final class SshKeyController extends Controller
 {
-    public function index(Request $request): Response
-    {
-        return Inertia::render('settings/SshKeys', [
-            'keys' => $request->user()->sshKeys()->latest()->get()->map(fn (SshKey $key): array => [
-                'id' => $key->id,
-                'name' => $key->name,
-                'fingerprint' => $key->fingerprint,
-                'created_at' => $key->created_at?->toIso8601String(),
-            ]),
-        ]);
-    }
-
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
@@ -41,16 +30,35 @@ final class SshKeyController extends Controller
             'fingerprint' => $this->fingerprint($validated['public_key']),
         ]);
 
-        return back()->with('success', 'Key added.');
+        $synced = $this->syncServersManagedBy($request->user());
+
+        return back()->with('success', $synced === 0 ? 'Saved.' : 'Saved. The key can log in to your servers in a moment.');
     }
 
     public function destroy(SshKey $sshKey): RedirectResponse
     {
         $this->authorize('delete', $sshKey);
 
+        $owner = $sshKey->user;
+
         $sshKey->delete();
 
-        return back()->with('success', 'Key removed.');
+        $this->syncServersManagedBy($owner);
+
+        return back()->with('success', 'Removed.');
+    }
+
+    private function syncServersManagedBy(User $user): int
+    {
+        $teamIds = $user->teams()
+            ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value])
+            ->pluck('teams.id');
+
+        $servers = SyncAuthorizedKeys::activeServersOf($teamIds);
+
+        SyncAuthorizedKeys::dispatchForServers($servers);
+
+        return $servers->count();
     }
 
     private function fingerprint(string $publicKey): string
@@ -58,6 +66,6 @@ final class SshKeyController extends Controller
         $parts = explode(' ', trim($publicKey));
         $blob = base64_decode($parts[1] ?? '', true);
 
-        return 'SHA256:'.rtrim(base64_encode(hash('sha256', $blob === false ? '' : $blob, true)), '=');
+        return 'SHA256:' . rtrim(base64_encode(hash('sha256', $blob === false ? '' : $blob, true)), '=');
     }
 }

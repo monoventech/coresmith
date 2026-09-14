@@ -37,6 +37,7 @@ class WebhookEndpoint extends Model
         return [
             'secret' => Vaulted::class,
             'active' => 'boolean',
+            'last_delivered_at' => 'datetime',
         ];
     }
 }

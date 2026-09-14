@@ -3,14 +3,15 @@
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
     import type { Snippet } from 'svelte'
+    import { cn } from '@/lib/utils'
 
-    let { children }: { children?: Snippet } = $props()
+    let { children, markClass }: { children?: Snippet; markClass?: string } = $props()
 </script>
 
 <span class="relative inline-block">
     {@render children?.()}
     <svg
-        class="pointer-events-none absolute bottom-[-0.07em] left-0 h-[0.26em] w-full"
+        class={cn('pointer-events-none absolute bottom-[-0.07em] left-0 h-[0.26em] w-full', markClass)}
         viewBox="0 0 200 10"
         preserveAspectRatio="none"
         fill="none"

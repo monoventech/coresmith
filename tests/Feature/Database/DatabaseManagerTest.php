@@ -212,7 +212,7 @@ test('restoring refuses when the backup file is missing rather than truncating t
     $transport = (new FakeSSHTransport)->respondTo('test -f', '', 1);
     $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
 
-    expect(fn () => databaseManager()->restore(databaseConnection($transport), $database, '/tmp/missing.sql.gz'))
+    expect(fn() => databaseManager()->restore(databaseConnection($transport), $database, '/tmp/missing.sql.gz'))
         ->toThrow(BackupNotFoundException::class);
 
     expect(implode("\n", $transport->commands()))->not->toContain('gunzip');

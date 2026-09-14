@@ -55,7 +55,7 @@ final class BitbucketClient extends OAuthGitClient
 
     public function deleteWebhook(string $repository, string $hookId): void
     {
-        $this->delete("/repositories/{$this->path($repository)}/hooks/".rawurlencode($hookId));
+        $this->delete("/repositories/{$this->path($repository)}/hooks/" . rawurlencode($hookId));
     }
 
     public function createDeployKey(string $repository, string $publicKey, string $title): string
@@ -70,12 +70,12 @@ final class BitbucketClient extends OAuthGitClient
 
     public function deleteDeployKey(string $repository, string $keyId): void
     {
-        $this->delete("/repositories/{$this->path($repository)}/deploy-keys/".rawurlencode($keyId));
+        $this->delete("/repositories/{$this->path($repository)}/deploy-keys/" . rawurlencode($keyId));
     }
 
     public function latestCommit(string $repository, string $branch): array
     {
-        $body = $this->get("/repositories/{$this->path($repository)}/commits/".rawurlencode($branch), ['pagelen' => 1])->json();
+        $body = $this->get("/repositories/{$this->path($repository)}/commits/" . rawurlencode($branch), ['pagelen' => 1])->json();
         $commit = (array) (($body['values'] ?? [])[0] ?? []);
 
         return [
@@ -87,7 +87,7 @@ final class BitbucketClient extends OAuthGitClient
 
     public function updateCommitStatus(string $repository, string $sha, string $state, string $targetUrl, string $description): void
     {
-        $this->post("/repositories/{$this->path($repository)}/commit/".rawurlencode($sha).'/statuses/build', [
+        $this->post("/repositories/{$this->path($repository)}/commit/" . rawurlencode($sha) . '/statuses/build', [
             'key' => 'coresmith-deploy',
             'name' => 'Coresmith',
             'state' => match ($state) {
@@ -142,7 +142,7 @@ final class BitbucketClient extends OAuthGitClient
             }
         }
 
-        return 'git@bitbucket.org:'.$repository['full_name'].'.git';
+        return 'git@bitbucket.org:' . $repository['full_name'] . '.git';
     }
 
     private function path(string $repository): string

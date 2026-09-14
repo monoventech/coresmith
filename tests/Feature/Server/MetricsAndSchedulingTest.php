@@ -121,7 +121,7 @@ test('metrics are not collected from a server that is not active', function () {
     $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
     $transport = new FakeSSHTransport;
 
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), new MetricsCollector);
@@ -140,13 +140,13 @@ test('a deployment stuck running is failed and its lock released', function () {
         'started_at' => now()->subMinutes(30),
     ]);
 
-    Cache::lock('deploy:'.$application->getKey(), 600)->get();
+    Cache::lock('deploy:' . $application->getKey(), 600)->get();
 
     (new DetectStaleDeployments)->handle();
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
         ->and($deployment->fresh()->log)->toContain('timed out')
-        ->and(Cache::lock('deploy:'.$application->getKey(), 600)->get())->toBeTrue();
+        ->and(Cache::lock('deploy:' . $application->getKey(), 600)->get())->toBeTrue();
 
     Event::assertDispatched(DeploymentFailed::class);
 });
@@ -164,7 +164,7 @@ test('a deployment still inside the window is left alone', function () {
 
 test('the schedule registers metric collection, sleeping and stale detection', function (string $name) {
     $names = collect(app(Schedule::class)->events())
-        ->map(fn ($event) => $event->description)
+        ->map(fn($event) => $event->description)
         ->all();
 
     expect($names)->toContain($name);

@@ -42,7 +42,7 @@ final class AsdfInstaller
         $user = AsdfManager::SYSTEM_USER;
 
         $connection->execute(
-            "test -d {$dir}/.git || git clone https://github.com/asdf-vm/asdf.git {$dir} --branch ".self::ASDF_VERSION,
+            "test -d {$dir}/.git || git clone https://github.com/asdf-vm/asdf.git {$dir} --branch " . self::ASDF_VERSION,
             sudo: true,
         )->throw();
 
@@ -66,13 +66,13 @@ final class AsdfInstaller
         $bashrc = "/home/{$user}/.bashrc";
 
         $exports = implode("\n", [
-            'export ASDF_DIR="'.self::ASDF_DIR.'"',
-            'export ASDF_DATA_DIR="'.AsdfManager::DATA_DIR.'"',
+            'export ASDF_DIR="' . self::ASDF_DIR . '"',
+            'export ASDF_DATA_DIR="' . AsdfManager::DATA_DIR . '"',
             '. "$ASDF_DIR/asdf.sh"',
         ]);
 
         $connection->execute(
-            "grep -q ASDF_DATA_DIR {$bashrc} 2>/dev/null || printf '%s\\n' ".escapeshellarg($exports)." >> {$bashrc}",
+            "grep -q ASDF_DATA_DIR {$bashrc} 2>/dev/null || printf '%s\\n' " . escapeshellarg($exports) . " >> {$bashrc}",
             sudo: true,
         )->throw();
     }
@@ -83,7 +83,7 @@ final class AsdfInstaller
             $command = "asdf plugin list | grep -qx {$plugin} || asdf plugin add {$plugin}";
 
             $connection->execute(
-                'sudo -u '.AsdfManager::SYSTEM_USER.' bash -lc '.escapeshellarg($command),
+                'sudo -u ' . AsdfManager::SYSTEM_USER . ' bash -lc ' . escapeshellarg($command),
                 sudo: true,
             )->throw();
         }
@@ -92,7 +92,7 @@ final class AsdfInstaller
     private function verify(SSHConnection $connection): void
     {
         $connection->execute(
-            'sudo -u '.AsdfManager::SYSTEM_USER.' bash -lc '.escapeshellarg('asdf --version'),
+            'sudo -u ' . AsdfManager::SYSTEM_USER . ' bash -lc ' . escapeshellarg('asdf --version'),
             sudo: true,
         )->throw();
     }

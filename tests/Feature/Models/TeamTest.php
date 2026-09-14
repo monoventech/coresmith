@@ -25,7 +25,7 @@ test('a team has members with roles', function () {
 
 test('a user can belong to many teams', function () {
     $user = User::factory()->create();
-    Team::factory()->count(2)->create()->each(fn (Team $t) => $t->members()->attach($user, ['role' => 'member']));
+    Team::factory()->count(2)->create()->each(fn(Team $t) => $t->members()->attach($user, ['role' => 'member']));
 
     expect($user->teams)->toHaveCount(2);
 });

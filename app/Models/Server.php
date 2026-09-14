@@ -60,6 +60,7 @@ class Server extends Model
             'audit_logging_enabled' => 'boolean',
             'last_connected_at' => 'datetime',
             'host_key_changed_at' => 'datetime',
+            'booted_at' => 'datetime',
         ];
     }
 }

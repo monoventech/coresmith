@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Server;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -45,6 +46,8 @@ final class ServerHostKeyController extends Controller
             ->causedBy($request->user())
             ->withProperties(['previous' => $previous, 'accepted' => $pending])
             ->log('ssh_host_key_accepted');
+
+        SyncAuthorizedKeys::dispatch($server);
 
         return back()->with('success', 'New host key accepted. Operations on this server can resume.');
     }

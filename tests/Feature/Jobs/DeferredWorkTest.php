@@ -36,7 +36,7 @@ function cronApp(array $attributes = []): Application
 
 function withTransport(FakeSSHTransport $transport, callable $work): void
 {
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         $work();

@@ -35,7 +35,7 @@ final class ProviderHost
 
         self::assertReachableTarget((string) $parts['host']);
 
-        return 'https://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        return 'https://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
     }
 
     public static function isValid(?string $value): bool
@@ -93,7 +93,7 @@ final class ProviderHost
         }
 
         return array_values(array_filter(array_map(
-            fn (array $record): string => (string) ($record['ip'] ?? $record['ipv6'] ?? ''),
+            fn(array $record): string => (string) ($record['ip'] ?? $record['ipv6'] ?? ''),
             $records,
         )));
     }

@@ -90,7 +90,7 @@ test('a tampered base_port cannot open a route to a privileged service', functio
     ]);
 
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:'.$upstreamPort]];
+    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:' . $upstreamPort]];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->with([

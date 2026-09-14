@@ -36,7 +36,7 @@ final class DeployKeyManager
 
     public function keyPath(Application $application): string
     {
-        return self::KEY_DIR.'/'.SafeName::assertSlug($application->slug);
+        return self::KEY_DIR . '/' . SafeName::assertSlug($application->slug);
     }
 
     public function prepareDirectory(Application $application): string
@@ -49,7 +49,7 @@ final class DeployKeyManager
 
     public function reserveFile(Application $application): string
     {
-        return 'install -m 600 /dev/null '.escapeshellarg($this->keyPath($application));
+        return 'install -m 600 /dev/null ' . escapeshellarg($this->keyPath($application));
     }
 
     /**
@@ -62,20 +62,20 @@ final class DeployKeyManager
 
     public function removeCommand(Application $application): string
     {
-        return 'rm -f '.escapeshellarg($this->keyPath($application));
+        return 'rm -f ' . escapeshellarg($this->keyPath($application));
     }
 
     public function sshCommand(Application $application): string
     {
-        return 'ssh -i '.escapeshellarg($this->keyPath($application))
-            .' -o IdentitiesOnly=yes'
-            .' -o StrictHostKeyChecking=accept-new'
-            .' -o UserKnownHostsFile='.escapeshellarg(self::KEY_DIR.'/known_hosts');
+        return 'ssh -i ' . escapeshellarg($this->keyPath($application))
+            . ' -o IdentitiesOnly=yes'
+            . ' -o StrictHostKeyChecking=accept-new'
+            . ' -o UserKnownHostsFile=' . escapeshellarg(self::KEY_DIR . '/known_hosts');
     }
 
     public function withKey(Application $application, string $gitCommand): string
     {
-        return 'GIT_SSH_COMMAND='.escapeshellarg($this->sshCommand($application)).' '.$gitCommand;
+        return 'GIT_SSH_COMMAND=' . escapeshellarg($this->sshCommand($application)) . ' ' . $gitCommand;
     }
 
     public function usesDeployKey(Application $application): bool

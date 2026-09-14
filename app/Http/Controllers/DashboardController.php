@@ -9,132 +9,102 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\Ability;
-use App\Enums\DeploymentStatus;
-use App\Enums\PowerState;
-use App\Enums\ServerStatus;
 use App\Models\Deployment;
-use App\Models\ManagedDatabase;
-use App\Models\Team;
+use App\Models\Server;
+use App\Services\Deployment\DeploymentPhases;
+use App\Services\Panel\ActivityFeed;
+use App\Services\Panel\FleetSnapshot;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class DashboardController extends Controller
 {
-    public const ATTENTION_LIMIT = 5;
-
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, ActivityFeed $feed, DeploymentPhases $phases): Response
     {
         $user = $request->user();
-        $team = $user->teams()->first();
+        $team = $this->currentTeam();
 
         if ($team === null) {
             return Inertia::render('Dashboard', [
                 'hasTeam' => false,
-                'counts' => ['servers' => 0, 'applications' => 0, 'databases' => 0],
-                'attention' => [],
-                'attentionTotal' => 0,
-                'deployments' => [],
+                'counts' => ['servers' => 0, 'applications' => 0],
+                'live' => null,
+                'tiles' => [],
+                'servers' => [],
+                'activity' => [],
                 'can' => ['createServer' => false],
             ]);
         }
 
-        $attention = $this->attention($team);
+        $fleet = new FleetSnapshot($team);
+        $servers = $fleet->servers();
+        $applications = $servers->sum(fn(Server $server): int => $server->applications->count());
+        $attention = $fleet->attention();
+        $running = $fleet->running();
+        $uptime = $fleet->uptime();
+        $busiest = $servers->sortByDesc(fn(Server $server): int => $server->applications->count())->first();
 
         return Inertia::render('Dashboard', [
             'hasTeam' => true,
-            'counts' => [
-                'servers' => $team->servers()->count(),
-                'applications' => $team->applications()->count(),
-                'databases' => ManagedDatabase::where('team_id', $team->getKey())->count(),
+            'counts' => ['servers' => $servers->count(), 'applications' => $applications],
+            'live' => $this->live($running->first(), $phases),
+            'tiles' => [
+                [
+                    'id' => 'applications',
+                    'label' => 'Applications',
+                    'value' => (string) $applications,
+                    'sub' => 'across ' . $servers->count() . ' ' . ($servers->count() === 1 ? 'server' : 'servers'),
+                    'tone' => 'default',
+                    'href' => $busiest === null ? route('dashboard') : route('servers.show', $busiest),
+                ],
+                [
+                    'id' => 'deploys',
+                    'label' => 'Deploys this week',
+                    'value' => (string) $fleet->deploysThisWeek(),
+                    'sub' => $running->isEmpty() ? 'none running' : $running->count() . ' running now',
+                    'tone' => 'default',
+                    'href' => route('deployments.index'),
+                ],
+                [
+                    'id' => 'attention',
+                    'label' => 'Needs attention',
+                    'value' => (string) count($attention),
+                    'sub' => $attention === [] ? 'all clear' : $attention[0]['subject'] . ' · ' . $attention[0]['summary'],
+                    'tone' => $attention === [] ? 'default' : 'warning',
+                    'href' => $attention === [] ? route('deployments.index') : $attention[0]['href'],
+                ],
+                [
+                    'id' => 'uptime',
+                    'label' => 'Uptime, ' . FleetSnapshot::UPTIME_DAYS . ' days',
+                    'value' => $uptime === null ? '—' : preg_replace('/\.?0+$/', '', number_format($uptime, 2)) . '%',
+                    'sub' => $uptime === null ? 'no readings yet' : 'fleet-wide',
+                    'tone' => 'default',
+                    'href' => route('deployments.index'),
+                ],
             ],
-            'attention' => array_slice($attention, 0, self::ATTENTION_LIMIT),
-            'attentionTotal' => count($attention),
-            'deployments' => $this->recentDeployments($team),
+            'servers' => $servers->map(fn(Server $server): array => $fleet->card($server))->values(),
+            'activity' => $feed->forTeam($team),
             'can' => ['createServer' => $user->hasTeamAbility($team, Ability::CreateServer)],
         ]);
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return array<string, string>|null
      */
-    private function attention(Team $team): array
+    private function live(?Deployment $deployment, DeploymentPhases $phases): ?array
     {
-        $items = [];
-
-        foreach ($team->servers()->whereNotNull('pending_host_key_fingerprint')->get() as $server) {
-            $items[] = [
-                'severity' => 'critical',
-                'title' => "{$server->name} presented a different host key",
-                'detail' => 'Every operation on this server is blocked until you review it.',
-                'href' => route('servers.show', $server),
-            ];
+        if ($deployment === null || $deployment->application === null) {
+            return null;
         }
 
-        foreach ($team->applications()->where('power_state', PowerState::Stopped->value)->get() as $application) {
-            $items[] = [
-                'severity' => 'warning',
-                'title' => "{$application->name} is stopped",
-                'detail' => 'Visitors see a maintenance page instead of the site.',
-                'href' => route('servers.applications.show', [$application->server_id, $application]),
-            ];
-        }
+        $application = $deployment->application;
 
-        foreach ($team->servers()->where('status', ServerStatus::Failed->value)->get() as $server) {
-            $items[] = [
-                'severity' => 'critical',
-                'title' => "{$server->name} failed to provision",
-                'detail' => 'Read the provisioning log to see where it stopped.',
-                'href' => route('servers.show', $server),
-            ];
-        }
-
-        $failed = Deployment::query()
-            ->whereIn('application_id', $team->applications()->select('id'))
-            ->where('status', DeploymentStatus::Failed->value)
-            ->with('application')
-            ->latest()
-            ->limit(3)
-            ->get();
-
-        foreach ($failed as $deployment) {
-            $items[] = [
-                'severity' => 'warning',
-                'title' => "The last deployment of {$deployment->application->name} failed",
-                'detail' => 'Open the deployment to read its output.',
-                'href' => route('servers.applications.deployments.show', [
-                    $deployment->application->server_id,
-                    $deployment->application_id,
-                    $deployment,
-                ]),
-            ];
-        }
-
-        return $items;
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function recentDeployments(Team $team): array
-    {
-        return Deployment::query()
-            ->whereIn('application_id', $team->applications()->select('id'))
-            ->with('application')
-            ->latest()
-            ->limit(6)
-            ->get()
-            ->map(fn (Deployment $deployment): array => [
-                'id' => $deployment->id,
-                'application' => $deployment->application->name,
-                'status' => $deployment->status->value,
-                'commit_message' => $deployment->commit_message,
-                'finished_at' => $deployment->finished_at?->toIso8601String(),
-                'href' => route('servers.applications.deployments.show', [
-                    $deployment->application->server_id,
-                    $deployment->application_id,
-                    $deployment,
-                ]),
-            ])->values()->all();
+        return [
+            'application' => $application->name,
+            'server' => (string) $application->server?->name,
+            'phase' => $phases->progress($deployment) ?? 'starting',
+            'href' => route('servers.applications.deployments.show', [$application->server_id, $application, $deployment]),
+        ];
     }
 }

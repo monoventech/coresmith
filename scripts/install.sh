@@ -589,6 +589,7 @@ configure_caddy() {
         printf '{\n'
         printf '    admin localhost:2019\n'
         [ -n "$ACME_EMAIL" ] && printf '    email %s\n' "$ACME_EMAIL"
+        printf '    on_demand_tls {\n        permission http {\n            endpoint http://127.0.0.1:8484/api/caddy/ask\n        }\n    }\n'
         printf '    log {\n        output file /var/log/caddy/access.log\n        format json\n    }\n'
         printf '}\n\n'
         printf 'import /etc/caddy/panel.caddy\n'
@@ -651,6 +652,56 @@ ${PANEL_HOST} {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://${PANEL_HOST}; font-src 'self'; img-src 'self' data:;"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    @reverb path /app/* /apps/*
+    reverse_proxy @reverb 127.0.0.1:6001
+
+    log {
+        output file /var/log/caddy/coresmith-panel.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+http://127.0.0.1:8484 {
+    bind 127.0.0.1
+    root * ${INSTALL_DIR}/public
+
+    @ask path /api/caddy/ask
+    handle @ask {
+        php_fastcgi unix/${fpm_sock} {
+            resolve_root_symlink
+        }
+    }
+
+    respond 404
+}
+
+https:// {
+    tls {
+        on_demand
+    }
+
+    root * ${INSTALL_DIR}/public
+
+    php_fastcgi unix/${fpm_sock} {
+        resolve_root_symlink
+    }
+
+    file_server
+    encode gzip zstd
+
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000"
         Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://${PANEL_HOST}; font-src 'self'; img-src 'self' data:;"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server

@@ -65,7 +65,7 @@ final class GitHubAppClient implements GitProvider
 
     public function deleteWebhook(string $repository, string $hookId): void
     {
-        $this->request()->delete(self::API."/repos/{$this->path($repository)}/hooks/".rawurlencode($hookId));
+        $this->request()->delete(self::API . "/repos/{$this->path($repository)}/hooks/" . rawurlencode($hookId));
     }
 
     public function createDeployKey(string $repository, string $publicKey, string $title): string
@@ -81,12 +81,12 @@ final class GitHubAppClient implements GitProvider
 
     public function deleteDeployKey(string $repository, string $keyId): void
     {
-        $this->request()->delete(self::API."/repos/{$this->path($repository)}/keys/".rawurlencode($keyId));
+        $this->request()->delete(self::API . "/repos/{$this->path($repository)}/keys/" . rawurlencode($keyId));
     }
 
     public function latestCommit(string $repository, string $branch): array
     {
-        $commit = $this->get("/repos/{$this->path($repository)}/commits/".rawurlencode($branch))->json();
+        $commit = $this->get("/repos/{$this->path($repository)}/commits/" . rawurlencode($branch))->json();
 
         return [
             'sha' => (string) ($commit['sha'] ?? ''),
@@ -97,7 +97,7 @@ final class GitHubAppClient implements GitProvider
 
     public function updateCommitStatus(string $repository, string $sha, string $state, string $targetUrl, string $description): void
     {
-        $this->post("/repos/{$this->path($repository)}/statuses/".rawurlencode($sha), [
+        $this->post("/repos/{$this->path($repository)}/statuses/" . rawurlencode($sha), [
             'state' => $state,
             'target_url' => $targetUrl,
             'description' => $description,
@@ -107,7 +107,7 @@ final class GitHubAppClient implements GitProvider
 
     public function revoke(): void
     {
-        $this->request()->delete(self::API.'/installation/token');
+        $this->request()->delete(self::API . '/installation/token');
     }
 
     public function token(): string
@@ -131,10 +131,10 @@ final class GitHubAppClient implements GitProvider
 
         $response = Http::withToken($this->jwt())
             ->withHeaders(['Accept' => 'application/vnd.github+json'])
-            ->post(self::API.'/app/installations/'.rawurlencode($installation).'/access_tokens');
+            ->post(self::API . '/app/installations/' . rawurlencode($installation) . '/access_tokens');
 
         if ($response->failed()) {
-            throw new GitProviderException('GitHub refused to issue an installation token: '.$this->reason($response));
+            throw new GitProviderException('GitHub refused to issue an installation token: ' . $this->reason($response));
         }
 
         $token = (string) $response->json('token');
@@ -166,9 +166,9 @@ final class GitHubAppClient implements GitProvider
         $signature = RSA::loadPrivateKey($key)
             ->withHash('sha256')
             ->withPadding(RSA::SIGNATURE_PKCS1)
-            ->sign($header.'.'.$claims);
+            ->sign($header . '.' . $claims);
 
-        return $header.'.'.$claims.'.'.$this->base64Url($signature);
+        return $header . '.' . $claims . '.' . $this->base64Url($signature);
     }
 
     private function base64Url(string $value): string
@@ -198,7 +198,7 @@ final class GitHubAppClient implements GitProvider
      */
     private function get(string $path, array $query = []): Response
     {
-        return $this->guard($this->request()->get(self::API.$path, $query));
+        return $this->guard($this->request()->get(self::API . $path, $query));
     }
 
     /**
@@ -206,13 +206,13 @@ final class GitHubAppClient implements GitProvider
      */
     private function post(string $path, array $payload): Response
     {
-        return $this->guard($this->request()->post(self::API.$path, $payload));
+        return $this->guard($this->request()->post(self::API . $path, $payload));
     }
 
     private function guard(Response $response): Response
     {
         if ($response->failed()) {
-            throw new GitProviderException('GitHub rejected the request: '.$this->reason($response));
+            throw new GitProviderException('GitHub rejected the request: ' . $this->reason($response));
         }
 
         return $response;
@@ -222,6 +222,6 @@ final class GitHubAppClient implements GitProvider
     {
         $message = (string) ($response->json('message') ?? '');
 
-        return $message !== '' ? $message : 'HTTP '.$response->status();
+        return $message !== '' ? $message : 'HTTP ' . $response->status();
     }
 }

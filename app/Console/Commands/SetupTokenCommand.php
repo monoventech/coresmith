@@ -27,7 +27,7 @@ final class SetupTokenCommand extends Command
         }
 
         if ($token->exists() && !$this->option('force')) {
-            $this->error('A setup token already exists at '.$token->path().'. Pass --force to replace it.');
+            $this->error('A setup token already exists at ' . $token->path() . '. Pass --force to replace it.');
 
             return self::FAILURE;
         }

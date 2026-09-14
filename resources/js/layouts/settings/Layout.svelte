@@ -1,83 +1,39 @@
 <script lang="ts">
-    import { Link } from '@inertiajs/svelte'
+    import { page } from '@inertiajs/svelte'
     import type { Snippet } from 'svelte'
-    import Heading from '@/components/Heading.svelte'
-    import { Separator } from '@/components/ui/separator'
-    import { currentUrlState } from '@/lib/currentUrl.svelte'
-    import { cn } from '@/lib/utils'
-    import type { NavItem } from '@/types'
+    import PageTabs from '@/components/PageTabs.svelte'
+    import type { PanelProps } from '@/lib/panel'
+    import { appPath } from '@/lib/panel'
 
-    let {
-        children
-    }: {
-        children?: Snippet
-    } = $props()
+    let { children }: { children?: Snippet } = $props()
 
-    const sidebarNavItems: NavItem[] = [
-        {
-            title: 'Profile',
-            href: route('profile.edit')
-        },
-        {
-            title: 'Security',
-            href: route('security.edit')
-        },
-        {
-            title: 'Appearance',
-            href: route('appearance.edit')
-        },
-        {
-            title: 'Team',
-            href: route('teams.index')
-        },
-        {
-            title: 'SSH keys',
-            href: route('ssh-keys.index')
-        },
-        {
-            title: 'Source providers',
-            href: route('source-providers.index')
-        },
-        {
-            title: 'API tokens',
-            href: route('api-tokens.index')
+    const path = $derived(appPath(page.url, (page.props.panel as PanelProps | null)?.base))
+
+    const tabs = $derived([
+        { label: 'General', href: route('settings.general'), current: path === '/settings' },
+        { label: 'Team', href: route('teams.index'), current: path.startsWith('/settings/team') || path.startsWith('/teams') },
+        { label: 'Git', href: route('source-providers.index'), current: path.startsWith('/settings/git') },
+        { label: 'Notifications', href: route('settings.notifications'), current: path.startsWith('/settings/notifications') },
+        { label: 'API tokens', href: route('api-tokens.index'), current: path.startsWith('/settings/api-tokens') },
+        { label: 'Billing', href: route('settings.billing'), current: path.startsWith('/settings/billing') }
+    ])
+
+    const description = $derived.by(() => {
+        if (path.startsWith('/settings/git')) {
+            return 'GitHub App with fine-grained, per-repository permissions, not OAuth.'
         }
-    ]
 
-    const url = currentUrlState()
+        if (path.startsWith('/settings/billing')) {
+            return 'Coresmith Cloud is billed per connected server. Self-hosting is free under ELv2, every feature included.'
+        }
+
+        return 'Panel, team and notification preferences for this Coresmith installation.'
+    })
 </script>
 
-<div class="px-6 py-8">
-    <Heading title="Settings" mark="Settings" description="Manage your profile and account settings" />
-
-    <div class="flex flex-col gap-10 lg:flex-row lg:gap-16">
-        <aside class="w-full lg:w-52 lg:shrink-0">
-            <nav class="flex flex-col gap-0.5" aria-label="Settings">
-                {#each sidebarNavItems as item (item.href)}
-                    {@const isCurrent = url.isCurrentUrl(item.href, url.currentUrl)}
-                    <Link
-                        href={item.href}
-                        aria-current={isCurrent ? 'page' : undefined}
-                        class={cn(
-                            'relative rounded-md px-3 py-2 text-sm font-medium transition-colors outline-none',
-                            'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-                            isCurrent
-                                ? 'bg-accent text-foreground before:absolute before:inset-y-1.5 before:-left-px before:w-0.5 before:rounded-full before:bg-primary'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        )}
-                    >
-                        {item.title}
-                    </Link>
-                {/each}
-            </nav>
-        </aside>
-
-        <Separator class="lg:hidden" />
-
-        <div class="flex-1">
-            <section class="max-w-xl space-y-12">
-                {@render children?.()}
-            </section>
-        </div>
-    </div>
+<h1 class="type-h1 m-0">Settings</h1>
+<p class="type-body-sm mt-1.5 text-muted-foreground">{description}</p>
+<div class="mt-[22px] mb-9">
+    <PageTabs {tabs} label="Settings" />
 </div>
+{@render children?.()}

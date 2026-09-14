@@ -235,7 +235,7 @@ test('the route sync job leaves the server alone for an application with no doma
     $application = Application::factory()->create(['domain' => null, 'additional_domains' => []]);
     $transport = new FakeSSHTransport;
 
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         (new SyncApplicationRoute($application))->handle(

@@ -36,7 +36,7 @@ test('the update is broadcast on a channel private to that deployment', function
 
     expect($event->broadcastOn())->toHaveCount(1)
         ->and($event->broadcastOn()[0])->toBeInstanceOf(PrivateChannel::class)
-        ->and($event->broadcastOn()[0]->name)->toBe('private-deployments.'.$deployment->getKey())
+        ->and($event->broadcastOn()[0]->name)->toBe('private-deployments.' . $deployment->getKey())
         ->and($event->broadcastAs())->toBe('deployment.updated');
 });
 
@@ -101,7 +101,7 @@ test('the deployment page is visible to the team and shows the log', function ()
             $deployment,
         ]))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
+        ->assertInertia(fn($page) => $page
             ->component('deployments/Show')
             ->where('deployment.log', 'Cloning into bare repository')
             ->where('deployment.status', 'running')
@@ -119,7 +119,7 @@ test('the page is told streaming is available when a broadcaster is configured',
             $deployment->application,
             $deployment,
         ]))
-        ->assertInertia(fn ($page) => $page->where('streaming', true));
+        ->assertInertia(fn($page) => $page->where('streaming', true));
 });
 
 test('the page falls back to refreshing when no broadcaster is configured', function (string $driver) {
@@ -133,7 +133,7 @@ test('the page falls back to refreshing when no broadcaster is configured', func
             $deployment->application,
             $deployment,
         ]))
-        ->assertInertia(fn ($page) => $page->where('streaming', false));
+        ->assertInertia(fn($page) => $page->where('streaming', false));
 })->with(['null', 'log', '']);
 
 test('another teams deployment page is refused', function () {
@@ -194,5 +194,5 @@ test('an update is broadcast when the log grows and when the run ends', function
 
     DeploymentUpdated::dispatch($deployment);
 
-    Event::assertDispatched(DeploymentUpdated::class, fn (DeploymentUpdated $event) => $event->deployment->is($deployment));
+    Event::assertDispatched(DeploymentUpdated::class, fn(DeploymentUpdated $event) => $event->deployment->is($deployment));
 });

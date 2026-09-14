@@ -23,16 +23,16 @@ final class YumPackageManager implements PackageManager
             return 'true';
         }
 
-        return 'yum install -y '.PackageList::escape($packages);
+        return 'yum install -y ' . PackageList::escape($packages);
     }
 
     public function isInstalled(string $package): string
     {
-        return 'rpm -q '.escapeshellarg($package).' >/dev/null 2>&1';
+        return 'rpm -q ' . escapeshellarg($package) . ' >/dev/null 2>&1';
     }
 
     public function addRepository(string $repo): string
     {
-        return 'yum-config-manager --add-repo '.escapeshellarg($repo);
+        return 'yum-config-manager --add-repo ' . escapeshellarg($repo);
     }
 }

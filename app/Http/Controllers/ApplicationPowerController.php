@@ -14,6 +14,10 @@ use App\Jobs\StopApplication;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Server;
+use App\Models\User;
+use App\Notifications\ApplicationToggledNotification;
+use App\Notifications\Preferences;
+use App\Notifications\TeamNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -33,6 +37,9 @@ final class ApplicationPowerController extends Controller
         StopApplication::dispatch($application);
         SyncApplicationRoute::dispatch($application);
 
+        activity()->performedOn($application)->log('application_stopped');
+        $this->notify($application, 'The app was stopped');
+
         return back()->with('success', 'Stopping. Visitors will see a maintenance page until you start it again.');
     }
 
@@ -50,6 +57,9 @@ final class ApplicationPowerController extends Controller
         StartApplication::dispatch($application);
         SyncApplicationRoute::dispatch($application);
 
+        activity()->performedOn($application)->log('application_started');
+        $this->notify($application, 'The app was started');
+
         return back()->with('success', 'Starting. The site will be reachable again shortly.');
     }
 
@@ -66,8 +76,23 @@ final class ApplicationPowerController extends Controller
 
         SyncApplicationRoute::dispatch($application);
 
+        activity()->performedOn($application)->log($validated['enabled'] ? 'maintenance_enabled' : 'maintenance_disabled');
+        $this->notify($application, $validated['enabled'] ? 'Maintenance page turned on' : 'Maintenance page turned off');
+
         return back()->with('success', $validated['enabled']
             ? 'Maintenance page is on. Your processes keep running so you can still debug.'
             : 'Maintenance page is off.');
+    }
+
+    private function notify(Application $application, string $change): void
+    {
+        $actor = auth()->user();
+
+        app(TeamNotifier::class)->send(
+            $application->team,
+            Preferences::TOGGLE_CHANGES,
+            new ApplicationToggledNotification($application, $change, $actor?->name),
+            $actor instanceof User ? $actor : null,
+        );
     }
 }

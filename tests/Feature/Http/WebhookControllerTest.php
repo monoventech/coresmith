@@ -35,7 +35,7 @@ function signedPost(WebhookEndpoint $endpoint, array $payload, ?string $signatur
         [],
         [],
         [],
-        ['CONTENT_TYPE' => 'application/json', 'HTTP_'.str_replace('-', '_', strtoupper($header)) => $signature],
+        ['CONTENT_TYPE' => 'application/json', 'HTTP_' . str_replace('-', '_', strtoupper($header)) => $signature],
         $body,
     );
 }
@@ -73,7 +73,7 @@ test('a signature computed with a different secret is rejected', function () {
     Queue::fake();
     $endpoint = endpointFor();
     $body = json_encode(['ref' => 'refs/heads/main'], JSON_THROW_ON_ERROR);
-    $forged = 'sha256='.hash_hmac('sha256', $body, 'wrong-secret');
+    $forged = 'sha256=' . hash_hmac('sha256', $body, 'wrong-secret');
 
     signedPost($endpoint, ['ref' => 'refs/heads/main'], $forged)->assertStatus(401);
 

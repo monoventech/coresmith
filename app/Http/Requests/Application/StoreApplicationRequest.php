@@ -35,7 +35,7 @@ final class StoreApplicationRequest extends FormRequest
             'type' => ['required', Rule::enum(ApplicationType::class)],
             'js_runtime' => ['nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['nullable', 'string', 'max:64'],
-            'domain' => ['nullable', 'string', 'max:253', 'regex:'.SafeName::DOMAIN_PATTERN],
+            'domain' => ['nullable', 'string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
             'repository_url' => ['nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
             'repository_branch' => ['required', 'string', 'max:255'],
             'php_version' => ['nullable', 'string', 'regex:/^[A-Za-z0-9._-]+$/'],

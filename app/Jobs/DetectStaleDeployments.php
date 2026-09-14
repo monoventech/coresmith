@@ -40,11 +40,11 @@ final class DetectStaleDeployments implements ShouldQueue
                 $deployment->forceFill([
                     'status' => DeploymentStatus::Failed,
                     'finished_at' => now(),
-                    'log' => trim((string) $deployment->log."\nDeployment timed out with no response for "
-                        .self::STALE_AFTER_MINUTES.' minutes. The SSH connection most likely dropped.'),
+                    'log' => trim((string) $deployment->log . "\nDeployment timed out with no response for "
+                        . self::STALE_AFTER_MINUTES . ' minutes. The SSH connection most likely dropped.'),
                 ])->save();
 
-                Cache::lock('deploy:'.$deployment->application_id)->forceRelease();
+                Cache::lock('deploy:' . $deployment->application_id)->forceRelease();
 
                 DeploymentFailed::dispatch($deployment);
             });

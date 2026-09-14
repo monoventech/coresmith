@@ -49,14 +49,14 @@ final class ProvisionServer implements ShouldQueue
         $startedAt = now();
 
         try {
-            $this->phase(1, fn () => $this->detectOperatingSystem($connection, $detector));
-            $this->phase(2, fn () => $this->installBasePackages($connection));
-            $this->phase(3, fn () => app(AsdfInstaller::class)->install($connection));
-            $this->phase(4, fn () => app(DirectoryStructure::class)->create($connection));
-            $this->phase(5, fn () => app(CaddyInstaller::class)->install($connection));
-            $this->phase(6, fn () => app(FirewallConfigurator::class)->configure($connection));
-            $this->phase(7, fn () => app(SecurityHardening::class)->harden($connection));
-            $this->phase(8, fn () => $this->finalize($connection, (int) $startedAt->diffInSeconds(now())));
+            $this->phase(1, fn() => $this->detectOperatingSystem($connection, $detector));
+            $this->phase(2, fn() => $this->installBasePackages($connection));
+            $this->phase(3, fn() => app(AsdfInstaller::class)->install($connection));
+            $this->phase(4, fn() => app(DirectoryStructure::class)->create($connection));
+            $this->phase(5, fn() => app(CaddyInstaller::class)->install($connection));
+            $this->phase(6, fn() => app(FirewallConfigurator::class)->configure($connection));
+            $this->phase(7, fn() => app(SecurityHardening::class)->harden($connection));
+            $this->phase(8, fn() => $this->finalize($connection, (int) $startedAt->diffInSeconds(now())));
         } catch (Throwable $e) {
             $this->fail_($e);
 
@@ -119,7 +119,7 @@ final class ProvisionServer implements ShouldQueue
 
         $this->server->forceFill([
             'status' => ServerStatus::Failed,
-            'provisioning_log' => trim($log."\n".$e->getMessage()),
+            'provisioning_log' => trim($log . "\n" . $e->getMessage()),
         ])->save();
     }
 }

@@ -12,6 +12,14 @@ final class HostKeyFingerprint
 {
     public static function fromHostKey(string $hostKey): string
     {
-        return 'SHA256:'.rtrim(base64_encode(hash('sha256', $hostKey, true)), '=');
+        return 'SHA256:' . rtrim(base64_encode(hash('sha256', $hostKey, true)), '=');
+    }
+
+    public static function fromPublicKey(string $publicKey): ?string
+    {
+        $parts = preg_split('/\s+/', trim($publicKey)) ?: [];
+        $blob = isset($parts[1]) ? base64_decode($parts[1], true) : false;
+
+        return $blob === false || $blob === '' ? null : self::fromHostKey($blob);
     }
 }

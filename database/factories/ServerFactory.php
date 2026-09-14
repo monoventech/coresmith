@@ -31,7 +31,7 @@ class ServerFactory extends Factory
 
         return [
             'team_id' => Team::factory(),
-            'name' => fake()->domainWord().'-'.fake()->numberBetween(1, 99),
+            'name' => fake()->domainWord() . '-' . fake()->numberBetween(1, 99),
             'ip_address' => fake()->ipv4(),
             'ssh_port' => 22,
             'ssh_user' => 'root',
@@ -42,7 +42,7 @@ class ServerFactory extends Factory
 
     public function active(): static
     {
-        return $this->state(fn (array $attributes): array => [
+        return $this->state(fn(array $attributes): array => [
             'status' => ServerStatus::Active,
             'os_name' => 'ubuntu',
             'os_version' => '24.04',

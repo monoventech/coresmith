@@ -7,7 +7,7 @@ use App\Services\SSH\SSHConnectionManager;
 use Tests\Support\FakeSSHTransport;
 
 beforeEach(function () {
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => new FakeSSHTransport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => new FakeSSHTransport);
 });
 
 afterEach(function () {

@@ -17,7 +17,7 @@ final class AsdfManager
 {
     public const DATA_DIR = '/opt/asdf-data';
 
-    public const INSTALL_DIR = self::DATA_DIR.'/installs';
+    public const INSTALL_DIR = self::DATA_DIR . '/installs';
 
     public const SYSTEM_USER = 'coresmith';
 
@@ -80,7 +80,7 @@ final class AsdfManager
      */
     public function installedVersions(SSHConnection $connection, string $runtime): array
     {
-        $path = escapeshellarg(self::INSTALL_DIR.'/'.$runtime);
+        $path = escapeshellarg(self::INSTALL_DIR . '/' . $runtime);
         $result = $connection->execute("ls -1 {$path} 2>/dev/null || true");
 
         $versions = array_values(array_filter(array_map(
@@ -106,17 +106,17 @@ final class AsdfManager
     {
         $binary ??= $runtime === 'nodejs' ? 'node' : $runtime;
 
-        return $this->versionPath($runtime, $version).'/bin/'.$binary;
+        return $this->versionPath($runtime, $version) . '/bin/' . $binary;
     }
 
     public function fpmBinaryPath(string $phpVersion): string
     {
-        return $this->versionPath('php', $phpVersion).'/sbin/php-fpm';
+        return $this->versionPath('php', $phpVersion) . '/sbin/php-fpm';
     }
 
     public function versionPath(string $runtime, string $version): string
     {
-        return self::INSTALL_DIR."/{$runtime}/{$version}";
+        return self::INSTALL_DIR . "/{$runtime}/{$version}";
     }
 
     /**
@@ -127,9 +127,9 @@ final class AsdfManager
         $exports = '';
 
         foreach ($env as $name => $value) {
-            $exports .= $name.'='.escapeshellarg($value).' ';
+            $exports .= $name . '=' . escapeshellarg($value) . ' ';
         }
 
-        return 'sudo -u '.self::SYSTEM_USER.' env '.$exports.'bash -lc '.escapeshellarg($command);
+        return 'sudo -u ' . self::SYSTEM_USER . ' env ' . $exports . 'bash -lc ' . escapeshellarg($command);
     }
 }

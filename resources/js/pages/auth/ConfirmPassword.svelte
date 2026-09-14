@@ -1,7 +1,8 @@
 <script module lang="ts">
     export const layout = {
         title: 'Confirm your password',
-        description: 'This is a protected area. Confirm your password to continue.'
+        mark: 'password',
+        description: 'This part of the panel changes security settings, so it asks once more.'
     }
 </script>
 
@@ -12,26 +13,19 @@
     import PasswordInput from '@/components/PasswordInput.svelte'
     import { Button } from '@/components/ui/button'
     import { Label } from '@/components/ui/label'
-    import { Spinner } from '@/components/ui/spinner'
 </script>
 
 <AppHead title="Confirm password" />
 
 <Form method="post" action={route('password.confirm.store')} resetOnSuccess>
     {#snippet children({ errors, processing })}
-        <div class="space-y-6">
-            <div class="grid gap-2">
-                <Label for="password">Password</Label>
-                <PasswordInput id="password" name="password" class="mt-1 block w-full" required autocomplete="current-password" />
+        <div class="flex flex-col gap-4">
+            <div>
+                <Label for="password" class="mb-1.5">Password</Label>
+                <PasswordInput id="password" name="password" required autocomplete="current-password" aria-invalid={errors.password ? true : undefined} />
                 <InputError message={errors.password} />
             </div>
-
-            <div class="flex items-center">
-                <Button type="submit" class="w-full" disabled={processing} data-test="confirm-password-button">
-                    {#if processing}<Spinner />{/if}
-                    Confirm password
-                </Button>
-            </div>
+            <Button type="submit" class="w-full" disabled={processing} data-test="confirm-password-button">Confirm</Button>
         </div>
     {/snippet}
 </Form>

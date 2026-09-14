@@ -67,7 +67,7 @@ abstract class OAuthGitClient implements GitProvider
         ]));
 
         if ($response->failed()) {
-            throw new GitProviderException("{$this->providerName()} refused to refresh the connection: ".$this->reason($response));
+            throw new GitProviderException("{$this->providerName()} refused to refresh the connection: " . $this->reason($response));
         }
 
         $token = (string) $response->json('access_token');
@@ -95,7 +95,7 @@ abstract class OAuthGitClient implements GitProvider
      */
     protected function get(string $path, array $query = []): Response
     {
-        return $this->guard($this->request()->get($this->apiRoot().$path, $query));
+        return $this->guard($this->request()->get($this->apiRoot() . $path, $query));
     }
 
     /**
@@ -103,18 +103,18 @@ abstract class OAuthGitClient implements GitProvider
      */
     protected function post(string $path, array $payload): Response
     {
-        return $this->guard($this->request()->post($this->apiRoot().$path, $payload));
+        return $this->guard($this->request()->post($this->apiRoot() . $path, $payload));
     }
 
     protected function delete(string $path): void
     {
-        $this->request()->delete($this->apiRoot().$path);
+        $this->request()->delete($this->apiRoot() . $path);
     }
 
     protected function guard(Response $response): Response
     {
         if ($response->failed()) {
-            throw new GitProviderException("{$this->providerName()} rejected the request: ".$this->reason($response));
+            throw new GitProviderException("{$this->providerName()} rejected the request: " . $this->reason($response));
         }
 
         return $response;
@@ -130,6 +130,6 @@ abstract class OAuthGitClient implements GitProvider
             }
         }
 
-        return 'HTTP '.$response->status();
+        return 'HTTP ' . $response->status();
     }
 }

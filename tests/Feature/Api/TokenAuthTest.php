@@ -27,7 +27,7 @@ function apiUser(Team $team, TeamRole $role): User
  */
 function tokenFor(User $user, Team $team, array $abilities): string
 {
-    $token = $user->createToken('test', array_map(fn (Ability $a): string => $a->value, $abilities));
+    $token = $user->createToken('test', array_map(fn(Ability $a): string => $a->value, $abilities));
 
     ApiToken::whereKey($token->accessToken->getKey())->update(['team_id' => $team->getKey()]);
 
@@ -36,7 +36,7 @@ function tokenFor(User $user, Team $team, array $abilities): string
 
 function asToken(string $token): array
 {
-    return ['Authorization' => 'Bearer '.$token, 'Accept' => 'application/json'];
+    return ['Authorization' => 'Bearer ' . $token, 'Accept' => 'application/json'];
 }
 
 test('an unauthenticated request is refused', function () {
@@ -69,7 +69,7 @@ test('a token bound to one team cannot reach another teams server even when the 
     $server = Server::factory()->for($other)->create();
 
     $this->withHeaders(asToken(tokenFor($user, $team, [Ability::ViewServer])))
-        ->getJson('/api/v1/servers/'.$server->getKey())
+        ->getJson('/api/v1/servers/' . $server->getKey())
         ->assertNotFound();
 });
 
@@ -91,7 +91,7 @@ test('a token cannot grant an ability the users role does not have', function ()
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
 
     $this->withHeaders(asToken(tokenFor($member, $team, [Ability::UpdateApplication])))
-        ->putJson('/api/v1/applications/'.$application->getKey().'/maintenance', ['enabled' => true])
+        ->putJson('/api/v1/applications/' . $application->getKey() . '/maintenance', ['enabled' => true])
         ->assertForbidden()
         ->assertJsonPath('message', 'Your role in this team does not allow that, so no token can.');
 
@@ -106,7 +106,7 @@ test('a member may deploy, because that is what the member role is for', functio
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
 
     $this->withHeaders(asToken(tokenFor($member, $team, [Ability::DeployApplication])))
-        ->postJson('/api/v1/applications/'.$application->getKey().'/deploy')
+        ->postJson('/api/v1/applications/' . $application->getKey() . '/deploy')
         ->assertStatus(202);
 
     Queue::assertPushed(DeployApplication::class);
@@ -120,7 +120,7 @@ test('an admin token can put an application into maintenance', function () {
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
 
     $this->withHeaders(asToken(tokenFor($admin, $team, [Ability::UpdateApplication])))
-        ->putJson('/api/v1/applications/'.$application->getKey().'/maintenance', ['enabled' => true])
+        ->putJson('/api/v1/applications/' . $application->getKey() . '/maintenance', ['enabled' => true])
         ->assertOk()
         ->assertJsonPath('data.maintenance_mode', true);
 
@@ -133,7 +133,7 @@ test('the maintenance endpoint refuses a value that is not a boolean', function 
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
 
     $this->withHeaders(asToken(tokenFor($admin, $team, [Ability::UpdateApplication])))
-        ->putJson('/api/v1/applications/'.$application->getKey().'/maintenance', ['enabled' => 'maybe'])
+        ->putJson('/api/v1/applications/' . $application->getKey() . '/maintenance', ['enabled' => 'maybe'])
         ->assertStatus(422);
 });
 
@@ -144,7 +144,7 @@ test('an admin token carrying deploy actually deploys', function () {
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
 
     $this->withHeaders(asToken(tokenFor($admin, $team, [Ability::DeployApplication])))
-        ->postJson('/api/v1/applications/'.$application->getKey().'/deploy')
+        ->postJson('/api/v1/applications/' . $application->getKey() . '/deploy')
         ->assertStatus(202)
         ->assertJsonPath('data.application_id', $application->getKey());
 
@@ -159,7 +159,7 @@ test('a read only token cannot deploy', function () {
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
 
     $this->withHeaders(asToken(tokenFor($admin, $team, [Ability::ViewApplication])))
-        ->postJson('/api/v1/applications/'.$application->getKey().'/deploy')
+        ->postJson('/api/v1/applications/' . $application->getKey() . '/deploy')
         ->assertForbidden();
 
     Queue::assertNothingPushed();
@@ -230,7 +230,7 @@ test('the application payload never carries environment variables or deploy keys
     ]);
 
     $response = $this->withHeaders(asToken(tokenFor($user, $team, [Ability::ViewApplication])))
-        ->getJson('/api/v1/applications/'.$application->getKey())
+        ->getJson('/api/v1/applications/' . $application->getKey())
         ->assertOk();
 
     expect($response->getContent())->not->toContain('do-not-leak')
@@ -243,7 +243,7 @@ test('the server payload never carries the private key', function () {
     $server = Server::factory()->for($team)->create();
 
     $response = $this->withHeaders(asToken(tokenFor($user, $team, [Ability::ViewServer])))
-        ->getJson('/api/v1/servers/'.$server->getKey())
+        ->getJson('/api/v1/servers/' . $server->getKey())
         ->assertOk();
 
     expect($response->getContent())->not->toContain('BEGIN')

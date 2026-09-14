@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Jobs\SyncAuthorizedKeys;
+use App\Models\Deployment;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,7 +22,7 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
-        return Inertia::render('settings/Profile', [
+        return Inertia::render('account/Profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
         ]);
@@ -38,9 +41,7 @@ class ProfileController extends Controller
 
         $request->user()->save();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
-
-        return to_route('profile.edit');
+        return to_route('profile.edit')->with('success', 'Saved.');
     }
 
     /**
@@ -49,10 +50,24 @@ class ProfileController extends Controller
     public function destroy(ProfileDeleteRequest $request): RedirectResponse
     {
         $user = $request->user();
+        $owned = $user->ownedTeams()->first();
+
+        if ($owned !== null) {
+            return back()->withErrors(['password' => "Hand {$owned->name} to another owner before deleting your account."]);
+        }
+
+        $servers = SyncAuthorizedKeys::activeServersOf($user->teams()->pluck('teams.id'));
 
         Auth::logout();
 
-        $user->delete();
+        DB::transaction(function () use ($user): void {
+            Deployment::query()->where('triggered_by', $user->getKey())->update(['triggered_by' => null]);
+            $user->tokens()->delete();
+            $user->sshKeys()->delete();
+            $user->delete();
+        });
+
+        SyncAuthorizedKeys::dispatchForServers($servers);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

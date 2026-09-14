@@ -47,7 +47,7 @@ final class ServerApiController extends ApiController
             'name' => $server->name,
             'ip_address' => $server->ip_address,
             'status' => $server->status?->value,
-            'os' => trim(((string) $server->os_name).' '.((string) $server->os_version)) ?: null,
+            'os' => trim(((string) $server->os_name) . ' ' . ((string) $server->os_version)) ?: null,
             'provisioning_phase' => $server->provisioning_phase,
             'host_key_change_pending' => $server->pending_host_key_fingerprint !== null,
             'last_connected_at' => $server->last_connected_at?->toIso8601String(),

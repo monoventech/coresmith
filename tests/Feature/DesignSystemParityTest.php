@@ -2,14 +2,9 @@
 
 declare(strict_types=1);
 
-/**
- * The Monoven design system is the source of truth for Coresmith's visual layer.
- * These assert the app has not drifted from it. The system lives outside the repo,
- * so each test skips rather than fails when it is not mounted.
- */
 function designSystemPath(): ?string
 {
-    $path = getenv('MONOVEN_DS_PATH') ?: getenv('HOME').'/dev/Monoven · Coresmith Design System';
+    $path = getenv('MONOVEN_DS_PATH') ?: getenv('HOME') . '/dev/Monoven · Coresmith Design System';
 
     return is_dir($path) ? $path : null;
 }
@@ -21,7 +16,7 @@ function appCss(): string
 
 function designSystemFile(string $relative): string
 {
-    return (string) file_get_contents(designSystemPath().'/'.$relative);
+    return (string) file_get_contents(designSystemPath() . '/' . $relative);
 }
 
 beforeEach(function () {
@@ -47,7 +42,7 @@ test('the coresmith product layer values are the ones the app ships', function (
         }
     }
 
-    expect($missing)->toBe([], 'These product-layer values differ from the design system: '.implode(' · ', $missing));
+    expect($missing)->toBe([], 'These product-layer values differ from the design system: ' . implode(' · ', $missing));
 });
 
 test('the display face is the one the product layer names', function () {
@@ -61,23 +56,22 @@ test('the locked portfolio faces are unchanged', function () {
 
     foreach (['--font-sans', '--font-mono'] as $token) {
         preg_match("/{$token}:\s*([^;]+);/", $typography, $m);
-        expect($css)->toContain("{$token}: ".trim($m[1]).';');
+        expect($css)->toContain("{$token}: " . trim($m[1]) . ';');
     }
 });
 
 test('the modular type scale matches the design system exactly', function () {
     preg_match_all('/^(\.type-[a-z0-9-]+)\s*\{([^}]+)\}/m', designSystemFile('tokens/typography.css'), $expected, PREG_SET_ORDER);
-    preg_match_all('/^(\.type-[a-z0-9-]+)\s*\{([^}]+)\}/m', appCss(), $actual, PREG_SET_ORDER);
+    preg_match_all('/^[ \t]*(\.type-[a-z0-9-]+)\s*\{([^}]+)\}/m', appCss(), $actual, PREG_SET_ORDER);
 
     expect($expected)->not->toBeEmpty();
 
-    // Compare declarations, not whitespace: the file is Prettier-formatted here and minified there.
     $declarations = static function (array $sets): array {
         $out = [];
 
         foreach ($sets as [, $selector, $body]) {
             $rules = array_filter(array_map(
-                static fn (string $rule): string => (string) preg_replace('/\s+/', '', $rule),
+                static fn(string $rule): string => (string) preg_replace('/\s+/', '', $rule),
                 explode(';', $body),
             ));
             sort($rules);
@@ -97,7 +91,7 @@ test('the modular type scale matches the design system exactly', function () {
         }
     }
 
-    expect($drifted)->toBe([], 'These type classes differ from the design system: '.implode(', ', $drifted));
+    expect($drifted)->toBe([], 'These type classes differ from the design system: ' . implode(', ', $drifted));
 });
 
 test('the radius family is the signature one', function () {

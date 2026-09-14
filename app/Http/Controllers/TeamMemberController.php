@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\TeamRole;
+use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +35,8 @@ final class TeamMemberController extends Controller
 
         $team->members()->attach($user, ['role' => $validated['role']]);
 
+        $this->syncServers($team);
+
         return back()->with('success', 'Member added.');
     }
 
@@ -48,6 +51,8 @@ final class TeamMemberController extends Controller
 
         $team->members()->updateExistingPivot($user->getKey(), ['role' => $validated['role']]);
 
+        $this->syncServers($team);
+
         return back()->with('success', 'Role updated.');
     }
 
@@ -59,7 +64,14 @@ final class TeamMemberController extends Controller
 
         $team->members()->detach($user->getKey());
 
+        $this->syncServers($team);
+
         return back()->with('success', 'Member removed.');
+    }
+
+    private function syncServers(Team $team): void
+    {
+        SyncAuthorizedKeys::dispatchForServers(SyncAuthorizedKeys::activeServersOf([$team->getKey()]));
     }
 
     private function guardOwnerRole(Request $request, Team $team, string $role): void

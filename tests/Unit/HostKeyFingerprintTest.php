@@ -21,5 +21,5 @@ test('differs for different keys', function () {
 
 test('matches the openssh reference digest', function () {
     expect(HostKeyFingerprint::fromHostKey('abc'))
-        ->toBe('SHA256:'.rtrim(base64_encode(hash('sha256', 'abc', true)), '='));
+        ->toBe('SHA256:' . rtrim(base64_encode(hash('sha256', 'abc', true)), '='));
 });

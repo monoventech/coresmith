@@ -2,10 +2,16 @@
 
 namespace App\Http\Middleware;
 
-use App\Enums\PowerState;
-use App\Enums\ServerStatus;
+use App\Enums\Ability;
 use App\Models\InstanceSetting;
+use App\Models\Team;
+use App\Models\User;
+use App\Services\Panel\CommandPalette;
+use App\Services\Panel\FleetSnapshot;
+use App\Services\Panel\SetupProgress;
+use App\Services\Teams\TeamContext;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -38,40 +44,75 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $this->forwardFlash($request);
+
         return [
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user(),
             ],
-            'sidebarOpen' => !$request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'appName' => InstanceSetting::get('instance_name', config('app.name')),
             'billingEnabled' => (bool) config('coresmith.billing_enabled'),
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
-            'fleet' => fn (): ?array => $this->fleet($request),
-            'flash' => [
-                'success' => $request->session()->get('success'),
-                'error' => $request->session()->get('error'),
-                'plainTextToken' => $request->session()->get('plainTextToken'),
-            ],
+            'panel' => fn(): ?array => $this->panel($request),
+            'palette' => Inertia::optional(fn(): array => $request->user() === null
+                ? []
+                : (new CommandPalette($request->user(), app(TeamContext::class)->team()))->commands()),
         ];
     }
 
-    /**
-     * @return array{servers: int, active: int, attention: int}|null
-     */
-    private function fleet(Request $request): ?array
+    private function forwardFlash(Request $request): void
     {
-        $team = $request->user()?->teams()->first();
+        if (!$request->hasSession()) {
+            return;
+        }
 
-        if ($team === null) {
+        $flash = array_filter([
+            'success' => $request->session()->get('success'),
+            'error' => $request->session()->get('error'),
+            'plainTextToken' => $request->session()->get('plainTextToken'),
+        ], fn(mixed $value): bool => is_string($value) && $value !== '');
+
+        if ($flash !== []) {
+            Inertia::flash($flash);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function panel(Request $request): ?array
+    {
+        $user = $request->user();
+
+        if (!$user instanceof User) {
             return null;
         }
 
+        $context = app(TeamContext::class);
+        $teams = $user->teams()->withCount(['servers', 'members'])->orderBy('teams.name')->get();
+        $team = $context->team();
+        $fleet = $team === null ? null : new FleetSnapshot($team);
+        [$current, $others] = $teams->partition(fn(Team $each): bool => $each->id === $team?->id);
+
         return [
-            'servers' => $team->servers()->count(),
-            'active' => $team->servers()->where('status', ServerStatus::Active->value)->count(),
-            'attention' => $team->servers()->whereNotNull('pending_host_key_fingerprint')->count()
-                + $team->applications()->where('power_state', PowerState::Stopped->value)->count(),
+            'team' => $team === null ? null : ['id' => $team->id, 'name' => $team->name, 'slug' => $team->slug, 'role' => $user->roleIn($team)?->label()],
+            'teams' => $current->concat($others)->map(fn(Team $each): array => [
+                'id' => $each->id,
+                'name' => $each->name,
+                'slug' => $each->slug,
+                'role' => $user->roleIn($each)?->label(),
+                'servers' => (int) $each->servers_count,
+                'members' => (int) $each->members_count,
+                'current' => $each->id === $team?->id,
+            ])->values()->all(),
+            'base' => $context->base(),
+            'viaHost' => $context->viaHost(),
+            'setup' => $team === null ? null : (new SetupProgress($team))->summary(),
+            'attention' => $fleet === null ? 0 : count($fleet->attention()),
+            'can' => [
+                'createServer' => $team !== null && $user->hasTeamAbility($team, Ability::CreateServer),
+            ],
         ];
     }
 }

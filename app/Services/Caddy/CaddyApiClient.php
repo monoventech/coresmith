@@ -34,20 +34,20 @@ final class CaddyApiClient
     {
         $config = $this->buildValidated($application);
 
-        $this->request($connection, 'PATCH', '/id/'.CaddyRouteBuilder::routeId($application), $config);
+        $this->request($connection, 'PATCH', '/id/' . CaddyRouteBuilder::routeId($application), $config);
         $this->persistConfig($connection);
     }
 
     public function removeSite(SSHConnection $connection, Application $application): void
     {
-        $this->request($connection, 'DELETE', '/id/'.CaddyRouteBuilder::routeId($application));
+        $this->request($connection, 'DELETE', '/id/' . CaddyRouteBuilder::routeId($application));
         $this->persistConfig($connection);
     }
 
     public function persistConfig(SSHConnection $connection): void
     {
         $connection->execute(
-            $this->curl('GET', '/config/').' > '.CaddyInstaller::CONFIG_FILE,
+            $this->curl('GET', '/config/') . ' > ' . CaddyInstaller::CONFIG_FILE,
             sudo: true,
         )->throw();
     }
@@ -57,7 +57,7 @@ final class CaddyApiClient
         $file = CaddyInstaller::CONFIG_FILE;
 
         $connection->execute(
-            "test -s {$file} && ".$this->curl('POST', '/load', dataFile: $file).' || true',
+            "test -s {$file} && " . $this->curl('POST', '/load', dataFile: $file) . ' || true',
             sudo: true,
         )->throw();
     }
@@ -87,17 +87,17 @@ final class CaddyApiClient
      */
     private function curl(string $method, string $path, ?array $payload = null, ?string $dataFile = null): string
     {
-        $url = 'http://localhost:'.self::ADMIN_PORT.$path;
+        $url = 'http://localhost:' . self::ADMIN_PORT . $path;
 
-        $command = 'curl -fsS --max-time 30 -X '.$method.' '.escapeshellarg($url);
+        $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . escapeshellarg($url);
 
         if ($payload !== null) {
             $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-            $command .= ' -H '.escapeshellarg('Content-Type: application/json').' -d '.escapeshellarg($json);
+            $command .= ' -H ' . escapeshellarg('Content-Type: application/json') . ' -d ' . escapeshellarg($json);
         }
 
         if ($dataFile !== null) {
-            $command .= ' -H '.escapeshellarg('Content-Type: application/json').' --data-binary '.escapeshellarg('@'.$dataFile);
+            $command .= ' -H ' . escapeshellarg('Content-Type: application/json') . ' --data-binary ' . escapeshellarg('@' . $dataFile);
         }
 
         return $command;

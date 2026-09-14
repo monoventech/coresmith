@@ -17,12 +17,12 @@ final class ProvisioningVerifier
 {
     public function verify(SSHConnection $connection): void
     {
-        $this->assert($connection, 'test -d '.AsdfManager::DATA_DIR, 'shared runtime directory');
+        $this->assert($connection, 'test -d ' . AsdfManager::DATA_DIR, 'shared runtime directory');
         $this->assert($connection, 'test -d /var/coresmith/apps', 'application directory');
         $this->assert($connection, 'systemctl is-active --quiet caddy', 'Caddy service');
         $this->assert(
             $connection,
-            'curl -fsS --max-time 10 http://localhost:'.CaddyApiClient::ADMIN_PORT.'/config/ >/dev/null',
+            'curl -fsS --max-time 10 http://localhost:' . CaddyApiClient::ADMIN_PORT . '/config/ >/dev/null',
             'Caddy admin API',
         );
 

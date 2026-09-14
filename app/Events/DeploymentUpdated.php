@@ -8,7 +8,9 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Http\Controllers\DeploymentController;
 use App\Models\Deployment;
+use App\Services\Deployment\DeploymentPhases;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -25,7 +27,7 @@ final class DeploymentUpdated implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('deployments.'.$this->deployment->getKey())];
+        return [new PrivateChannel('deployments.' . $this->deployment->getKey())];
     }
 
     public function broadcastAs(): string
@@ -38,12 +40,6 @@ final class DeploymentUpdated implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
-        return [
-            'id' => $this->deployment->getKey(),
-            'status' => $this->deployment->status->value,
-            'log' => (string) $this->deployment->log,
-            'started_at' => $this->deployment->started_at?->toIso8601String(),
-            'finished_at' => $this->deployment->finished_at?->toIso8601String(),
-        ];
+        return DeploymentController::present($this->deployment, app(DeploymentPhases::class));
     }
 }

@@ -11,17 +11,33 @@ namespace App\Services\Server;
 use App\Enums\PowerState;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
+use App\Models\Server;
 use App\Models\ServerMetric;
+use App\Notifications\DiskPressureNotification;
+use App\Notifications\Preferences;
+use App\Notifications\TeamNotifier;
 use App\Services\SSH\SSHConnection;
+use Spatie\Activitylog\Models\Activity;
 
 final class MetricsCollector
 {
     public const ACCESS_LOG = '/var/log/caddy/access.log';
 
+    public const DISK_PRESSURE_PERCENT = 80;
+
     public function collect(SSHConnection $connection): ServerMetric
     {
         $output = $connection->execute($this->probe())->throw()->output;
         $values = $this->parse($output);
+        $server = $connection->server();
+
+        if ($values['uptime'] !== null) {
+            $server->forceFill(['booted_at' => now()->subSeconds($values['uptime'])->startOfMinute()])->save();
+        }
+
+        if ($values['disk'] >= self::DISK_PRESSURE_PERCENT) {
+            $this->recordDiskPressure($server, $values['disk']);
+        }
 
         return ServerMetric::create([
             'server_id' => $connection->server()->getKey(),
@@ -35,6 +51,27 @@ final class MetricsCollector
             'network_tx_bytes' => $values['tx'],
             'recorded_at' => now(),
         ]);
+    }
+
+    private function recordDiskPressure(Server $server, float $percent): void
+    {
+        $recent = Activity::query()
+            ->where('subject_type', $server->getMorphClass())
+            ->where('subject_id', $server->getKey())
+            ->where('description', 'disk_pressure')
+            ->where('created_at', '>=', now()->subDay())
+            ->exists();
+
+        if ($recent) {
+            return;
+        }
+
+        activity()
+            ->performedOn($server)
+            ->withProperties(['percent' => (int) round($percent)])
+            ->log('disk_pressure');
+
+        app(TeamNotifier::class)->send($server->team, Preferences::DISK_PRESSURE, new DiskPressureNotification($server, (int) round($percent)));
     }
 
     public function recordTraffic(SSHConnection $connection): void
@@ -92,11 +129,12 @@ final class MetricsCollector
             "df -P / | awk 'NR==2 {gsub(/%/,\"\",\$5); print \"disk=\" \$5}'",
             "awk '{print \"load=\" \$1 \",\" \$2 \",\" \$3}' /proc/loadavg",
             "awk '/^ *(eth|ens|enp|eno)[0-9]/ {rx+=\$2; tx+=\$10} END {print \"net=\" rx+0 \",\" tx+0}' /proc/net/dev",
+            "awk '{print \"uptime=\" int(\$1)}' /proc/uptime",
         ]);
     }
 
     /**
-     * @return array{cpu: float, memory: float, disk: float, load1: float, load5: float, load15: float, rx: ?int, tx: ?int}
+     * @return array{cpu: float, memory: float, disk: float, load1: float, load5: float, load15: float, rx: ?int, tx: ?int, uptime: ?int}
      */
     public function parse(string $output): array
     {
@@ -118,6 +156,8 @@ final class MetricsCollector
             $tx = (int) $matches[2];
         }
 
+        $uptime = preg_match('/uptime=([0-9]+)/', $output, $matches) === 1 ? (int) $matches[1] : null;
+
         return [
             'cpu' => $cpu,
             'memory' => $memory,
@@ -127,6 +167,7 @@ final class MetricsCollector
             'load15' => $load[2],
             'rx' => $rx,
             'tx' => $tx,
+            'uptime' => $uptime,
         ];
     }
 

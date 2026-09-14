@@ -39,7 +39,7 @@ final class DatabaseManager
         $package = $this->packageFor($connection->server()->os_name, $type);
 
         $connection->execute(
-            $packages->isInstalled($package).' || '.$packages->install([$package]),
+            $packages->isInstalled($package) . ' || ' . $packages->install([$package]),
             sudo: true,
         )->throw();
 
@@ -80,10 +80,10 @@ final class DatabaseManager
     public function backup(SSHConnection $connection, ManagedDatabase $database, string $timestamp): string
     {
         $name = (string) $database->name;
-        $directory = self::BACKUP_ROOT.'/'.$name;
-        $destination = $directory.'/'.$name.'-'.$timestamp.'.sql.gz';
+        $directory = self::BACKUP_ROOT . '/' . $name;
+        $destination = $directory . '/' . $name . '-' . $timestamp . '.sql.gz';
 
-        $connection->execute('mkdir -p '.escapeshellarg($directory), sudo: true)->throw();
+        $connection->execute('mkdir -p ' . escapeshellarg($directory), sudo: true)->throw();
 
         $command = match ($database->type) {
             DatabaseType::Mysql => $this->mysql->backup($name, $destination),
@@ -93,7 +93,7 @@ final class DatabaseManager
 
         if ($command !== null) {
             $connection->execute($command, sudo: true)->throw();
-            $connection->execute('chmod 600 '.escapeshellarg($destination), sudo: true)->throw();
+            $connection->execute('chmod 600 ' . escapeshellarg($destination), sudo: true)->throw();
         }
 
         return $destination;
@@ -103,7 +103,7 @@ final class DatabaseManager
     {
         $name = (string) $database->name;
 
-        $exists = $connection->execute('test -f '.escapeshellarg($source));
+        $exists = $connection->execute('test -f ' . escapeshellarg($source));
 
         if ($exists->failed()) {
             throw BackupNotFoundException::at($source);
@@ -123,8 +123,8 @@ final class DatabaseManager
     public function uploadBackupToS3(SSHConnection $connection, ManagedDatabase $database, string $remotePath): string
     {
         $disk = Storage::disk('s3');
-        $contents = $connection->execute('cat '.escapeshellarg($remotePath), sudo: true)->throw()->output;
-        $key = 'backups/'.$database->getKey().'/'.basename($remotePath);
+        $contents = $connection->execute('cat ' . escapeshellarg($remotePath), sudo: true)->throw()->output;
+        $key = 'backups/' . $database->getKey() . '/' . basename($remotePath);
 
         $disk->put($key, $contents);
 

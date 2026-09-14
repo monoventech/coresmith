@@ -12,7 +12,7 @@ function svelteSources(): array
     $files = [];
 
     foreach (Finder::create()->files()->in(base_path('resources/js'))->name('*.svelte')->notPath('components/ui') as $file) {
-        $files[str_replace(base_path().'/', '', $file->getPathname())] = (string) file_get_contents($file->getPathname());
+        $files[str_replace(base_path() . '/', '', $file->getPathname())] = (string) file_get_contents($file->getPathname());
     }
 
     return $files;
@@ -40,7 +40,7 @@ function fullBleedPages(): array
     $sources = [];
 
     foreach ($pages as $page) {
-        $path = 'resources/js/pages/'.$page.'.svelte';
+        $path = 'resources/js/pages/' . $page . '.svelte';
         $sources[$path] = (string) file_get_contents(base_path($path));
     }
 
@@ -59,7 +59,7 @@ test('no page reaches for a raw control that the design system already provides'
     expect($offenders)->toBe(
         [],
         'A native checkbox draws the browser focus outline, not the Monoven focus ring, and ignores the radius family. '
-        .'Use components/ui/checkbox, ui/switch or ui/radio-group. Offenders: '.implode(', ', $offenders),
+            . 'Use components/ui/checkbox, ui/switch or ui/radio-group. Offenders: ' . implode(', ', $offenders),
     );
 });
 
@@ -74,7 +74,7 @@ test('a view carries at most one hand tell', function () {
         }
     }
 
-    expect($offenders)->toBe([], 'MONOVEN_DESIGN §7: the marker stroke is used once per view. Offenders: '.json_encode($offenders));
+    expect($offenders)->toBe([], 'MONOVEN_DESIGN §7: the marker stroke is used once per view. Offenders: ' . json_encode($offenders));
 });
 
 test('every full bleed page carries the hand tell and the Monoven mark', function () {
@@ -93,7 +93,7 @@ test('every full bleed page carries the hand tell and the Monoven mark', functio
 
     expect($missing)->toBe(
         [],
-        'A page with no layout inherits no branding, so it has to carry its own. '.json_encode($missing),
+        'A page with no layout inherits no branding, so it has to carry its own. ' . json_encode($missing),
     );
 });
 
@@ -107,7 +107,7 @@ test('the interface avoids the anti-patterns the design language names', functio
         }
     }
 
-    expect($offenders)->toBe([], "MONOVEN_DESIGN §12: {$why}. Offenders: ".implode(', ', $offenders));
+    expect($offenders)->toBe([], "MONOVEN_DESIGN §12: {$why}. Offenders: " . implode(', ', $offenders));
 })->with([
     ['/\bbg-gradient-to-|\bfrom-\[#|\bbg-\[linear-gradient/', 'no gradient meshes as the personality'],
     ['/\bbackdrop-blur/', 'no glassmorphism as decoration'],
@@ -123,14 +123,14 @@ test('icons come from one set only', function () {
 
         foreach ($matches[1] as $import) {
             if (!str_starts_with($import, '@/') && !str_contains($import, 'lucide')) {
-                $offenders[] = $path.' → '.$import;
+                $offenders[] = $path . ' → ' . $import;
             }
         }
     }
 
     expect($offenders)->toBe(
         [],
-        'MONOVEN_DESIGN §7: Lucide only. Mixing icon sets breaks the line signature. Offenders: '.implode(', ', $offenders),
+        'MONOVEN_DESIGN §7: Lucide only. Mixing icon sets breaks the line signature. Offenders: ' . implode(', ', $offenders),
     );
 });
 

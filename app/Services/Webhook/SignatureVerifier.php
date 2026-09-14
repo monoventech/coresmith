@@ -28,8 +28,8 @@ final class SignatureVerifier
         $digest = hash_hmac('sha256', $payload, $secret);
 
         return match ($provider) {
-            'github' => 'sha256='.$digest,
-            'bitbucket' => 'sha256='.$digest,
+            'github' => 'sha256=' . $digest,
+            'bitbucket' => 'sha256=' . $digest,
             default => $digest,
         };
     }

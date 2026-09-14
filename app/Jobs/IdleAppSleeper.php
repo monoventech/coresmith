@@ -35,7 +35,7 @@ final class IdleAppSleeper implements ShouldQueue
             ->where('idle_timeout_minutes', '>', 0)
             ->whereNotNull('last_request_at')
             ->get()
-            ->filter(fn (Application $application): bool => $application->last_request_at
+            ->filter(fn(Application $application): bool => $application->last_request_at
                 ->addMinutes((int) $application->idle_timeout_minutes)
                 ->isPast())
             ->each(function (Application $application) use ($connections, $processes): void {

@@ -9,32 +9,30 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\DeploymentStatus;
+use App\Enums\PowerState;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
+use App\Jobs\DetachApplication;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Git\DeployKeyManager;
+use App\Services\Git\Repository;
+use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\DeploymentPresenter;
+use App\Services\Panel\Formats;
+use App\Services\Panel\SmartToggles;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
+use App\Services\SSH\HostKeyFingerprint;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class ApplicationController extends Controller
 {
-    public function index(Server $server): Response
-    {
-        $this->authorize('view', $server);
-
-        return Inertia::render('applications/Index', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
-            'applications' => $server->applications()
-                ->latest()
-                ->get()
-                ->map(fn (Application $application): array => $this->summarise($application)),
-            'can' => ['update' => auth()->user()?->can('update', $server) ?? false],
-        ]);
-    }
+    public const SECRET_KEYS = '/(PASSWORD|SECRET|TOKEN|KEY|DSN|PRIVATE)/i';
 
     public function create(Server $server): Response
     {
@@ -42,7 +40,7 @@ final class ApplicationController extends Controller
         $this->authorize('create', Application::class);
 
         return Inertia::render('applications/Create', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
         ]);
     }
 
@@ -64,65 +62,71 @@ final class ApplicationController extends Controller
             'status' => ApplicationStatus::Pending,
         ]);
 
+        activity()->performedOn($application)->log('application_created');
+
         return to_route('servers.applications.show', [$server, $application])
             ->with('success', 'Application created. Deploy it when you are ready.');
     }
 
-    public function show(Server $server, Application $application): Response
+    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles): Response
     {
         $this->authorize('view', $application);
         $this->assertBelongsTo($server, $application);
 
+        $user = $request->user();
+        $canManageEnvironment = $user->can('manageEnvironment', $application);
+        $latest = $application->deployments()->latest('created_at')->first();
+        $running = $latest?->status === DeploymentStatus::Running ? $latest : null;
+        $usesKey = $keys->usesDeployKey($application);
+        $publicKey = $usesKey ? $keys->ensure($application)->deploy_key_public : null;
+
         return Inertia::render('applications/Show', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
             'application' => [
-                ...$this->summarise($application),
-                'repository_url' => $application->repository_url,
-                'repository_branch' => $application->repository_branch,
-                'directory' => $application->directory,
-                'web_directory' => $application->web_directory,
-                'additional_domains' => $application->additional_domains,
-                'php_version' => $application->php_version,
-                'node_version' => $application->node_version,
-                'ruby_version' => $application->ruby_version,
-                'power_state' => $application->power_state->value,
-                'toggles' => (object) ((array) $application->toggles),
-                'uses_deploy_key' => app(DeployKeyManager::class)->usesDeployKey($application),
-                'deploy_key_public' => app(DeployKeyManager::class)->usesDeployKey($application)
-                    ? app(DeployKeyManager::class)->ensure($application)->deploy_key_public
-                    : null,
+                'id' => $application->id,
+                'name' => $application->name,
+                'state' => $running === null ? ApplicationPresenter::state($application) : ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
+                'kind' => ApplicationPresenter::kind($application),
+                'runtime' => ApplicationPresenter::runtime($application),
+                'domain' => $application->domain,
+                'additional_domains' => array_values((array) $application->additional_domains),
+                'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
+                'branch' => $application->repository_branch,
+                'current_release' => Formats::release($application->current_release),
+                'power_state' => $application->power_state?->value,
+                'stopped' => $application->power_state === PowerState::Stopped,
+                'maintenance' => (bool) (((array) $application->toggles)['maintenance_mode'] ?? false),
+                'user' => $application->system_user,
+                'ports' => ApplicationPresenter::portBlock($application),
+                'processes' => array_values(array_filter((array) $application->processes, 'is_array')),
+                'cron_jobs' => array_values(array_filter((array) $application->cron_jobs, 'is_array')),
+                'deploy_key' => $publicKey === null ? null : [
+                    'fingerprint' => HostKeyFingerprint::fromPublicKey($publicKey),
+                    'short' => Formats::fingerprint(HostKeyFingerprint::fromPublicKey($publicKey)),
+                    'public_key' => $publicKey,
+                    'repository' => Repository::slug((string) $application->repository_url),
+                ],
+                'environment' => $this->environmentPreview((string) $application->env_variables, $canManageEnvironment),
+                'env' => $canManageEnvironment ? (string) $application->env_variables : null,
+                'latest_deployment' => $latest === null ? null : [
+                    ...DeploymentPresenter::row($latest->setRelation('application', $application->setRelation('server', $server))),
+                    'href' => route('servers.applications.deployments.show', [$server, $application, $latest, 'from' => 'app']),
+                ],
+                'running_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $application, $running, 'from' => 'app']),
+                'releases_href' => route('servers.applications.releases.index', [$server, $application]),
+                'deploy_href' => route('servers.applications.deploy', [$server, $application]),
+                'logs_href' => route('servers.applications.logs', [$server, $application]),
+                'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
             ],
-            'deployments' => $application->deployments()
-                ->latest()
-                ->limit(10)
-                ->get()
-                ->map(fn ($deployment): array => [
-                    'id' => $deployment->id,
-                    'status' => $deployment->status?->value,
-                    'commit_hash' => $deployment->commit_hash,
-                    'commit_message' => $deployment->commit_message,
-                    'finished_at' => $deployment->finished_at?->toIso8601String(),
-                ]),
+            'toggles' => array_map(fn(array $toggle): array => [
+                ...$toggle,
+                'href' => route('servers.applications.toggles.update', [$server, $application, $toggle['key']]),
+            ], $toggles->describe($application)),
             'can' => [
-                'update' => auth()->user()?->can('update', $application) ?? false,
-                'delete' => auth()->user()?->can('delete', $application) ?? false,
-                'deploy' => auth()->user()?->can('deploy', $application) ?? false,
-                'manageEnvironment' => auth()->user()?->can('manageEnvironment', $application) ?? false,
-            ],
-        ]);
-    }
-
-    public function edit(Server $server, Application $application): Response
-    {
-        $this->authorize('update', $application);
-        $this->assertBelongsTo($server, $application);
-
-        return Inertia::render('applications/Edit', [
-            'server' => ['id' => $server->id, 'name' => $server->name],
-            'application' => $this->summarise($application),
-            'can' => [
-                'update' => true,
-                'manageEnvironment' => auth()->user()?->can('manageEnvironment', $application) ?? false,
+                'update' => $user->can('update', $application),
+                'delete' => $user->can('delete', $application),
+                'deploy' => $user->can('deploy', $application),
+                'manageEnvironment' => $canManageEnvironment,
             ],
         ]);
     }
@@ -131,10 +135,15 @@ final class ApplicationController extends Controller
     {
         $this->assertBelongsTo($server, $application);
 
+        $before = $application->allDomains();
+
         $application->update($request->validated());
 
-        return to_route('servers.applications.show', [$server, $application])
-            ->with('success', 'Application updated.');
+        foreach (array_diff($application->allDomains(), $before) as $domain) {
+            activity()->performedOn($application)->withProperties(['domain' => $domain])->log('domain_added');
+        }
+
+        return back()->with('success', 'Saved.');
     }
 
     public function destroy(Server $server, Application $application): RedirectResponse
@@ -142,9 +151,13 @@ final class ApplicationController extends Controller
         $this->authorize('delete', $application);
         $this->assertBelongsTo($server, $application);
 
+        activity()->performedOn($application)->log('application_removed');
+
         $application->delete();
 
-        return to_route('servers.applications.index', $server)->with('success', 'Application removed.');
+        DetachApplication::dispatch($application);
+
+        return to_route('servers.show', $server)->with('success', "Removed. {$application->name} was stopped and detached.");
     }
 
     private function assertBelongsTo(Server $server, Application $application): void
@@ -153,22 +166,30 @@ final class ApplicationController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
+     * @return list<array{key: string, value: string, secret: bool}>
      */
-    private function summarise(Application $application): array
+    private function environmentPreview(string $env, bool $reveal): array
     {
-        return [
-            'id' => $application->id,
-            'name' => $application->name,
-            'slug' => $application->slug,
-            'type' => $application->type?->value,
-            'framework' => $application->framework,
-            'domain' => $application->domain,
-            'status' => $application->status?->value,
-            'power_state' => $application->power_state?->value,
-            'app_size' => $application->app_size,
-            'base_port' => $application->base_port,
-            'run_migrations' => (bool) $application->run_migrations,
-        ];
+        $lines = [];
+
+        foreach (preg_split('/\R/', $env) ?: [] as $line) {
+            if (preg_match('/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $matches) !== 1) {
+                continue;
+            }
+
+            $secret = preg_match(self::SECRET_KEYS, $matches[1]) === 1;
+
+            $lines[] = [
+                'key' => $matches[1],
+                'value' => $secret || !$reveal ? '••••••••' : trim($matches[2], "\"'"),
+                'secret' => $secret,
+            ];
+
+            if (count($lines) === 4) {
+                break;
+            }
+        }
+
+        return $lines;
     }
 }

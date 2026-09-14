@@ -159,7 +159,7 @@ test('the php version the installer installs satisfies what the project requires
     $minimum = ltrim((string) preg_replace('/^[^0-9]*/', '', $required), 'v');
 
     expect($installs)->not->toBeEmpty()
-        ->and(version_compare($installs.'.0', $minimum.(substr_count($minimum, '.') < 2 ? '.0' : ''), '>='))
+        ->and(version_compare($installs . '.0', $minimum . (substr_count($minimum, '.') < 2 ? '.0' : ''), '>='))
         ->toBeTrue("The installer installs PHP {$installs}, which is older than composer.json's \"{$required}\".");
 });
 
@@ -170,20 +170,28 @@ test('every phase the installer announces is actually defined', function () {
 
     expect(array_unique($matches[1]))->toHaveCount(8);
 
-    foreach ([
-        'install_system_packages', 'install_caddy', 'create_user_and_dirs', 'install_coresmith_app',
-        'configure_environment', 'configure_caddy', 'create_systemd_services', 'finalize',
-    ] as $function) {
-        expect($body)->toContain($function.'() {')
+    foreach (
+        [
+            'install_system_packages',
+            'install_caddy',
+            'create_user_and_dirs',
+            'install_coresmith_app',
+            'configure_environment',
+            'configure_caddy',
+            'create_systemd_services',
+            'finalize',
+        ] as $function
+    ) {
+        expect($body)->toContain($function . '() {')
             ->and($body)->toContain("\n    {$function}\n");
     }
 });
 
 test('writing the environment survives a password full of shell metacharacters', function () {
-    $directory = sys_get_temp_dir().'/coresmith-env-'.getmypid();
+    $directory = sys_get_temp_dir() . '/coresmith-env-' . getmypid();
     @mkdir($directory, 0700, true);
 
-    file_put_contents($directory.'/.env', "APP_ENV=local\nDB_PASSWORD=\nKEEP=me\n");
+    file_put_contents($directory . '/.env', "APP_ENV=local\nDB_PASSWORD=\nKEEP=me\n");
 
     preg_match('/^update_env\(\) \{.*?^\}$/ms', installScriptBody(), $matches);
     $function = $matches[0] ?? '';
@@ -191,22 +199,22 @@ test('writing the environment survives a password full of shell metacharacters',
     expect($function)->not->toBeEmpty();
 
     $password = 'p|ss&w"rd$with\\slashes/and|pipes';
-    $script = 'INSTALL_DIR='.escapeshellarg($directory)."\n{$function}\n"
-        ."update_env APP_ENV 'production'\n"
-        .'update_env DB_PASSWORD '.escapeshellarg($password)."\n"
-        ."update_env NEW_KEY 'added'\n";
+    $script = 'INSTALL_DIR=' . escapeshellarg($directory) . "\n{$function}\n"
+        . "update_env APP_ENV 'production'\n"
+        . 'update_env DB_PASSWORD ' . escapeshellarg($password) . "\n"
+        . "update_env NEW_KEY 'added'\n";
 
     $process = new Process(['bash', '-c', $script]);
     $process->run();
 
-    $result = (string) file_get_contents($directory.'/.env');
+    $result = (string) file_get_contents($directory . '/.env');
 
-    @unlink($directory.'/.env');
+    @unlink($directory . '/.env');
     @rmdir($directory);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($result)->toContain('APP_ENV=production')
-        ->and($result)->toContain('DB_PASSWORD='.$password)
+        ->and($result)->toContain('DB_PASSWORD=' . $password)
         ->and($result)->toContain('KEEP=me')
         ->and($result)->toContain('NEW_KEY=added')
         ->and(substr_count($result, 'APP_ENV='))->toBe(1);
@@ -214,7 +222,7 @@ test('writing the environment survives a password full of shell metacharacters',
 
 test('the continuous integration workflows are present and valid', function () {
     foreach (['ci.yml', 'installer.yml'] as $workflow) {
-        expect(is_file(base_path('.github/workflows/'.$workflow)))->toBeTrue("{$workflow} is missing");
+        expect(is_file(base_path('.github/workflows/' . $workflow)))->toBeTrue("{$workflow} is missing");
     }
 
     $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
@@ -233,4 +241,21 @@ test('the installer workflow proves the instance it built actually works', funct
         ->and($workflow)->toContain('/etc/coresmith/setup-token')
         ->and($workflow)->toContain('expected 403')
         ->and($workflow)->toContain('expected 503');
+});
+
+test('caddy only issues certificates for hosts the panel approves, asked over loopback', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('permission http {')
+        ->and($body)->toContain('endpoint http://127.0.0.1:8484/api/caddy/ask')
+        ->and($body)->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
+        ->and($body)->toContain("https:// {\n    tls {\n        on_demand\n    }");
+});
+
+test('team domains get hsts for themselves only, never for the customer subdomains', function () {
+    $site = str(installScriptBody())->after("https:// {\n")->before("\n}\nSITECONF")->toString();
+
+    expect($site)->toContain('Strict-Transport-Security "max-age=31536000"')
+        ->and($site)->not->toContain('includeSubDomains')
+        ->and($site)->not->toContain('preload');
 });

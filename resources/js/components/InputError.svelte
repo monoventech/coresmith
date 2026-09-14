@@ -1,15 +1,7 @@
 <script lang="ts">
-    import { cn } from '@/lib/utils'
+    import FieldError from '@/components/FieldError.svelte'
 
-    let {
-        message = '',
-        class: className = ''
-    }: {
-        message?: string
-        class?: string
-    } = $props()
+    let { message = '' }: { message?: string; class?: string } = $props()
 </script>
 
-{#if message}
-    <p class={cn('text-sm text-destructive', className)}>{message}</p>
-{/if}
+<FieldError {message} />

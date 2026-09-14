@@ -6,10 +6,10 @@
 		ref = $bindable(null),
 		class: className,
 		checked = $bindable(false),
-		size = "default",
+		busy = false,
 		...restProps
 	}: WithoutChildrenOrChild<SwitchPrimitive.RootProps> & {
-		size?: "sm" | "default";
+		busy?: boolean;
 	} = $props();
 </script>
 
@@ -17,15 +17,19 @@
 	bind:ref
 	bind:checked
 	data-slot="switch"
-	data-size={size}
+	aria-busy={busy || undefined}
 	class={cn(
-		"data-checked:bg-primary data-unchecked:bg-input focus-visible:border-ring focus-visible:ring-ring aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 dark:data-unchecked:bg-input/80 shrink-0 rounded-full border border-transparent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:ring-3 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] peer group/switch relative inline-flex items-center transition-[color,background-color,border-color,opacity,transform] outline-none after:absolute after:-inset-x-3 after:-inset-y-2 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+		"focus-ring relative inline-block h-6 w-10 shrink-0 cursor-pointer rounded-md border border-border p-0 transition-colors duration-(--dur-fast) ease-(--ease-out-soft) data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted data-disabled:cursor-not-allowed data-disabled:opacity-50",
+		busy && "data-[state=checked]:bg-track-busy data-[state=unchecked]:bg-track-busy",
 		className
 	)}
 	{...restProps}
 >
 	<SwitchPrimitive.Thumb
 		data-slot="switch-thumb"
-		class="bg-background dark:data-unchecked:bg-foreground dark:data-checked:bg-primary-foreground rounded-full group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 pointer-events-none block ring-0 transition-transform rtl:data-[state=checked]:translate-x-[calc(-100%)]"
+		class={cn(
+			"pointer-events-none absolute top-0.5 block size-4.5 rounded-[6px] transition-[left] duration-(--dur-fast) ease-(--ease-out-soft) data-[state=checked]:left-4.5 data-[state=checked]:bg-primary-foreground data-[state=unchecked]:left-0.5 data-[state=unchecked]:bg-muted-foreground",
+			busy && "data-[state=checked]:left-2.5 data-[state=unchecked]:left-2.5"
+		)}
 	/>
 </SwitchPrimitive.Root>

@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Panel\FleetSnapshot;
 use App\Services\Server\MetricsCollector;
 use Illuminate\Console\Scheduling\Schedule;
 
@@ -90,33 +91,43 @@ test('pruning works past a single batch', function () {
 
 test('pruning is scheduled so the table cannot grow without bound', function () {
     $events = collect(app(Schedule::class)->events())
-        ->filter(fn ($event): bool => str_contains((string) $event->command, 'coresmith:prune-metrics'));
+        ->filter(fn($event): bool => str_contains((string) $event->command, 'coresmith:prune-metrics'));
 
     expect($events)->toHaveCount(1)
         ->and($events->first()->expression)->toBe('15 3 * * 0');
 });
 
-test('the server page carries the latest reading and an hour of history', function () {
+test('the server page carries the latest reading and a day of hourly averages', function () {
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['meta' => ['cpu_cores' => 4]]);
+    $server = Server::factory()->for($team)->create();
 
     ServerMetric::factory()->for($server)->create([
-        'cpu_percent' => 12.34,
-        'memory_percent' => 44.0,
-        'disk_percent' => 61.0,
-        'load_1m' => 0.42,
-        'recorded_at' => now()->subMinutes(30),
+        'cpu_percent' => 10.2,
+        'memory_percent' => 40.2,
+        'disk_percent' => 61.1,
+        'recorded_at' => now()->subMinutes(100),
     ]);
-    ServerMetric::factory()->for($server)->create(['recorded_at' => now()->subMinutes(5)]);
+    ServerMetric::factory()->for($server)->create([
+        'cpu_percent' => 14.4,
+        'memory_percent' => 48.4,
+        'disk_percent' => 61.3,
+        'recorded_at' => now()->subMinutes(70),
+    ]);
+    ServerMetric::factory()->for($server)->create([
+        'cpu_percent' => 30.46,
+        'memory_percent' => 50.54,
+        'disk_percent' => 62.16,
+        'recorded_at' => now()->subMinutes(5),
+    ]);
     ServerMetric::factory()->for($server)->create(['recorded_at' => now()->subDays(2)]);
 
     $this->actingAs(metricsUser($team, TeamRole::Member))
         ->get(route('servers.show', $server))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->has('metrics.history', 2)
-            ->where('metrics.cores', 4)
-            ->where('metrics.history.0.cpu_percent', 12.3));
+        ->assertInertia(fn($page) => $page
+            ->where('server.metrics.cpu', ['now' => 30, 'series' => [12.3, 30.5]])
+            ->where('server.metrics.memory', ['now' => 51, 'series' => [44.3, 50.5]])
+            ->where('server.metrics.disk', ['now' => 62, 'series' => [61.2, 62.2]]));
 });
 
 test('a server that has never been read reports no metrics rather than failing', function () {
@@ -126,19 +137,40 @@ test('a server that has never been read reports no metrics rather than failing',
     $this->actingAs(metricsUser($team, TeamRole::Member))
         ->get(route('servers.show', $server))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('metrics.latest', null)->has('metrics.history', 0));
+        ->assertInertia(fn($page) => $page->where('server.metrics', [
+            'cpu' => ['now' => null, 'series' => []],
+            'memory' => ['now' => null, 'series' => []],
+            'disk' => ['now' => null, 'series' => []],
+        ]));
 });
 
 test('the latest reading is the most recent one, not the first inserted', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
 
-    ServerMetric::factory()->for($server)->create(['cpu_percent' => 10.0, 'recorded_at' => now()->subMinutes(2)]);
-    ServerMetric::factory()->for($server)->create(['cpu_percent' => 90.5, 'recorded_at' => now()->subMinutes(1)]);
+    ServerMetric::factory()->for($server)->create(['cpu_percent' => 10.0, 'recorded_at' => now()->subMinutes(3)]);
+    ServerMetric::factory()->for($server)->create(['cpu_percent' => 90.0, 'recorded_at' => now()->subMinutes(1)]);
+    ServerMetric::factory()->for($server)->create(['cpu_percent' => 20.0, 'recorded_at' => now()->subMinutes(2)]);
 
     $this->actingAs(metricsUser($team, TeamRole::Member))
         ->get(route('servers.show', $server))
-        ->assertInertia(fn ($page) => $page->where('metrics.latest.cpu_percent', 90.5));
+        ->assertInertia(fn($page) => $page->where('server.metrics.cpu.now', 90));
+});
+
+test('a reading older than the freshness window stays in the history but is not shown as current', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    ServerMetric::factory()->for($server)->create([
+        'cpu_percent' => 42.4,
+        'recorded_at' => now()->subMinutes(FleetSnapshot::FRESH_METRIC_MINUTES + 1),
+    ]);
+
+    $this->actingAs(metricsUser($team, TeamRole::Member))
+        ->get(route('servers.show', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('server.metrics.cpu.now', null)
+            ->where('server.metrics.cpu.series', [42.4]));
 });
 
 test('another teams metrics are not reachable', function () {

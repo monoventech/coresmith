@@ -12,28 +12,9 @@ use App\Models\Application;
 use App\Models\Server;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 
 final class EnvController extends Controller
 {
-    public function show(Server $server, Application $application): Response
-    {
-        $this->authorize('manageEnvironment', $application);
-
-        abort_unless($application->server_id === $server->id, 404);
-
-        return Inertia::render('applications/Env', [
-            'can' => [
-                'update' => auth()->user()?->can('update', $application) ?? false,
-                'manageEnvironment' => true,
-            ],
-            'server' => ['id' => $server->id, 'name' => $server->name],
-            'application' => ['id' => $application->id, 'name' => $application->name],
-            'env' => (string) $application->env_variables,
-        ]);
-    }
-
     public function update(Request $request, Server $server, Application $application): RedirectResponse
     {
         $this->authorize('manageEnvironment', $application);
@@ -46,6 +27,8 @@ final class EnvController extends Controller
 
         $application->update(['env_variables' => $validated['env'] ?? null]);
 
-        return back()->with('success', 'Environment saved. Deploy to apply it.');
+        activity()->performedOn($application)->log('environment_updated');
+
+        return back()->with('success', 'Saved. The new values are written at the next deploy.');
     }
 }

@@ -4,24 +4,24 @@
 	import { type VariantProps, tv } from "tailwind-variants";
 
 	export const buttonVariants = tv({
-		base: "focus-visible:border-ring focus-visible:ring-ring aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-md border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:not-aria-[haspopup]:translate-y-px aria-invalid:ring-3 [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] outline-none select-none disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		base: "focus-ring inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent font-sans text-[14px] leading-none font-medium no-underline select-none transition-[color,background-color,border-color,transform] duration-(--dur-fast) ease-(--ease-out-soft) active:not-disabled:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer",
 		variants: {
 			variant: {
-				default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-				outline: "border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground",
-				secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-				ghost: "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground",
-				destructive: "bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive-strong focus-visible:border-destructive/40 dark:hover:bg-destructive/30",
-				link: "text-primary underline-offset-4 hover:underline",
+				default: "bg-primary text-primary-foreground hover:not-disabled:bg-primary-hover",
+				secondary: "bg-secondary text-secondary-foreground hover:not-disabled:bg-secondary-hover",
+				outline: "border-border bg-transparent text-foreground hover:not-disabled:bg-muted",
+				ghost: "bg-transparent text-foreground hover:not-disabled:bg-accent",
+				destructive: "bg-destructive text-destructive-foreground hover:not-disabled:bg-destructive-hover",
+				link: "h-auto! bg-transparent p-0! text-primary underline-offset-4 hover:underline",
 			},
 			size: {
-				default: "h-10 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-				xs: "h-8 gap-1 rounded-[min(var(--radius-md),10px)] px-2.5 text-xs in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5",
-				sm: "h-9 gap-1 rounded-[min(var(--radius-md),12px)] px-3 text-[0.8rem] in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 [&_svg:not([class*='size-'])]:size-4",
-				lg: "h-11 gap-1.5 px-6 has-data-[icon=inline-end]:pr-5 has-data-[icon=inline-start]:pl-5",
+				default: "h-10 px-4",
+				xs: "h-8 px-2.5 text-[12px]",
+				sm: "h-9 px-3",
+				lg: "h-11 px-6",
 				icon: "size-10",
-				"icon-xs": "size-8 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-md [&_svg:not([class*='size-'])]:size-3.5",
-				"icon-sm": "size-9 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-md",
+				"icon-xs": "size-8",
+				"icon-sm": "size-9",
 				"icon-lg": "size-11",
 			},
 		},
@@ -42,6 +42,8 @@
 </script>
 
 <script lang="ts">
+	import { Link } from "@inertiajs/svelte";
+
 	let {
 		class: className,
 		variant = "default",
@@ -53,9 +55,24 @@
 		children,
 		...restProps
 	}: ButtonProps = $props();
+
+	const internal = $derived(
+		typeof href === "string" && !restProps.target && !restProps.download && (href.startsWith("/") || (typeof window !== "undefined" && href.startsWith(window.location.origin)))
+	);
+
+	const linkProps = $derived(restProps as Record<string, unknown>);
 </script>
 
-{#if href}
+{#if href && internal && !disabled}
+	<Link
+		data-slot="button"
+		class={cn(buttonVariants({ variant, size }), className)}
+		{href}
+		{...linkProps}
+	>
+		{@render children?.()}
+	</Link>
+{:else if href}
 	<a
 		bind:this={ref}
 		data-slot="button"

@@ -41,6 +41,7 @@ class Deployment extends Model
             'status' => DeploymentStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'tag_signed' => 'boolean',
         ];
     }
 }

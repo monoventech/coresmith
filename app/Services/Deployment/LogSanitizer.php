@@ -81,8 +81,8 @@ final class LogSanitizer
 
         if (is_array($decoded)) {
             return array_filter(
-                array_map(static fn (mixed $value): string => is_scalar($value) ? (string) $value : '', $decoded),
-                static fn (string $value): bool => $value !== '',
+                array_map(static fn(mixed $value): string => is_scalar($value) ? (string) $value : '', $decoded),
+                static fn(string $value): bool => $value !== '',
             );
         }
 

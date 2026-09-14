@@ -28,7 +28,7 @@ test('coresmith config exposes vault_key entry', function () {
 test('inertia shares appName, billingEnabled, vaultKeyConfigured', function () {
     $response = $this->get('/');
     $response->assertInertia(
-        fn ($page) => $page
+        fn($page) => $page
             ->where('appName', 'Coresmith')
             ->where('billingEnabled', false)
             ->where('vaultKeyConfigured', true)
@@ -38,5 +38,5 @@ test('inertia shares appName, billingEnabled, vaultKeyConfigured', function () {
 test('vaultKeyConfigured is false when no vault key is set', function () {
     config(['coresmith.vault_key' => null]);
 
-    $this->get('/')->assertInertia(fn ($page) => $page->where('vaultKeyConfigured', false));
+    $this->get('/')->assertInertia(fn($page) => $page->where('vaultKeyConfigured', false));
 });

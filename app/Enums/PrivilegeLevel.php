@@ -15,19 +15,35 @@ enum PrivilegeLevel: string
     case Full = 'full';
 
     private const STANDARD = [
-        'SELECT', 'INSERT', 'UPDATE', 'DELETE',
-        'CREATE', 'ALTER', 'INDEX', 'DROP',
-        'REFERENCES', 'TRIGGER',
-        'LOCK TABLES', 'EXECUTE',
+        'SELECT',
+        'INSERT',
+        'UPDATE',
+        'DELETE',
+        'CREATE',
+        'ALTER',
+        'INDEX',
+        'DROP',
+        'REFERENCES',
+        'TRIGGER',
+        'LOCK TABLES',
+        'EXECUTE',
         'CREATE TEMPORARY TABLES',
     ];
 
     private const EXTENDED_EXTRA = [
-        'CREATE VIEW', 'CREATE ROUTINE', 'ALTER ROUTINE', 'EVENT', 'SHOW VIEW',
+        'CREATE VIEW',
+        'CREATE ROUTINE',
+        'ALTER ROUTINE',
+        'EVENT',
+        'SHOW VIEW',
     ];
 
     private const FULL_EXTRA = [
-        'CREATE VIEW', 'CREATE ROUTINE', 'ALTER ROUTINE', 'EVENT', 'SHOW VIEW',
+        'CREATE VIEW',
+        'CREATE ROUTINE',
+        'ALTER ROUTINE',
+        'EVENT',
+        'SHOW VIEW',
     ];
 
     /**

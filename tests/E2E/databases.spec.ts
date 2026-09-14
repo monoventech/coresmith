@@ -1,60 +1,84 @@
-import { expect, gotoDatabases, settled, test } from './support/fixtures'
+import { databaseRow, dialog, expect, gotoDatabase, gotoServerTab, own, test, toast } from './support/fixtures'
 
-test.describe('Databases', () => {
-    test('seeded databases are listed', async ({ page }) => {
-        await gotoDatabases(page)
+test.describe('databases', () => {
+    test('a server lists its databases with engine and user', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Databases')
 
-        await expect(page.getByRole('heading', { name: 'Databases' })).toBeVisible()
-        await expect(page.getByRole('link', { name: 'storefront_production' })).toBeVisible()
+        await expect(databaseRow(page, 'atlas_production')).toBeVisible()
+        await expect(databaseRow(page, 'ledger_production')).toBeVisible()
+        await expect(page.getByTestId('databases-table')).toContainText('Databases listen on localhost only.')
     })
 
-    test('an empty server shows the empty state', async ({ page }) => {
-        await gotoDatabases(page, 'empty-server')
+    test('a server without databases explains and offers to create one', async ({ page }) => {
+        await gotoServerTab(page, 'forge-02', 'Databases')
 
-        await expect(page.getByText('No databases yet')).toBeVisible()
+        await expect(page.getByText('No databases on this server.')).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Create a database' })).toBeVisible()
     })
 
-    test('a database can be created', async ({ page }) => {
-        const name = `shop_${Date.now()}`
+    test('a server that is not connected cannot create one yet', async ({ page }) => {
+        await gotoServerTab(page, 'empty-server', 'Databases')
 
-        await gotoDatabases(page)
-        await page.getByRole('link', { name: /New database|Create a database/ }).click()
+        await expect(page.getByText('No databases on this server.')).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Create a database' })).toHaveCount(0)
+    })
 
+    test('a database is created with a user of its own', async ({ page }) => {
+        const name = `shop_${Date.now().toString(36)}`
+
+        await gotoServerTab(page, 'anvil-01', 'Databases')
+        await page.getByRole('link', { name: 'Create a database' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Create a database' })).toBeVisible()
         await page.getByLabel('Database name').fill(name)
-        await page.getByLabel('Database user').fill(`${name}_user`)
-        await page.getByRole('button', { name: 'Create database' }).click()
+        await page.getByLabel('User', { exact: true }).fill(`${name}_app`)
+        await page.getByRole('button', { name: 'Create the database' }).click()
 
-        await settled(page, 'queued for creation')
-        await expect(page.getByRole('link', { name })).toBeVisible()
+        await expect(toast(page)).toContainText('Database queued for creation.')
+        await expect(databaseRow(page, name)).toBeVisible()
     })
 
-    test('a name carrying sql metacharacters is refused', async ({ page }) => {
-        await gotoDatabases(page)
-        await page.getByRole('link', { name: /New database|Create a database/ }).click()
+    test('a name carrying sql metacharacters is refused next to the field', async ({ page }) => {
+        await gotoServerTab(page, 'anvil-01', 'Databases')
+        await page.getByRole('link', { name: 'Create a database' }).click()
 
         await page.getByLabel('Database name').fill('shop`; DROP DATABASE mysql; --')
-        await page.getByLabel('Database user').fill('shop_user')
-        await page.getByRole('button', { name: 'Create database' }).click()
+        await page.getByLabel('User', { exact: true }).fill('shop_user')
+        await page.getByRole('button', { name: 'Create the database' }).click()
 
-        await settled(page, 'letters, digits and underscores')
+        await expect(page.getByLabel('Database name')).toHaveAttribute('aria-invalid', 'true')
     })
 
-    test('the detail page shows the connection but never a password', async ({ page }) => {
-        await gotoDatabases(page)
-        await page.getByRole('link', { name: 'storefront_production' }).click()
+    test('a database shows how to connect but never a password', async ({ page }) => {
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
 
         await expect(page.getByRole('heading', { name: 'Connection' })).toBeVisible()
-        await expect(page.getByText('Localhost only')).toBeVisible()
+        await expect(page.getByRole('main')).toContainText('PostgreSQL · on forge-01 · localhost only')
+        await expect(page.getByRole('main')).toContainText('postgresql://atlas_app@')
 
         const html = await page.content()
+
         expect(html).not.toContain('db_password')
     })
 
-    test('a backup can be started', async ({ page }) => {
-        await gotoDatabases(page)
-        await page.getByRole('link', { name: 'storefront_production' }).click()
-        await page.getByRole('button', { name: /Back up now/i }).click()
+    test('a backup is started from the database', async ({ page }) => {
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
 
-        await settled(page, 'Backup started')
+        await page.getByRole('button', { name: 'Back up now' }).click()
+
+        await expect(toast(page)).toContainText('Backup started.')
+    })
+
+    test('deleting asks first, then removes it from the panel', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'doomed', '_')
+
+        await gotoDatabase(page, 'bench-01', name)
+
+        await page.getByRole('button', { name: 'Delete this database' }).click()
+        await expect(dialog(page)).toContainText(`Delete ${name}?`)
+        await dialog(page).getByRole('button', { name: 'Delete it' }).click()
+
+        await expect(toast(page)).toContainText('Database removed.')
+        await expect(databaseRow(page, name)).toHaveCount(0)
     })
 })

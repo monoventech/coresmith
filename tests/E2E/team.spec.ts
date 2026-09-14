@@ -1,79 +1,85 @@
-import { asMember, expect, settled, test } from './support/fixtures'
+import type { Page } from '@playwright/test'
+import { asMember, dialog, expect, gotoSettings, own, test, toast } from './support/fixtures'
 
-test.describe('Team management', () => {
-    test('the roster lists everyone with their role', async ({ page }) => {
-        await page.goto('/teams')
+function member(page: Page, email: string) {
+    return page.getByTestId('member-row').filter({ hasText: email })
+}
 
-        await expect(page.getByRole('heading', { name: 'Monoven' })).toBeVisible()
-        await expect(page.getByText('owner@coresmith.test')).toBeVisible()
-        await expect(page.getByText('member@coresmith.test')).toBeVisible()
-        await expect(page.getByText('(you)')).toBeVisible()
+test.describe('the team', () => {
+    test('everyone is listed with their role and whether they use two-factor', async ({ page }) => {
+        await gotoSettings(page, 'Team')
+
+        const card = page.getByTestId('team-card')
+
+        await expect(card.getByRole('heading', { name: 'Monoven Ltd' })).toBeVisible()
+        await expect(member(page, 'owner@coresmith.test')).toContainText('(you)')
+        await expect(member(page, 'owner@coresmith.test')).toContainText('Owner')
+        await expect(member(page, 'jonas@coresmith.test')).toContainText('2FA')
+        await expect(member(page, 'member@coresmith.test')).toContainText('No 2FA')
+        await expect(card).toContainText('Deployers can deploy and roll back.')
     })
 
-    test('the team page is reachable from settings', async ({ page }) => {
-        await page.goto('/settings/profile')
-        await page.getByRole('link', { name: 'Team' }).first().click()
+    test('your own row cannot change your own role', async ({ page }) => {
+        await gotoSettings(page, 'Team')
 
-        await expect(page).toHaveURL(/teams/)
+        await expect(member(page, 'owner@coresmith.test').getByRole('combobox')).toHaveCount(0)
+        await expect(member(page, 'owner@coresmith.test').getByRole('button')).toHaveCount(0)
     })
 
-    test('an owner can change a members role', async ({ page }) => {
-        await page.goto('/teams')
+    test('a role is changed and kept', async ({ page }) => {
+        await gotoSettings(page, 'Team')
 
-        const row = page.locator('li').filter({ hasText: 'member@coresmith.test' })
-        await row.getByRole('combobox').selectOption('admin')
+        const role = member(page, 'rowan@coresmith.test').getByRole('combobox', { name: 'Role for Rowan Hale' })
 
-        await settled(page, 'Role updated')
+        await role.selectOption('admin')
+        await expect(toast(page)).toContainText('Role updated.')
+
         await page.reload()
-        await expect(row.getByRole('combobox')).toHaveValue('admin')
+        await expect(member(page, 'rowan@coresmith.test').getByRole('combobox')).toHaveValue('admin')
 
-        await row.getByRole('combobox').selectOption('member')
-        await settled(page, 'Role updated')
+        await member(page, 'rowan@coresmith.test').getByRole('combobox').selectOption('member')
+        await expect(toast(page)).toContainText('Role updated.')
     })
 
-    test('an owner can add and remove a member', async ({ page }) => {
-        await page.goto('/teams')
+    test('someone with an account is invited and then removed', async ({ page }, testInfo) => {
+        const email = `${own(testInfo, 'invitee')}@coresmith.test`
+        const name = `Invitee ${own(testInfo, 'invitee').split('-')[1]}`
 
-        await page.getByLabel('Email address').fill('signout@coresmith.test')
-        await page.getByRole('button', { name: 'Add member' }).click()
+        await gotoSettings(page, 'Team')
 
-        await settled(page, 'signout@coresmith.test')
+        await page.getByRole('button', { name: 'Invite someone' }).click()
+        await dialog(page).getByLabel('Email address').fill(email)
+        await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
 
-        const row = page.locator('li').filter({ hasText: 'signout@coresmith.test' })
-        await row.getByRole('button', { name: 'Remove' }).click()
+        await expect(toast(page)).toContainText('Member added.')
+        await expect(member(page, email)).toBeVisible()
 
-        await settled(page, 'Member removed')
+        await member(page, email).getByRole('button', { name: `Remove ${name}` }).click()
+        await expect(dialog(page)).toContainText(`Remove ${name}?`)
+        await dialog(page).getByRole('button', { name: 'Remove from the team' }).click()
+
+        await expect(toast(page)).toContainText('Member removed.')
+        await expect(member(page, email)).toHaveCount(0)
     })
 
-    test('adding an unknown address is refused', async ({ page }) => {
-        await page.goto('/teams')
+    test('an address without an account is refused in the dialog', async ({ page }) => {
+        await gotoSettings(page, 'Team')
 
-        await page.getByLabel('Email address').fill('nobody@coresmith.test')
-        await page.getByRole('button', { name: 'Add member' }).click()
+        await page.getByRole('button', { name: 'Invite someone' }).click()
+        await dialog(page).getByLabel('Email address').fill('nobody@coresmith.test')
+        await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
 
-        await settled(page, 'selected email is invalid')
-    })
-
-    test('the last owner cannot be demoted', async ({ page }) => {
-        await page.goto('/teams')
-
-        const row = page.locator('li').filter({ hasText: 'owner@coresmith.test' })
-        await row.getByRole('combobox').selectOption('member')
-
-        await page.waitForTimeout(1500)
-        await page.reload()
-
-        await expect(row.getByRole('combobox')).toHaveValue('owner')
+        await expect(dialog(page).getByLabel('Email address')).toHaveAttribute('aria-invalid', 'true')
     })
 })
 
-asMember.describe('Team page as a member', () => {
+asMember.describe('the team as a member', () => {
     asMember('a member sees the roster but no controls', async ({ page }) => {
-        await page.goto('/teams')
+        await gotoSettings(page, 'Team')
 
-        await expect(page.getByText('owner@coresmith.test')).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Add member' })).toHaveCount(0)
-        await expect(page.getByRole('button', { name: 'Remove' })).toHaveCount(0)
-        await expect(page.getByRole('combobox')).toHaveCount(0)
+        await expect(member(page, 'owner@coresmith.test')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Invite someone' })).toHaveCount(0)
+        await expect(page.getByTestId('team-card').getByRole('combobox')).toHaveCount(0)
+        await expect(page.getByTestId('team-card').getByRole('button', { name: /^Remove / })).toHaveCount(0)
     })
 })

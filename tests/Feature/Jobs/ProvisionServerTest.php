@@ -27,7 +27,7 @@ function provisioningTransport(): FakeSSHTransport
 
 function provision(Server $server, FakeSSHTransport $transport): void
 {
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         (new ProvisionServer($server))->handle(app(SSHConnectionManager::class), new OsDetector);
@@ -123,7 +123,7 @@ test('a failure marks the server failed and preserves the completed phase', func
         ->queueResult("/dev/vda1           40G   10G       30G  25% /\n", 0)
         ->queueResult('E: Could not get lock', 100);
 
-    expect(fn () => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
 
     $fresh = $server->fresh();
 
@@ -136,7 +136,7 @@ test('an unsupported distribution fails provisioning cleanly', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = (new FakeSSHTransport)->queueResult("ID=gentoo\nVERSION_ID=\"2\"\n", 0);
 
-    expect(fn () => provision($server, $transport))->toThrow(UnsupportedOperatingSystemException::class);
+    expect(fn() => provision($server, $transport))->toThrow(UnsupportedOperatingSystemException::class);
 
     expect($server->fresh()->status)->toBe(ServerStatus::Failed)
         ->and($server->fresh()->provisioning_phase)->toBeNull();
@@ -188,7 +188,7 @@ test('provisioning halts if the caddy admin api answers from outside the box', f
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = provisioningTransport()->respondTo('echo reachable || echo blocked', "reachable\n", 0);
 
-    expect(fn () => provision($server, $transport))->toThrow(ProvisioningVerificationException::class);
+    expect(fn() => provision($server, $transport))->toThrow(ProvisioningVerificationException::class);
 
     expect($server->fresh()->status)->toBe(ServerStatus::Failed);
 });

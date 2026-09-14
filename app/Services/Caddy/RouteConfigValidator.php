@@ -104,7 +104,7 @@ final class RouteConfigValidator
      */
     private function validateRoots(array $config, Application $application): void
     {
-        $allowed = CaddyRouteBuilder::APPS_ROOT.'/'.$application->slug.'/';
+        $allowed = CaddyRouteBuilder::APPS_ROOT . '/' . $application->slug . '/';
 
         foreach ($this->collect($config, 'root') as $root) {
             $root = (string) $root;

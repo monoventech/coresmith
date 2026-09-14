@@ -47,7 +47,7 @@ final class VaultEncryptor
             throw new InvalidArgumentException('Vault encryption failed.');
         }
 
-        return base64_encode($nonce.$ciphertext.$tag);
+        return base64_encode($nonce . $ciphertext . $tag);
     }
 
     public function decrypt(string $payload): string

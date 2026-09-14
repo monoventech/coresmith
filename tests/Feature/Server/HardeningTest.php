@@ -89,7 +89,7 @@ test('the sshd config disables passwords and pins modern crypto', function () {
 });
 
 test('the sshd config never pins the wrong port', function () {
-    expect((new SecurityHardening)->sshdConfig(2222))->not->toContain('Port 22'.PHP_EOL);
+    expect((new SecurityHardening)->sshdConfig(2222))->not->toContain('Port 22' . PHP_EOL);
 });
 
 test('the fail2ban jail bans after five attempts on the real ssh port', function () {

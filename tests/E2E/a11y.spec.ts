@@ -1,50 +1,103 @@
-import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from './support/fixtures'
+import type { Page } from '@playwright/test'
+import { asGuest, blockingViolations, expect, gotoApplication, gotoDatabase, gotoServer, gotoServerTab, openSecurity, test, useTheme } from './support/fixtures'
 
-const PAGES = [
-    ['/dashboard', 'Dashboard'],
-    ['/servers', 'Servers list'],
-    ['/servers/create', 'Add a server'],
-    ['/ssh-keys', 'SSH keys'],
-    ['/settings/profile', 'Profile settings'],
-    ['/teams', 'Team management'],
+type Visit = (page: Page) => Promise<void>
+
+const direct =
+    (path: string): Visit =>
+    async (page) => {
+        await page.goto(path)
+    }
+
+const PAGES: [string, Visit][] = [
+    ['Fleet', direct('/dashboard')],
+    ['Deployments', direct('/deployments')],
+    ['Releases', direct('/releases')],
+    ['Server apps', (page) => gotoServer(page, 'forge-01')],
+    ['Server with a disk warning', (page) => gotoServer(page, 'outpost-01')],
+    ['Server with a changed host key', (page) => gotoServer(page, 'rekeyed-server')],
+    ['Server not connected yet', (page) => gotoServer(page, 'empty-server')],
+    ['Server databases', (page) => gotoServerTab(page, 'forge-01', 'Databases')],
+    ['Server hardening', (page) => gotoServerTab(page, 'forge-01', 'Hardening')],
+    ['Server activity', (page) => gotoServerTab(page, 'forge-01', 'Activity')],
+    ['Application', (page) => gotoApplication(page, 'forge-01', 'atlas')],
+    ['Stopped application', (page) => gotoApplication(page, 'bench-01', 'retired-blog')],
+    ['Failed application', (page) => gotoApplication(page, 'forge-01', 'storefront')],
+    [
+        'Running deploy',
+        async (page) => {
+            await page.goto('/dashboard')
+            await page.getByTestId('live-deploy').click()
+            await page.getByTestId('phase-rail').waitFor()
+        }
+    ],
+    ['Database', (page) => gotoDatabase(page, 'forge-01', 'atlas_production')],
+    ['Provision a server', direct('/servers/create')],
+    ['Setup', direct('/setup')],
+    ['General settings', direct('/settings')],
+    ['Team settings', direct('/settings/team')],
+    ['Git settings', direct('/settings/git')],
+    ['Notification settings', direct('/settings/notifications')],
+    ['API tokens', direct('/settings/api-tokens')],
+    ['Billing', direct('/settings/billing')],
+    ['Profile', direct('/settings/profile')],
+    ['Security', openSecurity],
+    [
+        'Account dialog',
+        async (page) => {
+            await page.goto('/dashboard')
+            await page.getByRole('button', { name: 'Account' }).click()
+            await page.getByTestId('team-switcher').waitFor()
+        }
+    ]
 ]
 
-test.describe('Accessibility', () => {
-    for (const [path, label] of PAGES) {
-        test(`${label} has no serious or critical accessibility violations`, async ({ page }) => {
-            await page.goto(path)
-            await page.waitForLoadState('networkidle')
+const OTHER_TEAM_PAGES: [string, string][] = [
+    ['Team settings with a domain waiting for DNS', '/acme/settings/team'],
+    ['Team settings with a verified domain', '/northwind/settings/team']
+]
 
-            const results = await new AxeBuilder({ page })
-                .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-                .analyze()
+const GUEST_PAGES: [string, string][] = [
+    ['Landing', '/'],
+    ['Sign in', '/login'],
+    ['Sign in to a team with single sign-on', '/northwind/login'],
+    ['Single sign-on', '/sso'],
+    ['Forgot password', '/forgot-password']
+]
 
-            const blocking = results.violations.filter((violation) =>
-                ['serious', 'critical'].includes(violation.impact ?? ''),
-            )
+for (const theme of ['light', 'dark'] as const) {
+    test.describe(`accessibility in ${theme}`, () => {
+        for (const [label, visit] of PAGES) {
+            test(`${label} has no serious or critical violations`, async ({ page }) => {
+                await useTheme(page, theme)
+                await visit(page)
 
-            expect(
-                blocking.map((violation) => `${violation.id}: ${violation.help}`),
-                `${label} accessibility violations`,
-            ).toEqual([])
-        })
+                expect(await blockingViolations(page), `${label} in ${theme}`).toEqual([])
+            })
+        }
 
-        test(`${label} passes contrast in dark mode`, async ({ page }) => {
-            await page.emulateMedia({ colorScheme: 'dark' })
-            await page.goto(path)
-            await page.waitForLoadState('networkidle')
+        for (const [label, path] of OTHER_TEAM_PAGES) {
+            test(`${label} has no serious or critical violations`, async ({ page }) => {
+                await useTheme(page, theme)
+                await page.goto(path)
 
-            const results = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
+                const violations = await blockingViolations(page)
 
-            const blocking = results.violations.filter((violation) =>
-                ['serious', 'critical'].includes(violation.impact ?? ''),
-            )
+                await page.goto('/monoven/dashboard')
 
-            expect(
-                blocking.flatMap((violation) => violation.nodes.map((node) => node.failureSummary ?? violation.id)),
-                `${label} dark mode contrast`,
-            ).toEqual([])
-        })
-    }
-})
+                expect(violations, `${label} in ${theme}`).toEqual([])
+            })
+        }
+    })
+
+    asGuest.describe(`guest accessibility in ${theme}`, () => {
+        for (const [label, path] of GUEST_PAGES) {
+            asGuest(`${label} has no serious or critical violations`, async ({ page }) => {
+                await useTheme(page, theme)
+                await page.goto(path)
+
+                expect(await blockingViolations(page), `${label} in ${theme}`).toEqual([])
+            })
+        }
+    })
+}

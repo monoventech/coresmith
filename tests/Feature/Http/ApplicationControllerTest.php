@@ -14,6 +14,7 @@ use App\Services\SafeName;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use Illuminate\Support\Facades\Queue;
+use Spatie\Activitylog\Models\Activity;
 
 function appTeamMember(Team $team, TeamRole $role): User
 {
@@ -195,16 +196,28 @@ test('a member can roll back but an outsider cannot', function () {
 test('a member cannot read or write environment variables', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
-    $application = Application::factory()->for($team)->for($server)->create();
+    $application = Application::factory()->for($team)->for($server)->create([
+        'env_variables' => "APP_KEY=base64:app-key-value\nDATABASE_URL=postgres://shop:hunter2@db.internal/shop\nDB_PASS=db-pass-value",
+    ]);
     $member = appTeamMember($team, TeamRole::Member);
 
-    $this->actingAs($member)
-        ->get(route('servers.applications.env.show', [$server, $application]))
-        ->assertForbidden();
+    $response = $this->actingAs($member)
+        ->get(route('servers.applications.show', [$server, $application]))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->where('application.env', null)
+            ->has('application.environment', 3)
+            ->where('can.manageEnvironment', false));
+
+    expect($response->getContent())->not->toContain('app-key-value')
+        ->and($response->getContent())->not->toContain('hunter2')
+        ->and($response->getContent())->not->toContain('db-pass-value');
 
     $this->actingAs($member)
         ->put(route('servers.applications.env.update', [$server, $application]), ['env' => 'APP_KEY=leak'])
         ->assertForbidden();
+
+    expect($application->fresh()->env_variables)->not->toContain('leak');
 });
 
 test('an admin can save environment variables and they are encrypted at rest', function () {
@@ -238,20 +251,39 @@ test('an update may send only the fields that changed', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
     $application = Application::factory()->for($team)->for($server)->create([
-        'name' => 'Before',
+        'domain' => null,
         'app_size' => 'large',
         'web_directory' => '/dist',
     ]);
 
     $this->actingAs(appTeamMember($team, TeamRole::Admin))
-        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'After'])
+        ->put(route('servers.applications.update', [$server, $application]), ['domain' => 'shop.example.com'])
         ->assertRedirect();
 
     $fresh = $application->fresh();
 
-    expect($fresh->name)->toBe('After')
+    expect($fresh->domain)->toBe('shop.example.com')
         ->and($fresh->app_size)->toBe('large')
         ->and($fresh->web_directory)->toBe('/dist');
+});
+
+test('a name sent to the update endpoint is ignored, so the app keeps its name, slug and linux user', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['name' => 'Before']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'After', 'repository_branch' => 'release'])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $fresh = $application->fresh();
+
+    expect($fresh->name)->toBe('Before')
+        ->and($fresh->slug)->toBe($application->slug)
+        ->and($fresh->system_user)->toBe($application->system_user)
+        ->and($fresh->repository_branch)->toBe('release')
+        ->and(Activity::query()->where('description', 'application_renamed')->exists())->toBeFalse();
 });
 
 test('a partial update still validates the fields it does send', function () {

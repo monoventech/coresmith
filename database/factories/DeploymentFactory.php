@@ -32,7 +32,7 @@ class DeploymentFactory extends Factory
 
     public function succeeded(): static
     {
-        return $this->state(fn (array $attributes): array => [
+        return $this->state(fn(array $attributes): array => [
             'status' => DeploymentStatus::Succeeded,
             'started_at' => now()->subMinutes(2),
             'finished_at' => now(),

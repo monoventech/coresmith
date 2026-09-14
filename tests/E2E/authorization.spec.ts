@@ -1,51 +1,62 @@
-import { asMember, expect } from './support/fixtures'
+import { asMember, expect, gotoApplication, gotoServer, gotoServerTab, gotoSettings } from './support/fixtures'
 
-asMember.describe('What a member may do', () => {
-    asMember('a member can see servers', async ({ page }) => {
-        await page.goto('/servers')
+asMember.describe('what a member may do', () => {
+    asMember('a member sees the fleet but is not offered provisioning', async ({ page }) => {
+        await page.goto('/dashboard')
 
-        await expect(page.getByRole('link', { name: 'web-1' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
+        await expect(page.getByTestId('server-card').first()).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Provision a server' })).toHaveCount(0)
     })
 
-    asMember('a member is not offered the add server action', async ({ page }) => {
-        await page.goto('/servers')
-
-        await expect(page.getByRole('link', { name: 'Add a server' })).toHaveCount(0)
-    })
-
-    asMember('a member reaching the create page directly is refused', async ({ page }) => {
+    asMember('a member reaching the provision page directly is refused', async ({ page }) => {
         const response = await page.goto('/servers/create')
 
         expect(response?.status()).toBe(403)
     })
 
-    asMember('a member is not offered provisioning controls', async ({ page }) => {
-        await page.goto('/servers')
-        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
+    asMember('a member is not offered the server controls', async ({ page }) => {
+        await gotoServer(page, 'anvil-01')
 
-        await expect(page.getByRole('button', { name: 'Provision' })).toHaveCount(0)
-        await expect(page.getByRole('button', { name: 'Test connection' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Rename' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Reboot server' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Detach' })).toHaveCount(0)
     })
 
-    asMember('a member can still deploy but cannot open the environment', async ({ page }) => {
-        await page.goto('/servers')
-        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
-        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
-        await page.getByRole('link', { name: 'Storefront', exact: true }).click()
+    asMember('a member is not offered the firewall or the prune action', async ({ page }) => {
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        await expect(page.getByTestId('firewall').getByRole('button', { name: 'Apply' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Prune old releases' })).toHaveCount(0)
+        await expect(page.getByRole('switch', { name: 'Audit logging' })).toBeDisabled()
+    })
+
+    asMember('a member can deploy but cannot change the app or read its secrets', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
 
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
-        await expect(page.getByRole('link', { name: 'Environment' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Rename' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Stop the app' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Edit variables' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Add domain' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Remove this app' })).toHaveCount(0)
+        await expect(page.getByRole('switch', { name: 'Queue worker' })).toBeDisabled()
+        await expect(page.getByTestId('env-preview')).toContainText('APP_ENV=••••••••')
+        await expect(page.getByTestId('env-preview')).not.toContainText('production')
     })
 
-    asMember('a member cannot reach the environment page directly', async ({ page }) => {
-        await page.goto('/servers')
-        await page.getByRole('main').getByRole('link', { name: 'web-1' }).click()
-        await page.getByRole('main').getByRole('link', { name: 'Applications' }).click()
-        await page.getByRole('link', { name: 'Storefront', exact: true }).click()
-        await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+    asMember('a member sees the panel settings but cannot change them', async ({ page }) => {
+        await gotoSettings(page, 'General')
 
-        const response = await page.goto(`${page.url()}/env`)
+        await expect(page.getByTestId('panel-card')).toContainText('Coresmith')
+        await expect(page.getByTestId('panel-card').getByRole('button', { name: 'Save' })).toHaveCount(0)
+        await expect(page.getByTestId('backups-card').getByRole('button', { name: 'Back up now' })).toHaveCount(0)
+    })
 
-        expect(response?.status()).toBe(403)
+    asMember('a member is not offered database deletion', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Databases')
+        await page.getByTestId('databases-table').getByRole('link').first().click()
+
+        await expect(page.getByRole('button', { name: 'Delete this database' })).toHaveCount(0)
     })
 })

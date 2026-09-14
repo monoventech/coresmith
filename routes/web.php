@@ -1,17 +1,22 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
-use App\Http\Controllers\ApplicationDeploymentsController;
+use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
+use App\Http\Controllers\ApplicationToggleController;
+use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DeploymentController;
+use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\InstallationController;
-use App\Http\Controllers\OverviewController;
+use App\Http\Controllers\ReleasesController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
+use App\Http\Controllers\ServerTabsController;
+use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamMemberController;
@@ -24,30 +29,36 @@ Route::inertia('/', 'Welcome', [
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
-    Route::get('applications', [OverviewController::class, 'applications'])->name('applications.index');
-    Route::get('databases', [OverviewController::class, 'databases'])->name('databases.index');
+    Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
+    Route::get('releases', [ReleasesController::class, 'latest'])->name('releases.index');
+    Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
 
-    Route::resource('servers', ServerController::class);
+    Route::redirect('servers', '/dashboard')->name('servers.index');
+    Route::resource('servers', ServerController::class)->except(['index', 'edit']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');
     Route::post('servers/{server}/provision', [ServerController::class, 'provision'])
         ->name('servers.provision');
+    Route::post('servers/{server}/reboot', [ServerController::class, 'reboot'])
+        ->name('servers.reboot');
+    Route::post('servers/{server}/prune-releases', [ServerController::class, 'prune'])
+        ->name('servers.prune-releases');
 
-    Route::resource('servers.applications', ApplicationController::class);
-    Route::get('servers/{server}/firewall', [ServerFirewallController::class, 'index'])
-        ->name('servers.firewall.index');
+    Route::get('servers/{server}/hardening', [ServerTabsController::class, 'hardening'])
+        ->name('servers.hardening');
+    Route::get('servers/{server}/activity', [ServerTabsController::class, 'activity'])
+        ->name('servers.activity');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
-
-    Route::get('servers/{server}/applications/{application}/deployments', [ApplicationDeploymentsController::class, 'index'])
-        ->name('servers.applications.deployments.index');
-    Route::get('servers/{server}/applications/{application}/features', [ApplicationDeploymentsController::class, 'features'])
-        ->name('servers.applications.features');
 
     Route::post('servers/{server}/host-key/accept', [ServerHostKeyController::class, 'accept'])
         ->name('servers.host-key.accept');
     Route::post('servers/{server}/host-key/reject', [ServerHostKeyController::class, 'reject'])
         ->name('servers.host-key.reject');
+
+    Route::resource('servers.applications', ApplicationController::class)->except(['index', 'edit']);
+    Route::get('servers/{server}/applications/{application}/releases', [ReleasesController::class, 'index'])
+        ->name('servers.applications.releases.index');
     Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
         ->name('servers.applications.deployments.show');
     Route::post('servers/{server}/applications/{application}/stop', [ApplicationPowerController::class, 'stop'])
@@ -60,25 +71,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.deploy');
     Route::post('servers/{server}/applications/{application}/rollback', [DeploymentController::class, 'rollback'])
         ->name('servers.applications.rollback');
-    Route::get('servers/{server}/applications/{application}/env', [EnvController::class, 'show'])
-        ->name('servers.applications.env.show');
     Route::put('servers/{server}/applications/{application}/env', [EnvController::class, 'update'])
         ->name('servers.applications.env.update');
+    Route::put('servers/{server}/applications/{application}/toggles/{toggle}', [ApplicationToggleController::class, 'update'])
+        ->where('toggle', '[a-z_]+')
+        ->name('servers.applications.toggles.update');
+    Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogController::class, 'index'])
+        ->middleware('throttle:30,1')
+        ->name('servers.applications.logs');
 
     Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update']);
     Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
         ->name('servers.databases.backup');
 
-    Route::resource('ssh-keys', SshKeyController::class)->only(['index', 'store', 'destroy']);
+    Route::resource('ssh-keys', SshKeyController::class)->only(['store', 'destroy']);
 
-    Route::get('teams', [TeamController::class, 'index'])->name('teams.index');
+    Route::put('current-team', [CurrentTeamController::class, 'update'])->name('current-team.update');
     Route::get('teams/{team}', [TeamController::class, 'show'])->name('teams.show');
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
 });
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
+require __DIR__ . '/sso.php';
 
 Route::middleware('setup.token')->group(function () {
     Route::get('install', [InstallationController::class, 'show'])->name('install.show');

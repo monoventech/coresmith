@@ -7,7 +7,9 @@
 declare(strict_types=1);
 
 return [
+    'version' => env('CORESMITH_VERSION', '0.1.0'),
     'billing_enabled' => (bool) env('CORESMITH_BILLING_ENABLED', false),
     'vault_key' => env('CORESMITH_VAULT_KEY'),
     'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/etc/coresmith/setup-token'),
+    'tenant_domain' => env('CORESMITH_TENANT_DOMAIN'),
 ];

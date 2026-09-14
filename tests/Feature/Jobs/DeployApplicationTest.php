@@ -37,7 +37,7 @@ function deployableApp(array $attributes = []): Application
 
 function deploy(Deployment $deployment, FakeSSHTransport $transport): void
 {
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         (new DeployApplication($deployment, TIMESTAMP))->handle(
@@ -63,7 +63,7 @@ test('a successful deployment swaps the symlink atomically', function () {
 
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain('ln -sfn /var/coresmith/apps/my-app/releases/'.TIMESTAMP.' /var/coresmith/apps/my-app/current.tmp')
+    expect($commands)->toContain('ln -sfn /var/coresmith/apps/my-app/releases/' . TIMESTAMP . ' /var/coresmith/apps/my-app/current.tmp')
         ->and($commands)->toContain('mv -Tf /var/coresmith/apps/my-app/current.tmp /var/coresmith/apps/my-app/current')
         ->and($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded);
 
@@ -75,7 +75,7 @@ test('a failed migration never reaches the symlink swap', function () {
     $deployment = Deployment::factory()->for(deployableApp())->create();
     $transport = healthyDeployTransport()->respondTo('artisan migrate', "SQLSTATE[42S01]: duplicate column\n", 1);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
     $commands = implode("\n", $transport->commands());
 
@@ -90,17 +90,17 @@ test('a failed deployment removes the half built release', function () {
     $deployment = Deployment::factory()->for(deployableApp())->create();
     $transport = healthyDeployTransport()->respondTo('artisan migrate', '', 1);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect(implode("\n", $transport->commands()))
-        ->toContain('rm -rf /var/coresmith/apps/my-app/releases/'.TIMESTAMP);
+        ->toContain('rm -rf /var/coresmith/apps/my-app/releases/' . TIMESTAMP);
 });
 
 test('a migration failure is written to the deployment log', function () {
     $deployment = Deployment::factory()->for(deployableApp())->create();
     $transport = healthyDeployTransport()->respondTo('artisan migrate', "SQLSTATE[42S01]: duplicate column\n", 1);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect($deployment->fresh()->log)->toContain('SQLSTATE[42S01]');
 });
@@ -119,7 +119,7 @@ test('a critically full disk aborts before anything is built', function () {
     $deployment = Deployment::factory()->for(deployableApp())->create();
     $transport = (new FakeSSHTransport)->respondTo('df /', "97\n", 0);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(DeploymentAborted::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(DeploymentAborted::class);
 
     expect(implode("\n", $transport->commands()))->not->toContain('git clone')
         ->and($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
@@ -128,7 +128,7 @@ test('a critically full disk aborts before anything is built', function () {
 
 test('a second deployment while one is running is cancelled, not queued behind it', function () {
     $application = deployableApp();
-    Cache::lock('deploy:'.$application->getKey(), 600)->get();
+    Cache::lock('deploy:' . $application->getKey(), 600)->get();
 
     $deployment = Deployment::factory()->for($application)->create();
 
@@ -144,17 +144,17 @@ test('the lock is released so the next deployment can run', function () {
 
     deploy($deployment, healthyDeployTransport());
 
-    expect(Cache::lock('deploy:'.$application->getKey(), 600)->get())->toBeTrue();
+    expect(Cache::lock('deploy:' . $application->getKey(), 600)->get())->toBeTrue();
 });
 
 test('the lock is released even when the deployment fails', function () {
     $application = deployableApp();
     $deployment = Deployment::factory()->for($application)->create();
 
-    expect(fn () => deploy($deployment, healthyDeployTransport()->respondTo('artisan migrate', '', 1)))
+    expect(fn() => deploy($deployment, healthyDeployTransport()->respondTo('artisan migrate', '', 1)))
         ->toThrow(SSHCommandFailedException::class);
 
-    expect(Cache::lock('deploy:'.$application->getKey(), 600)->get())->toBeTrue();
+    expect(Cache::lock('deploy:' . $application->getKey(), 600)->get())->toBeTrue();
 });
 
 test('only the last five releases are kept', function () {
@@ -239,7 +239,7 @@ test('a custom blueprint replaces the built in dependency, build and migrate pha
 
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain('bash /var/coresmith/apps/my-app/releases/'.TIMESTAMP.'/.coresmith-blueprint.sh')
+    expect($commands)->toContain('bash /var/coresmith/apps/my-app/releases/' . TIMESTAMP . '/.coresmith-blueprint.sh')
         ->and($commands)->not->toContain('composer install')
         ->and($commands)->not->toContain('artisan config:cache')
         ->and($commands)->not->toContain('artisan migrate');
@@ -258,7 +258,7 @@ test('a failing custom blueprint never reaches the symlink swap', function () {
     $deployment = Deployment::factory()->for(deployableApp(['custom_blueprint' => "exit 1\n"]))->create();
     $transport = healthyDeployTransport()->respondTo('.coresmith-blueprint.sh', "build failed\n", 1);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect(implode("\n", $transport->commands()))->not->toContain('current.tmp');
 });
@@ -271,7 +271,7 @@ test('a private repository is cloned with its own deploy key', function () {
 
     deploy($deployment, $transport);
 
-    $clone = collect($transport->commands())->first(fn (string $c) => str_contains($c, 'git clone --bare'));
+    $clone = collect($transport->commands())->first(fn(string $c) => str_contains($c, 'git clone --bare'));
 
     expect($clone)->toContain('GIT_SSH_COMMAND=')
         ->and($clone)->toContain('/etc/coresmith/deploy-keys/my-app')
@@ -317,7 +317,7 @@ test('the deploy key does not outlive a failed clone', function () {
     ]))->create();
     $transport = healthyDeployTransport()->respondTo('git clone --bare', 'Permission denied (publickey).', 128);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect(implode("\n", $transport->commands()))->toContain("rm -f '/etc/coresmith/deploy-keys/my-app'")
         ->and($deployment->fresh()->status)->toBe(DeploymentStatus::Failed);
@@ -341,7 +341,7 @@ test('the private deploy key never reaches the deployment log', function () {
     $deployment = Deployment::factory()->for($application)->create();
     $transport = healthyDeployTransport()->respondTo('composer install', 'failed', 1);
 
-    expect(fn () => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect((string) $deployment->fresh()->log)->not->toContain('BEGIN OPENSSH PRIVATE KEY');
 });

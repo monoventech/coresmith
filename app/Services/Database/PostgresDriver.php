@@ -80,14 +80,14 @@ final class PostgresDriver
         $database = SafeName::assertDatabaseIdentifier($database);
 
         return 'sudo -u postgres pg_dump --no-owner --no-acl '
-            .escapeshellarg($database).' | gzip > '.escapeshellarg($destination);
+            . escapeshellarg($database) . ' | gzip > ' . escapeshellarg($destination);
     }
 
     public function restore(string $database, string $source): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);
 
-        return 'gunzip -c '.escapeshellarg($source).' | sudo -u postgres psql '.escapeshellarg($database);
+        return 'gunzip -c ' . escapeshellarg($source) . ' | sudo -u postgres psql ' . escapeshellarg($database);
     }
 
     public function bindToLoopback(): string
@@ -100,14 +100,14 @@ final class PostgresDriver
         $command = 'sudo -u postgres psql -v ON_ERROR_STOP=1';
 
         if ($database !== null) {
-            $command .= ' -d '.escapeshellarg(SafeName::assertDatabaseIdentifier($database));
+            $command .= ' -d ' . escapeshellarg(SafeName::assertDatabaseIdentifier($database));
         }
 
-        return $command.' -c '.escapeshellarg($sql);
+        return $command . ' -c ' . escapeshellarg($sql);
     }
 
     private function quoteLiteral(string $value): string
     {
-        return "'".str_replace("'", "''", $value)."'";
+        return "'" . str_replace("'", "''", $value) . "'";
     }
 }

@@ -1,0 +1,81 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers;
+
+use App\Enums\ServerStatus;
+use App\Enums\SourceProviderType;
+use App\Models\Application;
+use App\Models\Server;
+use App\Models\SourceProvider;
+use App\Services\Git\Repository;
+use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\ServerPresenter;
+use App\Services\Panel\SetupProgress;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+final class SetupController extends Controller
+{
+    public function show(Request $request, ServerPresenter $servers): RedirectResponse|Response
+    {
+        $user = $request->user();
+        $team = $this->currentTeam();
+
+        if ($team === null) {
+            return to_route('dashboard');
+        }
+
+        $progress = new SetupProgress($team);
+        $done = $progress->done();
+        $current = $progress->current();
+        $requested = (int) $request->query('step', (string) $current);
+        $step = max(0, min($requested, $current));
+
+        $provider = $team->sourceProviders()->latest()->first();
+        $server = $team->servers()->whereNot('status', ServerStatus::Active->value)->latest()->first()
+            ?? $team->servers()->latest()->first();
+        $application = $team->applications()->with('server')->latest()->first();
+
+        return Inertia::render('setup/Show', [
+            'steps' => array_map(fn(string $label, int $index): array => ['label' => $label, 'done' => $done[$index]], SetupProgress::STEPS, array_keys(SetupProgress::STEPS)),
+            'current' => $current,
+            'step' => $step,
+            'complete' => $progress->complete(),
+            'github' => [
+                'connected' => $provider instanceof SourceProvider,
+                'name' => $provider?->name,
+                'label' => $provider?->type->label(),
+                'configured' => (string) config('services.github.app_id') !== '',
+                'connect_href' => route('source-providers.connect', SourceProviderType::GitHubApp->value),
+                'settings_href' => route('source-providers.index'),
+            ],
+            'team' => ['id' => $team->id],
+            'server' => $server instanceof Server ? [
+                ...$servers->header($server, $user),
+                'href' => route('servers.show', $server),
+                'test_href' => route('servers.test-connection', $server),
+                'provision_href' => route('servers.provision', $server),
+            ] : null,
+            'application' => $application instanceof Application ? [
+                'id' => $application->id,
+                'name' => $application->name,
+                'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
+                'kind' => ApplicationPresenter::kind($application),
+                'runtime' => ApplicationPresenter::runtime($application),
+                'server' => $application->server?->name,
+                'deploy_href' => route('servers.applications.deploy', [$application->server_id, $application]),
+            ] : null,
+            'create_application_href' => $server instanceof Server && $server->status === ServerStatus::Active
+                ? route('servers.applications.create', $server)
+                : null,
+        ]);
+    }
+}

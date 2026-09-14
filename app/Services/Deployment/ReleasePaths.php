@@ -21,37 +21,37 @@ final class ReleasePaths
 
     public function base(): string
     {
-        return self::ROOT.'/'.SafeName::assertSlug($this->application->slug);
+        return self::ROOT . '/' . SafeName::assertSlug($this->application->slug);
     }
 
     public function releases(): string
     {
-        return $this->base().'/releases';
+        return $this->base() . '/releases';
     }
 
     public function release(string $timestamp): string
     {
-        return $this->releases().'/'.$timestamp;
+        return $this->releases() . '/' . $timestamp;
     }
 
     public function current(): string
     {
-        return $this->base().'/current';
+        return $this->base() . '/current';
     }
 
     public function shared(): string
     {
-        return $this->base().'/shared';
+        return $this->base() . '/shared';
     }
 
     public function repo(): string
     {
-        return $this->base().'/repo';
+        return $this->base() . '/repo';
     }
 
     public function envFile(): string
     {
-        return '/etc/coresmith/env/'.SafeName::assertSlug($this->application->slug).'.env';
+        return '/etc/coresmith/env/' . SafeName::assertSlug($this->application->slug) . '.env';
     }
 
     public function webRoot(string $releasePath): string
@@ -62,11 +62,11 @@ final class ReleasePaths
         $path = $releasePath;
 
         if ($directory !== '') {
-            $path .= '/'.$directory;
+            $path .= '/' . $directory;
         }
 
         if ($web !== '') {
-            $path .= '/'.$web;
+            $path .= '/' . $web;
         }
 
         return $path;

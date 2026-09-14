@@ -13,7 +13,7 @@ use Tests\Support\FakeSSHTransport;
 
 function runConnectionTest(Server $server, FakeSSHTransport $transport): void
 {
-    SSHConnectionManager::createTransportUsing(fn (): FakeSSHTransport => $transport);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
         (new TestSSHConnection($server))->handle(app(SSHConnectionManager::class));
@@ -51,7 +51,7 @@ test('a failing command leaves the server untouched', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'last_connected_at' => null]);
     $transport = (new FakeSSHTransport)->queueResult('', 1);
 
-    expect(fn () => runConnectionTest($server, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => runConnectionTest($server, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect($server->fresh()->last_connected_at)->toBeNull()
         ->and($server->fresh()->status)->toBe(ServerStatus::Pending);
@@ -62,7 +62,7 @@ test('a changed host key does not clear the stored fingerprint', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => $known]);
     $transport = (new FakeSSHTransport)->setHostKey('attacker-key');
 
-    expect(fn () => runConnectionTest($server, $transport))->toThrow(HostKeyChangedException::class);
+    expect(fn() => runConnectionTest($server, $transport))->toThrow(HostKeyChangedException::class);
 
     expect($server->fresh()->host_key_fingerprint)->toBe($known);
 });

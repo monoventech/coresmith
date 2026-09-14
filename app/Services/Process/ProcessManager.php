@@ -23,14 +23,14 @@ final class ProcessManager
 
     public function install(SSHConnection $connection, Application $application): void
     {
-        $connection->execute('mkdir -p /var/coresmith/logs/'.SafeName::assertSlug($application->slug), sudo: true)->throw();
+        $connection->execute('mkdir -p /var/coresmith/logs/' . SafeName::assertSlug($application->slug), sudo: true)->throw();
 
         if ($application->type === ApplicationType::Php) {
             $connection->execute('mkdir -p /etc/php-fpm.d /var/run/php', sudo: true)->throw();
             $connection->uploadContent($this->fpm->pool($application), $this->fpm->poolPath($application));
             $connection->uploadContent(
                 $this->fpm->unit($application),
-                SystemdUnitBuilder::UNIT_DIR.'/'.$this->fpm->unitName($application).'.service',
+                SystemdUnitBuilder::UNIT_DIR . '/' . $this->fpm->unitName($application) . '.service',
             );
         }
 
@@ -56,7 +56,7 @@ final class ProcessManager
     public function start(SSHConnection $connection, Application $application): void
     {
         foreach ($this->unitNames($application) as $unit) {
-            $connection->execute('systemctl enable --now '.escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl enable --now ' . escapeshellarg($unit), sudo: true)->throw();
         }
 
         $application->forceFill(['power_state' => PowerState::Active])->save();
@@ -65,7 +65,7 @@ final class ProcessManager
     public function stop(SSHConnection $connection, Application $application, PowerState $state = PowerState::Stopped): void
     {
         foreach ($this->unitNames($application) as $unit) {
-            $connection->execute('systemctl stop '.escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl stop ' . escapeshellarg($unit), sudo: true)->throw();
         }
 
         $application->forceFill(['power_state' => $state])->save();
@@ -74,7 +74,7 @@ final class ProcessManager
     public function restart(SSHConnection $connection, Application $application): void
     {
         foreach ($this->unitNames($application) as $unit) {
-            $connection->execute('systemctl restart '.escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl restart ' . escapeshellarg($unit), sudo: true)->throw();
         }
 
         $application->forceFill(['power_state' => PowerState::Active])->save();

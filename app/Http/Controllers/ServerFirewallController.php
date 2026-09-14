@@ -13,36 +13,9 @@ use App\Models\Server;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Inertia\Inertia;
-use Inertia\Response;
-use Spatie\Activitylog\Models\Activity;
 
 final class ServerFirewallController extends Controller
 {
-    public function index(Request $request, Server $server): Response
-    {
-        $this->authorize('view', $server);
-
-        return Inertia::render('servers/Firewall', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'ssh_port' => $server->ssh_port],
-            'changes' => Activity::query()
-                ->where('subject_type', $server->getMorphClass())
-                ->where('subject_id', $server->getKey())
-                ->where('description', 'firewall_rule_changed')
-                ->latest('id')
-                ->limit(25)
-                ->get()
-                ->map(fn (Activity $activity): array => [
-                    'id' => $activity->id,
-                    'action' => $activity->properties['action'] ?? null,
-                    'port' => $activity->properties['port'] ?? null,
-                    'from' => $activity->properties['from'] ?? null,
-                    'at' => $activity->created_at?->toIso8601String(),
-                ])->values(),
-            'can' => ['manage' => $request->user()->can('manageFirewall', $server)],
-        ]);
-    }
-
     public function store(Request $request, Server $server): RedirectResponse
     {
         $this->authorize('manageFirewall', $server);

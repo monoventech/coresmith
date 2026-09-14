@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Http;
 
 function tokenFile(): string
 {
-    return sys_get_temp_dir().'/coresmith-setup-token-'.getmypid();
+    return sys_get_temp_dir() . '/coresmith-setup-token-' . getmypid();
 }
 
 function issueToken(): string
@@ -37,12 +37,12 @@ function installPayload(array $overrides = []): array
 beforeEach(function () {
     config(['fortify.features' => []]);
     $this->breachedRange = '';
-    Http::fake(fn () => Http::response($this->breachedRange, 200));
+    Http::fake(fn() => Http::response($this->breachedRange, 200));
     config(['coresmith.setup_token_path' => tokenFile()]);
     @unlink(tokenFile());
 });
 
-afterEach(fn () => @unlink(tokenFile()));
+afterEach(fn() => @unlink(tokenFile()));
 
 test('the setup page is refused without the token', function () {
     issueToken();
@@ -59,9 +59,9 @@ test('the setup page is refused with the wrong token', function () {
 test('the setup page opens with the right token', function () {
     $token = issueToken();
 
-    $this->get('/install?token='.$token)
+    $this->get('/install?token=' . $token)
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('Install')->where('setupToken', $token));
+        ->assertInertia(fn($page) => $page->component('Install')->where('setupToken', $token));
 });
 
 test('the setup page is refused when no token file exists at all', function () {
@@ -152,7 +152,7 @@ test('a short password is refused', function () {
 
 test('a password known to be breached is refused', function () {
     $breached = 'password123456';
-    $this->breachedRange = substr(strtoupper(sha1($breached)), 5).':42000';
+    $this->breachedRange = substr(strtoupper(sha1($breached)), 5) . ':42000';
 
     $token = issueToken();
 
@@ -202,7 +202,7 @@ test('nothing is written when validation fails', function () {
 test('a fresh instance shows the holding page rather than the app', function () {
     $this->get('/dashboard')
         ->assertStatus(503)
-        ->assertInertia(fn ($page) => $page->component('auth/SetupRequired'));
+        ->assertInertia(fn($page) => $page->component('auth/SetupRequired'));
 });
 
 test('the holding page never leaks the token', function () {
@@ -229,5 +229,5 @@ test('the instance name replaces the app name across the interface', function ()
     $this->post('/install', installPayload(['setup_token' => $token, 'instance_name' => 'Acme Ops']));
 
     $this->get(route('dashboard'))
-        ->assertInertia(fn ($page) => $page->where('appName', 'Acme Ops'));
+        ->assertInertia(fn($page) => $page->where('appName', 'Acme Ops'));
 });

@@ -17,6 +17,15 @@ final readonly class Repository
         public bool $private,
     ) {}
 
+    public static function slug(string $url): ?string
+    {
+        if (preg_match('~^(?:https://[^/\s]+/|git@[^:\s]+:)([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+)/?$~', trim($url), $matches) !== 1) {
+            return null;
+        }
+
+        return preg_replace('/\.git$/', '', $matches[1]);
+    }
+
     /**
      * @return array{full_name: string, ssh_url: string, default_branch: string, private: bool}
      */

@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Events\DeploymentSucceeded;
@@ -17,6 +18,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Deployment\DeploymentPhases;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Git\DeployKeyManager;
@@ -40,6 +42,8 @@ final class DeployApplication implements ShouldQueue
 
     public int $timeout = 600;
 
+    private bool $swapped = false;
+
     public function __construct(
         private readonly Deployment $deployment,
         private readonly string $timestamp,
@@ -50,7 +54,7 @@ final class DeployApplication implements ShouldQueue
     public function handle(SSHConnectionManager $connections, DeploymentCommands $commands): void
     {
         $application = $this->deployment->application;
-        $lock = Cache::lock('deploy:'.$application->getKey(), self::LOCK_SECONDS);
+        $lock = Cache::lock('deploy:' . $application->getKey(), self::LOCK_SECONDS);
 
         if (!$lock->get()) {
             $this->deployment->forceFill([
@@ -71,34 +75,51 @@ final class DeployApplication implements ShouldQueue
             $this->deployment->forceFill([
                 'status' => DeploymentStatus::Running,
                 'started_at' => now(),
+                'release' => $this->timestamp,
+                'branch' => $application->repository_branch,
             ])->save();
 
-            DeploymentUpdated::dispatch($this->deployment);
+            $application->forceFill(['status' => ApplicationStatus::Deploying])->save();
+
+            $this->appendLog($this->stamp() . ' release ' . $this->timestamp . ' · branch ' . $application->repository_branch . ' · triggered by ' . $this->trigger());
 
             $this->prepare($connection, $paths, $release);
 
             if ($this->hasCustomBlueprint($application)) {
+                $this->mark(DeploymentPhases::BUILD, 'running the custom blueprint');
                 $this->runBlueprint($connection, $commands, $release, $application);
             } else {
                 $this->installDependencies($connection, $commands, $release);
                 $this->build($connection, $commands, $release);
                 $this->migrate($connection, $commands, $release);
             }
+
+            $this->checkHealth($connection, $commands, $paths, $release);
             $this->swapSymlink($connection, $paths, $release);
             app(ProcessManager::class)->install($connection, $application);
             $this->restartProcesses($connection, $commands);
             $this->writeCrontab($connection, $application);
             $this->pruneOldReleases($connection, $paths);
 
+            $this->appendLog($this->stamp() . ' deployed. previous release kept for instant rollback.');
+
             $this->deployment->forceFill([
                 'status' => DeploymentStatus::Succeeded,
                 'finished_at' => now(),
             ])->save();
 
+            $application->forceFill([
+                'status' => ApplicationStatus::Active,
+                'current_release' => $this->timestamp,
+            ])->save();
+
             DeploymentUpdated::dispatch($this->deployment);
             DeploymentSucceeded::dispatch($this->deployment);
         } catch (Throwable $e) {
-            $this->cleanUpFailedRelease($connection, $release);
+            if (!$this->swapped) {
+                $this->cleanUpFailedRelease($connection, $release);
+            }
+
             $this->markFailed(app(LogSanitizer::class)->sanitize($e->getMessage(), $this->deployment->application));
 
             throw $e;
@@ -129,7 +150,9 @@ final class DeployApplication implements ShouldQueue
         $keys = app(DeployKeyManager::class);
         $private = $keys->usesDeployKey($application);
 
-        $connection->execute('mkdir -p '.$paths->releases().' '.$paths->shared())->throw();
+        $this->mark(DeploymentPhases::CLONE, $private ? 'fetching via deploy key (ed25519, read-only)' : 'fetching over https');
+
+        $connection->execute('mkdir -p ' . $paths->releases() . ' ' . $paths->shared())->throw();
 
         if ($private) {
             $this->installDeployKey($connection, $keys, $application);
@@ -141,8 +164,8 @@ final class DeployApplication implements ShouldQueue
                 : "git clone --bare {$url} {$repo}";
 
             $fetch = $private
-                ? $keys->withKey($application, "git --git-dir={$repo} fetch --all --prune")
-                : "git --git-dir={$repo} fetch --all --prune";
+                ? $keys->withKey($application, "git --git-dir={$repo} fetch --all --prune --tags")
+                : "git --git-dir={$repo} fetch --all --prune --tags";
 
             $connection->execute("test -d {$repo} || {$clone}")->throw();
             $connection->execute($fetch)->throw();
@@ -152,35 +175,113 @@ final class DeployApplication implements ShouldQueue
             }
         }
 
-        $connection->execute('mkdir -p '.$release)->throw();
+        $this->recordCommit($connection, $repo, $branch);
+
+        $connection->execute('mkdir -p ' . $release)->throw();
         $connection->execute("git --git-dir={$repo} archive {$branch} | tar -x -C {$release}")->throw();
 
         $connection->execute(
-            'test -d '.$paths->shared().'/storage && ln -sfn '.$paths->shared().'/storage '.$release.'/storage || true',
+            'test -d ' . $paths->shared() . '/storage && ln -sfn ' . $paths->shared() . '/storage ' . $release . '/storage || true',
         )->throw();
+    }
+
+    private function recordCommit(SSHConnection $connection, string $repo, string $branch): void
+    {
+        $result = $connection->execute("git --git-dir={$repo} log -1 --format='%H%n%an%n%s' {$branch} 2>/dev/null || true");
+        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\R/', $result->output) ?: []), static fn(string $line): bool => $line !== ''));
+
+        if (count($lines) < 2 || preg_match('/^[0-9a-f]{40}$/', $lines[0]) !== 1) {
+            return;
+        }
+
+        [$hash, $author] = $lines;
+        $subject = $lines[2] ?? null;
+
+        $tag = trim($connection->execute("git --git-dir={$repo} describe --tags --exact-match {$hash} 2>/dev/null || true")->output);
+        $tag = preg_match('/^[A-Za-z0-9._\/-]{1,120}$/', $tag) === 1 ? $tag : null;
+
+        $signed = null;
+
+        if ($tag !== null) {
+            $object = $connection->execute('git --git-dir=' . $repo . ' cat-file -p ' . escapeshellarg('refs/tags/' . $tag) . ' 2>/dev/null || true')->output;
+            $signed = str_contains($object, 'BEGIN PGP SIGNATURE') || str_contains($object, 'BEGIN SSH SIGNATURE');
+        }
+
+        $this->deployment->forceFill([
+            'commit_hash' => $this->deployment->commit_hash ?? $hash,
+            'commit_message' => $this->deployment->commit_message ?? $subject,
+            'commit_author' => $author,
+            'tag' => $tag,
+            'tag_signed' => $signed,
+        ])->save();
+
+        $this->appendLog('commit ' . substr($hash, 0, 7) . ' by ' . $author . ($tag !== null ? ' · tag ' . $tag : ''));
     }
 
     private function installDependencies(SSHConnection $connection, DeploymentCommands $commands, string $release): void
     {
-        $this->runInRelease($connection, $commands, $release, $commands->dependencies($this->deployment->application));
+        $steps = $commands->dependencies($this->deployment->application);
+
+        if ($steps === []) {
+            return;
+        }
+
+        $this->mark(DeploymentPhases::DEPENDENCIES, 'installing dependencies');
+        $this->runInRelease($connection, $commands, $release, $steps);
     }
 
     private function build(SSHConnection $connection, DeploymentCommands $commands, string $release): void
     {
-        $this->runInRelease($connection, $commands, $release, $commands->build($this->deployment->application));
+        $steps = $commands->build($this->deployment->application);
+
+        if ($steps === []) {
+            return;
+        }
+
+        $this->mark(DeploymentPhases::BUILD, 'building the release');
+        $this->runInRelease($connection, $commands, $release, $steps);
     }
 
     private function migrate(SSHConnection $connection, DeploymentCommands $commands, string $release): void
     {
-        $this->runInRelease($connection, $commands, $release, $commands->migrations($this->deployment->application));
+        $steps = $commands->migrations($this->deployment->application);
+
+        if ($steps === []) {
+            return;
+        }
+
+        $this->mark(DeploymentPhases::MIGRATIONS, 'running migrations against release ' . $this->timestamp);
+        $this->runInRelease($connection, $commands, $release, $steps);
+    }
+
+    private function checkHealth(SSHConnection $connection, DeploymentCommands $commands, ReleasePaths $paths, string $release): void
+    {
+        $this->mark(DeploymentPhases::HEALTH, 'checking the release before it goes live');
+
+        foreach ($commands->healthChecks($this->deployment->application, $paths, $release) as $description => $check) {
+            $result = $connection->execute($check);
+
+            if ($result->failed()) {
+                throw new DeploymentAborted("Health check failed: {$description} is missing, so the release was not put live.");
+            }
+
+            $this->appendLog('health: ' . $description . ' present');
+        }
     }
 
     private function swapSymlink(SSHConnection $connection, ReleasePaths $paths, string $release): void
     {
         $current = $paths->current();
 
+        $this->mark(DeploymentPhases::SWAP, 'current → releases/' . $this->timestamp);
+
         $connection->execute("ln -sfn {$release} {$current}.tmp")->throw();
         $connection->execute("mv -Tf {$current}.tmp {$current}")->throw();
+
+        $this->swapped = true;
+        $this->deployment->application->forceFill(['current_release' => $this->timestamp])->save();
+
+        $this->appendLog('symlink: current → releases/' . $this->timestamp . ' (atomic swap)');
     }
 
     private function restartProcesses(SSHConnection $connection, DeploymentCommands $commands): void
@@ -206,19 +307,19 @@ final class DeployApplication implements ShouldQueue
 
     private function runBlueprint(SSHConnection $connection, DeploymentCommands $commands, string $release, Application $application): void
     {
-        $script = $release.'/.coresmith-blueprint.sh';
+        $script = $release . '/.coresmith-blueprint.sh';
 
         $connection->uploadContent((string) $application->custom_blueprint, $script);
 
         $result = $connection->execute(
-            'cd '.$release.' && '.$commands->pathPrefix($application).'bash '.$script,
+            'cd ' . $release . ' && ' . $commands->pathPrefix($application) . 'bash ' . $script,
         );
 
         $this->appendLog($result->output);
 
         $result->throw();
 
-        $connection->execute('rm -f '.$script);
+        $connection->execute('rm -f ' . $script);
     }
 
     private function writeCrontab(SSHConnection $connection, Application $application): void
@@ -226,10 +327,10 @@ final class DeployApplication implements ShouldQueue
         $builder = app(CrontabBuilder::class);
         $crontab = $builder->build($application);
 
-        $connection->uploadContent($crontab, '/tmp/coresmith-cron-'.$application->slug);
+        $connection->uploadContent($crontab, '/tmp/coresmith-cron-' . $application->slug);
         $connection->execute(
-            'cat /tmp/coresmith-cron-'.$application->slug.' | '.$builder->install($application)
-            .' && rm -f /tmp/coresmith-cron-'.$application->slug,
+            'cat /tmp/coresmith-cron-' . $application->slug . ' | ' . $builder->install($application)
+                . ' && rm -f /tmp/coresmith-cron-' . $application->slug,
             sudo: true,
         )->throw();
     }
@@ -240,14 +341,14 @@ final class DeployApplication implements ShouldQueue
         $keep = ReleasePaths::KEEP_RELEASES;
 
         $connection->execute(
-            "ls -1dt {$releases}/*/ 2>/dev/null | tail -n +".($keep + 1).' | xargs -r rm -rf',
+            "ls -1dt {$releases}/*/ 2>/dev/null | tail -n +" . ($keep + 1) . ' | xargs -r rm -rf',
         )->throw();
     }
 
     private function cleanUpFailedRelease(SSHConnection $connection, string $release): void
     {
         try {
-            $connection->execute('rm -rf '.$release);
+            $connection->execute('rm -rf ' . $release);
         } catch (Throwable) {
             $this->appendLog('Could not remove the half-built release; the stale deployment detector will reclaim it.');
         }
@@ -261,12 +362,31 @@ final class DeployApplication implements ShouldQueue
         $prefix = $commands->pathPrefix($this->deployment->application);
 
         foreach ($steps as $step) {
+            $this->appendLog('$ ' . $step);
+
             $result = $connection->execute("cd {$release} && {$prefix}{$step}");
 
             $this->appendLog($result->output);
 
             $result->throw();
         }
+    }
+
+    private function mark(string $phase, string $detail): void
+    {
+        $this->appendLog($this->stamp() . ' ' . $phase . ': ' . $detail);
+    }
+
+    private function stamp(): string
+    {
+        return '[' . now()->format('H:i:s') . ']';
+    }
+
+    private function trigger(): string
+    {
+        $user = $this->deployment->triggeredBy;
+
+        return $user === null ? 'push' : $user->name;
     }
 
     private function appendLog(string $output): void
@@ -278,7 +398,7 @@ final class DeployApplication implements ShouldQueue
         $clean = app(LogSanitizer::class)->sanitize($output, $this->deployment->application);
 
         $this->deployment->forceFill([
-            'log' => trim((string) $this->deployment->log."\n".$clean),
+            'log' => trim((string) $this->deployment->log . "\n" . $clean),
         ])->save();
 
         DeploymentUpdated::dispatch($this->deployment);
@@ -286,10 +406,20 @@ final class DeployApplication implements ShouldQueue
 
     private function markFailed(string $message): void
     {
+        $application = $this->deployment->application;
+
+        $outcome = $this->swapped
+            ? ' deploy failed after the symlink swap. releases/' . $this->timestamp . ' is live, check its processes.'
+            : ' deploy failed. the current release is untouched.';
+
         $this->deployment->forceFill([
             'status' => DeploymentStatus::Failed,
             'finished_at' => now(),
-            'log' => trim((string) $this->deployment->log."\n".$message),
+            'log' => trim((string) $this->deployment->log . "\n" . $message . "\n" . $this->stamp() . $outcome),
+        ])->save();
+
+        $application->forceFill([
+            'status' => $application->current_release === null ? ApplicationStatus::Failed : ApplicationStatus::Active,
         ])->save();
 
         DeploymentUpdated::dispatch($this->deployment);

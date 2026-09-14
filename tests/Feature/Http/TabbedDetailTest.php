@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\TeamRole;
 use App\Jobs\ManageFirewallRule;
+use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
 
@@ -21,21 +24,69 @@ function tabUser(Team $team, TeamRole $role): User
     return $user->fresh();
 }
 
-test('the deployments tab lists the applications full history', function () {
+test('the deployments page lists the teams full history and nothing from another team', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
     $application = Application::factory()->for($team)->for($server)->create();
 
     Deployment::factory()->for($application)->count(3)->create();
     Deployment::factory()->for(Application::factory()->for($team)->for($server))->create();
+    Deployment::factory()->for(Application::factory()->for(Team::factory()))->create();
 
     $this->actingAs(tabUser($team, TeamRole::Member))
-        ->get(route('servers.applications.deployments.index', [$server, $application]))
+        ->get(route('deployments.index'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('applications/Deployments')->has('deployments', 3));
+        ->assertInertia(fn($page) => $page
+            ->component('deployments/Index')
+            ->where('filter', 'all')
+            ->where('filters.0.key', 'all')
+            ->where('filters.0.count', 4)
+            ->has('deployments', 4));
 });
 
-test('the features tab carries the toggles and what the application runs', function () {
+test('filtering the deployments page stays inside the team', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed]);
+    Deployment::factory()->for($application)->succeeded()->create();
+    Deployment::factory()->for(Application::factory()->for(Team::factory()))->create(['status' => DeploymentStatus::Failed]);
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->get(route('deployments.index', ['status' => 'failed']))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->where('filter', 'failed')
+            ->where('filters.3.key', 'failed')
+            ->where('filters.3.count', 1)
+            ->has('deployments', 1)
+            ->where('deployments.0.state.key', 'failed'));
+});
+
+test('the releases page lists only that applications successful releases', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+
+    foreach (['20260901120000', '20260902120000', '20260903120000'] as $release) {
+        Deployment::factory()->for($application)->succeeded()->create(['release' => $release]);
+    }
+
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed, 'release' => '20260904120000']);
+    Deployment::factory()->for(Application::factory()->for($team)->for($server))->succeeded()->create(['release' => '20260905120000']);
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->get(route('servers.applications.releases.index', [$server, $application]))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('releases/Index')
+            ->where('application.id', $application->id)
+            ->has('releases', 3)
+            ->where('can.deploy', true));
+});
+
+test('the application page carries the toggles and what the application runs', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
     $application = Application::factory()->for($team)->for($server)->create([
@@ -45,36 +96,112 @@ test('the features tab carries the toggles and what the application runs', funct
     ]);
 
     $this->actingAs(tabUser($team, TeamRole::Member))
-        ->get(route('servers.applications.features', [$server, $application]))
+        ->get(route('servers.applications.show', [$server, $application]))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('applications/Features')
+        ->assertInertia(fn($page) => $page
+            ->component('applications/Show')
             ->where('application.power_state', 'stopped')
-            ->where('application.toggles.maintenance_mode', true)
+            ->where('application.stopped', true)
+            ->where('application.maintenance', true)
             ->has('application.processes', 1)
+            ->has('toggles', 3)
+            ->where('toggles.0.key', 'queue_worker')
+            ->where('toggles.0.on', true)
+            ->where('toggles.2.key', 'maintenance_mode')
+            ->where('toggles.2.on', true)
+            ->where('toggles.2.disabled', true)
+            ->where('toggles.2.href', route('servers.applications.toggles.update', [$server, $application, 'maintenance_mode']))
             ->where('can.update', false));
 });
 
-test('a deployment or feature page for another server is a not found', function (string $name) {
+test('an admin can flip a smart toggle from the application page', function () {
+    Queue::fake();
+    Notification::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+
+    $this->actingAs(tabUser($team, TeamRole::Admin))
+        ->put(route('servers.applications.toggles.update', [$server, $application, 'maintenance_mode']), ['on' => true])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect($application->fresh()->toggles['maintenance_mode'] ?? false)->toBeTrue();
+    Queue::assertPushed(SyncApplicationRoute::class);
+});
+
+test('a member cannot flip a smart toggle', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->put(route('servers.applications.toggles.update', [$server, $application, 'maintenance_mode']), ['on' => true])
+        ->assertForbidden();
+
+    expect($application->fresh()->toggles['maintenance_mode'] ?? false)->toBeFalse();
+    Queue::assertNothingPushed();
+});
+
+test('a releases page or smart toggle for another server is a not found', function (string $method, string $name, array $extra) {
+    Queue::fake();
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
     $other = Server::factory()->for($team)->create();
     $application = Application::factory()->for($team)->for($server)->create();
 
     $this->actingAs(tabUser($team, TeamRole::Owner))
-        ->get(route($name, [$other, $application]))
+        ->{$method}(route($name, [$other, $application, ...$extra]))
         ->assertNotFound();
-})->with(['servers.applications.deployments.index', 'servers.applications.features']);
 
-test('another teams application tabs are refused', function (string $name) {
+    Queue::assertNothingPushed();
+})->with([
+    ['get', 'servers.applications.releases.index', []],
+    ['put', 'servers.applications.toggles.update', ['maintenance_mode']],
+]);
+
+test('another teams application pages are refused', function (string $method, string $name, array $extra) {
+    Queue::fake();
     $application = Application::factory()->for(Team::factory())->create();
 
     $this->actingAs(tabUser(Team::factory()->create(), TeamRole::Owner))
-        ->get(route($name, [$application->server_id, $application]))
+        ->{$method}(route($name, [$application->server_id, $application, ...$extra]))
         ->assertForbidden();
-})->with(['servers.applications.deployments.index', 'servers.applications.features']);
 
-test('the firewall tab lists only the changes coresmith applied to that server', function () {
+    Queue::assertNothingPushed();
+})->with([
+    ['get', 'servers.applications.releases.index', []],
+    ['put', 'servers.applications.toggles.update', ['maintenance_mode']],
+]);
+
+test('another teams server tabs are refused', function (string $name) {
+    $server = Server::factory()->for(Team::factory()->create())->create();
+
+    $this->actingAs(tabUser(Team::factory()->create(), TeamRole::Owner))
+        ->get(route($name, $server))
+        ->assertForbidden();
+})->with(['servers.show', 'servers.databases.index', 'servers.hardening', 'servers.activity']);
+
+test('the activity tab lists only what happened on that server', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1']);
+    $other = Server::factory()->for($team)->create(['name' => 'web-2']);
+
+    activity()->performedOn($server)->log('server_rebooted');
+    activity()->performedOn($other)->log('server_rebooted');
+    Deployment::factory()->for(Application::factory()->for($team)->for($other))->succeeded()->create();
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->get(route('servers.activity', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('servers/Activity')
+            ->has('activity', 1)
+            ->where('activity.0.parts.0.text', 'web-1'));
+});
+
+test('the hardening tab lists only the firewall changes coresmith applied to that server', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
     $other = Server::factory()->for($team)->create();
@@ -84,12 +211,12 @@ test('the firewall tab lists only the changes coresmith applied to that server',
     activity()->performedOn($server)->log('something_else');
 
     $this->actingAs(tabUser($team, TeamRole::Owner))
-        ->get(route('servers.firewall.index', $server))
+        ->get(route('servers.hardening', $server))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('servers/Firewall')
-            ->has('changes', 1)
-            ->where('changes.0.port', 8080));
+        ->assertInertia(fn($page) => $page
+            ->component('servers/Hardening')
+            ->has('firewall.changes', 1)
+            ->where('firewall.changes.0.port', 8080));
 });
 
 test('an admin can queue a firewall change', function () {
@@ -140,13 +267,16 @@ test('a member cannot change the firewall', function () {
     Queue::assertNothingPushed();
 });
 
-test('a member sees the firewall tab but is not offered the form', function () {
+test('a member sees the hardening tab but is not offered the firewall form', function () {
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create();
+    $server = Server::factory()->for($team)->create(['ssh_port' => 2222]);
 
     $this->actingAs(tabUser($team, TeamRole::Member))
-        ->get(route('servers.firewall.index', $server))
-        ->assertInertia(fn ($page) => $page->where('can.manage', false));
+        ->get(route('servers.hardening', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->where('firewall.ssh_port', 2222)
+            ->where('server.can.manageFirewall', false));
 });
 
 test('a firewall change is refused for a port outside the valid range', function (string $port) {
@@ -177,7 +307,7 @@ test('every tab route on a server is behind authentication', function (string $n
     $server = Server::factory()->create();
 
     $this->get(route($name, $server))->assertRedirect(route('login'));
-})->with(['servers.firewall.index']);
+})->with(['servers.show', 'servers.databases.index', 'servers.hardening', 'servers.activity']);
 
 test('the activity log is the only firewall source, so nothing is invented', function () {
     $team = Team::factory()->create();
@@ -186,6 +316,6 @@ test('the activity log is the only firewall source, so nothing is invented', fun
     expect(Activity::query()->where('description', 'firewall_rule_changed')->count())->toBe(0);
 
     $this->actingAs(tabUser($team, TeamRole::Owner))
-        ->get(route('servers.firewall.index', $server))
-        ->assertInertia(fn ($page) => $page->has('changes', 0));
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page->has('firewall.changes', 0));
 });

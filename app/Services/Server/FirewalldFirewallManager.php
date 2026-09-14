@@ -14,14 +14,14 @@ final class FirewalldFirewallManager implements FirewallManager
 {
     public function allow(int $port, string $protocol = 'tcp'): string
     {
-        $rule = FirewallRule::port($port).'/'.FirewallRule::protocol($protocol);
+        $rule = FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
 
         return "firewall-cmd --permanent --add-port={$rule} && firewall-cmd --reload";
     }
 
     public function deny(int $port, string $protocol = 'tcp'): string
     {
-        $rule = FirewallRule::port($port).'/'.FirewallRule::protocol($protocol);
+        $rule = FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
 
         return "firewall-cmd --permanent --remove-port={$rule} && firewall-cmd --reload";
     }
@@ -32,8 +32,8 @@ final class FirewalldFirewallManager implements FirewallManager
         $target = FirewallRule::port($port);
 
         return 'firewall-cmd --permanent --add-rich-rule='
-            .escapeshellarg("rule family=\"ipv4\" source address=\"{$source}\" port port=\"{$target}\" protocol=\"tcp\" accept")
-            .' && firewall-cmd --reload';
+            . escapeshellarg("rule family=\"ipv4\" source address=\"{$source}\" port port=\"{$target}\" protocol=\"tcp\" accept")
+            . ' && firewall-cmd --reload';
     }
 
     public function denyIncomingByDefault(): string

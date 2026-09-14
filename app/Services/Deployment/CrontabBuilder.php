@@ -21,28 +21,28 @@ final class CrontabBuilder
     public function build(Application $application): string
     {
         $slug = SafeName::assertSlug($application->slug);
-        $current = ReleasePaths::ROOT.'/'.$slug.'/current';
-        $log = '/var/coresmith/logs/'.$slug.'/scheduler.log';
+        $current = ReleasePaths::ROOT . '/' . $slug . '/current';
+        $log = '/var/coresmith/logs/' . $slug . '/scheduler.log';
         $path = rtrim(str_replace(['PATH=', ':$PATH '], ['', ''], $this->commands->pathPrefix($application)), ' ');
-        $path = $path === '' ? '/usr/local/bin:/usr/bin:/bin' : $path.':/usr/local/bin:/usr/bin:/bin';
+        $path = $path === '' ? '/usr/local/bin:/usr/bin:/bin' : $path . ':/usr/local/bin:/usr/bin:/bin';
 
         $lines = [
             "# Coresmith managed crons for {$slug} - do not edit manually",
             'SHELL=/bin/bash',
-            'PATH='.$path,
+            'PATH=' . $path,
             '',
         ];
 
         foreach ($this->entries($application) as $entry) {
-            $lines[] = $entry['schedule'].' cd '.$current.' && '.$entry['command'].' >> '.$log.' 2>&1';
+            $lines[] = $entry['schedule'] . ' cd ' . $current . ' && ' . $entry['command'] . ' >> ' . $log . ' 2>&1';
         }
 
-        return implode("\n", $lines)."\n";
+        return implode("\n", $lines) . "\n";
     }
 
     public function install(Application $application): string
     {
-        return 'crontab -u '.SafeName::assertSystemUser($application->system_user).' -';
+        return 'crontab -u ' . SafeName::assertSystemUser($application->system_user) . ' -';
     }
 
     /**

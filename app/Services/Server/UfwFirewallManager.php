@@ -14,17 +14,17 @@ final class UfwFirewallManager implements FirewallManager
 {
     public function allow(int $port, string $protocol = 'tcp'): string
     {
-        return 'ufw allow '.FirewallRule::port($port).'/'.FirewallRule::protocol($protocol);
+        return 'ufw allow ' . FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
     }
 
     public function deny(int $port, string $protocol = 'tcp'): string
     {
-        return 'ufw deny '.FirewallRule::port($port).'/'.FirewallRule::protocol($protocol);
+        return 'ufw deny ' . FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
     }
 
     public function allowFrom(string $ip, int $port): string
     {
-        return 'ufw allow from '.FirewallRule::ip($ip).' to any port '.FirewallRule::port($port);
+        return 'ufw allow from ' . FirewallRule::ip($ip) . ' to any port ' . FirewallRule::port($port);
     }
 
     public function denyIncomingByDefault(): string

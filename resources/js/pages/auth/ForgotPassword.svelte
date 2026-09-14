@@ -1,7 +1,8 @@
 <script module lang="ts">
     export const layout = {
-        title: 'Forgot password',
-        description: 'Tell us your email and we will send a reset link.'
+        title: 'Reset your password',
+        mark: 'password',
+        description: "Tell us the email you sign in with and we'll send a link to choose a new one."
     }
 </script>
 
@@ -13,43 +14,28 @@
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
-    import { Spinner } from '@/components/ui/spinner'
 
-    let {
-        status = ''
-    }: {
-        status?: string
-    } = $props()
+    let { status = '' }: { status?: string } = $props()
 </script>
 
 <AppHead title="Forgot password" />
 
 {#if status}
-    <div class="mb-6 text-sm font-medium text-success">
-        {status}
-    </div>
+    <p class="tint-success mb-4 rounded-md border px-3.5 py-2.5 text-[13px]">{status}</p>
 {/if}
 
-<div class="space-y-6">
-    <Form method="post" action={route('password.email')}>
-        {#snippet children({ errors, processing })}
-            <div class="grid gap-2">
-                <Label for="email">Email address</Label>
-                <Input id="email" type="email" name="email" autocomplete="off" placeholder="email@example.com" />
+<Form method="post" action={route('password.email')}>
+    {#snippet children({ errors, processing })}
+        <div class="flex flex-col gap-4">
+            <div>
+                <Label for="email" class="mb-1.5">Email address</Label>
+                <Input id="email" type="email" name="email" autocomplete="email" placeholder="you@example.com" aria-invalid={errors.email ? true : undefined} />
                 <InputError message={errors.email} />
             </div>
-
-            <div class="my-6 flex items-center justify-start">
-                <Button type="submit" class="w-full" disabled={processing} data-test="email-password-reset-link-button">
-                    {#if processing}<Spinner />{/if}
-                    Send reset link
-                </Button>
-            </div>
-        {/snippet}
-    </Form>
-
-    <div class="space-x-1 text-sm text-muted-foreground">
-        <span>Or go back to</span>
-        <TextLink href={route('login')}>sign in</TextLink>
-    </div>
-</div>
+            <Button type="submit" class="w-full" disabled={processing} data-test="email-password-reset-link-button">Send the reset link</Button>
+            <p class="m-0 text-[13px] text-muted-foreground">
+                Remembered it? <TextLink href={route('login')}>Sign in</TextLink>
+            </p>
+        </div>
+    {/snippet}
+</Form>

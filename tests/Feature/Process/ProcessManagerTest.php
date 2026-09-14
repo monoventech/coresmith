@@ -57,7 +57,7 @@ test('the fpm pool restarts workers to contain memory leaks', function () {
 
 test('worker count follows the app size', function (string $size, int $children) {
     expect((new FpmPoolBuilder(new AsdfManager))->pool(managedApp(['app_size' => $size])))
-        ->toContain('pm.max_children = '.$children);
+        ->toContain('pm.max_children = ' . $children);
 })->with([['small', 5], ['medium', 15], ['large', 30]]);
 
 test('the fpm socket is owned by caddy and not world readable', function () {

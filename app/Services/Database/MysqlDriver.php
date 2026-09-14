@@ -66,14 +66,14 @@ final class MysqlDriver
         $database = SafeName::assertDatabaseIdentifier($database);
 
         return 'mysqldump --single-transaction --quick --routines --triggers '
-            .escapeshellarg($database).' | gzip > '.escapeshellarg($destination);
+            . escapeshellarg($database) . ' | gzip > ' . escapeshellarg($destination);
     }
 
     public function restore(string $database, string $source): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);
 
-        return 'gunzip -c '.escapeshellarg($source).' | mysql '.escapeshellarg($database);
+        return 'gunzip -c ' . escapeshellarg($source) . ' | mysql ' . escapeshellarg($database);
     }
 
     public function bindToLoopback(): string
@@ -83,11 +83,11 @@ final class MysqlDriver
 
     public function command(string $sql): string
     {
-        return 'mysql --protocol=socket -e '.escapeshellarg($sql);
+        return 'mysql --protocol=socket -e ' . escapeshellarg($sql);
     }
 
     private function quoteLiteral(string $value): string
     {
-        return "'".str_replace(['\\', "'"], ['\\\\', "\\'"], $value)."'";
+        return "'" . str_replace(['\\', "'"], ['\\\\', "\\'"], $value) . "'";
     }
 }

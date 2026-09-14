@@ -40,13 +40,13 @@ final class GenerateVaultKey extends Command
         $key = base64_encode(random_bytes(32));
 
         $contents = preg_match('/^CORESMITH_VAULT_KEY=.*$/m', $contents) === 1
-            ? preg_replace('/^CORESMITH_VAULT_KEY=.*$/m', 'CORESMITH_VAULT_KEY='.$key, $contents)
-            : $contents.PHP_EOL.'CORESMITH_VAULT_KEY='.$key.PHP_EOL;
+            ? preg_replace('/^CORESMITH_VAULT_KEY=.*$/m', 'CORESMITH_VAULT_KEY=' . $key, $contents)
+            : $contents . PHP_EOL . 'CORESMITH_VAULT_KEY=' . $key . PHP_EOL;
 
         File::put($path, (string) $contents);
 
         $this->info('Vault key generated.');
-        $this->line('Back up your .env separately — without this key every stored credential is unrecoverable.');
+        $this->line('Back up your .env separately. Without this key every stored credential is unrecoverable.');
 
         return self::SUCCESS;
     }
