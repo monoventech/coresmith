@@ -35,12 +35,11 @@ final class TestSSHConnection implements ShouldQueue
             $connection->execute('whoami')->throw();
             $connection->execute('uname -a')->throw();
 
-            $status = $this->server->status ?? ServerStatus::Pending;
+            $this->server->forceFill(['last_connected_at' => now()])->save();
 
-            $this->server->forceFill([
-                'last_connected_at' => now(),
-                'status' => $status === ServerStatus::Pending ? ServerStatus::Provisioning : $status,
-            ])->save();
+            if ($this->server->status === ServerStatus::Pending) {
+                AuditServer::begin($this->server);
+            }
         } finally {
             $connections->disconnect($this->server);
         }

@@ -3,10 +3,14 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
+use App\Enums\DeploymentStatus;
+use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Jobs\DeployApplication;
+use App\Jobs\ReservePortBlock;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
@@ -91,6 +95,21 @@ test('a duplicate name gets a suffixed slug rather than colliding', function () 
         ->and($slugs[1])->toStartWith('shop-');
 });
 
+test('creating an app on an active server checks its port block in the background, a pending server does not', function (ServerStatus $status, bool $queued) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => $status]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), payload())
+        ->assertRedirect();
+
+    $queued ? Queue::assertPushed(ReservePortBlock::class) : Queue::assertNotPushed(ReservePortBlock::class);
+})->with([
+    'active' => [ServerStatus::Active, true],
+    'pending' => [ServerStatus::Pending, false],
+]);
+
 test('the system user always fits a linux username', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
@@ -152,6 +171,19 @@ test('another teams application cannot be viewed', function () {
         ->get(route('servers.applications.show', [$server, $application]))
         ->assertForbidden();
 });
+
+test('the app page knows when the last failed deploy had already gone live', function (string $log, bool $live) {
+    $team = Team::factory()->create();
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create();
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed, 'log' => $log]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $page->where('application.last_failed', true)->where('application.last_failed_live', $live));
+})->with([
+    'after the swap' => ["[14:03:11] swap: current → releases/20260914-140211\n[14:03:40] deploy failed after the symlink swap.", true],
+    'before the swap' => ["[14:02:12] clone: fetching over https\n[14:02:15] deploy failed. the current release is untouched.", false],
+]);
 
 test('a member can deploy', function () {
     Queue::fake();
@@ -306,4 +338,19 @@ test('additional domains are validated one by one', function () {
             'additional_domains' => ['ok.example.com', 'not a domain'],
         ])
         ->assertSessionHasErrors('additional_domains.1');
+});
+
+test('the app page explains a recent out of memory kill', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['app_size' => 'small']);
+
+    activity()->performedOn($application)->withProperties(['process' => 'queue', 'at' => now()->toIso8601String(), 'limit_mb' => 256])->log('app_oom_killed');
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $page
+            ->where('application.oom.process', 'queue')
+            ->where('application.oom.limit_mb', 256)
+            ->where('application.oom.size', 'Small')
+            ->where('application.oom.when', 'at ' . now()->format('H:i')));
 });

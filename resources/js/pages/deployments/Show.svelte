@@ -25,6 +25,7 @@
         log: string
         phases: Phase[]
         failed_phase: string | null
+        failure_reason: string | null
         reached_users: boolean
         release: string | null
         branch: string | null
@@ -211,7 +212,12 @@
     {#if live.status === 'succeeded'}
         <Button variant="outline" href={application.releases_href} class="max-sm:hidden">View releases</Button>
     {:else if live.status === 'failed' && can.deploy}
-        <Button disabled={retrying} onclick={retry} class="max-sm:hidden">Retry deploy</Button>
+        <div class="flex gap-2 max-sm:hidden">
+            {#if live.reached_users}
+                <Button variant="outline" href={application.releases_href}>Roll back</Button>
+            {/if}
+            <Button disabled={retrying} onclick={retry}>Retry deploy</Button>
+        </div>
     {/if}
 </div>
 
@@ -221,13 +227,15 @@
         data-testid="failure-banner"
     >
         <OctagonAlert class="mt-0.5 size-[18px] shrink-0 text-destructive max-sm:size-4" />
-        <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal">
+        <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal" data-testid="failure-reason">
             {#if live.reached_users}
                 <span class="font-semibold">{FAILURES.swap}.</span>
-                <span class="font-mono text-[12.5px]">releases/{live.release}</span> is live, check its processes before pushing again.
+                {live.failure_reason ? ` ${live.failure_reason}` : ` releases/${live.release} is live, check its processes before pushing again.`}
             {:else}
                 <span class="font-semibold">{FAILURES[live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span>
-                {#if application.current_release}
+                {#if live.failure_reason}
+                    {` ${live.failure_reason}`}
+                {:else if application.current_release}
                     <span class="max-sm:hidden">
                         The symlink still points at <span class="font-mono text-[12.5px]">{application.current_release}</span>, users never saw an error page.
                         Fix {FIXES[live.failed_phase ?? ''] ?? 'it'} and push again, or retry.
@@ -257,7 +265,9 @@
             </div>
         {/each}
         <p class="mt-2.5 mb-0.5 text-[12px] leading-normal text-muted-foreground max-sm:hidden">
-            The current release keeps serving traffic until the symlink swap. If any phase fails, nothing changes.
+            {live.reached_users
+                ? 'Every phase finished and the swap went through, so this release is the one being served.'
+                : 'The current release keeps serving traffic until the symlink swap. If any phase fails, nothing changes.'}
         </p>
     </div>
 
@@ -290,7 +300,10 @@
 {:else if live.status === 'succeeded'}
     <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden">View releases</Button>
 {:else if live.status === 'failed' && can.deploy}
-    <Button size="lg" disabled={retrying} onclick={retry} class="mt-3.5 w-full sm:hidden">Retry deploy</Button>
+    {#if live.reached_users}
+        <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden">Roll back</Button>
+    {/if}
+    <Button size="lg" disabled={retrying} onclick={retry} class="mt-2.5 w-full sm:hidden">Retry deploy</Button>
 {/if}
 
 <p class="sr-only" data-testid="log-transport">

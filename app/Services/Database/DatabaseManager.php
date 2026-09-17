@@ -11,6 +11,7 @@ namespace App\Services\Database;
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
 use App\Exceptions\BackupNotFoundException;
+use App\Exceptions\ExistingDatabaseServerRefused;
 use App\Models\ManagedDatabase;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\SSHConnection;
@@ -23,6 +24,12 @@ final class DatabaseManager
 
     public const BACKUP_ROOT = '/var/coresmith/backups';
 
+    private const SERVICES = [
+        'mysql' => ['mysql', 'mysqld', 'mariadb'],
+        'postgresql' => ['postgresql'],
+        'redis' => ['redis-server', 'redis'],
+    ];
+
     public function __construct(
         private readonly MysqlDriver $mysql,
         private readonly PostgresDriver $postgres,
@@ -33,17 +40,67 @@ final class DatabaseManager
         return Str::password(self::PASSWORD_LENGTH, symbols: false);
     }
 
-    public function ensureServerInstalled(SSHConnection $connection, DatabaseType $type): void
+    public function ensureServerInstalled(SSHConnection $connection, DatabaseType $type, ?ManagedDatabase $for = null): bool
     {
-        $packages = PackageManagerFactory::for($connection->server());
-        $package = $this->packageFor($connection->server()->os_name, $type);
+        $server = $connection->server();
+        $meta = (array) $server->meta;
+        $installed = array_values((array) ($meta['installed_databases'] ?? []));
+        $managed = in_array($type->value, $installed, true)
+            || ManagedDatabase::query()
+                ->where('server_id', $server->getKey())
+                ->where('type', $type->value)
+                ->where('is_external', false)
+                ->when($for !== null, fn($query) => $query->whereKeyNot($for->getKey()))
+                ->exists();
 
-        $connection->execute(
-            $packages->isInstalled($package) . ' || ' . $packages->install([$package]),
-            sudo: true,
-        )->throw();
+        if (!$managed && $this->alreadyRunning($connection, $type)) {
+            $this->assertCanAdminister($connection, $type);
 
+            return true;
+        }
+
+        $packages = PackageManagerFactory::for($server);
+        $package = $this->packageFor($server->os_name, $type);
+
+        $connection->execute($packages->isInstalled($package) . ' || ' . $packages->install([$package]), sudo: true)->throw();
         $connection->execute($this->bindCommand($type), sudo: true)->throw();
+
+        if (!in_array($type->value, $installed, true)) {
+            $server->forceFill(['meta' => [...$meta, 'installed_databases' => [...$installed, $type->value]]])->save();
+        }
+
+        return false;
+    }
+
+    private function alreadyRunning(SSHConnection $connection, DatabaseType $type): bool
+    {
+        $checks = array_map(fn(string $service): string => 'systemctl is-active --quiet ' . escapeshellarg($service), self::SERVICES[$type->value]);
+
+        return $connection->execute(implode(' || ', $checks))->successful();
+    }
+
+    private function assertCanAdminister(SSHConnection $connection, DatabaseType $type): void
+    {
+        $server = $connection->server()->name;
+
+        [$command, $engine, $problem, $advice, $expected] = match ($type) {
+            DatabaseType::Mysql => [$this->mysql->command('SELECT 1'), 'MySQL', 'Coresmith cannot create databases on it', 'Let root sign in through the local socket, or grant it CREATE, CREATE USER and GRANT OPTION, then try again.', null],
+            DatabaseType::Postgresql => [$this->postgres->command('SELECT 1'), 'PostgreSQL', 'Coresmith cannot create databases on it', 'Make sure the postgres system user can run psql, then try again.', null],
+            DatabaseType::Redis => ['redis-cli -t 3 ping 2>&1', 'Redis', 'Coresmith cannot reach it', 'Let redis-cli connect on this server without a password, or drop the requirepass setting, then try again.', 'PONG'],
+        };
+
+        $result = $connection->execute($command, sudo: true);
+
+        if ($result->successful() && ($expected === null || str_contains($result->output, $expected))) {
+            return;
+        }
+
+        if (str_contains($result->output, 'command not found')) {
+            $problem = 'Coresmith cannot check it';
+            $advice = 'Install redis-tools on the server so Coresmith can check it, then try again.';
+        }
+
+        throw new ExistingDatabaseServerRefused("{$engine} is already running on {$server}, but {$problem}. {$advice}");
     }
 
     public function create(SSHConnection $connection, ManagedDatabase $database, string $password): void

@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Exceptions\NoPreviousReleaseException;
+use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
-use App\Services\Deployment\DeploymentCommands;
-use App\Services\Runtime\AsdfManager;
 use App\Services\SSH\SSHConnectionManager;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
@@ -39,7 +38,7 @@ function rollbackRun(Application $application, FakeSSHTransport $transport, ?str
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
-        (new RollbackApplication($application, $release))->handle(app(SSHConnectionManager::class), new DeploymentCommands(new AsdfManager));
+        (new RollbackApplication($application, $release))->handle(app(SSHConnectionManager::class));
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }
@@ -55,7 +54,7 @@ test('a named release that is still on disk becomes the live release', function 
 
     expect($commands)->toContain('ln -sfn /var/coresmith/apps/my-app/releases/20260911-100000 /var/coresmith/apps/my-app/current.tmp')
         ->and($commands)->toContain('mv -Tf /var/coresmith/apps/my-app/current.tmp /var/coresmith/apps/my-app/current')
-        ->and($commands)->toContain('systemctl reload php-fpm-coresmith-app-abcd')
+        ->and($commands)->toContain("systemctl reload-or-restart 'coresmith-app-my-app-fpm'")
         ->and($application->fresh()->current_release)->toBe('20260911-100000');
 });
 
@@ -146,6 +145,23 @@ test('a restart failure after the swap still records the release that is now liv
 
     expect(implode("\n", $transport->commands()))->toContain('mv -Tf')
         ->and($application->fresh()->current_release)->toBe('20260911-100000');
+});
+
+test('a rollback whose processes do not come back up is recorded, not silent', function () {
+    $application = rollbackApp();
+    $transport = rollbackTransport()
+        ->respondTo('systemctl is-active', "failed\n")
+        ->respondTo('journalctl -u', "bind: address already in use\n");
+
+    expect(fn() => rollbackRun($application, $transport, '20260911-100000'))->toThrow(ProcessDidNotStart::class);
+
+    $activity = Activity::query()->where('description', 'rollback_processes_failed')->sole();
+
+    expect($activity->subject_id)->toBe($application->id)
+        ->and($activity->properties['from'])->toBe('20260913-120000')
+        ->and($activity->properties['to'])->toBe('20260911-100000')
+        ->and($activity->properties['error'])->toContain('did not start')
+        ->and(Activity::query()->where('description', 'application_rolled_back')->exists())->toBeFalse();
 });
 
 test('rollbacks run on the deployments queue', function () {

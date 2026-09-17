@@ -35,10 +35,10 @@ final class CreateDatabase implements ShouldQueue
         try {
             $password = DatabaseManager::generatePassword();
 
-            $databases->ensureServerInstalled($connection, $this->database->type);
+            $external = $databases->ensureServerInstalled($connection, $this->database->type, $this->database);
             $databases->create($connection, $this->database, $password);
 
-            $this->database->forceFill(['db_password' => $password])->save();
+            $this->database->forceFill(['db_password' => $password, 'is_external' => $external])->save();
         } finally {
             $connections->disconnect($server);
         }

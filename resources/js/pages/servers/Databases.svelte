@@ -21,6 +21,7 @@
         port: number
         status: string
         privilege_level: string
+        is_external: boolean
         href: string
     }
 
@@ -28,6 +29,7 @@
 
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
     const columns = 'grid grid-cols-[1.3fr_1fr_1fr_0.8fr_0.7fr] gap-3 max-sm:grid-cols-[1fr_auto]'
+    const hasExternal = $derived(databases.some((database) => database.is_external))
 </script>
 
 <AppHead title="{server.name} databases" />
@@ -63,7 +65,7 @@
                 )}
             >
                 <span class="truncate font-mono text-[14px] font-medium">{database.name}</span>
-                <span class="text-[12.5px] text-muted-foreground max-sm:hidden">{ENGINES[database.type] ?? database.type}</span>
+                <span class="text-[12.5px] text-muted-foreground max-sm:hidden">{ENGINES[database.type] ?? database.type}{database.is_external ? ' · existing server' : ''}</span>
                 <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{database.db_user ?? '—'}</span>
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{database.port}</span>
                 <span class={cn('inline-flex items-center gap-1.5 text-[12.5px] font-medium', database.status === 'active' ? 'text-success' : 'text-muted-foreground')}>
@@ -72,7 +74,11 @@
             </Link>
         {/each}
         <div class="flex flex-wrap items-center justify-between gap-3 px-5.5 py-3">
-            <p class="m-0 text-[12.5px] text-muted-foreground">Databases listen on localhost only. Each one has its own credentials, never shared between apps.</p>
+            <p class="m-0 text-[12.5px] text-muted-foreground">
+                {hasExternal
+                    ? "Databases Coresmith installed listen on localhost only; it doesn't control network access for the rest. Each one has its own credentials, never shared between apps."
+                    : 'Databases listen on localhost only. Each one has its own credentials, never shared between apps.'}
+            </p>
             {#if can.create && server.active}
                 <Button size="sm" variant="outline" href={route('servers.databases.create', server.id)}>Create a database</Button>
             {/if}

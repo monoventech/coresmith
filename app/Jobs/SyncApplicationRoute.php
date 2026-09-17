@@ -36,8 +36,7 @@ final class SyncApplicationRoute implements ShouldQueue
         $connection = $connections->for($this->application->server);
 
         try {
-            $caddy->updateSite($connection, $this->application);
-            $caddy->persistConfig($connection);
+            $caddy->putSite($connection, $this->application);
         } finally {
             $connections->disconnect($this->application->server);
         }

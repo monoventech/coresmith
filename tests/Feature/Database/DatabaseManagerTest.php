@@ -121,7 +121,7 @@ test('creating a mysql database makes the db, the user and the grant', function 
 });
 
 test('a database server binds to loopback only', function (DatabaseType $type, string $expected) {
-    $transport = new FakeSSHTransport;
+    $transport = (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3);
 
     databaseManager()->ensureServerInstalled(databaseConnection($transport), $type);
 
@@ -133,12 +133,12 @@ test('a database server binds to loopback only', function (DatabaseType $type, s
 ]);
 
 test('a database server is only installed when missing', function () {
-    $transport = new FakeSSHTransport;
+    $transport = (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3);
 
     databaseManager()->ensureServerInstalled(databaseConnection($transport), DatabaseType::Mysql);
 
-    expect($transport->commands()[0])->toContain('dpkg-query')
-        ->and($transport->commands()[0])->toContain('||');
+    expect($transport->commands()[1])->toContain('dpkg-query')
+        ->and($transport->commands()[1])->toContain('||');
 });
 
 test('a backup is compressed and readable only by root', function () {

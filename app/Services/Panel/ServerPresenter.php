@@ -13,6 +13,8 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\User;
+use App\Services\Server\Audit\ServerAudit;
+use Carbon\CarbonImmutable;
 
 final class ServerPresenter
 {
@@ -128,10 +130,43 @@ final class ServerPresenter
                     default => 'pending',
                 },
             ], self::PROVISIONING_PHASES, array_keys(self::PROVISIONING_PHASES)),
+            'error' => $failed ? $server->provisioning_error : null,
+            'failed_phase' => $failed ? $completed + 1 : null,
             'log' => $server->provisioning_log,
             'public_key' => $server->ssh_public_key,
             'ssh' => $server->ssh_user . '@' . $server->ip_address . ':' . $server->ssh_port,
             'ssh_user' => $server->ssh_user,
+            'audit' => $this->audit($server),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function audit(Server $server): ?array
+    {
+        $audit = (array) $server->audit;
+
+        if ($audit === []) {
+            return null;
+        }
+
+        $report = ServerAudit::report($server);
+        $findings = $report?->toArray() ?? [];
+        $count = fn(string $severity): int => count(array_filter($findings, fn(array $finding): bool => $finding['severity'] === $severity));
+        $ran = is_string($audit['ran_at'] ?? null) ? CarbonImmutable::parse($audit['ran_at']) : null;
+        $state = (string) ($audit['state'] ?? 'done');
+        $stalled = $state === 'running' && !ServerAudit::isRunning($server);
+
+        return [
+            'state' => $stalled ? 'failed' : $state,
+            'ran' => $ran === null ? null : ($ran->isToday() ? 'at ' . $ran->format('H:i') : 'on ' . $ran->format('M j')),
+            'error' => $stalled ? 'The check stopped before it finished. Check again.' : ($audit['error'] ?? null),
+            'findings' => $findings,
+            'blockers' => $count('blocker'),
+            'warnings' => $count('warning'),
+            'fresh' => ServerAudit::isFresh($server),
+            'can_proceed' => ServerAudit::isFresh($server) && !ServerAudit::blocks($server),
         ];
     }
 }

@@ -95,24 +95,4 @@ final class DeploymentCommands
             ApplicationType::Ruby => ['Gemfile' => 'test -f ' . escapeshellarg($base . '/Gemfile')],
         };
     }
-
-    /**
-     * @return list<string>
-     */
-    public function restart(Application $application): array
-    {
-        $slug = $application->slug;
-
-        $units = match ($application->type) {
-            ApplicationType::Php => ['systemctl reload php-fpm-' . $application->system_user],
-            ApplicationType::Static => [],
-            default => ['systemctl restart coresmith-app-' . $slug . '-web'],
-        };
-
-        if ($application->processes !== null && $application->processes !== []) {
-            $units[] = 'systemctl restart coresmith-app-' . $slug . '-worker';
-        }
-
-        return $units;
-    }
 }

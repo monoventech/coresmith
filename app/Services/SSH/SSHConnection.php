@@ -11,9 +11,11 @@ namespace App\Services\SSH;
 use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\SSHAuthenticationException;
 use App\Models\Server;
+use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\Contracts\SSHTransport;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Crypt\PublicKeyLoader;
+use phpseclib3\Exception\ConnectionClosedException;
 use RuntimeException;
 
 final class SSHConnection
@@ -61,7 +63,13 @@ final class SSHConnection
     {
         $command = $this->prepare($command, $sudo);
 
-        $output = $this->connect()->transport->exec($command);
+        try {
+            $output = $this->connect()->transport->exec($command);
+        } catch (ConnectionClosedException $e) {
+            $this->authenticated = false;
+
+            throw $e;
+        }
 
         return $this->record($command, $output);
     }
@@ -70,7 +78,13 @@ final class SSHConnection
     {
         $command = $this->prepare($command, $sudo);
 
-        $output = $this->connect()->transport->exec($command, $onOutput);
+        try {
+            $output = $this->connect()->transport->exec($command, $onOutput);
+        } catch (ConnectionClosedException $e) {
+            $this->authenticated = false;
+
+            throw $e;
+        }
 
         return $this->record($command, $output);
     }
@@ -137,7 +151,7 @@ final class SSHConnection
         activity()
             ->performedOn($this->server)
             ->withProperties([
-                'command' => $command,
+                'command' => app(LogSanitizer::class)->sanitize($command),
                 'exit_code' => $exitCode,
                 'output_length' => strlen($output),
             ])

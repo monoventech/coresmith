@@ -25,6 +25,8 @@ final class DeploymentPhases
 
     public const SWAP = 'swap';
 
+    public const WATCH = 'watch';
+
     public const ORDER = [self::CLONE, self::DEPENDENCIES, self::BUILD, self::MIGRATIONS, self::HEALTH, self::SWAP];
 
     public const LABELS = [
@@ -43,6 +45,7 @@ final class DeploymentPhases
         self::MIGRATIONS => 'running migrations',
         self::HEALTH => 'health check',
         self::SWAP => 'symlink swap',
+        self::WATCH => 'watching the processes',
     ];
 
     private const MARKER = '/^\[(\d{2}):(\d{2}):(\d{2})\] ([a-z]+):/';
@@ -58,6 +61,7 @@ final class DeploymentPhases
         $status = $deployment->status;
         $starts = $this->starts($log);
         $end = $this->end($log);
+        $outlived = $this->outlivedTheRail($log);
 
         $lastIndex = -1;
 
@@ -70,7 +74,7 @@ final class DeploymentPhases
         $phases = [];
 
         foreach (self::ORDER as $index => $key) {
-            $state = $this->state($index, isset($starts[$key]), $lastIndex, $status);
+            $state = $this->state($index, isset($starts[$key]), $lastIndex, $status, $outlived);
 
             $phases[] = [
                 'key' => $key,
@@ -85,6 +89,12 @@ final class DeploymentPhases
 
     public function progress(Deployment $deployment): ?string
     {
+        $trailing = $this->trailingMarker((string) $deployment->log);
+
+        if ($deployment->status === DeploymentStatus::Running && $trailing !== null && isset(self::PROGRESS[$trailing])) {
+            return self::PROGRESS[$trailing];
+        }
+
         foreach (array_reverse($this->states($deployment)) as $phase) {
             if ($phase['state'] === 'running') {
                 return self::PROGRESS[$phase['key']];
@@ -94,7 +104,25 @@ final class DeploymentPhases
         return null;
     }
 
-    private function state(int $index, bool $started, int $lastIndex, DeploymentStatus $status): string
+    private function outlivedTheRail(string $log): bool
+    {
+        return $this->trailingMarker($log) !== null;
+    }
+
+    private function trailingMarker(string $log): ?string
+    {
+        $last = null;
+
+        foreach (preg_split('/\R/', $log) ?: [] as $line) {
+            if (preg_match(self::MARKER, $line, $matches) === 1) {
+                $last = $matches[4];
+            }
+        }
+
+        return $last !== null && !in_array($last, self::ORDER, true) ? $last : null;
+    }
+
+    private function state(int $index, bool $started, int $lastIndex, DeploymentStatus $status, bool $outlived = false): string
     {
         $finished = in_array($status, [DeploymentStatus::Succeeded, DeploymentStatus::Failed, DeploymentStatus::Cancelled], true);
 
@@ -109,7 +137,7 @@ final class DeploymentPhases
 
         if ($started) {
             return match (true) {
-                $index < $lastIndex, $status === DeploymentStatus::Succeeded => 'done',
+                $index < $lastIndex, $status === DeploymentStatus::Succeeded, $outlived => 'done',
                 $finished => 'failed',
                 default => 'running',
             };

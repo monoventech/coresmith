@@ -49,6 +49,8 @@
             deploy_href: string
             logs_href: string
             last_failed: boolean
+            last_failed_live: boolean
+            oom: { process: string; when: string; limit_mb: number; size: string } | null
         }
         toggles: Toggle[]
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean }
@@ -217,10 +219,24 @@
     <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="failed-banner">
         <OctagonAlert class="size-[18px] shrink-0 text-destructive max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
-            <span class="font-semibold">The last deploy failed, so nothing changed.</span>
-            {application.current_release ? ` releases/${application.current_release} is still live.` : ' Nothing was live yet.'}
+            <span class="font-semibold">{application.last_failed_live ? 'The last deploy went live but did not finish.' : 'The last deploy failed, so nothing changed.'}</span>
+            {application.last_failed_live
+                ? ` releases/${application.current_release} is serving, read the log before pushing again.`
+                : application.current_release
+                  ? ` releases/${application.current_release} is still live.`
+                  : ' Nothing was live yet.'}
         </span>
         <Link href={application.latest_deployment.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]!">Read the log</Link>
+    </div>
+{/if}
+
+{#if application.oom}
+    <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="oom-banner">
+        <TriangleAlert class="size-[18px] shrink-0 text-warning max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+            <span class="font-semibold">{`The ${application.oom.process} process was killed ${application.oom.when} for going over its ${application.oom.limit_mb} MB memory limit.`}</span>
+            {` systemd started it again. If it keeps happening, the app needs more memory than the ${application.oom.size} size gives it.`}
+        </span>
     </div>
 {/if}
 

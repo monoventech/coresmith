@@ -311,3 +311,15 @@ test.describe('adding an application', () => {
         await expect(page.getByLabel('Domain')).toHaveAttribute('aria-invalid', 'true')
     })
 })
+
+test.describe('an app killed for memory', () => {
+    test('the app page says which process, its limit and what to do if it repeats', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'hungry')
+
+        const banner = page.getByTestId('oom-banner')
+
+        await expect(banner).toContainText('The queue process was killed')
+        await expect(banner).toContainText('256 MB memory limit')
+        await expect(banner).toContainText('more memory than the Small size gives it')
+    })
+})

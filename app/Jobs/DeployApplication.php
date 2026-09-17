@@ -10,39 +10,60 @@ namespace App\Jobs;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
+use App\Enums\PowerState;
 use App\Events\DeploymentFailed;
 use App\Events\DeploymentSucceeded;
 use App\Events\DeploymentUpdated;
 use App\Exceptions\DeploymentAborted;
+use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\DeploymentPhases;
+use App\Services\Deployment\GitFailure;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Git\DeployKeyManager;
+use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
+use App\Services\Server\PortBlockGuard;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use Closure;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Sleep;
+use phpseclib3\Exception\ConnectionClosedException;
 use Throwable;
 
 final class DeployApplication implements ShouldQueue
 {
     use Queueable;
 
-    public const LOCK_SECONDS = 600;
+    public const LOCK_SECONDS = 840;
 
     public const DISK_ABORT_PERCENT = 95;
 
+    public const GIT_RETRIES = 2;
+
+    public const DEPENDENCY_RETRIES = 1;
+
+    public const RETRY_SECONDS = 5;
+
+    private const NETWORK_ERRORS = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'Could not resolve host', 'Connection timed out', 'Operation timed out', 'curl error 28', 'curl error 6', 'could not be downloaded', 'Failed to download', '502 Bad Gateway', '503 Service Unavailable', '504 Gateway Time', 'socket hang up', 'Net::OpenTimeout', 'Gem::RemoteFetcher'];
+
     public int $tries = 1;
 
-    public int $timeout = 600;
+    public int $timeout = 780;
 
     private bool $swapped = false;
+
+    private ?string $failureReason = null;
+
+    private bool $crashLooping = false;
 
     public function __construct(
         private readonly Deployment $deployment,
@@ -83,23 +104,28 @@ final class DeployApplication implements ShouldQueue
 
             $this->appendLog($this->stamp() . ' release ' . $this->timestamp . ' · branch ' . $application->repository_branch . ' · triggered by ' . $this->trigger());
 
-            $this->prepare($connection, $paths, $release);
+            $this->claimPorts($connection, $application);
+
+            $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => $this->prepare($connection, $paths, $release));
 
             if ($this->hasCustomBlueprint($application)) {
                 $this->mark(DeploymentPhases::BUILD, 'running the custom blueprint');
                 $this->runBlueprint($connection, $commands, $release, $application);
             } else {
-                $this->installDependencies($connection, $commands, $release);
-                $this->build($connection, $commands, $release);
+                $this->reconnecting($connection, DeploymentPhases::DEPENDENCIES, fn() => $this->installDependencies($connection, $commands, $release));
+                $this->reconnecting($connection, DeploymentPhases::BUILD, fn() => $this->build($connection, $commands, $release));
                 $this->migrate($connection, $commands, $release);
             }
 
             $this->checkHealth($connection, $commands, $paths, $release);
             $this->swapSymlink($connection, $paths, $release);
-            app(ProcessManager::class)->install($connection, $application);
-            $this->restartProcesses($connection, $commands);
+            $processes = app(ProcessManager::class);
+            $processes->install($connection, $application);
+            $this->startProcesses($connection, $processes, $application);
+            $this->routeTraffic($connection, $application);
             $this->writeCrontab($connection, $application);
             $this->pruneOldReleases($connection, $paths);
+            $this->watchProcesses($connection, $processes, $application);
 
             $this->appendLog($this->stamp() . ' deployed. previous release kept for instant rollback.');
 
@@ -120,12 +146,64 @@ final class DeployApplication implements ShouldQueue
                 $this->cleanUpFailedRelease($connection, $release);
             }
 
+            $this->failureReason ??= $e instanceof DeploymentAborted ? $e->getMessage() : null;
+
             $this->markFailed(app(LogSanitizer::class)->sanitize($e->getMessage(), $this->deployment->application));
 
             throw $e;
         } finally {
             $lock->release();
             $connections->disconnect($application->server);
+        }
+    }
+
+    private function reconnecting(SSHConnection $connection, string $phase, Closure $work): void
+    {
+        try {
+            $work();
+        } catch (ConnectionClosedException) {
+            $this->appendLog("the SSH connection dropped during {$phase}, reconnecting and running it once more");
+            $connection->disconnect();
+            Sleep::for(self::RETRY_SECONDS)->seconds();
+
+            try {
+                $work();
+            } catch (ConnectionClosedException $e) {
+                $this->failureReason = 'The SSH connection to ' . $connection->server()->name . " dropped twice during {$phase}. Check the server is reachable, then deploy again.";
+
+                throw $e;
+            }
+        }
+    }
+
+    private function git(SSHConnection $connection, string $command, string $step, ?Closure $beforeRetry = null): void
+    {
+        $application = $this->deployment->application;
+        $attempts = self::GIT_RETRIES + 1;
+
+        for ($attempt = 1; ; $attempt++) {
+            $result = $connection->execute($command);
+
+            if ($result->successful()) {
+                return;
+            }
+
+            $this->appendLog($result->output);
+            $failure = GitFailure::from($result->output, $application);
+
+            if (!$failure->retryable || $attempt >= $attempts) {
+                $this->failureReason = $failure->reason;
+
+                throw new DeploymentAborted($failure->reason);
+            }
+
+            $this->appendLog("{$step} failed (attempt {$attempt} of {$attempts}), retrying in " . self::RETRY_SECONDS . ' seconds');
+
+            if ($beforeRetry !== null) {
+                $beforeRetry();
+            }
+
+            Sleep::for(self::RETRY_SECONDS)->seconds();
         }
     }
 
@@ -139,6 +217,27 @@ final class DeployApplication implements ShouldQueue
                 "Deployment aborted: server disk is {$percent}% full. Free up space (clear old releases, prune logs) before deploying."
             );
         }
+    }
+
+    private function claimPorts(SSHConnection $connection, Application $application): void
+    {
+        if ($application->current_release !== null) {
+            return;
+        }
+
+        $moved = app(PortBlockGuard::class)->ensureFree($connection, $application);
+
+        if ($moved === null) {
+            return;
+        }
+
+        if (isset($moved['unknown'])) {
+            $this->appendLog('ports: could not read the listening ports, going ahead');
+
+            return;
+        }
+
+        $this->appendLog("ports: {$moved['process']} already listens on {$moved['port']}, moved to {$moved['to']}–" . ($moved['to'] + 9));
     }
 
     private function prepare(SSHConnection $connection, ReleasePaths $paths, string $release): void
@@ -167,8 +266,8 @@ final class DeployApplication implements ShouldQueue
                 ? $keys->withKey($application, "git --git-dir={$repo} fetch --all --prune --tags")
                 : "git --git-dir={$repo} fetch --all --prune --tags";
 
-            $connection->execute("test -d {$repo} || {$clone}")->throw();
-            $connection->execute($fetch)->throw();
+            $this->git($connection, "test -d {$repo} || {$clone}", 'clone', fn() => $connection->execute('rm -rf ' . $repo));
+            $this->git($connection, $fetch, 'fetch');
         } finally {
             if ($private) {
                 $connection->execute($keys->removeCommand($application));
@@ -178,7 +277,7 @@ final class DeployApplication implements ShouldQueue
         $this->recordCommit($connection, $repo, $branch);
 
         $connection->execute('mkdir -p ' . $release)->throw();
-        $connection->execute("git --git-dir={$repo} archive {$branch} | tar -x -C {$release}")->throw();
+        $this->git($connection, "set -o pipefail; git --git-dir={$repo} archive {$branch} | tar -x -C {$release}", 'checkout');
 
         $connection->execute(
             'test -d ' . $paths->shared() . '/storage && ln -sfn ' . $paths->shared() . '/storage ' . $release . '/storage || true',
@@ -227,7 +326,7 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::DEPENDENCIES, 'installing dependencies');
-        $this->runInRelease($connection, $commands, $release, $steps);
+        $this->runInRelease($connection, $commands, $release, $steps, DeploymentPhases::DEPENDENCIES, self::DEPENDENCY_RETRIES);
     }
 
     private function build(SSHConnection $connection, DeploymentCommands $commands, string $release): void
@@ -239,7 +338,7 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::BUILD, 'building the release');
-        $this->runInRelease($connection, $commands, $release, $steps);
+        $this->runInRelease($connection, $commands, $release, $steps, DeploymentPhases::BUILD, 0);
     }
 
     private function migrate(SSHConnection $connection, DeploymentCommands $commands, string $release): void
@@ -251,7 +350,7 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::MIGRATIONS, 'running migrations against release ' . $this->timestamp);
-        $this->runInRelease($connection, $commands, $release, $steps);
+        $this->runInRelease($connection, $commands, $release, $steps, DeploymentPhases::MIGRATIONS, 0);
     }
 
     private function checkHealth(SSHConnection $connection, DeploymentCommands $commands, ReleasePaths $paths, string $release): void
@@ -284,11 +383,64 @@ final class DeployApplication implements ShouldQueue
         $this->appendLog('symlink: current → releases/' . $this->timestamp . ' (atomic swap)');
     }
 
-    private function restartProcesses(SSHConnection $connection, DeploymentCommands $commands): void
+    private function startProcesses(SSHConnection $connection, ProcessManager $processes, Application $application): void
     {
-        foreach ($commands->restart($this->deployment->application) as $command) {
-            $connection->execute($command, sudo: true)->throw();
+        if (in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
+            $this->appendLog('processes: ' . $application->name . ' is ' . $application->power_state->value . ', so the new release starts when the app does');
+
+            return;
         }
+
+        $processes->refresh($connection, $application);
+
+        try {
+            $processes->verifyStarted($connection, $application);
+        } catch (ProcessDidNotStart $e) {
+            $this->appendLog($e->journal);
+            $this->failureReason = $e->getMessage();
+
+            throw $e;
+        }
+    }
+
+    private function watchProcesses(SSHConnection $connection, ProcessManager $processes, Application $application): void
+    {
+        if (in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
+            return;
+        }
+
+        if ($processes->unitNames($application) === []) {
+            return;
+        }
+
+        $seconds = CrashLoopWatch::CHECKS * CrashLoopWatch::INTERVAL_SECONDS;
+
+        $this->appendLog($this->stamp() . " watch: keeping an eye on the processes for {$seconds} seconds");
+
+        $loop = app(CrashLoopWatch::class)->watch($connection, $application);
+
+        if ($loop === null) {
+            $this->appendLog('watch: every process stayed up');
+
+            return;
+        }
+
+        $this->appendLog($loop->output);
+        $this->crashLooping = true;
+        $this->failureReason = "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
+
+        throw new DeploymentAborted($this->failureReason);
+    }
+
+    private function routeTraffic(SSHConnection $connection, Application $application): void
+    {
+        if ($application->allDomains() === []) {
+            return;
+        }
+
+        app(CaddyApiClient::class)->putSite($connection, $application);
+
+        $this->appendLog('caddy: route for ' . implode(', ', $application->allDomains()) . ' is in place');
     }
 
     private function installDeployKey(SSHConnection $connection, DeployKeyManager $keys, Application $application): void
@@ -357,19 +509,41 @@ final class DeployApplication implements ShouldQueue
     /**
      * @param  list<string>  $steps
      */
-    private function runInRelease(SSHConnection $connection, DeploymentCommands $commands, string $release, array $steps): void
+    private function runInRelease(SSHConnection $connection, DeploymentCommands $commands, string $release, array $steps, string $phase, int $retries): void
     {
         $prefix = $commands->pathPrefix($this->deployment->application);
 
         foreach ($steps as $step) {
-            $this->appendLog('$ ' . $step);
+            for ($attempt = 1; ; $attempt++) {
+                $this->appendLog('$ ' . $step);
 
-            $result = $connection->execute("cd {$release} && {$prefix}{$step}");
+                $result = $connection->execute("cd {$release} && {$prefix}{$step}");
 
-            $this->appendLog($result->output);
+                $this->appendLog($result->output);
 
-            $result->throw();
+                if ($result->successful()) {
+                    break;
+                }
+
+                if ($attempt > $retries || !$this->looksLikeNetwork($result->output)) {
+                    $result->throw();
+                }
+
+                $this->appendLog("{$phase} hit a network error (attempt {$attempt} of " . ($retries + 1) . '), retrying in ' . self::RETRY_SECONDS . ' seconds');
+                Sleep::for(self::RETRY_SECONDS)->seconds();
+            }
         }
+    }
+
+    private function looksLikeNetwork(string $output): bool
+    {
+        foreach (self::NETWORK_ERRORS as $needle) {
+            if (str_contains($output, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function mark(string $phase, string $detail): void
@@ -416,10 +590,11 @@ final class DeployApplication implements ShouldQueue
             'status' => DeploymentStatus::Failed,
             'finished_at' => now(),
             'log' => trim((string) $this->deployment->log . "\n" . $message . "\n" . $this->stamp() . $outcome),
+            'failure_reason' => $this->failureReason === null ? null : app(LogSanitizer::class)->sanitize($this->failureReason, $application),
         ])->save();
 
         $application->forceFill([
-            'status' => $application->current_release === null ? ApplicationStatus::Failed : ApplicationStatus::Active,
+            'status' => $application->current_release === null || $this->crashLooping ? ApplicationStatus::Failed : ApplicationStatus::Active,
         ])->save();
 
         DeploymentUpdated::dispatch($this->deployment);

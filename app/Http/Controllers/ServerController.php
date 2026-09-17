@@ -12,6 +12,8 @@ use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Http\Requests\Server\StoreServerRequest;
 use App\Http\Requests\Server\UpdateServerRequest;
+use App\Jobs\AuditServer;
+use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
 use App\Jobs\PruneReleases;
 use App\Jobs\RebootServer;
@@ -22,6 +24,8 @@ use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\ServerPresenter;
+use App\Services\Server\Audit\PreProvisioningAudit;
+use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\KeyPairGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -121,13 +125,98 @@ final class ServerController extends Controller
         return back()->with('success', 'Testing the connection. This page updates when it finishes.');
     }
 
+    public function audit(Server $server): RedirectResponse
+    {
+        $this->authorize('update', $server);
+
+        abort_unless($server->status->isBeforeProvisioning(), 404);
+
+        AuditServer::begin($server);
+
+        return back()->with('success', "Checking {$server->name}. Nothing on the server changes while Coresmith looks.");
+    }
+
+    public function fixAudit(Server $server, string $fix): RedirectResponse
+    {
+        $this->authorize('update', $server);
+
+        abort_unless(
+            $server->status->isBeforeProvisioning()
+                && array_key_exists($fix, PreProvisioningAudit::FIXES)
+                && in_array($fix, ServerAudit::fixes($server), true),
+            404,
+        );
+
+        ServerAudit::start($server);
+        FixAuditFinding::dispatch($server, $fix);
+
+        return back()->with('success', 'Stopping ' . PreProvisioningAudit::FIXES[$fix] . " on {$server->name}, then checking again.");
+    }
+
     public function provision(Server $server): RedirectResponse
     {
         $this->authorize('update', $server);
 
+        if ($server->status === ServerStatus::Failed) {
+            return back()->with('error', 'Provisioning already ran on this server. Retry it from the phase that failed, or start over.');
+        }
+
+        if ($server->status->isBeforeProvisioning()) {
+            if (ServerAudit::isRunning($server)) {
+                return back()->with('error', 'The check is still running. Provision once it finishes.');
+            }
+
+            if (!ServerAudit::isFresh($server)) {
+                AuditServer::begin($server);
+
+                return back()->with('error', 'Coresmith checks the server before provisioning, so that check is running now. Provision once it finishes.');
+            }
+
+            if (ServerAudit::blocks($server)) {
+                return back()->with('error', 'Resolve the blockers first, then check again.');
+            }
+        }
+
+        abort_unless($server->status->isBeforeProvisioning(), 404);
+
+        $server->forceFill(['status' => ServerStatus::Provisioning])->save();
+
         ProvisionServer::dispatch($server);
 
         return back()->with('success', 'Provisioning started. Every phase is logged, close this page and it keeps going.');
+    }
+
+    public function retryProvisioning(Server $server): RedirectResponse
+    {
+        $this->authorize('update', $server);
+
+        abort_unless($server->status === ServerStatus::Failed, 404);
+
+        $completed = (int) ($server->provisioning_phase ?? 0);
+        $words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+
+        $server->forceFill(['status' => ServerStatus::Provisioning, 'provisioning_error' => null])->save();
+        ProvisionServer::dispatch($server);
+
+        activity()->performedOn($server)->withProperties(['phase' => $completed + 1])->log('provisioning_retried');
+
+        $kept = $completed === 0 ? 'Nothing had finished yet.' : ($completed === 1 ? 'The phase before it finished and is kept.' : "The {$words[$completed]} phases before it finished and are kept.");
+
+        return back()->with('success', 'Retrying from phase ' . ($completed + 1) . ". {$kept}");
+    }
+
+    public function restartProvisioning(Server $server): RedirectResponse
+    {
+        $this->authorize('update', $server);
+
+        abort_unless($server->status === ServerStatus::Failed, 404);
+
+        $server->forceFill(['status' => ServerStatus::Provisioning, 'provisioning_error' => null, 'provisioning_log' => null])->save();
+        ProvisionServer::dispatch($server, fromScratch: true);
+
+        activity()->performedOn($server)->log('provisioning_restarted');
+
+        return back()->with('success', 'Starting over from phase 1. Each phase is written to be safe to run again.');
     }
 
     public function reboot(Server $server): RedirectResponse

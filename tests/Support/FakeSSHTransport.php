@@ -6,6 +6,7 @@ namespace Tests\Support;
 
 use App\Services\SSH\Contracts\SSHTransport;
 use phpseclib3\Crypt\Common\PrivateKey;
+use phpseclib3\Exception\ConnectionClosedException;
 
 final class FakeSSHTransport implements SSHTransport
 {
@@ -25,11 +26,17 @@ final class FakeSSHTransport implements SSHTransport
     /** @var array<string, array{output: string, exitCode: int}> */
     private array $matched = [];
 
+    /** @var array<string, list<array{output: string, exitCode: int}>> */
+    private array $sequences = [];
+
     /** @var list<string> */
     private array $commands = [];
 
     /** @var array<string, string> */
     private array $uploads = [];
+
+    /** @var array<string, int> */
+    private array $drops = [];
 
     public function setHostKey(string $hostKey): self
     {
@@ -55,6 +62,26 @@ final class FakeSSHTransport implements SSHTransport
     public function respondTo(string $needle, string $output, int $exitCode = 0): self
     {
         $this->matched[$needle] = ['output' => $output, 'exitCode' => $exitCode];
+
+        return $this;
+    }
+
+    /**
+     * @param  list<array{0: string, 1?: int}>  $responses
+     */
+    public function respondToSequence(string $needle, array $responses): self
+    {
+        $this->sequences[$needle] = array_map(
+            fn(array $response): array => ['output' => (string) $response[0], 'exitCode' => (int) ($response[1] ?? 0)],
+            $responses,
+        );
+
+        return $this;
+    }
+
+    public function dropConnectionOn(string $needle, int $times = 1): self
+    {
+        $this->drops[$needle] = $times;
 
         return $this;
     }
@@ -102,17 +129,36 @@ final class FakeSSHTransport implements SSHTransport
     {
         $this->commands[] = $command;
 
+        foreach ($this->drops as $needle => $remaining) {
+            if ($remaining > 0 && str_contains($command, $needle)) {
+                $this->drops[$needle] = $remaining - 1;
+                $this->connected = false;
+
+                throw new ConnectionClosedException('Connection closed by server');
+            }
+        }
+
         $next = null;
 
-        foreach ($this->matched as $needle => $response) {
+        foreach ($this->sequences as $needle => $responses) {
             if (str_contains($command, $needle)) {
-                $next = $response;
+                $next = count($responses) > 1 ? array_shift($this->sequences[$needle]) : $responses[0];
 
                 break;
             }
         }
 
-        $next ??= array_shift($this->queued) ?? ['output' => '', 'exitCode' => 0];
+        if ($next === null) {
+            foreach ($this->matched as $needle => $response) {
+                if (str_contains($command, $needle)) {
+                    $next = $response;
+
+                    break;
+                }
+            }
+        }
+
+        $next ??= array_shift($this->queued) ?? $this->healthyServer($command) ?? ['output' => '', 'exitCode' => 0];
         $this->exitStatus = $next['exitCode'];
 
         if ($onOutput !== null) {
@@ -120,6 +166,18 @@ final class FakeSSHTransport implements SSHTransport
         }
 
         return $next['output'];
+    }
+
+    /**
+     * @return array{output: string, exitCode: int}|null
+     */
+    private function healthyServer(string $command): ?array
+    {
+        return match (true) {
+            str_contains($command, "systemctl is-active 'coresmith-app-") => ['output' => "active\n", 'exitCode' => 0],
+            str_contains($command, "NRestarts --value 'coresmith-app-") => ['output' => "0\n", 'exitCode' => 0],
+            default => null,
+        };
     }
 
     public function exitStatus(): int

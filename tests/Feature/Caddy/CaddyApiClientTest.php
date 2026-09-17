@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Exceptions\InvalidRouteConfigException;
+use App\Exceptions\SSHCommandFailedException;
+use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Caddy\CaddyApiClient;
@@ -11,6 +13,7 @@ use App\Services\Caddy\CaddyInstaller;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Caddy\RouteConfigValidator;
 use App\Services\SSH\SSHConnection;
+use App\Services\SSH\SSHConnectionManager;
 use Tests\Support\FakeSSHTransport;
 
 function caddyConnection(FakeSSHTransport $transport): SSHConnection
@@ -57,6 +60,56 @@ test('the admin api is only ever addressed on localhost', function () {
     }
 });
 
+function caddyCalls(FakeSSHTransport $transport, string $needle): int
+{
+    return count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, $needle)));
+}
+
+test('putting a site patches the route when caddy already has it', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp();
+
+    caddyClient()->putSite(caddyConnection($transport), $app);
+
+    expect(implode("\n", $transport->commands()))->toContain("-X PATCH 'http://localhost:2019/id/app-{$app->id}'")
+        ->not->toContain('-X POST');
+});
+
+test('putting a site adds the route when caddy has never seen it', function () {
+    $transport = (new FakeSSHTransport)->respondTo("-X GET 'http://localhost:2019/id/", 'curl: (22) The requested URL returned error: 404', 22);
+
+    caddyClient()->putSite(caddyConnection($transport), routableApp());
+
+    expect(implode("\n", $transport->commands()))->toContain("-X POST 'http://localhost:2019/config/apps/http/servers/coresmith/routes'")
+        ->not->toContain('-X PATCH');
+});
+
+test('a busy admin api is retried until it answers', function () {
+    $transport = (new FakeSSHTransport)->respondToSequence('-X PATCH', [
+        ['curl: (22) The requested URL returned error: 503', 22],
+        ['curl: (7) Failed to connect to localhost port 2019', 7],
+        ['', 0],
+    ]);
+
+    caddyClient()->putSite(caddyConnection($transport), routableApp());
+
+    expect(caddyCalls($transport, '-X PATCH'))->toBe(3);
+});
+
+test('a route caddy rejects is not retried', function () {
+    $transport = (new FakeSSHTransport)->respondTo('-X PATCH', 'curl: (22) The requested URL returned error: 400', 22);
+
+    expect(fn() => caddyClient()->putSite(caddyConnection($transport), routableApp()))->toThrow(SSHCommandFailedException::class);
+    expect(caddyCalls($transport, '-X PATCH'))->toBe(1);
+});
+
+test('the admin api is given up on after three retries', function () {
+    $transport = (new FakeSSHTransport)->respondTo('-X PATCH', 'curl: (28) Operation timed out', 28);
+
+    expect(fn() => caddyClient()->putSite(caddyConnection($transport), routableApp()))->toThrow(SSHCommandFailedException::class);
+    expect(caddyCalls($transport, '-X PATCH'))->toBe(4);
+});
+
 test('updating a site patches by route id', function () {
     $transport = new FakeSSHTransport;
     $app = routableApp();
@@ -87,7 +140,63 @@ test('a mutation is followed by a config persist', function () {
 
     expect($commands)->toHaveCount(2)
         ->and($commands[1])->toContain('-X GET')
-        ->and($commands[1])->toContain('> ' . CaddyInstaller::CONFIG_FILE);
+        ->and($commands[1])->toContain('> ' . CaddyApiClient::STAGED_CONFIG_FILE)
+        ->and($commands[1])->toContain('&& mv -f ' . CaddyApiClient::STAGED_CONFIG_FILE . ' ' . CaddyInstaller::CONFIG_FILE)
+        ->and($commands[1])->not->toContain("-X GET 'http://localhost:2019/config/' > " . CaddyInstaller::CONFIG_FILE);
+});
+
+test('a persist that fails never truncates the config caddy would reload', function () {
+    $transport = (new FakeSSHTransport)->respondTo('-X GET', 'curl: (22) The requested URL returned error: 400', 22);
+
+    expect(fn() => caddyClient()->addSite(caddyConnection($transport), routableApp()))->toThrow(SSHCommandFailedException::class);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('> ' . CaddyInstaller::CONFIG_FILE);
+});
+
+test('a persisted config caddy refuses on boot is an error, a missing one is not', function () {
+    $refused = (new FakeSSHTransport)->respondTo('-X POST', 'curl: (22) The requested URL returned error: 400', 22);
+
+    expect(fn() => caddyClient()->loadPersistedConfig(caddyConnection($refused)))->toThrow(SSHCommandFailedException::class);
+
+    $missing = new FakeSSHTransport;
+
+    caddyClient()->loadPersistedConfig(caddyConnection($missing));
+
+    expect($missing->commands()[0])->toContain('test -s ' . CaddyInstaller::CONFIG_FILE . ' || exit 0')
+        ->and($missing->commands()[0])->not->toContain('|| true');
+});
+
+test('only idempotent verbs are retried', function () {
+    $transport = (new FakeSSHTransport)->respondTo('-X POST', 'curl: (28) Operation timed out', 28);
+
+    expect(fn() => caddyClient()->addSite(caddyConnection($transport), routableApp()))->toThrow(SSHCommandFailedException::class);
+    expect(caddyCalls($transport, '-X POST'))->toBe(1);
+});
+
+test('syncing a route puts the site and persists, and a domainless app touches nothing', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp();
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        app()->call([new SyncApplicationRoute($app), 'handle']);
+
+        $commands = implode("\n", $transport->commands());
+
+        expect($commands)->toContain('/id/app-' . $app->id)
+            ->and($commands)->toContain('mv -f ' . CaddyApiClient::STAGED_CONFIG_FILE)
+            ->and($transport->connected())->toBeFalse();
+
+        $quiet = new FakeSSHTransport;
+        SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $quiet);
+
+        app()->call([new SyncApplicationRoute(routableApp(['slug' => 'no-domain', 'domain' => null])), 'handle']);
+
+        expect($quiet->commands())->toBe([]);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
 });
 
 test('an invalid route is never pushed to caddy', function () {

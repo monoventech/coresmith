@@ -10,15 +10,20 @@ namespace App\Services\Process;
 
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
+use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Sleep;
 
 final class ProcessManager
 {
+    public const START_GRACE_SECONDS = 3;
+
     public function __construct(
         private readonly SystemdUnitBuilder $units,
         private readonly FpmPoolBuilder $fpm,
+        private readonly ProcessStartAdvice $advice = new ProcessStartAdvice,
     ) {}
 
     public function install(SSHConnection $connection, Application $application): void
@@ -71,13 +76,40 @@ final class ProcessManager
         $application->forceFill(['power_state' => $state])->save();
     }
 
-    public function restart(SSHConnection $connection, Application $application): void
+    public function refresh(SSHConnection $connection, Application $application): void
     {
+        $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;
+
         foreach ($this->unitNames($application) as $unit) {
-            $connection->execute('systemctl restart ' . escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl enable ' . escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl ' . ($unit === $fpm ? 'reload-or-restart ' : 'restart ') . escapeshellarg($unit), sudo: true)->throw();
+        }
+    }
+
+    public function verifyStarted(SSHConnection $connection, Application $application): void
+    {
+        $units = $this->unitNames($application);
+
+        if ($units === []) {
+            return;
         }
 
-        $application->forceFill(['power_state' => PowerState::Active])->save();
+        Sleep::for(self::START_GRACE_SECONDS)->seconds();
+
+        foreach ($units as $unit) {
+            $state = trim($connection->execute('systemctl is-active ' . escapeshellarg($unit))->output);
+
+            if ($state === 'active') {
+                continue;
+            }
+
+            $journal = $connection->execute(
+                'journalctl -u ' . escapeshellarg($unit) . " --no-pager -n 30 --since '2 minutes ago' 2>/dev/null || true",
+                sudo: true,
+            )->output;
+
+            throw new ProcessDidNotStart($unit, $state === '' ? 'unknown' : $state, $journal, $this->advice->for($application, $journal));
+        }
     }
 
     public function sleep(SSHConnection $connection, Application $application): void

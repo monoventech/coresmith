@@ -271,3 +271,62 @@ test('progress is empty once nothing is running', function (DeploymentStatus $st
 
     expect((new DeploymentPhases)->progress($deployment))->toBeNull();
 })->with([DeploymentStatus::Succeeded, DeploymentStatus::Failed, DeploymentStatus::Cancelled]);
+
+test('the process watch after the swap is not a phase of its own', function () {
+    $lines = [
+        '[14:02:12] clone: fetching over https',
+        '[14:02:20] deps: installing dependencies',
+        '[14:02:50] build: building the release',
+        '[14:03:05] health: checking the release before it goes live',
+        '[14:03:06] swap: current → releases/20260914-140206',
+    ];
+
+    $without = phasesStates(phasesDeployment(DeploymentStatus::Succeeded, [...$lines, '[14:03:07] deployed. previous release kept for instant rollback.']));
+    $with = phasesStates(phasesDeployment(DeploymentStatus::Succeeded, [...$lines, '[14:03:07] watch: keeping an eye on the processes for 60 seconds', 'watch: every process stayed up', '[14:04:07] deployed. previous release kept for instant rollback.']));
+
+    expect(array_keys($with))->toBe(['clone', 'deps', 'build', 'migrate', 'health', 'swap'])
+        ->and($with)->toBe($without);
+});
+
+test('a deploy the crash loop watch failed does not blame the symlink swap, because the swap finished', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Failed, [
+        '[15:08:29] clone: fetching over https',
+        '[15:08:38] deps: installing dependencies',
+        '[15:09:10] build: building the release',
+        '[15:09:24] health: checking the release before it goes live',
+        '[15:09:25] swap: current → releases/20260916-150829',
+        '[15:09:29] watch: keeping an eye on the processes for 60 seconds',
+        '[15:10:00] deploy failed after the symlink swap. releases/20260916-150829 is live, check its processes.',
+    ]);
+
+    expect(phasesStates($deployment))->toBe([
+        'clone' => 'done',
+        'deps' => 'done',
+        'build' => 'done',
+        'migrate' => 'skipped',
+        'health' => 'done',
+        'swap' => 'done',
+    ]);
+});
+
+test('a deploy whose symlink swap itself failed still blames the swap', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Failed, [
+        '[15:08:29] clone: fetching over https',
+        '[15:09:24] health: checking the release before it goes live',
+        '[15:09:25] swap: current → releases/20260916-150829',
+        '[15:09:26] deploy failed. The symlink could not be moved.',
+    ]);
+
+    expect(phasesStates($deployment)['swap'])->toBe('failed');
+});
+
+test('a deploy still inside the process watch says so, rather than falling back to starting', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Running, [
+        '[15:09:24] health: checking the release before it goes live',
+        '[15:09:25] swap: current → releases/20260916-150829',
+        '[15:09:29] watch: keeping an eye on the processes for 60 seconds',
+    ]);
+
+    expect((new DeploymentPhases)->progress($deployment))->toBe('watching the processes')
+        ->and(phasesStates($deployment)['swap'])->toBe('done');
+});

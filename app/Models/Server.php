@@ -57,6 +57,7 @@ class Server extends Model
             'status' => ServerStatus::class,
             'installed_runtimes' => 'array',
             'meta' => 'array',
+            'audit' => 'array',
             'audit_logging_enabled' => 'boolean',
             'last_connected_at' => 'datetime',
             'host_key_changed_at' => 'datetime',

@@ -14,7 +14,7 @@ final class PortExhaustedException extends RuntimeException
 {
     public static function forServer(string $name): self
     {
-        return new self("No available port blocks on server [{$name}].");
+        return new self("No port block is free on {$name}. All 200 blocks in 8000–9999 are taken by apps or by other processes. Remove apps you no longer need, or stop processes using ports in that range.");
     }
 
     public static function ssrForServer(string $name): self

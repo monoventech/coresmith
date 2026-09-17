@@ -150,7 +150,7 @@ test('the logs endpoint requires authentication and is rate limited', function (
 
     $this->get(logRouteUrl($application))->assertRedirect(route('login'));
 
-    expect(Route::getRoutes()->getByName('servers.applications.logs')->gatherMiddleware())->toContain('throttle:30,1');
+    expect(Route::getRoutes()->getByName('servers.applications.logs')->gatherMiddleware())->toContain('throttle:30,1,app-logs');
 });
 
 test('a read caches the application requests with the moment they were read', function () {

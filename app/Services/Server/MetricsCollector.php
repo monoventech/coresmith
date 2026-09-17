@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Server;
 
+use App\Enums\AppSize;
 use App\Enums\PowerState;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
@@ -17,6 +18,9 @@ use App\Notifications\DiskPressureNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\SSH\SSHConnection;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
 final class MetricsCollector
@@ -119,6 +123,53 @@ final class MetricsCollector
         }
 
         return false;
+    }
+
+    public function recordOomKills(SSHConnection $connection): void
+    {
+        $server = $connection->server();
+        $key = 'oom-since:' . $server->getKey();
+        $lookback = now()->subSeconds(OomKillReader::LOOKBACK_SECONDS)->getTimestamp();
+        $since = CarbonImmutable::createFromTimestamp(min((int) Cache::get($key, $lookback) ?: $lookback, $lookback));
+        $kills = app(OomKillReader::class)->read($connection, $since);
+
+        Cache::put($key, now()->getTimestamp(), now()->addDay());
+
+        if ($kills === []) {
+            return;
+        }
+
+        $applications = $server->applications()->get()->sortByDesc(fn(Application $application): int => strlen($application->slug))->values();
+
+        foreach ($kills as $kill) {
+            $application = $applications->first(fn(Application $candidate): bool => str_starts_with($kill['unit'], 'coresmith-app-' . $candidate->slug . '-'));
+
+            if ($application === null) {
+                continue;
+            }
+
+            $at = $kill['at']->toIso8601String();
+
+            $seen = Activity::query()
+                ->where('subject_type', $application->getMorphClass())
+                ->where('subject_id', $application->getKey())
+                ->where('description', 'app_oom_killed')
+                ->where('properties->at', $at)
+                ->exists();
+
+            if ($seen) {
+                continue;
+            }
+
+            activity()
+                ->performedOn($application)
+                ->withProperties([
+                    'process' => Str::after($kill['unit'], 'coresmith-app-' . $application->slug . '-'),
+                    'at' => $at,
+                    'limit_mb' => (AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small)->memoryMaxMb(),
+                ])
+                ->log('app_oom_killed');
+        }
     }
 
     public function probe(): string

@@ -15,4 +15,17 @@ enum ServerStatus: string
     case Active = 'active';
     case Failed = 'failed';
     case Disconnected = 'disconnected';
+
+    /**
+     * @return list<self>
+     */
+    public static function beforeProvisioning(): array
+    {
+        return [self::Pending, self::Disconnected];
+    }
+
+    public function isBeforeProvisioning(): bool
+    {
+        return in_array($this, self::beforeProvisioning(), true);
+    }
 }

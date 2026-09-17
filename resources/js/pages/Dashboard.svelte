@@ -179,7 +179,7 @@
             <Dialog.Title>Deploy on {deployFrom?.name}</Dialog.Title>
             <Dialog.Description>Each app builds into a new release while the current one keeps serving.</Dialog.Description>
         </Dialog.Header>
-        <div class="mt-4 flex flex-col">
+        <div class="-mx-1 mt-4 flex max-h-[min(24rem,50dvh)] flex-col overflow-y-auto p-1">
             {#each deployFrom?.applications ?? [] as application (application.id)}
                 <div class="flex min-h-11 items-center gap-3 border-t border-border first:border-t-0" data-testid="deploy-option">
                     <span class="font-mono text-[13.5px] font-medium">{application.name}</span>

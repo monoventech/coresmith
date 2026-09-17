@@ -56,6 +56,7 @@ test('server events are described in plain words', function (string $description
     'firewall' => ['firewall_rule_changed', ['action' => 'allow', 'port' => 6379], 'Firewall allow port 6379 on web-1'],
     'host key changed' => ['ssh_host_key_changed', [], 'web-1 presented a different host key, operations paused'],
     'apparmor' => ['apparmor_profiles_in_complain_mode', ['profiles_in_complain_mode' => 3], 'AppArmor has 3 profiles in complain mode on web-1'],
+    'audited' => ['server_audited', ['blockers' => 1, 'warnings' => 2], 'Pre-provisioning check on web-1, 1 blocking, 2 to review'],
 ]);
 
 test('application events are described in plain words and link to the application', function (string $description, array $properties, string $sentence) {
@@ -77,7 +78,10 @@ test('application events are described in plain words and link to the applicatio
     'toggle disabled' => ['toggle_changed', ['toggle' => 'scheduler', 'label' => 'Scheduler', 'on' => false], 'Smart toggle disabled, Scheduler on shop, no deployment needed'],
     'process sync failed' => ['processes_sync_failed', ['error' => 'SSH command failed with exit code 1.'], "Couldn't apply the process change on shop, SSH command failed with exit code 1."],
     'process sync failed without detail' => ['processes_sync_failed', [], "Couldn't apply the process change on shop, the server did not respond"],
+    'rollback processes failed' => ['rollback_processes_failed', ['from' => '20260913140000', 'to' => '20260912090000', 'error' => 'coresmith-app-shop-web did not start.'], 'shop rolled back to 20260912-090000, but its processes did not start. Open the app to see why, then deploy a release that starts.'],
     'domain added' => ['domain_added', ['domain' => 'www.shop.test'], 'www.shop.test added to shop'],
+    'port block moved' => ['port_block_moved', ['from' => 8000, 'to' => 8010, 'port' => 8005, 'process' => 'java'], 'shop moved to ports 8010–8019, java already listens on 8005'],
+    'killed for memory' => ['app_oom_killed', ['process' => 'queue', 'at' => '2026-09-13T14:03:00+00:00', 'limit_mb' => 256], 'shop queue process killed for going over its 256 MB memory limit, systemd started it again'],
 ]);
 
 test('names are marked as monospace and empty fragments are dropped', function () {

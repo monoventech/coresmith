@@ -9,11 +9,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
+use App\Enums\ServerStatus;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\DetachApplication;
+use App\Jobs\ReservePortBlock;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Git\DeployKeyManager;
@@ -25,10 +28,12 @@ use App\Services\Panel\SmartToggles;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Activitylog\Models\Activity;
 
 final class ApplicationController extends Controller
 {
@@ -63,6 +68,10 @@ final class ApplicationController extends Controller
         ]);
 
         activity()->performedOn($application)->log('application_created');
+
+        if ($server->status === ServerStatus::Active) {
+            ReservePortBlock::dispatch($application);
+        }
 
         return to_route('servers.applications.show', [$server, $application])
             ->with('success', 'Application created. Deploy it when you are ready.');
@@ -117,6 +126,8 @@ final class ApplicationController extends Controller
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
                 'logs_href' => route('servers.applications.logs', [$server, $application]),
                 'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
+                'last_failed_live' => $latest !== null && $latest->status === DeploymentStatus::Failed && DeploymentPresenter::reachedUsers($latest),
+                'oom' => $this->recentOomKill($application),
             ],
             'toggles' => array_map(fn(array $toggle): array => [
                 ...$toggle,
@@ -163,6 +174,33 @@ final class ApplicationController extends Controller
     private function assertBelongsTo(Server $server, Application $application): void
     {
         abort_unless($application->server_id === $server->id, 404);
+    }
+
+    /**
+     * @return array{process: string, when: string, limit_mb: int, size: string}|null
+     */
+    private function recentOomKill(Application $application): ?array
+    {
+        $kill = Activity::query()
+            ->where('subject_type', $application->getMorphClass())
+            ->where('subject_id', $application->getKey())
+            ->where('description', 'app_oom_killed')
+            ->where('created_at', '>=', now()->subDay())
+            ->latest('id')
+            ->first();
+
+        if ($kill === null) {
+            return null;
+        }
+
+        $at = CarbonImmutable::parse((string) ($kill->properties['at'] ?? $kill->created_at));
+
+        return [
+            'process' => (string) ($kill->properties['process'] ?? 'web'),
+            'when' => $at->isToday() ? 'at ' . $at->format('H:i') : 'on ' . $at->format('M j'),
+            'limit_mb' => (int) ($kill->properties['limit_mb'] ?? 0),
+            'size' => ucfirst((AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small)->value),
+        ];
     }
 
     /**

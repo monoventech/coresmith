@@ -7,6 +7,7 @@ use App\Exceptions\SSHAuthenticationException;
 use App\Models\Server;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnection;
+use phpseclib3\Exception\ConnectionClosedException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -104,6 +105,17 @@ test('commands are logged without their output', function () {
         ->and(json_encode($activity->properties))->not->toContain('SENSITIVE-OUTPUT');
 });
 
+test('a token inside a logged command is redacted', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+
+    connectTo($server, new FakeSSHTransport)->execute("git clone --bare 'https://x-access-token:ghp_abcdefghijklmnopqrstuvwxyz012345@github.com/acme/app.git' /tmp/repo");
+
+    $activity = Activity::where('description', 'ssh_command_executed')->latest('id')->first();
+
+    expect($activity->properties['command'])->not->toContain('ghp_abcdefghijklmnopqrstuvwxyz012345')
+        ->and($activity->properties['command'])->toContain('github.com/acme/app.git');
+});
+
 test('a failing command returns a failed result', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = (new FakeSSHTransport)->queueResult('not found', 127);
@@ -130,6 +142,19 @@ test('uploading content records the destination', function () {
     connectTo($server, $transport)->uploadContent('Caddyfile body', '/etc/caddy/Caddyfile');
 
     expect($transport->uploads())->toBe(['/etc/caddy/Caddyfile' => 'Caddyfile body']);
+});
+
+test('a dropped connection reconnects and re-authenticates on the next command', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = (new FakeSSHTransport)->dropConnectionOn('git fetch');
+    $connection = connectTo($server, $transport);
+
+    expect(fn() => $connection->execute('git fetch'))->toThrow(ConnectionClosedException::class);
+    expect($transport->connected())->toBeFalse();
+
+    $connection->execute('git fetch');
+
+    expect($transport->connected())->toBeTrue();
 });
 
 test('disconnecting closes the transport', function () {

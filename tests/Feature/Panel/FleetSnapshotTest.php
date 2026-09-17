@@ -316,3 +316,19 @@ test('a partial record of readings lowers uptime', function () {
 
     expect((new FleetSnapshot($team))->uptime())->toBe(27.27);
 });
+
+test('an application killed for memory in the last day needs attention', function () {
+    $team = Team::factory()->create();
+    $server = fleetServer($team);
+    $application = Application::factory()->for($team)->for($server)->create(['name' => 'Hungry']);
+
+    activity()->performedOn($application)->withProperties(['process' => 'web', 'at' => now()->subHours(2)->toIso8601String(), 'limit_mb' => 256])->log('app_oom_killed');
+
+    expect((new FleetSnapshot($team))->attention())->toContain(
+        ['severity' => 'warning', 'subject' => 'Hungry', 'summary' => 'killed for memory', 'href' => route('servers.applications.show', [$server, $application])],
+    );
+
+    $this->travel(25)->hours();
+
+    expect((new FleetSnapshot($team))->attention())->toBe([]);
+});

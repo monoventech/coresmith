@@ -39,6 +39,7 @@ final class CollectServerMetrics implements ShouldQueue
         try {
             $metrics->collect($connection);
             $metrics->recordTraffic($connection);
+            $metrics->recordOomKills($connection);
         } finally {
             $connections->disconnect($this->server);
         }

@@ -8,10 +8,13 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\PowerState;
 use App\Exceptions\NoPreviousReleaseException;
+use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
-use App\Services\Deployment\DeploymentCommands;
+use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -38,7 +41,7 @@ final class RollbackApplication implements ShouldQueue
         $this->onQueue('deployments');
     }
 
-    public function handle(SSHConnectionManager $connections, DeploymentCommands $commands): void
+    public function handle(SSHConnectionManager $connections): void
     {
         $connection = $connections->for($this->application->server);
         $paths = new ReleasePaths($this->application);
@@ -61,8 +64,20 @@ final class RollbackApplication implements ShouldQueue
 
             $this->application->forceFill(['current_release' => $name])->save();
 
-            foreach ($commands->restart($this->application) as $command) {
-                $connection->execute($command, sudo: true)->throw();
+            if (!in_array($this->application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
+                $processes = app(ProcessManager::class);
+                $processes->refresh($connection, $this->application);
+
+                try {
+                    $processes->verifyStarted($connection, $this->application);
+                } catch (ProcessDidNotStart $e) {
+                    activity()
+                        ->performedOn($this->application)
+                        ->withProperties(['from' => $previous, 'to' => $name, 'error' => app(LogSanitizer::class)->sanitize($e->getMessage(), $this->application)])
+                        ->log('rollback_processes_failed');
+
+                    throw $e;
+                }
             }
 
             activity()

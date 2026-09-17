@@ -21,7 +21,6 @@ final class LogSanitizer
         '/AKIA[A-Z0-9]{16}/' => '[REDACTED_AWS_KEY]',
         '/gh[pousr]_[A-Za-z0-9]{20,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/' => '[REDACTED_PRIVATE_KEY]',
-        '/\b[a-z][a-z0-9+.-]*:\/\/[^\s:@\/]+:[^\s:@\/]+@/i' => '$0',
     ];
 
     public function sanitize(string $output, ?Application $application = null): string
@@ -30,10 +29,6 @@ final class LogSanitizer
         $output = $this->redactCredentialsInUrls($output);
 
         foreach (self::PATTERNS as $pattern => $replacement) {
-            if ($replacement === '$0') {
-                continue;
-            }
-
             $output = (string) preg_replace($pattern, $replacement, $output);
         }
 
@@ -60,8 +55,8 @@ final class LogSanitizer
     private function redactCredentialsInUrls(string $output): string
     {
         return (string) preg_replace(
-            '/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@\/]+):[^\s@\/]+@/i',
-            '$1:[REDACTED]@',
+            '/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s@\/]+@/i',
+            '$1[REDACTED]@',
             $output,
         );
     }

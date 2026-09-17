@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\InstallRuntime;
 use App\Models\Server;
 use App\Services\Runtime\AsdfManager;
+use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Tests\Support\FakeSSHTransport;
 
@@ -61,4 +63,19 @@ test('different runtimes are tracked separately', function () {
     runInstallRuntime($server, (new FakeSSHTransport)->queueResult("no\n", 0), 'nodejs', '24.15.0');
 
     expect($server->fresh()->installed_runtimes)->toBe(['php' => ['8.5.5'], 'nodejs' => ['24.15.0']]);
+});
+
+test('a runtime download that fails on the network is tried twice more, a compile error is not', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+    $flaky = (new FakeSSHTransport)
+        ->respondToSequence('asdf install', [["curl: (28) Operation timed out after 30000 milliseconds\n", 1], ["curl: (6) Could not resolve host: www.php.net\n", 1], ['', 0]]);
+
+    app(AsdfManager::class)->install((new SSHConnection($server, $flaky))->connect(), $server, 'php', '8.5.5');
+
+    expect(count(array_filter($flaky->commands(), fn(string $command): bool => str_contains($command, 'asdf install'))))->toBe(3);
+
+    $broken = (new FakeSSHTransport)->respondTo('asdf install', "configure: error: libxml2 not found\n", 1);
+
+    expect(fn() => app(AsdfManager::class)->install((new SSHConnection($server, $broken))->connect(), $server, 'php', '8.5.5'))->toThrow(SSHCommandFailedException::class);
+    expect(count(array_filter($broken->commands(), fn(string $command): bool => str_contains($command, 'asdf install'))))->toBe(1);
 });

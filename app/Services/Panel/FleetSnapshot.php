@@ -17,6 +17,7 @@ use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
 use Illuminate\Support\Collection;
+use Spatie\Activitylog\Models\Activity;
 
 final class FleetSnapshot
 {
@@ -193,6 +194,25 @@ final class FleetSnapshot
                 'summary' => 'last deploy failed',
                 'href' => route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment]),
             ];
+        }
+
+        $applications = $this->team->applications()->with('server')->get()->keyBy('id');
+        $killed = Activity::query()
+            ->where('subject_type', (new Application)->getMorphClass())
+            ->whereIn('subject_id', $applications->keys())
+            ->where('description', 'app_oom_killed')
+            ->where('created_at', '>=', now()->subDay())
+            ->pluck('subject_id')
+            ->unique();
+
+        foreach ($killed as $id) {
+            $application = $applications->get($id);
+
+            if ($application === null) {
+                continue;
+            }
+
+            $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'killed for memory', 'href' => route('servers.applications.show', [$application->server_id, $application])];
         }
 
         usort($items, static fn(array $a, array $b): int => ($a['severity'] === 'critical' ? 0 : 1) <=> ($b['severity'] === 'critical' ? 0 : 1));

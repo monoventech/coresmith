@@ -237,7 +237,7 @@ test('only a team owner can take a backup', function (TeamRole $role) {
 })->with([TeamRole::Admin, TeamRole::Member]);
 
 test('on demand backups are rate limited', function () {
-    expect(Route::getRoutes()->getByName('settings.backups.store')->gatherMiddleware())->toContain('throttle:6,1');
+    expect(Route::getRoutes()->getByName('settings.backups.store')->gatherMiddleware())->toContain('throttle:6,1,backups');
 });
 
 test('general settings require authentication', function () {

@@ -159,5 +159,5 @@ test('the endpoint is rate limited', function () {
     $endpoint = endpointFor();
 
     expect(collect(Route::getRoutes()->getByName('webhooks.deploy')->gatherMiddleware()))
-        ->toContain('throttle:30,1');
+        ->toContain('throttle:30,1,webhook-deploy');
 });

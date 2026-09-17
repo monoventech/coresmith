@@ -49,7 +49,7 @@
             <h1 class="type-h1 m-0 font-mono font-medium">{database.name}</h1>
             <Badge variant={database.status === 'active' ? 'success' : 'default'} dot>{database.status === 'active' ? 'Ready' : database.status}</Badge>
         </div>
-        <p class="type-body-sm mt-1.5 text-muted-foreground">{ENGINES[database.type] ?? database.type} · on {server.name} · localhost only</p>
+        <p class="type-body-sm mt-1.5 text-muted-foreground">{ENGINES[database.type] ?? database.type} · on {server.name} · {database.is_external ? 'existing server' : 'localhost only'}</p>
     </div>
     {#if can.backup}
         <Button variant="outline" onclick={backup}>Back up now</Button>
@@ -59,7 +59,11 @@
 <div class="grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
     <div class="rounded-xl border border-border bg-card px-5.5 py-5">
         <h3 class="type-h3 m-0 mb-1">Connection</h3>
-        <p class="mb-3 text-[12.5px] text-muted-foreground">Apps on {server.name} reach it over localhost. It isn't exposed to the internet.</p>
+        <p class="mb-3 text-[12.5px] text-muted-foreground" data-testid={database.is_external ? 'external-database-note' : undefined}>
+            {database.is_external
+                ? `Coresmith created this database on a ${ENGINES[database.type] ?? database.type} server that was already on ${server.name}. It never reconfigures, restarts or removes that server, so check its network settings yourself.`
+                : `Apps on ${server.name} reach it over localhost. It isn't exposed to the internet.`}
+        </p>
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div>host {database.host}</div>
             <div>port {database.port}</div>
@@ -75,7 +79,7 @@
             <p class="mb-3 text-[12.5px] text-muted-foreground">Its own user, with only the privileges its app needs.</p>
             <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
                 <div>privileges {database.privilege_level}</div>
-                <div>reachable from localhost</div>
+                <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
         </div>
         {#if can.delete}

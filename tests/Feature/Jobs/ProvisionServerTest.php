@@ -11,6 +11,7 @@ use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Event;
 use Tests\Support\FakeSSHTransport;
 
@@ -113,6 +114,68 @@ test('a re-run at phase 1 resumes from phase 2 without re-detecting', function (
         ->and($commands)->toContain('apt-get update');
 });
 
+test('every phase is logged as it starts and finishes, and completed phases say they were skipped', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'provisioning_phase' => 1]);
+    $transport = (new FakeSSHTransport)->respondTo('echo reachable || echo blocked', "blocked\n", 0);
+
+    provision($server, $transport);
+
+    expect($server->fresh()->provisioning_log)
+        ->toContain('phase 1 of 8, Operating system: already done, skipped')
+        ->toContain('phase 2 of 8, Base system: started')
+        ->toContain('phase 2 of 8, Base system: done');
+});
+
+test('a failed phase stores the reason and the end of the command output', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'provisioning_phase' => 1]);
+    $transport = (new FakeSSHTransport)->respondTo('apt-get update', "Reading package lists...\nE: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 2231 (unattended-upgr)\n", 100);
+
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+
+    $fresh = $server->fresh();
+
+    expect($fresh->status)->toBe(ServerStatus::Failed)
+        ->and($fresh->provisioning_error)->toStartWith('Base system failed. The command exited with code 100.')
+        ->and($fresh->provisioning_error)->toContain('Could not get lock /var/lib/dpkg/lock-frontend')
+        ->and($fresh->provisioning_log)->toContain('phase 2 of 8, Base system: failed');
+});
+
+test('a failed phase redacts secrets from the command output before storing it', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'provisioning_phase' => 1]);
+    $transport = (new FakeSSHTransport)->respondTo(
+        'apt-get update',
+        "Authorization: Bearer sk-abcdef1234567890\nfetching https://token123secret@example.test/repo.git\nE: Could not get lock\n",
+        100,
+    );
+
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+
+    $fresh = $server->fresh();
+
+    expect($fresh->provisioning_error)->toContain('Bearer [REDACTED]')
+        ->and($fresh->provisioning_error)->toContain('https://[REDACTED]@example.test/repo.git')
+        ->and($fresh->provisioning_error)->not->toContain('sk-abcdef1234567890')
+        ->and($fresh->provisioning_error)->not->toContain('token123secret')
+        ->and($fresh->provisioning_log)->toContain('Bearer [REDACTED]')
+        ->and($fresh->provisioning_log)->not->toContain('sk-abcdef1234567890')
+        ->and($fresh->provisioning_log)->toContain('exit code 100');
+});
+
+test('starting over runs every phase again from the first', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'provisioning_phase' => 5, 'provisioning_error' => 'Caddy failed.']);
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => provisioningTransport());
+
+    try {
+        (new ProvisionServer($server, fromScratch: true))->handle(app(SSHConnectionManager::class), new OsDetector);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($server->fresh()->provisioning_log)->toContain('phase 1 of 8, Operating system: started')
+        ->and($server->fresh()->provisioning_error)->toBeNull();
+});
+
 test('a failure marks the server failed and preserves the completed phase', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = (new FakeSSHTransport)
@@ -130,6 +193,18 @@ test('a failure marks the server failed and preserves the completed phase', func
     expect($fresh->status)->toBe(ServerStatus::Failed)
         ->and($fresh->provisioning_phase)->toBe(1)
         ->and($fresh->provisioning_log)->toContain('exit code 100');
+});
+
+test('a job that dies outside handle leaves the server failed and recoverable', function () {
+    $server = Server::factory()->create(['status' => ServerStatus::Provisioning, 'provisioning_phase' => 3, 'host_key_fingerprint' => null]);
+
+    (new ProvisionServer($server))->failed(new MaxAttemptsExceededException('Job has timed out.'));
+
+    $fresh = $server->fresh();
+
+    expect($fresh->status)->toBe(ServerStatus::Failed)
+        ->and($fresh->provisioning_phase)->toBe(3)
+        ->and($fresh->provisioning_error)->toContain('Job has timed out.');
 });
 
 test('an unsupported distribution fails provisioning cleanly', function () {
@@ -235,4 +310,23 @@ test('phase 7 hardens ssh, installs fail2ban and applies sysctls', function () {
         ->and($commands)->toContain('sshd -t')
         ->and($commands)->toContain('sysctl --system')
         ->and($commands)->toContain('timedatectl set-timezone UTC');
+});
+
+test('a failure inside handle is recorded once, not twice when the queue also calls failed', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'provisioning_phase' => 1]);
+    $transport = (new FakeSSHTransport)->respondTo('apt-get update', "E: Could not get lock\n", 100);
+
+    $job = new ProvisionServer($server);
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        $job->handle(app(SSHConnectionManager::class), new OsDetector);
+    } catch (SSHCommandFailedException $e) {
+        $job->failed($e);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect(substr_count((string) $server->fresh()->provisioning_log, 'phase 2 of 8, Base system: failed'))->toBe(1);
 });

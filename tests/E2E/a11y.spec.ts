@@ -17,12 +17,17 @@ const PAGES: [string, Visit][] = [
     ['Server with a disk warning', (page) => gotoServer(page, 'outpost-01')],
     ['Server with a changed host key', (page) => gotoServer(page, 'rekeyed-server')],
     ['Server not connected yet', (page) => gotoServer(page, 'empty-server')],
+    ['Server checked before provisioning', (page) => gotoServer(page, 'audit-server')],
+    ['Server being checked', (page) => gotoServer(page, 'checking-server')],
+    ['Server whose provisioning failed', (page) => gotoServer(page, 'halfway-server')],
     ['Server databases', (page) => gotoServerTab(page, 'forge-01', 'Databases')],
     ['Server hardening', (page) => gotoServerTab(page, 'forge-01', 'Hardening')],
     ['Server activity', (page) => gotoServerTab(page, 'forge-01', 'Activity')],
     ['Application', (page) => gotoApplication(page, 'forge-01', 'atlas')],
     ['Stopped application', (page) => gotoApplication(page, 'bench-01', 'retired-blog')],
     ['Failed application', (page) => gotoApplication(page, 'forge-01', 'storefront')],
+    ['Application whose deploy crashed after going live', (page) => gotoApplication(page, 'bench-01', 'crashy')],
+    ['Application killed for memory', (page) => gotoApplication(page, 'bench-01', 'hungry')],
     [
         'Running deploy',
         async (page) => {
@@ -31,7 +36,16 @@ const PAGES: [string, Visit][] = [
             await page.getByTestId('phase-rail').waitFor()
         }
     ],
+    [
+        'Failed deploy',
+        async (page) => {
+            await gotoApplication(page, 'bench-01', 'crashy')
+            await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+            await page.getByTestId('failure-banner').waitFor()
+        }
+    ],
     ['Database', (page) => gotoDatabase(page, 'forge-01', 'atlas_production')],
+    ['Database on an existing server', (page) => gotoDatabase(page, 'forge-01', 'legacy_reports')],
     ['Provision a server', direct('/servers/create')],
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],

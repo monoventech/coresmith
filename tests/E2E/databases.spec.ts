@@ -6,7 +6,14 @@ test.describe('databases', () => {
 
         await expect(databaseRow(page, 'atlas_production')).toBeVisible()
         await expect(databaseRow(page, 'ledger_production')).toBeVisible()
-        await expect(page.getByTestId('databases-table')).toContainText('Databases listen on localhost only.')
+        await expect(page.getByTestId('databases-table')).toContainText("Databases Coresmith installed listen on localhost only; it doesn't control network access for the rest.")
+        await expect(databaseRow(page, 'legacy_reports')).toContainText('existing server')
+    })
+
+    test('a server whose databases are all its own installs keeps the plain caption', async ({ page }) => {
+        await gotoServerTab(page, 'anvil-01', 'Databases')
+
+        await expect(page.getByTestId('databases-table')).toContainText('Databases listen on localhost only. Each one has its own credentials, never shared between apps.')
     })
 
     test('a server without databases explains and offers to create one', async ({ page }) => {
@@ -80,5 +87,15 @@ test.describe('databases', () => {
 
         await expect(toast(page)).toContainText('Database removed.')
         await expect(databaseRow(page, name)).toHaveCount(0)
+    })
+})
+
+test.describe('a database on a server that was already there', () => {
+    test('it says Coresmith leaves that server alone and does not promise localhost only', async ({ page }) => {
+        await gotoDatabase(page, 'forge-01', 'legacy_reports')
+
+        await expect(page.getByTestId('external-database-note')).toContainText('It never reconfigures, restarts or removes that server')
+        await expect(page.getByRole('main')).toContainText('existing server')
+        await expect(page.getByRole('main')).not.toContainText('localhost only')
     })
 })

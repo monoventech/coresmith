@@ -148,3 +148,29 @@ asMember.describe('deploys as a member', () => {
         await expect(page.getByLabel('Deployment output')).toContainText('clone: fetching via deploy key')
     })
 })
+
+test.describe('a deploy that failed with a known reason', () => {
+    test('a release that crashed after going live says so and offers a roll back', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'crashy')
+
+        await expect(page.getByTestId('failed-banner')).toContainText('The last deploy went live but did not finish.')
+
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        await expect(page.getByTestId('failure-reason')).toContainText('Crash loop: coresmith-app-crashy-fpm kept stopping')
+        await expect(page.getByTestId('phase-rail')).not.toContainText('failed')
+        await expect(page.getByTestId('deployment-log')).toContainText('Class "App\\Billing\\Gateway" not found')
+
+        await page.getByRole('link', { name: 'Roll back' }).filter({ visible: true }).first().click()
+        await page.waitForURL(/\/releases$/)
+    })
+
+    test('a clone that failed names the branch it could not find', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'wrong-branch')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        await expect(page.getByTestId('failure-reason')).toContainText('The clone failed, so nothing changed.')
+        await expect(page.getByTestId('failure-reason')).toContainText('Branch release/2.0 is not in the repository.')
+        await expect(page.getByRole('link', { name: 'Roll back' })).toHaveCount(0)
+    })
+})

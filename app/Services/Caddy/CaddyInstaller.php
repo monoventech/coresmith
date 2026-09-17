@@ -69,7 +69,7 @@ final class CaddyInstaller
         $connection->uploadContent($this->panelSite(), self::PANEL_FILE);
 
         $connection->execute(
-            'test -f ' . self::CONFIG_FILE . ' || echo "{}" > ' . self::CONFIG_FILE,
+            'sh -c ' . escapeshellarg('test -f ' . self::CONFIG_FILE . ' || echo "{}" > ' . self::CONFIG_FILE),
             sudo: true,
         )->throw();
 

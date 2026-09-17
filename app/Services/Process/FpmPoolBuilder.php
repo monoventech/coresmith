@@ -83,6 +83,7 @@ final class FpmPoolBuilder
         Type=simple
         User=root
         ExecStart={$binary} --nodaemonize --fpm-config {$pool}
+        ExecReload=/bin/kill -USR2 \$MAINPID
         Restart=always
         RestartSec=5
 

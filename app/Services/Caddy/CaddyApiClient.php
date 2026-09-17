@@ -8,14 +8,27 @@ declare(strict_types=1);
 
 namespace App\Services\Caddy;
 
+use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
 use App\Services\SSH\SSHConnection;
+use App\Services\SSH\SSHResult;
+use Illuminate\Support\Sleep;
 
 final class CaddyApiClient
 {
     public const ADMIN_PORT = 2019;
 
     public const ROUTES_PATH = '/config/apps/http/servers/coresmith/routes';
+
+    public const STAGED_CONFIG_FILE = '/etc/caddy/caddy-config.staged.json';
+
+    public const RETRIES = 3;
+
+    public const RETRY_SECONDS = 2;
+
+    private const BUSY_EXIT_CODES = [7, 28, 52, 56];
+
+    private const IDEMPOTENT_METHODS = ['GET', 'PUT', 'PATCH', 'DELETE'];
 
     public function __construct(
         private readonly CaddyRouteBuilder $builder,
@@ -38,6 +51,20 @@ final class CaddyApiClient
         $this->persistConfig($connection);
     }
 
+    public function putSite(SSHConnection $connection, Application $application): void
+    {
+        $config = $this->buildValidated($application);
+        $path = '/id/' . CaddyRouteBuilder::routeId($application);
+
+        if ($this->exists($connection, $path)) {
+            $this->request($connection, 'PATCH', $path, $config);
+        } else {
+            $this->request($connection, 'POST', self::ROUTES_PATH, $config);
+        }
+
+        $this->persistConfig($connection);
+    }
+
     public function removeSite(SSHConnection $connection, Application $application): void
     {
         $this->request($connection, 'DELETE', '/id/' . CaddyRouteBuilder::routeId($application));
@@ -46,20 +73,53 @@ final class CaddyApiClient
 
     public function persistConfig(SSHConnection $connection): void
     {
-        $connection->execute(
-            $this->curl('GET', '/config/') . ' > ' . CaddyInstaller::CONFIG_FILE,
-            sudo: true,
-        )->throw();
+        $this->script($connection, $this->curl('GET', '/config/') . ' > ' . self::STAGED_CONFIG_FILE . ' && mv -f ' . self::STAGED_CONFIG_FILE . ' ' . CaddyInstaller::CONFIG_FILE);
     }
 
     public function loadPersistedConfig(SSHConnection $connection): void
     {
         $file = CaddyInstaller::CONFIG_FILE;
 
-        $connection->execute(
-            "test -s {$file} && " . $this->curl('POST', '/load', dataFile: $file) . ' || true',
-            sudo: true,
-        )->throw();
+        $this->script($connection, "test -s {$file} || exit 0; " . $this->curl('POST', '/load', dataFile: $file));
+    }
+
+    private function script(SSHConnection $connection, string $script): void
+    {
+        $this->run($connection, 'sh -c ' . escapeshellarg($script));
+    }
+
+    private function exists(SSHConnection $connection, string $path): bool
+    {
+        try {
+            $this->run($connection, $this->curl('GET', $path) . ' >/dev/null');
+
+            return true;
+        } catch (SSHCommandFailedException $e) {
+            if (str_contains($e->output(), 'returned error: 404')) {
+                return false;
+            }
+
+            throw $e;
+        }
+    }
+
+    private function run(SSHConnection $connection, string $command, bool $retry = true): SSHResult
+    {
+        for ($attempt = 0; ; $attempt++) {
+            $result = $connection->execute($command, sudo: true);
+
+            if ($result->successful() || !$retry || $attempt >= self::RETRIES || !$this->busy($result)) {
+                return $result->throw();
+            }
+
+            Sleep::for(self::RETRY_SECONDS)->seconds();
+        }
+    }
+
+    private function busy(SSHResult $result): bool
+    {
+        return in_array($result->exitCode, self::BUSY_EXIT_CODES, true)
+            || preg_match('/returned error: 5\d\d/', $result->output) === 1;
     }
 
     /**
@@ -79,7 +139,7 @@ final class CaddyApiClient
      */
     private function request(SSHConnection $connection, string $method, string $path, ?array $payload = null): void
     {
-        $connection->execute($this->curl($method, $path, $payload), sudo: true)->throw();
+        $this->run($connection, $this->curl($method, $path, $payload), retry: in_array($method, self::IDEMPOTENT_METHODS, true));
     }
 
     /**

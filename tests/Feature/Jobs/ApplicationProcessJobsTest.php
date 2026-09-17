@@ -167,7 +167,7 @@ test('detaching stops every unit and removes the site from caddy', function () {
     expect($commands)->toContain("systemctl stop 'coresmith-app-shop-fpm'")
         ->and($commands)->toContain("systemctl stop 'coresmith-app-shop-queue'")
         ->and($commands)->toContain("-X DELETE 'http://localhost:2019/id/app-{$application->id}'")
-        ->and($commands)->toContain("-X GET 'http://localhost:2019/config/' > /etc/caddy/caddy-config.json")
+        ->and($commands)->toContain('mv -f /etc/caddy/caddy-config.staged.json /etc/caddy/caddy-config.json')
         ->and(Application::withTrashed()->find($application->id)->power_state)->toBe(PowerState::Stopped)
         ->and($transport->connected())->toBeFalse();
 });

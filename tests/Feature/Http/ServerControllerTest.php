@@ -4,12 +4,23 @@ declare(strict_types=1);
 
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Jobs\AuditServer;
+use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
 use App\Jobs\TestSSHConnection;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Panel\ServerPresenter;
 use Illuminate\Support\Facades\Queue;
+
+function checkedServer(Team $team, array $findings = [], int $minutesAgo = 5): Server
+{
+    return Server::factory()->for($team)->create([
+        'status' => ServerStatus::Pending,
+        'audit' => ['state' => 'done', 'ran_at' => now()->subMinutes($minutesAgo)->toIso8601String(), 'findings' => $findings],
+    ]);
+}
 
 function teamMember(Team $team, TeamRole $role): User
 {
@@ -203,16 +214,158 @@ test('provisioning another teams server is refused and queues nothing', function
     Queue::assertNothingPushed();
 });
 
-test('an admin can start provisioning', function () {
+test('an admin can provision a server whose recent check found nothing blocking', function () {
     Queue::fake();
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create();
+    $server = checkedServer($team, [['key' => 'app_users', 'severity' => 'warning', 'title' => '1 Coresmith app user exists', 'detail' => '', 'fix' => null]]);
 
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->post(route('servers.provision', $server))
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Provisioning started. Every phase is logged, close this page and it keeps going.');
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Provisioning);
 
     Queue::assertPushed(ProvisionServer::class);
+});
+
+test('provisioning waits for blockers to be resolved', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = checkedServer($team, [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provision', $server))
+        ->assertSessionHas('error', 'Resolve the blockers first, then check again.');
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Pending);
+
+    Queue::assertNotPushed(ProvisionServer::class);
+});
+
+test('a server never checked, or checked over an hour ago, is checked again instead of provisioned', function (?int $minutesAgo) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = $minutesAgo === null ? Server::factory()->for($team)->create(['status' => ServerStatus::Pending]) : checkedServer($team, [], $minutesAgo);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provision', $server))
+        ->assertSessionHas('error', 'Coresmith checks the server before provisioning, so that check is running now. Provision once it finishes.');
+
+    Queue::assertPushed(AuditServer::class);
+    Queue::assertNotPushed(ProvisionServer::class);
+})->with(['never' => [null], 'stale' => [61]]);
+
+test('a check that never reported back does not wedge provisioning', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create([
+        'status' => ServerStatus::Pending,
+        'audit' => ['state' => 'running', 'started_at' => now()->subMinutes(6)->toIso8601String()],
+    ]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provision', $server))
+        ->assertSessionHas('error', 'Coresmith checks the server before provisioning, so that check is running now. Provision once it finishes.');
+
+    Queue::assertPushed(AuditServer::class);
+});
+
+test('a stale running check is presented as one that did not finish', function () {
+    $server = Server::factory()->create([
+        'status' => ServerStatus::Pending,
+        'audit' => ['state' => 'running', 'started_at' => now()->subMinutes(6)->toIso8601String()],
+    ]);
+
+    $audit = app(ServerPresenter::class)->header($server, teamMember($server->team, TeamRole::Admin))['provisioning']['audit'];
+
+    expect($audit['state'])->toBe('failed')
+        ->and($audit['error'])->toBe('The check stopped before it finished. Check again.');
+});
+
+test('provisioning a server that is already active is not found', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route('servers.provision', $server))->assertNotFound();
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Active);
+
+    Queue::assertNotPushed(ProvisionServer::class);
+});
+
+test('an admin can check a pending server and a member cannot', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Pending]);
+
+    $this->actingAs(teamMember($team, TeamRole::Member))->post(route('servers.audit', $server))->assertForbidden();
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.audit', $server))
+        ->assertSessionHas('success', "Checking {$server->name}. Nothing on the server changes while Coresmith looks.");
+
+    Queue::assertPushed(AuditServer::class);
+});
+
+test('a server that is already provisioned is not audited', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route('servers.audit', $server))->assertNotFound();
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin can apply a fix the latest check offered', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = checkedServer($team, [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.audit.fix', [$server, 'stop-nginx']))
+        ->assertSessionHas('success', "Stopping nginx on {$server->name}, then checking again.");
+
+    expect($server->fresh()->audit['state'])->toBe('running');
+
+    Queue::assertPushed(FixAuditFinding::class);
+});
+
+test('a fix the check did not offer, or on a server past provisioning, is not found', function (string $fix, ServerStatus $status) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = checkedServer($team, [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
+    $server->forceFill(['status' => $status])->save();
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route('servers.audit.fix', [$server, $fix]))->assertNotFound();
+
+    Queue::assertNothingPushed();
+})->with([
+    'not offered' => ['stop-apache2', ServerStatus::Pending],
+    'not a fix' => ['stop-sshd', ServerStatus::Pending],
+    'active server' => ['stop-nginx', ServerStatus::Active],
+]);
+
+test('a member cannot apply a fix', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = checkedServer($team, [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
+
+    $this->actingAs(teamMember($team, TeamRole::Member))->post(route('servers.audit.fix', [$server, 'stop-nginx']))->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
+test('applying a fix on another teams server is refused and queues nothing', function () {
+    Queue::fake();
+    $outsider = teamMember(Team::factory()->create(), TeamRole::Owner);
+    $server = checkedServer(Team::factory()->create(), [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
+
+    $this->actingAs($outsider)->post(route('servers.audit.fix', [$server, 'stop-nginx']))->assertForbidden();
+
+    Queue::assertNothingPushed();
 });
 
 test('a member cannot trigger a connection test', function () {
@@ -225,6 +378,50 @@ test('a member cannot trigger a connection test', function () {
         ->assertForbidden();
 
     Queue::assertNotPushed(TestSSHConnection::class);
+});
+
+test('a failed server resumes from the phase that failed', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Failed, 'provisioning_phase' => 3, 'provisioning_error' => 'Directories failed.']);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provisioning.retry', $server))
+        ->assertSessionHas('success', 'Retrying from phase 4. The three phases before it finished and are kept.');
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Provisioning)
+        ->and($server->fresh()->provisioning_error)->toBeNull();
+
+    Queue::assertPushed(ProvisionServer::class, fn(ProvisionServer $job): bool => (fn() => $this->fromScratch)->call($job) === false);
+});
+
+test('a failed server can start over from phase 1', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Failed, 'provisioning_phase' => 3, 'provisioning_log' => 'phase 1 ... ok', 'provisioning_error' => 'Directories failed.']);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provisioning.restart', $server))
+        ->assertSessionHas('success', 'Starting over from phase 1. Each phase is written to be safe to run again.');
+
+    expect($server->fresh()->provisioning_log)->toBeNull()
+        ->and($server->fresh()->provisioning_error)->toBeNull();
+
+    Queue::assertPushed(ProvisionServer::class, fn(ProvisionServer $job): bool => (fn() => $this->fromScratch)->call($job) === true);
+});
+
+test('only a failed server can be retried or started over, and a failed one is not provisioned directly', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $admin = teamMember($team, TeamRole::Admin);
+    $active = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
+    $failed = Server::factory()->for($team)->create(['status' => ServerStatus::Failed, 'provisioning_phase' => 2]);
+
+    $this->actingAs($admin)->post(route('servers.provisioning.retry', $active))->assertNotFound();
+    $this->actingAs($admin)->post(route('servers.provisioning.restart', $active))->assertNotFound();
+    $this->actingAs($admin)->post(route('servers.provision', $failed))->assertSessionHas('error', 'Provisioning already ran on this server. Retry it from the phase that failed, or start over.');
+
+    Queue::assertNothingPushed();
 });
 
 test('every server route requires authentication', function (string $method, string $route) {
@@ -241,7 +438,29 @@ test('every server route requires authentication', function (string $method, str
     ['put', 'servers.update'],
     ['delete', 'servers.destroy'],
     ['post', 'servers.provision'],
+    ['post', 'servers.audit'],
     ['post', 'servers.test-connection'],
     ['post', 'servers.reboot'],
     ['post', 'servers.prune-releases'],
 ]);
+
+test('a disconnected server can be checked and offered fixes, because its panel offers both', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Disconnected]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.audit', $server))
+        ->assertSessionHas('success');
+
+    Queue::assertPushed(AuditServer::class);
+
+    $checked = checkedServer($team, [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
+    $checked->forceFill(['status' => ServerStatus::Disconnected])->save();
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.audit.fix', ['server' => $checked, 'fix' => 'stop-nginx']))
+        ->assertSessionHas('success');
+
+    Queue::assertPushed(FixAuditFinding::class);
+});

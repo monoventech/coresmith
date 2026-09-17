@@ -10,8 +10,11 @@ namespace App\Jobs;
 
 use App\Enums\ServerStatus;
 use App\Events\ServerProvisioned;
+use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
 use App\Services\Caddy\CaddyInstaller;
+use App\Services\Deployment\LogSanitizer;
+use App\Services\Panel\ServerPresenter;
 use App\Services\Runtime\AsdfInstaller;
 use App\Services\Server\BasePackages;
 use App\Services\Server\DirectoryStructure;
@@ -35,14 +38,21 @@ final class ProvisionServer implements ShouldQueue
 
     public int $timeout = 1800;
 
-    public function __construct(private readonly Server $server)
-    {
+    public function __construct(
+        private readonly Server $server,
+        private readonly bool $fromScratch = false,
+    ) {
         $this->onQueue('provisioning');
     }
 
     public function handle(SSHConnectionManager $connections, OsDetector $detector): void
     {
         $connection = $connections->for($this->server);
+
+        $this->server->forceFill([
+            'provisioning_error' => null,
+            ...($this->fromScratch ? ['provisioning_phase' => 0] : []),
+        ])->save();
 
         $this->server->forceFill(['status' => ServerStatus::Provisioning])->save();
 
@@ -64,6 +74,15 @@ final class ProvisionServer implements ShouldQueue
         } finally {
             $connections->disconnect($this->server);
         }
+    }
+
+    public function failed(Throwable $e): void
+    {
+        if ($this->server->fresh()?->status === ServerStatus::Failed) {
+            return;
+        }
+
+        $this->fail_($e);
     }
 
     private function finalize(SSHConnection $connection, int $durationSeconds): void
@@ -104,22 +123,55 @@ final class ProvisionServer implements ShouldQueue
 
     private function phase(int $number, Closure $work): void
     {
+        $name = ServerPresenter::PROVISIONING_PHASES[$number - 1]['name'];
+
         if (($this->server->provisioning_phase ?? 0) >= $number) {
+            $this->log("phase {$number} of 8, {$name}: already done, skipped");
+
             return;
         }
+
+        $this->log("phase {$number} of 8, {$name}: started");
 
         $work();
 
         $this->server->forceFill(['provisioning_phase' => $number])->save();
+
+        $this->log("phase {$number} of 8, {$name}: done");
     }
 
     private function fail_(Throwable $e): void
     {
-        $log = (string) $this->server->provisioning_log;
+        $sanitizer = app(LogSanitizer::class);
+        $number = (int) ($this->server->provisioning_phase ?? 0) + 1;
+        $name = ServerPresenter::PROVISIONING_PHASES[$number - 1]['name'] ?? 'Provisioning';
+        $message = $sanitizer->sanitize($e->getMessage());
+        $output = $e instanceof SSHCommandFailedException ? $sanitizer->sanitize($this->tail($e->output())) : '';
+        $reason = $e instanceof SSHCommandFailedException ? "The command exited with code {$e->exitCode()}." : $message;
+
+        $this->log("phase {$number} of 8, {$name}: failed. " . $message);
+
+        if ($output !== '') {
+            $this->log($output, stamped: false);
+        }
 
         $this->server->forceFill([
             'status' => ServerStatus::Failed,
-            'provisioning_log' => trim($log . "\n" . $e->getMessage()),
+            'provisioning_error' => trim("{$name} failed. {$reason}\n{$output}"),
         ])->save();
+    }
+
+    private function log(string $line, bool $stamped = true): void
+    {
+        $this->server->forceFill([
+            'provisioning_log' => trim((string) $this->server->provisioning_log . "\n" . ($stamped ? '[' . now()->format('H:i:s') . '] ' : '') . $line),
+        ])->save();
+    }
+
+    private function tail(string $output): string
+    {
+        $lines = array_values(array_filter(array_map(rtrim(...), preg_split('/\R/', $output) ?: []), fn(string $line): bool => trim($line) !== ''));
+
+        return implode("\n", array_slice($lines, -12));
     }
 }

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Server;
 
 use App\Exceptions\PortExhaustedException;
+use App\Models\Application;
 use App\Models\Server;
 
 final class PortAllocator
@@ -23,17 +24,39 @@ final class PortAllocator
 
     public const SSR_RANGE_END = 13899;
 
-    public function allocate(Server $server): int
+    /**
+     * @param  list<int>  $inUse
+     */
+    public function allocate(Server $server, array $inUse = [], ?Application $except = null): int
     {
-        $used = $server->applications()->withTrashed()->pluck('base_port')->all();
+        $used = $server->applications()
+            ->withTrashed()
+            ->when($except !== null, fn($query) => $query->whereKeyNot($except->getKey()))
+            ->pluck('base_port')
+            ->map(fn(mixed $port): int => (int) $port)
+            ->all();
 
         for ($port = self::RANGE_START; $port <= self::RANGE_END; $port += self::BLOCK_SIZE) {
-            if (!in_array($port, $used, true)) {
+            if (!in_array($port, $used, true) && !self::overlaps($port, $inUse)) {
                 return $port;
             }
         }
 
         throw PortExhaustedException::forServer($server->name);
+    }
+
+    /**
+     * @param  list<int>  $inUse
+     */
+    public static function overlaps(int $base, array $inUse): bool
+    {
+        foreach ($inUse as $port) {
+            if ($port >= $base && $port < $base + self::BLOCK_SIZE) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function allocateSsrPort(Server $server): int

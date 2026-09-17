@@ -8,14 +8,14 @@ use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('caddy/ask', CaddyAskController::class)
-    ->middleware('throttle:240,1')
+    ->middleware('throttle:240,1,caddy-ask')
     ->name('caddy.ask');
 
 Route::post('webhooks/{webhook}/deploy', [WebhookController::class, 'deploy'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:30,1,webhook-deploy')
     ->name('webhooks.deploy');
 
-Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1,api-v1'])->group(function () {
     Route::get('servers', [ServerApiController::class, 'index'])
         ->middleware('token.can:server.view')->name('api.servers.index');
     Route::get('servers/{server}', [ServerApiController::class, 'show'])

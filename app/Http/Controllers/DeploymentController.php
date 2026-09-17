@@ -104,6 +104,7 @@ final class DeploymentController extends Controller
             'log' => (string) $deployment->log,
             'phases' => $states,
             'failed_phase' => $failed['key'] ?? null,
+            'failure_reason' => $deployment->failure_reason,
             'reached_users' => DeploymentPresenter::reachedUsers($deployment),
             'release' => Formats::release($deployment->release),
             'branch' => $deployment->branch,

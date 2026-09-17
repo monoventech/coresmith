@@ -32,6 +32,13 @@ test('credentials embedded in a url are redacted', function () {
         ->and($clean)->toContain('[REDACTED]@github.com');
 });
 
+test('a single token userinfo with no colon is redacted too', function () {
+    $clean = (new LogSanitizer)->sanitize('cloning https://ghp_xxx@github.com/x.git');
+
+    expect($clean)->not->toContain('ghp_xxx')
+        ->and($clean)->toContain('[REDACTED]@github.com');
+});
+
 test('common secret shapes are redacted even when not in the environment', function (string $secret, string $line) {
     expect((new LogSanitizer)->sanitize($line))->not->toContain($secret);
 })->with([

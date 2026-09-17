@@ -12,6 +12,7 @@ use App\Exceptions\InvalidRuntimeException;
 use App\Models\Server;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Sleep;
 
 final class AsdfManager
 {
@@ -22,6 +23,10 @@ final class AsdfManager
     public const SYSTEM_USER = 'coresmith';
 
     public const PLUGINS = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
+
+    public const DOWNLOAD_RETRIES = 2;
+
+    private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'unable to download', 'SSL_ERROR_SYSCALL'];
 
     public static function assertValid(string $runtime, string $version): void
     {
@@ -57,7 +62,32 @@ final class AsdfManager
             $connection->execute(PackageManagerFactory::for($server)->install($dependencies), sudo: true)->throw();
         }
 
-        $connection->execute($this->asdfCommand('install', $runtime, $version), sudo: true)->throw();
+        $command = $this->asdfCommand('install', $runtime, $version);
+
+        for ($attempt = 0; ; $attempt++) {
+            $result = $connection->execute($command, sudo: true);
+
+            if ($result->successful()) {
+                return;
+            }
+
+            if ($attempt >= self::DOWNLOAD_RETRIES || !$this->downloadFailed($result->output)) {
+                $result->throw();
+            }
+
+            Sleep::for(10)->seconds();
+        }
+    }
+
+    private function downloadFailed(string $output): bool
+    {
+        foreach (self::DOWNLOAD_ERRORS as $needle) {
+            if (str_contains($output, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function uninstall(SSHConnection $connection, string $runtime, string $version): void

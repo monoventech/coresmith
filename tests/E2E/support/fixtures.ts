@@ -129,7 +129,8 @@ export async function openSecurity(page: Page) {
 }
 
 export async function blockingViolations(page: Page): Promise<string[]> {
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('load')
+    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined)
 
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
 

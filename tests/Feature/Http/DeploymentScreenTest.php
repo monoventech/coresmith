@@ -164,6 +164,16 @@ test('the deploy screen carries the phases, the failure and the release details'
             ->where('can.deploy', true));
 });
 
+test('a failed deploy carries the reason it failed', function () {
+    $team = Team::factory()->create();
+    $reason = "Branch release/2.0 is not in the repository. Check the branch name in the app's settings, then deploy again.";
+    $deployment = Deployment::factory()->for(screenApp($team))->create(['status' => DeploymentStatus::Failed, 'failure_reason' => $reason]);
+
+    $this->actingAs(screenMember($team))
+        ->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page->where('deployment.failure_reason', $reason));
+});
+
 test('the back link follows where the deploy was started from', function (?string $from, string $label, string $route) {
     $team = Team::factory()->create();
     $application = screenApp($team);

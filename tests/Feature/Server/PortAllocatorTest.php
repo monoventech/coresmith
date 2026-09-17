@@ -81,6 +81,20 @@ test('only ports inside the allocatable range are considered valid', function ()
         ->and(PortAllocator::isInAllocatableRange(22))->toBeFalse();
 });
 
+test('a block with any port another process holds is skipped', function () {
+    $server = Server::factory()->create();
+
+    expect(app(PortAllocator::class)->allocate($server, [8003, 8015]))->toBe(8020);
+});
+
+test('an application being moved does not count its own block against itself', function () {
+    $server = Server::factory()->create();
+    $application = Application::factory()->for($server)->create(['base_port' => 8000]);
+
+    expect(app(PortAllocator::class)->allocate($server, [], $application))->toBe(8000)
+        ->and(app(PortAllocator::class)->allocate($server))->toBe(8010);
+});
+
 test('a tampered base_port cannot open a route to a privileged service', function (int $tamperedBasePort, int $upstreamPort) {
     $app = Application::factory()->create([
         'slug' => 'my-app',

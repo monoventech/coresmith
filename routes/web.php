@@ -39,6 +39,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.test-connection');
     Route::post('servers/{server}/provision', [ServerController::class, 'provision'])
         ->name('servers.provision');
+    Route::post('servers/{server}/provisioning/retry', [ServerController::class, 'retryProvisioning'])
+        ->name('servers.provisioning.retry');
+    Route::post('servers/{server}/provisioning/restart', [ServerController::class, 'restartProvisioning'])
+        ->name('servers.provisioning.restart');
+    Route::post('servers/{server}/audit', [ServerController::class, 'audit'])
+        ->name('servers.audit');
+    Route::post('servers/{server}/audit/fixes/{fix}', [ServerController::class, 'fixAudit'])
+        ->where('fix', 'stop-[a-z0-9]+')
+        ->name('servers.audit.fix');
     Route::post('servers/{server}/reboot', [ServerController::class, 'reboot'])
         ->name('servers.reboot');
     Route::post('servers/{server}/prune-releases', [ServerController::class, 'prune'])
@@ -77,7 +86,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->where('toggle', '[a-z_]+')
         ->name('servers.applications.toggles.update');
     Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogController::class, 'index'])
-        ->middleware('throttle:30,1')
+        ->middleware('throttle:30,1,app-logs')
         ->name('servers.applications.logs');
 
     Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update']);
@@ -99,6 +108,6 @@ require __DIR__ . '/sso.php';
 Route::middleware('setup.token')->group(function () {
     Route::get('install', [InstallationController::class, 'show'])->name('install.show');
     Route::post('install', [InstallationController::class, 'store'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:10,1,install')
         ->name('install.store');
 });
