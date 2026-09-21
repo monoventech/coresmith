@@ -2,8 +2,8 @@
     // Copyright 2026 Monoven Ltd. All rights reserved.
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
-    import { Link, page } from '@inertiajs/svelte'
     import { cn } from '@/lib/utils'
+    import { Link, page } from '@inertiajs/svelte'
 
     type Tab = { label: string; href: string; current?: boolean }
 
@@ -31,7 +31,10 @@
             {tab.label}
             <span
                 aria-hidden="true"
-                class={cn('absolute inset-x-0 bottom-0 h-0.5 bg-primary transition-opacity duration-(--dur-fast)', current ? 'opacity-100' : 'opacity-0')}
+                class={cn(
+                    'absolute inset-x-0 bottom-0 h-0.5 bg-primary transition-opacity duration-(--dur-fast)',
+                    current ? 'opacity-100' : 'opacity-0'
+                )}
             ></span>
         </Link>
     {/each}

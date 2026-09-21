@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte'
     import PageTabs from '@/components/PageTabs.svelte'
+    import type { Snippet } from 'svelte'
 
     let { children }: { children?: Snippet } = $props()
 
@@ -11,8 +11,10 @@
 </script>
 
 <h1 class="type-h1 m-0">Your account</h1>
-<p class="type-body-sm mt-1.5 text-muted-foreground">Your name, sign-in details and two-factor authentication. These follow you across every panel you belong to.</p>
-<div class="mt-[22px] mb-9">
+<p class="type-body-sm mt-1.5 text-muted-foreground">
+    Your name, sign-in details and two-factor authentication. These follow you across every panel you belong to.
+</p>
+<div class="mt-5.5 mb-9">
     <PageTabs {tabs} label="Account" />
 </div>
 {@render children?.()}

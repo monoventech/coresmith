@@ -1,10 +1,10 @@
 <script lang="ts">
-    import { Link } from '@inertiajs/svelte'
-    import type { Snippet } from 'svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
     import Toast from '@/components/panel/Toast.svelte'
     import Wordmark from '@/components/panel/Wordmark.svelte'
+    import { Link } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
 
     let {
         title = '',
@@ -25,16 +25,22 @@
 </script>
 
 <div class="panel grain relative flex min-h-dvh flex-col bg-background font-sans text-foreground">
-    <header class="relative z-10 mx-auto flex w-full max-w-[1200px] items-center px-10 py-5.5 max-sm:px-5">
-        <Link href={route('home')} class="focus-ring rounded-md text-foreground no-underline" aria-label="Coresmith home">
+    <header class="relative z-10 mx-auto flex w-full max-w-300 items-center px-10 py-5.5 max-sm:px-5">
+        <Link
+            href={route('home')}
+            class="focus-ring rounded-md text-foreground no-underline"
+            aria-label="Coresmith home"
+        >
             <Wordmark />
         </Link>
     </header>
 
-    <main class="relative z-10 mx-auto w-full max-w-[1200px] flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
-        <div class="max-w-[420px]">
+    <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
+        <div class="max-w-105">
             {#if title}
-                <h1 class="type-h1 m-0 mb-1.5">{before}{#if index >= 0}<MarkerUnderline>{word}</MarkerUnderline>{/if}{after}</h1>
+                <h1 class="type-h1 m-0 mb-1.5">
+                    {before}{#if index >= 0}<MarkerUnderline>{word}</MarkerUnderline>{/if}{after}
+                </h1>
             {/if}
             {#if description}
                 <p class="type-body-sm mb-7 text-muted-foreground">{description}</p>
@@ -46,7 +52,7 @@
     </main>
 
     <footer class="relative z-10 border-t border-border">
-        <div class="mx-auto flex w-full max-w-[1200px] flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
+        <div class="mx-auto flex w-full max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
             <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
             <MonovenMark class="ml-auto" />
         </div>

@@ -97,8 +97,8 @@
 {/if}
 
 {#if server.disk_warning}
-    <div class="tint-warning mt-4 flex flex-wrap items-center gap-3 rounded-xl border px-[18px] py-3" data-testid="disk-warning">
-        <TriangleAlert class="size-[18px] shrink-0 text-warning" />
+    <div class="tint-warning mt-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3" data-testid="disk-warning">
+        <TriangleAlert class="size-4.5 shrink-0 text-warning" />
         <span class="min-w-0 flex-1 text-[13.5px]">
             Disk is at {server.disk_warning.percent}%. Pruning keeps the last 5 releases of each app, plus the live one.
         </span>
@@ -111,7 +111,7 @@
 {#if server.active}
     <div class="mt-4 grid grid-cols-3 gap-3 max-[900px]:grid-cols-1">
         {#each metrics as metric (metric.label)}
-            <div class="rounded-xl border border-border bg-card px-[18px] py-3.5">
+            <div class="rounded-xl border border-border bg-card px-4.5 py-3.5">
                 <div class="mb-2 flex items-baseline justify-between">
                     <span class="type-caption text-muted-foreground">{metric.label}</span>
                     <span class="font-mono text-[14px]">{metric.value.now === null ? '—' : `${metric.value.now}%`}</span>
@@ -122,7 +122,7 @@
     </div>
 {/if}
 
-<div class="mt-[22px] mb-9">
+<div class="mt-5.5 mb-9">
     <PageTabs {tabs} label="Server sections" />
 </div>
 

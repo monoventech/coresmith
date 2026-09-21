@@ -143,7 +143,7 @@
 {/if}
 
 {#if provisioning.log}
-    <div class="mt-4 rounded-xl border border-border bg-card px-[22px] py-5">
+    <div class="mt-4 rounded-xl border border-border bg-card px-5.5 py-5">
         <h3 class="type-h3 m-0 mb-2.5">Provisioning log</h3>
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <pre

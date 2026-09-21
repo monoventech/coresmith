@@ -1,12 +1,12 @@
 <script lang="ts">
-    import { Form } from '@inertiajs/svelte'
-    import { tick } from 'svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
     import { Spinner } from '@/components/ui/spinner'
     import { twoFactorAuthState } from '@/lib/twoFactorAuth.svelte'
+    import { Form } from '@inertiajs/svelte'
+    import { tick } from 'svelte'
 
     let {
         isOpen = $bindable(false),
@@ -26,7 +26,11 @@
     let otp = $state<HTMLDivElement>()
 
     const title = $derived(
-        twoFactorEnabled ? 'Two-factor authentication is on' : verifying ? 'Enter the code from your app' : 'Turn on two-factor authentication'
+        twoFactorEnabled
+            ? 'Two-factor authentication is on'
+            : verifying
+              ? 'Enter the code from your app'
+              : 'Turn on two-factor authentication'
     )
 
     const description = $derived(
@@ -101,7 +105,10 @@
         {:else if !verifying}
             <div class="mt-4 flex flex-col items-center gap-4">
                 <!-- monoven-allow: a QR code needs true white behind true black or scanners fail -->
-                <div class="flex size-44 items-center justify-center rounded-md bg-white p-2.5 [&_svg]:size-full" data-testid="two-factor-qr">
+                <div
+                    class="flex size-44 items-center justify-center rounded-md bg-white p-2.5 [&_svg]:size-full"
+                    data-testid="two-factor-qr"
+                >
                     {#if twoFactorAuth.state.qrCodeSvg}
                         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                         {@html twoFactorAuth.state.qrCodeSvg}
@@ -110,21 +117,34 @@
                     {/if}
                 </div>
                 <div class="flex w-full items-center gap-2">
-                    <code class="min-w-0 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-[12.5px]" data-testid="two-factor-key">
+                    <code
+                        class="min-w-0 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-[12.5px]"
+                        data-testid="two-factor-key"
+                    >
                         {twoFactorAuth.state.manualSetupKey ?? 'Loading the setup key…'}
                     </code>
-                    <Button variant="outline" size="sm" disabled={!twoFactorAuth.state.manualSetupKey} onclick={copyKey}>{copied ? 'Copied' : 'Copy'}</Button>
+                    <Button variant="outline" size="sm" disabled={!twoFactorAuth.state.manualSetupKey} onclick={copyKey}
+                        >{copied ? 'Copied' : 'Copy'}</Button
+                    >
                 </div>
             </div>
             <Dialog.Footer>
                 {#if !twoFactorEnabled}
                     <Button variant="ghost" onclick={() => (isOpen = false)}>Cancel</Button>
                 {/if}
-                <Button disabled={!twoFactorAuth.hasSetupData()} onclick={next}>{twoFactorEnabled ? 'Done' : 'Continue'}</Button>
+                <Button disabled={!twoFactorAuth.hasSetupData()} onclick={next}
+                    >{twoFactorEnabled ? 'Done' : 'Continue'}</Button
+                >
             </Dialog.Footer>
         {:else}
-            <Form method="post" action={route('two-factor.confirm')} resetOnError onFinish={() => (code = '')} onSuccess={() => (isOpen = false)}>
-                {#snippet children({ errors, processing }: { errors: Record<string, string>; processing: boolean })}
+            <Form
+                method="post"
+                action={route('two-factor.confirm')}
+                resetOnError
+                onFinish={() => (code = '')}
+                onSuccess={() => (isOpen = false)}
+            >
+                {#snippet children({ errors, processing }: { errors: Record; processing: boolean })}
                     <input type="hidden" name="code" value={code} />
                     <div bind:this={otp} class="mt-4 flex flex-col items-center gap-2">
                         <InputOTP bind:value={code} maxlength={6} disabled={processing} autofocus>
@@ -139,7 +159,9 @@
                         <FieldError message={errors['confirmTwoFactorAuthentication.code'] ?? errors.code} />
                     </div>
                     <Dialog.Footer>
-                        <Button type="button" variant="ghost" disabled={processing} onclick={() => (verifying = false)}>Back</Button>
+                        <Button type="button" variant="ghost" disabled={processing} onclick={() => (verifying = false)}
+                            >Back</Button
+                        >
                         <Button type="submit" disabled={processing || code.length < 6}>Turn it on</Button>
                     </Dialog.Footer>
                 {/snippet}

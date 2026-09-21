@@ -1,10 +1,10 @@
 <script lang="ts">
-    import { Form } from '@inertiajs/svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { Form } from '@inertiajs/svelte'
 
     let {
         slug,
@@ -21,7 +21,9 @@
     let editing = $state(false)
     let copied = $state<string | null>(null)
 
-    const addresses = $derived([path, subdomain].filter((value): value is string => typeof value === 'string' && value !== ''))
+    const addresses = $derived(
+        [path, subdomain].filter((value): value is string => typeof value === 'string' && value !== '')
+    )
     const prefix = $derived(path.slice(0, path.length - slug.length))
 
     async function copy(value: string) {
@@ -42,12 +44,18 @@
             <Button variant="ghost" size="sm" onclick={() => (editing = true)}>Change</Button>
         {/if}
     </div>
-    <p class="mb-3 text-[12.5px] text-muted-foreground">Links, bookmarks and tabs open straight into this team, even when you belong to several.</p>
+    <p class="mb-3 text-[12.5px] text-muted-foreground">
+        Links, bookmarks and tabs open straight into this team, even when you belong to several.
+    </p>
     <div class="flex flex-col">
         {#each addresses as address (address)}
             <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
                 <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{address}</span>
-                <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={() => copy(address)}>{copied === address ? 'Copied' : 'Copy'}</button>
+                <button
+                    type="button"
+                    class="focus-ring quick-action h-8! px-3! text-[12.5px]!"
+                    onclick={() => copy(address)}>{copied === address ? 'Copied' : 'Copy'}</button
+                >
             </div>
         {/each}
     </div>
@@ -59,12 +67,16 @@
             {#snippet children({ errors, processing })}
                 <Dialog.Header>
                     <Dialog.Title>Change the team address</Dialog.Title>
-                    <Dialog.Description>Old links stop working straight away, so update any bookmarks you shared.</Dialog.Description>
+                    <Dialog.Description
+                        >Old links stop working straight away, so update any bookmarks you shared.</Dialog.Description
+                    >
                 </Dialog.Header>
                 <div class="mt-4">
                     <Label for="team-slug" class="mb-1.5">Address</Label>
                     <div class="flex items-center gap-2">
-                        <span class="shrink-0 font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{prefix}</span>
+                        <span class="shrink-0 font-mono text-[12.5px] text-muted-foreground max-sm:hidden"
+                            >{prefix}</span
+                        >
                         <Input
                             id="team-slug"
                             name="slug"
@@ -78,7 +90,9 @@
                         />
                     </div>
                     <FieldError message={errors.slug} />
-                    <p class="mt-1.5 text-[12px] text-muted-foreground">Lowercase letters, numbers and single hyphens.</p>
+                    <p class="mt-1.5 text-[12px] text-muted-foreground">
+                        Lowercase letters, numbers and single hyphens.
+                    </p>
                 </div>
                 <Dialog.Footer>
                     <Button variant="ghost" type="button" onclick={() => (editing = false)}>Cancel</Button>

@@ -89,7 +89,7 @@
                     data-testid="audit-finding"
                     data-severity={finding.severity}
                 >
-                    <Badge variant={SEVERITY[finding.severity].variant} class="mt-0.5 min-w-[68px] justify-center"
+                    <Badge variant={SEVERITY[finding.severity].variant} class="mt-0.5 min-w-17 justify-center"
                         >{SEVERITY[finding.severity].label}</Badge
                     >
                     <div class="min-w-0 flex-1 max-sm:basis-full">

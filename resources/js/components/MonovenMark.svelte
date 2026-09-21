@@ -7,6 +7,4 @@
     let { class: className }: { class?: string } = $props()
 </script>
 
-<p class={cn('text-xs font-medium tracking-[0.02em] text-muted-foreground', className)}>
-    Made by Monoven
-</p>
+<p class={cn('text-xs font-medium tracking-[0.02em] text-muted-foreground', className)}>Made by Monoven</p>

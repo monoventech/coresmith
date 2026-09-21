@@ -41,7 +41,9 @@
             {busy && busyDescription ? busyDescription : description}
         </div>
     </div>
-    <span class="w-6 text-right text-[12px] font-medium text-muted-foreground max-sm:hidden" aria-hidden="true">{busy ? '…' : checked ? 'On' : 'Off'}</span>
+    <span class="w-6 text-right text-[12px] font-medium text-muted-foreground max-sm:hidden" aria-hidden="true"
+        >{busy ? '…' : checked ? 'On' : 'Off'}</span
+    >
     <Switch
         {checked}
         {busy}

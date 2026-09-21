@@ -1,7 +1,4 @@
 <script lang="ts">
-    import { page } from '@inertiajs/svelte'
-    import type { Snippet } from 'svelte'
-    import { onMount } from 'svelte'
     import AccountDialog from '@/components/panel/AccountDialog.svelte'
     import CommandPalette from '@/components/panel/CommandPalette.svelte'
     import MobileNav from '@/components/panel/MobileNav.svelte'
@@ -10,6 +7,9 @@
     import Wordmark from '@/components/panel/Wordmark.svelte'
     import { getInitials } from '@/lib/initials'
     import { initializeSidebar } from '@/lib/sidebar.svelte'
+    import { page } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
+    import { onMount } from 'svelte'
 
     let {
         detail = false,
@@ -44,7 +44,7 @@
     <Sidebar onSearch={() => (palette = true)} onAccount={() => (account = true)} />
 
     <main id="main" class="grain relative min-w-0 flex-1 overflow-y-auto" data-testid="panel-main">
-        <div class="mx-auto max-w-[1208px] px-[18px] pt-3 pb-24 sm:px-11 sm:pt-9 sm:pb-16">
+        <div class="mx-auto max-w-302 px-4.5 pt-3 pb-24 sm:px-11 sm:pt-9 sm:pb-16">
             {#if !detail}
                 <div class="mt-2 mb-0.5 flex items-center justify-between gap-3 sm:hidden">
                     <Wordmark size="compact" />
@@ -54,7 +54,9 @@
                         aria-label="Account"
                         onclick={() => (account = true)}
                     >
-                        <span class="inline-flex size-7 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+                        <span
+                            class="inline-flex size-7 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
+                        >
                             {getInitials(user.name)}
                         </span>
                     </button>

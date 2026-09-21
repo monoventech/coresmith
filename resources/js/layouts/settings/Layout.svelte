@@ -1,9 +1,9 @@
 <script lang="ts">
-    import { page } from '@inertiajs/svelte'
-    import type { Snippet } from 'svelte'
     import PageTabs from '@/components/PageTabs.svelte'
     import type { PanelProps } from '@/lib/panel'
     import { appPath } from '@/lib/panel'
+    import { page } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
 
     let { children }: { children?: Snippet } = $props()
 
@@ -11,9 +11,17 @@
 
     const tabs = $derived([
         { label: 'General', href: route('settings.general'), current: path === '/settings' },
-        { label: 'Team', href: route('teams.index'), current: path.startsWith('/settings/team') || path.startsWith('/teams') },
+        {
+            label: 'Team',
+            href: route('teams.index'),
+            current: path.startsWith('/settings/team') || path.startsWith('/teams')
+        },
         { label: 'Git', href: route('source-providers.index'), current: path.startsWith('/settings/git') },
-        { label: 'Notifications', href: route('settings.notifications'), current: path.startsWith('/settings/notifications') },
+        {
+            label: 'Notifications',
+            href: route('settings.notifications'),
+            current: path.startsWith('/settings/notifications')
+        },
         { label: 'API tokens', href: route('api-tokens.index'), current: path.startsWith('/settings/api-tokens') },
         { label: 'Billing', href: route('settings.billing'), current: path.startsWith('/settings/billing') }
     ])
@@ -33,7 +41,7 @@
 
 <h1 class="type-h1 m-0">Settings</h1>
 <p class="type-body-sm mt-1.5 text-muted-foreground">{description}</p>
-<div class="mt-[22px] mb-9">
+<div class="mt-5.5 mb-9">
     <PageTabs {tabs} label="Settings" />
 </div>
 {@render children?.()}

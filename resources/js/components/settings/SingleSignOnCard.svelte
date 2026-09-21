@@ -17,7 +17,6 @@
 </script>
 
 <script lang="ts">
-    import { Form, router } from '@inertiajs/svelte'
     import FieldError from '@/components/FieldError.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -25,6 +24,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { Form, router } from '@inertiajs/svelte'
 
     let { sso }: { sso: SingleSignOn } = $props()
 
@@ -55,17 +55,28 @@
 
     function setEnabled(enabled: boolean) {
         switching = true
-        router.put(route('settings.sso.enabled'), { enabled }, { preserveScroll: true, onFinish: () => (switching = false) })
+        router.put(
+            route('settings.sso.enabled'),
+            { enabled },
+            { preserveScroll: true, onFinish: () => (switching = false) }
+        )
     }
 
     function setProvisioning(on: boolean) {
         provisioning = true
-        router.put(route('settings.sso.provisioning'), { jit_provisioning: on }, { preserveScroll: true, onFinish: () => (provisioning = false) })
+        router.put(
+            route('settings.sso.provisioning'),
+            { jit_provisioning: on },
+            { preserveScroll: true, onFinish: () => (provisioning = false) }
+        )
     }
 
     function remove() {
         working = true
-        router.delete(route('settings.sso.destroy'), { preserveScroll: true, onFinish: () => ((working = false), (removing = false)) })
+        router.delete(route('settings.sso.destroy'), {
+            preserveScroll: true,
+            onFinish: () => ((working = false), (removing = false))
+        })
     }
 </script>
 
@@ -80,17 +91,20 @@
             <Badge variant="outline">Waiting for DNS</Badge>
         {/if}
         {#if connection && sso.can_manage}
-            <span class="ml-auto"><Button variant="ghost" size="sm" onclick={() => (editing = true)}>Edit</Button></span>
+            <span class="ml-auto"><Button variant="ghost" size="sm" onclick={() => (editing = true)}>Edit</Button></span
+            >
         {/if}
     </div>
 
     {#if connection}
         <p class="mb-3 text-[12.5px] text-muted-foreground">
-            People at <span class="font-mono text-[12px]">{connection.email_domain}</span> sign in through your identity provider with OpenID Connect.
+            People at <span class="font-mono text-[12px]">{connection.email_domain}</span> sign in through your identity provider
+            with OpenID Connect.
         </p>
     {:else}
         <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Let people sign in through your identity provider, like Okta, Microsoft Entra ID or Google Workspace, with OpenID Connect.
+            Let people sign in through your identity provider, like Okta, Microsoft Entra ID or Google Workspace, with
+            OpenID Connect.
         </p>
     {/if}
 
@@ -100,11 +114,15 @@
                 <dl class="m-0 flex flex-col" data-testid="sso-details">
                     <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
                         <dt class="w-28 shrink-0 text-[12.5px] text-muted-foreground">Issuer</dt>
-                        <dd class="m-0 min-w-0 flex-1 truncate font-mono text-[12.5px]" title={connection.issuer}>{connection.issuer}</dd>
+                        <dd class="m-0 min-w-0 flex-1 truncate font-mono text-[12.5px]" title={connection.issuer}>
+                            {connection.issuer}
+                        </dd>
                     </div>
                     <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
                         <dt class="w-28 shrink-0 text-[12.5px] text-muted-foreground">Client ID</dt>
-                        <dd class="m-0 min-w-0 flex-1 truncate font-mono text-[12.5px]" title={connection.client_id}>{connection.client_id}</dd>
+                        <dd class="m-0 min-w-0 flex-1 truncate font-mono text-[12.5px]" title={connection.client_id}>
+                            {connection.client_id}
+                        </dd>
                     </div>
                     <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
                         <dt class="w-28 shrink-0 text-[12.5px] text-muted-foreground">Client secret</dt>
@@ -118,15 +136,30 @@
 
                 {#if !connection.verified}
                     <p class="mt-3 mb-2 text-[12.5px] text-muted-foreground">
-                        Add this record at your DNS provider to prove you own <span class="font-mono text-[12px]">{connection.email_domain}</span>, then check it.
+                        Add this record at your DNS provider to prove you own <span class="font-mono text-[12px]"
+                            >{connection.email_domain}</span
+                        >, then check it.
                     </p>
-                    <div class="grid grid-cols-[52px_1fr_auto] items-center gap-2.5 border-t border-border py-2" data-testid="sso-dns-record">
+                    <div
+                        class="grid grid-cols-[52px_1fr_auto] items-center gap-2.5 border-t border-border py-2"
+                        data-testid="sso-dns-record"
+                    >
                         <span class="font-mono text-[11.5px] text-muted-foreground">{connection.record.type}</span>
                         <span class="min-w-0">
-                            <span class="block truncate font-mono text-[12px]" title={connection.record.name}>{connection.record.name}</span>
-                            <span class="block truncate font-mono text-[12px] text-muted-foreground" title={connection.record.value}>{connection.record.value}</span>
+                            <span class="block truncate font-mono text-[12px]" title={connection.record.name}
+                                >{connection.record.name}</span
+                            >
+                            <span
+                                class="block truncate font-mono text-[12px] text-muted-foreground"
+                                title={connection.record.value}>{connection.record.value}</span
+                            >
                         </span>
-                        <Button variant="outline" size="xs" aria-label="Copy the TXT value" onclick={() => copy(connection.record.value)}>
+                        <Button
+                            variant="outline"
+                            size="xs"
+                            aria-label="Copy the TXT value"
+                            onclick={() => copy(connection.record.value)}
+                        >
                             {copied === connection.record.value ? 'Copied' : 'Copy'}
                         </Button>
                     </div>
@@ -161,11 +194,15 @@
         </div>
 
         <div class="flex min-w-0 flex-col" data-testid="sso-redirect-uris">
-            <div class="flex min-h-10 items-center border-t border-border text-[12.5px] text-muted-foreground">Redirect URIs to register at your identity provider</div>
+            <div class="flex min-h-10 items-center border-t border-border text-[12.5px] text-muted-foreground">
+                Redirect URIs to register at your identity provider
+            </div>
             {#each sso.redirect_uris as uri (uri)}
                 <div class="flex min-h-10 items-center gap-2.5 border-t border-border">
                     <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={uri}>{uri}</span>
-                    <Button variant="outline" size="xs" aria-label="Copy {uri}" onclick={() => copy(uri)}>{copied === uri ? 'Copied' : 'Copy'}</Button>
+                    <Button variant="outline" size="xs" aria-label="Copy {uri}" onclick={() => copy(uri)}
+                        >{copied === uri ? 'Copied' : 'Copy'}</Button
+                    >
                 </div>
             {/each}
         </div>
@@ -177,13 +214,20 @@
                 <Button variant="outline" size="sm" onclick={() => (editing = true)}>Set up single sign-on</Button>
             {:else}
                 {#if !connection.verified}
-                    <Button size="sm" disabled={checking} onclick={check}>{checking ? 'Checking…' : 'Check DNS'}</Button>
+                    <Button size="sm" disabled={checking} onclick={check}>{checking ? 'Checking…' : 'Check DNS'}</Button
+                    >
                 {:else if connection.enabled}
-                    <Button variant="outline" size="sm" disabled={switching} onclick={() => setEnabled(false)}>Turn off</Button>
+                    <Button variant="outline" size="sm" disabled={switching} onclick={() => setEnabled(false)}
+                        >Turn off</Button
+                    >
                 {:else}
-                    <Button size="sm" disabled={switching} onclick={() => setEnabled(true)}>{switching ? 'Checking…' : 'Turn on'}</Button>
+                    <Button size="sm" disabled={switching} onclick={() => setEnabled(true)}
+                        >{switching ? 'Checking…' : 'Turn on'}</Button
+                    >
                 {/if}
-                <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}>Remove</Button>
+                <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}
+                    >Remove</Button
+                >
             {/if}
         </div>
     {:else}
@@ -193,11 +237,18 @@
 
 <Dialog.Root bind:open={editing}>
     <Dialog.Content>
-        <Form method="put" action={route('settings.sso.update')} options={{ preserveScroll: true }} onSuccess={() => (editing = false)}>
+        <Form
+            method="put"
+            action={route('settings.sso.update')}
+            options={{ preserveScroll: true }}
+            onSuccess={() => (editing = false)}
+        >
             {#snippet children({ errors, processing })}
                 <Dialog.Header>
                     <Dialog.Title>{connection ? 'Edit single sign-on' : 'Set up single sign-on'}</Dialog.Title>
-                    <Dialog.Description>Copy these details from the OpenID Connect app you created at your identity provider.</Dialog.Description>
+                    <Dialog.Description
+                        >Copy these details from the OpenID Connect app you created at your identity provider.</Dialog.Description
+                    >
                 </Dialog.Header>
                 <div class="mt-4 flex flex-col gap-3">
                     <div>
@@ -245,7 +296,9 @@
                         />
                         <FieldError message={errors.client_secret} />
                         {#if connection}
-                            <p id="sso-client-secret-hint" class="mt-1.5 mb-0 text-[12px] text-muted-foreground">Enter it again if you change the issuer URL or client ID.</p>
+                            <p id="sso-client-secret-hint" class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                                Enter it again if you change the issuer URL or client ID.
+                            </p>
                         {/if}
                     </div>
                     <div>
@@ -282,7 +335,8 @@
         <Dialog.Header>
             <Dialog.Title>Remove single sign-on?</Dialog.Title>
             <Dialog.Description>
-                People at {connection?.email_domain} sign in with a Coresmith password again. Anyone who never set one can choose it from the sign-in page.
+                People at {connection?.email_domain} sign in with a Coresmith password again. Anyone who never set one can
+                choose it from the sign-in page.
             </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>

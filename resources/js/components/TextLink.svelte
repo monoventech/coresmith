@@ -1,8 +1,8 @@
 <script lang="ts">
+    import { cn } from '@/lib/utils'
     import type { LinkComponentBaseProps, Method } from '@inertiajs/core'
     import { Link } from '@inertiajs/svelte'
     import type { Snippet } from 'svelte'
-    import { cn } from '@/lib/utils'
 
     let {
         href,
@@ -28,7 +28,10 @@
     {tabindex}
     {method}
     {as}
-    class={cn('focus-ring cursor-pointer rounded-sm bg-transparent p-0 font-medium text-primary no-underline underline-offset-4 hover:underline', className)}
+    class={cn(
+        'focus-ring cursor-pointer rounded-sm bg-transparent p-0 font-medium text-primary no-underline underline-offset-4 hover:underline',
+        className
+    )}
     {...rest}
 >
     {@render children?.()}
