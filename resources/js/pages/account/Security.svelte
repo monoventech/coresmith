@@ -30,7 +30,7 @@
 
 <AppHead title="Security" />
 
-<div class="flex max-w-[660px] flex-col gap-4">
+<div class="flex max-w-165 flex-col gap-4">
     <div class="rounded-xl border border-border bg-card p-6" data-testid="password-card">
         <h3 class="type-h3 m-0 mb-1">Password</h3>
         <p class="mb-4 text-[12.5px] text-muted-foreground">Use a long, random one. A password manager remembers it so you don't have to.</p>

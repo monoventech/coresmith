@@ -43,7 +43,7 @@
 <div class="panel flex h-dvh overflow-hidden bg-background font-sans text-foreground">
     <Sidebar onSearch={() => (palette = true)} onAccount={() => (account = true)} />
 
-    <main id="main" class="grain relative min-w-0 flex-1 overflow-y-auto" data-testid="panel-main">
+    <main id="main" {...{ 'scroll-region': '' }} class="grain relative min-w-0 flex-1 overflow-y-auto" data-testid="panel-main">
         <div class="mx-auto max-w-302 px-4.5 pt-3 pb-24 sm:px-11 sm:pt-9 sm:pb-16">
             {#if !detail}
                 <div class="mt-2 mb-0.5 flex items-center justify-between gap-3 sm:hidden">

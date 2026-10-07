@@ -8,13 +8,16 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
+use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Process\ProcessManager;
+use App\Services\Runtime\Stack;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -61,12 +64,21 @@ final class RollbackApplication implements ShouldQueue
             $connection->execute("mv -Tf {$current}.tmp {$current}")->throw();
 
             $name = basename($target);
+            $stack = $this->stackFor($name);
+            $before = $this->application->runtimeVersions();
 
-            $this->application->forceFill(['current_release' => $name])->save();
+            $this->application->forceFill(['current_release' => $name, ...($stack?->applicationAttributes() ?? [])])->save();
+
+            $processes = app(ProcessManager::class);
+
+            if ($stack !== null) {
+                $processes->install($connection, $this->application);
+            }
+
+            app(CrontabBuilder::class)->write($connection, $this->application);
 
             if (!in_array($this->application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
-                $processes = app(ProcessManager::class);
-                $processes->refresh($connection, $this->application);
+                $processes->refresh($connection, $this->application, restart: $before !== $this->application->runtimeVersions());
 
                 try {
                     $processes->verifyStarted($connection, $this->application);
@@ -82,7 +94,7 @@ final class RollbackApplication implements ShouldQueue
 
             activity()
                 ->performedOn($this->application)
-                ->withProperties(['from' => $previous, 'to' => $name])
+                ->withProperties(['from' => $previous, 'to' => $name, 'runtimes' => $stack === null ? 'unchanged' : 'restored'])
                 ->log('application_rolled_back');
         } finally {
             $connections->disconnect($this->application->server);
@@ -104,10 +116,33 @@ final class RollbackApplication implements ShouldQueue
             return $wanted;
         }
 
-        if (count($ordered) < 2) {
+        $release = $this->application->deployments()
+            ->where('status', DeploymentStatus::Succeeded->value)
+            ->where('release', '!=', $this->application->current_release)
+            ->latest('created_at')
+            ->value('release');
+
+        if ($release === null) {
             throw NoPreviousReleaseException::forApplication($this->application->slug);
         }
 
-        return $ordered[1];
+        $wanted = $paths->release($release);
+
+        if (!in_array($wanted, $ordered, true)) {
+            throw NoPreviousReleaseException::releaseGone($release);
+        }
+
+        return $wanted;
+    }
+
+    private function stackFor(string $release): ?Stack
+    {
+        $deployment = $this->application->deployments()
+            ->where('release', $release)
+            ->whereNotNull('stack')
+            ->latest('created_at')
+            ->first();
+
+        return $deployment === null ? null : Stack::fromArray($deployment->stack);
     }
 }

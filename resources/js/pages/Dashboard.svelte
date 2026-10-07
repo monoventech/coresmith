@@ -103,7 +103,7 @@
                 <Link
                     href={tile.href}
                     data-testid="tile-{tile.id}"
-                    class="focus-ring hover-card block rounded-xl border border-border bg-card px-[18px] py-4 text-left text-foreground no-underline"
+                    class="focus-ring hover-card block rounded-xl border border-border bg-card px-4.5 py-4 text-left text-foreground no-underline"
                 >
                     <div class="type-caption text-muted-foreground">{tile.label}</div>
                     <div class={cn('mt-1 font-mono text-[26px] font-medium', tile.tone === 'warning' ? 'text-warning-strong' : 'text-foreground')}>
@@ -120,8 +120,8 @@
                     class="hover-card group relative rounded-xl border border-border bg-card px-5.5 py-5 text-foreground has-[.card-link:focus-visible]:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] max-sm:p-4"
                     data-testid="server-card"
                 >
-                    <div class="mb-1 flex items-center gap-2.5 max-sm:mb-0 max-sm:gap-[9px]">
-                        <StateDot tone={server.state.tone} state={server.state.key} class="max-sm:size-[7px]" />
+                    <div class="mb-1 flex items-center gap-2.5 max-sm:mb-0 max-sm:gap-2.25">
+                        <StateDot tone={server.state.tone} state={server.state.key} class="max-sm:size-1.75" />
                         <Link
                             href={server.href}
                             class="card-link font-mono text-[15px] font-medium text-foreground no-underline outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] max-sm:text-[14px]"
@@ -131,7 +131,7 @@
                         <span class={cn('ml-auto text-[12px] font-medium max-sm:text-[11.5px]', toneText(server.state.tone))}>{server.state.label}</span>
                     </div>
                     <div class="mb-4 text-[12.5px] text-muted-foreground max-sm:hidden">{server.meta || 'Waiting for its first connection'}</div>
-                    <div class="mt-[3px] mb-3 text-[12px] text-muted-foreground sm:hidden">{server.compact_meta || 'Waiting for its first connection'}</div>
+                    <div class="mt-0.75 mb-3 text-[12px] text-muted-foreground sm:hidden">{server.compact_meta || 'Waiting for its first connection'}</div>
                     <div class="flex gap-2.5 font-mono text-[11px] text-muted-foreground sm:hidden">
                         <span>CPU {server.cpu ?? '—'}{server.cpu === null ? '' : '%'}</span>
                         <span>MEM {server.memory ?? '—'}{server.memory === null ? '' : '%'}</span>

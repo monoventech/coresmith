@@ -71,4 +71,11 @@ final class ReleasePaths
 
         return $path;
     }
+
+    public function appDirectory(string $releasePath): string
+    {
+        $directory = trim((string) $this->application->directory, '/');
+
+        return $directory === '' ? $releasePath : $releasePath . '/' . $directory;
+    }
 }

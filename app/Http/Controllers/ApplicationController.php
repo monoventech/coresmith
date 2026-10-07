@@ -25,6 +25,9 @@ use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Panel\SmartToggles;
+use App\Services\Runtime\Catalog;
+use App\Services\Runtime\RuntimeDetector;
+use App\Services\Runtime\RuntimeLifecycle;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
@@ -39,13 +42,19 @@ final class ApplicationController extends Controller
 {
     public const SECRET_KEYS = '/(PASSWORD|SECRET|TOKEN|KEY|DSN|PRIVATE)/i';
 
-    public function create(Server $server): Response
+    public function create(Server $server, Catalog $catalog, RuntimeLifecycle $lifecycle): Response
     {
         $this->authorize('view', $server);
         $this->authorize('create', Application::class);
 
         return Inertia::render('applications/Create', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'runtimes' => collect(['php', 'ruby', 'bun', 'nodejs', 'deno'])->mapWithKeys(fn(string $runtime): array => [$runtime => [
+                'label' => $catalog->label($runtime),
+                'recommended' => $catalog->recommendedLine($runtime),
+                'sources' => RuntimeDetector::SOURCES[$runtime],
+                'options' => $lifecycle->options($runtime),
+            ]])->all(),
         ]);
     }
 
@@ -57,8 +66,12 @@ final class ApplicationController extends Controller
     ): RedirectResponse {
         $slug = $slugs->fromName($request->string('name')->value(), $server);
 
+        $runtime = $request->runtime();
+        $line = $request->runtimeLine();
+
         $application = Application::create([
-            ...$request->safe()->except([]),
+            ...$request->safe()->except(['runtime_version', 'acknowledge_eol']),
+            'runtime_pins' => $line === null ? null : [$runtime => $line],
             'server_id' => $server->id,
             'team_id' => $server->team_id,
             'slug' => $slug,
@@ -68,6 +81,10 @@ final class ApplicationController extends Controller
         ]);
 
         activity()->performedOn($application)->log('application_created');
+
+        if ($line !== null && $request->isEndOfLife((string) $runtime, $line)) {
+            activity()->performedOn($application)->withProperties(['runtime' => $runtime, 'line' => $line])->log('runtime_eol_chosen');
+        }
 
         if ($server->status === ServerStatus::Active) {
             ReservePortBlock::dispatch($application);
@@ -128,6 +145,7 @@ final class ApplicationController extends Controller
                 'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
                 'last_failed_live' => $latest !== null && $latest->status === DeploymentStatus::Failed && DeploymentPresenter::reachedUsers($latest),
                 'oom' => $this->recentOomKill($application),
+                'runtime_eol' => ApplicationPresenter::runtimeEol($application),
             ],
             'toggles' => array_map(fn(array $toggle): array => [
                 ...$toggle,

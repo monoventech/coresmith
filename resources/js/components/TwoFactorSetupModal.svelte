@@ -8,6 +8,8 @@
     import { Form } from '@inertiajs/svelte'
     import { tick } from 'svelte'
 
+    type FormErrors = Record<string, string>
+
     let {
         isOpen = $bindable(false),
         requiresConfirmation,
@@ -144,7 +146,7 @@
                 onFinish={() => (code = '')}
                 onSuccess={() => (isOpen = false)}
             >
-                {#snippet children({ errors, processing }: { errors: Record; processing: boolean })}
+                {#snippet children({ errors, processing }: { errors: FormErrors; processing: boolean })}
                     <input type="hidden" name="code" value={code} />
                     <div bind:this={otp} class="mt-4 flex flex-col items-center gap-2">
                         <InputOTP bind:value={code} maxlength={6} disabled={processing} autofocus>

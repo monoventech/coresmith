@@ -52,6 +52,9 @@ jobs:
       - name: Prettier
         run: bun run format:check
 
+      - name: Tailwind canonical classes
+        run: bun run lint:tailwind
+
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
 

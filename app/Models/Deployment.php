@@ -42,6 +42,8 @@ class Deployment extends Model
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'tag_signed' => 'boolean',
+            'stack' => 'array',
+            'stale_after' => 'datetime',
         ];
     }
 }

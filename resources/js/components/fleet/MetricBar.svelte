@@ -7,11 +7,14 @@
 </script>
 
 <div>
-    <div class="mb-[5px] flex justify-between text-[11.5px] text-muted-foreground">
+    <div class="mb-1.25 flex justify-between text-[11.5px] text-muted-foreground">
         <span>{label}</span>
         <span class="font-mono">{value === null ? '—' : `${value}%`}</span>
     </div>
-    <div class="h-[3px] rounded-[2px] bg-muted">
-        <div class={cn('h-[3px] rounded-[2px]', warning ? 'bg-warning' : 'bg-muted-foreground')} style:width="{value ?? 0}%"></div>
+    <div class="h-0.75 rounded-xs bg-muted">
+        <div
+            class={cn('h-0.75 rounded-xs', warning ? 'bg-warning' : 'bg-muted-foreground')}
+            style:width="{value ?? 0}%"
+        ></div>
     </div>
 </div>

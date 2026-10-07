@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Enums\PowerState;
+use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Process\FpmPoolBuilder;
@@ -91,6 +92,19 @@ test('a unit executes the real binary path with no shell wrapper', function () {
         ->and($unit)->not->toContain('/bin/sh -c');
 });
 
+test('the js web unit tells next.js which host to bind, since it reads HOSTNAME not HOST', function () {
+    $app = managedApp(['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0']);
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build($app, 'web', '/opt/asdf-data/installs/nodejs/24.15.0/bin/node server.js');
+
+    expect($unit)->toContain('Environment="HOSTNAME=127.0.0.1"');
+});
+
+test('a php web unit gets no HOSTNAME environment line', function () {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), 'web', '/bin/true');
+
+    expect($unit)->not->toContain('HOSTNAME');
+});
+
 test('a unit carries the systemd hardening directives', function (string $directive) {
     $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), 'web', '/bin/true');
 
@@ -135,7 +149,7 @@ test('a php app installs an fpm pool and unit', function () {
 
 test('a js app installs a web unit rather than an fpm pool', function () {
     $transport = new FakeSSHTransport;
-    $app = managedApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'node_version' => '24.15.0']);
+    $app = managedApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'bun_version' => '1.4.2']);
 
     processManager()->install(processConnection($transport), $app);
 
@@ -143,6 +157,33 @@ test('a js app installs a web unit rather than an fpm pool', function () {
 
     expect($uploads)->toHaveKey('/etc/systemd/system/coresmith-app-my-app-web.service')
         ->and($uploads)->not->toHaveKey('/etc/php-fpm.d/coresmith-app-my-app.conf');
+});
+
+test('a worker command finds its binary through the unit PATH, so it follows the live release', function (string $stored, string $execStart) {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), 'queue', $stored);
+
+    expect($unit)->toContain("\nExecStart={$execStart}\n");
+})->with([
+    'a bare command' => ['php artisan horizon', '/usr/bin/env php artisan horizon'],
+    'the system php of an older toggle' => ['/usr/bin/php artisan queue:work --sleep=3', '/usr/bin/env php artisan queue:work --sleep=3'],
+    'a php binary pinned by an older toggle' => ['/opt/asdf-data/installs/php/8.4.20/bin/php artisan queue:work --tries=3', '/usr/bin/env php artisan queue:work --tries=3'],
+    'a bundler pinned by an older toggle' => ['/opt/asdf-data/installs/ruby/3.4.1/bin/bundle exec sidekiq', '/usr/bin/env bundle exec sidekiq'],
+    'any other absolute path' => ['/bin/queue-work', '/bin/queue-work'],
+    'a php path that is not the system php' => ['/usr/bin/php8.3 artisan queue:work', '/usr/bin/php8.3 artisan queue:work'],
+]);
+
+test('a blank worker command is refused, since it would print the unit environment to the log', function (string $command) {
+    (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), 'queue', $command);
+})->with([
+    'empty' => [''],
+    'whitespace only' => ["  \t "],
+])->throws(UnsafeNameException::class);
+
+test('the web command keeps the absolute binary it was built with', function () {
+    $app = managedApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'bun_version' => '1.4.2']);
+
+    expect((new SystemdUnitBuilder(new AsdfManager))->build($app, 'web', '/opt/asdf-data/installs/bun/1.4.2/bin/bun server.js'))
+        ->toContain("\nExecStart=/opt/asdf-data/installs/bun/1.4.2/bin/bun server.js\n");
 });
 
 test('declared worker processes each get their own unit', function () {

@@ -19,7 +19,7 @@
 
 <AppHead title="Your account" />
 
-<div class="max-w-[660px] rounded-xl border border-border bg-card p-6" data-testid="profile-card">
+<div class="max-w-165 rounded-xl border border-border bg-card p-6" data-testid="profile-card">
     <h3 class="type-h3 m-0 mb-1">Profile</h3>
     <p class="mb-4 text-[12.5px] text-muted-foreground">Your name shows on deploys you trigger and in the team list.</p>
 

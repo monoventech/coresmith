@@ -1,6 +1,4 @@
 <script lang="ts">
-    import { router } from '@inertiajs/svelte'
-    import { TriangleAlert } from '@lucide/svelte'
     import BackLink from '@/components/BackLink.svelte'
     import HostKeyAlert from '@/components/HostKeyAlert.svelte'
     import PageTabs from '@/components/PageTabs.svelte'
@@ -10,6 +8,8 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import type { ServerHeader } from '@/lib/servers'
+    import { router } from '@inertiajs/svelte'
+    import { TriangleAlert } from '@lucide/svelte'
 
     let { server }: { server: ServerHeader } = $props()
 
@@ -28,7 +28,11 @@
     const metrics = $derived([
         { label: 'CPU · 24h', value: server.metrics.cpu, stroke: 'var(--primary)' },
         { label: 'Memory · 24h', value: server.metrics.memory, stroke: 'currentColor' },
-        { label: 'Disk · 24h', value: server.metrics.disk, stroke: server.disk_warning ? 'var(--warning)' : 'currentColor' }
+        {
+            label: 'Disk · 24h',
+            value: server.metrics.disk,
+            stroke: server.disk_warning ? 'var(--warning)' : 'currentColor'
+        }
     ])
 
     function openRename() {
@@ -66,7 +70,9 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="type-h1 m-0 font-mono font-medium">{server.name}</h1>
-            <Badge variant={server.state.tone} dot pulse={server.state.key === 'provisioning'}>{server.state.label}</Badge>
+            <Badge variant={server.state.tone} dot pulse={server.state.key === 'provisioning'}
+                >{server.state.label}</Badge
+            >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">{server.meta}</p>
     </div>
@@ -97,13 +103,18 @@
 {/if}
 
 {#if server.disk_warning}
-    <div class="tint-warning mt-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3" data-testid="disk-warning">
+    <div
+        class="tint-warning mt-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3"
+        data-testid="disk-warning"
+    >
         <TriangleAlert class="size-4.5 shrink-0 text-warning" />
         <span class="min-w-0 flex-1 text-[13.5px]">
             Disk is at {server.disk_warning.percent}%. Pruning keeps the last 5 releases of each app, plus the live one.
         </span>
         {#if server.can.update}
-            <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={prune}>Prune old releases</button>
+            <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={prune}
+                >Prune old releases</button
+            >
         {/if}
     </div>
 {/if}
@@ -114,7 +125,8 @@
             <div class="rounded-xl border border-border bg-card px-4.5 py-3.5">
                 <div class="mb-2 flex items-baseline justify-between">
                     <span class="type-caption text-muted-foreground">{metric.label}</span>
-                    <span class="font-mono text-[14px]">{metric.value.now === null ? '—' : `${metric.value.now}%`}</span>
+                    <span class="font-mono text-[14px]">{metric.value.now === null ? '—' : `${metric.value.now}%`}</span
+                    >
                 </div>
                 <Sparkline values={metric.value.series} stroke={metric.stroke} />
             </div>
@@ -148,7 +160,9 @@
     <Dialog.Content>
         <Dialog.Header>
             <Dialog.Title>Detach {server.name}?</Dialog.Title>
-            <Dialog.Description>Coresmith stops managing this server. The VM itself, and everything on it, is untouched.</Dialog.Description>
+            <Dialog.Description
+                >Coresmith stops managing this server. The VM itself, and everything on it, is untouched.</Dialog.Description
+            >
         </Dialog.Header>
         <Dialog.Footer>
             <Button variant="ghost" onclick={() => (detaching = false)}>Keep it</Button>

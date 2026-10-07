@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Services\Runtime\Catalog;
 use App\Services\SSH\Contracts\SSHTransport;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Exception\ConnectionClosedException;
@@ -37,6 +38,17 @@ final class FakeSSHTransport implements SSHTransport
 
     /** @var array<string, int> */
     private array $drops = [];
+
+    /** @var array<string, string> */
+    private array $timeouts = [];
+
+    /** @var list<int> */
+    private array $budgets = [];
+
+    private bool $timedOut = false;
+
+    /** @var list<string> */
+    private array $calls = [];
 
     public function setHostKey(string $hostKey): self
     {
@@ -86,6 +98,29 @@ final class FakeSSHTransport implements SSHTransport
         return $this;
     }
 
+    public function timeOutOn(string $needle, string $partialOutput = ''): self
+    {
+        $this->timeouts[$needle] = $partialOutput;
+
+        return $this;
+    }
+
+    public function budgetFor(string $needle): ?int
+    {
+        foreach ($this->commands as $index => $command) {
+            if (str_contains($command, $needle)) {
+                return $this->budgets[$index] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    public function timedOut(): bool
+    {
+        return $this->timedOut;
+    }
+
     /** @return list<string> */
     public function commands(): array
     {
@@ -108,8 +143,15 @@ final class FakeSSHTransport implements SSHTransport
         return $this->connected;
     }
 
+    /** @return list<string> */
+    public function calls(): array
+    {
+        return $this->calls;
+    }
+
     public function connect(string $host, int $port, int $timeout): void
     {
+        $this->calls[] = 'connect';
         $this->connected = true;
     }
 
@@ -125,9 +167,11 @@ final class FakeSSHTransport implements SSHTransport
         return $this->loginSucceeds;
     }
 
-    public function exec(string $command, ?callable $onOutput = null): string
+    public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
     {
         $this->commands[] = $command;
+        $this->budgets[] = $timeout;
+        $this->timedOut = false;
 
         foreach ($this->drops as $needle => $remaining) {
             if ($remaining > 0 && str_contains($command, $needle)) {
@@ -135,6 +179,18 @@ final class FakeSSHTransport implements SSHTransport
                 $this->connected = false;
 
                 throw new ConnectionClosedException('Connection closed by server');
+            }
+        }
+
+        foreach ($this->timeouts as $needle => $partialOutput) {
+            if (str_contains($command, $needle)) {
+                $this->timedOut = true;
+
+                if ($onOutput !== null) {
+                    $onOutput($partialOutput);
+                }
+
+                return $partialOutput;
             }
         }
 
@@ -173,11 +229,19 @@ final class FakeSSHTransport implements SSHTransport
      */
     private function healthyServer(string $command): ?array
     {
-        return match (true) {
-            str_contains($command, "systemctl is-active 'coresmith-app-") => ['output' => "active\n", 'exitCode' => 0],
-            str_contains($command, "NRestarts --value 'coresmith-app-") => ['output' => "0\n", 'exitCode' => 0],
-            default => null,
-        };
+        if (str_contains($command, "systemctl is-active 'coresmith-app-")) {
+            return ['output' => "active\n", 'exitCode' => 0];
+        }
+
+        if (str_contains($command, "NRestarts --value 'coresmith-app-")) {
+            return ['output' => "0\n", 'exitCode' => 0];
+        }
+
+        if (preg_match("~^ls -1 '/opt/asdf-data/installs/([a-z]+)'~", $command, $matches) === 1) {
+            return ['output' => implode("\n", app(Catalog::class)->versions($matches[1])) . "\n", 'exitCode' => 0];
+        }
+
+        return null;
     }
 
     public function exitStatus(): int
@@ -192,6 +256,7 @@ final class FakeSSHTransport implements SSHTransport
 
     public function disconnect(): void
     {
+        $this->calls[] = 'disconnect';
         $this->connected = false;
     }
 }

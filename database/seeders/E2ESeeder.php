@@ -14,6 +14,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Jobs\InstallRuntimes;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
@@ -22,6 +23,7 @@ use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
+use App\Services\Runtime\JsTooling;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
@@ -83,6 +85,14 @@ final class E2ESeeder extends Seeder
             ->performedOn($hungry)
             ->withProperties(['process' => 'queue', 'at' => now()->subMinutes(40)->toIso8601String(), 'limit_mb' => 256])
             ->log('app_oom_killed');
+
+        $legacy = $this->application('legacy-api', 8060, [
+            'type' => ApplicationType::Js,
+            'framework' => null,
+            'js_runtime' => 'node',
+            ...MonovenTenant::stack(['nodejs' => ['20.20.2', '.nvmrc', '20']], null, new JsTooling('npm', true, false, true)),
+        ]);
+        $this->succeeded($legacy, 3 * 24 * 60, 'v2.3.0');
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             User::factory()->create(['name' => 'Invitee ' . $code, 'email' => "invitee-{$code}@coresmith.test", 'password' => $password]);
@@ -147,7 +157,7 @@ final class E2ESeeder extends Seeder
         $acme = Team::factory()->create(['name' => 'Acme Labs', 'slug' => 'acme', 'owner_id' => $owner->id]);
         $acme->members()->attach($owner, ['role' => TeamRole::Admin->value]);
 
-        Server::factory()->for($acme)->create([
+        $acmeWeb = Server::factory()->for($acme)->create([
             'name' => 'acme-web',
             'environment' => 'Production',
             'region' => 'lon1',
@@ -157,6 +167,44 @@ final class E2ESeeder extends Seeder
             'os_version' => '24.04',
             'provisioning_phase' => 8,
             'last_connected_at' => now(),
+        ]);
+
+        $portal = Application::factory()->for($acme)->for($acmeWeb)->create([
+            'name' => 'acme-portal',
+            'slug' => 'acme-portal',
+            'system_user' => 'coresmith-app-acme-portal',
+            'type' => ApplicationType::Php,
+            'framework' => 'laravel',
+            'php_version' => null,
+            'domain' => 'portal.acme.test',
+            'repository_url' => 'https://github.com/acme/portal',
+            'repository_branch' => 'main',
+            'base_port' => 8000,
+            'status' => ApplicationStatus::Deploying,
+        ]);
+
+        $started = CarbonImmutable::now()->subMinutes(3);
+        $release = $started->format('Ymd-His');
+
+        Deployment::factory()->for($portal)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => 'a1b2c3d' . substr(hash('sha1', 'acme-portal'), 0, 33),
+            'commit_message' => 'Move to PHP 8.5',
+            'commit_author' => 'Maya Lindqvist',
+            'status' => DeploymentStatus::Running,
+            'started_at' => $started,
+            'stale_after' => $started->addSeconds(InstallRuntimes::window()),
+            'created_at' => $started,
+            'stack' => MonovenTenant::stack(['php' => ['8.5.10', 'composer.json', '^8.5']], ['name' => 'laravel', 'major' => 13])['stack'],
+            'log' => implode("\n", [
+                '[' . $started->format('H:i:s') . '] release ' . $release . ' · branch main · triggered by Maya Lindqvist',
+                '[' . $started->addSeconds(1)->format('H:i:s') . '] clone: fetching over https',
+                'commit a1b2c3d by Maya Lindqvist',
+                '[' . $started->addSeconds(9)->format('H:i:s') . '] deps: resolving runtimes from the repository',
+                'PHP 8.5.10 from composer.json (^8.5), active until Dec 2027, not installed yet',
+                '[' . $started->addSeconds(10)->format('H:i:s') . '] deps: installing PHP 8.5.10, compiling it, usually 5–15 minutes the first time',
+            ]),
         ]);
 
         TeamDomain::factory()->for($acme)->create(['hostname' => 'panel.acme.test']);
@@ -221,7 +269,7 @@ final class E2ESeeder extends Seeder
             'system_user' => 'coresmith-app-' . $name,
             'type' => ApplicationType::Php,
             'framework' => 'laravel',
-            'php_version' => '8.5.1',
+            ...MonovenTenant::stack(['php' => ['8.5.10', 'composer.json', '^8.4']], ['name' => 'laravel', 'major' => 13]),
             'domain' => $name . '.bench.monoven.io',
             'repository_url' => 'https://github.com/monoventech/' . $name,
             'repository_branch' => 'main',

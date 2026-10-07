@@ -1,9 +1,9 @@
 <script lang="ts">
-    import { Link, page } from '@inertiajs/svelte'
-    import { Layers, LayoutGrid, Rocket, Settings } from '@lucide/svelte'
     import type { PanelProps } from '@/lib/panel'
     import { appPath, sectionFor } from '@/lib/panel'
     import { cn } from '@/lib/utils'
+    import { Link, page } from '@inertiajs/svelte'
+    import { Layers, LayoutGrid, Rocket, Settings } from '@lucide/svelte'
 
     const section = $derived(sectionFor(appPath(page.url, (page.props.panel as PanelProps | null)?.base)))
 
@@ -16,7 +16,7 @@
 </script>
 
 <nav
-    class="panel fixed inset-x-0 bottom-0 z-40 flex justify-around gap-2 border-t border-border bg-background px-[18px] pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] sm:hidden"
+    class="panel fixed inset-x-0 bottom-0 z-40 flex justify-around gap-2 border-t border-border bg-background px-4.5 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] sm:hidden"
     aria-label="Main"
     data-testid="mobile-nav"
 >

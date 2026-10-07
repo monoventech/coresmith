@@ -226,7 +226,7 @@
         class="tint-destructive mb-5 flex items-start gap-3 rounded-xl border px-4.5 py-3.5 max-sm:mb-3.5 max-sm:gap-2.5 max-sm:px-3.5 max-sm:py-3"
         data-testid="failure-banner"
     >
-        <OctagonAlert class="mt-0.5 size-[18px] shrink-0 text-destructive max-sm:size-4" />
+        <OctagonAlert class="mt-0.5 size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal" data-testid="failure-reason">
             {#if live.reached_users}
                 <span class="font-semibold">{FAILURES.swap}.</span>
@@ -253,7 +253,7 @@
     <div class="rounded-xl border border-border bg-card px-4.5 py-3.5 max-sm:px-4 max-sm:py-2.5" data-testid="phase-rail">
         {#each live.phases as phase (phase.key)}
             <div
-                class={cn('flex min-h-[42px] items-center gap-[11px] max-sm:min-h-[38px] max-sm:gap-2.5', (phase.state === 'pending' || phase.state === 'skipped') && 'opacity-50')}
+                class={cn('flex min-h-10.5 items-center gap-2.75 max-sm:min-h-9.5 max-sm:gap-2.5', (phase.state === 'pending' || phase.state === 'skipped') && 'opacity-50')}
                 data-phase={phase.key}
                 data-state={phase.state}
             >
@@ -275,8 +275,8 @@
     <div
         bind:this={terminal}
         class={cn(
-            'terminal h-[396px] max-[900px]:h-[300px] max-sm:px-3.5 max-sm:py-3 max-sm:text-[11px] max-sm:leading-[1.65]',
-            finished ? 'max-sm:h-[150px]' : 'max-sm:h-[230px]'
+            'terminal h-99 max-[900px]:h-75 max-sm:px-3.5 max-sm:py-3 max-sm:text-[11px] max-sm:leading-[1.65]',
+            finished ? 'max-sm:h-37.5' : 'max-sm:h-57.5'
         )}
         data-testid="deployment-log"
         tabindex="0"

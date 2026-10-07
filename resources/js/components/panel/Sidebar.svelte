@@ -1,6 +1,4 @@
 <script lang="ts">
-    import { Link, page } from '@inertiajs/svelte'
-    import { ChevronsUpDown, Layers, LayoutGrid, ListChecks, Moon, PanelLeftClose, PanelLeftOpen, Rocket, Search, Settings, Sun } from '@lucide/svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
     import Wordmark from '@/components/panel/Wordmark.svelte'
     import { getInitials } from '@/lib/initials'
@@ -9,6 +7,20 @@
     import { sidebarState, toggleSidebar } from '@/lib/sidebar.svelte'
     import { themeState } from '@/lib/theme.svelte'
     import { cn } from '@/lib/utils'
+    import { Link, page } from '@inertiajs/svelte'
+    import {
+        ChevronsUpDown,
+        Layers,
+        LayoutGrid,
+        ListChecks,
+        Moon,
+        PanelLeftClose,
+        PanelLeftOpen,
+        Rocket,
+        Search,
+        Settings,
+        Sun
+    } from '@lucide/svelte'
 
     let { onSearch, onAccount }: { onSearch: () => void; onAccount: () => void } = $props()
 
@@ -33,7 +45,13 @@
         ]
 
         if (panel?.setup && !panel.setup.complete) {
-            list.push({ id: 'setup', label: 'Finish setup', href: route('setup.show'), icon: ListChecks, badge: `${panel.setup.current + 1}/${panel.setup.total}` })
+            list.push({
+                id: 'setup',
+                label: 'Finish setup',
+                href: route('setup.show'),
+                icon: ListChecks,
+                badge: `${panel.setup.current + 1}/${panel.setup.total}`
+            })
         }
 
         return list
@@ -47,19 +65,19 @@
 <aside
     class={cn(
         'panel hidden min-h-0 shrink-0 flex-col overflow-y-auto border-r border-border bg-card px-3 pt-5 pb-4 transition-[width] duration-(--dur-fast) ease-(--ease-out-soft) sm:flex',
-        collapsed ? 'w-[89px]' : 'w-[253px]'
+        collapsed ? 'w-22.25' : 'w-63.25'
     )}
     data-testid="sidebar"
     data-collapsed={collapsed}
 >
-    <div class={cn('mb-5 flex min-h-[30px] items-center gap-[9px]', collapsed ? 'justify-center' : 'px-3')}>
+    <div class={cn('mb-5 flex min-h-7.5 items-center gap-2.25', collapsed ? 'justify-center' : 'px-3')}>
         {#if !collapsed}
             <Wordmark />
         {/if}
         <button
             type="button"
             class={cn(
-                'focus-ring inline-flex size-[30px] shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted',
+                'focus-ring inline-flex size-7.5 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted',
                 !collapsed && 'ml-auto'
             )}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -84,10 +102,10 @@
         aria-label="Search"
         onclick={onSearch}
     >
-        <Search class="size-[15px]" />
+        <Search class="size-3.75" />
         {#if !collapsed}
             <span class="flex-1">Search</span>
-            <span class="rounded-[4px] border border-border px-[5px] py-px font-mono text-[11px]">{shortcut}</span>
+            <span class="rounded-sm border border-border px-1.25 py-px font-mono text-[11px]">{shortcut}</span>
         {/if}
     </button>
 
@@ -119,12 +137,17 @@
     <div class="mt-auto flex flex-col gap-3.5 px-3">
         <button
             type="button"
-            class={cn('focus-ring flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md bg-transparent p-0 text-left text-foreground', collapsed && 'justify-center')}
+            class={cn(
+                'focus-ring flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md bg-transparent p-0 text-left text-foreground',
+                collapsed && 'justify-center'
+            )}
             title="{user.name}{panel?.team ? ` · ${panel.team.name}` : ''}"
             aria-label="Account"
             onclick={onAccount}
         >
-            <span class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground">
+            <span
+                class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
+            >
                 {getInitials(user.name)}
             </span>
             {#if !collapsed}
@@ -140,7 +163,10 @@
 
         <button
             type="button"
-            class={cn('focus-ring flex h-9 cursor-pointer items-center gap-2.5 bg-transparent p-0 text-left text-[13px] font-medium text-muted-foreground', collapsed && 'justify-center')}
+            class={cn(
+                'focus-ring flex h-9 cursor-pointer items-center gap-2.5 bg-transparent p-0 text-left text-[13px] font-medium text-muted-foreground',
+                collapsed && 'justify-center'
+            )}
             title={dark ? 'Light mode' : 'Dark mode'}
             aria-label={dark ? 'Light mode' : 'Dark mode'}
             onclick={flipTheme}
@@ -155,12 +181,27 @@
             {/if}
         </button>
 
-        <div class={cn('flex items-center gap-2 text-[12px] text-muted-foreground', collapsed && 'justify-center')} data-testid="fleet-status">
-            <span class={cn('status-dot-pulse size-1.5 shrink-0 rounded-full', panel && panel.attention > 0 ? 'bg-warning' : 'bg-success')} aria-hidden="true"></span>
+        <div
+            class={cn('flex items-center gap-2 text-[12px] text-muted-foreground', collapsed && 'justify-center')}
+            data-testid="fleet-status"
+        >
+            <span
+                class={cn(
+                    'status-dot-pulse size-1.5 shrink-0 rounded-full',
+                    panel && panel.attention > 0 ? 'bg-warning' : 'bg-success'
+                )}
+                aria-hidden="true"
+            ></span>
             {#if !collapsed}
-                <span>{panel && panel.attention > 0 ? `${panel.attention} need${panel.attention === 1 ? 's' : ''} attention` : 'All systems normal'}</span>
+                <span
+                    >{panel && panel.attention > 0
+                        ? `${panel.attention} need${panel.attention === 1 ? 's' : ''} attention`
+                        : 'All systems normal'}</span
+                >
             {:else}
-                <span class="sr-only">{panel && panel.attention > 0 ? `${panel.attention} need attention` : 'All systems normal'}</span>
+                <span class="sr-only"
+                    >{panel && panel.attention > 0 ? `${panel.attention} need attention` : 'All systems normal'}</span
+                >
             {/if}
         </div>
 

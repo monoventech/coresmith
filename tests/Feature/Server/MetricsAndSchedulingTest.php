@@ -145,7 +145,7 @@ test('a deployment stuck running is failed and its lock released', function () {
     (new DetectStaleDeployments)->handle();
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
-        ->and($deployment->fresh()->log)->toContain('timed out')
+        ->and($deployment->fresh()->log)->toContain('No progress was reported')
         ->and(Cache::lock('deploy:' . $application->getKey(), 600)->get())->toBeTrue();
 
     Event::assertDispatched(DeploymentFailed::class);

@@ -17,7 +17,7 @@
 
 <AppHead title="Notifications" />
 
-<div class="max-w-[660px] rounded-xl border border-border bg-card px-5.5 py-3" data-testid="notifications-card">
+<div class="max-w-165 rounded-xl border border-border bg-card px-5.5 py-3" data-testid="notifications-card">
     {#each toggles as toggle (toggle.key)}
         <ToggleRow
             label={toggle.label}

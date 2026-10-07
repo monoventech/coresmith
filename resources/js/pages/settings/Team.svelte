@@ -87,7 +87,7 @@
     <ul class="m-0 list-none p-0">
         {#each members as member (member.id)}
             <li class="flex min-h-13 flex-wrap items-center gap-3.5 border-b border-border px-5.5 py-1.5 text-[13.5px]" data-testid="member-row">
-                <span class="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-muted-foreground">
+                <span class="inline-flex size-7.5 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-muted-foreground">
                     {getInitials(member.name)}
                 </span>
                 <span class="w-36 truncate font-medium max-sm:w-auto max-sm:flex-1">
@@ -105,7 +105,7 @@
                         />
                     </div>
                 {:else}
-                    <span class="w-[70px] text-[12.5px] text-muted-foreground">{member.role_label}</span>
+                    <span class="w-17.5 text-[12.5px] text-muted-foreground">{member.role_label}</span>
                 {/if}
                 <Badge variant={member.two_factor ? 'success' : 'outline'}>{member.two_factor ? '2FA' : 'No 2FA'}</Badge>
                 {#if can.manageMembers && !member.is_you}

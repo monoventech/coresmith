@@ -1,11 +1,22 @@
 <script lang="ts">
-    import { page, router } from '@inertiajs/svelte'
-    import { CreditCard, KeyRound, Layers, Plus, Rocket, Search, Server, SunMoon, TriangleAlert, Undo2 } from '@lucide/svelte'
-    import { tick } from 'svelte'
-    import { fade } from 'svelte/transition'
     import type { PaletteCommand } from '@/lib/panel'
     import { themeState } from '@/lib/theme.svelte'
     import { cn } from '@/lib/utils'
+    import { page, router } from '@inertiajs/svelte'
+    import {
+        CreditCard,
+        KeyRound,
+        Layers,
+        Plus,
+        Rocket,
+        Search,
+        Server,
+        SunMoon,
+        TriangleAlert,
+        Undo2
+    } from '@lucide/svelte'
+    import { tick } from 'svelte'
+    import { fade } from 'svelte/transition'
 
     let { open = $bindable(false) }: { open?: boolean } = $props()
 
@@ -30,7 +41,9 @@
     let returnFocus: HTMLElement | null = null
 
     const commands = $derived((page.props.palette as PaletteCommand[] | undefined) ?? [])
-    const filtered = $derived(commands.filter((command) => command.label.toLowerCase().includes(query.trim().toLowerCase())))
+    const filtered = $derived(
+        commands.filter((command) => command.label.toLowerCase().includes(query.trim().toLowerCase()))
+    )
 
     $effect(() => {
         if (!open) {
@@ -99,14 +112,14 @@
         transition:fade={{ duration: 200 }}
     >
         <div
-            class="w-full max-w-[520px] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-(--shadow-lg)"
+            class="w-full max-w-130 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-(--shadow-lg)"
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
             tabindex="-1"
             onclick={(event) => event.stopPropagation()}
         >
-            <div class="flex items-center gap-2.5 border-b border-border px-[18px] py-3.5">
+            <div class="flex items-center gap-2.5 border-b border-border px-4.5 py-3.5">
                 <Search class="size-4 text-muted-foreground" />
                 <input
                     bind:this={input}
@@ -123,7 +136,9 @@
                     autocomplete="off"
                     spellcheck="false"
                 />
-                <span class="rounded-[4px] border border-border px-[5px] py-px font-mono text-[11px] text-muted-foreground">esc</span>
+                <span class="rounded-sm border border-border px-1.25 py-px font-mono text-[11px] text-muted-foreground"
+                    >esc</span
+                >
             </div>
 
             <div id="palette-results" class="max-h-80 overflow-y-auto p-1.5" role="listbox" aria-label="Commands">

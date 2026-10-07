@@ -51,6 +51,7 @@
             last_failed: boolean
             last_failed_live: boolean
             oom: { process: string; when: string; limit_mb: number; size: string } | null
+            runtime_eol: { runtime: string; ended: string; fix: string } | null
         }
         toggles: Toggle[]
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean }
@@ -201,7 +202,7 @@
 
 {#if application.stopped || application.maintenance}
     <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="offline-banner">
-        <TriangleAlert class="size-[18px] shrink-0 text-warning max-sm:size-4" />
+        <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             {#if application.stopped}
                 This application is stopped. Visitors see a maintenance page until you start it again.
@@ -217,7 +218,7 @@
 
 {#if application.last_failed && application.latest_deployment?.href}
     <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="failed-banner">
-        <OctagonAlert class="size-[18px] shrink-0 text-destructive max-sm:size-4" />
+        <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             <span class="font-semibold">{application.last_failed_live ? 'The last deploy went live but did not finish.' : 'The last deploy failed, so nothing changed.'}</span>
             {application.last_failed_live
@@ -232,10 +233,20 @@
 
 {#if application.oom}
     <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="oom-banner">
-        <TriangleAlert class="size-[18px] shrink-0 text-warning max-sm:size-4" />
+        <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             <span class="font-semibold">{`The ${application.oom.process} process was killed ${application.oom.when} for going over its ${application.oom.limit_mb} MB memory limit.`}</span>
             {` systemd started it again. If it keeps happening, the app needs more memory than the ${application.oom.size} size gives it.`}
+        </span>
+    </div>
+{/if}
+
+{#if application.runtime_eol}
+    <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="eol-banner">
+        <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+            <span class="font-semibold">{`This app runs ${application.runtime_eol.runtime}, which stopped getting security fixes on ${application.runtime_eol.ended}.`}</span>
+            {` ${application.runtime_eol.fix}`}
         </span>
     </div>
 {/if}
@@ -323,7 +334,7 @@
 
         <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
             <h3 class="type-h3 m-0 mb-2.5">Live log</h3>
-            <div class="terminal h-[120px] px-3.5 py-2.5 text-[11.5px] leading-[1.7]" data-testid="live-log" role="log" aria-live="polite">
+            <div class="terminal h-30 px-3.5 py-2.5 text-[11.5px] leading-[1.7]" data-testid="live-log" role="log" aria-live="polite">
                 {#if log.loading}
                     <div class="opacity-60">reading the access log…</div>
                 {:else if log.error}

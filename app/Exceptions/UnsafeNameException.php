@@ -46,4 +46,9 @@ final class UnsafeNameException extends InvalidArgumentException
     {
         return new self("[{$value}] is not a valid system user name.");
     }
+
+    public static function workerCommand(): self
+    {
+        return new self('A worker command cannot be blank: it would run /usr/bin/env with nothing to execute and print the unit\'s environment to the log.');
+    }
 }

@@ -20,7 +20,7 @@ final class CreateDatabase implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 120;
+    public int $timeout = 1260;
 
     public function __construct(private readonly ManagedDatabase $database)
     {

@@ -16,4 +16,9 @@ final class NoPreviousReleaseException extends RuntimeException
     {
         return new self("[{$slug}] has no previous release to roll back to.");
     }
+
+    public static function releaseGone(string $release): self
+    {
+        return new self("Release {$release} is no longer on the server, so there is nothing to roll back to. Deploy again instead.");
+    }
 }

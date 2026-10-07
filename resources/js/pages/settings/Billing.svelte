@@ -28,7 +28,7 @@
         <div class="flex-1 rounded-xl border border-border bg-card px-5.5 py-5">
             <h3 class="type-h3 m-0 mb-2.5">Payment method</h3>
             <div class="flex items-center gap-3 text-[13.5px]">
-                <CreditCard class="size-[18px] shrink-0 text-muted-foreground" />
+                <CreditCard class="size-4.5 shrink-0 text-muted-foreground" />
                 <span class="text-muted-foreground">No card needed while you self-host.</span>
             </div>
         </div>

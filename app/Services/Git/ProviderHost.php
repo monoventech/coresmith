@@ -10,6 +10,7 @@ namespace App\Services\Git;
 
 use App\Exceptions\GitProviderException;
 use App\Services\SafeName;
+use App\Services\Sso\AddressResolver;
 
 final class ProviderHost
 {
@@ -67,7 +68,7 @@ final class ProviderHost
             throw new GitProviderException("\"{$host}\" is not a valid host name.");
         }
 
-        foreach (self::resolve($host) as $address) {
+        foreach (app(AddressResolver::class)->addresses($host) as $address) {
             self::assertAddressAllowed($address, $host);
         }
     }
@@ -79,23 +80,6 @@ final class ProviderHost
                 throw new GitProviderException("Coresmith will not talk to {$host}: it resolves to {$address}.");
             }
         }
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function resolve(string $host): array
-    {
-        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
-
-        if ($records === false) {
-            return [];
-        }
-
-        return array_values(array_filter(array_map(
-            fn(array $record): string => (string) ($record['ip'] ?? $record['ipv6'] ?? ''),
-            $records,
-        )));
     }
 
     private static function inRange(string $ip, string $range): bool

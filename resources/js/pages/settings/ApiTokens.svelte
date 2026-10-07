@@ -80,7 +80,7 @@
 <AppHead title="API tokens" />
 
 {#if issued}
-    <div class="tint-success mb-4 max-w-[760px] rounded-xl border px-4.5 py-3.5" data-testid="issued-token">
+    <div class="tint-success mb-4 max-w-190 rounded-xl border px-4.5 py-3.5" data-testid="issued-token">
         <p class="m-0 text-[13.5px]"><span class="font-semibold">Copy this token now.</span> It is hashed as soon as you leave this page and can't be shown again.</p>
         <div class="mt-2.5 flex flex-wrap items-center gap-2">
             <code class="min-w-0 flex-1 rounded-md bg-muted px-3 py-2 font-mono text-[12px] break-all">{issued}</code>
@@ -90,7 +90,7 @@
 {/if}
 
 {#if tokens.length === 0}
-    <div class="max-w-[660px]">
+    <div class="max-w-165">
         <EmptyState
             title="No API tokens yet."
             description="Tokens let the CLI and your CI deploy on your behalf. They're scoped, revocable, and hashed at rest, you see the value exactly once."
@@ -98,7 +98,7 @@
         <div class="mt-4"><Button onclick={() => (creating = true)}>Create a token</Button></div>
     </div>
 {:else}
-    <div class="max-w-[760px] overflow-hidden rounded-xl border border-border bg-card" data-testid="tokens-card">
+    <div class="max-w-190 overflow-hidden rounded-xl border border-border bg-card" data-testid="tokens-card">
         <div class="flex flex-wrap items-center gap-3 border-b border-border px-5.5 py-4">
             <div>
                 <h3 class="type-h3 m-0">API tokens</h3>

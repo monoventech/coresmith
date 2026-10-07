@@ -10,6 +10,7 @@ namespace App\Services\SSH;
 
 use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\SSHAuthenticationException;
+use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Server;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -59,34 +60,34 @@ final class SSHConnection
         return $this;
     }
 
-    public function execute(string $command, bool $sudo = false): SSHResult
+    public function execute(string $command, bool $sudo = false, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
     {
         $command = $this->prepare($command, $sudo);
 
         try {
-            $output = $this->connect()->transport->exec($command);
+            $output = $this->connect()->transport->exec($command, null, $timeout);
         } catch (ConnectionClosedException $e) {
             $this->authenticated = false;
 
             throw $e;
         }
 
-        return $this->record($command, $output);
+        return $this->conclude($command, $output, $timeout);
     }
 
-    public function stream(string $command, callable $onOutput, bool $sudo = false): SSHResult
+    public function stream(string $command, callable $onOutput, bool $sudo = false, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
     {
         $command = $this->prepare($command, $sudo);
 
         try {
-            $output = $this->connect()->transport->exec($command, $onOutput);
+            $output = $this->connect()->transport->exec($command, $onOutput, $timeout);
         } catch (ConnectionClosedException $e) {
             $this->authenticated = false;
 
             throw $e;
         }
 
-        return $this->record($command, $output);
+        return $this->conclude($command, $output, $timeout);
     }
 
     public function uploadContent(string $content, string $remotePath): void
@@ -144,10 +145,20 @@ final class SSHConnection
         return $sudo && $this->server->ssh_user !== 'root' ? "sudo {$command}" : $command;
     }
 
-    private function record(string $command, string $output): SSHResult
+    private function conclude(string $command, string $output, int $timeout): SSHResult
     {
-        $exitCode = $this->transport->exitStatus();
+        if ($this->transport->timedOut()) {
+            $this->record($command, $output, -1);
+            $this->disconnect();
 
+            throw new SSHCommandTimedOut(SSHCommandTimedOut::display(app(LogSanitizer::class)->sanitize($command)), $timeout, $output);
+        }
+
+        return $this->record($command, $output, $this->transport->exitStatus());
+    }
+
+    private function record(string $command, string $output, int $exitCode): SSHResult
+    {
         activity()
             ->performedOn($this->server)
             ->withProperties([

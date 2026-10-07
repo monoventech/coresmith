@@ -37,11 +37,21 @@ test('the runtime names the language and its minor version', function (array $at
     'php with an unusual version' => [['type' => ApplicationType::Php, 'php_version' => 'nightly'], 'PHP nightly'],
     'ruby' => [['type' => ApplicationType::Ruby, 'ruby_version' => '3.4.1'], 'Ruby 3.4'],
     'static' => [['type' => ApplicationType::Static], 'Caddy'],
-    'node' => [['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0'], 'Node 24.15'],
+    'node' => [['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0'], 'Node 24'],
     'deno' => [['type' => ApplicationType::Js, 'js_runtime' => 'deno'], 'Deno'],
     'bun' => [['type' => ApplicationType::Js, 'js_runtime' => 'bun'], 'Bun'],
     'unspecified javascript runtime' => [['type' => ApplicationType::Js], 'Bun'],
+    'deno with a version' => [['type' => ApplicationType::Js, 'js_runtime' => 'deno', 'deno_version' => '2.9.7'], 'Deno 2.9'],
+    'bun with a version' => [['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'bun_version' => '1.4.2'], 'Bun 1.4'],
 ]);
+
+test('the kind names the framework\'s major version when the live release recorded it', function () {
+    $recorded = new Application(['type' => ApplicationType::Php, 'framework' => 'laravel', 'stack' => ['runtimes' => [], 'framework' => ['name' => 'laravel', 'major' => 13], 'tooling' => null]]);
+    $unrecorded = new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']);
+
+    expect(ApplicationPresenter::kind($recorded))->toBe('Laravel 13')
+        ->and(ApplicationPresenter::kind($unrecorded))->toBe('Laravel');
+});
 
 test('the port block spans the ten ports from the base port', function () {
     expect(ApplicationPresenter::portBlock(new Application(['base_port' => 8000])))->toBe('8000–8009');

@@ -10,6 +10,7 @@ use App\Services\Git\ProviderHost;
 use App\Services\Git\Providers\BitbucketClient;
 use App\Services\Git\Providers\GitHubAppClient;
 use App\Services\Git\Providers\GitLabClient;
+use App\Services\Sso\AddressResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
@@ -248,8 +249,16 @@ test('a host pointing at the metadata service is rejected when saving the model'
 })->throws(GitProviderException::class);
 
 test('a hostname is rejected when it resolves into a blocked range', function () {
-    ProviderHost::normalise('https://localtest.me');
-})->throws(GitProviderException::class, 'it resolves to 127.0.0.1');
+    app()->instance(AddressResolver::class, new class implements AddressResolver
+    {
+        public function addresses(string $host): array
+        {
+            return $host === 'rebound.example.com' ? ['127.0.0.1'] : [];
+        }
+    });
+
+    ProviderHost::normalise('https://rebound.example.com');
+})->throws(GitProviderException::class, 'Coresmith will not talk to rebound.example.com: it resolves to 127.0.0.1.');
 
 test('a trailing dot cannot be used to slip past the blocked host list', function () {
     ProviderHost::normalise('https://metadata.google.internal.');

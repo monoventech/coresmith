@@ -11,6 +11,7 @@ namespace App\Services\Runtime;
 use App\Exceptions\InvalidRuntimeException;
 use App\Models\Server;
 use App\Services\Server\PackageManagerFactory;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
 
@@ -26,7 +27,9 @@ final class AsdfManager
 
     public const DOWNLOAD_RETRIES = 2;
 
-    private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'unable to download', 'SSL_ERROR_SYSCALL'];
+    public const INSTALL_SECONDS = 1800;
+
+    private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'unable to download', 'SSL_ERROR_SYSCALL'];
 
     public static function assertValid(string $runtime, string $version): void
     {
@@ -34,7 +37,7 @@ final class AsdfManager
             throw InvalidRuntimeException::runtime($runtime);
         }
 
-        if (preg_match('/^[A-Za-z0-9._-]+$/', $version) !== 1) {
+        if (preg_match('/^[A-Za-z0-9._-]+\z/', $version) !== 1) {
             throw InvalidRuntimeException::version($version);
         }
     }
@@ -59,13 +62,17 @@ final class AsdfManager
         $dependencies = BuildDependencies::for($runtime, $server->os_name);
 
         if ($dependencies !== []) {
-            $connection->execute(PackageManagerFactory::for($server)->install($dependencies), sudo: true)->throw();
+            $connection->execute(PackageManagerFactory::for($server)->install($dependencies), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
         }
 
-        $command = $this->asdfCommand('install', $runtime, $version);
+        $this->withDownloadRetries($connection, $this->asCoresmith('asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);
+        $this->withDownloadRetries($connection, $this->asdfCommand('install', $runtime, $version), self::INSTALL_SECONDS);
+    }
 
+    public function withDownloadRetries(SSHConnection $connection, string $command, int $timeout): void
+    {
         for ($attempt = 0; ; $attempt++) {
-            $result = $connection->execute($command, sudo: true);
+            $result = $connection->execute($command, sudo: true, timeout: $timeout);
 
             if ($result->successful()) {
                 return;
@@ -113,14 +120,25 @@ final class AsdfManager
         $path = escapeshellarg(self::INSTALL_DIR . '/' . $runtime);
         $result = $connection->execute("ls -1 {$path} 2>/dev/null || true");
 
-        $versions = array_values(array_filter(array_map(
-            trim(...),
-            preg_split('/\R/', $result->output) ?: [],
-        )));
+        $versions = array_values(array_filter(
+            array_map(trim(...), preg_split('/\R/', $result->output) ?: []),
+            fn(string $version): bool => preg_match('/^\d[0-9A-Za-z.+-]*$/', $version) === 1 && self::isValid($runtime, $version),
+        ));
 
         sort($versions);
 
         return $versions;
+    }
+
+    private static function isValid(string $runtime, string $version): bool
+    {
+        try {
+            self::assertValid($runtime, $version);
+        } catch (InvalidRuntimeException) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -146,13 +164,17 @@ final class AsdfManager
 
     public function versionPath(string $runtime, string $version): string
     {
+        if ($version !== '') {
+            self::assertValid($runtime, $version);
+        }
+
         return self::INSTALL_DIR . "/{$runtime}/{$version}";
     }
 
     /**
      * @param  array<string, string>  $env
      */
-    private function asCoresmith(string $command, array $env = []): string
+    public function asCoresmith(string $command, array $env = []): string
     {
         $exports = '';
 

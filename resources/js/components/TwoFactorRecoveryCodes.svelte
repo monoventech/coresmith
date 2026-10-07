@@ -13,7 +13,7 @@
             await twoFactorAuth.fetchRecoveryCodes()
         }
 
-        visible = !visible
+        visible = visible!
     }
 
     onMount(() => {

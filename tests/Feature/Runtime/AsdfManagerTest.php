@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\InvalidRuntimeException;
 use App\Models\Server;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\BuildDependencies;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Sleep;
 use Tests\Support\FakeSSHTransport;
 
 function asdfConnection(FakeSSHTransport $transport): SSHConnection
@@ -33,6 +35,14 @@ test('an explicit binary name overrides the default', function () {
         ->toBe('/opt/asdf-data/installs/nodejs/24.15.0/bin/npm');
 });
 
+test('a version path rejects a version that could reach the shell', function () {
+    (new AsdfManager)->versionPath('php', '8.5.5; rm -rf /');
+})->throws(InvalidRuntimeException::class);
+
+test('a version path allows an empty version for a runtime not yet resolved', function () {
+    expect((new AsdfManager)->versionPath('ruby', ''))->toBe('/opt/asdf-data/installs/ruby/');
+});
+
 test('detects an installed version', function () {
     $connection = asdfConnection((new FakeSSHTransport)->queueResult("yes\n", 0));
 
@@ -54,7 +64,7 @@ test('installing an already present version does no work', function () {
     expect($transport->commands())->toHaveCount(1);
 });
 
-test('installing a missing version installs build dependencies first then asdf installs it', function () {
+test('installing a missing version installs build dependencies, updates the plugin, then asdf installs it', function () {
     $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
     $connection = asdfConnection($transport);
 
@@ -65,8 +75,10 @@ test('installing a missing version installs build dependencies first then asdf i
     expect($commands[1])->toContain('apt-get install -y')
         ->and($commands[1])->toContain("'libonig-dev'")
         ->and($commands[2])->toContain('sudo -u coresmith')
-        ->and($commands[2])->toContain("CORESMITH_VERSION='8.5.5'")
-        ->and($commands[2])->toContain('asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"');
+        ->and($commands[2])->toContain('asdf plugin update "$CORESMITH_RUNTIME"')
+        ->and($commands[3])->toContain('sudo -u coresmith')
+        ->and($commands[3])->toContain("CORESMITH_VERSION='8.5.5'")
+        ->and($commands[3])->toContain('asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"');
 });
 
 test('runtime installs run as the coresmith user, never root directly', function () {
@@ -108,4 +120,33 @@ test('build dependencies are distro specific', function () {
 test('a runtime with no build dependencies yields an empty list', function () {
     expect(BuildDependencies::for('bun', 'ubuntu'))->toBe([])
         ->and(BuildDependencies::for('php', null))->toBe([]);
+});
+
+test('compiling a runtime gets thirty minutes', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+
+    app(AsdfManager::class)->install((new SSHConnection($server, $transport))->connect(), $server, 'php', '8.5.10');
+
+    expect($transport->budgetFor('asdf install'))->toBe(AsdfManager::INSTALL_SECONDS)
+        ->and(AsdfManager::INSTALL_SECONDS)->toBe(1800);
+});
+
+test('an npm-style network error during install is retried', function () {
+    Sleep::fake();
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+    $transport = (new FakeSSHTransport)
+        ->queueResult("no\n", 0)
+        ->respondToSequence('asdf install', [["npm error code ETIMEDOUT\nnpm error network request failed\n", 1], ['', 0]]);
+
+    app(AsdfManager::class)->install((new SSHConnection($server, $transport))->connect(), $server, 'bun', '1.4.2');
+
+    expect(substr_count(implode("\n", $transport->commands()), 'asdf install "$CORESMITH_RUNTIME"'))->toBe(2);
+});
+
+test('an installed version list keeps only names that look like versions', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = (new FakeSSHTransport)->respondTo("ls -1 '/opt/asdf-data/installs/php'", "8.5.10\nsystem\nbad;name\n8.5.10+x\n8.4.20\n");
+
+    expect(app(AsdfManager::class)->installedVersions((new SSHConnection($server, $transport))->connect(), 'php'))->toBe(['8.4.20', '8.5.10']);
 });

@@ -27,7 +27,7 @@
 
 <div class="dark">
     <div class="panel grain relative min-h-dvh bg-background font-sans text-foreground">
-        <header class="relative z-10 mx-auto flex max-w-[1200px] flex-wrap items-center gap-7 px-10 py-5.5 max-sm:gap-4 max-sm:px-5">
+        <header class="relative z-10 mx-auto flex max-w-300 flex-wrap items-center gap-7 px-10 py-5.5 max-sm:gap-4 max-sm:px-5">
             <Link href={route('home')} class="focus-ring rounded-md text-foreground no-underline" aria-label="Coresmith home">
                 <Wordmark />
             </Link>
@@ -39,7 +39,7 @@
             </nav>
         </header>
 
-        <section class="relative z-10 mx-auto max-w-[1200px] px-10 pt-24 pb-18 max-sm:px-5 max-sm:pt-12">
+        <section class="relative z-10 mx-auto max-w-300 px-10 pt-24 pb-18 max-sm:px-5 max-sm:pt-12">
             <h1 class="type-display-lg m-0 max-w-[15ch] text-pretty max-sm:text-[2.5rem]">Server management without the <MarkerUnderline>complexity.</MarkerUnderline></h1>
             <p class="type-body-lg mt-6 max-w-[52ch] text-muted-foreground">
                 Deploy any app, any language, any server, natively on the host OS. No Docker daemon, no image layers, no container overhead. Zero-downtime
@@ -52,7 +52,7 @@
             <p class="mt-4 text-[12.5px] text-muted-foreground">Source-available under ELv2, every feature, no enterprise edition.</p>
         </section>
 
-        <section class="relative z-10 mx-auto max-w-[1200px] px-10 pb-24 max-sm:px-5">
+        <section class="relative z-10 mx-auto max-w-300 px-10 pb-24 max-sm:px-5">
             <div class="terminal overflow-x-auto px-6 py-5">
                 <div class="text-[oklch(0.62_0.008_80)]"># one push to main. the old release serves traffic the whole time.</div>
                 <div>[14:02:18] release 20260818-1402 · branch main · commit 9f3c2e1</div>
@@ -64,7 +64,7 @@
         </section>
 
         <section id="how" class="relative z-10 border-t border-border">
-            <div class="mx-auto max-w-[1200px] px-10 py-24 max-sm:px-5 max-sm:py-16">
+            <div class="mx-auto max-w-300 px-10 py-24 max-sm:px-5 max-sm:py-16">
                 <h2 class="type-display-md m-0 mb-12">How it works</h2>
                 <div class="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
                     <div class="rounded-xl border border-border bg-card p-6">
@@ -96,7 +96,7 @@
         </section>
 
         <section id="security" class="relative z-10 border-t border-border">
-            <div class="mx-auto grid max-w-[1200px] grid-cols-2 items-start gap-16 px-10 py-24 max-[900px]:grid-cols-1 max-sm:px-5 max-sm:py-16">
+            <div class="mx-auto grid max-w-300 grid-cols-2 items-start gap-16 px-10 py-24 max-[900px]:grid-cols-1 max-sm:px-5 max-sm:py-16">
                 <div>
                     <h2 class="type-display-md m-0 mb-4">One server, every stack</h2>
                     <p class="type-body m-0 mb-6 max-w-[48ch] text-muted-foreground">
@@ -113,7 +113,7 @@
                     <div class="type-caption mb-3.5 text-muted-foreground uppercase">On forge-01 right now</div>
                     <div class="flex flex-col">
                         {#each stack as app, index (app.name)}
-                            <div class="flex items-center gap-3 py-[11px] {index < stack.length - 1 ? 'border-b border-border' : ''}">
+                            <div class="flex items-center gap-3 py-2.75 {index < stack.length - 1 ? 'border-b border-border' : ''}">
                                 <span class="size-1.5 shrink-0 rounded-full bg-success" aria-hidden="true"></span>
                                 <span class="font-mono text-[14px] font-medium">{app.name}</span>
                                 <span class="text-[13px] text-muted-foreground max-sm:hidden">{app.kind}</span>
@@ -126,7 +126,7 @@
         </section>
 
         <section class="relative z-10 border-t border-border">
-            <div class="mx-auto max-w-[1200px] px-10 py-24 max-sm:px-5 max-sm:py-16">
+            <div class="mx-auto max-w-300 px-10 py-24 max-sm:px-5 max-sm:py-16">
                 <h2 class="type-display-md m-0 mb-3 max-w-[22ch]">Read the source. All of it.</h2>
                 <p class="type-body m-0 mb-7 max-w-[52ch] text-muted-foreground">
                     Licensed under ELv2. Every feature in Coresmith Cloud is in the self-hosted version, no community edition, no feature gates. The only
@@ -140,7 +140,7 @@
         </section>
 
         <footer class="relative z-10 border-t border-border">
-            <div class="mx-auto flex max-w-[1200px] flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
+            <div class="mx-auto flex max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
                 <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
                 <MonovenMark class="ml-auto" />
             </div>

@@ -72,7 +72,7 @@
         >
             <span
                 class={cn(
-                    'inline-flex size-[26px] items-center justify-center rounded-md border font-mono text-[12.5px] font-semibold',
+                    'inline-flex size-6.5 items-center justify-center rounded-md border font-mono text-[12.5px] font-semibold',
                     item.done && !isCurrent && 'border-primary bg-primary text-primary-foreground',
                     isCurrent && 'border-primary bg-accent text-foreground',
                     !item.done && !isCurrent && 'border-border bg-transparent text-muted-foreground'
@@ -88,7 +88,7 @@
     {/each}
 </nav>
 
-<div class="max-w-[660px]">
+<div class="max-w-165">
     {#if step === 0}
         <div class="rounded-xl border border-border bg-card p-6" data-testid="setup-step">
             <div class="mb-1.5 flex items-center gap-2.5">

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { asMember, expect, gotoApplication, isMobile, nav, noSidewaysScroll, own, test, toast } from './support/fixtures'
+import { asMember, blockingViolations, expect, gotoApplication, isMobile, nav, noSidewaysScroll, own, test, toast, useTheme } from './support/fixtures'
 
 async function gotoDeployments(page: Page, mobile: boolean) {
     await page.goto('/dashboard')
@@ -173,4 +173,33 @@ test.describe('a deploy that failed with a known reason', () => {
         await expect(page.getByTestId('failure-reason')).toContainText('Branch release/2.0 is not in the repository.')
         await expect(page.getByRole('link', { name: 'Roll back' })).toHaveCount(0)
     })
+})
+
+test.describe('a deploy that installs a runtime first', () => {
+    test('the rail shows dependencies running and the log says what is compiling', async ({ page }) => {
+        try {
+            await page.goto('/acme/dashboard')
+            await page.getByTestId('live-deploy').click()
+
+            await expect(page.locator('[data-phase="deps"]')).toHaveAttribute('data-state', 'running')
+            await expect(page.getByTestId('deployment-log')).toContainText('installing PHP 8.5.10, compiling it, usually 5–15 minutes the first time')
+        } finally {
+            await page.goto('/monoven/dashboard')
+        }
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`it has no serious or critical accessibility violations in ${theme}`, async ({ page }) => {
+            try {
+                await useTheme(page, theme)
+                await page.goto('/acme/dashboard')
+                await page.getByTestId('live-deploy').click()
+                await page.getByTestId('phase-rail').waitFor()
+
+                expect(await blockingViolations(page)).toEqual([])
+            } finally {
+                await page.goto('/monoven/dashboard')
+            }
+        })
+    }
 })

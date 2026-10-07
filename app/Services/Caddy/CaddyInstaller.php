@@ -11,6 +11,7 @@ namespace App\Services\Caddy;
 use App\Exceptions\UnsupportedOperatingSystemException;
 use App\Services\Server\AptPackageManager;
 use App\Services\Server\PackageManagerFactory;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 
 final class CaddyInstaller
@@ -38,8 +39,8 @@ final class CaddyInstaller
             $connection->execute($command, sudo: true)->throw();
         }
 
-        $connection->execute($packages->update(), sudo: true)->throw();
-        $connection->execute($packages->install(['caddy']), sudo: true)->throw();
+        $connection->execute($packages->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        $connection->execute($packages->install(['caddy']), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
     }
 
     /**

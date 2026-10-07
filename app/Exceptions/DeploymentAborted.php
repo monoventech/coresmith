@@ -10,4 +10,4 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-final class DeploymentAborted extends RuntimeException {}
+final class DeploymentAborted extends RuntimeException implements ExplainsFailure {}

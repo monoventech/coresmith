@@ -1,5 +1,17 @@
 import type { Page } from '@playwright/test'
-import { applicationRow, dialog, expect, gotoApplication, gotoServer, isMobile, own, test, toast } from './support/fixtures'
+import {
+    applicationRow,
+    blockingViolations,
+    dialog,
+    expect,
+    gotoApplication,
+    gotoServer,
+    isMobile,
+    own,
+    test,
+    toast,
+    useTheme
+} from './support/fixtures'
 
 function toggle(page: Page, name: string) {
     return page.getByTestId('smart-toggles').getByRole('switch', { name })
@@ -12,6 +24,7 @@ test.describe('an application', () => {
         await expect(page.getByTestId('back-link')).toHaveText('← forge-01')
         await expect(page.getByRole('main')).toContainText('Live')
         await expect(page.getByRole('main')).toContainText('atlas.monoven.io')
+        await expect(page.getByRole('main')).toContainText('Laravel 13 · PHP 8.5')
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
     })
 
@@ -158,14 +171,21 @@ test.describe('changing an application', () => {
 
         await expect(page.getByRole('main')).toContainText('Stopped')
         await expect(page.getByTestId('offline-banner').getByRole('button', { name: 'Start it' })).toBeVisible()
-        await expect(page.getByTestId('offline-banner')).toContainText('Visitors see a maintenance page until you start it again.')
+        await expect(page.getByTestId('offline-banner')).toContainText(
+            'Visitors see a maintenance page until you start it again.'
+        )
         await expect(toggle(page, 'Maintenance page')).toBeDisabled()
-        await expect(page.getByTestId('toggle-maintenance_mode')).toContainText('The application is stopped, so visitors already see one.')
+        await expect(page.getByTestId('toggle-maintenance_mode')).toContainText(
+            'The application is stopped, so visitors already see one.'
+        )
     })
 })
 
 test.describe('what the full app page adds on a wider screen', () => {
-    test.skip(({ isMobile }) => isMobile, 'The phone app page keeps only Deploy, the toggles and the current release, as the mobile prototype draws it')
+    test.skip(
+        ({ isMobile }) => isMobile,
+        'The phone app page keeps only Deploy, the toggles and the current release, as the mobile prototype draws it'
+    )
 
     test('a repository cloned over ssh shows its read-only deploy key', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
@@ -310,6 +330,84 @@ test.describe('adding an application', () => {
 
         await expect(page.getByLabel('Domain')).toHaveAttribute('aria-invalid', 'true')
     })
+
+    test('the runtime version defaults to the repository and lists supported versions with their status', async ({
+        page
+    }) => {
+        await gotoServer(page, 'bench-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+
+        const picker = page.getByRole('radiogroup', { name: 'PHP version' })
+
+        await expect(picker.getByRole('radio', { name: /^From the repository/ })).toBeChecked()
+        await expect(picker.getByRole('radio', { name: /^8\.5\.10 recommended/ })).toBeVisible()
+        await expect(picker.getByRole('radio', { name: /^8\.1\.34 End of life/ })).toBeVisible()
+        await expect(page.getByRole('main')).toContainText('Used only when the repository does not name a version.')
+    })
+
+    test('choosing an end-of-life version asks first, and backing out restores the previous choice', async ({
+        page
+    }) => {
+        await gotoServer(page, 'bench-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+
+        const picker = page.getByRole('radiogroup', { name: 'PHP version' })
+
+        await picker.getByRole('radio', { name: /^8\.4\.25/ }).click()
+        await picker.getByRole('radio', { name: /^8\.1\.34/ }).click()
+
+        await expect(dialog(page)).toContainText('PHP 8.1 no longer gets security fixes')
+        await dialog(page).getByRole('button', { name: 'Pick another version' }).click()
+
+        await expect(picker.getByRole('radio', { name: /^8\.4\.25/ })).toBeChecked()
+    })
+
+    test('an end-of-life version can still be chosen once confirmed, and the app is added', async ({ page }) => {
+        const name = `eol${Date.now().toString(36)}`
+
+        await gotoServer(page, 'bench-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+        await page.getByLabel('Name', { exact: true }).fill(name)
+        await page
+            .getByRole('radiogroup', { name: 'PHP version' })
+            .getByRole('radio', { name: /^8\.1\.34/ })
+            .click()
+        await dialog(page).getByRole('button', { name: 'Use PHP 8.1' }).click()
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
+        await expect(toast(page)).toContainText('Application created.')
+    })
+
+    test('the version list follows the javascript runtime', async ({ page }) => {
+        await gotoServer(page, 'bench-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+        await page.getByLabel('Language').selectOption('js')
+        await page.getByLabel('Runtime').selectOption('node')
+
+        await expect(
+            page
+                .getByRole('radiogroup', { name: 'Node.js version' })
+                .getByRole('radio', { name: /^24\.21\.0 recommended/ })
+        ).toBeVisible()
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the end-of-life question has no serious or critical accessibility violations in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+            await gotoServer(page, 'bench-01')
+            await page.getByRole('link', { name: 'Add an app' }).click()
+            await page
+                .getByRole('radiogroup', { name: 'PHP version' })
+                .getByRole('radio', { name: /^8\.1\.34/ })
+                .click()
+            await expect(dialog(page)).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 })
 
 test.describe('an app killed for memory', () => {
@@ -321,5 +419,18 @@ test.describe('an app killed for memory', () => {
         await expect(banner).toContainText('The queue process was killed')
         await expect(banner).toContainText('256 MB memory limit')
         await expect(banner).toContainText('more memory than the Small size gives it')
+    })
+})
+
+test.describe('an app on an end-of-life runtime', () => {
+    test('the app page says which version, when support ended and what to change', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'legacy-api')
+
+        const banner = page.getByTestId('eol-banner')
+
+        await expect(banner).toContainText(
+            'This app runs Node.js 20, which stopped getting security fixes on 30 April 2026.'
+        )
+        await expect(banner).toContainText('Set .nvmrc to 24, then deploy.')
     })
 })

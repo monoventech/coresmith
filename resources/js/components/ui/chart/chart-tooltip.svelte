@@ -106,7 +106,7 @@
 	<div
 		bind:this={ref}
 		class={cn(
-			"border-border/50 bg-background grid min-w-[9rem] items-start gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs shadow-xl",
+			"border-border/50 bg-background grid min-w-36 items-start gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs shadow-xl",
 			className
 		)}
 		{...restProps}
@@ -145,7 +145,7 @@
 							<div
 								style="--color-bg: {indicatorColor}; --color-border: {indicatorColor};"
 								class={cn(
-									"shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
+									"shrink-0 rounded-xs border-border bg-(--color-bg)",
 									{
 										"size-2.5": indicator === "dot",
 										"h-full w-1": indicator === "line",

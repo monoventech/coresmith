@@ -8,12 +8,12 @@
 <AppHead title="Setup required" />
 
 <div class="panel grain relative flex min-h-dvh flex-col bg-background font-sans text-foreground">
-    <header class="relative z-10 mx-auto flex w-full max-w-[1200px] items-center px-10 py-5.5 max-sm:px-5">
+    <header class="relative z-10 mx-auto flex w-full max-w-300 items-center px-10 py-5.5 max-sm:px-5">
         <Wordmark />
     </header>
 
-    <main class="relative z-10 mx-auto w-full max-w-[1200px] flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
-        <div class="max-w-[520px]">
+    <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
+        <div class="max-w-130">
             <h1 class="type-h1 m-0 mb-1.5">Installed, not yet <MarkerUnderline>configured</MarkerUnderline></h1>
             <p class="type-body-sm mb-7 text-muted-foreground">
                 No account exists on this instance yet. Open the setup link the installer printed in your terminal, it carries a one-time token, and
@@ -28,7 +28,7 @@
     </main>
 
     <footer class="relative z-10 border-t border-border">
-        <div class="mx-auto flex w-full max-w-[1200px] flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
+        <div class="mx-auto flex w-full max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
             <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
             <MonovenMark class="ml-auto" />
         </div>

@@ -11,18 +11,20 @@ use App\Events\DeploymentSucceeded;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
+use App\Exceptions\SSHCommandTimedOut;
 use App\Jobs\DeployApplication;
-use App\Jobs\DetectStaleDeployments;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Sleep;
 use Tests\Support\FakeSSHTransport;
+use Tests\Support\ProbeOutput;
 
 const TIMESTAMP = '20260730120000';
 
@@ -189,7 +191,7 @@ test('a laravel app caches config, routes and views', function () {
 test('a bun app installs with a frozen lockfile and builds', function () {
     $application = deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'node_version' => '24.15.0']);
     $deployment = Deployment::factory()->for($application)->create();
-    $transport = healthyDeployTransport();
+    $transport = healthyDeployTransport()->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['package.json' => '{"scripts":{"build":"vite build"}}'], ['bun.lock']));
 
     deploy($deployment, $transport);
 
@@ -203,7 +205,7 @@ test('a bun app installs with a frozen lockfile and builds', function () {
 test('a node app uses npm rather than bun', function () {
     $application = deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0']);
     $deployment = Deployment::factory()->for($application)->create();
-    $transport = healthyDeployTransport();
+    $transport = healthyDeployTransport()->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['package.json' => '{"scripts":{"build":"next build"}}'], ['package-lock.json']));
 
     deploy($deployment, $transport);
 
@@ -214,7 +216,7 @@ test('a node app uses npm rather than bun', function () {
 
 test('commands run with the resolved runtime binary on PATH', function () {
     $deployment = Deployment::factory()->for(deployableApp())->create();
-    $transport = healthyDeployTransport();
+    $transport = healthyDeployTransport()->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['composer.json' => '{"require":{"php":"8.5.5"}}']))->respondTo("ls -1 '/opt/asdf-data/installs/php'", "8.5.5\n");
 
     deploy($deployment, $transport);
 
@@ -224,7 +226,7 @@ test('commands run with the resolved runtime binary on PATH', function () {
 
 test('a php app reloads its own fpm unit, not one named after its linux user', function () {
     $deployment = Deployment::factory()->for(deployableApp(['system_user' => 'coresmith-app-abcd']))->create();
-    $transport = healthyDeployTransport();
+    $transport = healthyDeployTransport()->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['composer.json' => '{"require":{"php":"8.5.5"}}']))->respondTo("ls -1 '/opt/asdf-data/installs/php'", "8.5.5\n");
 
     deploy($deployment, $transport);
 
@@ -540,15 +542,6 @@ test('a static site is never told it was watched, because it has nothing to watc
         ->and(implode("\n", $transport->commands()))->not->toContain('is-active');
 });
 
-test('the deploy timeout and lock cover the process watch with margin under the stale-deployment reclaim', function () {
-    $deployment = Deployment::factory()->for(deployableApp())->create();
-
-    expect((new DeployApplication($deployment, TIMESTAMP))->timeout)->toBe(780)
-        ->and(DeployApplication::LOCK_SECONDS)->toBe(840)
-        ->and(DeployApplication::LOCK_SECONDS)->toBeGreaterThan((new DeployApplication($deployment, TIMESTAMP))->timeout)
-        ->and(DeployApplication::LOCK_SECONDS)->toBeLessThan(DetectStaleDeployments::STALE_AFTER_MINUTES * 60);
-});
-
 test('a first deploy moves off a port block another process already holds', function () {
     $application = deployableApp(['current_release' => null, 'base_port' => 8000, 'type' => ApplicationType::Js, 'framework' => 'sveltekit', 'php_version' => null, 'node_version' => '22.1.0', 'js_runtime' => 'node']);
     $deployment = Deployment::factory()->for($application)->create();
@@ -578,4 +571,15 @@ test('a later deploy never scans or moves the port block', function () {
     deploy(Deployment::factory()->for($application)->create(), $transport);
 
     expect(implode("\n", $transport->commands()))->not->toContain('ss -tlnpH');
+});
+
+test('a dependency install that hangs fails the deploy, names the command and removes the half built release', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->timeOutOn('composer install');
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandTimedOut::class);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($deployment->fresh()->failure_reason)->toStartWith('`composer install --no-dev --optimize-autoloader --no-interaction` ran for 10 minutes without finishing')
+        ->and(implode("\n", $transport->commands()))->toContain('rm -rf /var/coresmith/apps/my-app/releases/' . TIMESTAMP);
 });

@@ -17,7 +17,6 @@ use App\Models\User;
 use App\Notifications\ApplicationToggledNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
-use App\Services\Runtime\AsdfManager;
 use InvalidArgumentException;
 
 final class SmartToggles
@@ -32,7 +31,9 @@ final class SmartToggles
 
     public const SCHEDULE_COMMAND = 'php artisan schedule:run';
 
-    public function __construct(private readonly AsdfManager $asdf) {}
+    public const QUEUE_COMMAND = 'php artisan queue:work --sleep=3 --tries=3 --max-time=3600';
+
+    public const SIDEKIQ_COMMAND = 'bundle exec sidekiq';
 
     /**
      * @return list<string>
@@ -126,8 +127,8 @@ final class SmartToggles
 
         match ($key) {
             self::MAINTENANCE => $this->maintenance($application, $on),
-            self::QUEUE => $this->process($application, 'queue', $this->phpBinary($application) . ' artisan queue:work --sleep=3 --tries=3 --max-time=3600', $on),
-            self::SIDEKIQ => $this->process($application, 'sidekiq', $this->asdf->binaryPath('ruby', (string) $application->ruby_version, 'bundle') . ' exec sidekiq', $on),
+            self::QUEUE => $this->process($application, 'queue', self::QUEUE_COMMAND, $on),
+            self::SIDEKIQ => $this->process($application, 'sidekiq', self::SIDEKIQ_COMMAND, $on),
             self::SCHEDULER => $this->scheduler($application, $on),
         };
 
@@ -185,10 +186,5 @@ final class SmartToggles
     private function hasProcess(Application $application, string $name): bool
     {
         return collect((array) $application->processes)->contains(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === $name);
-    }
-
-    private function phpBinary(Application $application): string
-    {
-        return $application->php_version === null ? '/usr/bin/php' : $this->asdf->binaryPath('php', (string) $application->php_version);
     }
 }

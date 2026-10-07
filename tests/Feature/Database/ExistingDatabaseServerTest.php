@@ -8,6 +8,7 @@ use App\Jobs\CreateDatabase;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Services\Database\DatabaseManager;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Tests\Support\FakeSSHTransport;
@@ -102,6 +103,10 @@ test('an existing redis Coresmith cannot even probe says to install the client, 
 
     expect(fn() => app(DatabaseManager::class)->ensureServerInstalled(existingDbConnection($transport, ['name' => 'forge-09']), DatabaseType::Redis))
         ->toThrow(ExistingDatabaseServerRefused::class, 'Install redis-tools on the server so Coresmith can check it, then try again.');
+});
+
+test('the job outlasts the package install budget it delegates to', function () {
+    expect((new CreateDatabase(ManagedDatabase::factory()->make()))->timeout)->toBeGreaterThan(SSHTransport::PACKAGE_SECONDS);
 });
 
 test('the redis probe cannot hang the provisioning job', function () {

@@ -68,6 +68,20 @@ class Application extends Model
         return array_values(array_unique($domains));
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public function runtimeVersions(): array
+    {
+        return array_filter([
+            'php' => $this->php_version,
+            'nodejs' => $this->node_version,
+            'bun' => $this->bun_version,
+            'deno' => $this->deno_version,
+            'ruby' => $this->ruby_version,
+        ], fn(?string $version): bool => $version !== null && $version !== '');
+    }
+
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
@@ -106,6 +120,8 @@ class Application extends Model
             'run_migrations' => 'boolean',
             'quick_deploy' => 'boolean',
             'last_request_at' => 'datetime',
+            'runtime_pins' => 'array',
+            'stack' => 'array',
         ];
     }
 }

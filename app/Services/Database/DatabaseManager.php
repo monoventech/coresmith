@@ -14,6 +14,7 @@ use App\Exceptions\BackupNotFoundException;
 use App\Exceptions\ExistingDatabaseServerRefused;
 use App\Models\ManagedDatabase;
 use App\Services\Server\PackageManagerFactory;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -62,7 +63,7 @@ final class DatabaseManager
         $packages = PackageManagerFactory::for($server);
         $package = $this->packageFor($server->os_name, $type);
 
-        $connection->execute($packages->isInstalled($package) . ' || ' . $packages->install([$package]), sudo: true)->throw();
+        $connection->execute($packages->isInstalled($package) . ' || ' . $packages->install([$package]), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
         $connection->execute($this->bindCommand($type), sudo: true)->throw();
 
         if (!in_array($type->value, $installed, true)) {

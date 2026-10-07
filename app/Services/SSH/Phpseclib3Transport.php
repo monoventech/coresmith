@@ -13,6 +13,7 @@ use LogicException;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
+use ReflectionProperty;
 
 final class Phpseclib3Transport implements SSHTransport
 {
@@ -53,15 +54,19 @@ final class Phpseclib3Transport implements SSHTransport
         return $this->connection()->login($user, $key);
     }
 
-    public function exec(string $command, ?callable $onOutput = null): string
+    public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
     {
+        $ssh = $this->connection();
+        $ssh->setTimeout($timeout);
+        self::forgetExitStatus($ssh);
+
         if ($onOutput === null) {
-            return (string) $this->connection()->exec($command);
+            return (string) $ssh->exec($command);
         }
 
         $output = '';
 
-        $this->connection()->exec($command, function (string $chunk) use ($onOutput, &$output): void {
+        $ssh->exec($command, function (string $chunk) use ($onOutput, &$output): void {
             $output .= $chunk;
             $onOutput($chunk);
         });
@@ -69,9 +74,21 @@ final class Phpseclib3Transport implements SSHTransport
         return $output;
     }
 
+    public function timedOut(): bool
+    {
+        return $this->ssh !== null && $this->ssh->isTimeout();
+    }
+
     public function exitStatus(): int
     {
-        return (int) $this->connection()->getExitStatus();
+        $status = $this->connection()->getExitStatus();
+
+        return $status === false ? -1 : (int) $status;
+    }
+
+    public static function forgetExitStatus(SSH2 $ssh): void
+    {
+        (new ReflectionProperty(SSH2::class, 'exit_status'))->setValue($ssh, null);
     }
 
     public function uploadContent(string $content, string $remotePath): void

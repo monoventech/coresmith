@@ -92,7 +92,7 @@
         <p class="mb-4 text-[12.5px] text-muted-foreground">Eight phases, hardened by default, not opt-in.</p>
         <ol class="m-0 flex list-none flex-col gap-0.5 p-0">
             {#each phases as phase, index (phase.name)}
-                <li class="flex items-baseline gap-3 py-[7px]">
+                <li class="flex items-baseline gap-3 py-1.75">
                     <span class="w-4 flex-none font-mono text-[12px] text-primary">{index + 1}</span>
                     <span class="text-[13.5px]"><span class="font-medium">{phase.name}</span><span class="text-muted-foreground">{`, ${phase.desc}`}</span></span>
                 </li>

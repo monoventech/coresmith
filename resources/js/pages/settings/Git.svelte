@@ -87,7 +87,7 @@
         {#each providers as provider (provider.id)}
             <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="provider-card">
                 <div class="mb-1 flex flex-wrap items-center gap-2.5">
-                    <GitBranch class="size-[18px] text-muted-foreground" />
+                    <GitBranch class="size-4.5 text-muted-foreground" />
                     <h3 class="type-h3 m-0">{provider.label}</h3>
                     <Badge variant={provider.connected ? 'success' : 'destructive'}>{provider.connected ? (provider.type === 'github_app' ? 'Installed' : 'Connected') : 'Disconnected'}</Badge>
                 </div>

@@ -1,5 +1,16 @@
 import type { Page } from '@playwright/test'
-import { asGuest, blockingViolations, expect, gotoApplication, gotoDatabase, gotoServer, gotoServerTab, openSecurity, test, useTheme } from './support/fixtures'
+import {
+    asGuest,
+    blockingViolations,
+    expect,
+    gotoApplication,
+    gotoDatabase,
+    gotoServer,
+    gotoServerTab,
+    openSecurity,
+    test,
+    useTheme
+} from './support/fixtures'
 
 type Visit = (page: Page) => Promise<void>
 
@@ -28,6 +39,15 @@ const PAGES: [string, Visit][] = [
     ['Failed application', (page) => gotoApplication(page, 'forge-01', 'storefront')],
     ['Application whose deploy crashed after going live', (page) => gotoApplication(page, 'bench-01', 'crashy')],
     ['Application killed for memory', (page) => gotoApplication(page, 'bench-01', 'hungry')],
+    ['Application on an end-of-life runtime', (page) => gotoApplication(page, 'bench-01', 'legacy-api')],
+    [
+        'Add an app',
+        async (page) => {
+            await gotoServer(page, 'bench-01')
+            await page.getByRole('link', { name: 'Add an app' }).click()
+            await page.getByRole('radiogroup', { name: 'PHP version' }).waitFor()
+        }
+    ],
     [
         'Running deploy',
         async (page) => {

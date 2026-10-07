@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { router } from '@inertiajs/svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
     import AuditReport from '@/components/servers/AuditReport.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -7,6 +6,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
+    import { router } from '@inertiajs/svelte'
 
     let { server }: { server: ServerHeader } = $props()
 

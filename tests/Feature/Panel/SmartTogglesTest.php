@@ -132,7 +132,7 @@ test('every applied toggle is logged with its key, label and new state', functio
         ->and($activity->properties->toArray())->toBe(['toggle' => 'scheduler', 'label' => 'Scheduler', 'on' => true]);
 });
 
-test('turning the queue worker on adds a worker process with the resolved php binary and keeps the others', function () {
+test('turning the queue worker on adds a worker that names no php version and keeps the others', function () {
     Queue::fake();
     $application = togglesApp(['processes' => [['name' => 'horizon', 'command' => 'php artisan horizon']]]);
 
@@ -140,7 +140,7 @@ test('turning the queue worker on adds a worker process with the resolved php bi
 
     expect($application->fresh()->processes)->toBe([
         ['name' => 'horizon', 'command' => 'php artisan horizon'],
-        ['name' => 'queue', 'command' => '/opt/asdf-data/installs/php/8.5.5/bin/php artisan queue:work --sleep=3 --tries=3 --max-time=3600'],
+        ['name' => 'queue', 'command' => 'php artisan queue:work --sleep=3 --tries=3 --max-time=3600'],
     ]);
 
     Queue::assertPushed(SyncApplicationProcesses::class, fn(SyncApplicationProcesses $job): bool => togglesRemoved($job) === []);
@@ -156,14 +156,14 @@ test('turning the queue worker on twice replaces the worker rather than running 
         ->and($application->fresh()->processes[0]['command'])->toContain('queue:work');
 });
 
-test('an application with no pinned php version runs its worker with the system php', function () {
+test('the stored worker is the same whatever php version the app runs when it is toggled', function (?string $php) {
     Queue::fake();
-    $application = togglesApp(['php_version' => null]);
+    $application = togglesApp(['php_version' => $php]);
 
     togglesService()->apply($application, SmartToggles::QUEUE, true);
 
-    expect($application->fresh()->processes[0]['command'])->toStartWith('/usr/bin/php artisan queue:work');
-});
+    expect($application->fresh()->processes[0]['command'])->toBe('php artisan queue:work --sleep=3 --tries=3 --max-time=3600');
+})->with(['no version yet' => [null], 'a version' => ['8.4.20']]);
 
 test('turning the queue worker off removes only that process and tells the sync job to tear its unit down', function () {
     Queue::fake();
@@ -213,14 +213,14 @@ test('turning the scheduler off removes the schedule run and clears an empty lis
     Queue::assertPushed(SyncApplicationProcesses::class);
 });
 
-test('turning sidekiq on runs it through the resolved bundler and off tears the unit down', function () {
+test('turning sidekiq on runs it through bundler with no ruby version named and off tears the unit down', function () {
     Queue::fake();
     $application = togglesApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.4.1']);
 
     togglesService()->apply($application, SmartToggles::SIDEKIQ, true);
 
     expect($application->fresh()->processes)->toBe([
-        ['name' => 'sidekiq', 'command' => '/opt/asdf-data/installs/ruby/3.4.1/bin/bundle exec sidekiq'],
+        ['name' => 'sidekiq', 'command' => 'bundle exec sidekiq'],
     ]);
 
     togglesService()->apply($application->fresh(), SmartToggles::SIDEKIQ, false);

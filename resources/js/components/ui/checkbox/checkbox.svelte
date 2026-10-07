@@ -17,7 +17,7 @@
 	bind:ref
 	data-slot="checkbox"
 	class={cn(
-		"focus-ring peer relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-input bg-background text-primary-foreground transition-colors duration-(--dur-fast) outline-none data-[state=checked]:border-primary data-[state=checked]:bg-primary aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50",
+		"focus-ring peer relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-input bg-background text-primary-foreground transition-colors duration-(--dur-fast) outline-none data-[state=checked]:border-primary data-[state=checked]:bg-primary aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50",
 		className
 	)}
 	bind:checked

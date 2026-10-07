@@ -14,6 +14,7 @@ use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
+use App\Services\Runtime\Catalog;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -163,6 +164,7 @@ final class ActivityFeed
             'application_stopped' => [$this->mono($application?->name), $this->text(' stopped, visitors see the maintenance page')],
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
             'app_oom_killed' => [$this->mono($application?->name), $this->text(' ' . ($properties['process'] ?? 'a') . ' process killed for going over its ' . (int) ($properties['limit_mb'] ?? 0) . ' MB memory limit, systemd started it again')],
+            'runtime_eol_chosen' => [$this->mono($application?->name), $this->text(' was added on ' . app(Catalog::class)->label((string) ($properties['runtime'] ?? '')) . ' ' . ($properties['line'] ?? '') . ', which no longer gets security fixes')],
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],

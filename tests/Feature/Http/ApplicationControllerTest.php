@@ -32,8 +32,7 @@ function payload(array $overrides = []): array
 {
     return array_merge([
         'name' => 'My Svelte App',
-        'type' => ApplicationType::Js->value,
-        'js_runtime' => 'bun',
+        'type' => ApplicationType::Php->value,
         'repository_branch' => 'main',
         'directory' => '/',
         'web_directory' => '/public',
@@ -144,7 +143,7 @@ test('application input is validated', function (array $override, string $field)
     [['domain' => 'not a domain'], 'domain'],
     [['domain' => 'evil.com, other.com'], 'domain'],
     [['type' => 'wordpress'], 'type'],
-    [['php_version' => '8.5.5; rm -rf /'], 'php_version'],
+    [['runtime_version' => '8.5.5; rm -rf /'], 'runtime_version'],
     [['repository_url' => 'not-a-url'], 'repository_url'],
     [['app_size' => 'enormous'], 'app_size'],
     [['name' => ''], 'name'],
@@ -353,4 +352,70 @@ test('the app page explains a recent out of memory kill', function () {
             ->where('application.oom.limit_mb', 256)
             ->where('application.oom.size', 'Small')
             ->where('application.oom.when', 'at ' . now()->format('H:i')));
+});
+
+test('the add-an-app page offers every runtime\'s versions with their status', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->get(route('servers.applications.create', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('runtimes.php.label', 'PHP')
+            ->where('runtimes.php.recommended', '8.5')
+            ->where('runtimes.php.options.0.line', '8.5')
+            ->where('runtimes.nodejs.sources', '.tool-versions, .nvmrc, .node-version or engines.node in package.json')
+            ->has('runtimes.bun.options', 1)
+            ->has('runtimes.deno.options', 1)
+            ->has('runtimes.ruby.options', 4));
+});
+
+test('a chosen version is kept as a fallback and nothing claims to be live yet', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), payload(['runtime_version' => '8.4']))
+        ->assertSessionHasNoErrors();
+
+    $application = Application::query()->latest('created_at')->first();
+
+    expect($application->runtime_pins)->toBe(['php' => '8.4'])
+        ->and($application->php_version)->toBeNull();
+});
+
+test('an end-of-life version is refused until the choice is confirmed, and the confirmed choice is recorded', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $admin = appTeamMember($team, TeamRole::Admin);
+
+    $this->actingAs($admin)
+        ->post(route('servers.applications.store', $server), payload(['runtime_version' => '8.1']))
+        ->assertSessionHasErrors(['runtime_version' => 'PHP 8.1 no longer gets security fixes. Confirm you want it, or pick another version.']);
+
+    $this->actingAs($admin)
+        ->post(route('servers.applications.store', $server), payload(['runtime_version' => '8.1', 'acknowledge_eol' => true]))
+        ->assertSessionHasNoErrors();
+
+    expect(Activity::query()->where('description', 'runtime_eol_chosen')->sole()->properties->toArray())->toBe(['runtime' => 'php', 'line' => '8.1']);
+});
+
+test('a version the runtime does not have is refused', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), payload(['runtime_version' => '24']))
+        ->assertSessionHasErrors('runtime_version');
+});
+
+test('an app\'s versions cannot be edited after it is added, because the repository decides them', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['php_version' => '8.5.10']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['php_version' => '7.4.33']);
+
+    expect($application->fresh()->php_version)->toBe('8.5.10');
 });

@@ -11,6 +11,7 @@ namespace App\Services\Deployment;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Services\SafeName;
+use App\Services\SSH\SSHConnection;
 
 final class CrontabBuilder
 {
@@ -23,7 +24,7 @@ final class CrontabBuilder
         $slug = SafeName::assertSlug($application->slug);
         $current = ReleasePaths::ROOT . '/' . $slug . '/current';
         $log = '/var/coresmith/logs/' . $slug . '/scheduler.log';
-        $path = rtrim(str_replace(['PATH=', ':$PATH '], ['', ''], $this->commands->pathPrefix($application)), ' ');
+        $path = rtrim(str_replace(['PATH=', ':$PATH '], ['', ''], $this->commands->pathPrefix($application->runtimeVersions())), ' ');
         $path = $path === '' ? '/usr/local/bin:/usr/bin:/bin' : $path . ':/usr/local/bin:/usr/bin:/bin';
 
         $lines = [
@@ -43,6 +44,14 @@ final class CrontabBuilder
     public function install(Application $application): string
     {
         return 'crontab -u ' . SafeName::assertSystemUser($application->system_user) . ' -';
+    }
+
+    public function write(SSHConnection $connection, Application $application): void
+    {
+        $file = '/tmp/coresmith-cron-' . SafeName::assertSlug($application->slug);
+
+        $connection->uploadContent($this->build($application), $file);
+        $connection->execute('cat ' . $file . ' | ' . $this->install($application) . ' && rm -f ' . $file, sudo: true)->throw();
     }
 
     /**

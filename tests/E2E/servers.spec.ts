@@ -55,6 +55,16 @@ test.describe('a server', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
     })
 
+    test('the apps table shows each app’s real runtime version', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'The Runtime column is hidden below 640px, matching the prototype’s mobile apps table')
+
+        await gotoServer(page, 'forge-01')
+
+        await expect(applicationRow(page, 'relay')).toContainText('Deno 2.9')
+        await expect(applicationRow(page, 'storefront')).toContainText('Bun 1.4')
+        await expect(applicationRow(page, 'atlas')).toContainText('PHP 8.5')
+    })
+
     test('a server with a nearly full disk says so and offers to prune', async ({ page }) => {
         await gotoServer(page, 'outpost-01')
 

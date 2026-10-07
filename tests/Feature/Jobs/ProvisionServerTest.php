@@ -10,6 +10,7 @@ use App\Exceptions\UnsupportedOperatingSystemException;
 use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Services\Server\OsDetector;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Event;
@@ -329,4 +330,14 @@ test('a failure inside handle is recorded once, not twice when the queue also ca
     }
 
     expect(substr_count((string) $server->fresh()->provisioning_log, 'phase 2 of 8, Base system: failed'))->toBe(1);
+});
+
+test('installing the base packages gets twenty minutes, not the ten every other command gets', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'provisioning_phase' => 1]);
+    $transport = provisioningTransport();
+
+    rescue(fn() => provision($server, $transport), report: false);
+
+    expect($transport->budgetFor('apt-get update'))->toBe(SSHTransport::PACKAGE_SECONDS)
+        ->and(SSHTransport::PACKAGE_SECONDS)->toBe(1200);
 });

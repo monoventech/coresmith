@@ -146,6 +146,7 @@
     --default-transition-duration: 150ms;
     --default-transition-timing-function: var(--ease-out-soft);
 
+    --radius: var(--radius);
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);

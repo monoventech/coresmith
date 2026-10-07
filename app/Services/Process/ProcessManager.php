@@ -76,13 +76,13 @@ final class ProcessManager
         $application->forceFill(['power_state' => $state])->save();
     }
 
-    public function refresh(SSHConnection $connection, Application $application): void
+    public function refresh(SSHConnection $connection, Application $application, bool $restart = false): void
     {
         $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;
 
         foreach ($this->unitNames($application) as $unit) {
             $connection->execute('systemctl enable ' . escapeshellarg($unit), sudo: true)->throw();
-            $connection->execute('systemctl ' . ($unit === $fpm ? 'reload-or-restart ' : 'restart ') . escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl ' . ($unit === $fpm && !$restart ? 'reload-or-restart ' : 'restart ') . escapeshellarg($unit), sudo: true)->throw();
         }
     }
 

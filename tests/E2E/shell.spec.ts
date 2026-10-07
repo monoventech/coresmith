@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { dialog, expect, isMobile, nav, test } from './support/fixtures'
+import { applicationRow, dialog, expect, gotoServer, isMobile, main, nav, test } from './support/fixtures'
 
 function palette(page: Page) {
     return page.getByRole('dialog', { name: 'Command palette' })
@@ -167,6 +167,26 @@ test.describe('the command palette', () => {
         await page.keyboard.press('Enter')
 
         await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
+    })
+})
+
+test.describe('page scrolling', () => {
+    test('an in-app link opens at the top, and going back restores where the page was', async ({ page }) => {
+        await gotoServer(page, 'bench-01')
+
+        const row = applicationRow(page, 'legacy-api')
+        await row.scrollIntoViewIfNeeded()
+        const scrolled = await main(page).evaluate((el) => el.scrollTop)
+        expect(scrolled).toBeGreaterThan(0)
+
+        await row.click()
+        await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+        await expect(page.getByRole('heading', { level: 1, name: 'legacy-api', exact: true })).toBeVisible()
+        await expect(main(page)).toHaveJSProperty('scrollTop', 0)
+
+        await page.goBack()
+        await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+        await expect(main(page)).toHaveJSProperty('scrollTop', scrolled)
     })
 })
 

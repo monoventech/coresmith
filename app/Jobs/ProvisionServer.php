@@ -23,6 +23,7 @@ use App\Services\Server\OsDetector;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\Server\ProvisioningVerifier;
 use App\Services\Server\SecurityHardening;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Closure;
@@ -117,8 +118,8 @@ final class ProvisionServer implements ShouldQueue
     {
         $packages = PackageManagerFactory::for($this->server->fresh());
 
-        $connection->execute($packages->update(), sudo: true)->throw();
-        $connection->execute($packages->install(BasePackages::for($this->server->fresh())), sudo: true)->throw();
+        $connection->execute($packages->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        $connection->execute($packages->install(BasePackages::for($this->server->fresh())), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
     }
 
     private function phase(int $number, Closure $work): void

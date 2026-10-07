@@ -55,9 +55,7 @@ final class SyncApplicationProcesses implements ShouldQueue
                 $processes->start($connection, $application);
             }
 
-            $slug = $application->slug;
-            $connection->uploadContent($crontab->build($application), '/tmp/coresmith-cron-' . $slug);
-            $connection->execute('cat /tmp/coresmith-cron-' . $slug . ' | ' . $crontab->install($application) . ' && rm -f /tmp/coresmith-cron-' . $slug, sudo: true)->throw();
+            $crontab->write($connection, $application);
         } catch (Throwable $e) {
             activity()
                 ->performedOn($application)

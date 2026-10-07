@@ -12,10 +12,10 @@ test('every queue from the spec is defined with its tries and timeout', function
         ->and($config['maxProcesses'])->toBe($processes)
         ->and($config['connection'])->toBe('redis');
 })->with([
-    ['provisioning', 'provisioning', 1, 1800, 2],
-    ['deployments', 'deployments', 1, 600, 3],
-    ['server-tasks', 'server-tasks', 3, 120, 5],
-    ['default', 'default', 3, 60, 3],
+    ['provisioning', 'provisioning', 1, 2760, 2],
+    ['deployments', 'deployments', 1, 840, 3],
+    ['server-tasks', 'server-tasks', 3, 1320, 5],
+    ['default', 'default', 3, 960, 3],
 ]);
 
 test('provisioning and deployments never auto retry', function () {

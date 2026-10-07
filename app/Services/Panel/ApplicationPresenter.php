@@ -12,6 +12,8 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Models\Application;
+use App\Services\Runtime\Catalog;
+use App\Services\Runtime\RuntimeLifecycle;
 
 final class ApplicationPresenter
 {
@@ -37,19 +39,23 @@ final class ApplicationPresenter
         $framework = strtolower((string) $application->framework);
 
         if ($framework !== '' && isset(self::FRAMEWORKS[$framework])) {
-            return self::FRAMEWORKS[$framework];
+            $label = self::FRAMEWORKS[$framework];
+        } elseif ($framework !== '') {
+            $label = ucfirst($framework);
+        } else {
+            $label = match ($application->type) {
+                ApplicationType::Php => 'PHP',
+                ApplicationType::Ruby => 'Ruby',
+                ApplicationType::Static => 'Static site',
+                default => 'API',
+            };
         }
 
-        if ($framework !== '') {
-            return ucfirst($framework);
-        }
+        $detected = ((array) $application->stack)['framework'] ?? null;
 
-        return match ($application->type) {
-            ApplicationType::Php => 'PHP',
-            ApplicationType::Ruby => 'Ruby',
-            ApplicationType::Static => 'Static site',
-            default => 'API',
-        };
+        return is_array($detected) && ($detected['name'] ?? null) === $framework && isset($detected['major'])
+            ? $label . ' ' . (int) $detected['major']
+            : $label;
     }
 
     public static function runtime(Application $application): string
@@ -59,9 +65,64 @@ final class ApplicationPresenter
             ApplicationType::Ruby => trim('Ruby ' . self::minor($application->ruby_version)),
             ApplicationType::Static => 'Caddy',
             default => match ($application->js_runtime) {
-                'deno' => 'Deno',
-                'node' => trim('Node ' . self::minor($application->node_version)),
-                default => 'Bun',
+                'deno' => trim('Deno ' . self::minor($application->deno_version)),
+                'node' => trim('Node ' . self::major($application->node_version)),
+                default => trim('Bun ' . self::minor($application->bun_version)),
+            },
+        };
+    }
+
+    /**
+     * @return array{runtime: string, ended: string, fix: string}|null
+     */
+    public static function runtimeEol(Application $application): ?array
+    {
+        $runtime = match ($application->type) {
+            ApplicationType::Php => 'php',
+            ApplicationType::Ruby => 'ruby',
+            ApplicationType::Js => match ($application->js_runtime) {
+                'node' => 'nodejs',
+                'deno' => 'deno',
+                default => 'bun',
+            },
+            default => null,
+        };
+
+        $version = $runtime === null ? null : ($application->runtimeVersions()[$runtime] ?? null);
+
+        if ($runtime === null || $version === null) {
+            return null;
+        }
+
+        $status = app(RuntimeLifecycle::class)->status($runtime, $version);
+
+        if (!$status->isEol()) {
+            return null;
+        }
+
+        $catalog = app(Catalog::class);
+        $source = ((array) $application->stack)['runtimes'][$runtime]['source'] ?? null;
+
+        return [
+            'runtime' => $catalog->label($runtime) . ' ' . $catalog->lineOf($runtime, $version),
+            'ended' => (string) $status->eolAt?->format('j F Y'),
+            'fix' => self::runtimeFix($runtime, is_string($source) ? $source : null, $catalog->recommendedLine($runtime)),
+        ];
+    }
+
+    private static function runtimeFix(string $runtime, ?string $source, string $recommended): string
+    {
+        return match ($source) {
+            '.tool-versions' => "Set {$runtime} in .tool-versions to {$recommended}, then deploy.",
+            'composer.json' => "Set require.php in composer.json to ^{$recommended}, then deploy.",
+            '.nvmrc', '.node-version', '.ruby-version', '.dvmrc' => "Set {$source} to {$recommended}, then deploy.",
+            'package.json' => "Set engines.node in package.json to {$recommended}, then deploy.",
+            'Gemfile' => "Set the ruby line in Gemfile to {$recommended}, then deploy.",
+            default => match ($runtime) {
+                'php' => "Set require.php in composer.json to ^{$recommended}, then deploy.",
+                'nodejs' => "Add a .nvmrc containing {$recommended} to the repository, then deploy.",
+                'ruby' => "Add a .ruby-version containing {$recommended} to the repository, then deploy.",
+                default => 'Name a supported version in .tool-versions, then deploy.',
             },
         };
     }
@@ -94,5 +155,14 @@ final class ApplicationPresenter
         }
 
         return preg_match('/^(\d+)\.(\d+)/', $version, $matches) === 1 ? $matches[1] . '.' . $matches[2] : $version;
+    }
+
+    private static function major(?string $version): string
+    {
+        if ($version === null || $version === '') {
+            return '';
+        }
+
+        return preg_match('/^(\d+)/', $version, $matches) === 1 ? $matches[1] : $version;
     }
 }

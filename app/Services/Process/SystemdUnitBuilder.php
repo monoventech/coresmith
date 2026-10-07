@@ -10,9 +10,11 @@ namespace App\Services\Process;
 
 use App\Enums\ApplicationType;
 use App\Enums\AppSize;
+use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Runtime\JsTooling;
 use App\Services\SafeName;
 
 final class SystemdUnitBuilder
@@ -45,6 +47,10 @@ final class SystemdUnitBuilder
         $memoryHigh = $size->memoryHighMb();
         $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
+        $listen = $process === 'web'
+            ? "Environment=\"PORT={$application->base_port}\"\nEnvironment=\"HOST=127.0.0.1\"\n" . ($application->type === ApplicationType::Js ? "Environment=\"HOSTNAME=127.0.0.1\"\n" : '')
+            : '';
+        $command = $process === 'web' ? $command : $this->workerCommand($command);
 
         return <<<UNIT
         [Unit]
@@ -58,7 +64,7 @@ final class SystemdUnitBuilder
         WorkingDirectory={$workingDirectory}
         Environment="HOME=/home/{$user}"
         Environment="PATH={$path}"
-        EnvironmentFile={$envFile}
+        {$listen}EnvironmentFile={$envFile}
 
         ExecStart={$command}
 
@@ -98,30 +104,49 @@ final class SystemdUnitBuilder
 
     private function jsCommand(Application $application): string
     {
-        $runtime = $application->js_runtime === 'node' ? 'nodejs' : (string) $application->js_runtime;
-        $version = $application->node_version;
+        $tooling = ((array) $application->stack)['tooling'] ?? null;
+        $start = JsTooling::fromArray(is_array($tooling) ? $tooling : null)?->start ?? false;
 
-        $binary = $runtime === 'nodejs'
-            ? $this->asdf->binaryPath('nodejs', (string) $version)
-            : $this->asdf->binaryPath($runtime, (string) $version);
+        return match ($application->js_runtime) {
+            'node' => $start
+                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run start'
+                : $this->asdf->binaryPath('nodejs', (string) $application->node_version) . ' ' . $this->entry($application),
+            'deno' => $this->asdf->binaryPath('deno', (string) $application->deno_version) . ($start ? ' task start' : ' run --allow-net --allow-read --allow-env main.ts'),
+            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun start' : ' ' . $this->entry($application)),
+        };
+    }
 
-        return $binary . ' server.js';
+    private function workerCommand(string $command): string
+    {
+        $pinned = '~^(?:/usr/bin/(?=php(?:\s|\z))|' . preg_quote(AsdfManager::INSTALL_DIR, '~') . '/[a-z]+/[A-Za-z0-9._-]+/bin/(?=[^/\s]+(?:\s|\z)))~';
+        $command = (string) preg_replace($pinned, '', trim($command));
+
+        if ($command === '') {
+            throw UnsafeNameException::workerCommand();
+        }
+
+        return str_starts_with($command, '/') ? $command : '/usr/bin/env ' . $command;
+    }
+
+    private function entry(Application $application): string
+    {
+        return match (strtolower((string) $application->framework)) {
+            'sveltekit' => 'build/index.js',
+            'nuxt' => '.output/server/index.mjs',
+            'astro' => 'dist/server/entry.mjs',
+            default => 'server.js',
+        };
     }
 
     private function pathFor(Application $application): string
     {
         $directories = [];
 
-        foreach ([['php', $application->php_version], ['nodejs', $application->node_version], ['ruby', $application->ruby_version]] as [$runtime, $version]) {
-            if ($version !== null) {
-                $directories[] = dirname($this->asdf->binaryPath($runtime, (string) $version));
-            }
+        foreach ($application->runtimeVersions() as $runtime => $version) {
+            AsdfManager::assertValid($runtime, $version);
+            $directories[] = $this->asdf->versionPath($runtime, $version) . '/bin';
         }
 
-        $directories[] = '/usr/local/bin';
-        $directories[] = '/usr/bin';
-        $directories[] = '/bin';
-
-        return implode(':', $directories);
+        return implode(':', [...$directories, '/usr/local/bin', '/usr/bin', '/bin']);
     }
 }

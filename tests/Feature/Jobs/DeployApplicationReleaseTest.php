@@ -146,7 +146,7 @@ test('each command run in the release is echoed before its output', function () 
         ->and($lines)->toContain('$ php artisan migrate --force --isolated');
 });
 
-test('a custom blueprint is logged as the build phase with no dependency or migration marker', function () {
+test('a custom blueprint is logged as the build phase with no dependency install or migration marker', function () {
     $deployment = Deployment::factory()->for(releaseApp(['custom_blueprint' => "echo building\n"]))->create();
 
     releaseRun($deployment, releaseTransport());
@@ -154,7 +154,7 @@ test('a custom blueprint is logged as the build phase with no dependency or migr
     $log = (string) $deployment->fresh()->log;
 
     expect($log)->toContain('[14:05:09] build: running the custom blueprint')
-        ->and($log)->not->toContain('] deps:')
+        ->and($log)->not->toContain('] deps: installing dependencies')
         ->and($log)->not->toContain('] migrate:');
 });
 

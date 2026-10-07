@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
+use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\UnsafeNameException;
@@ -11,6 +12,7 @@ use App\Jobs\ManageFirewallRule;
 use App\Jobs\RollbackApplication;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
@@ -83,6 +85,7 @@ test('a malformed cron schedule is refused', function () {
 
 test('rolling back swaps to the previous release', function () {
     $app = cronApp();
+    Deployment::factory()->for($app)->create(['release' => '1', 'status' => DeploymentStatus::Succeeded]);
     $transport = (new FakeSSHTransport)->respondTo('ls -1dt', "/var/coresmith/apps/my-app/releases/2/\n/var/coresmith/apps/my-app/releases/1/\n", 0);
 
     withTransport($transport, function () use ($app): void {

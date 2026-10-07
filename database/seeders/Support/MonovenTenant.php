@@ -24,6 +24,9 @@ use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Git\DeployKeyManager;
+use App\Services\Runtime\JsTooling;
+use App\Services\Runtime\ResolvedRuntime;
+use App\Services\Runtime\Stack;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
 use Carbon\CarbonImmutable;
@@ -75,6 +78,22 @@ final class MonovenTenant
         $this->activity();
 
         return $this;
+    }
+
+    /**
+     * @param  array<string, array{0: string, 1: string, 2: ?string}>  $runtimes
+     * @param  array{name: string, major: int}|null  $framework
+     * @return array<string, mixed>
+     */
+    public static function stack(array $runtimes, ?array $framework = null, ?JsTooling $tooling = null): array
+    {
+        $resolved = [];
+
+        foreach ($runtimes as $runtime => [$version, $source, $detail]) {
+            $resolved[$runtime] = new ResolvedRuntime($runtime, $version, $source, $detail, true);
+        }
+
+        return (new Stack($resolved, $framework, $tooling))->applicationAttributes();
     }
 
     private function sshKeys(): void
@@ -183,14 +202,14 @@ final class MonovenTenant
     private function applications(): void
     {
         $specs = [
-            ['atlas', 'forge-01', ApplicationType::Php, 'laravel', ['php_version' => '8.5.1'], 8000, 'atlas.monoven.io', ['www.atlas.monoven.io']],
-            ['ledger', 'forge-01', ApplicationType::Ruby, 'rails', ['ruby_version' => '3.3.6'], 8010, 'ledger.monoven.io', []],
-            ['relay', 'forge-01', ApplicationType::Js, null, ['js_runtime' => 'deno'], 8020, 'relay.monoven.io', []],
-            ['storefront', 'forge-01', ApplicationType::Js, 'sveltekit', ['js_runtime' => 'bun'], 8030, 'shop.monoven.io', []],
-            ['atlas-staging', 'forge-02', ApplicationType::Php, 'laravel', ['php_version' => '8.5.1'], 8000, 'staging.atlas.monoven.io', []],
-            ['storefront-staging', 'forge-02', ApplicationType::Js, 'sveltekit', ['js_runtime' => 'bun'], 8010, 'staging.shop.monoven.io', []],
-            ['warehouse', 'anvil-01', ApplicationType::Ruby, 'rails', ['ruby_version' => '3.3.6'], 8000, 'warehouse.monoven.io', []],
-            ['relay-edge', 'outpost-01', ApplicationType::Js, null, ['js_runtime' => 'deno'], 8000, 'edge.relay.monoven.io', []],
+            ['atlas', 'forge-01', ApplicationType::Php, 'laravel', self::stack(['php' => ['8.5.10', 'composer.json', '^8.4'], 'bun' => ['1.4.2', 'default', null]], ['name' => 'laravel', 'major' => 13], new JsTooling('bun', true, true, false)), 8000, 'atlas.monoven.io', ['www.atlas.monoven.io']],
+            ['ledger', 'forge-01', ApplicationType::Ruby, 'rails', self::stack(['ruby' => ['3.4.10', '.ruby-version', '3.4.10']], ['name' => 'rails', 'major' => 8]), 8010, 'ledger.monoven.io', []],
+            ['relay', 'forge-01', ApplicationType::Js, null, ['js_runtime' => 'deno', ...self::stack(['deno' => ['2.9.7', '.dvmrc', '2.9.7']], null, new JsTooling('deno', true, false, true))], 8020, 'relay.monoven.io', []],
+            ['storefront', 'forge-01', ApplicationType::Js, 'sveltekit', ['js_runtime' => 'bun', ...self::stack(['bun' => ['1.4.2', 'package.json', 'bun@1.4.2']], ['name' => 'sveltekit', 'major' => 2], new JsTooling('bun', true, true, false))], 8030, 'shop.monoven.io', []],
+            ['atlas-staging', 'forge-02', ApplicationType::Php, 'laravel', self::stack(['php' => ['8.5.10', 'composer.json', '^8.4'], 'bun' => ['1.4.2', 'default', null]], ['name' => 'laravel', 'major' => 13], new JsTooling('bun', true, true, false)), 8000, 'staging.atlas.monoven.io', []],
+            ['storefront-staging', 'forge-02', ApplicationType::Js, 'sveltekit', ['js_runtime' => 'bun', ...self::stack(['bun' => ['1.4.2', 'package.json', 'bun@1.4.2']], ['name' => 'sveltekit', 'major' => 2], new JsTooling('bun', true, true, false))], 8010, 'staging.shop.monoven.io', []],
+            ['warehouse', 'anvil-01', ApplicationType::Ruby, 'rails', self::stack(['ruby' => ['3.3.12', '.ruby-version', '3.3.12']], ['name' => 'rails', 'major' => 8]), 8000, 'warehouse.monoven.io', []],
+            ['relay-edge', 'outpost-01', ApplicationType::Js, null, ['js_runtime' => 'deno', ...self::stack(['deno' => ['2.9.7', '.dvmrc', '2.9.7']], null, new JsTooling('deno', true, false, true))], 8000, 'edge.relay.monoven.io', []],
         ];
 
         foreach ($specs as [$name, $serverName, $type, $framework, $runtime, $port, $domain, $extra]) {

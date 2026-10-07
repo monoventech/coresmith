@@ -12,13 +12,19 @@ use phpseclib3\Crypt\Common\PrivateKey;
 
 interface SSHTransport
 {
+    public const COMMAND_SECONDS = 600;
+
+    public const PACKAGE_SECONDS = 1200;
+
     public function connect(string $host, int $port, int $timeout): void;
 
     public function hostKey(): string;
 
     public function login(string $user, PrivateKey $key): bool;
 
-    public function exec(string $command, ?callable $onOutput = null): string;
+    public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string;
+
+    public function timedOut(): bool;
 
     public function exitStatus(): int;
 

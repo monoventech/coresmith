@@ -80,7 +80,7 @@ test('an active application has its remaining units started', function () {
 
     expect($commands)->toContain("systemctl enable --now 'coresmith-app-shop-fpm'")
         ->and($commands)->toContain("systemctl enable --now 'coresmith-app-shop-queue'")
-        ->and($transport->uploads()['/etc/systemd/system/coresmith-app-shop-queue.service'])->toContain('ExecStart=php artisan queue:work');
+        ->and($transport->uploads()['/etc/systemd/system/coresmith-app-shop-queue.service'])->toContain('ExecStart=/usr/bin/env php artisan queue:work');
 });
 
 test('a stopped or sleeping application gets its units installed but not started', function (PowerState $state) {

@@ -57,7 +57,7 @@
     <div class="rounded-xl border border-border bg-card px-5.5 py-5">
         <h3 class="type-h3 m-0 mb-1">Nine-layer app isolation</h3>
         <p class="mb-3.5 text-[12.5px] text-muted-foreground">A compromise in one app must defeat all nine to reach another.</p>
-        <ul class="m-0 flex list-none flex-col gap-[9px] p-0">
+        <ul class="m-0 flex list-none flex-col gap-2.25 p-0">
             {#each isolation as layer (layer)}
                 <li class="flex items-center gap-2.5 text-[13.5px]"><Check class="size-4 shrink-0 text-success" />{layer}</li>
             {/each}
@@ -67,7 +67,7 @@
     <div class="flex flex-col rounded-xl border border-border bg-card px-5.5 py-5">
         <h3 class="type-h3 m-0 mb-1">Server hardening</h3>
         <p class="mb-3.5 text-[12.5px] text-muted-foreground">Applied during provisioning and verified before the server goes live.</p>
-        <ul class="m-0 flex list-none flex-col gap-[9px] p-0">
+        <ul class="m-0 flex list-none flex-col gap-2.25 p-0">
             {#each hardening as item (item)}
                 <li class="flex items-center gap-2.5 text-[13.5px]"><ShieldCheck class="size-4 shrink-0 text-success" />{item}</li>
             {/each}
@@ -95,7 +95,7 @@
         <div class="flex flex-col">
             {#each firewall.changes as change (change.id)}
                 <div class="flex items-baseline gap-3 border-t border-border py-2.5">
-                    <span class="w-[52px] flex-none font-mono text-[12px] text-muted-foreground">{clock(change.at)}</span>
+                    <span class="w-13 flex-none font-mono text-[12px] text-muted-foreground">{clock(change.at)}</span>
                     <span class="text-[13.5px]">
                         <span class="font-mono">{change.action} {change.port}</span><span class="text-muted-foreground">{change.from ? ' from ' : ''}</span><span class="font-mono">{change.from ?? ''}</span>
                     </span>
