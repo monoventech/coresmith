@@ -51,7 +51,7 @@ jobs:
 
       - name: The instance has a setup token, readable only by its owner
         run: |
-          test -f /var/lib/coresmith/setup-token
+          sudo test -f /var/lib/coresmith/setup-token
           test "$(sudo stat -c '%a' /var/lib/coresmith/setup-token)" = "600"
           test "$(sudo cat /var/lib/coresmith/setup-token | wc -c)" -gt 32
 

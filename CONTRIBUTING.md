@@ -67,7 +67,7 @@ CI runs the same list.
 
 ## Design
 
-- `MONOVEN_DESIGN.md` (the studio Signature) and `brand.md` (Coresmith's product layer) are the design rules. Check every new page or component against the Definition-of-Done checklist and the §12 anti-patterns in `MONOVEN_DESIGN.md` before calling it done. Matching the neighbouring file is not the same thing.
+- `MONOVEN_DESIGN.md` (the studio Signature) and `brand.md` (Coresmith's product layer) are the design rules. Monoven keeps them private, so they are not in a public checkout; ask a maintainer for them before visual work. Check every new page or component against the Definition-of-Done checklist and the §12 anti-patterns in `MONOVEN_DESIGN.md` before calling it done. Matching the neighbouring file is not the same thing.
 - Where Coresmith's palette and the Signature disagree, `brand.md` records which one wins. Don't change those decisions silently.
 - `DesignSystemParityTest` fails if the app's tokens, type scale, radius family or display face drift from the Monoven design system.
 - Use the shadcn primitives in `resources/js/components/ui/` rather than raw form controls; a native checkbox gets the browser's focus outline, not the Monoven focus ring. Keep to one accent, and give every full-bleed view one hand tell and the Monoven footer mark.
