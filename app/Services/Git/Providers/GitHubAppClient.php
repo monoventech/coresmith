@@ -11,13 +11,14 @@ namespace App\Services\Git\Providers;
 use App\Exceptions\GitProviderException;
 use App\Models\SourceProvider;
 use App\Services\Git\Contracts\GitProvider;
+use App\Services\Git\GitHub\AppJwt;
+use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\Repository;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
-use phpseclib3\Crypt\RSA;
 
 final class GitHubAppClient implements GitProvider
 {
@@ -25,7 +26,10 @@ final class GitHubAppClient implements GitProvider
 
     public const TOKEN_SKEW_SECONDS = 300;
 
-    public function __construct(private readonly SourceProvider $provider) {}
+    public function __construct(
+        private readonly SourceProvider $provider,
+        private readonly GitHubAppCredentials $app,
+    ) {}
 
     public function listRepositories(): Collection
     {
@@ -107,10 +111,21 @@ final class GitHubAppClient implements GitProvider
 
     public function revoke(): void
     {
-        $this->request()->delete(self::API . '/installation/token');
+        $token = $this->cachedToken();
+
+        if ($token === null) {
+            return;
+        }
+
+        $this->request($token)->delete(self::API . '/installation/token');
     }
 
     public function token(): string
+    {
+        return $this->cachedToken() ?? $this->mintInstallationToken();
+    }
+
+    private function cachedToken(): ?string
     {
         $expiry = $this->provider->token_expires_at;
 
@@ -118,7 +133,7 @@ final class GitHubAppClient implements GitProvider
             return (string) $this->provider->access_token;
         }
 
-        return $this->mintInstallationToken();
+        return null;
     }
 
     private function mintInstallationToken(): string
@@ -129,7 +144,7 @@ final class GitHubAppClient implements GitProvider
             throw new GitProviderException('This GitHub connection has no installation to mint a token for. Reconnect it from Settings → Source providers.');
         }
 
-        $response = Http::withToken($this->jwt())
+        $response = Http::withToken(app(AppJwt::class)->for($this->app))
             ->withHeaders(['Accept' => 'application/vnd.github+json'])
             ->post(self::API . '/app/installations/' . rawurlencode($installation) . '/access_tokens');
 
@@ -147,35 +162,6 @@ final class GitHubAppClient implements GitProvider
         return $token;
     }
 
-    private function jwt(): string
-    {
-        $key = (string) $this->provider->app_private_key;
-        $appId = (string) $this->provider->app_id;
-
-        if ($key === '' || $appId === '') {
-            throw new GitProviderException('This GitHub connection is missing its App credentials.');
-        }
-
-        $header = $this->base64Url(json_encode(['alg' => 'RS256', 'typ' => 'JWT'], JSON_THROW_ON_ERROR));
-        $claims = $this->base64Url(json_encode([
-            'iat' => time() - 60,
-            'exp' => time() + 540,
-            'iss' => $appId,
-        ], JSON_THROW_ON_ERROR));
-
-        $signature = RSA::loadPrivateKey($key)
-            ->withHash('sha256')
-            ->withPadding(RSA::SIGNATURE_PKCS1)
-            ->sign($header . '.' . $claims);
-
-        return $header . '.' . $claims . '.' . $this->base64Url($signature);
-    }
-
-    private function base64Url(string $value): string
-    {
-        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
-    }
-
     private function path(string $repository): string
     {
         if (!preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/', $repository)) {
@@ -185,9 +171,9 @@ final class GitHubAppClient implements GitProvider
         return $repository;
     }
 
-    private function request(): PendingRequest
+    private function request(?string $token = null): PendingRequest
     {
-        return Http::withToken($this->token())
+        return Http::withToken($token ?? $this->token())
             ->withHeaders(['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'])
             ->timeout(20)
             ->retry(2, 200, throw: false);

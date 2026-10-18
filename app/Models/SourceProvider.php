@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Casts\Vaulted;
 use App\Enums\SourceProviderType;
 use App\Services\Git\ProviderHost;
+use Carbon\CarbonInterface;
 use Database\Factories\SourceProviderFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,7 +26,7 @@ class SourceProvider extends Model
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['access_token', 'refresh_token', 'app_private_key'];
+    protected $hidden = ['access_token', 'refresh_token'];
 
     protected static function booted(): void
     {
@@ -36,12 +37,50 @@ class SourceProvider extends Model
 
     public function connected(): bool
     {
-        return !$this->type->usesTokens() || $this->access_token !== null;
+        return match ($this->type) {
+            SourceProviderType::GitHubApp => filled($this->installation_id) && $this->suspended_at === null && !$this->trashed(),
+            SourceProviderType::Custom => true,
+            SourceProviderType::GitLab, SourceProviderType::Bitbucket => $this->access_token !== null,
+        };
+    }
+
+    public function markUninstalled(): void
+    {
+        $this->forceFill(['access_token' => null, 'token_expires_at' => null])->save();
+
+        activity()->performedOn($this)->log('github_installation_removed');
+
+        $this->delete();
+    }
+
+    public function markSuspended(?CarbonInterface $at): void
+    {
+        $this->forceFill(['suspended_at' => $at])->save();
+    }
+
+    public function manageUrl(): ?string
+    {
+        if (blank($this->installation_id)) {
+            return null;
+        }
+
+        $installation = rawurlencode((string) $this->installation_id);
+
+        return match ($this->account_type) {
+            'Organization' => 'https://github.com/organizations/' . rawurlencode((string) $this->name) . "/settings/installations/{$installation}",
+            'User' => "https://github.com/settings/installations/{$installation}",
+            default => null,
+        };
     }
 
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function githubApp(): BelongsTo
+    {
+        return $this->belongsTo(GitHubApp::class, 'github_app_id');
     }
 
     /**
@@ -53,9 +92,11 @@ class SourceProvider extends Model
             'type' => SourceProviderType::class,
             'access_token' => Vaulted::class,
             'refresh_token' => Vaulted::class,
-            'app_private_key' => Vaulted::class,
             'scopes' => 'array',
             'token_expires_at' => 'datetime',
+            'suspended_at' => 'datetime',
+            'last_status' => 'integer',
+            'last_delivered_at' => 'datetime',
         ];
     }
 }

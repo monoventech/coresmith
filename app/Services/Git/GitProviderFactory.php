@@ -12,16 +12,22 @@ use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
 use App\Models\SourceProvider;
 use App\Services\Git\Contracts\GitProvider;
+use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\Providers\BitbucketClient;
 use App\Services\Git\Providers\GitHubAppClient;
 use App\Services\Git\Providers\GitLabClient;
 
 final class GitProviderFactory
 {
+    public function __construct(private readonly GitHubApps $apps) {}
+
     public function for(SourceProvider $provider): GitProvider
     {
         return match ($provider->type) {
-            SourceProviderType::GitHubApp => new GitHubAppClient($provider),
+            SourceProviderType::GitHubApp => new GitHubAppClient(
+                $provider,
+                $this->apps->for($provider) ?? throw new GitProviderException('This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.'),
+            ),
             SourceProviderType::GitLab => new GitLabClient($provider),
             SourceProviderType::Bitbucket => new BitbucketClient($provider),
             SourceProviderType::Custom => throw new GitProviderException('A custom provider is cloned over SSH and has no API to call.'),

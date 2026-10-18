@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
+use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Git\ProviderHost;
@@ -16,6 +17,10 @@ use Illuminate\Support\Facades\Http;
 
 function provider(SourceProviderType $type, array $attributes = []): SourceProvider
 {
+    if ($type === SourceProviderType::GitHubApp && !array_key_exists('github_app_id', $attributes)) {
+        $attributes['github_app_id'] = GitHubApp::factory()->create()->id;
+    }
+
     return SourceProvider::factory()->create(array_merge([
         'type' => $type->value,
         'access_token' => 'token-' . $type->value,
@@ -27,6 +32,17 @@ function client(SourceProvider $source): object
 {
     return app(GitProviderFactory::class)->for($source);
 }
+
+beforeEach(function () {
+    config(['services.github' => [
+        'app_id' => null,
+        'app_slug' => 'coresmith',
+        'client_id' => null,
+        'client_secret' => null,
+        'private_key' => null,
+        'webhook_secret' => null,
+    ]]);
+});
 
 test('each provider type resolves to its own client', function (SourceProviderType $type, string $expected) {
     expect(client(provider($type)))->toBeInstanceOf($expected);
@@ -107,24 +123,93 @@ test('an expiring github token is reminted from the app private key', function (
         'api.github.com/*' => Http::response(['repositories' => [], 'total_count' => 0]),
     ]);
 
-    $source = provider(SourceProviderType::GitHubApp, [
-        'token_expires_at' => now()->addMinute(),
-        'app_id' => '12345',
-        'app_private_key' => openssl_pkey_export(openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]), $pem) ? $pem : '',
-    ]);
+    $source = provider(SourceProviderType::GitHubApp, ['token_expires_at' => now()->addMinute()]);
 
     client($source)->listRepositories();
 
     expect($source->fresh()->access_token)->toBe('ghs_fresh');
-    Http::assertSent(fn($request) => str_contains($request->url(), 'access_tokens'));
+    Http::assertSent(function ($request) use ($source) {
+        $authorization = $request->header('Authorization')[0] ?? '';
+
+        if (!str_contains($request->url(), 'access_tokens') || preg_match('/^Bearer ([\w-]+)\.([\w-]+)\.([\w-]+)$/', $authorization, $parts) !== 1) {
+            return false;
+        }
+
+        $claims = json_decode((string) base64_decode(strtr($parts[2], '-_', '+/')), true, 512, JSON_THROW_ON_ERROR);
+
+        return $claims['iss'] === $source->githubApp->app_id;
+    });
+});
+
+test('a connection made without an app of its own is signed by the environment app', function () {
+    config(['services.github' => [
+        'app_id' => '1041207',
+        'app_slug' => 'coresmith',
+        'client_id' => 'Iv1.env',
+        'client_secret' => 'env-secret',
+        'private_key' => GitHubApp::factory()->make(['team_id' => null])->private_key,
+        'webhook_secret' => null,
+    ]]);
+    Http::fake([
+        'api.github.com/app/installations/*' => Http::response(['token' => 'ghs_env', 'expires_at' => now()->addHour()->toIso8601String()]),
+        'api.github.com/*' => Http::response(['repositories' => [], 'total_count' => 0]),
+    ]);
+
+    $source = provider(SourceProviderType::GitHubApp, ['github_app_id' => null, 'token_expires_at' => now()->subMinute()]);
+
+    client($source)->listRepositories();
+
+    expect($source->fresh()->access_token)->toBe('ghs_env');
+    Http::assertSent(function ($request) {
+        preg_match('/^Bearer [\w-]+\.([\w-]+)\.[\w-]+$/', $request->header('Authorization')[0] ?? '', $parts);
+
+        return str_contains($request->url(), 'access_tokens')
+            && isset($parts[1])
+            && json_decode((string) base64_decode(strtr($parts[1], '-_', '+/')), true)['iss'] === '1041207';
+    });
 });
 
 test('a github connection with no app credentials fails loudly instead of clone failing later', function () {
     Http::fake();
 
-    client(provider(SourceProviderType::GitHubApp, ['token_expires_at' => now()->subHour(), 'app_id' => null]))
+    client(provider(SourceProviderType::GitHubApp, ['github_app_id' => null, 'token_expires_at' => now()->subHour()]))
         ->listRepositories();
-})->throws(GitProviderException::class);
+})->throws(GitProviderException::class, 'made through an app this panel no longer has');
+
+test('a github connection whose app was removed fails loudly too', function () {
+    Http::fake();
+    $source = provider(SourceProviderType::GitHubApp);
+    $source->githubApp->delete();
+
+    client($source->fresh())->listRepositories();
+})->throws(GitProviderException::class, 'Connect GitHub again from Settings, Git.');
+
+test('disconnecting a github connection never mints a token just to revoke it', function () {
+    Http::fake();
+
+    client(provider(SourceProviderType::GitHubApp, ['token_expires_at' => now()->subHour()]))->revoke();
+
+    Http::assertNothingSent();
+
+    client(provider(SourceProviderType::GitHubApp, ['access_token' => 'ghs_live', 'token_expires_at' => now()->addHour()]))->revoke();
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => $request->method() === 'DELETE'
+        && $request->url() === 'https://api.github.com/installation/token'
+        && $request->hasHeader('Authorization', 'Bearer ghs_live'));
+});
+
+test('a github token that is inside the refresh skew or missing is not revoked either', function (string $state) {
+    Http::fake();
+
+    client(provider(SourceProviderType::GitHubApp, match ($state) {
+        'inside the five minute skew' => ['token_expires_at' => now()->addMinutes(4)],
+        'no token at all' => ['access_token' => null, 'token_expires_at' => null],
+        'a token with no expiry' => ['token_expires_at' => null],
+    }))->revoke();
+
+    Http::assertNothingSent();
+})->with(['inside the five minute skew', 'no token at all', 'a token with no expiry']);
 
 test('gitlab refreshes an expiring token and stores the rotated refresh token', function () {
     Http::fake([

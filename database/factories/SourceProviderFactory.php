@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\SourceProviderType;
+use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -32,5 +34,13 @@ class SourceProviderFactory extends Factory
             'scopes' => ['repo'],
             'token_expires_at' => now()->addHour(),
         ];
+    }
+
+    public function githubApp(?GitHubApp $app = null): static
+    {
+        return $this->state([
+            'type' => SourceProviderType::GitHubApp->value,
+            'github_app_id' => $app ?? fn(array $attributes): string => (string) GitHubApp::factory()->create(['team_id' => $attributes['team_id']])->getKey(),
+        ]);
     }
 }

@@ -41,7 +41,7 @@ enum SourceProviderType: string
     public function scopes(): array
     {
         return match ($this) {
-            self::GitHubApp => ['contents:read', 'metadata:read', 'statuses:write', 'administration:write'],
+            self::GitHubApp => ['contents:read', 'metadata:read', 'statuses:write'],
             self::GitLab => ['read_repository', 'read_api', 'api'],
             self::Bitbucket => ['repository', 'webhook', 'repository:admin'],
             self::Custom => [],

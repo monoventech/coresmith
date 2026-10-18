@@ -70,6 +70,11 @@ class Team extends Model
         return $this->hasMany(SourceProvider::class);
     }
 
+    public function githubApps(): HasMany
+    {
+        return $this->hasMany(GitHubApp::class);
+    }
+
     public function cloudProviders(): HasMany
     {
         return $this->hasMany(CloudProvider::class);

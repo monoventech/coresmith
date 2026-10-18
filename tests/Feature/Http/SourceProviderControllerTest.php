@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Models\Application;
+use App\Models\GitHubApp;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -24,12 +25,14 @@ function providerUser(Team $team, TeamRole $role): User
 
 test('the page lists the teams connections without leaking any credential', function () {
     $team = Team::factory()->create();
-    SourceProvider::factory()->for($team)->create([
+    SourceProvider::factory()->for($team)->githubApp(GitHubApp::factory()->for($team)->create([
+        'client_secret' => 'cs_supersecret',
+        'webhook_secret' => 'whsec_supersecret',
+    ]))->create([
         'type' => SourceProviderType::GitHubApp->value,
         'name' => 'oseughu',
         'access_token' => 'ghs_supersecret',
         'refresh_token' => 'rt_supersecret',
-        'app_private_key' => '-----BEGIN RSA PRIVATE KEY-----secret',
     ]);
 
     $response = $this->actingAs(providerUser($team, TeamRole::Owner))
@@ -41,11 +44,14 @@ test('the page lists the teams connections without leaking any credential', func
         ->has('providers', 1)
         ->where('providers.0.name', 'oseughu')
         ->where('providers.0.label', 'GitHub')
+        ->where('providers.0.scopes', ['contents:read', 'metadata:read', 'statuses:write'])
         ->where('providers.0.connected', true));
 
     expect($response->getContent())->not->toContain('ghs_supersecret')
         ->and($response->getContent())->not->toContain('rt_supersecret')
-        ->and($response->getContent())->not->toContain('BEGIN RSA PRIVATE KEY');
+        ->and($response->getContent())->not->toContain('cs_supersecret')
+        ->and($response->getContent())->not->toContain('whsec_supersecret')
+        ->and($response->getContent())->not->toContain('PRIVATE KEY');
 });
 
 test('the page lists the teams deploy keys and webhooks without leaking either secret', function () {
@@ -87,6 +93,34 @@ test('the page advertises the exact scopes each provider asks for', function () 
             ->where('connectable.1.scopes', ['read_repository', 'read_api', 'api'])
             ->where('connectable.2.scopes', ['repository', 'webhook', 'repository:admin']));
 });
+
+test('github counts as configured when the team has registered an app or the environment has one', function (string $setup, bool $expected) {
+    config(['services.github' => ['app_id' => null, 'app_slug' => 'coresmith', 'client_id' => null, 'client_secret' => null, 'private_key' => null, 'webhook_secret' => null]]);
+    $team = Team::factory()->create();
+
+    if ($setup === 'another teams app') {
+        GitHubApp::factory()->for(Team::factory()->create())->create();
+    }
+
+    if ($setup === 'its own app') {
+        GitHubApp::factory()->for($team)->create();
+    }
+
+    if ($setup === 'the environment app') {
+        config(['services.github' => ['app_id' => '1041207', 'app_slug' => 'coresmith', 'client_id' => 'Iv1.env', 'client_secret' => 'env-secret', 'private_key' => "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----", 'webhook_secret' => null]]);
+    }
+
+    $this->actingAs(providerUser($team, TeamRole::Owner))
+        ->get(route('source-providers.index'))
+        ->assertInertia(fn($page) => $page
+            ->where('connectable.0.type', 'github_app')
+            ->where('connectable.0.configured', $expected));
+})->with([
+    'nothing registered' => ['nothing', false],
+    'only another teams app' => ['another teams app', false],
+    'an app of its own' => ['its own app', true],
+    'the environment app' => ['the environment app', true],
+]);
 
 test('a provider whose token was cleared is shown as disconnected', function () {
     $team = Team::factory()->create();
@@ -152,6 +186,49 @@ test('disconnecting revokes the token at the provider and erases it locally', fu
 
     Http::assertSent(fn($request) => str_contains($request->url(), 'oauth/revoke'));
 });
+
+test('disconnecting a github connection revokes its live installation token and erases it locally', function () {
+    Http::fake(['api.github.com/installation/token' => Http::response(null, 204)]);
+    $team = Team::factory()->create();
+    $source = SourceProvider::factory()->for($team)->githubApp()->create(['access_token' => 'ghs_to_revoke', 'token_expires_at' => now()->addHour()]);
+
+    $this->actingAs(providerUser($team, TeamRole::Owner))
+        ->delete(route('source-providers.destroy', $source))
+        ->assertRedirect();
+
+    $trashed = SourceProvider::withTrashed()->find($source->getKey());
+
+    expect($trashed->trashed())->toBeTrue()
+        ->and($trashed->access_token)->toBeNull()
+        ->and($trashed->token_expires_at)->toBeNull();
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => $request->method() === 'DELETE'
+        && $request->url() === 'https://api.github.com/installation/token'
+        && $request->hasHeader('Authorization', 'Bearer ghs_to_revoke'));
+});
+
+test('a github connection with nothing to revoke is still disconnected without a request', function (string $case) {
+    Http::fake();
+    $team = Team::factory()->create();
+    $source = SourceProvider::factory()->for($team)->githubApp()->create(['access_token' => 'ghs_stale', 'token_expires_at' => now()->subHour()]);
+
+    if ($case === 'the app was removed') {
+        $source->update(['token_expires_at' => now()->addHour()]);
+        $source->githubApp->delete();
+    }
+
+    $this->actingAs(providerUser($team, TeamRole::Owner))
+        ->delete(route('source-providers.destroy', $source))
+        ->assertRedirect();
+
+    $trashed = SourceProvider::withTrashed()->find($source->getKey());
+
+    expect($trashed->trashed())->toBeTrue()
+        ->and($trashed->access_token)->toBeNull();
+
+    Http::assertNothingSent();
+})->with(['the token expired', 'the app was removed']);
 
 test('a provider that refuses the revoke call is still disconnected locally', function () {
     Http::fake(['gitlab.com/oauth/revoke' => Http::response(['error' => 'invalid_token'], 401)]);

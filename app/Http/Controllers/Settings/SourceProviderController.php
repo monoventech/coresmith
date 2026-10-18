@@ -13,7 +13,9 @@ use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\SourceProvider;
+use App\Models\Team;
 use App\Models\WebhookEndpoint;
+use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Repository;
 use App\Services\SSH\HostKeyFingerprint;
@@ -79,7 +81,7 @@ final class SourceProviderController extends Controller
                     'type' => $type->value,
                     'label' => $type->label(),
                     'scopes' => $type->scopes(),
-                    'configured' => $this->isConfigured($type),
+                    'configured' => $this->isConfigured($type, $team),
                 ])->values(),
             'can' => ['manage' => $request->user()->can('update', $team)],
         ]);
@@ -100,7 +102,6 @@ final class SourceProviderController extends Controller
         $sourceProvider->forceFill([
             'access_token' => null,
             'refresh_token' => null,
-            'app_private_key' => null,
             'token_expires_at' => null,
         ])->save();
 
@@ -109,10 +110,10 @@ final class SourceProviderController extends Controller
         return back()->with('success', 'Disconnected. Apps keep deploying with their own deploy keys.');
     }
 
-    private function isConfigured(SourceProviderType $type): bool
+    private function isConfigured(SourceProviderType $type, Team $team): bool
     {
         return match ($type) {
-            SourceProviderType::GitHubApp => (string) config('services.github.app_id') !== '',
+            SourceProviderType::GitHubApp => app(GitHubApps::class)->available($team) !== [],
             SourceProviderType::GitLab => (string) config('services.gitlab.client_id') !== '',
             SourceProviderType::Bitbucket => (string) config('services.bitbucket.client_id') !== '',
             SourceProviderType::Custom => true,
