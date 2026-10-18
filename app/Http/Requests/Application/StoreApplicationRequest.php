@@ -40,11 +40,11 @@ final class StoreApplicationRequest extends FormRequest
             'framework' => ['nullable', 'string', 'max:64'],
             'domain' => ['nullable', 'string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
             'repository_url' => ['nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
-            'repository_branch' => ['required', 'string', 'max:255'],
+            'repository_branch' => ['required', 'string', 'max:255', 'regex:' . SafeName::BRANCH_PATTERN],
             'runtime_version' => ['nullable', 'string', Rule::in($this->runtimeLines())],
             'acknowledge_eol' => ['boolean'],
-            'directory' => ['required', 'string', 'max:255'],
-            'web_directory' => ['required', 'string', 'max:255'],
+            'directory' => ['required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
+            'web_directory' => ['required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
             'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['boolean'],
         ];
@@ -57,6 +57,9 @@ final class StoreApplicationRequest extends FormRequest
     {
         return [
             'domain.regex' => 'Enter a valid domain name, for example app.example.com.',
+            'repository_branch.regex' => 'That is not a branch name Git accepts. Use something like main or release/2.0.',
+            'directory.regex' => 'Use a folder inside the repository, like / or apps/web.',
+            'web_directory.regex' => 'Use a folder inside the app, like /public or dist.',
             'repository_url.regex' => 'Use an https:// URL for public repositories, or git@host:owner/repo.git for private ones.',
         ];
     }

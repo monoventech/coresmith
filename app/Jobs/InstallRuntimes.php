@@ -165,7 +165,7 @@ final class InstallRuntimes implements ShouldQueue
         }
 
         try {
-            $connection->execute('rm -rf ' . $this->releasePath());
+            $connection->execute('rm -rf ' . $this->releasePath(), sudo: true);
         } catch (Throwable) {
             $log->append($this->deployment, $this->cannotRemoveReleaseMessage());
         }
@@ -189,7 +189,7 @@ final class InstallRuntimes implements ShouldQueue
         $connections->disconnect($server);
 
         try {
-            $connections->for($server)->execute('rm -rf ' . $this->releasePath());
+            $connections->for($server)->execute('rm -rf ' . $this->releasePath(), sudo: true);
         } catch (Throwable) {
             app(DeploymentLog::class)->append($deployment, $this->cannotRemoveReleaseMessage());
         } finally {

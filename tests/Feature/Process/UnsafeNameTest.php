@@ -69,3 +69,53 @@ test('legitimate names are accepted', function (string $slug) {
 test('legitimate process names are accepted', function (string $name) {
     expect(SafeName::isProcess($name))->toBeTrue();
 })->with(['web', 'worker', 'queue-worker', 'ssr']);
+
+test('a branch git would read as an option or a pattern cannot be persisted', function (string $branch) {
+    Application::factory()->create(['repository_branch' => $branch]);
+})->with([
+    '--upload-pack=touch /tmp/x',
+    '-x',
+    'a..b',
+    'a b',
+    'a;b',
+    '$(id)',
+    'a/',
+    '/a',
+    '.hidden',
+    'x.lock',
+    'a//b',
+    'a/.b',
+    'a~1',
+    'a:b',
+    'a*',
+    'a@{1}',
+    "main\n",
+    str_repeat('a', 256),
+])->throws(UnsafeNameException::class);
+
+test('ordinary branch names are kept', function (string $branch) {
+    expect(Application::factory()->create(['repository_branch' => $branch])->fresh()->repository_branch)->toBe($branch);
+})->with(['main', 'production', 'release/2.0', 'feature/x-y', 'v1.2.3', 'hotfix+1', 'dependabot/npm_and_yarn/vite-6.0.1']);
+
+test('an app folder that leaves the repository or breaks a config line cannot be persisted', function (string $column, string $path) {
+    Application::factory()->create([$column => $path]);
+})->with([
+    ['directory', '../other-app'],
+    ['directory', 'apps/../../etc'],
+    ['directory', 'apps web'],
+    ['web_directory', '../../../../etc'],
+    ['web_directory', "public\nphp_admin_value[open_basedir] = /"],
+    ['web_directory', '/./public'],
+    ['web_directory', 'public//assets'],
+    ['web_directory', '$(id)'],
+])->throws(UnsafeNameException::class);
+
+test('ordinary app folders are kept', function (string $column, string $path) {
+    expect(Application::factory()->create([$column => $path])->fresh()->{$column})->toBe($path);
+})->with([
+    ['directory', '/'],
+    ['directory', 'apps/web'],
+    ['web_directory', '/public'],
+    ['web_directory', 'dist/'],
+    ['web_directory', '.output/public'],
+]);

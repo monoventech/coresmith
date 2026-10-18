@@ -22,8 +22,9 @@ final class CrontabBuilder
     public function build(Application $application): string
     {
         $slug = SafeName::assertSlug($application->slug);
-        $current = ReleasePaths::ROOT . '/' . $slug . '/current';
-        $log = '/var/coresmith/logs/' . $slug . '/scheduler.log';
+        $paths = new ReleasePaths($application);
+        $current = $paths->appDirectory($paths->current());
+        $log = $paths->shared() . '/logs/scheduler.log';
         $path = rtrim(str_replace(['PATH=', ':$PATH '], ['', ''], $this->commands->pathPrefix($application->runtimeVersions())), ' ');
         $path = $path === '' ? '/usr/local/bin:/usr/bin:/bin' : $path . ':/usr/local/bin:/usr/bin:/bin';
 
@@ -48,10 +49,10 @@ final class CrontabBuilder
 
     public function write(SSHConnection $connection, Application $application): void
     {
-        $file = '/tmp/coresmith-cron-' . SafeName::assertSlug($application->slug);
-
-        $connection->uploadContent($this->build($application), $file);
-        $connection->execute('cat ' . $file . ' | ' . $this->install($application) . ' && rm -f ' . $file, sudo: true)->throw();
+        $connection->execute(
+            'echo ' . escapeshellarg(base64_encode($this->build($application))) . ' | base64 -d | ' . $this->install($application),
+            sudo: true,
+        )->throw();
     }
 
     /**

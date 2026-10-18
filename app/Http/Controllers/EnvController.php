@@ -10,6 +10,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Deployment\EnvironmentFile;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -22,7 +24,13 @@ final class EnvController extends Controller
         abort_unless($application->server_id === $server->id, 404);
 
         $validated = $request->validate([
-            'env' => ['nullable', 'string', 'max:65535'],
+            'env' => ['nullable', 'string', 'max:65535', function (string $attribute, mixed $value, Closure $fail): void {
+                $error = app(EnvironmentFile::class)->firstError((string) $value);
+
+                if ($error !== null) {
+                    $fail($error);
+                }
+            }],
         ]);
 
         $application->update(['env_variables' => $validated['env'] ?? null]);

@@ -105,7 +105,7 @@ test('when every runtime is installed the deploy finishes in one job and the app
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($application->fresh()->php_version)->toBe('8.4.20')
         ->and($application->fresh()->stack['runtimes']['php']['version'])->toBe('8.4.20')
-        ->and(implode("\n", $transport->commands()))->toContain('PATH=/opt/asdf-data/installs/php/8.4.20/bin:$PATH composer install');
+        ->and(implode("\n", $transport->commands()))->toContain("'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'composer install");
 });
 
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
@@ -233,7 +233,7 @@ test('a resumed deploy skips the clone, confirms the runtimes and finishes', fun
         ->and($commands)->not->toContain(RepositoryProbe::DIRECTORY_VARIABLE)
         ->and($commands)->not->toContain('git clone')
         ->and($commands)->not->toContain(' archive ')
-        ->and($commands)->toContain('PATH=/opt/asdf-data/installs/php/8.5.10/bin:$PATH composer install')
+        ->and($commands)->toContain("'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'composer install")
         ->and(Cache::lock('deploy:' . $application->id, 10)->get())->toBeTrue();
 });
 
@@ -479,7 +479,7 @@ test('a laravel app with a vite build installs and builds its assets in the depl
 
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain('/opt/asdf-data/installs/bun/1.4.2/bin:$PATH bun install --frozen-lockfile')
+    expect($commands)->toContain("/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'bun install --frozen-lockfile'")
         ->and($commands)->toContain('bun run build')
         ->and(strpos($commands, 'bun run build'))->toBeLessThan(strpos($commands, 'php artisan config:cache'));
 });

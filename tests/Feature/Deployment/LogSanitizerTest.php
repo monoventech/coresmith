@@ -19,6 +19,29 @@ test('values from the application environment are redacted by name', function ()
         ->and($clean)->toContain('[REDACTED:DB_PASSWORD]');
 });
 
+test('ordinary settings stay readable, so a log still says which database file is missing', function () {
+    $application = Application::factory()->create([
+        'env_variables' => "SESSION_DRIVER=database\nAPP_ENV=production\nDB_DATABASE=/var/coresmith/apps/shop/shared/database.sqlite\n",
+    ]);
+
+    $line = 'Database file at path [/var/coresmith/apps/shop/shared/database.sqlite] does not exist. Running in production.';
+
+    expect((new LogSanitizer)->sanitize($line, $application))->toBe($line);
+});
+
+test('a value shaped like a credential is redacted whatever its name', function () {
+    $application = Application::factory()->create(['env_variables' => "STRIPE=sk9a8b7c6d5e4f3g2h1i0jklmnop\n"]);
+
+    expect((new LogSanitizer)->sanitize('charging with sk9a8b7c6d5e4f3g2h1i0jklmnop', $application))
+        ->toBe('charging with [REDACTED:STRIPE]');
+});
+
+test('a secret that contains another value is redacted whole', function () {
+    $application = Application::factory()->create(['env_variables' => "DB_PASSWORD=hunter2long\nAPI_TOKEN=hunter2long-and-more\n"]);
+
+    expect((new LogSanitizer)->sanitize('token hunter2long-and-more', $application))->toBe('token [REDACTED:API_TOKEN]');
+});
+
 test('very short environment values are left alone', function () {
     $application = Application::factory()->create(['env_variables' => "APP_ENV=prod\n"]);
 

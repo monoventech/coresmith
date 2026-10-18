@@ -214,7 +214,7 @@ final class SecurityHardening
             return;
         }
 
-        $result = $connection->execute('aa-status --json 2>/dev/null || apparmor_status 2>/dev/null || true');
+        $result = $connection->execute('aa-status --json 2>/dev/null || apparmor_status 2>/dev/null || true', sudo: true);
         $complaining = $this->countComplainProfiles($result->output);
 
         if ($complaining > 0) {

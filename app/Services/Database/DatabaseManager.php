@@ -161,7 +161,7 @@ final class DatabaseManager
     {
         $name = (string) $database->name;
 
-        $exists = $connection->execute('test -f ' . escapeshellarg($source));
+        $exists = $connection->execute('test -f ' . escapeshellarg($source), sudo: true);
 
         if ($exists->failed()) {
             throw BackupNotFoundException::at($source);

@@ -68,7 +68,7 @@ test('a crontab carries the resolved runtime path and logs to the scheduler log'
     $crontab = (new CrontabBuilder(new DeploymentCommands(new AsdfManager)))->build($app);
 
     expect($crontab)->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin')
-        ->and($crontab)->toContain('>> /var/coresmith/logs/my-app/scheduler.log 2>&1');
+        ->and($crontab)->toContain('>> /var/coresmith/apps/my-app/shared/logs/scheduler.log 2>&1');
 });
 
 test('a cron command containing a newline cannot inject extra entries', function () {

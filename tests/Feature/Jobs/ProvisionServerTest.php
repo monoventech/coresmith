@@ -227,7 +227,9 @@ test('phase 4 creates the coresmith directory tree with locked down secret dirs'
     $commands = implode("\n", $transport->commands());
 
     expect($commands)->toContain('mkdir -p /var/coresmith/apps')
-        ->and($commands)->toContain('chmod 750 /var/coresmith/apps')
+        ->and($commands)->toContain('chown root:coresmith /var/coresmith/apps && chmod 751 /var/coresmith/apps')
+        ->and($commands)->toContain('chown root:coresmith /var/coresmith/logs && chmod 750 /var/coresmith/logs')
+        ->and($commands)->toContain('chmod 700 /etc/coresmith/blueprints')
         ->and($commands)->toContain('mkdir -p /etc/coresmith/env')
         ->and($commands)->toContain('chown root:root /etc/coresmith/env')
         ->and($commands)->toContain('chmod 700 /etc/coresmith/env')

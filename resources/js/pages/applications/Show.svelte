@@ -62,6 +62,7 @@
     let busy = $state<Record<string, boolean>>({})
     let dialog = $state<'env' | 'domain' | 'remove' | null>(null)
     let envText = $state('')
+    let envError = $state<string | null>(null)
     let domainInput = $state('')
     let domainError = $state<string | null>(null)
     let working = $state(false)
@@ -91,6 +92,7 @@
 
     function openEnv() {
         envText = application.env ?? ''
+        envError = null
         dialog = 'env'
     }
 
@@ -100,7 +102,12 @@
         router.put(
             route('servers.applications.env.update', [server.id, application.id]),
             { env: envText },
-            { preserveScroll: true, onSuccess: () => (dialog = null), onFinish: () => (working = false) }
+            {
+                preserveScroll: true,
+                onSuccess: () => (dialog = null),
+                onError: (errors) => (envError = errors.env ?? Object.values(errors)[0] ?? null),
+                onFinish: () => (working = false)
+            }
         )
     }
 
@@ -376,7 +383,16 @@
                 <Dialog.Description>Values are root-owned and injected via systemd, the app never reads the file itself. They apply at the next deploy.</Dialog.Description>
             </Dialog.Header>
             <div class="mt-4">
-                <Textarea bind:value={envText} rows={8} class="font-mono text-[12.5px] leading-[1.7]" aria-label="Environment variables" spellcheck="false" />
+                <Textarea
+                    bind:value={envText}
+                    oninput={() => (envError = null)}
+                    rows={8}
+                    class="font-mono text-[12.5px] leading-[1.7]"
+                    aria-label="Environment variables"
+                    aria-invalid={envError ? true : undefined}
+                    spellcheck="false"
+                />
+                <FieldError message={envError} />
             </div>
             <Dialog.Footer>
                 <Button variant="ghost" type="button" onclick={() => (dialog = null)}>Cancel</Button>

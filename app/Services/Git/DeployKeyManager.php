@@ -42,9 +42,8 @@ final class DeployKeyManager
     public function prepareDirectory(Application $application): string
     {
         $dir = escapeshellarg(self::KEY_DIR);
-        $owner = escapeshellarg(SafeName::assertSystemUser($application->server->ssh_user));
 
-        return "mkdir -p {$dir} && chown {$owner} {$dir} && chmod 700 {$dir}";
+        return "mkdir -p {$dir} && chown root:root {$dir} && chmod 700 {$dir}";
     }
 
     public function reserveFile(Application $application): string

@@ -14,6 +14,10 @@ final class LogSanitizer
 {
     public const MIN_REDACTABLE_LENGTH = 8;
 
+    public const SECRET_NAME = '/(PASS|SECRET|TOKEN|KEY|DSN|PRIVATE|CREDENTIAL|AUTH|SALT|CERT)/i';
+
+    public const CREDENTIAL_SHAPE = '/^(?=\S*\d)(?=\S*[A-Za-z])\S{24,}\z/';
+
     private const PATTERNS = [
         '/([A-Za-z0-9_.]*(?:password|secret|token|credential|api_?key|access_key|private_key|auth)\s*=\s*)[^\s&"\']+/i' => '${1}[REDACTED]',
         '/Bearer\s+[A-Za-z0-9\-._~+\/]+=*/i' => 'Bearer [REDACTED]',
@@ -41,11 +45,15 @@ final class LogSanitizer
             return $output;
         }
 
-        foreach ($this->environmentPairs($application) as $key => $value) {
-            if (strlen($value) < self::MIN_REDACTABLE_LENGTH) {
-                continue;
-            }
+        $pairs = array_filter(
+            $this->environmentPairs($application),
+            fn(string $value, string $key): bool => $this->secret($key, $value),
+            ARRAY_FILTER_USE_BOTH,
+        );
 
+        uasort($pairs, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        foreach ($pairs as $key => $value) {
             $output = str_replace($value, "[REDACTED:{$key}]", $output);
         }
 
@@ -61,41 +69,23 @@ final class LogSanitizer
         );
     }
 
+    private function secret(string $key, string $value): bool
+    {
+        if (strlen($value) < self::MIN_REDACTABLE_LENGTH) {
+            return false;
+        }
+
+        return preg_match(self::SECRET_NAME, $key) === 1 || preg_match(self::CREDENTIAL_SHAPE, $value) === 1;
+    }
+
     /**
      * @return array<string, string>
      */
     private function environmentPairs(Application $application): array
     {
-        $raw = (string) $application->env_variables;
-
-        if (trim($raw) === '') {
-            return [];
-        }
-
-        $decoded = json_decode($raw, true);
-
-        if (is_array($decoded)) {
-            return array_filter(
-                array_map(static fn(mixed $value): string => is_scalar($value) ? (string) $value : '', $decoded),
-                static fn(string $value): bool => $value !== '',
-            );
-        }
-
-        $pairs = [];
-
-        foreach (preg_split('/\R/', $raw) ?: [] as $line) {
-            if (!str_contains($line, '=') || str_starts_with(trim($line), '#')) {
-                continue;
-            }
-
-            [$key, $value] = explode('=', $line, 2);
-            $value = trim(trim($value), '"\'');
-
-            if ($value !== '') {
-                $pairs[trim($key)] = $value;
-            }
-        }
-
-        return $pairs;
+        return array_filter(
+            app(EnvironmentFile::class)->parse((string) $application->env_variables),
+            static fn(string $value): bool => $value !== '',
+        );
     }
 }

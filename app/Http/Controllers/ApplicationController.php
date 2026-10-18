@@ -19,6 +19,7 @@ use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Deployment\EnvironmentFile;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
@@ -228,22 +229,14 @@ final class ApplicationController extends Controller
     {
         $lines = [];
 
-        foreach (preg_split('/\R/', $env) ?: [] as $line) {
-            if (preg_match('/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/', $line, $matches) !== 1) {
-                continue;
-            }
-
-            $secret = preg_match(self::SECRET_KEYS, $matches[1]) === 1;
+        foreach (array_slice(app(EnvironmentFile::class)->parse($env), 0, 4, true) as $key => $value) {
+            $secret = preg_match(self::SECRET_KEYS, $key) === 1;
 
             $lines[] = [
-                'key' => $matches[1],
-                'value' => $secret || !$reveal ? '••••••••' : trim($matches[2], "\"'"),
+                'key' => $key,
+                'value' => $secret || !$reveal ? '••••••••' : $value,
                 'secret' => $secret,
             ];
-
-            if (count($lines) === 4) {
-                break;
-            }
         }
 
         return $lines;

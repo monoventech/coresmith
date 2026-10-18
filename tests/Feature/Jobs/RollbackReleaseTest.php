@@ -7,7 +7,6 @@ use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\ProcessDidNotStart;
-use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -183,9 +182,12 @@ test('the connection is released after a rollback, even a refused one', function
 
 test('a restart failure after the swap still records the release that is now live', function () {
     $application = rollbackApp();
-    $transport = rollbackTransport()->respondTo('systemctl reload', 'Job for php-fpm failed', 1);
+    $transport = rollbackTransport()
+        ->respondTo('systemctl reload', 'Job for php-fpm failed', 1)
+        ->respondTo("systemctl is-active 'coresmith-app-my-app-fpm'", "failed\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-my-app-fpm'", 'ERROR: failed to open configuration file');
 
-    expect(fn() => rollbackRun($application, $transport, '20260911-100000'))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => rollbackRun($application, $transport, '20260911-100000'))->toThrow(ProcessDidNotStart::class);
 
     expect(implode("\n", $transport->commands()))->toContain('mv -Tf')
         ->and($application->fresh()->current_release)->toBe('20260911-100000');
@@ -246,7 +248,8 @@ test('rolling back to a release with no recorded versions leaves the runtimes as
     rollbackRun($application, $transport);
 
     expect($application->fresh()->php_version)->toBe('8.5.10')
-        ->and(array_keys($transport->uploads()))->toBe(['/tmp/coresmith-cron-my-app'])
+        ->and($transport->uploads())->toBe([])
+        ->and($transport->crontabFor('coresmith-app-abcd'))->toContain('# Coresmith managed crons for my-app')
         ->and(implode("\n", $transport->commands()))->toContain("systemctl reload-or-restart 'coresmith-app-my-app-fpm'")
         ->and(Activity::query()->where('description', 'application_rolled_back')->sole()->properties['runtimes'])->toBe('unchanged');
 });
@@ -258,12 +261,11 @@ test('rolling back to a release on another php version installs a crontab whose 
 
     rollbackRun($application, $transport, '20260912-090000');
 
-    $crontab = $transport->uploads()['/tmp/coresmith-cron-my-app'] ?? '';
+    $crontab = $transport->crontabFor('coresmith-app-abcd') ?? '';
 
     expect($crontab)->toContain("\nPATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin\n")
         ->and($crontab)->toContain('* * * * * cd /var/coresmith/apps/my-app/current && php artisan schedule:run')
-        ->and($crontab)->not->toContain('8.5.10')
-        ->and($transport->commands())->toContain('cat /tmp/coresmith-cron-my-app | crontab -u coresmith-app-abcd - && rm -f /tmp/coresmith-cron-my-app');
+        ->and($crontab)->not->toContain('8.5.10');
 });
 
 test('a stopped app still gets its units rewritten, so it starts on the right versions', function () {

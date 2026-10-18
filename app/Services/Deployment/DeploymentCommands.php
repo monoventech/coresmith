@@ -70,7 +70,7 @@ final class DeploymentCommands
         }
 
         return match ($application->type) {
-            ApplicationType::Php => $application->framework === 'laravel' ? ['php artisan migrate --force --isolated'] : [],
+            ApplicationType::Php => $application->framework === 'laravel' ? ['php artisan migrate --force'] : [],
             ApplicationType::Ruby => ['RAILS_ENV=production bundle exec rails db:migrate'],
             default => [],
         };

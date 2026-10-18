@@ -45,6 +45,16 @@ class Application extends Model
             foreach ($application->allDomains() as $domain) {
                 SafeName::assertDomain($domain);
             }
+
+            if ($application->repository_branch !== null) {
+                SafeName::assertBranch($application->repository_branch);
+            }
+
+            foreach (['directory', 'web_directory'] as $path) {
+                if ($application->{$path} !== null) {
+                    SafeName::assertRelativePath($application->{$path});
+                }
+            }
         });
     }
 

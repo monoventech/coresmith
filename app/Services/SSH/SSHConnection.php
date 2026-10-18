@@ -23,6 +23,14 @@ final class SSHConnection
 {
     public const TIMEOUT_SECONDS = 30;
 
+    public const STAGING_TEMPLATE = '/tmp/coresmith-upload.XXXXXXXXXX';
+
+    private const STAGED_PATTERN = '~^/tmp/coresmith-upload\.[A-Za-z0-9]{10}\z~';
+
+    private const SHELL_SYNTAX = '/[|&;<>()$`\n]/';
+
+    private const OWN_SHELL = '/^(?:ba)?sh -c /';
+
     private bool $authenticated = false;
 
     public function __construct(
@@ -92,7 +100,28 @@ final class SSHConnection
 
     public function uploadContent(string $content, string $remotePath): void
     {
-        $this->connect()->transport->uploadContent($content, $remotePath);
+        if ($this->server->ssh_user === 'root') {
+            $this->connect()->transport->uploadContent($content, $remotePath);
+
+            return;
+        }
+
+        $staged = trim($this->execute('mktemp ' . self::STAGING_TEMPLATE)->throw()->output);
+
+        if (preg_match(self::STAGED_PATTERN, $staged) !== 1) {
+            throw new RuntimeException("Could not stage the upload for [{$remotePath}] on {$this->server->name}.");
+        }
+
+        try {
+            $this->connect()->transport->uploadContent($content, $staged);
+
+            $source = escapeshellarg($staged);
+            $target = escapeshellarg($remotePath);
+
+            $this->execute("if [ -e {$target} ]; then cat {$source} > {$target}; else install -m 644 {$source} {$target}; fi", sudo: true)->throw();
+        } finally {
+            $this->execute('rm -f ' . escapeshellarg($staged));
+        }
     }
 
     public function upload(string $localPath, string $remotePath): void
@@ -142,7 +171,15 @@ final class SSHConnection
 
     private function prepare(string $command, bool $sudo): string
     {
-        return $sudo && $this->server->ssh_user !== 'root' ? "sudo {$command}" : $command;
+        if (!$sudo || $this->server->ssh_user === 'root') {
+            return $command;
+        }
+
+        if (preg_match(self::OWN_SHELL, $command) === 1 || preg_match(self::SHELL_SYNTAX, $command) !== 1) {
+            return 'sudo ' . $command;
+        }
+
+        return 'sudo bash -c ' . escapeshellarg($command);
     }
 
     private function conclude(string $command, string $output, int $timeout): SSHResult

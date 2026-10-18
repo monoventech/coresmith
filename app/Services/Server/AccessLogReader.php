@@ -24,7 +24,7 @@ final class AccessLogReader
     public function recent(SSHConnection $connection, Application $application): array
     {
         $log = escapeshellarg(MetricsCollector::ACCESS_LOG);
-        $output = $connection->execute("test -f {$log} && tail -n " . self::SCAN . " {$log} || true")->output;
+        $output = $connection->execute("test -f {$log} && tail -n " . self::SCAN . " {$log} || true", sudo: true)->output;
 
         return $this->parse($output, $application->allDomains());
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\SSHAuthenticationException;
+use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnection;
@@ -88,6 +89,79 @@ test('sudo is not prefixed for root', function () {
     connectTo($server, $transport)->execute('systemctl restart caddy', sudo: true);
 
     expect($transport->commands())->toContain('systemctl restart caddy');
+});
+
+test('a compound command runs whole as root for a non-root user', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    connectTo($server, $transport)->execute('systemctl enable --now auditd && augenrules --load || true', sudo: true);
+
+    expect($transport->commands())->toContain("sudo bash -c 'systemctl enable --now auditd && augenrules --load || true'");
+});
+
+test('a command that starts its own shell is only prefixed with sudo', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    connectTo($server, $transport)->execute("sh -c 'test -f /etc/x || touch /etc/x'", sudo: true);
+
+    expect($transport->commands())->toContain("sudo sh -c 'test -f /etc/x || touch /etc/x'");
+});
+
+test('a compound command runs unchanged for root', function () {
+    $server = Server::factory()->create(['ssh_user' => 'root', 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    connectTo($server, $transport)->execute('cat /tmp/a | crontab -u someone -', sudo: true);
+
+    expect($transport->commands())->toBe(['cat /tmp/a | crontab -u someone -']);
+});
+
+test('a root upload goes straight to its path', function () {
+    $server = Server::factory()->create(['ssh_user' => 'root', 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    connectTo($server, $transport)->uploadContent('[Unit]', '/etc/systemd/system/x.service');
+
+    expect($transport->uploads())->toBe(['/etc/systemd/system/x.service' => '[Unit]'])
+        ->and($transport->commands())->toBe([]);
+});
+
+test('a non-root upload is staged and copied into place as root, keeping an existing file\'s owner and mode', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    connectTo($server, $transport)->uploadContent('[Unit]', '/etc/systemd/system/x.service');
+
+    $staged = FakeSSHTransport::STAGED_UPLOAD;
+
+    expect($transport->uploads())->toBe([$staged => '[Unit]'])
+        ->and($transport->commands())->toBe([
+            'mktemp ' . SSHConnection::STAGING_TEMPLATE,
+            'sudo bash -c ' . escapeshellarg("if [ -e '/etc/systemd/system/x.service' ]; then cat '{$staged}' > '/etc/systemd/system/x.service'; else install -m 644 '{$staged}' '/etc/systemd/system/x.service'; fi"),
+            "rm -f '{$staged}'",
+        ]);
+});
+
+test('a staged upload is removed even when it cannot be copied into place', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
+    $transport = (new FakeSSHTransport)->respondTo('install -m 644', 'install: cannot create regular file', 1);
+
+    expect(fn() => connectTo($server, $transport)->uploadContent('x', '/etc/x'))->toThrow(SSHCommandFailedException::class);
+
+    $commands = $transport->commands();
+
+    expect(end($commands))->toBe("rm -f '" . FakeSSHTransport::STAGED_UPLOAD . "'");
+});
+
+test('an upload is refused when the server does not hand back a staging file', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
+    $transport = (new FakeSSHTransport)->respondTo('mktemp', "/home/deploy/elsewhere\n");
+
+    expect(fn() => connectTo($server, $transport)->uploadContent('x', '/etc/x'))->toThrow(RuntimeException::class, 'Could not stage the upload for [/etc/x]');
+
+    expect($transport->uploads())->toBe([]);
 });
 
 test('commands are logged without their output', function () {

@@ -419,3 +419,15 @@ test('an app\'s versions cannot be edited after it is added, because the reposit
 
     expect($application->fresh()->php_version)->toBe('8.5.10');
 });
+
+test('environment text the server could not read is refused with the line and what to do', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['env_variables' => "APP_ENV=production\n"]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.env.update', [$server, $application]), ['env' => "APP_ENV=staging\nAPP_NAME=\"Shop"])
+        ->assertSessionHasErrors(['env' => 'Line 2 opens a quote that never closes. Close it or remove it.']);
+
+    expect($application->fresh()->env_variables)->toBe("APP_ENV=production\n");
+});

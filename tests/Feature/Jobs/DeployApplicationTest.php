@@ -15,6 +15,7 @@ use App\Exceptions\SSHCommandTimedOut;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Server;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Runtime\AsdfManager;
@@ -221,7 +222,7 @@ test('commands run with the resolved runtime binary on PATH', function () {
     deploy($deployment, $transport);
 
     expect(implode("\n", $transport->commands()))
-        ->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin:$PATH');
+        ->toContain("-E 'PATH=/opt/asdf-data/installs/php/8.5.5/bin:/usr/local/bin:/usr/bin:/bin'");
 });
 
 test('a php app reloads its own fpm unit, not one named after its linux user', function () {
@@ -275,7 +276,9 @@ test('a custom blueprint replaces the built in dependency, build and migrate pha
 
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain('bash /var/coresmith/apps/my-app/releases/' . TIMESTAMP . '/.coresmith-blueprint.sh')
+    expect($commands)->toContain("-- /bin/bash -s < '/etc/coresmith/blueprints/my-app.sh'")
+        ->and($transport->uploads()['/etc/coresmith/blueprints/my-app.sh'])->toBe("set -e\necho building\n")
+        ->and($commands)->toContain("rm -f '/etc/coresmith/blueprints/my-app.sh'")
         ->and($commands)->not->toContain('composer install')
         ->and($commands)->not->toContain('artisan config:cache')
         ->and($commands)->not->toContain('artisan migrate');
@@ -292,7 +295,7 @@ test('a custom blueprint still gets the atomic symlink swap', function () {
 
 test('a failing custom blueprint never reaches the symlink swap', function () {
     $deployment = Deployment::factory()->for(deployableApp(['custom_blueprint' => "exit 1\n"]))->create();
-    $transport = healthyDeployTransport()->respondTo('.coresmith-blueprint.sh', "build failed\n", 1);
+    $transport = healthyDeployTransport()->respondTo("/bin/bash -s < '/etc/coresmith/blueprints/my-app.sh'", "build failed\n", 1);
 
     expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
@@ -340,7 +343,7 @@ test('the key file exists with tight permissions before its contents are written
 
     $commands = $transport->commands();
     $reserve = array_search("install -m 600 /dev/null '/etc/coresmith/deploy-keys/my-app'", $commands, true);
-    $harden = array_search("mkdir -p '/etc/coresmith/deploy-keys' && chown 'root' '/etc/coresmith/deploy-keys' && chmod 700 '/etc/coresmith/deploy-keys'", $commands, true);
+    $harden = array_search("mkdir -p '/etc/coresmith/deploy-keys' && chown root:root '/etc/coresmith/deploy-keys' && chmod 700 '/etc/coresmith/deploy-keys'", $commands, true);
 
     expect($harden)->not->toBeFalse()
         ->and($reserve)->not->toBeFalse()
@@ -582,4 +585,188 @@ test('a dependency install that hangs fails the deploy, names the command and re
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
         ->and($deployment->fresh()->failure_reason)->toStartWith('`composer install --no-dev --optimize-autoloader --no-interaction` ran for 10 minutes without finishing')
         ->and(implode("\n", $transport->commands()))->toContain('rm -rf /var/coresmith/apps/my-app/releases/' . TIMESTAMP);
+});
+
+test('the app gets its own linux account and a root controlled folder before anything is cloned', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['system_user' => 'coresmith-app-my-app']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = $transport->commands();
+    $account = collect($commands)->search(fn(string $c) => str_contains($c, 'useradd --system'));
+    $clone = collect($commands)->search(fn(string $c) => str_contains($c, 'git clone --bare'));
+
+    expect($account)->not->toBeFalse()
+        ->and($account)->toBeLessThan($clone)
+        ->and($commands[$account])->toContain('--shell /usr/sbin/nologin')
+        ->and($commands[$account])->toContain('chown root:root /var/coresmith/apps/my-app /var/coresmith/apps/my-app/releases')
+        ->and($commands[$account])->toContain('chown -h coresmith-app-my-app:caddy /var/coresmith/apps/my-app/shared');
+});
+
+test('the environment file is written root only before anything runs as the app', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['env_variables' => "APP_ENV=production\nAPP_NAME=\"Ada's \$hop\"\nMAIL_FROM_NAME=\"\${APP_NAME}\""]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = $transport->commands();
+    $reserve = array_search("mkdir -p '/etc/coresmith/env' && chmod 700 '/etc/coresmith/env' && install -m 600 -o root -g root /dev/null '/etc/coresmith/env/my-app.env'", $commands, true);
+    $firstAsApp = collect($commands)->search(fn(string $c) => str_starts_with($c, 'systemd-run '));
+
+    expect($reserve)->not->toBeFalse()
+        ->and($reserve)->toBeLessThan($firstAsApp)
+        ->and($transport->uploads()['/etc/coresmith/env/my-app.env'])->toBe("APP_ENV=\"production\"\nAPP_NAME=\"Ada's \\\$hop\"\nMAIL_FROM_NAME=\"Ada's \\\$hop\"\n")
+        ->and($commands)->toContain("chown root:root '/etc/coresmith/env/my-app.env' && chmod 600 '/etc/coresmith/env/my-app.env'");
+});
+
+test('dependencies, builds and migrations run as the app with its environment, never as root', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['system_user' => 'coresmith-app-my-app']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    foreach (['composer install', 'artisan config:cache', 'artisan migrate'] as $step) {
+        $command = collect($transport->commands())->first(fn(string $c) => str_contains($c, $step));
+
+        expect($command)->toStartWith('systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-my-app --gid=coresmith-app-my-app ')
+            ->and($command)->toContain("-p 'EnvironmentFile=/etc/coresmith/env/my-app.env'")
+            ->and($command)->toContain("-p 'WorkingDirectory=/var/coresmith/apps/my-app/releases/" . TIMESTAMP . "'");
+    }
+});
+
+test('the release is handed to the app before anything runs in it', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['system_user' => 'coresmith-app-my-app']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = $transport->commands();
+    $claim = array_search("chown -hR coresmith-app-my-app:caddy '/var/coresmith/apps/my-app/releases/" . TIMESTAMP . "' && chmod 750 '/var/coresmith/apps/my-app/releases/" . TIMESTAMP . "'", $commands, true);
+    $archive = collect($commands)->search(fn(string $c) => str_contains($c, ' archive '));
+    $firstAsApp = collect($commands)->search(fn(string $c) => str_starts_with($c, 'systemd-run '));
+
+    expect($claim)->not->toBeFalse()
+        ->and($archive)->toBeLessThan($claim)
+        ->and($claim)->toBeLessThan($firstAsApp);
+});
+
+test('a laravel app keeps its storage folder across releases, a node app does not get one made for it', function (ApplicationType $type, bool $seeded) {
+    $deployment = Deployment::factory()->for(deployableApp(['type' => $type, 'js_runtime' => 'node', 'node_version' => '24.15.0']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $shared = collect($transport->commands())->first(fn(string $c) => str_contains($c, 'shared/logs'));
+
+    expect($shared)->toStartWith('systemd-run ')
+        ->and(str_contains($shared, 'cp -a'))->toBe($seeded)
+        ->and($shared)->toContain('ln -sfn');
+})->with([
+    'php' => [ApplicationType::Php, true],
+    'js' => [ApplicationType::Js, false],
+]);
+
+test('an app in a folder of a monorepo is probed, built and started from that folder', function () {
+    $application = deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0', 'directory' => 'apps/web']);
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = healthyDeployTransport()->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['package.json' => '{"scripts":{"build":"vite build","start":"node server.js"}}'], ['package-lock.json']));
+
+    deploy($deployment, $transport);
+
+    $install = collect($transport->commands())->first(fn(string $c) => str_contains($c, 'npm ci'));
+
+    expect($install)->toContain("-p 'WorkingDirectory=/var/coresmith/apps/my-app/releases/" . TIMESTAMP . "/apps/web'")
+        ->and($transport->uploads()['/etc/systemd/system/coresmith-app-my-app-web.service'])->toContain('WorkingDirectory=/var/coresmith/apps/my-app/current/apps/web');
+});
+
+test('a process that fails to restart is reported with its journal and advice, not a bare exit code', function () {
+    $application = deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0']);
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = healthyDeployTransport()
+        ->respondTo("systemctl restart 'coresmith-app-my-app-web'", "Job for coresmith-app-my-app-web.service failed.\n", 1)
+        ->respondTo("systemctl is-active 'coresmith-app-my-app-web'", "failed\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-my-app-web'", 'coresmith-app-my-app-web.service: Failed to load environment files: No such file or directory');
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(ProcessDidNotStart::class);
+
+    expect($deployment->fresh()->failure_reason)->toContain("The app's environment file is missing from the server. Deploy again to write it.")
+        ->and($deployment->fresh()->log)->toContain('Failed to load environment files');
+});
+
+test('a server command that fails puts what the server said in the log', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('chmod 700 /var/coresmith/apps/my-app/repo', "chmod: cannot access '/var/coresmith/apps/my-app/repo': No such file or directory\n", 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect(substr_count((string) $deployment->fresh()->log, "chmod: cannot access '/var/coresmith/apps/my-app/repo'"))->toBe(1);
+});
+
+test('output already in the log is not written twice when its command fails', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('artisan migrate', "SQLSTATE[42S01]: duplicate column\n", 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect(substr_count((string) $deployment->fresh()->log, 'SQLSTATE[42S01]'))->toBe(1);
+});
+
+test('a redeploy fetches every branch head into the cached repository', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $fetch = collect($transport->commands())->first(fn(string $c) => str_contains($c, ' fetch '));
+
+    expect($fetch)->toContain("fetch --prune --tags origin '+refs/heads/*:refs/heads/*'")
+        ->and(implode("\n", $transport->commands()))->not->toContain('fetch --all');
+});
+
+test('the cached repository is pointed at the current url before it fetches', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = $transport->commands();
+    $setUrl = array_search("git --git-dir=/var/coresmith/apps/my-app/repo remote set-url origin 'https://github.com/monoven/example.git'", $commands, true);
+    $fetch = collect($commands)->search(fn(string $c) => str_contains($c, ' fetch '));
+
+    expect($setUrl)->not->toBeFalse()
+        ->and($setUrl)->toBeLessThan($fetch);
+});
+
+test('a private repository still fetches through its deploy key', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['repository_url' => 'git@github.com:monoven/example.git']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $fetch = collect($transport->commands())->first(fn(string $c) => str_contains($c, ' fetch '));
+
+    expect($fetch)->toContain('GIT_SSH_COMMAND=')
+        ->and($fetch)->toContain('fetch --prune --tags origin');
+});
+
+test('a sudo user deploys with every step run as root and uploads staged first', function () {
+    $server = Server::factory()->create(['ssh_user' => 'deploy']);
+    $deployment = Deployment::factory()->for(deployableApp(['server_id' => $server->id, 'system_user' => 'coresmith-app-my-app']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $unprivileged = collect($transport->commands())->reject(fn(string $c) => str_starts_with($c, 'sudo ')
+        || str_starts_with($c, 'df /')
+        || str_starts_with($c, 'mktemp ')
+        || str_starts_with($c, "rm -f '/tmp/coresmith-upload.")
+        || str_starts_with($c, 'systemctl is-active ')
+        || str_starts_with($c, 'systemctl show ')
+        || str_starts_with($c, 'curl ')
+        || str_starts_with($c, "test -x '/opt/asdf-data/")
+        || str_starts_with($c, "ls -1 '/opt/asdf-data/"));
+
+    expect($unprivileged->values()->all())->toBe([])
+        ->and(array_keys($transport->uploads()))->toBe([FakeSSHTransport::STAGED_UPLOAD]);
 });

@@ -94,6 +94,26 @@ test('pruning an app with five releases or fewer removes nothing', function () {
     }
 });
 
+test('pruning leaves alone anything in releases that is not a release, whatever its name', function () {
+    $names = ['20260901-000000', '20260902-000000', '20260903-000000', '20260904-000000', '20260905-000000', '20260906-000000', '20260907-000000'];
+    $root = housekeepingReleaseTree($names, live: '20260907-000000');
+    $outside = $root . '/outside';
+    File::ensureDirectoryExists($outside);
+    File::ensureDirectoryExists($root . '/my-app/releases/old notes');
+    touch($root . '/my-app/releases/old notes', 1_700_000_000);
+    symlink($outside, $root . '/my-app/releases/20260101-000000');
+    touch($outside, 1_700_000_000);
+
+    try {
+        expect(housekeepingPrune($root))->toBe('3')
+            ->and(housekeepingRemaining($root))->toBe(['20260903-000000', '20260904-000000', '20260905-000000', '20260906-000000', '20260907-000000', 'old notes'])
+            ->and(is_dir($outside))->toBeTrue()
+            ->and(is_link($root . '/my-app/releases/20260101-000000'))->toBeFalse();
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
 test('the prune command resolves the live release before deciding what to remove', function () {
     $command = PruneReleases::command(new Application(['slug' => 'my-app']));
 

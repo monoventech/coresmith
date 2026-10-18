@@ -35,7 +35,7 @@ final class PruneReleases implements ShouldQueue
 
         try {
             foreach ($this->server->applications()->get() as $application) {
-                $result = $connection->execute(self::command($application))->throw();
+                $result = $connection->execute(self::command($application), sudo: true)->throw();
                 $removed += (int) trim($result->output);
             }
         } finally {
@@ -55,7 +55,7 @@ final class PruneReleases implements ShouldQueue
         $keep = ReleasePaths::KEEP_RELEASES + 1;
 
         return "current=\$(readlink -f {$paths->current()} 2>/dev/null || true); "
-            . "ls -1dt {$releases}/*/ 2>/dev/null | sed 's:/\$::' | tail -n +{$keep} "
+            . "ls -1dt {$releases}/*/ 2>/dev/null | sed 's:/\$::' | grep -E '/[0-9]{8}-?[0-9]{6}\$' | tail -n +{$keep} "
             . '| while read -r dir; do [ "$dir" = "$current" ] || { rm -rf "$dir" && echo x; }; done | wc -l';
     }
 }

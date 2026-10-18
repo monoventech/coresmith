@@ -42,6 +42,16 @@ final class UnsafeNameException extends InvalidArgumentException
         return new self("[{$value}] is not a valid domain name.");
     }
 
+    public static function branch(string $value): self
+    {
+        return new self('[' . addcslashes($value, "\0..\37") . '] is not a branch name git accepts as a plain name, so it could be read as an option or a pattern.');
+    }
+
+    public static function relativePath(string $value): self
+    {
+        return new self('[' . addcslashes($value, "\0..\37") . '] is not a path inside the repository. Use letters, digits, dots, hyphens and underscores, with no . or .. segments.');
+    }
+
     public static function systemUser(string $value): self
     {
         return new self("[{$value}] is not a valid system user name.");

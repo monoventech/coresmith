@@ -103,8 +103,8 @@ test('the crontab is rewritten from the application cron jobs', function () {
 
     processJobsRun(new SyncApplicationProcesses($application), $transport);
 
-    expect($transport->uploads()['/tmp/coresmith-cron-shop'])->toContain('* * * * * cd /var/coresmith/apps/shop/current && php artisan schedule:run')
-        ->and($transport->commands())->toContain('cat /tmp/coresmith-cron-shop | crontab -u coresmith-app-shop - && rm -f /tmp/coresmith-cron-shop');
+    expect($transport->crontabFor('coresmith-app-shop'))->toContain('* * * * * cd /var/coresmith/apps/shop/current && php artisan schedule:run')
+        ->and($transport->uploads())->not->toHaveKey('/tmp/coresmith-cron-shop');
 });
 
 test('an application with no cron jobs gets an empty managed crontab so a removed schedule stops', function () {
@@ -113,8 +113,8 @@ test('an application with no cron jobs gets an empty managed crontab so a remove
 
     processJobsRun(new SyncApplicationProcesses($application), $transport);
 
-    expect($transport->uploads()['/tmp/coresmith-cron-shop'])->not->toContain('schedule:run')
-        ->and($transport->uploads()['/tmp/coresmith-cron-shop'])->toContain('# Coresmith managed crons for shop');
+    expect($transport->crontabFor('coresmith-app-shop'))->not->toContain('schedule:run')
+        ->and($transport->crontabFor('coresmith-app-shop'))->toContain('# Coresmith managed crons for shop');
 });
 
 test('the sync works from the application as saved now, not the copy it was queued with', function () {

@@ -16,23 +16,24 @@ final class DirectoryStructure
     private const ROOT_ONLY = [
         '/etc/coresmith/env',
         '/etc/coresmith/deploy-keys',
+        '/etc/coresmith/blueprints',
     ];
 
     private const SHARED = [
-        '/etc/coresmith',
-        '/var/coresmith/apps',
-        '/var/coresmith/logs',
-        '/var/coresmith/backups',
-        '/var/coresmith/scripts',
+        '/etc/coresmith' => 750,
+        '/var/coresmith/apps' => 751,
+        '/var/coresmith/logs' => 750,
+        '/var/coresmith/backups' => 750,
+        '/var/coresmith/scripts' => 750,
     ];
 
     public function create(SSHConnection $connection): void
     {
         $user = AsdfManager::SYSTEM_USER;
 
-        foreach (self::SHARED as $directory) {
+        foreach (self::SHARED as $directory => $mode) {
             $connection->execute(
-                "mkdir -p {$directory} && chown root:{$user} {$directory} && chmod 750 {$directory}",
+                "mkdir -p {$directory} && chown root:{$user} {$directory} && chmod {$mode} {$directory}",
                 sudo: true,
             )->throw();
         }

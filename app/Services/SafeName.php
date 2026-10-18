@@ -22,6 +22,10 @@ final class SafeName
 
     public const DOMAIN_PATTERN = '/^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i';
 
+    public const BRANCH_PATTERN = '/^(?![-\/.])(?!.*(?:\.\.|\/\/|\/\.|\.lock\/))(?!.*(?:\/|\.|\.lock)\z)[A-Za-z0-9._\/+-]{1,255}\z/';
+
+    public const RELATIVE_PATH_PATTERN = '~^/?(?:(?!\.\.?(?:/|\z))[A-Za-z0-9._-]+(?:/(?!\.\.?(?:/|\z))[A-Za-z0-9._-]+)*/?)?\z~';
+
     public static function isSlug(?string $value): bool
     {
         return $value !== null && preg_match(self::SLUG_PATTERN, $value) === 1;
@@ -89,6 +93,34 @@ final class SafeName
     {
         if (!self::isSystemUser($value)) {
             throw UnsafeNameException::systemUser((string) $value);
+        }
+
+        return (string) $value;
+    }
+
+    public static function isBranch(?string $value): bool
+    {
+        return $value !== null && preg_match(self::BRANCH_PATTERN, $value) === 1;
+    }
+
+    public static function assertBranch(?string $value): string
+    {
+        if (!self::isBranch($value)) {
+            throw UnsafeNameException::branch((string) $value);
+        }
+
+        return (string) $value;
+    }
+
+    public static function isRelativePath(?string $value): bool
+    {
+        return $value !== null && strlen($value) <= 255 && preg_match(self::RELATIVE_PATH_PATTERN, $value) === 1;
+    }
+
+    public static function assertRelativePath(?string $value): string
+    {
+        if (!self::isRelativePath($value)) {
+            throw UnsafeNameException::relativePath((string) $value);
         }
 
         return (string) $value;

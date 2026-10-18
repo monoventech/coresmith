@@ -50,7 +50,7 @@ final class RollbackApplication implements ShouldQueue
         $paths = new ReleasePaths($this->application);
 
         try {
-            $releases = $connection->execute('ls -1dt ' . $paths->releases() . '/*/ 2>/dev/null || true')->output;
+            $releases = $connection->execute('ls -1dt ' . $paths->releases() . '/*/ 2>/dev/null || true', sudo: true)->output;
             $ordered = array_values(array_filter(array_map(
                 static fn(string $line): string => rtrim(trim($line), '/'),
                 preg_split('/\R/', $releases) ?: [],
@@ -60,8 +60,8 @@ final class RollbackApplication implements ShouldQueue
             $current = $paths->current();
             $previous = $this->application->current_release;
 
-            $connection->execute("ln -sfn {$target} {$current}.tmp")->throw();
-            $connection->execute("mv -Tf {$current}.tmp {$current}")->throw();
+            $connection->execute("ln -sfn {$target} {$current}.tmp", sudo: true)->throw();
+            $connection->execute("mv -Tf {$current}.tmp {$current}", sudo: true)->throw();
 
             $name = basename($target);
             $stack = $this->stackFor($name);

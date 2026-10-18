@@ -24,10 +24,17 @@ final class SSHCommandTimedOut extends RuntimeException implements ExplainsFailu
     public static function display(string $command): string
     {
         $command = (string) preg_replace('/^sudo /', '', $command);
+        $command = self::inner('~^bash -c \'(.*)\'\z~s', $command);
+        $command = self::inner('~^systemd-run .*? -- /bin/bash -c \'(.*)\'\z~s', $command);
         $command = (string) preg_replace('/^cd \S+ && /', '', $command);
         $command = (string) preg_replace('/^PATH=\S+ /', '', $command);
 
         return Str::limit($command, 100);
+    }
+
+    private static function inner(string $pattern, string $command): string
+    {
+        return preg_match($pattern, $command, $matches) === 1 ? str_replace("'\\''", "'", $matches[1]) : $command;
     }
 
     public static function duration(int $seconds): string

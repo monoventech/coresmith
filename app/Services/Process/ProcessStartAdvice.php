@@ -18,6 +18,9 @@ final class ProcessStartAdvice
         $slug = $application->slug;
 
         return match (true) {
+            str_contains($journal, 'Failed to load environment files') => "The app's environment file is missing from the server. Deploy again to write it.",
+            str_contains($journal, 'Failed to determine user credentials') || str_contains($journal, 'status=217/USER') => "The app's Linux user is missing from the server. Deploy again to create it.",
+            str_contains($journal, 'Failed to set up mount namespacing') || str_contains($journal, 'status=226/NAMESPACE') => "systemd could not set up the app's sandbox. Check the app's folders exist under /var/coresmith/apps/{$slug}/, then deploy again.",
             str_contains($journal, 'Address already in use') || str_contains($journal, 'EADDRINUSE') => "Port {$port} is already taken by another process. Find it with ss -tlnp | grep {$port}, stop it, then deploy again.",
             str_contains($journal, 'EACCES') => 'The process was not allowed to bind its port. Check nothing else owns the port block, then deploy again.',
             str_contains($journal, 'MODULE_NOT_FOUND') || str_contains($journal, 'Cannot find module') => 'A Node module is missing. Deploy again, the dependency install may have failed quietly.',

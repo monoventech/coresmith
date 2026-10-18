@@ -6,11 +6,14 @@ namespace Tests\Support;
 
 use App\Services\Runtime\Catalog;
 use App\Services\SSH\Contracts\SSHTransport;
+use App\Services\SSH\SSHConnection;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Exception\ConnectionClosedException;
 
 final class FakeSSHTransport implements SSHTransport
 {
+    public const STAGED_UPLOAD = '/tmp/coresmith-upload.Fake000001';
+
     private string $hostKey = 'fake-host-key';
 
     private bool $loginSucceeds = true;
@@ -133,6 +136,17 @@ final class FakeSSHTransport implements SSHTransport
         return $this->uploads;
     }
 
+    public function crontabFor(string $user): ?string
+    {
+        foreach ($this->commands as $command) {
+            if (preg_match("~^echo '([A-Za-z0-9+/=]+)' \\| base64 -d \\| crontab -u " . preg_quote($user, '~') . ' -$~', $command, $matches) === 1) {
+                return (string) base64_decode($matches[1], true);
+            }
+        }
+
+        return null;
+    }
+
     public function loginAttempted(): bool
     {
         return $this->loginAttempted;
@@ -229,6 +243,10 @@ final class FakeSSHTransport implements SSHTransport
      */
     private function healthyServer(string $command): ?array
     {
+        if ($command === 'mktemp ' . SSHConnection::STAGING_TEMPLATE) {
+            return ['output' => self::STAGED_UPLOAD . "\n", 'exitCode' => 0];
+        }
+
         if (str_contains($command, "systemctl is-active 'coresmith-app-")) {
             return ['output' => "active\n", 'exitCode' => 0];
         }

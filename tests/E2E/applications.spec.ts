@@ -255,6 +255,25 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(page.getByTestId('env-preview')).toContainText(`${run}=yes`)
     })
 
+    test('environment text the server could not read is refused with the line to fix', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
+
+        await page.getByRole('button', { name: 'Edit variables' }).click()
+
+        const editor = dialog(page).getByRole('textbox', { name: 'Environment variables' })
+
+        await editor.fill('APP_ENV=staging\nAPP_NAME="Shop')
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+
+        await expect(dialog(page)).toContainText('Line 2 opens a quote that never closes. Close it or remove it.')
+        await expect(editor).toHaveAttribute('aria-invalid', 'true')
+
+        await editor.fill('APP_ENV=staging\nAPP_NAME="Shop"')
+
+        await expect(editor).not.toHaveAttribute('aria-invalid', 'true')
+        await expect(dialog(page)).not.toContainText('Line 2 opens a quote')
+    })
+
     test('a domain that is not a domain is refused before it is sent', async ({ page }, testInfo) => {
         await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
 

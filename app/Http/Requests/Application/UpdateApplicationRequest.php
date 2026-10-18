@@ -33,9 +33,9 @@ final class UpdateApplicationRequest extends FormRequest
             'additional_domains' => ['sometimes', 'nullable', 'array'],
             'additional_domains.*' => ['string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
             'repository_url' => ['sometimes', 'nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
-            'repository_branch' => ['sometimes', 'required', 'string', 'max:255'],
-            'directory' => ['sometimes', 'required', 'string', 'max:255'],
-            'web_directory' => ['sometimes', 'required', 'string', 'max:255'],
+            'repository_branch' => ['sometimes', 'required', 'string', 'max:255', 'regex:' . SafeName::BRANCH_PATTERN],
+            'directory' => ['sometimes', 'required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
+            'web_directory' => ['sometimes', 'required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
             'app_size' => ['sometimes', 'required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['sometimes', 'boolean'],
         ];
@@ -48,6 +48,9 @@ final class UpdateApplicationRequest extends FormRequest
     {
         return [
             'domain.regex' => 'Enter a valid domain name, for example app.example.com.',
+            'repository_branch.regex' => 'That is not a branch name Git accepts. Use something like main or release/2.0.',
+            'directory.regex' => 'Use a folder inside the repository, like / or apps/web.',
+            'web_directory.regex' => 'Use a folder inside the app, like /public or dist.',
             'additional_domains.*.regex' => 'Each additional domain must be a valid domain name.',
         ];
     }

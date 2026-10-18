@@ -54,6 +54,11 @@ final class ReleasePaths
         return '/etc/coresmith/env/' . SafeName::assertSlug($this->application->slug) . '.env';
     }
 
+    public function blueprint(): string
+    {
+        return '/etc/coresmith/blueprints/' . SafeName::assertSlug($this->application->slug) . '.sh';
+    }
+
     public function webRoot(string $releasePath): string
     {
         $directory = trim((string) $this->application->directory, '/');

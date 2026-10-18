@@ -101,5 +101,8 @@ test('a unit that is not running fails with its journal and advice for what the 
     'unreadable files' => ['PHP Warning: require(/var/coresmith/apps/shop/current/vendor/autoload.php): Failed to open stream: Permission denied', 'The process could not read its files.'],
     'missing entry point' => ['bun: No such file or directory: server.js', 'The entry point was not found.'],
     'syntax error' => ['PHP Parse error: syntax error, unexpected token "}"', 'The code has a syntax error.'],
+    'missing environment file' => ['coresmith-app-shop-queue.service: Failed to load environment files: No such file or directory', "The app's environment file is missing from the server. Deploy again to write it."],
+    'missing linux user' => ['coresmith-app-shop-queue.service: Failed to determine user credentials: No such process', "The app's Linux user is missing from the server. Deploy again to create it."],
+    'sandbox not set up' => ['coresmith-app-shop-queue.service: Failed to set up mount namespacing: /home/coresmith-app-shop: No such file or directory', "systemd could not set up the app's sandbox."],
     'anything else' => ['Killed', 'The process log says why.'],
 ]);

@@ -230,3 +230,40 @@ test('a static app has no processes to manage', function () {
 
     expect(processManager()->unitNames($app))->toBe([]);
 });
+
+test('a unit can write to its own home and nobody else\'s', function () {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), 'web', '/bin/true');
+
+    expect($unit)->toContain('ProtectHome=tmpfs')
+        ->and($unit)->toContain('BindPaths=-/home/coresmith-app-abcd')
+        ->and($unit)->toContain('Environment="HOME=/home/coresmith-app-abcd"');
+});
+
+test('a unit for an app in a folder of a monorepo starts in that folder', function () {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(['directory' => 'apps/web']), 'web', '/bin/true');
+
+    expect($unit)->toContain('WorkingDirectory=/var/coresmith/apps/my-app/current/apps/web');
+});
+
+test('php gets the app environment, because the fpm unit reads the file and the pool keeps it', function () {
+    $fpm = new FpmPoolBuilder(new AsdfManager);
+    $application = managedApp();
+
+    expect($fpm->unit($application))->toContain('EnvironmentFile=/etc/coresmith/env/my-app.env')
+        ->and($fpm->pool($application))->toContain("\nclear_env = no\n");
+});
+
+test('a restart that fails is left for the start check to explain, instead of stopping at its exit code', function () {
+    $transport = (new FakeSSHTransport)->respondTo("systemctl restart 'coresmith-app-my-app-web'", 'Job failed', 1);
+    $application = managedApp(['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0']);
+
+    processManager()->refresh(processConnection($transport), $application);
+
+    expect($transport->commands())->toContain("systemctl restart 'coresmith-app-my-app-web'");
+});
+
+test('php-fpm logs to the journal, because the runtime folder is read only to its unit', function () {
+    $pool = (new FpmPoolBuilder(new AsdfManager))->pool(managedApp());
+
+    expect($pool)->toStartWith("[global]\nerror_log = syslog\nsyslog.ident = coresmith-app-my-app-fpm\n\n[coresmith-app-my-app]\n");
+});

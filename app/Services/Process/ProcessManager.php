@@ -82,7 +82,7 @@ final class ProcessManager
 
         foreach ($this->unitNames($application) as $unit) {
             $connection->execute('systemctl enable ' . escapeshellarg($unit), sudo: true)->throw();
-            $connection->execute('systemctl ' . ($unit === $fpm && !$restart ? 'reload-or-restart ' : 'restart ') . escapeshellarg($unit), sudo: true)->throw();
+            $connection->execute('systemctl ' . ($unit === $fpm && !$restart ? 'reload-or-restart ' : 'restart ') . escapeshellarg($unit), sudo: true);
         }
     }
 

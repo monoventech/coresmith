@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Services\Runtime;
 
+use App\Models\Application;
+use App\Services\Deployment\AppShell;
 use App\Services\SSH\SSHConnection;
 
 final class RepositoryProbe
@@ -37,12 +39,16 @@ final class RepositoryProbe
     exit 0
     BASH;
 
-    public function read(SSHConnection $connection, string $directory): RepositoryFacts
+    public function read(SSHConnection $connection, string $directory, ?Application $as = null): RepositoryFacts
     {
         $command = 'echo ' . escapeshellarg(base64_encode($this->script())) . ' | base64 -d | '
             . self::DIRECTORY_VARIABLE . '=' . escapeshellarg($directory) . ' bash -s';
 
-        return $this->parse($connection->execute($command)->output);
+        if ($as === null) {
+            return $this->parse($connection->execute($command)->output);
+        }
+
+        return $this->parse($connection->execute(app(AppShell::class)->run($as, $command, $directory), sudo: true)->output);
     }
 
     public function script(): string

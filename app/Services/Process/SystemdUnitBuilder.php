@@ -39,7 +39,8 @@ final class SystemdUnitBuilder
         $name = $application->name;
         $user = $application->system_user;
         $size = AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small;
-        $workingDirectory = ReleasePaths::ROOT . '/' . $slug . '/current';
+        $paths = new ReleasePaths($application);
+        $workingDirectory = $paths->appDirectory($paths->current());
         $envFile = '/etc/coresmith/env/' . $slug . '.env';
         $logFile = '/var/coresmith/logs/' . $slug . '/' . $process . '.log';
         $path = $this->pathFor($application);
@@ -65,6 +66,7 @@ final class SystemdUnitBuilder
         Environment="HOME=/home/{$user}"
         Environment="PATH={$path}"
         {$listen}EnvironmentFile={$envFile}
+        BindPaths=-/home/{$user}
 
         ExecStart={$command}
 

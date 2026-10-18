@@ -143,7 +143,7 @@ test('each command run in the release is echoed before its output', function () 
         ->and($lines)->toContain('$ php artisan config:cache')
         ->and($lines)->toContain('$ php artisan route:cache')
         ->and($lines)->toContain('$ php artisan view:cache')
-        ->and($lines)->toContain('$ php artisan migrate --force --isolated');
+        ->and($lines)->toContain('$ php artisan migrate --force');
 });
 
 test('a custom blueprint is logged as the build phase with no dependency install or migration marker', function () {
@@ -192,17 +192,16 @@ test('the commit is read from the branch being deployed', function () {
         ->toContain("git --git-dir=/var/coresmith/apps/my-app/repo log -1 --format='%H%n%an%n%s' 'production'");
 });
 
-test('a commit hash and message sent by the webhook are kept over what git resolves', function () {
+test('the commit git archived is recorded even when the push named another', function () {
     $deployment = Deployment::factory()->for(releaseApp())->create(['commit_hash' => 'c0ffee1234', 'commit_message' => 'From the push']);
     $transport = releaseTransport()->respondTo('log -1 --format', "4f3c2b1a0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b\nAda Lovelace\nShip the release screen\n");
 
     releaseRun($deployment, $transport);
 
-    $fresh = $deployment->fresh();
-
-    expect($fresh->commit_hash)->toBe('c0ffee1234')
-        ->and($fresh->commit_message)->toBe('From the push')
-        ->and($fresh->commit_author)->toBe('Ada Lovelace');
+    expect($deployment->fresh())
+        ->commit_hash->toBe('4f3c2b1a0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b')
+        ->commit_message->toBe('Ship the release screen')
+        ->commit_author->toBe('Ada Lovelace');
 });
 
 test('a commit with no subject still records the hash and author', function () {
