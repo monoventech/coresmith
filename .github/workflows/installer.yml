@@ -33,12 +33,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Give the checkout a branch the installer can clone
-        run: git branch --force installer-under-test HEAD
+      - name: Give the installer a copy of the checkout it can read
+        run: |
+          git branch --force installer-under-test HEAD
+          sudo git clone --bare "$GITHUB_WORKSPACE" /srv/coresmith-under-test.git
+          sudo chmod -R a+rX /srv/coresmith-under-test.git
 
       - name: Run the installer
         env:
-          CORESMITH_REPO: ${{ github.workspace }}
+          CORESMITH_REPO: /srv/coresmith-under-test.git
         run: |
           sudo --preserve-env=CORESMITH_REPO bash scripts/install.sh \
             --unattended \
@@ -48,9 +51,9 @@ jobs:
 
       - name: The instance has a setup token, readable only by its owner
         run: |
-          test -f /etc/coresmith/setup-token
-          test "$(sudo stat -c '%a' /etc/coresmith/setup-token)" = "600"
-          test "$(sudo cat /etc/coresmith/setup-token | wc -c)" -gt 32
+          test -f /var/lib/coresmith/setup-token
+          test "$(sudo stat -c '%a' /var/lib/coresmith/setup-token)" = "600"
+          test "$(sudo cat /var/lib/coresmith/setup-token | wc -c)" -gt 32
 
       - name: Secrets are not world readable
         run: |
@@ -64,8 +67,8 @@ jobs:
           sudo grep -q '^APP_ENV=production' /opt/coresmith/app/.env
           sudo grep -q '^APP_DEBUG=false' /opt/coresmith/app/.env
           sudo grep -q '^CORESMITH_ALLOW_REGISTRATION=false' /opt/coresmith/app/.env
-          sudo grep -q '^CORESMITH_SETUP_TOKEN_PATH=/etc/coresmith/setup-token' /opt/coresmith/app/.env
-          sudo grep -qE '^CORESMITH_VAULT_KEY=[0-9a-f]{64}$' /opt/coresmith/app/.env
+          sudo grep -q '^CORESMITH_SETUP_TOKEN_PATH=/var/lib/coresmith/setup-token' /opt/coresmith/app/.env
+          sudo grep -qE '^CORESMITH_VAULT_KEY=[A-Za-z0-9+/]{43}=$' /opt/coresmith/app/.env
 
       - name: Services are running
         run: |
@@ -94,7 +97,7 @@ jobs:
           status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/install")"
           test "$status" = "403" || { echo "::error::/install without a token returned $status, expected 403"; exit 1; }
 
-          token="$(sudo cat /etc/coresmith/setup-token)"
+          token="$(sudo cat /var/lib/coresmith/setup-token)"
           status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/install?token=${token}")"
           test "$status" = "200" || { echo "::error::/install with the token returned $status, expected 200"; exit 1; }
 
@@ -106,10 +109,13 @@ jobs:
 
       - name: Running it twice changes nothing and breaks nothing
         env:
-          CORESMITH_REPO: ${{ github.workspace }}
+          CORESMITH_REPO: /srv/coresmith-under-test.git
         run: |
+          keys() { sudo grep -E '^(APP_KEY|CORESMITH_VAULT_KEY|REVERB_APP_KEY|REVERB_APP_SECRET)=' /opt/coresmith/app/.env | sort; }
+          before="$(keys)"
           sudo --preserve-env=CORESMITH_REPO bash scripts/install.sh \
             --unattended --db sqlite --branch installer-under-test
+          test "$before" = "$(keys)" || { echo "::error::re-running the installer replaced keys that existing data depends on"; exit 1; }
           systemctl is-active --quiet caddy
           systemctl is-active --quiet coresmith-horizon
 

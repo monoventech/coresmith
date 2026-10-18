@@ -10,7 +10,7 @@
 
         @fonts
 
-        @routes
+        @routes(nonce: \Illuminate\Support\Facades\Vite::cspNonce())
         @vite(['resources/css/app.css', 'resources/js/app.ts'])
         <x-inertia::head>
             <title>{{ config('app.name', 'Laravel') }}</title>

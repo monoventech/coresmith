@@ -218,3 +218,26 @@ test.describe('the account dialog', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
     })
 })
+
+test.describe('the content security policy', () => {
+    test('the main pages run under the policy without a single violation', async ({ page }) => {
+        const problems: string[] = []
+
+        page.on('console', (message) => {
+            if (message.type() === 'error' && message.text().includes('Content Security Policy')) {
+                problems.push(message.text())
+            }
+        })
+        page.on('pageerror', (error) => problems.push(error.message))
+
+        for (const path of ['/dashboard', '/deployments', '/releases', '/settings']) {
+            const response = await page.goto(path)
+            const policy = response?.headers()['content-security-policy'] ?? ''
+
+            expect(policy).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+'/)
+            await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+        }
+
+        expect(problems).toEqual([])
+    })
+})

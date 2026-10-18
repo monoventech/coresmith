@@ -231,3 +231,23 @@ test('the instance name replaces the app name across the interface', function ()
     $this->get(route('dashboard'))
         ->assertInertia(fn($page) => $page->where('appName', 'Acme Ops'));
 });
+
+test('a token the panel is not allowed to delete still stops working once used', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-locked-token-' . getmypid();
+    @mkdir($directory, 0755);
+    $path = $directory . '/setup-token';
+    config(['coresmith.setup_token_path' => $path]);
+    $token = app(SetupToken::class)->generate();
+    chmod($directory, 0555);
+
+    try {
+        app(SetupToken::class)->forget();
+
+        expect(app(SetupToken::class)->matches($token))->toBeFalse()
+            ->and(!file_exists($path) || file_get_contents($path) === '')->toBeTrue();
+    } finally {
+        chmod($directory, 0755);
+        @unlink($path);
+        @rmdir($directory);
+    }
+});

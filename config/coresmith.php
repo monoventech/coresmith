@@ -10,8 +10,18 @@ return [
     'version' => env('CORESMITH_VERSION', '0.1.0'),
     'billing_enabled' => (bool) env('CORESMITH_BILLING_ENABLED', false),
     'vault_key' => env('CORESMITH_VAULT_KEY'),
-    'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/etc/coresmith/setup-token'),
+    'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/var/lib/coresmith/setup-token'),
     'tenant_domain' => env('CORESMITH_TENANT_DOMAIN'),
+
+    'content_security_policy' => (bool) env('CORESMITH_CSP', true),
+    'websocket_origin' => env('VITE_REVERB_APP_KEY') && env('VITE_REVERB_HOST')
+        ? sprintf(
+            '%s://%s:%s',
+            env('VITE_REVERB_SCHEME', 'https') === 'https' ? 'wss' : 'ws',
+            env('VITE_REVERB_HOST'),
+            env('VITE_REVERB_PORT', env('VITE_REVERB_SCHEME', 'https') === 'https' ? 443 : 80),
+        )
+        : null,
 
     'runtimes' => [
         'php' => [

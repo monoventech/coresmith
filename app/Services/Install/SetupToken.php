@@ -54,8 +54,12 @@ final class SetupToken
 
     public function forget(): void
     {
-        if ($this->exists()) {
-            @unlink($this->path());
+        if (!$this->exists()) {
+            return;
+        }
+
+        if (!@unlink($this->path())) {
+            @file_put_contents($this->path(), '');
         }
     }
 }

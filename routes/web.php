@@ -33,7 +33,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('releases', [ReleasesController::class, 'latest'])->name('releases.index');
     Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
 
-    Route::redirect('servers', '/dashboard')->name('servers.index');
+    Route::get('servers', fn() => to_route('dashboard'))->name('servers.index');
     Route::resource('servers', ServerController::class)->except(['index', 'edit']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');

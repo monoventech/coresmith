@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\ContentSecurityPolicy;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Install\SetupToken;
+use App\Services\VaultEncryptor;
 use Symfony\Component\Process\Process;
 
 function installScript(): string
@@ -97,18 +99,21 @@ test('help is printed without touching the machine', function () {
 });
 
 test('the token path the installer writes is the one the panel reads', function () {
-    config(['coresmith.setup_token_path' => '/etc/coresmith/setup-token']);
+    config(['coresmith.setup_token_path' => '/var/lib/coresmith/setup-token']);
 
-    expect(installScriptBody())->toContain('SETUP_TOKEN_FILE="/etc/coresmith/setup-token"')
+    expect(installScriptBody())->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
         ->and(installScriptBody())->toContain('update_env CORESMITH_SETUP_TOKEN_PATH "$SETUP_TOKEN_FILE"')
-        ->and(app(SetupToken::class)->path())->toBe('/etc/coresmith/setup-token');
+        ->and(app(SetupToken::class)->path())->toBe('/var/lib/coresmith/setup-token');
 });
 
-test('the panel can read the directory its setup token lives in', function () {
+test('the setup token lives where the sandboxed php-fpm can delete it once used', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('php_admin_value[open_basedir] = ${INSTALL_DIR}:${DATA_DIR}:${CONFIG_DIR}:/tmp')
-        ->and($body)->toContain('chmod 755 "$CONFIG_DIR"');
+    expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
+        ->and($body)->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
+        ->and($body)->toContain('chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"')
+        ->and($body)->toContain('php_admin_value[open_basedir] = ${INSTALL_DIR}:${DATA_DIR}:/tmp')
+        ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
 
 test('the installer turns off public registration, which the holding page depends on', function () {
@@ -128,7 +133,7 @@ test('secrets are written with restrictive permissions', function () {
 });
 
 test('the vault key is generated rather than left at a default', function () {
-    expect(installScriptBody())->toContain('update_env CORESMITH_VAULT_KEY "$(openssl rand -hex 32)"');
+    expect(installScriptBody())->toContain('vault_key_is_valid || update_env CORESMITH_VAULT_KEY "$(openssl rand -base64 32)"');
 });
 
 test('debug mode is off in the installed environment', function () {
@@ -238,7 +243,7 @@ test('the installer workflow proves the instance it built actually works', funct
     expect($workflow)->toContain('bash scripts/install.sh')
         ->and($workflow)->toContain('ubuntu-22.04')
         ->and($workflow)->toContain('ubuntu-24.04')
-        ->and($workflow)->toContain('/etc/coresmith/setup-token')
+        ->and($workflow)->toContain('/var/lib/coresmith/setup-token')
         ->and($workflow)->toContain('expected 403')
         ->and($workflow)->toContain('expected 503');
 });
@@ -246,8 +251,7 @@ test('the installer workflow proves the instance it built actually works', funct
 test('caddy only issues certificates for hosts the panel approves, asked over loopback', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('permission http {')
-        ->and($body)->toContain('endpoint http://127.0.0.1:8484/api/caddy/ask')
+    expect($body)->toContain('permission http http://127.0.0.1:8484/api/caddy/ask')
         ->and($body)->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
         ->and($body)->toContain("https:// {\n    tls {\n        on_demand\n    }");
 });
@@ -259,3 +263,185 @@ test('team domains get hsts for themselves only, never for the customer subdomai
         ->and($site)->not->toContain('includeSubDomains')
         ->and($site)->not->toContain('preload');
 });
+
+test('failed jobs and batches live on a connection the installer migrates', function () {
+    $body = installScriptBody();
+    $queue = (string) file_get_contents(base_path('config/queue.php'));
+    $jobs = (string) file_get_contents(base_path('database/migrations/0001_01_01_000002_create_jobs_table.php'));
+
+    expect($body)->toContain('update_env DB_QUEUE_CONNECTION "$DB_DRIVER"')
+        ->and($body)->toContain('update_env DB_CACHE_CONNECTION "$DB_DRIVER"')
+        ->and(substr_count($queue, "env('DB_QUEUE_CONNECTION', 'sqlite_queue')"))->toBe(3)
+        ->and((string) file_get_contents(base_path('config/cache.php')))->toContain("env('DB_CACHE_CONNECTION', 'sqlite_cache')")
+        ->and($jobs)->toContain("Schema::create('failed_jobs'")
+        ->and($jobs)->toContain("Schema::create('job_batches'");
+});
+
+test('the application is installed without the composer scripts meant for a development checkout', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('composer install --no-dev --optimize-autoloader --no-interaction --no-scripts')
+        ->and($body)->toContain('run sudo -u coresmith php artisan package:discover --ansi')
+        ->and($body)->toContain('run sudo -u coresmith php artisan vendor:publish --tag=laravel-assets --ansi --force');
+});
+
+test('the installer can install from a local checkout as well as a bare repository', function () {
+    expect(installScriptBody())->toContain('git config --system --add safe.directory "$CORESMITH_REPO/.git"');
+});
+
+test('caddy is validated as itself and restarted so the panel config is actually served', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('{ sudo -u caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; }')
+        ->and($body)->toContain('chown -R caddy:caddy /var/log/caddy')
+        ->and($body)->toContain("run systemctl enable caddy\n    run systemctl restart caddy")
+        ->and($body)->not->toContain('systemctl enable --now caddy');
+});
+
+test('caddy can read what it serves without being able to read or change the rest of the panel', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('setfacl -m u:caddy:x "$(dirname "$INSTALL_DIR")" "$INSTALL_DIR"')
+        ->and($body)->toContain('setfacl -R -m u:caddy:rX "$INSTALL_DIR/public"')
+        ->and($body)->toContain('setfacl -R -d -m u:caddy:rX "$INSTALL_DIR/public"')
+        ->and($body)->not->toMatch('/usermod\s+-aG\s+coresmith\s+caddy/');
+});
+
+test('an empty saved route config never replaces the panel config when caddy starts', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load')
+        ->and($body)->not->toContain("echo '{}' >/etc/caddy/caddy-config.json");
+});
+
+test('the setup token is written by the panel user into a file it owns', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"')
+        ->and($body)->toContain('coresmith:setup-token --force 2>>"$LOG_FILE" | tail -1)" || setup_token=""');
+});
+
+test('a failed step is named on the way out rather than ending the install silently', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('set -Eeuo pipefail')
+        ->and($body)->toContain('trap on_failure ERR')
+        ->and($body)->toContain('error "The installer stopped (exit ${status}) at: ${step}"');
+});
+
+test('the content security policy comes from the panel, so caddy never sends a second one', function () {
+    expect(installScriptBody())->not->toContain('Content-Security-Policy')
+        ->and(class_exists(ContentSecurityPolicy::class))->toBeTrue();
+});
+
+function installScriptFunctions(string ...$names): string
+{
+    return collect($names)->map(function (string $name): string {
+        preg_match('/^' . preg_quote($name, '/') . '\(\) \{.*?^\}$/ms', installScriptBody(), $matches);
+
+        return $matches[0] ?? '';
+    })->implode("\n");
+}
+
+function runInstallScriptFunctions(string $directory, string $body): Process
+{
+    $script = 'set -euo pipefail' . "\n" . 'INSTALL_DIR=' . escapeshellarg($directory) . "\nlog() { :; }\n"
+        . installScriptFunctions('env_value', 'vault_key_is_valid', 'ensure_env_secret', 'update_env', 'adopt_existing_install', 'ensure_database_password')
+        . "\n" . $body;
+
+    $process = new Process(['bash', '-c', $script]);
+    $process->run();
+
+    return $process;
+}
+
+test('a re-run keeps the database, password and domain the panel was installed with', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-rerun-' . getmypid();
+    @mkdir($directory, 0700, true);
+    file_put_contents($directory . '/.env', "APP_URL=https://panel.example.com\nACME_EMAIL=ops@example.com\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=coresmith\nDB_USERNAME=coresmith\nDB_PASSWORD=\"kept-secret\"\n");
+
+    $process = runInstallScriptFunctions($directory, 'DOMAIN=""; ACME_EMAIL=""; DB_EXPLICITLY_SET=false; DB_DRIVER=sqlite; DB_HOST=""; DB_PORT=""; DB_NAME=""; DB_USER=""; DB_PASSWORD=""' . "\n"
+        . 'adopt_existing_install; ensure_database_password' . "\n"
+        . 'printf "%s|%s|%s|%s|%s|%s" "$DOMAIN" "$ACME_EMAIL" "$DB_DRIVER" "$DB_NAME" "$DB_USER" "$DB_PASSWORD"');
+
+    @unlink($directory . '/.env');
+    @rmdir($directory);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe('panel.example.com|ops@example.com|pgsql|coresmith|coresmith|kept-secret');
+});
+
+test('an unattended install on postgresql or mysql still gets a database password', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-fresh-' . getmypid();
+    @mkdir($directory, 0700, true);
+
+    $process = runInstallScriptFunctions($directory, 'DOMAIN=""; ACME_EMAIL=""; DB_EXPLICITLY_SET=true; DB_DRIVER=pgsql; DB_PASSWORD=""' . "\n"
+        . 'adopt_existing_install; ensure_database_password; printf "%s" "$DB_PASSWORD"');
+
+    @rmdir($directory);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toMatch('/^[0-9a-f]{32}$/');
+});
+
+test('an existing secret is never replaced and a missing one is created', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-secrets-' . getmypid();
+    @mkdir($directory, 0700, true);
+    file_put_contents($directory . '/.env', "CORESMITH_VAULT_KEY=original\nREVERB_APP_KEY=\n");
+
+    $process = runInstallScriptFunctions($directory, "ensure_env_secret CORESMITH_VAULT_KEY replaced\nensure_env_secret REVERB_APP_KEY created\nensure_env_secret REVERB_APP_SECRET added\n");
+    $result = (string) file_get_contents($directory . '/.env');
+
+    @unlink($directory . '/.env');
+    @rmdir($directory);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($result)->toContain('CORESMITH_VAULT_KEY=original')
+        ->and($result)->not->toContain('replaced')
+        ->and($result)->toContain('REVERB_APP_KEY=created')
+        ->and($result)->toContain('REVERB_APP_SECRET=added');
+});
+
+test('re-running the installer keeps the keys that existing data was encrypted with', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('[ -n "$(env_value APP_KEY)" ] || sudo -u coresmith php artisan key:generate')
+        ->and($body)->toContain('ensure_env_secret REVERB_APP_KEY')
+        ->and($body)->toContain('ensure_env_secret REVERB_APP_SECRET')
+        ->and($body)->not->toContain('    update_env CORESMITH_VAULT_KEY "$(openssl rand')
+        ->and($body)->toContain("preflight\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
+});
+
+test('the browser is given the reverb key so live updates use the socket', function () {
+    expect(installScriptBody())->toContain('update_env VITE_REVERB_APP_KEY "$(env_value REVERB_APP_KEY)"');
+});
+
+test('the vault key the installer generates is one the vault accepts', function () {
+    $process = new Process(['openssl', 'rand', '-base64', '32']);
+    $process->run();
+    $key = trim($process->getOutput());
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(fn() => new VaultEncryptor($key))->not->toThrow(InvalidArgumentException::class)
+        ->and(installScriptBody())->toContain('update_env CORESMITH_VAULT_KEY "$(openssl rand -base64 32)"');
+});
+
+test('a vault key that the vault would refuse is replaced, and a good one is kept', function (string $existing, bool $kept) {
+    $directory = sys_get_temp_dir() . '/coresmith-vault-' . getmypid();
+    @mkdir($directory, 0700, true);
+    file_put_contents($directory . '/.env', "CORESMITH_VAULT_KEY={$existing}\n");
+
+    $process = runInstallScriptFunctions($directory, 'vault_key_is_valid || update_env CORESMITH_VAULT_KEY "$(openssl rand -base64 32)"');
+    preg_match('/^CORESMITH_VAULT_KEY=(.*)$/m', (string) file_get_contents($directory . '/.env'), $matches);
+
+    @unlink($directory . '/.env');
+    @rmdir($directory);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(($matches[1] ?? '') === $existing)->toBe($kept)
+        ->and(fn() => new VaultEncryptor($matches[1] ?? ''))->not->toThrow(InvalidArgumentException::class);
+})->with([
+    'a valid key' => ['kwaPNVUnWP5zWso3XuetpQuqerZlJ5jX9rpFguOAepg=', true],
+    'a hex key from older installers' => [str_repeat('ab', 32), false],
+    'no key at all' => ['', false],
+]);

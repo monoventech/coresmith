@@ -24,7 +24,9 @@
 #   --verbose                  Show command output
 #   --help                     Show this message
 
-set -euo pipefail
+set -Eeuo pipefail
+
+LAST_STEP=""
 
 readonly CORESMITH_VERSION="1.0.0"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoven/coresmith.git}"
@@ -32,7 +34,7 @@ readonly INSTALL_DIR="/opt/coresmith/app"
 readonly DATA_DIR="/var/lib/coresmith"
 readonly APPS_DIR="/var/coresmith"
 readonly CONFIG_DIR="/etc/coresmith"
-readonly SETUP_TOKEN_FILE="/etc/coresmith/setup-token"
+readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
 readonly PHP_VERSION="8.5"
 
@@ -75,11 +77,23 @@ fatal() {
 }
 
 run() {
+    LAST_STEP="$*"
+
     if $VERBOSE; then
         "$@"
     else
-        "$@" >/dev/null 2>&1
+        "$@" >>"$LOG_FILE" 2>&1
     fi
+
+    local status=$?
+    [ "$status" -eq 0 ] && LAST_STEP=""
+    return "$status"
+}
+
+on_failure() {
+    local status=$? step="${LAST_STEP:-$BASH_COMMAND}"
+    error "The installer stopped (exit ${status}) at: ${step}"
+    error "Details are in ${LOG_FILE}. Fix the cause, then run the installer again; it is safe to re-run."
 }
 
 usage() {
@@ -254,9 +268,9 @@ interactive_prompts() {
     if ! $DB_EXPLICITLY_SET; then
         printf '\n%sChoose a database:%s\n' "$BOLD" "$NC"
         printf '%s⚠  This cannot be changed after installation.%s\n\n' "$YELLOW" "$NC"
-        printf '  %s1) SQLite%s (recommended) — no daemon, no credentials, one file.\n' "$GREEN" "$NC"
-        printf '  2) PostgreSQL — installed and configured for you.\n'
-        printf '  3) MySQL — installed and configured for you.\n\n'
+        printf '  %s1) SQLite%s (recommended): no daemon, no credentials, one file.\n' "$GREEN" "$NC"
+        printf '  2) PostgreSQL: installed and configured for you.\n'
+        printf '  3) MySQL: installed and configured for you.\n\n'
         printf '  Select [1/2/3] (default 1): '
         read -r choice
         case "${choice:-1}" in
@@ -271,7 +285,41 @@ interactive_prompts() {
         [ "$DB_DRIVER" = "pgsql" ] && DB_PORT="${DB_PORT:-5432}"
         [ "$DB_DRIVER" = "mysql" ] && DB_PORT="${DB_PORT:-3306}"
     fi
+}
 
+adopt_existing_install() {
+    [ -f "$INSTALL_DIR/.env" ] || return 0
+
+    log "Existing installation found; keeping its settings unless this run overrides them."
+
+    if [ -z "$DOMAIN" ]; then
+        local url
+        url="$(env_value APP_URL)"
+        url="${url#*://}"
+        DOMAIN="${url%%/*}"
+    fi
+
+    [ -n "$ACME_EMAIL" ] || ACME_EMAIL="$(env_value ACME_EMAIL)"
+
+    if ! $DB_EXPLICITLY_SET; then
+        DB_DRIVER="$(env_value DB_CONNECTION)"
+        DB_DRIVER="${DB_DRIVER:-sqlite}"
+        DB_EXPLICITLY_SET=true
+
+        if [ "$DB_DRIVER" != "sqlite" ]; then
+            DB_HOST="$(env_value DB_HOST)"
+            DB_PORT="$(env_value DB_PORT)"
+            DB_NAME="$(env_value DB_DATABASE)"
+            DB_USER="$(env_value DB_USERNAME)"
+        fi
+    fi
+
+    if [ "$DB_DRIVER" != "sqlite" ] && [ -z "$DB_PASSWORD" ]; then
+        DB_PASSWORD="$(env_value DB_PASSWORD)"
+    fi
+}
+
+ensure_database_password() {
     if [ "$DB_DRIVER" != "sqlite" ] && [ -z "$DB_PASSWORD" ]; then
         DB_PASSWORD="$(openssl rand -hex 16)"
         log "Database password generated and written to .env."
@@ -451,8 +499,6 @@ create_user_and_dirs() {
     chown root:root "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"
     chmod 700 "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"
 
-    # The panel reads its setup token from here, so it must be able to traverse.
-    chmod 755 "$CONFIG_DIR"
 
     success "User and directories created"
 }
@@ -464,6 +510,9 @@ install_coresmith_app() {
 
     # Git refuses to clone a directory owned by another user unless it is marked safe.
     git config --system --add safe.directory "$CORESMITH_REPO" 2>/dev/null || true
+    if [ -d "$CORESMITH_REPO/.git" ]; then
+        git config --system --add safe.directory "$CORESMITH_REPO/.git" 2>/dev/null || true
+    fi
     git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
 
     if [ -d "$INSTALL_DIR/.git" ]; then
@@ -477,14 +526,37 @@ install_coresmith_app() {
     fi
 
     cd "$INSTALL_DIR"
-    run sudo -u coresmith composer install --no-dev --optimize-autoloader --no-interaction
+    run sudo -u coresmith composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+    run sudo -u coresmith php artisan package:discover --ansi
+    run sudo -u coresmith php artisan vendor:publish --tag=laravel-assets --ansi --force
     run sudo -u coresmith bun install --frozen-lockfile
-    run sudo -u coresmith bun run build
 
     success "Application installed"
 }
 
 # ── Phase 5: environment ─────────────────────────────────────────────────────
+
+env_value() {
+    local file="$INSTALL_DIR/.env"
+
+    [ -f "$file" ] || return 0
+
+    KEY="$1" awk '
+        BEGIN { key = ENVIRON["KEY"] }
+        index($0, key "=") == 1 { value = substr($0, length(key) + 2); gsub(/^"|"$/, "", value); print value; exit }
+    ' "$file"
+}
+
+vault_key_is_valid() {
+    local key
+
+    key="$(env_value CORESMITH_VAULT_KEY)"
+    [ -n "$key" ] && [ "$(printf '%s' "$key" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" = "32" ]
+}
+
+ensure_env_secret() {
+    [ -n "$(env_value "$1")" ] || update_env "$1" "$2"
+}
 
 update_env() {
     local key="$1" value="$2" file="$INSTALL_DIR/.env" tmp
@@ -540,8 +612,10 @@ configure_environment() {
     update_env QUEUE_CONNECTION "redis"
     update_env CACHE_STORE "redis"
     update_env SESSION_DRIVER "redis"
+    update_env DB_QUEUE_CONNECTION "$DB_DRIVER"
+    update_env DB_CACHE_CONNECTION "$DB_DRIVER"
 
-    update_env CORESMITH_VAULT_KEY "$(openssl rand -hex 32)"
+    vault_key_is_valid || update_env CORESMITH_VAULT_KEY "$(openssl rand -base64 32)"
     update_env CORESMITH_SETUP_TOKEN_PATH "$SETUP_TOKEN_FILE"
 
     # A self-hosted panel is not a signup page. The owner account comes from the
@@ -550,11 +624,12 @@ configure_environment() {
 
     update_env BROADCAST_CONNECTION "reverb"
     update_env REVERB_APP_ID "coresmith"
-    update_env REVERB_APP_KEY "$(openssl rand -hex 16)"
-    update_env REVERB_APP_SECRET "$(openssl rand -hex 32)"
+    ensure_env_secret REVERB_APP_KEY "$(openssl rand -hex 16)"
+    ensure_env_secret REVERB_APP_SECRET "$(openssl rand -hex 32)"
     update_env REVERB_HOST "127.0.0.1"
     update_env REVERB_PORT "6001"
     update_env REVERB_SCHEME "http"
+    update_env VITE_REVERB_APP_KEY "$(env_value REVERB_APP_KEY)"
     update_env VITE_REVERB_HOST "$PANEL_HOST"
     update_env VITE_REVERB_PORT "443"
     update_env VITE_REVERB_SCHEME "https"
@@ -564,7 +639,7 @@ configure_environment() {
     chown coresmith:coresmith .env
     chmod 600 .env
 
-    sudo -u coresmith php artisan key:generate --force --no-interaction >/dev/null
+    [ -n "$(env_value APP_KEY)" ] || sudo -u coresmith php artisan key:generate --force --no-interaction >/dev/null
 
     # The frontend bundle carries the Reverb host, so it is built after the env exists.
     run sudo -u coresmith bun run build
@@ -589,14 +664,12 @@ configure_caddy() {
         printf '{\n'
         printf '    admin localhost:2019\n'
         [ -n "$ACME_EMAIL" ] && printf '    email %s\n' "$ACME_EMAIL"
-        printf '    on_demand_tls {\n        permission http {\n            endpoint http://127.0.0.1:8484/api/caddy/ask\n        }\n    }\n'
+        printf '    on_demand_tls {\n        permission http http://127.0.0.1:8484/api/caddy/ask\n    }\n'
         printf '    log {\n        output file /var/log/caddy/access.log\n        format json\n    }\n'
         printf '}\n\n'
         printf 'import /etc/caddy/panel.caddy\n'
     } >/etc/caddy/Caddyfile
 
-    [ -f /etc/caddy/caddy-config.json ] || echo '{}' >/etc/caddy/caddy-config.json
-    chown caddy:caddy /etc/caddy/caddy-config.json 2>/dev/null || true
 
     local pool_dir=""
     for dir in "/etc/php/${PHP_VERSION}/fpm/pool.d" /etc/php-fpm.d /etc/php/fpm/pool.d; do
@@ -632,8 +705,7 @@ php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv
-; ${CONFIG_DIR} is readable because the panel reads its one-time setup token from there.
-php_admin_value[open_basedir] = ${INSTALL_DIR}:${DATA_DIR}:${CONFIG_DIR}:/tmp
+php_admin_value[open_basedir] = ${INSTALL_DIR}:${DATA_DIR}:/tmp
 FPMCONF
 
     cat >/etc/caddy/panel.caddy <<SITECONF
@@ -652,7 +724,6 @@ ${PANEL_HOST} {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://${PANEL_HOST}; font-src 'self'; img-src 'self' data:;"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
     }
@@ -702,7 +773,6 @@ https:// {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         Strict-Transport-Security "max-age=31536000"
-        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://${PANEL_HOST}; font-src 'self'; img-src 'self' data:;"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
     }
@@ -720,6 +790,16 @@ https:// {
 }
 SITECONF
 
+    setfacl -m u:caddy:x "$(dirname "$INSTALL_DIR")" "$INSTALL_DIR"
+    setfacl -R -m u:caddy:rX "$INSTALL_DIR/public"
+    setfacl -R -d -m u:caddy:rX "$INSTALL_DIR/public"
+
+    mkdir -p /var/log/caddy
+    chown -R caddy:caddy /var/log/caddy
+
+    { sudo -u caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; } >>"$LOG_FILE" 2>&1 ||
+        fatal "The generated Caddy configuration is invalid. See ${LOG_FILE} for Caddy's explanation."
+
     success "Caddy configured for ${PANEL_HOST}"
 }
 
@@ -731,7 +811,7 @@ create_systemd_services() {
     mkdir -p /etc/systemd/system/caddy.service.d
     cat >/etc/systemd/system/caddy.service.d/coresmith.conf <<'UNIT'
 [Service]
-ExecStartPost=/bin/bash -c 'sleep 2 && test -s /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
+ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
 UNIT
 
     cat >/etc/systemd/system/coresmith-horizon.service <<UNIT
@@ -870,7 +950,8 @@ finalize() {
 
     run systemctl enable --now redis-server || run systemctl enable --now redis || true
     run systemctl restart "php${PHP_VERSION}-fpm" || run systemctl restart php-fpm || true
-    run systemctl enable --now caddy
+    run systemctl enable caddy
+    run systemctl restart caddy
     run systemctl enable --now coresmith-horizon
     run systemctl enable --now coresmith-reverb
     run systemctl enable --now coresmith-scheduler.timer
@@ -888,8 +969,10 @@ finalize() {
         fi
     done
 
+    install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"
+
     local setup_token
-    setup_token="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:setup-token --force 2>/dev/null | tail -1)"
+    setup_token="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:setup-token --force 2>>"$LOG_FILE" | tail -1)" || setup_token=""
 
     if [ -z "$setup_token" ]; then
         warn "Could not issue a setup token. Run this on the server, then open the URL it prints:"
@@ -915,7 +998,7 @@ print_summary() {
         printf '  %s%s⚠  Finish setup now:%s\n\n' "$BOLD" "$YELLOW" "$NC"
         printf '  %s%s/install?token=%s%s\n\n' "$BOLD" "$PANEL_URL" "$setup_token" "$NC"
         printf '  %sThis link works once. After the owner account exists it is%s\n' "$YELLOW" "$NC"
-        printf '  %sdeleted from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
+        printf '  %scleared from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
     fi
 
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"
@@ -933,10 +1016,13 @@ print_summary() {
 main() {
     parse_args "$@"
     preflight
+    adopt_existing_install
     interactive_prompts
+    ensure_database_password
 
     mkdir -p "$(dirname "$LOG_FILE")"
     exec > >(tee -a "$LOG_FILE") 2>&1
+    trap on_failure ERR
 
     install_system_packages
     install_caddy

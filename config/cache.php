@@ -41,7 +41,7 @@ return [
         'database' => [
             'driver' => 'database',
             'table' => 'cache',
-            'connection' => 'sqlite_cache',
+            'connection' => env('DB_CACHE_CONNECTION', 'sqlite_cache'),
         ],
 
         'file' => [

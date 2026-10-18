@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnforceTokenAbility;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureTeamContext;
@@ -30,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'setup.token' => RequireSetupToken::class,
         ]);
 
-        $middleware->web(prepend: [EnsureInstalled::class]);
+        $middleware->web(prepend: [ContentSecurityPolicy::class, EnsureInstalled::class]);
         $middleware->api(prepend: [EnsureInstalled::class]);
 
         $middleware->web(append: [
