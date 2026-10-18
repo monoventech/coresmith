@@ -213,11 +213,16 @@ preflight() {
 
     success "$OS_NAME $OS_VERSION (package manager: $PKG_MANAGER)"
 
-    SERVER_IP="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null ||
-        curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null ||
-        hostname -I 2>/dev/null | awk '{print $1}')"
+    SERVER_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit } }')"
+    [ -n "$SERVER_IP" ] || SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
     [ -n "$SERVER_IP" ] || fatal "Could not determine this server's IP address."
     success "Server IP: $SERVER_IP"
+
+    local public_ip
+    public_ip="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+    if [ -n "$public_ip" ] && [ "$public_ip" != "$SERVER_IP" ]; then
+        log "Reachable from the internet as ${public_ip}, through NAT. Without --domain the panel answers on ${SERVER_IP}; point a domain at ${public_ip} to use it from outside."
+    fi
 
     if command -v ss >/dev/null 2>&1; then
         local detected
@@ -811,7 +816,7 @@ create_systemd_services() {
     mkdir -p /etc/systemd/system/caddy.service.d
     cat >/etc/systemd/system/caddy.service.d/coresmith.conf <<'UNIT'
 [Service]
-ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
+ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load -H "Origin: http://localhost:2019" -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
 UNIT
 
     cat >/etc/systemd/system/coresmith-horizon.service <<UNIT
@@ -952,8 +957,15 @@ finalize() {
     run systemctl restart "php${PHP_VERSION}-fpm" || run systemctl restart php-fpm || true
     run systemctl enable caddy
     run systemctl restart caddy
-    run systemctl enable --now coresmith-horizon
-    run systemctl enable --now coresmith-reverb
+    run systemctl enable coresmith-horizon coresmith-reverb
+
+    if systemctl is-active --quiet coresmith-horizon; then
+        run sudo -u coresmith php "$INSTALL_DIR/artisan" horizon:terminate
+    else
+        run systemctl start coresmith-horizon
+    fi
+
+    run systemctl restart coresmith-reverb
     run systemctl enable --now coresmith-scheduler.timer
 
     configure_firewall
@@ -961,6 +973,13 @@ finalize() {
 
     local healthy=true
     for service in caddy coresmith-horizon coresmith-reverb; do
+        local waited=0
+
+        until systemctl is-active --quiet "$service" || [ "$waited" -ge 30 ]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+
         if systemctl is-active --quiet "$service"; then
             success "$service is running"
         else
@@ -969,21 +988,27 @@ finalize() {
         fi
     done
 
+    local setup_token="" setup_output="" already_set_up=false
+
     install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"
+    setup_output="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:setup-token --force 2>&1)" || true
 
-    local setup_token
-    setup_token="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:setup-token --force 2>>"$LOG_FILE" | tail -1)" || setup_token=""
-
-    if [ -z "$setup_token" ]; then
+    if printf '%s\n' "$setup_output" | grep -q 'already has an account'; then
+        already_set_up=true
+        rm -f "$SETUP_TOKEN_FILE"
+    elif printf '%s\n' "$setup_output" | tail -1 | grep -qE '^[A-Za-z0-9]{64}$'; then
+        setup_token="$(printf '%s\n' "$setup_output" | tail -1)"
+    else
+        printf '%s\n' "$setup_output" >>"$LOG_FILE"
         warn "Could not issue a setup token. Run this on the server, then open the URL it prints:"
         warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"
     fi
 
-    print_summary "$setup_token" "$healthy"
+    print_summary "$setup_token" "$healthy" "$already_set_up"
 }
 
 print_summary() {
-    local setup_token="$1" healthy="$2"
+    local setup_token="$1" healthy="$2" already_set_up="${3:-false}"
 
     printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$GREEN" "$NC"
     printf '%s%s║        Coresmith installed successfully!         ║%s\n' "$BOLD" "$GREEN" "$NC"
@@ -999,6 +1024,8 @@ print_summary() {
         printf '  %s%s/install?token=%s%s\n\n' "$BOLD" "$PANEL_URL" "$setup_token" "$NC"
         printf '  %sThis link works once. After the owner account exists it is%s\n' "$YELLOW" "$NC"
         printf '  %scleared from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
+    elif [ "$already_set_up" = "true" ]; then
+        printf '  The panel is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
 
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"

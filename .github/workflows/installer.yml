@@ -86,25 +86,25 @@ jobs:
           host="$(sudo grep '^APP_URL=' /opt/coresmith/app/.env | cut -d/ -f3)"
 
           for _ in $(seq 1 15); do
-            if curl -fsSk --resolve "${host}:443:127.0.0.1" "https://${host}/up" >/dev/null; then
+            if curl -fsSk "https://${host}/up" >/dev/null; then
               break
             fi
             sleep 4
           done
 
-          curl -fsSk --resolve "${host}:443:127.0.0.1" "https://${host}/up" >/dev/null
+          curl -fsSk "https://${host}/up" >/dev/null
 
-          status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/install")"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -k "https://${host}/install")"
           test "$status" = "403" || { echo "::error::/install without a token returned $status, expected 403"; exit 1; }
 
           token="$(sudo cat /var/lib/coresmith/setup-token)"
-          status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/install?token=${token}")"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -k "https://${host}/install?token=${token}")"
           test "$status" = "200" || { echo "::error::/install with the token returned $status, expected 200"; exit 1; }
 
       - name: An unconfigured instance holds the door rather than showing the app
         run: |
           host="$(sudo grep '^APP_URL=' /opt/coresmith/app/.env | cut -d/ -f3)"
-          status="$(curl -s -o /dev/null -w '%{http_code}' -k --resolve "${host}:443:127.0.0.1" "https://${host}/dashboard")"
+          status="$(curl -s -o /dev/null -w '%{http_code}' -k "https://${host}/dashboard")"
           test "$status" = "503" || { echo "::error::/dashboard returned $status on a fresh instance, expected 503"; exit 1; }
 
       - name: Running it twice changes nothing and breaks nothing
