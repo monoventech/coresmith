@@ -29,6 +29,7 @@ use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\KeyPairGenerator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -50,7 +51,7 @@ final class ServerController extends Controller
 
     public function store(StoreServerRequest $request, KeyPairGenerator $keys): RedirectResponse
     {
-        $pair = $keys->generate();
+        $pair = $keys->generate('coresmith@' . (Str::slug((string) $request->validated('name')) ?: 'server'));
 
         $server = Server::create([
             ...$request->safe()->except([]),

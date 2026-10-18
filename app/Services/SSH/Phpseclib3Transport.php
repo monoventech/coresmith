@@ -17,6 +17,21 @@ use ReflectionProperty;
 
 final class Phpseclib3Transport implements SSHTransport
 {
+    public const ALGORITHMS = [
+        'kex' => ['curve25519-sha256', 'curve25519-sha256@libssh.org'],
+        'hostkey' => ['ssh-ed25519', 'rsa-sha2-512', 'rsa-sha2-256'],
+        'client_to_server' => [
+            'crypt' => ['chacha20-poly1305@openssh.com', 'aes256-gcm@openssh.com', 'aes128-gcm@openssh.com'],
+            'mac' => ['hmac-sha2-512-etm@openssh.com', 'hmac-sha2-256-etm@openssh.com'],
+            'comp' => ['none'],
+        ],
+        'server_to_client' => [
+            'crypt' => ['chacha20-poly1305@openssh.com', 'aes256-gcm@openssh.com', 'aes128-gcm@openssh.com'],
+            'mac' => ['hmac-sha2-512-etm@openssh.com', 'hmac-sha2-256-etm@openssh.com'],
+            'comp' => ['none'],
+        ],
+    ];
+
     private ?SSH2 $ssh = null;
 
     private ?SFTP $sftp = null;
@@ -38,7 +53,13 @@ final class Phpseclib3Transport implements SSHTransport
         $this->timeout = $timeout;
 
         $this->ssh = new SSH2($host, $port);
+        $this->ssh->setPreferredAlgorithms(self::ALGORITHMS);
         $this->ssh->setTimeout($timeout);
+    }
+
+    public function negotiatedAlgorithms(): array
+    {
+        return $this->connection()->getAlgorithmsNegotiated();
     }
 
     public function hostKey(): string
@@ -122,6 +143,7 @@ final class Phpseclib3Transport implements SSHTransport
 
         if ($this->sftp === null) {
             $this->sftp = new SFTP($this->host, $this->port);
+            $this->sftp->setPreferredAlgorithms(self::ALGORITHMS);
             $this->sftp->setTimeout($this->timeout);
             $this->sftp->login($this->user, $this->key);
         }

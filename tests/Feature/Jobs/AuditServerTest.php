@@ -10,6 +10,7 @@ use App\Models\Server;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Queue\MaxAttemptsExceededException;
+use phpseclib3\Exception\NoSupportedAlgorithmsException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -103,4 +104,11 @@ test('a failure that merely mentions sudo in a warning is not blamed on sudo', f
     expect(AuditServer::explain($server, $e))
         ->toContain('ss: command not found')
         ->and(AuditServer::explain($server, $e))->not->toContain('passwordless sudo');
+});
+
+test('a server that only offers outdated ssh algorithms is told what to update', function () {
+    $server = Server::factory()->make(['name' => 'web-1']);
+    $e = new NoSupportedAlgorithmsException('No compatible key exchange algorithms found');
+
+    expect(AuditServer::explain($server, $e))->toBe('web-1 offers no SSH algorithms Coresmith trusts. Update OpenSSH on the server so it allows curve25519 key exchange and AES-GCM or ChaCha20 ciphers, then check again.');
 });

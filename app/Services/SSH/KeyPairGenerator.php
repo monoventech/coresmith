@@ -12,13 +12,14 @@ use phpseclib3\Crypt\EC;
 
 final class KeyPairGenerator
 {
-    public function generate(): KeyPair
+    public function generate(string $comment = 'coresmith'): KeyPair
     {
         $key = EC::createKey('Ed25519');
+        $options = ['comment' => $comment];
 
         return new KeyPair(
-            privateKey: $key->toString('OpenSSH'),
-            publicKey: $key->getPublicKey()->toString('OpenSSH'),
+            privateKey: $key->toString('OpenSSH', $options),
+            publicKey: $key->getPublicKey()->toString('OpenSSH', $options),
         );
     }
 }

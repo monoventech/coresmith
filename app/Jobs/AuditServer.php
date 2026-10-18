@@ -20,6 +20,7 @@ use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Str;
+use phpseclib3\Exception\NoSupportedAlgorithmsException;
 use phpseclib3\Exception\UnableToConnectException;
 use Throwable;
 
@@ -85,6 +86,7 @@ final class AuditServer implements ShouldQueue
             $e instanceof HostKeyChangedException => 'The server presented a different host key. Review it on this page before checking again.',
             $e instanceof SSHAuthenticationException => "Coresmith could not sign in as {$server->ssh_user}. Check the public key above is in ~/.ssh/authorized_keys, then check again.",
             $e instanceof UnableToConnectException => "Coresmith could not reach {$server->ip_address} on port {$server->ssh_port}. Check the server is running and the port is open, then check again.",
+            $e instanceof NoSupportedAlgorithmsException => "{$server->name} offers no SSH algorithms Coresmith trusts. Update OpenSSH on the server so it allows curve25519 key exchange and AES-GCM or ChaCha20 ciphers, then check again.",
             $e instanceof SSHCommandFailedException && Str::contains($e->output(), self::SUDO_REFUSALS) => "Coresmith could not run the check as root on {$server->name}. Give {$server->ssh_user} passwordless sudo, or connect as root, then check again.",
             $e instanceof SSHCommandFailedException && trim($e->output()) !== '' => 'The check stopped: ' . Str::limit(trim($e->output()), 300) . ' Fix that on the server, then check again.',
             default => 'The check stopped with an error: ' . Str::limit(trim($e->getMessage()), 300) . ' Check again, and if it keeps happening check the server.',

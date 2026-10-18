@@ -464,3 +464,25 @@ test('a disconnected server can be checked and offered fixes, because its panel 
 
     Queue::assertPushed(FixAuditFinding::class);
 });
+
+test('each new server key is labelled with its server, safely, whatever the name', function (string $name, string $label) {
+    $team = Team::factory()->create();
+
+    $this->actingAs(teamMember($team, TeamRole::Owner))
+        ->post(route('servers.store'), [
+            'team_id' => $team->id,
+            'name' => $name,
+            'ip_address' => '203.0.113.10',
+            'ssh_port' => 22,
+            'ssh_user' => 'root',
+        ])
+        ->assertRedirect();
+
+    $key = Server::query()->latest('id')->firstOrFail()->ssh_public_key;
+
+    expect($key)->toEndWith(' ' . $label)
+        ->and($key)->not->toContain("\n");
+})->with([
+    'a plain name' => ['Web 1', 'coresmith@web-1'],
+    'a name with a line break' => ["edge\nssh-ed25519 AAAA attacker", 'coresmith@edge-ssh-ed25519-aaaa-attacker'],
+]);
