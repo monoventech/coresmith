@@ -8,7 +8,7 @@ test.describe('git settings', () => {
 
         await expect(provider).toContainText('Installed')
         await expect(provider).toContainText('Installed on monoventech')
-        await expect(provider).toContainText(/Token expires in \d+ minutes, rotated automatically\./)
+        await expect(provider).toContainText(/Token expires in \d+ (minutes|hours), rotated automatically\./)
         await expect(page.getByRole('main')).toContainText('GitHub App with fine-grained, per-repository permissions, not OAuth.')
     })
 

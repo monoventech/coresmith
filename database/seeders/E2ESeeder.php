@@ -58,7 +58,7 @@ final class E2ESeeder extends Seeder
 
     public function run(): void
     {
-        $tenant = (new MonovenTenant(self::METRICS_AHEAD_MINUTES))->build([
+        $tenant = (new MonovenTenant(self::METRICS_AHEAD_MINUTES, self::METRICS_AHEAD_MINUTES))->build([
             'owner' => self::OWNER_EMAIL,
             'admin' => self::ADMIN_EMAIL,
             'member' => self::MEMBER_EMAIL,

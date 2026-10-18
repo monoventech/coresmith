@@ -47,7 +47,10 @@ final class MonovenTenant
 
     public User $member;
 
-    public function __construct(private readonly int $metricsAhead = 0) {}
+    public function __construct(
+        private readonly int $metricsAhead = 0,
+        private readonly int $tokenMinutes = 41,
+    ) {}
 
     /**
      * @param  array{owner: string, admin: string, member: string, password: string}  $credentials
@@ -117,7 +120,7 @@ final class MonovenTenant
             'name' => 'monoventech',
             'access_token' => 'ghs_demo_never_rendered',
             'installation_id' => '51842',
-            'token_expires_at' => now()->addMinutes(41),
+            'token_expires_at' => now()->addMinutes($this->tokenMinutes),
         ]);
     }
 
