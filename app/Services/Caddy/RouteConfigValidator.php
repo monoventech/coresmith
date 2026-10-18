@@ -55,19 +55,21 @@ final class RouteConfigValidator
     {
         $allowedPorts = range($application->base_port, $application->base_port + self::PORT_BLOCK - 1);
 
+        $expectedSocket = 'unix/' . (new CaddyRouteBuilder)->fpmSocket($application);
+
         foreach ($this->collect($config, 'upstreams') as $upstreams) {
             foreach ((array) $upstreams as $upstream) {
-                $dial = is_array($upstream) ? ($upstream['dial'] ?? '') : '';
+                $dial = (string) (is_array($upstream) ? ($upstream['dial'] ?? '') : '');
 
-                $this->assertLoopbackDial((string) $dial, $allowedPorts);
-            }
-        }
+                if (str_starts_with($dial, 'unix/')) {
+                    if ($dial !== $expectedSocket) {
+                        throw InvalidRouteConfigException::socket($dial);
+                    }
 
-        $expectedSocket = (new CaddyRouteBuilder)->fpmSocket($application);
+                    continue;
+                }
 
-        foreach ($this->collect($config, 'unix') as $socket) {
-            if ($socket !== $expectedSocket) {
-                throw InvalidRouteConfigException::socket((string) $socket);
+                $this->assertLoopbackDial($dial, $allowedPorts);
             }
         }
     }

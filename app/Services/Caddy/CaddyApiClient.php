@@ -20,7 +20,7 @@ final class CaddyApiClient
 
     public const ADMIN_ORIGIN = 'http://localhost:' . self::ADMIN_PORT;
 
-    public const ROUTES_PATH = '/config/apps/http/servers/coresmith/routes';
+    public const ROUTES_PATH = '/config/apps/http/servers/' . CaddyInstaller::SERVER . '/routes';
 
     public const STAGED_CONFIG_FILE = '/etc/caddy/caddy-config.staged.json';
 
@@ -76,13 +76,6 @@ final class CaddyApiClient
     public function persistConfig(SSHConnection $connection): void
     {
         $this->script($connection, $this->curl('GET', '/config/') . ' > ' . self::STAGED_CONFIG_FILE . ' && mv -f ' . self::STAGED_CONFIG_FILE . ' ' . CaddyInstaller::CONFIG_FILE);
-    }
-
-    public function loadPersistedConfig(SSHConnection $connection): void
-    {
-        $file = CaddyInstaller::CONFIG_FILE;
-
-        $this->script($connection, "test -s {$file} || exit 0; " . $this->curl('POST', '/load', dataFile: $file));
     }
 
     private function script(SSHConnection $connection, string $script): void
@@ -153,7 +146,7 @@ final class CaddyApiClient
     /**
      * @param  array<string, mixed>|null  $payload
      */
-    private function curl(string $method, string $path, ?array $payload = null, ?string $dataFile = null): string
+    private function curl(string $method, string $path, ?array $payload = null): string
     {
         $url = self::ADMIN_ORIGIN . $path;
 
@@ -162,10 +155,6 @@ final class CaddyApiClient
         if ($payload !== null) {
             $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
             $command .= ' -H ' . escapeshellarg('Content-Type: application/json') . ' -d ' . escapeshellarg($json);
-        }
-
-        if ($dataFile !== null) {
-            $command .= ' -H ' . escapeshellarg('Content-Type: application/json') . ' --data-binary ' . escapeshellarg('@' . $dataFile);
         }
 
         return $command;

@@ -40,8 +40,8 @@ test('a running application is routed to its own handlers', function () {
     $route = routeFor(maintenanceApp(['power_state' => PowerState::Active]));
     $encoded = json_encode($route, JSON_THROW_ON_ERROR);
 
-    expect(handlers($route))->toHaveCount(2)
-        ->and($encoded)->toContain('php_fastcgi')
+    expect(handlers($route)[0]['handle'][0]['status_code'])->toBe(404)
+        ->and($encoded)->toContain('"protocol":"fastcgi"')
         ->and($encoded)->not->toContain('static_response":{"status_code":503')
         ->and($encoded)->not->toContain('is unavailable');
 });
@@ -51,7 +51,7 @@ test('a stopped application is served a maintenance page instead of the site', f
     $encoded = json_encode($route, JSON_THROW_ON_ERROR);
 
     expect(handlers($route))->toHaveCount(1)
-        ->and($encoded)->not->toContain('php_fastcgi')
+        ->and($encoded)->not->toContain('fastcgi')
         ->and($encoded)->not->toContain('reverse_proxy')
         ->and($encoded)->not->toContain('file_server');
 
@@ -74,7 +74,7 @@ test('maintenance mode serves the page while the processes keep running', functi
 test('a sleeping application still serves the site so a request can wake it', function () {
     $route = routeFor(maintenanceApp(['power_state' => PowerState::Sleeping]));
 
-    expect(json_encode($route, JSON_THROW_ON_ERROR))->toContain('php_fastcgi');
+    expect(json_encode($route, JSON_THROW_ON_ERROR))->toContain('"protocol":"fastcgi"');
 });
 
 test('the maintenance page tells crawlers not to index it and browsers not to cache it', function () {

@@ -40,7 +40,7 @@ final class CaddyRouteBuilder
                         ? [$this->serveMaintenancePage($application)]
                         : [
                             $this->blockSensitivePaths(),
-                            $this->serveApplication($application),
+                            ...$this->serveApplication($application),
                         ],
                 ],
             ],
@@ -62,14 +62,6 @@ final class CaddyRouteBuilder
         return array_map(SafeName::assertDomain(...), $domains);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function tlsPolicy(): array
-    {
-        return ['protocol' => ['minimum_version' => 'tls1.2']];
-    }
-
     public function offline(Application $application): bool
     {
         return $application->power_state === PowerState::Stopped || $this->maintenanceMode($application);
@@ -87,7 +79,7 @@ final class CaddyRouteBuilder
     {
         return [
             'handle' => [
-                $this->securityHeaders(),
+                ...$this->securityHeaders(),
                 [
                     'handler' => 'headers',
                     'response' => ['set' => [
@@ -151,36 +143,49 @@ final class CaddyRouteBuilder
     }
 
     /**
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      */
     private function serveApplication(Application $application): array
     {
+        $servesFiles = in_array($application->type, [ApplicationType::Php, ApplicationType::Static], true);
+
         return [
-            'handle' => [
-                ['handler' => 'encode', 'encodings' => ['gzip' => (object) [], 'zstd' => (object) []]],
-                $this->securityHeaders(),
-                ...$this->applicationHandlers($application),
+            [
+                'handle' => [
+                    ...($servesFiles ? [['handler' => 'vars', 'root' => $this->documentRoot($application)]] : []),
+                    ...$this->securityHeaders(),
+                    ['handler' => 'encode', 'encodings' => ['gzip' => (object) [], 'zstd' => (object) []], 'prefer' => ['gzip', 'zstd']],
+                ],
             ],
+            ...$this->applicationRoutes($application),
         ];
     }
 
     /**
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      */
     private function securityHeaders(): array
     {
         return [
-            'handler' => 'headers',
-            'response' => [
-                'set' => [
-                    'X-Frame-Options' => ['SAMEORIGIN'],
-                    'X-Content-Type-Options' => ['nosniff'],
-                    'X-XSS-Protection' => ['1; mode=block'],
-                    'Referrer-Policy' => ['strict-origin-when-cross-origin'],
-                    'Permissions-Policy' => ['camera=(), microphone=(), geolocation=()'],
-                    'Strict-Transport-Security' => ['max-age=31536000; includeSubDomains; preload'],
+            [
+                'handler' => 'headers',
+                'response' => [
+                    'set' => [
+                        'X-Frame-Options' => ['SAMEORIGIN'],
+                        'X-Content-Type-Options' => ['nosniff'],
+                        'X-XSS-Protection' => ['1; mode=block'],
+                        'Referrer-Policy' => ['strict-origin-when-cross-origin'],
+                        'Permissions-Policy' => ['camera=(), microphone=(), geolocation=()'],
+                        'Strict-Transport-Security' => ['max-age=31536000; includeSubDomains; preload'],
+                    ],
                 ],
-                'deferred' => ['delete' => ['Server', 'X-Powered-By']],
+            ],
+            [
+                'handler' => 'headers',
+                'response' => [
+                    'delete' => ['Server', 'X-Powered-By'],
+                    'deferred' => true,
+                ],
             ],
         ];
     }
@@ -188,28 +193,44 @@ final class CaddyRouteBuilder
     /**
      * @return list<array<string, mixed>>
      */
-    private function applicationHandlers(Application $application): array
+    private function applicationRoutes(Application $application): array
     {
-        $root = $this->documentRoot($application);
-
         return match ($application->type) {
             ApplicationType::Php => [
                 [
-                    'handler' => 'php_fastcgi',
-                    'root' => $root,
-                    'unix' => $this->fpmSocket($application),
-                    'resolve_root_symlink' => true,
+                    'match' => [['file' => ['try_files' => ['{http.request.uri.path}/index.php']], 'not' => [['path' => ['*/']]]]],
+                    'handle' => [[
+                        'handler' => 'static_response',
+                        'headers' => ['Location' => ['{http.request.orig_uri.path}/{http.request.orig_uri.prefixed_query}']],
+                        'status_code' => 308,
+                    ]],
                 ],
-                ['handler' => 'file_server', 'root' => $root],
+                [
+                    'match' => [['file' => [
+                        'try_files' => ['{http.request.uri.path}', '{http.request.uri.path}/index.php', 'index.php'],
+                        'try_policy' => 'first_exist_fallback',
+                        'split_path' => ['.php'],
+                    ]]],
+                    'handle' => [['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}']],
+                ],
+                [
+                    'match' => [['path' => ['*.php']]],
+                    'handle' => [[
+                        'handler' => 'reverse_proxy',
+                        'transport' => ['protocol' => 'fastcgi', 'resolve_root_symlink' => true, 'split_path' => ['.php']],
+                        'upstreams' => [['dial' => 'unix/' . $this->fpmSocket($application)]],
+                    ]],
+                ],
+                ['handle' => [['handler' => 'file_server']]],
             ],
             ApplicationType::Static => [
-                ['handler' => 'file_server', 'root' => $root],
+                ['handle' => [['handler' => 'file_server']]],
             ],
             default => [
-                [
+                ['handle' => [[
                     'handler' => 'reverse_proxy',
                     'upstreams' => [['dial' => '127.0.0.1:' . $application->base_port]],
-                ],
+                ]]],
             ],
         };
     }

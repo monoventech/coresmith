@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Exceptions\InvalidRouteConfigException;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
+use App\Services\Caddy\CaddyInstaller;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Caddy\RouteConfigValidator;
 use App\Services\SafeName;
@@ -64,8 +65,10 @@ test('wildcard domains are accepted for dns challenge certificates', function ()
     expect(SafeName::isDomain('*.example.com'))->toBeTrue();
 });
 
-test('routes pin a modern tls floor', function () {
-    expect((new CaddyRouteBuilder)->tlsPolicy())->toBe(['protocol' => ['minimum_version' => 'tls1.2']]);
+test('the server that carries every route pins a modern tls floor', function () {
+    $server = json_decode((new CaddyInstaller)->config(), true)['apps']['http']['servers'][CaddyInstaller::SERVER];
+
+    expect($server['tls_connection_policies'])->toBe([['protocol_min' => 'tls1.2']]);
 });
 
 test('responses carry the full hardening header set from the spec', function (string $header) {
@@ -84,9 +87,9 @@ test('responses carry the full hardening header set from the spec', function (st
 
 test('the server and runtime fingerprint headers are removed', function () {
     $route = (new CaddyRouteBuilder)->build(domainApp());
-    $headers = collect($route['handle'][0]['routes'][1]['handle'])->firstWhere('handler', 'headers');
+    $headers = collect($route['handle'][0]['routes'][1]['handle'])->where('handler', 'headers')->last();
 
-    expect($headers['response']['deferred']['delete'])->toBe(['Server', 'X-Powered-By']);
+    expect($headers['response'])->toBe(['delete' => ['Server', 'X-Powered-By'], 'deferred' => true]);
 });
 
 test('hsts is set for a year with subdomains and preload', function () {

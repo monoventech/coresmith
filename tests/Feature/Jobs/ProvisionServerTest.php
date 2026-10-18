@@ -9,6 +9,7 @@ use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsupportedOperatingSystemException;
 use App\Jobs\ProvisionServer;
 use App\Models\Server;
+use App\Services\Caddy\CaddyInstaller;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
@@ -249,17 +250,18 @@ test('phase 5 installs caddy and verifies the admin api responds on localhost', 
         ->and($commands)->toContain('http://localhost:2019/config/');
 });
 
-test('phase 5 uploads a bootstrap caddyfile that never grows with apps', function () {
+test('phase 5 uploads the caddy config apps are added to, and starts caddy from it', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = provisioningTransport();
 
     provision($server, $transport);
 
     $uploads = $transport->uploads();
+    $config = json_decode($uploads[CaddyInstaller::CONFIG_FILE] ?? '', true);
 
-    expect($uploads)->toHaveKey('/etc/caddy/Caddyfile')
-        ->and($uploads['/etc/caddy/Caddyfile'])->toContain('respond 444')
-        ->and($uploads['/etc/caddy/Caddyfile'])->not->toContain('/var/coresmith/apps');
+    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([])
+        ->and($uploads[CaddyInstaller::CONFIG_FILE])->not->toContain('/var/coresmith/apps')
+        ->and($uploads)->toHaveKey(CaddyInstaller::SERVICE_DROP_IN);
 });
 
 test('provisioning halts if the caddy admin api answers from outside the box', function () {

@@ -11,22 +11,24 @@ namespace App\Services\Caddy;
 use App\Exceptions\UnsupportedOperatingSystemException;
 use App\Models\InstanceSetting;
 use App\Services\Server\AptPackageManager;
+use App\Services\Server\MetricsCollector;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
+use stdClass;
 
 final class CaddyInstaller
 {
-    public const CADDYFILE = '/etc/caddy/Caddyfile';
-
-    public const PANEL_FILE = '/etc/caddy/panel.caddy';
-
     public const CONFIG_FILE = '/etc/caddy/caddy-config.json';
+
+    public const SERVER = 'coresmith';
+
+    public const SERVICE_DROP_IN = '/etc/systemd/system/caddy.service.d/coresmith.conf';
 
     public function install(SSHConnection $connection): void
     {
         $this->installPackage($connection);
-        $this->writeBootstrapConfig($connection);
+        $this->writeConfig($connection);
         $this->enableService($connection);
         $this->verifyAdminApi($connection);
     }
@@ -63,23 +65,21 @@ final class CaddyInstaller
         };
     }
 
-    private function writeBootstrapConfig(SSHConnection $connection): void
+    private function writeConfig(SSHConnection $connection): void
     {
-        $connection->execute('mkdir -p /etc/caddy /var/log/caddy', sudo: true)->throw();
+        $connection->execute('mkdir -p /etc/caddy /var/log/caddy ' . dirname(self::SERVICE_DROP_IN), sudo: true)->throw();
 
-        $connection->uploadContent($this->caddyfile(InstanceSetting::get('notification_email')), self::CADDYFILE);
-        $connection->uploadContent($this->panelSite(), self::PANEL_FILE);
+        $current = $connection->execute('cat ' . self::CONFIG_FILE . ' 2>/dev/null || true', sudo: true)->output;
 
-        $connection->execute(
-            'sh -c ' . escapeshellarg('test -f ' . self::CONFIG_FILE . ' || echo "{}" > ' . self::CONFIG_FILE),
-            sudo: true,
-        )->throw();
+        $connection->uploadContent($this->config(InstanceSetting::get('notification_email'), $current), self::CONFIG_FILE);
+        $connection->uploadContent($this->serviceDropIn(), self::SERVICE_DROP_IN);
 
-        $connection->execute('chmod 644 ' . self::CADDYFILE . ' ' . self::PANEL_FILE, sudo: true)->throw();
+        $connection->execute('chmod 644 ' . self::CONFIG_FILE . ' ' . self::SERVICE_DROP_IN, sudo: true)->throw();
     }
 
     private function enableService(SSHConnection $connection): void
     {
+        $connection->execute('systemctl daemon-reload', sudo: true)->throw();
         $connection->execute('systemctl enable caddy', sudo: true)->throw();
         $connection->execute('systemctl restart caddy', sudo: true)->throw();
     }
@@ -91,63 +91,95 @@ final class CaddyInstaller
         )->throw();
     }
 
-    public function caddyfile(?string $email = null): string
+    public function config(?string $email = null, string $current = ''): string
     {
         $port = CaddyApiClient::ADMIN_PORT;
-        $acme = $email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) !== false && preg_match('/[\s{}"]/', $email) !== 1
-            ? "email {$email}"
-            : '';
 
-        return <<<CADDY
-        {
-            admin localhost:{$port} {
-                origins localhost:{$port}
-                enforce_origin
-            }
-            {$acme}
+        $config = [
+            'admin' => [
+                'listen' => "localhost:{$port}",
+                'origins' => ["localhost:{$port}"],
+                'enforce_origin' => true,
+            ],
+            'logging' => [
+                'logs' => [
+                    'default' => ['exclude' => ['http.log.access']],
+                    'access' => [
+                        'writer' => ['output' => 'file', 'filename' => MetricsCollector::ACCESS_LOG],
+                        'encoder' => ['format' => 'json'],
+                        'include' => ['http.log.access'],
+                    ],
+                ],
+            ],
+            'apps' => [
+                'http' => [
+                    'servers' => [
+                        self::SERVER => [
+                            'listen' => [':443'],
+                            'routes' => $this->existingRoutes($current),
+                            'read_timeout' => '10s',
+                            'read_header_timeout' => '5s',
+                            'write_timeout' => '30s',
+                            'idle_timeout' => '120s',
+                            'max_header_bytes' => 65536,
+                            'tls_connection_policies' => [['protocol_min' => 'tls1.2']],
+                            'logs' => new stdClass,
+                        ],
+                    ],
+                ],
+            ],
+        ];
 
-            default_sni ""
-            auto_https disable_redirects
-
-            log {
-                output file /var/log/caddy/access.log
-                format json
-            }
-
-            servers {
-                timeouts {
-                    read_body   10s
-                    read_header 5s
-                    write       30s
-                    idle        120s
-                }
-
-                max_header_size 64KB
-            }
+        if ($this->usableEmail($email)) {
+            $config['apps']['tls'] = [
+                'automation' => [
+                    'policies' => [[
+                        'issuers' => [
+                            ['module' => 'acme', 'email' => $email],
+                            ['module' => 'acme', 'ca' => 'https://acme.zerossl.com/v2/DV90', 'email' => $email],
+                        ],
+                    ]],
+                ],
+            ];
         }
 
-        :80 {
-            respond 444
-        }
-
-        :443 {
-            tls internal {
-                on_demand
-            }
-            respond 444
-        }
-
-        import /etc/caddy/panel.caddy
-
-        CADDY;
+        return json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
     }
 
-    public function panelSite(): string
+    public function serviceDropIn(): string
     {
-        return <<<'CADDY'
-        # Coresmith panel site. Managed applications are never added here —
-        # they are pushed through the Admin API at runtime.
+        $file = self::CONFIG_FILE;
 
-        CADDY;
+        return <<<UNIT
+        [Service]
+        ExecStart=
+        ExecStart=/usr/bin/caddy run --environ --config {$file}
+        ExecReload=
+        ExecReload=/usr/bin/caddy reload --config {$file} --force
+
+        UNIT;
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function existingRoutes(string $current): array
+    {
+        $node = json_decode($current);
+
+        foreach (['apps', 'http', 'servers', self::SERVER, 'routes'] as $key) {
+            if (!$node instanceof stdClass || !property_exists($node, $key)) {
+                return [];
+            }
+
+            $node = $node->{$key};
+        }
+
+        return is_array($node) && array_is_list($node) ? $node : [];
+    }
+
+    private function usableEmail(?string $email): bool
+    {
+        return $email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) !== false && preg_match('/[\s{}"]/', $email) !== 1;
     }
 }

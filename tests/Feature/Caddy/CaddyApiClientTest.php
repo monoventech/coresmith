@@ -153,19 +153,6 @@ test('a persist that fails never truncates the config caddy would reload', funct
     expect(implode("\n", $transport->commands()))->not->toContain('> ' . CaddyInstaller::CONFIG_FILE);
 });
 
-test('a persisted config caddy refuses on boot is an error, a missing one is not', function () {
-    $refused = (new FakeSSHTransport)->respondTo('-X POST', 'curl: (22) The requested URL returned error: 400', 22);
-
-    expect(fn() => caddyClient()->loadPersistedConfig(caddyConnection($refused)))->toThrow(SSHCommandFailedException::class);
-
-    $missing = new FakeSSHTransport;
-
-    caddyClient()->loadPersistedConfig(caddyConnection($missing));
-
-    expect($missing->commands()[0])->toContain('test -s ' . CaddyInstaller::CONFIG_FILE . ' || exit 0')
-        ->and($missing->commands()[0])->not->toContain('|| true');
-});
-
 test('only idempotent verbs are retried', function () {
     $transport = (new FakeSSHTransport)->respondTo('-X POST', 'curl: (28) Operation timed out', 28);
 
@@ -211,17 +198,14 @@ test('an invalid route is never pushed to caddy', function () {
     }
 });
 
-test('the bootstrap caddyfile refuses unknown hosts and keeps admin on localhost', function () {
-    $caddyfile = (new CaddyInstaller)->caddyfile();
+test('the bootstrap config keeps the admin api on localhost and answers only the origin it trusts', function () {
+    $config = json_decode((new CaddyInstaller)->config(), true);
 
-    expect($caddyfile)->toContain('admin localhost:2019')
-        ->and($caddyfile)->toContain('enforce_origin')
-        ->and($caddyfile)->toContain('respond 444')
-        ->and($caddyfile)->toContain('import /etc/caddy/panel.caddy');
+    expect($config['admin'])->toBe(['listen' => 'localhost:2019', 'origins' => ['localhost:2019'], 'enforce_origin' => true]);
 });
 
-test('the caddyfile never contains a managed application site', function () {
-    expect((new CaddyInstaller)->caddyfile())->not->toContain('/var/coresmith/apps');
+test('the bootstrap config never contains a managed application site', function () {
+    expect((new CaddyInstaller)->config())->not->toContain('/var/coresmith/apps');
 });
 
 test('every admin api call carries the origin caddy enforces, or caddy answers 403', function () {
@@ -236,5 +220,5 @@ test('every admin api call carries the origin caddy enforces, or caddy answers 4
     }
 
     expect(CaddyApiClient::probe())->toContain("-H 'Origin: http://localhost:2019'")
-        ->and((new CaddyInstaller)->caddyfile())->toContain('enforce_origin');
+        ->and(json_decode((new CaddyInstaller)->config(), true)['admin']['enforce_origin'])->toBeTrue();
 });

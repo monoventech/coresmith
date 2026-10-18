@@ -21,6 +21,11 @@ function phpApp(array $attributes = []): Application
     ], $attributes));
 }
 
+function builtHandlers(array $route): array
+{
+    return collect($route['handle'][0]['routes'])->flatMap(fn(array $subroute): array => $subroute['handle'])->all();
+}
+
 test('the route carries a targetable id and the app domain', function () {
     $route = (new CaddyRouteBuilder)->build($app = phpApp());
 
@@ -41,39 +46,44 @@ test('every credential bearing path is blocked', function (string $path) {
     expect(SensitivePaths::PATHS)->toContain($path);
 })->with(['/.env*', '/.git/*', '/storage/*', '/vendor/*', '/node_modules/*', '/composer.lock']);
 
-test('a php app is served over its own fpm socket', function () {
+test('a php app is served over its own fpm socket the way caddy expands php_fastcgi', function () {
     $route = (new CaddyRouteBuilder)->build(phpApp());
-    $handlers = $route['handle'][0]['routes'][1]['handle'];
-    $fastcgi = collect($handlers)->firstWhere('handler', 'php_fastcgi');
+    $subroutes = $route['handle'][0]['routes'];
+    $handlers = collect(builtHandlers($route));
+    $fastcgi = $handlers->first(fn(array $handler): bool => ($handler['transport']['protocol'] ?? null) === 'fastcgi');
 
-    expect($fastcgi['unix'])->toBe('/var/run/php/coresmith-app-my-app-fpm.sock')
-        ->and($fastcgi['root'])->toBe('/var/coresmith/apps/my-app/current/public')
-        ->and($fastcgi['resolve_root_symlink'])->toBeTrue();
+    expect($handlers->firstWhere('handler', 'vars')['root'])->toBe('/var/coresmith/apps/my-app/current/public')
+        ->and($fastcgi['upstreams'])->toBe([['dial' => 'unix//var/run/php/coresmith-app-my-app-fpm.sock']])
+        ->and($fastcgi['transport'])->toBe(['protocol' => 'fastcgi', 'resolve_root_symlink' => true, 'split_path' => ['.php']])
+        ->and($subroutes[2]['handle'][0]['status_code'])->toBe(308)
+        ->and($subroutes[3]['handle'][0])->toBe(['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}'])
+        ->and($subroutes[4]['match'])->toBe([['path' => ['*.php']]])
+        ->and($subroutes[5]['handle'])->toBe([['handler' => 'file_server']]);
 });
 
 test('a js app reverse proxies to its allocated loopback port', function () {
     $route = (new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Js, 'base_port' => 8100]));
-    $handlers = $route['handle'][0]['routes'][1]['handle'];
-    $proxy = collect($handlers)->firstWhere('handler', 'reverse_proxy');
+    $proxy = collect(builtHandlers($route))->firstWhere('handler', 'reverse_proxy');
 
-    expect($proxy['upstreams'])->toBe([['dial' => '127.0.0.1:8100']]);
+    expect($proxy['upstreams'])->toBe([['dial' => '127.0.0.1:8100']])
+        ->and(collect(builtHandlers($route))->firstWhere('handler', 'vars'))->toBeNull();
 });
 
 test('a static app is served by the file server only', function () {
-    $route = (new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Static]));
-    $handlers = $route['handle'][0]['routes'][1]['handle'];
+    $handlers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Static]))));
 
-    expect(collect($handlers)->firstWhere('handler', 'file_server'))->not->toBeNull()
-        ->and(collect($handlers)->firstWhere('handler', 'php_fastcgi'))->toBeNull();
+    expect($handlers->firstWhere('handler', 'file_server'))->not->toBeNull()
+        ->and($handlers->firstWhere('handler', 'vars')['root'])->toBe('/var/coresmith/apps/my-app/current/public')
+        ->and($handlers->firstWhere('handler', 'reverse_proxy'))->toBeNull();
 });
 
-test('security headers are set and the Server header is removed', function () {
-    $route = (new CaddyRouteBuilder)->build(phpApp());
-    $headers = collect($route['handle'][0]['routes'][1]['handle'])->firstWhere('handler', 'headers');
+test('security headers are set up front and the fingerprint headers are deleted as the response is written', function () {
+    $headers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp())))->where('handler', 'headers')->values();
 
-    expect($headers['response']['set']['X-Content-Type-Options'])->toBe(['nosniff'])
-        ->and($headers['response']['set']['X-Frame-Options'])->toBe(['SAMEORIGIN'])
-        ->and($headers['response']['deferred']['delete'])->toBe(['Server', 'X-Powered-By']);
+    expect($headers[0]['response']['set']['X-Content-Type-Options'])->toBe(['nosniff'])
+        ->and($headers[0]['response']['set']['X-Frame-Options'])->toBe(['SAMEORIGIN'])
+        ->and($headers[0]['response'])->not->toHaveKey('deferred')
+        ->and($headers[1]['response'])->toBe(['delete' => ['Server', 'X-Powered-By'], 'deferred' => true]);
 });
 
 test('a subdirectory app resolves its document root', function () {
@@ -92,7 +102,7 @@ test('a generated route passes validation', function () {
 test('an upstream pointing off box is refused', function () {
     $app = phpApp(['type' => ApplicationType::Js]);
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => 'attacker.test:80']];
+    $config['handle'][0]['routes'][2]['handle'][0]['upstreams'] = [['dial' => 'attacker.test:80']];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->throws(InvalidRouteConfigException::class);
@@ -100,7 +110,7 @@ test('an upstream pointing off box is refused', function () {
 test('an upstream outside the allocated port block is refused', function () {
     $app = phpApp(['type' => ApplicationType::Js, 'base_port' => 8100]);
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:8200']];
+    $config['handle'][0]['routes'][2]['handle'][0]['upstreams'] = [['dial' => '127.0.0.1:8200']];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->throws(InvalidRouteConfigException::class);
@@ -108,7 +118,7 @@ test('an upstream outside the allocated port block is refused', function () {
 test('a port inside the allocated block is allowed', function () {
     $app = phpApp(['type' => ApplicationType::Js, 'base_port' => 8100]);
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['upstreams'] = [['dial' => '127.0.0.1:8109']];
+    $config['handle'][0]['routes'][2]['handle'][0]['upstreams'] = [['dial' => '127.0.0.1:8109']];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->throwsNoExceptions();
@@ -124,7 +134,7 @@ test('hijacking another apps domain is refused', function () {
 test('borrowing another apps fpm socket is refused', function () {
     $app = phpApp();
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['unix'] = '/var/run/php/coresmith-app-victim-fpm.sock';
+    $config['handle'][0]['routes'][4]['handle'][0]['upstreams'] = [['dial' => 'unix//var/run/php/coresmith-app-victim-fpm.sock']];
 
     (new RouteConfigValidator)->validate($config, $app);
 })->throws(InvalidRouteConfigException::class);
@@ -132,7 +142,7 @@ test('borrowing another apps fpm socket is refused', function () {
 test('serving a root outside the app directory is refused', function (string $root) {
     $app = phpApp();
     $config = (new CaddyRouteBuilder)->build($app);
-    $config['handle'][0]['routes'][1]['handle'][2]['root'] = $root;
+    $config['handle'][0]['routes'][1]['handle'][0]['root'] = $root;
 
     (new RouteConfigValidator)->validate($config, $app);
 })->with([
