@@ -95,13 +95,14 @@ jobs:
           restore-keys: composer-${{ runner.os }}-
 
       - name: Install PHP dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+        run: composer install --prefer-dist --no-interaction --no-progress --no-scripts
 
       - name: Prepare environment
         run: |
           cp .env.example .env
+          php artisan package:discover --ansi
           php artisan key:generate --force
-          echo "CORESMITH_VAULT_KEY=$(openssl rand -hex 32)" >> .env
+          echo "CORESMITH_VAULT_KEY=$(openssl rand -base64 32)" >> .env
 
       - name: Run Pest
         run: php artisan test
@@ -156,7 +157,7 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate --force
-          echo "CORESMITH_VAULT_KEY=$(openssl rand -hex 32)" >> .env
+          echo "CORESMITH_VAULT_KEY=$(openssl rand -base64 32)" >> .env
           touch database/e2e.sqlite database/e2e-install.sqlite
           bun run e2e:refresh
           bun run e2e:install-refresh
