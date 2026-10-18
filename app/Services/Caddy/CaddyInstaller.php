@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Caddy;
 
 use App\Exceptions\UnsupportedOperatingSystemException;
+use App\Models\InstanceSetting;
 use App\Services\Server\AptPackageManager;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -66,7 +67,7 @@ final class CaddyInstaller
     {
         $connection->execute('mkdir -p /etc/caddy /var/log/caddy', sudo: true)->throw();
 
-        $connection->uploadContent($this->caddyfile(), self::CADDYFILE);
+        $connection->uploadContent($this->caddyfile(InstanceSetting::get('notification_email')), self::CADDYFILE);
         $connection->uploadContent($this->panelSite(), self::PANEL_FILE);
 
         $connection->execute(
@@ -86,13 +87,16 @@ final class CaddyInstaller
     private function verifyAdminApi(SSHConnection $connection): void
     {
         $connection->execute(
-            'curl -fsS --max-time 10 http://localhost:' . CaddyApiClient::ADMIN_PORT . '/config/ >/dev/null',
+            CaddyApiClient::probe(),
         )->throw();
     }
 
-    public function caddyfile(): string
+    public function caddyfile(?string $email = null): string
     {
         $port = CaddyApiClient::ADMIN_PORT;
+        $acme = $email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) !== false && preg_match('/[\s{}"]/', $email) !== 1
+            ? "email {$email}"
+            : '';
 
         return <<<CADDY
         {
@@ -100,7 +104,7 @@ final class CaddyInstaller
                 origins localhost:{$port}
                 enforce_origin
             }
-            email {\$ACME_EMAIL}
+            {$acme}
 
             default_sni ""
             auto_https disable_redirects

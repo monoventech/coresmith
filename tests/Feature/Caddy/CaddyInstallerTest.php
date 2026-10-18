@@ -23,3 +23,19 @@ test('the bootstrap config is seeded through a shell sudo owns, so a non-root ss
         ->and($seed)->toStartWith('sudo sh -c ')
         ->and($seed)->not->toMatch('/^sudo test -f/');
 });
+
+test('the acme email is only written when a valid one is known', function (?string $email, string $expected) {
+    $caddyfile = (new CaddyInstaller)->caddyfile($email);
+
+    expect($caddyfile)->not->toContain('{$ACME_EMAIL}');
+
+    if ($expected === '') {
+        expect($caddyfile)->not->toMatch('/^\s*email\b/m');
+    } else {
+        expect($caddyfile)->toContain($expected);
+    }
+})->with([
+    'no email' => [null, ''],
+    'a valid email' => ['ops@example.com', 'email ops@example.com'],
+    'an email that would break the config' => ['ops@example.com} {', ''],
+]);

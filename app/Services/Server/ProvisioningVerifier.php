@@ -22,7 +22,7 @@ final class ProvisioningVerifier
         $this->assert($connection, 'systemctl is-active --quiet caddy', 'Caddy service');
         $this->assert(
             $connection,
-            'curl -fsS --max-time 10 http://localhost:' . CaddyApiClient::ADMIN_PORT . '/config/ >/dev/null',
+            CaddyApiClient::probe(),
             'Caddy admin API',
         );
 

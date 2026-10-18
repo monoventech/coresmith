@@ -18,6 +18,8 @@ final class CaddyApiClient
 {
     public const ADMIN_PORT = 2019;
 
+    public const ADMIN_ORIGIN = 'http://localhost:' . self::ADMIN_PORT;
+
     public const ROUTES_PATH = '/config/apps/http/servers/coresmith/routes';
 
     public const STAGED_CONFIG_FILE = '/etc/caddy/caddy-config.staged.json';
@@ -137,6 +139,12 @@ final class CaddyApiClient
     /**
      * @param  array<string, mixed>|null  $payload
      */
+    public static function probe(int $timeout = 10): string
+    {
+        return 'curl -fsS --max-time ' . $timeout . ' ' . escapeshellarg(self::ADMIN_ORIGIN . '/config/')
+            . ' -H ' . escapeshellarg('Origin: ' . self::ADMIN_ORIGIN) . ' >/dev/null';
+    }
+
     private function request(SSHConnection $connection, string $method, string $path, ?array $payload = null): void
     {
         $this->run($connection, $this->curl($method, $path, $payload), retry: in_array($method, self::IDEMPOTENT_METHODS, true));
@@ -147,9 +155,9 @@ final class CaddyApiClient
      */
     private function curl(string $method, string $path, ?array $payload = null, ?string $dataFile = null): string
     {
-        $url = 'http://localhost:' . self::ADMIN_PORT . $path;
+        $url = self::ADMIN_ORIGIN . $path;
 
-        $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . escapeshellarg($url);
+        $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . escapeshellarg($url) . ' -H ' . escapeshellarg('Origin: ' . self::ADMIN_ORIGIN);
 
         if ($payload !== null) {
             $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);

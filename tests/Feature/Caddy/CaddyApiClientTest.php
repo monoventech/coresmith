@@ -223,3 +223,18 @@ test('the bootstrap caddyfile refuses unknown hosts and keeps admin on localhost
 test('the caddyfile never contains a managed application site', function () {
     expect((new CaddyInstaller)->caddyfile())->not->toContain('/var/coresmith/apps');
 });
+
+test('every admin api call carries the origin caddy enforces, or caddy answers 403', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyClient()->addSite(caddyConnection($transport), routableApp());
+
+    expect($transport->commands())->not->toBeEmpty();
+
+    foreach ($transport->commands() as $command) {
+        expect($command)->toContain('Origin: http://localhost:2019');
+    }
+
+    expect(CaddyApiClient::probe())->toContain("-H 'Origin: http://localhost:2019'")
+        ->and((new CaddyInstaller)->caddyfile())->toContain('enforce_origin');
+});

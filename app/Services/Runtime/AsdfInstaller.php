@@ -82,18 +82,12 @@ final class AsdfInstaller
         foreach (AsdfManager::PLUGINS as $plugin) {
             $command = "asdf plugin list | grep -qx {$plugin} || asdf plugin add {$plugin}";
 
-            $connection->execute(
-                'sudo -u ' . AsdfManager::SYSTEM_USER . ' bash -lc ' . escapeshellarg($command),
-                sudo: true,
-            )->throw();
+            $connection->execute(AsdfManager::asSystemUser($command), sudo: true)->throw();
         }
     }
 
     private function verify(SSHConnection $connection): void
     {
-        $connection->execute(
-            'sudo -u ' . AsdfManager::SYSTEM_USER . ' bash -lc ' . escapeshellarg('asdf --version'),
-            sudo: true,
-        )->throw();
+        $connection->execute(AsdfManager::asSystemUser('asdf --version'), sudo: true)->throw();
     }
 }

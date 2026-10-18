@@ -23,6 +23,8 @@ final class AsdfManager
 
     public const SYSTEM_USER = 'coresmith';
 
+    public const PATH = AsdfInstaller::ASDF_DIR . '/bin:' . self::DATA_DIR . '/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+
     public const PLUGINS = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
 
     public const DOWNLOAD_RETRIES = 2;
@@ -176,12 +178,28 @@ final class AsdfManager
      */
     public function asCoresmith(string $command, array $env = []): string
     {
+        return self::asSystemUser($command, $env);
+    }
+
+    /**
+     * @param  array<string, string>  $env
+     */
+    public static function asSystemUser(string $command, array $env = []): string
+    {
+        $variables = [
+            'HOME' => '/home/' . self::SYSTEM_USER,
+            'ASDF_DIR' => AsdfInstaller::ASDF_DIR,
+            'ASDF_DATA_DIR' => self::DATA_DIR,
+            'PATH' => self::PATH,
+            ...$env,
+        ];
+
         $exports = '';
 
-        foreach ($env as $name => $value) {
+        foreach ($variables as $name => $value) {
             $exports .= $name . '=' . escapeshellarg($value) . ' ';
         }
 
-        return 'sudo -u ' . self::SYSTEM_USER . ' env ' . $exports . 'bash -lc ' . escapeshellarg($command);
+        return 'sudo -u ' . self::SYSTEM_USER . ' env ' . $exports . 'bash -c ' . escapeshellarg($command);
     }
 }
