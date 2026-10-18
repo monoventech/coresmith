@@ -14,7 +14,7 @@ use phpseclib3\Exception\NoKeyLoadedException;
 
 final class AppJwt
 {
-    public function for(GitHubAppCredentials $app): string
+    public function for(#[\SensitiveParameter] GitHubAppCredentials $app): string
     {
         if ($app->privateKey === '' || $app->appId === '') {
             throw new GitProviderException('This GitHub connection is missing its App credentials.');

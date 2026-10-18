@@ -10,4 +10,4 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-final class GitProviderException extends RuntimeException {}
+class GitProviderException extends RuntimeException {}

@@ -61,8 +61,8 @@ test('github lists the repositories the app is installed on', function () {
         'api.github.com/installation/repositories*' => Http::response([
             'total_count' => 2,
             'repositories' => [
-                ['full_name' => 'monoven/coresmith', 'ssh_url' => 'git@github.com:monoven/coresmith.git', 'default_branch' => 'main', 'private' => true],
-                ['full_name' => 'monoven/site', 'ssh_url' => 'git@github.com:monoven/site.git', 'default_branch' => 'trunk', 'private' => false],
+                ['id' => 70000001, 'full_name' => 'monoven/coresmith', 'ssh_url' => 'git@github.com:monoven/coresmith.git', 'default_branch' => 'main', 'private' => true, 'archived' => false, 'pushed_at' => '2026-10-18T09:00:00Z'],
+                ['id' => 70000002, 'full_name' => 'monoven/site', 'ssh_url' => 'git@github.com:monoven/site.git', 'default_branch' => 'trunk', 'private' => false, 'archived' => false, 'pushed_at' => '2026-10-10T09:00:00Z'],
             ],
         ]),
     ]);

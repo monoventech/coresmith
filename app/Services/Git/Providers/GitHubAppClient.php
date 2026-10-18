@@ -11,51 +11,136 @@ namespace App\Services\Git\Providers;
 use App\Exceptions\GitProviderException;
 use App\Models\SourceProvider;
 use App\Services\Git\Contracts\GitProvider;
-use App\Services\Git\GitHub\AppJwt;
+use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\Repository;
+use Closure;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 
 final class GitHubAppClient implements GitProvider
 {
-    public const API = 'https://api.github.com';
-
     public const TOKEN_SKEW_SECONDS = 300;
 
     public function __construct(
         private readonly SourceProvider $provider,
-        private readonly GitHubAppCredentials $app,
+        #[\SensitiveParameter] private readonly GitHubAppCredentials $app,
+        private readonly GitHubAppApi $api,
     ) {}
 
     public function listRepositories(): Collection
     {
-        $repositories = collect();
-        $page = 1;
-
-        do {
-            $body = $this->get('/installation/repositories', ['per_page' => 100, 'page' => $page])->json();
-            $batch = (array) ($body['repositories'] ?? []);
-
-            foreach ($batch as $repository) {
-                $repositories->push(new Repository(
-                    fullName: (string) $repository['full_name'],
-                    sshUrl: (string) $repository['ssh_url'],
-                    defaultBranch: (string) ($repository['default_branch'] ?? 'main'),
-                    private: (bool) ($repository['private'] ?? true),
-                ));
-            }
-
-            $page++;
-        } while ($batch !== [] && $repositories->count() < (int) ($body['total_count'] ?? 0));
-
-        return $repositories;
+        return collect($this->installationRepositories()['repositories'])->map(fn(array $repository): Repository => new Repository(
+            fullName: $repository['full_name'],
+            sshUrl: "git@github.com:{$repository['full_name']}.git",
+            defaultBranch: $repository['default_branch'],
+            private: $repository['private'],
+        ));
     }
 
-    public function createWebhook(string $repository, string $url, string $secret): string
+    /**
+     * @return array{total: int, repositories: list<array{id: string, full_name: string, private: bool, default_branch: string, archived: bool, pushed_at: ?string}>}
+     */
+    public function installationRepositories(int $maxPages = 10): array
+    {
+        $repositories = [];
+        $total = 0;
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $body = (array) $this->get('/installation/repositories', ['per_page' => 100, 'page' => $page])->json();
+            $batch = (array) ($body['repositories'] ?? []);
+            $total = (int) ($body['total_count'] ?? 0);
+
+            foreach ($batch as $repository) {
+                $repositories[] = [
+                    'id' => (string) $repository['id'],
+                    'full_name' => (string) $repository['full_name'],
+                    'private' => (bool) ($repository['private'] ?? true),
+                    'default_branch' => (string) ($repository['default_branch'] ?? 'main'),
+                    'archived' => (bool) ($repository['archived'] ?? false),
+                    'pushed_at' => isset($repository['pushed_at']) ? (string) $repository['pushed_at'] : null,
+                ];
+            }
+
+            if ($batch === [] || count($repositories) >= $total) {
+                break;
+            }
+        }
+
+        usort($repositories, fn(array $a, array $b): int => ($b['pushed_at'] ?? '') <=> ($a['pushed_at'] ?? ''));
+
+        return ['total' => $total, 'repositories' => $repositories];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function branches(string $fullName): array
+    {
+        $branches = array_filter((array) $this->get("/repos/{$this->path($fullName)}/branches", ['per_page' => 100])->json(), fn($branch): bool => is_array($branch) && isset($branch['name']));
+
+        return array_values(array_map(fn(array $branch): string => (string) $branch['name'], $branches));
+    }
+
+    public function branchHead(string $fullName, string $branch, ?string $knownSha): ?string
+    {
+        $path = '/repos/' . $this->path($fullName) . '/commits/heads/' . $this->ref($branch);
+        $headers = ['Accept' => 'application/vnd.github.sha'];
+
+        if ($knownSha !== null && preg_match('/^[0-9a-f]{40}$/D', $knownSha) === 1) {
+            $headers['If-None-Match'] = '"' . $knownSha . '"';
+        }
+
+        $request = $this->request(retry: false)->replaceHeaders($headers);
+        $response = $this->send(fn(): Response => $request->get(GitHubAppApi::API . $path));
+
+        if ($response->status() === 304) {
+            return null;
+        }
+
+        if (in_array($response->status(), [404, 422], true)) {
+            throw new GitProviderException("GitHub has no branch {$branch} in {$fullName} that this app can see.");
+        }
+
+        if (!$response->successful()) {
+            throw new GitProviderException('GitHub refused the check. ' . $this->reason($response));
+        }
+
+        $sha = trim($response->body());
+
+        if (preg_match('/^[0-9a-f]{40}$/D', $sha) !== 1) {
+            throw new GitProviderException(GitHubAppApi::NO_ANSWER);
+        }
+
+        return $sha;
+    }
+
+    public function cloneToken(string $repositoryId): string
+    {
+        if (preg_match('/^[0-9]{1,18}$/D', $repositoryId) !== 1) {
+            throw new GitProviderException("\"{$repositoryId}\" is not a valid repository id.");
+        }
+
+        return $this->api->mintToken($this->app, $this->installation(), [
+            'repository_ids' => [(int) $repositoryId],
+            'permissions' => ['contents' => 'read'],
+        ])['token'];
+    }
+
+    public function postDeployStatus(string $fullName, string $sha, string $state, string $targetUrl, string $description, string $context): void
+    {
+        $this->post("/repos/{$this->path($fullName)}/statuses/" . rawurlencode($sha), [
+            'state' => $state,
+            'target_url' => $targetUrl,
+            'description' => $description,
+            'context' => $context,
+        ]);
+    }
+
+    public function createWebhook(string $repository, string $url, #[\SensitiveParameter] string $secret): string
     {
         $response = $this->post("/repos/{$this->path($repository)}/hooks", [
             'name' => 'web',
@@ -69,7 +154,7 @@ final class GitHubAppClient implements GitProvider
 
     public function deleteWebhook(string $repository, string $hookId): void
     {
-        $this->request()->delete(self::API . "/repos/{$this->path($repository)}/hooks/" . rawurlencode($hookId));
+        $this->delete("/repos/{$this->path($repository)}/hooks/" . rawurlencode($hookId));
     }
 
     public function createDeployKey(string $repository, string $publicKey, string $title): string
@@ -85,28 +170,17 @@ final class GitHubAppClient implements GitProvider
 
     public function deleteDeployKey(string $repository, string $keyId): void
     {
-        $this->request()->delete(self::API . "/repos/{$this->path($repository)}/keys/" . rawurlencode($keyId));
+        $this->delete("/repos/{$this->path($repository)}/keys/" . rawurlencode($keyId));
     }
 
     public function latestCommit(string $repository, string $branch): array
     {
-        $commit = $this->get("/repos/{$this->path($repository)}/commits/" . rawurlencode($branch))->json();
-
-        return [
-            'sha' => (string) ($commit['sha'] ?? ''),
-            'message' => (string) ($commit['commit']['message'] ?? ''),
-            'author' => (string) ($commit['commit']['author']['name'] ?? ''),
-        ];
+        return ['sha' => (string) $this->branchHead($repository, $branch, null), 'message' => '', 'author' => ''];
     }
 
     public function updateCommitStatus(string $repository, string $sha, string $state, string $targetUrl, string $description): void
     {
-        $this->post("/repos/{$this->path($repository)}/statuses/" . rawurlencode($sha), [
-            'state' => $state,
-            'target_url' => $targetUrl,
-            'description' => $description,
-            'context' => 'coresmith/deploy',
-        ]);
+        $this->postDeployStatus($repository, $sha, $state, $targetUrl, $description, 'coresmith/deploy');
     }
 
     public function revoke(): void
@@ -117,7 +191,7 @@ final class GitHubAppClient implements GitProvider
             return;
         }
 
-        $this->request($token)->delete(self::API . '/installation/token');
+        $this->api->revokeToken($token);
     }
 
     public function token(): string
@@ -138,45 +212,54 @@ final class GitHubAppClient implements GitProvider
 
     private function mintInstallationToken(): string
     {
-        $installation = $this->provider->installation_id;
+        $minted = $this->api->mintToken($this->app, $this->installation());
 
-        if ($installation === null || $installation === '') {
+        $this->provider->forceFill([
+            'access_token' => $minted['token'],
+            'token_expires_at' => $minted['expires_at'],
+        ])->save();
+
+        return $minted['token'];
+    }
+
+    private function installation(): string
+    {
+        $installation = (string) $this->provider->installation_id;
+
+        if ($installation === '') {
             throw new GitProviderException('This GitHub connection has no installation to mint a token for. Reconnect it from Settings → Source providers.');
         }
 
-        $response = Http::withToken(app(AppJwt::class)->for($this->app))
-            ->withHeaders(['Accept' => 'application/vnd.github+json'])
-            ->post(self::API . '/app/installations/' . rawurlencode($installation) . '/access_tokens');
-
-        if ($response->failed()) {
-            throw new GitProviderException('GitHub refused to issue an installation token: ' . $this->reason($response));
-        }
-
-        $token = (string) $response->json('token');
-
-        $this->provider->forceFill([
-            'access_token' => $token,
-            'token_expires_at' => Carbon::parse((string) $response->json('expires_at')),
-        ])->save();
-
-        return $token;
+        return $installation;
     }
 
     private function path(string $repository): string
     {
-        if (!preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/', $repository)) {
+        if (preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/D', $repository) !== 1 || array_intersect(explode('/', $repository), ['.', '..']) !== []) {
             throw new GitProviderException("\"{$repository}\" is not a valid owner/repo name.");
         }
 
         return $repository;
     }
 
-    private function request(?string $token = null): PendingRequest
+    private function ref(string $branch): string
     {
-        return Http::withToken($token ?? $this->token())
-            ->withHeaders(['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => '2022-11-28'])
-            ->timeout(20)
-            ->retry(2, 200, throw: false);
+        $segments = explode('/', $branch);
+
+        if (array_intersect($segments, ['', '.', '..']) !== []) {
+            throw new GitProviderException("\"{$branch}\" is not a branch name Git accepts.");
+        }
+
+        return implode('/', array_map('rawurlencode', $segments));
+    }
+
+    private function request(bool $retry = true): PendingRequest
+    {
+        $request = Http::withToken($this->token())
+            ->withHeaders(['Accept' => GitHubAppApi::ACCEPT, 'X-GitHub-Api-Version' => GitHubAppApi::VERSION])
+            ->timeout(GitHubAppApi::TIMEOUT);
+
+        return $retry ? $request->retry(2, 200, throw: false) : $request;
     }
 
     /**
@@ -184,15 +267,35 @@ final class GitHubAppClient implements GitProvider
      */
     private function get(string $path, array $query = []): Response
     {
-        return $this->guard($this->request()->get(self::API . $path, $query));
+        $request = $this->request();
+
+        return $this->guard($this->send(fn(): Response => $request->get(GitHubAppApi::API . $path, $query)));
     }
 
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function post(string $path, array $payload): Response
+    private function post(string $path, #[\SensitiveParameter] array $payload): Response
     {
-        return $this->guard($this->request()->post(self::API . $path, $payload));
+        $request = $this->request(retry: false);
+
+        return $this->guard($this->send(fn(): Response => $request->post(GitHubAppApi::API . $path, $payload)));
+    }
+
+    private function delete(string $path): void
+    {
+        $request = $this->request();
+
+        $this->send(fn(): Response => $request->delete(GitHubAppApi::API . $path));
+    }
+
+    private function send(Closure $send): Response
+    {
+        try {
+            return $send();
+        } catch (ConnectionException) {
+            throw new GitProviderException(GitHubAppApi::NO_ANSWER);
+        }
     }
 
     private function guard(Response $response): Response
