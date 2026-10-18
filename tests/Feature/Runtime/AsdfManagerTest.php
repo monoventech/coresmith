@@ -151,7 +151,7 @@ test('an installed version list keeps only names that look like versions', funct
     expect(app(AsdfManager::class)->installedVersions((new SSHConnection($server, $transport))->connect(), 'php'))->toBe(['8.4.20', '8.5.10']);
 });
 
-test('asdf commands carry their own environment instead of trusting the user shell files', function () {
+test('asdf commands carry their own environment and start in their own home, not the caller directory', function () {
     $command = AsdfManager::asSystemUser('asdf --version', ['CORESMITH_RUNTIME' => 'php']);
 
     expect($command)->toStartWith('sudo -u coresmith env ')
@@ -159,6 +159,6 @@ test('asdf commands carry their own environment instead of trusting the user she
         ->and($command)->toContain("ASDF_DATA_DIR='/opt/asdf-data'")
         ->and($command)->toContain("PATH='/opt/asdf/bin:/opt/asdf-data/shims:")
         ->and($command)->toContain("CORESMITH_RUNTIME='php'")
-        ->and($command)->toEndWith("bash -c 'asdf --version'")
+        ->and($command)->toEndWith("bash -c 'cd \"\$HOME\" && asdf --version'")
         ->and($command)->not->toContain('bash -lc');
 });

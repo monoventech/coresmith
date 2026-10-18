@@ -200,6 +200,6 @@ final class AsdfManager
             $exports .= $name . '=' . escapeshellarg($value) . ' ';
         }
 
-        return 'sudo -u ' . self::SYSTEM_USER . ' env ' . $exports . 'bash -c ' . escapeshellarg($command);
+        return 'sudo -u ' . self::SYSTEM_USER . ' env ' . $exports . 'bash -c ' . escapeshellarg('cd "$HOME" && ' . $command);
     }
 }
