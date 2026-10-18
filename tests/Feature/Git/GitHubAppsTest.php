@@ -116,6 +116,20 @@ test('a private key that is neither a pem nor base64 leaves the environment app 
     expect(app(GitHubApps::class)->env())->toBeNull();
 });
 
+test('an unreadable environment key keeps the app configured and fails when it signs', function (string $form) {
+    githubAppsConfigureEnv(['private_key' => match ($form) {
+        'hex that is valid base64' => bin2hex(random_bytes(20)),
+        'plain text' => 'abcd',
+        'a truncated pem' => substr(githubAppsPem(), 0, 300),
+    }]);
+    $apps = app(GitHubApps::class);
+
+    expect($apps->env())->not->toBeNull()
+        ->and($apps->canRegister())->toBeFalse();
+
+    expect(fn() => app(AppJwt::class)->for($apps->env()))->toThrow(GitProviderException::class, 'could not be read');
+})->with(['hex that is valid base64', 'plain text', 'a truncated pem']);
+
 test('a team is offered the environment app alone when one is configured', function () {
     githubAppsConfigureEnv();
     $team = Team::factory()->create();
@@ -338,7 +352,7 @@ test('the jwt is signed with the app key for its id', function (string $format) 
         ->and(json_decode($decode($header), true, 512, JSON_THROW_ON_ERROR))->toBe(['alg' => 'RS256', 'typ' => 'JWT'])
         ->and($payload['iss'])->toBe($app->app_id)
         ->and($payload['iat'])->toBeLessThanOrEqual(time() - 59)
-        ->and($payload['exp'] - $payload['iat'])->toBeLessThanOrEqual(600)
+        ->and($payload['exp'] - $payload['iat'])->toBe(600)
         ->and($payload['exp'])->toBeGreaterThan(time())
         ->and(openssl_verify(
             $header . '.' . $claims,
@@ -348,14 +362,27 @@ test('the jwt is signed with the app key for its id', function (string $format) 
         ))->toBe(1);
 })->with(['PKCS8', 'PKCS1']);
 
-test('a jwt cannot be signed without an app key or id', function (string $appId, string $privateKey) {
+test('a jwt cannot be signed without a readable app key and an id', function (string $case) {
+    $pem = githubAppsPem();
+    $missing = 'This GitHub connection is missing its App credentials.';
+    $unreadable = 'This GitHub connection\'s App private key could not be read. Check the App credentials.';
+
+    [$appId, $privateKey, $message] = match ($case) {
+        'no key' => ['1041207', '', $missing],
+        'no id' => ['', $pem, $missing],
+        'junk bytes from valid base64' => ['1041207', (string) base64_decode(bin2hex(random_bytes(20)), true), $unreadable],
+        'plain text' => ['1041207', 'abcd', $unreadable],
+        'a truncated pem' => ['1041207', substr($pem, 0, 300), $unreadable],
+        'a pem with no body' => ['1041207', "-----BEGIN PRIVATE KEY-----\n-----END PRIVATE KEY-----", $unreadable],
+        'a public key' => ['1041207', PublicKeyLoader::load($pem)->getPublicKey()->toString('PKCS8'), $unreadable],
+    };
     $credentials = new GitHubAppCredentials('env', $appId, 'coresmith', 'Coresmith', 'client', 'secret', $privateKey, null, null, null, null, null);
 
-    app(AppJwt::class)->for($credentials);
-})->with([
-    'no key' => ['1041207', ''],
-    'no id' => ['', 'pem'],
-])->throws(GitProviderException::class, 'missing its App credentials');
+    expect(fn() => app(AppJwt::class)->for($credentials))->toThrow(function (GitProviderException $exception) use ($message) {
+        expect($exception->getMessage())->toBe($message)
+            ->and($exception->getPrevious())->toBeNull();
+    });
+})->with(['no key', 'no id', 'junk bytes from valid base64', 'plain text', 'a truncated pem', 'a pem with no body', 'a public key']);
 
 test('a github connection is connected while its installation is linked and not suspended', function () {
     $trashed = SourceProvider::factory()->create();

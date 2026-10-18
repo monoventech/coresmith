@@ -10,6 +10,7 @@ namespace App\Services\Git\GitHub;
 
 use App\Exceptions\GitProviderException;
 use phpseclib3\Crypt\RSA;
+use phpseclib3\Exception\NoKeyLoadedException;
 
 final class AppJwt
 {
@@ -19,14 +20,22 @@ final class AppJwt
             throw new GitProviderException('This GitHub connection is missing its App credentials.');
         }
 
+        try {
+            $key = RSA::loadPrivateKey($app->privateKey);
+        } catch (NoKeyLoadedException) {
+            throw new GitProviderException('This GitHub connection\'s App private key could not be read. Check the App credentials.');
+        }
+
+        $now = time();
+
         $header = $this->base64Url(json_encode(['alg' => 'RS256', 'typ' => 'JWT'], JSON_THROW_ON_ERROR));
         $claims = $this->base64Url(json_encode([
-            'iat' => time() - 60,
-            'exp' => time() + 540,
+            'iat' => $now - 60,
+            'exp' => $now + 540,
             'iss' => $app->appId,
         ], JSON_THROW_ON_ERROR));
 
-        $signature = RSA::loadPrivateKey($app->privateKey)
+        $signature = $key
             ->withHash('sha256')
             ->withPadding(RSA::SIGNATURE_PKCS1)
             ->sign($header . '.' . $claims);

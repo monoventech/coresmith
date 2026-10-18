@@ -176,6 +176,18 @@ test('a github connection with no app credentials fails loudly instead of clone 
         ->listRepositories();
 })->throws(GitProviderException::class, 'made through an app this panel no longer has');
 
+test('a github connection whose app key cannot be read fails with a provider exception before any request', function () {
+    Http::fake();
+    $source = provider(SourceProviderType::GitHubApp, [
+        'github_app_id' => GitHubApp::factory()->create(['private_key' => 'abcd'])->id,
+        'token_expires_at' => now()->subHour(),
+    ]);
+
+    expect(fn() => client($source)->listRepositories())->toThrow(GitProviderException::class, 'could not be read');
+
+    Http::assertNothingSent();
+});
+
 test('a github connection whose app was removed fails loudly too', function () {
     Http::fake();
     $source = provider(SourceProviderType::GitHubApp);
