@@ -89,7 +89,7 @@ final class SourceProviderConnectController extends Controller
         }
 
         try {
-            $this->store($provider, $team, (string) $request->query('code'), $request->query('installation_id'));
+            $this->store($provider, $team, (string) $request->query('code'));
         } catch (GitProviderException $e) {
             return redirect()->route('source-providers.index')->with('error', $e->getMessage());
         }
@@ -134,7 +134,7 @@ final class SourceProviderConnectController extends Controller
         return $context->explicit() && $context->team()?->isNot($team) ? null : $team;
     }
 
-    private function store(SourceProviderType $provider, Team $team, string $code, ?string $installationId): void
+    private function store(SourceProviderType $provider, Team $team, string $code): void
     {
         $tokens = $this->exchange($provider, $code);
 
@@ -144,7 +144,7 @@ final class SourceProviderConnectController extends Controller
                 'name' => $this->accountName($provider, (string) $tokens['access_token']),
                 'access_token' => $tokens['access_token'],
                 'refresh_token' => $tokens['refresh_token'],
-                'installation_id' => $installationId,
+                'installation_id' => null,
                 'token_expires_at' => $tokens['expires_in'] === null ? null : now()->addSeconds($tokens['expires_in']),
                 'scopes' => $provider->scopes(),
             ],

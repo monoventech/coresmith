@@ -14,7 +14,7 @@ use App\Models\User;
 final class InstallationChoices
 {
     /**
-     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>  $installations
+     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}>  $installations
      */
     public function offer(Team $team, User $user, string $app, array $installations): void
     {
@@ -28,7 +28,7 @@ final class InstallationChoices
     }
 
     /**
-     * @return array{team: string, app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>}|null
+     * @return array{team: string, app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}>}|null
      */
     public function pending(User $user): ?array
     {
@@ -67,6 +67,8 @@ final class InstallationChoices
                 'account_type' => $installation['account_type'],
                 'repository_selection' => $installation['repository_selection'],
                 'suspended_at' => is_string($installation['suspended_at'] ?? null) ? $installation['suspended_at'] : null,
+                'user_login' => is_string($installation['user_login'] ?? null) ? $installation['user_login'] : null,
+                'user_repositories' => is_int($installation['user_repositories'] ?? null) ? $installation['user_repositories'] : null,
             ];
         }
 

@@ -44,13 +44,72 @@ function githubConnectInstallation(int $id, string $login, string $type = 'Organ
     return ['id' => $id, 'account' => ['login' => $login, 'type' => $type], 'repository_selection' => $selection, 'suspended_at' => null];
 }
 
-function githubConnectFake(array $installations, string $clientId = 'Iv1.client'): void
+function githubConnectFake(array $installations, string $clientId = 'Iv1.client', array $github = [], array $override = []): void
 {
-    Http::fake([
+    $github = array_merge(['login' => 'oseughu', 'visible' => 4, 'total' => 4], $github);
+    $count = fn(int|array $counts, string $installation): int => is_array($counts) ? $counts[$installation] : $counts;
+
+    Http::fake(array_merge([
         'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_user_token', 'token_type' => 'bearer', 'expires_in' => 28800]),
-        'api.github.com/user/installations*' => Http::response(['total_count' => count($installations), 'installations' => $installations]),
+        'api.github.com/user' => Http::response(['login' => $github['login'], 'id' => 10, 'type' => 'User']),
+        'api.github.com/user/installations?*' => Http::response(['total_count' => count($installations), 'installations' => $installations]),
+        'api.github.com/user/installations/*/repositories*' => fn($request) => Http::response([
+            'total_count' => $count($github['visible'], (string) preg_replace('#^.*/user/installations/([0-9]+)/repositories.*$#', '$1', $request->url())),
+            'repositories' => [],
+        ]),
+        'api.github.com/app/installations/*/access_tokens' => fn($request) => Http::response([
+            'token' => 'ghs_counting_' . preg_replace('#^.*/app/installations/([0-9]+)/access_tokens$#', '$1', $request->url()),
+            'expires_at' => '2030-01-01T00:00:00Z',
+        ], 201),
+        'api.github.com/installation/repositories*' => fn($request) => Http::response([
+            'total_count' => $count($github['total'], substr((string) ($request->header('Authorization')[0] ?? ''), strlen('Bearer ghs_counting_'))),
+            'repositories' => [],
+        ]),
+        'api.github.com/installation/token' => Http::response(null, 204),
         "api.github.com/applications/{$clientId}/token" => Http::response(null, 204),
-    ]);
+    ], $override));
+}
+
+function githubConnectPem(): string
+{
+    static $pem = null;
+
+    if ($pem === null) {
+        openssl_pkey_export(openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]), $pem);
+    }
+
+    return $pem;
+}
+
+function githubConnectCounted(string $installation, int $times = 1): void
+{
+    expect(Http::recorded(fn($request) => $request->method() === 'POST'
+        && $request->url() === "https://api.github.com/app/installations/{$installation}/access_tokens"
+        && $request->body() === '{"permissions":{"metadata":"read"}}'))->toHaveCount($times)
+        ->and(Http::recorded(fn($request) => $request->method() === 'GET'
+            && $request->url() === 'https://api.github.com/installation/repositories?per_page=1'
+            && $request->hasHeader('Authorization', "Bearer ghs_counting_{$installation}")))->toHaveCount($times)
+        ->and(Http::recorded(fn($request) => $request->method() === 'DELETE'
+            && $request->url() === 'https://api.github.com/installation/token'
+            && $request->hasHeader('Authorization', "Bearer ghs_counting_{$installation}")))->toHaveCount($times);
+}
+
+function githubConnectRevokedLast(): void
+{
+    $order = Http::recorded()->values()->map(fn(array $pair): string => $pair[0]->method() . ' ' . $pair[0]->url());
+    $revoked = $order->search('DELETE https://api.github.com/applications/Iv1.client/token');
+    $asked = $order->keys()->filter(fn(int $index): bool => Http::recorded()->values()[$index][0]->hasHeader('Authorization', 'Bearer ghu_user_token'));
+
+    expect($revoked)->toBeInt()
+        ->and($asked->all())->not->toBe([])
+        ->and($asked->max())->toBeLessThan($revoked);
+}
+
+function githubConnectAskedAs(string $url): Closure
+{
+    return fn($request): bool => $request->method() === 'GET'
+        && $request->url() === $url
+        && $request->hasHeader('Authorization', 'Bearer ghu_user_token');
 }
 
 function githubConnectCallback(array $query): string
@@ -65,17 +124,17 @@ function githubConnectEnv(): void
         'app_slug' => 'coresmith-cloud',
         'client_id' => 'Iv1.env',
         'client_secret' => 'env-secret',
-        'private_key' => "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----",
+        'private_key' => githubConnectPem(),
         'webhook_secret' => 'env-hook-secret',
     ]]);
 }
 
-function githubConnectOffer(User $user, Team $team, GitHubApp $app): TestResponse
+function githubConnectOffer(User $user, Team $team, GitHubApp $app, ?array $installations = null, array $github = []): TestResponse
 {
-    githubConnectFake([
+    githubConnectFake($installations ?? [
         githubConnectInstallation(1, 'monoventech', 'Organization', 'all'),
         githubConnectInstallation(2, 'oseughu', 'User', 'selected'),
-    ]);
+    ], github: $github);
 
     return test()->actingAs($user)
         ->withSession(githubConnectIntent($team, $app))
@@ -347,18 +406,19 @@ test('a callback with matching state links the installation the user can reach',
         ->and($provider->connected())->toBeTrue()
         ->and(session(SourceProviderConnectController::STATE_KEY))->toBeNull();
 
-    Http::assertSentCount(3);
+    Http::assertSentCount(7);
     Http::assertSent(fn($request) => $request->method() === 'POST'
         && $request->url() === 'https://github.com/login/oauth/access_token'
         && $request['client_id'] === 'Iv1.client'
         && $request['code'] === 'c0de'
         && $request['redirect_uri'] === 'http://localhost/settings/source-providers/github_app/callback');
-    Http::assertSent(fn($request) => $request->method() === 'GET'
-        && str_starts_with($request->url(), 'https://api.github.com/user/installations')
-        && $request->hasHeader('Authorization', 'Bearer ghu_user_token'));
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations?per_page=100'));
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations/51842/repositories?per_page=1'));
     Http::assertSent(githubConnectRevoked());
+    githubConnectCounted('51842');
 
-    expect(githubConnectStoredAnywhere('ghu_user_token'))->toBeFalse();
+    expect(githubConnectStoredAnywhere('ghu_user_token'))->toBeFalse()
+        ->and(githubConnectStoredAnywhere('ghs_counting'))->toBeFalse();
 });
 
 test('a single reachable installation is linked when github names none', function () {
@@ -377,9 +437,9 @@ test('a single reachable installation is linked when github names none', functio
         ->repository_selection->toBe('all');
 });
 
-test('a suspended installation is linked and marked suspended', function () {
+test('a suspended personal installation is linked and marked suspended', function () {
     [$team, $owner, $app] = githubConnectTeam();
-    githubConnectFake([array_merge(githubConnectInstallation(51842, 'monoventech'), ['suspended_at' => '2026-10-18T14:00:00Z'])]);
+    githubConnectFake([array_merge(githubConnectInstallation(51842, 'oseughu', 'User', 'all'), ['suspended_at' => '2026-10-18T14:00:00Z'])]);
 
     $this->actingAs($owner)
         ->withSession(githubConnectIntent($team, $app))
@@ -554,7 +614,7 @@ test('the state is single use', function () {
         ->get($callback)
         ->assertSessionHas('error', 'That connection attempt could not be verified. Start again from this page.');
 
-    Http::assertSentCount(3);
+    Http::assertSentCount(7);
     expect(SourceProvider::count())->toBe(1);
 });
 
@@ -590,15 +650,11 @@ test('a code github refuses stores nothing', function () {
 
 test('an installation list github will not give stores nothing and still revokes the user token', function (string $failure) {
     [$team, $owner, $app] = githubConnectTeam();
-    Http::fake([
-        'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_user_token', 'token_type' => 'bearer']),
-        'api.github.com/user/installations*' => match ($failure) {
-            'a refusal' => Http::response(['message' => 'Bad credentials'], 401),
-            'an outage' => Http::response(['message' => 'Server Error'], 502),
-            'no answer' => Http::failedConnection(),
-        },
-        'api.github.com/applications/Iv1.client/token' => Http::response(null, 204),
-    ]);
+    githubConnectFake([], override: ['api.github.com/user/installations?*' => match ($failure) {
+        'a refusal' => Http::response(['message' => 'Bad credentials'], 401),
+        'an outage' => Http::response(['message' => 'Server Error'], 502),
+        'no answer' => Http::failedConnection(),
+    }]);
 
     $this->actingAs($owner)
         ->withSession(githubConnectIntent($team, $app))
@@ -613,11 +669,7 @@ test('an installation list github will not give stores nothing and still revokes
 
 test('a user token github will not revoke still links the installation', function () {
     [$team, $owner, $app] = githubConnectTeam();
-    Http::fake([
-        'github.com/login/oauth/access_token' => Http::response(['access_token' => 'ghu_user_token', 'token_type' => 'bearer']),
-        'api.github.com/user/installations*' => Http::response(['total_count' => 1, 'installations' => [githubConnectInstallation(51842, 'monoventech')]]),
-        'api.github.com/applications/Iv1.client/token' => Http::failedConnection(),
-    ]);
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')], override: ['api.github.com/applications/Iv1.client/token' => Http::failedConnection()]);
 
     $this->actingAs($owner)
         ->withSession(githubConnectIntent($team, $app))
@@ -656,12 +708,16 @@ test('several reachable installations open a chooser', function () {
             'user' => $owner->id,
             'app' => $app->id,
             'installations' => [
-                ['id' => '1', 'account' => 'monoventech', 'account_type' => 'Organization', 'repository_selection' => 'all', 'suspended_at' => null],
-                ['id' => '2', 'account' => 'oseughu', 'account_type' => 'User', 'repository_selection' => 'selected', 'suspended_at' => null],
+                ['id' => '1', 'account' => 'monoventech', 'account_type' => 'Organization', 'repository_selection' => 'all', 'suspended_at' => null, 'user_login' => null, 'user_repositories' => 4],
+                ['id' => '2', 'account' => 'oseughu', 'account_type' => 'User', 'repository_selection' => 'selected', 'suspended_at' => null, 'user_login' => 'oseughu', 'user_repositories' => null],
             ],
         ]);
 
     Http::assertSent(githubConnectRevoked());
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user'));
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations/1/repositories?per_page=1'));
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/access_tokens'));
+    githubConnectRevokedLast();
 
     $this->actingAs($owner)
         ->get(route('source-providers.index'))
@@ -916,6 +972,235 @@ test('disconnecting github revokes a live installation token without minting one
         && $request->url() === 'https://api.github.com/installation/token'
         && $request->hasHeader('Authorization', 'Bearer ghs_live'));
 });
+
+test('an outside collaborator cannot link an organization\'s whole installation', function (array $query) {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')], github: ['visible' => 1, 'total' => 9]);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', ...$query]))
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', "Your GitHub account can't see every repository this installation covers, so Coresmith won't link it. Ask an owner of monoventech to connect GitHub.");
+
+    expect(SourceProvider::withTrashed()->count())->toBe(0)
+        ->and(Activity::query()->where('description', 'github_installation_linked')->count())->toBe(0);
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations/51842/repositories?per_page=1'));
+    Http::assertSent(githubConnectRevoked());
+    githubConnectCounted('51842');
+    githubConnectRevokedLast();
+})->with([
+    'named by github' => [['installation_id' => '51842', 'setup_action' => 'install']],
+    'the only one reachable' => [[]],
+]);
+
+test('an organization member who can see every repository the installation covers links it', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech', 'Organization', 'all')], github: ['visible' => 9, 'total' => 9]);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('success', 'GitHub connected. Repositories on monoventech can be picked when you add an app.');
+
+    expect(SourceProvider::sole()->installation_id)->toBe('51842');
+    Http::assertSent(githubConnectRevoked());
+    Http::assertNotSent(fn($request) => $request->url() === 'https://api.github.com/user');
+    githubConnectCounted('51842');
+});
+
+test('someone else\'s personal installation cannot be linked', function (array $query) {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51900, 'victim', 'User', 'all')], github: ['login' => 'oseughu']);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', ...$query]))
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', 'This installation belongs to victim. Sign in to GitHub as victim to connect it.');
+
+    expect(SourceProvider::withTrashed()->count())->toBe(0);
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user'));
+    Http::assertSent(githubConnectRevoked());
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/access_tokens') || str_contains($request->url(), '/repositories'));
+    githubConnectRevokedLast();
+})->with([
+    'named by github' => [['installation_id' => '51900', 'setup_action' => 'install']],
+    'the only one reachable' => [[]],
+]);
+
+test('a personal installation of the signed-in account is linked', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51900, 'oseughu', 'User', 'all')], github: ['login' => 'oseughu']);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51900']))
+        ->assertSessionHas('success', 'GitHub connected. Repositories on oseughu can be picked when you add an app.');
+
+    expect(SourceProvider::sole())
+        ->installation_id->toBe('51900')
+        ->account_type->toBe('User');
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user'));
+    Http::assertSent(githubConnectRevoked());
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/access_tokens'));
+});
+
+test('a check github cannot finish refuses the link and still revokes the user token', function (string $check) {
+    [$team, $owner, $app] = githubConnectTeam();
+    $personal = in_array($check, ['the signed-in account', 'an answer with no account'], true);
+    githubConnectFake([githubConnectInstallation(51842, $personal ? 'oseughu' : 'monoventech', $personal ? 'User' : 'Organization')], override: match ($check) {
+        'the signed-in account' => ['api.github.com/user' => Http::response(['message' => 'Bad credentials'], 401)],
+        'an answer with no account' => ['api.github.com/user' => Http::response(['id' => 10])],
+        'what the user can see' => ['api.github.com/user/installations/*/repositories*' => Http::response(['message' => 'Server Error'], 502)],
+        'an answer with no count' => ['api.github.com/user/installations/*/repositories*' => Http::response(['repositories' => []])],
+        'a token to count with' => ['api.github.com/app/installations/*/access_tokens' => Http::response(['message' => 'Not Found'], 404)],
+        'a suspended installation' => ['api.github.com/app/installations/*/access_tokens' => Http::response(['message' => 'This installation has been suspended'], 403)],
+        'what the installation covers' => ['api.github.com/installation/repositories*' => Http::failedConnection()],
+    });
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', 'GitHub would not complete the connection. Nothing was saved.');
+
+    expect(SourceProvider::withTrashed()->count())->toBe(0)
+        ->and(githubConnectStoredAnywhere('ghu_user_token'))->toBeFalse();
+    Http::assertSent(githubConnectRevoked());
+})->with([
+    'the signed-in account',
+    'an answer with no account',
+    'what the user can see',
+    'an answer with no count',
+    'a token to count with',
+    'a suspended installation',
+    'what the installation covers',
+]);
+
+test('the token minted to count an installation is revoked even when the count fails', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')], override: ['api.github.com/installation/repositories*' => Http::response(['message' => 'Server Error'], 500)]);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('error', 'GitHub would not complete the connection. Nothing was saved.');
+
+    githubConnectCounted('51842');
+    expect(githubConnectStoredAnywhere('ghs_counting'))->toBeFalse();
+});
+
+test('a pick from the chooser is checked like a direct link, with what github showed before the token was revoked', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectOffer($owner, $team, $app, [
+        githubConnectInstallation(1, 'monoventech', 'Organization', 'all'),
+        githubConnectInstallation(2, 'someone-else', 'User', 'all'),
+        githubConnectInstallation(3, 'victim-org', 'Organization', 'selected'),
+    ], ['login' => 'oseughu', 'visible' => ['1' => 6, '3' => 1], 'total' => ['1' => 6, '3' => 9]]);
+    $asUser = fn(): int => Http::recorded(fn($request) => $request->hasHeader('Authorization', 'Bearer ghu_user_token'))->count();
+    $offered = $asUser();
+
+    Http::assertSent(githubConnectRevoked());
+
+    $this->actingAs($owner)
+        ->post(route('github.installations.store'), ['installation_id' => '3'])
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', "Your GitHub account can't see every repository this installation covers, so Coresmith won't link it. Ask an owner of victim-org to connect GitHub.");
+
+    $this->actingAs($owner)
+        ->post(route('github.installations.store'), ['installation_id' => '2'])
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', 'This installation belongs to someone-else. Sign in to GitHub as someone-else to connect it.');
+
+    expect(SourceProvider::count())->toBe(0)
+        ->and(session(GitHubConnector::CHOICES_KEY))->not->toBeNull();
+
+    $this->actingAs($owner)
+        ->post(route('github.installations.store'), ['installation_id' => '1'])
+        ->assertSessionHas('success', 'GitHub connected. Repositories on monoventech can be picked when you add an app.');
+
+    expect(SourceProvider::sole()->installation_id)->toBe('1')
+        ->and($asUser())->toBe($offered);
+    githubConnectCounted('3');
+    githubConnectCounted('1');
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/app/installations/2/'));
+});
+
+test('a pick whose installation github will not count is refused and stays on offer', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([
+        githubConnectInstallation(1, 'monoventech', 'Organization', 'all'),
+        githubConnectInstallation(2, 'oseughu', 'User', 'selected'),
+    ], override: ['api.github.com/installation/repositories*' => Http::response(['message' => 'Server Error'], 500)]);
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state']))
+        ->assertRedirect('http://localhost/monoven/settings/git');
+
+    $this->actingAs($owner)
+        ->post(route('github.installations.store'), ['installation_id' => '1'])
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', 'GitHub would not complete the connection. Nothing was saved.');
+
+    expect(SourceProvider::count())->toBe(0)
+        ->and(session(GitHubConnector::CHOICES_KEY))->not->toBeNull();
+    githubConnectCounted('1');
+});
+
+test('the callback links to the team the attempt was started for, not the one last worked in', function () {
+    [$monoven, $owner, $app] = githubConnectTeam();
+    $acme = Team::factory()->create(['slug' => 'acme']);
+    $acme->members()->attach($owner, ['role' => 'owner']);
+    $owner->forceFill(['current_team_id' => $acme->id])->save();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')]);
+
+    $this->actingAs($owner->fresh())
+        ->withSession(githubConnectIntent($monoven, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('success');
+
+    expect(SourceProvider::sole()->team_id)->toBe($monoven->id)
+        ->and($acme->sourceProviders()->count())->toBe(0);
+});
+
+test('a choice links to the team it was offered for, not the one last worked in', function () {
+    [$monoven, $owner, $app] = githubConnectTeam();
+    $acme = Team::factory()->create(['slug' => 'acme']);
+    $acme->members()->attach($owner, ['role' => 'owner']);
+    githubConnectOffer($owner, $monoven, $app);
+    $owner->forceFill(['current_team_id' => $acme->id])->save();
+
+    $this->actingAs($owner->fresh())
+        ->post(route('github.installations.store'), ['installation_id' => '2'])
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('success');
+
+    expect(SourceProvider::sole()->team_id)->toBe($monoven->id)
+        ->and($acme->sourceProviders()->count())->toBe(0);
+});
+
+test('a choice whose app is no longer offered is refused', function (string $change) {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectOffer($owner, $team, $app);
+
+    match ($change) {
+        'the app was removed' => $app->delete(),
+        'the environment app replaced it' => githubConnectEnv(),
+    };
+
+    $this->actingAs($owner)
+        ->post(route('github.installations.store'), ['installation_id' => '2'])
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', 'That connection attempt could not be verified. Start again from this page.');
+
+    expect(SourceProvider::withTrashed()->count())->toBe(0);
+
+    $this->actingAs($owner)
+        ->get(route('source-providers.index'))
+        ->assertInertia(fn($page) => $page->where('github.choose', null));
+})->with(['the app was removed', 'the environment app replaced it']);
 
 test('choosing an installation is throttled in a bucket of its own', function () {
     $route = Route::getRoutes()->getByName('github.installations.store');

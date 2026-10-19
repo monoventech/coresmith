@@ -15,6 +15,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Services\Teams\TeamContext;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -102,24 +103,18 @@ final class GitHubConnector
         }
 
         try {
-            $installations = $this->reachable($app, $code);
+            $token = $this->api->exchangeUserCode($app, $code, $this->manifest->callbackUrl());
         } catch (GitProviderException) {
             return $this->refuse($request, $team, self::REFUSED);
         }
 
-        if ($request->query('installation_id') !== null) {
-            $installation = $this->find($installations, $request->query('installation_id'));
-
-            return $installation === null
-                ? $this->refuse($request, $team, self::UNREACHABLE)
-                : $this->connected($request, $team, $app, $installation);
+        try {
+            return $this->settle($request, $team, $app, $token);
+        } catch (GitProviderException) {
+            return $this->refuse($request, $team, self::REFUSED);
+        } finally {
+            $this->quietly(fn() => $this->api->revokeUserToken($app, $token));
         }
-
-        return match (count($installations)) {
-            0 => $this->refuse($request, $team, "Your GitHub account cannot reach an installation of {$app->name}. Install it first, then connect."),
-            1 => $this->connected($request, $team, $app, $installations[0]),
-            default => $this->offer($request, $team, $app, $installations),
-        };
     }
 
     public function choose(Request $request, string $installationId): RedirectResponse
@@ -145,6 +140,16 @@ final class GitHubConnector
 
         if ($installation === null) {
             return $this->refuse($request, $team, self::UNREACHABLE);
+        }
+
+        try {
+            $refusal = $this->refusal($app, $installation);
+        } catch (GitProviderException) {
+            return $this->refuse($request, $team, self::REFUSED);
+        }
+
+        if ($refusal !== null) {
+            return $this->refuse($request, $team, $refusal);
         }
 
         $this->choices->forget();
@@ -235,32 +240,102 @@ final class GitHubConnector
         return redirect()->away($this->authorizeUrl($app, $intent['state']));
     }
 
-    /**
-     * @return list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>
-     */
-    private function reachable(#[\SensitiveParameter] GitHubAppCredentials $app, #[\SensitiveParameter] string $code): array
+    private function settle(Request $request, Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, #[\SensitiveParameter] string $token): RedirectResponse
     {
-        $token = $this->api->exchangeUserCode($app, $code, $this->manifest->callbackUrl());
+        $installations = $this->api->userInstallations($token);
+
+        if ($request->query('installation_id') !== null) {
+            $installation = $this->find($installations, $request->query('installation_id'));
+
+            return $installation === null
+                ? $this->refuse($request, $team, self::UNREACHABLE)
+                : $this->connectProven($request, $team, $app, $this->witnessed([$installation], $token)[0]);
+        }
+
+        return match (count($installations)) {
+            0 => $this->refuse($request, $team, "Your GitHub account cannot reach an installation of {$app->name}. Install it first, then connect."),
+            1 => $this->connectProven($request, $team, $app, $this->witnessed($installations, $token)[0]),
+            default => $this->offer($request, $team, $app, $this->witnessed($installations, $token)),
+        };
+    }
+
+    /**
+     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>  $installations
+     * @return list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}>
+     */
+    private function witnessed(array $installations, #[\SensitiveParameter] string $token): array
+    {
+        $login = null;
+        $witnessed = [];
+
+        foreach ($installations as $installation) {
+            $personal = $installation['account_type'] === 'User';
+
+            if ($personal && $login === null) {
+                $login = $this->api->userLogin($token);
+            }
+
+            $witnessed[] = [
+                ...$installation,
+                'user_login' => $personal ? $login : null,
+                'user_repositories' => $personal ? null : $this->api->userRepositoryCount($token, $installation['id']),
+            ];
+        }
+
+        return $witnessed;
+    }
+
+    /**
+     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}  $installation
+     */
+    private function connectProven(Request $request, Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): RedirectResponse
+    {
+        $refusal = $this->refusal($app, $installation);
+
+        return $refusal === null ? $this->connected($request, $team, $app, $installation) : $this->refuse($request, $team, $refusal);
+    }
+
+    /**
+     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}  $installation
+     */
+    private function refusal(#[\SensitiveParameter] GitHubAppCredentials $app, array $installation): ?string
+    {
+        $account = $installation['account'];
+
+        if ($installation['account_type'] === 'User') {
+            return $installation['user_login'] !== null && $installation['user_login'] === $account
+                ? null
+                : "This installation belongs to {$account}. Sign in to GitHub as {$account} to connect it.";
+        }
+
+        return $installation['user_repositories'] !== null && $installation['user_repositories'] === $this->installationTotal($app, $installation['id'])
+            ? null
+            : "Your GitHub account can't see every repository this installation covers, so Coresmith won't link it. Ask an owner of {$account} to connect GitHub.";
+    }
+
+    private function installationTotal(#[\SensitiveParameter] GitHubAppCredentials $app, string $installationId): int
+    {
+        $token = $this->api->mintToken($app, $installationId, ['permissions' => ['metadata' => 'read']])['token'];
 
         try {
-            return $this->api->userInstallations($token);
+            return $this->api->installationRepositoryCount($token);
         } finally {
-            $this->revoke($app, $token);
+            $this->quietly(fn() => $this->api->revokeToken($token));
         }
     }
 
-    private function revoke(#[\SensitiveParameter] GitHubAppCredentials $app, #[\SensitiveParameter] string $token): void
+    private function quietly(#[\SensitiveParameter] Closure $revoke): void
     {
         try {
-            $this->api->revokeUserToken($app, $token);
+            $revoke();
         } catch (GitProviderException $e) {
             report_if(app()->hasDebugModeEnabled(), $e);
         }
     }
 
     /**
-     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>  $installations
-     * @return array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}|null
+     * @param  list<array<string, mixed>>  $installations
+     * @return array<string, mixed>|null
      */
     private function find(array $installations, mixed $id): ?array
     {
@@ -289,7 +364,7 @@ final class GitHubConnector
     }
 
     /**
-     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>  $installations
+     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}>  $installations
      */
     private function offer(Request $request, Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installations): RedirectResponse
     {

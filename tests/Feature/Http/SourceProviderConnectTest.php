@@ -176,6 +176,30 @@ test('a successful callback stores the tokens encrypted with the granted scopes'
         ->and($source->team_id)->toBe($team->getKey());
 });
 
+test('a gitlab callback stores no installation id, even one the query carries', function (bool $existing) {
+    configureGitLab();
+    Http::fake([
+        'gitlab.com/oauth/token' => Http::response(['access_token' => 'at-live', 'refresh_token' => 'rt-live', 'expires_in' => 7200]),
+        'gitlab.com/api/v4/user' => Http::response(['username' => 'ose-ughu']),
+    ]);
+    $team = Team::factory()->create();
+
+    if ($existing) {
+        SourceProvider::factory()->for($team)->create(['type' => 'gitlab', 'installation_id' => '51842']);
+    }
+
+    $this->actingAs(connector($team, TeamRole::Owner))
+        ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'ok', 'type' => 'gitlab', 'team' => $team->getKey()]])
+        ->get(route('source-providers.callback', 'gitlab') . '?code=the-code&state=ok&installation_id=51842&setup_action=install')
+        ->assertSessionHas('success');
+
+    expect(SourceProvider::sole()->installation_id)->toBeNull()
+        ->and(SourceProvider::sole()->access_token)->toBe('at-live');
+})->with([
+    'a new connection' => [false],
+    'a connection that already carried one' => [true],
+]);
+
 test('a provider that refuses the code exchange stores nothing', function () {
     configureGitLab();
     Http::fake(['gitlab.com/oauth/token' => Http::response(['error' => 'invalid_grant'], 400)]);

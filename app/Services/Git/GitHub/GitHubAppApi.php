@@ -151,6 +151,24 @@ final class GitHubAppApi
         ], $installations));
     }
 
+    public function userLogin(#[\SensitiveParameter] string $userToken): string
+    {
+        $login = $this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get(self::API . '/user')))->json('login');
+
+        if (!is_string($login) || $login === '') {
+            throw new GitProviderException('GitHub did not say which account is signed in.');
+        }
+
+        return $login;
+    }
+
+    public function userRepositoryCount(#[\SensitiveParameter] string $userToken, string $installationId): int
+    {
+        $url = self::API . '/user/installations/' . $this->installation($installationId) . '/repositories';
+
+        return $this->total($this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get($url, ['per_page' => 1]))));
+    }
+
     public function revokeUserToken(#[\SensitiveParameter] GitHubAppCredentials $app, #[\SensitiveParameter] string $userToken): void
     {
         $this->call(fn(): Response => $this->http()
@@ -187,6 +205,11 @@ final class GitHubAppApi
         return ['token' => $token, 'expires_at' => CarbonImmutable::parse($expires)];
     }
 
+    public function installationRepositoryCount(#[\SensitiveParameter] string $installationToken): int
+    {
+        return $this->total($this->guard($this->call(fn(): Response => $this->http()->withToken($installationToken)->get(self::API . '/installation/repositories', ['per_page' => 1]))));
+    }
+
     public function revokeToken(#[\SensitiveParameter] string $token): void
     {
         $this->call(fn(): Response => $this->http()->withToken($token)->delete(self::API . '/installation/token'));
@@ -218,6 +241,17 @@ final class GitHubAppApi
         }
 
         return $response;
+    }
+
+    private function total(Response $response): int
+    {
+        $total = $response->json('total_count');
+
+        if (!is_int($total) || $total < 0) {
+            throw new GitProviderException('GitHub did not send a repository count.');
+        }
+
+        return $total;
     }
 
     private function refusal(Response $response): string

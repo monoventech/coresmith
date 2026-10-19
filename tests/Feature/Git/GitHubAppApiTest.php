@@ -382,6 +382,78 @@ test('a user with no installations gets an empty list and a refusal is an error'
         ->and(fn() => app(GitHubAppApi::class)->userInstallations('ghu_user'))->toThrow(GitProviderException::class, 'Bad credentials');
 });
 
+test('the signed-in account is read with the user\'s own token', function () {
+    Http::fake(['api.github.com/user' => Http::response(['login' => 'oseughu', 'id' => 10, 'type' => 'User'])]);
+
+    expect(app(GitHubAppApi::class)->userLogin('ghu_user'))->toBe('oseughu');
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => $request->method() === 'GET'
+        && $request->url() === 'https://api.github.com/user'
+        && $request->hasHeader('Authorization', 'Bearer ghu_user')
+        && $request->hasHeader('Accept', 'application/vnd.github+json')
+        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+});
+
+test('an account github will not name is an error that says why', function (int $status, array $body, string $message) {
+    Http::fake(['api.github.com/user' => Http::response($body, $status)]);
+
+    expect(fn() => app(GitHubAppApi::class)->userLogin('ghu_user'))->toThrow(GitProviderException::class, $message);
+})->with([
+    'a refusal' => [401, ['message' => 'Bad credentials'], 'Bad credentials'],
+    'no login' => [200, ['id' => 10], 'GitHub did not say which account is signed in.'],
+    'an empty login' => [200, ['login' => ''], 'GitHub did not say which account is signed in.'],
+    'a login that is not a string' => [200, ['login' => 10], 'GitHub did not say which account is signed in.'],
+]);
+
+test('the repositories a user can see in an installation are counted from one page', function () {
+    Http::fake(['api.github.com/user/installations/51842/repositories*' => Http::response(['total_count' => 3, 'repository_selection' => 'selected', 'repositories' => [['id' => 70000001]]])]);
+
+    expect(app(GitHubAppApi::class)->userRepositoryCount('ghu_user', '51842'))->toBe(3);
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => $request->method() === 'GET'
+        && $request->url() === 'https://api.github.com/user/installations/51842/repositories?per_page=1'
+        && $request->hasHeader('Authorization', 'Bearer ghu_user')
+        && $request->hasHeader('Accept', 'application/vnd.github+json')
+        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+});
+
+test('an installation\'s own repositories are counted with an installation token', function () {
+    Http::fake(['api.github.com/installation/repositories*' => Http::response(['total_count' => 12, 'repositories' => [['id' => 70000001]]])]);
+
+    expect(app(GitHubAppApi::class)->installationRepositoryCount('ghs_counting'))->toBe(12);
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => $request->method() === 'GET'
+        && $request->url() === 'https://api.github.com/installation/repositories?per_page=1'
+        && $request->hasHeader('Authorization', 'Bearer ghs_counting')
+        && $request->hasHeader('Accept', 'application/vnd.github+json')
+        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+});
+
+test('a count github will not give is an error rather than a number', function (string $count, int $status, array $body, string $message) {
+    Http::fake(['api.github.com/*' => Http::response($body, $status)]);
+    $api = app(GitHubAppApi::class);
+
+    $call = $count === 'the user\'s'
+        ? fn() => $api->userRepositoryCount('ghu_user', '51842')
+        : fn() => $api->installationRepositoryCount('ghs_counting');
+
+    expect($call)->toThrow(GitProviderException::class, $message);
+})->with([
+    'the user\'s, refused' => ['the user\'s', 403, ['message' => 'Resource not accessible by integration'], 'Resource not accessible by integration'],
+    'the user\'s, missing' => ['the user\'s', 200, ['repositories' => []], 'GitHub did not send a repository count.'],
+    'the user\'s, not a number' => ['the user\'s', 200, ['total_count' => '3'], 'GitHub did not send a repository count.'],
+    'the installation\'s, refused' => ['the installation\'s', 401, ['message' => 'Bad credentials'], 'Bad credentials'],
+    'the installation\'s, missing' => ['the installation\'s', 200, [], 'GitHub did not send a repository count.'],
+    'the installation\'s, negative' => ['the installation\'s', 200, ['total_count' => -1], 'GitHub did not send a repository count.'],
+]);
+
+test('a user count for an installation id that is not a number is refused before any request', function (string $installation) {
+    Http::fake();
+
+    expect(fn() => app(GitHubAppApi::class)->userRepositoryCount('ghu_user', $installation))->toThrow(GitProviderException::class, 'is not a valid installation id.');
+    Http::assertNothingSent();
+})->with(['../51842', '51842/repositories', '', '5184 2']);
+
 test('a user token is revoked with the app credentials', function () {
     Http::fake(['api.github.com/applications/Iv1.client/token' => Http::response(null, 204)]);
 
@@ -544,6 +616,9 @@ test('a request to github that gets no answer is a provider error for every app 
         fn() => $api->latestDelivery($app),
         fn() => $api->exchangeUserCode($app, 'c0de', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_user'),
+        fn() => $api->userLogin('ghu_user'),
+        fn() => $api->userRepositoryCount('ghu_user', '51842'),
+        fn() => $api->installationRepositoryCount('ghs_x'),
         fn() => $api->revokeUserToken($app, 'ghu_user'),
         fn() => $api->revokeToken('ghs_x'),
     ] as $call) {
@@ -626,6 +701,9 @@ test('every request waits at most twenty seconds and a post is never sent twice'
         fn() => $api->latestDelivery($app),
         fn() => $api->exchangeUserCode($app, 'c0de', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_user'),
+        fn() => $api->userLogin('ghu_user'),
+        fn() => $api->userRepositoryCount('ghu_user', '51842'),
+        fn() => $api->installationRepositoryCount('ghs_x'),
         fn() => $api->revokeUserToken($app, 'ghu_user'),
         fn() => $api->mintToken($app, '51842'),
         fn() => $api->revokeToken('ghs_x'),
@@ -636,9 +714,9 @@ test('every request waits at most twenty seconds and a post is never sent twice'
         }
     }
 
-    expect($timeouts)->toHaveCount(9)
+    expect($timeouts)->toHaveCount(12)
         ->and(array_unique($timeouts))->toBe([20]);
-    Http::assertSentCount(9);
+    Http::assertSentCount(12);
 });
 
 test('no credential reaches an exception message', function (string $failure) {
@@ -655,6 +733,9 @@ test('no credential reaches an exception message', function (string $failure) {
         fn() => $api->updateHook($app, 'https://panel.example.com/hook', 'hook-secret-xyz'),
         fn() => $api->exchangeUserCode($app, 'usercode456', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_secret_user'),
+        fn() => $api->userLogin('ghu_secret_user'),
+        fn() => $api->userRepositoryCount('ghu_secret_user', '51842'),
+        fn() => $api->installationRepositoryCount('ghs_secret_install'),
         fn() => $api->mintToken($app, '51842'),
         fn() => $api->revokeToken('ghs_secret_install'),
     ] as $call) {
@@ -738,7 +819,7 @@ test('the credentials constructor keeps its secrets out of the trace of its own 
 });
 
 test('every parameter that carries a credential is marked sensitive', function () {
-    $named = ['code', 'secret', 'token', 'userToken', 'clientSecret', 'webhookSecret', 'privateKey', 'payload'];
+    $named = ['code', 'secret', 'token', 'userToken', 'installationToken', 'clientSecret', 'webhookSecret', 'privateKey', 'payload'];
     $unmarked = [];
 
     foreach ([GitHubAppApi::class, GitHubAppClient::class, AppJwt::class, GitHubAppCredentials::class] as $class) {
