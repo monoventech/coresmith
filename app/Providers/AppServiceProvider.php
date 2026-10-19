@@ -51,6 +51,10 @@ class AppServiceProvider extends ServiceProvider
     {
         Date::use(CarbonImmutable::class);
 
+        if (!app()->hasDebugModeEnabled()) {
+            ini_set('zend.exception_ignore_args', '1');
+        }
+
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
         );
