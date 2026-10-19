@@ -11,7 +11,6 @@ namespace App\Listeners;
 use App\Events\DeploymentFailed;
 use App\Services\AutoDeploy\AutoDeploy;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Throwable;
 
 final class FollowUpAutoDeploy implements ShouldQueue
 {
@@ -25,10 +24,6 @@ final class FollowUpAutoDeploy implements ShouldQueue
 
     public function handle(DeploymentFailed $event): void
     {
-        try {
-            app(AutoDeploy::class)->afterDeployment($event->deployment);
-        } catch (Throwable $e) {
-            report($e);
-        }
+        rescue(fn() => app(AutoDeploy::class)->afterDeployment($event->deployment), report: true);
     }
 }

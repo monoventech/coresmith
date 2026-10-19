@@ -8,6 +8,7 @@ use App\Events\DeploymentUpdated;
 use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\DeployApplication;
 use App\Jobs\DetectStaleDeployments;
+use App\Jobs\InstallRuntimes;
 use App\Listeners\FollowUpAutoDeploy;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -15,6 +16,7 @@ use App\Models\User;
 use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Events\CallQueuedListener;
@@ -24,6 +26,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSSHTransport;
+use Tests\Support\ProbeOutput;
 
 function autoDeployApp(array $attributes = []): Application
 {
@@ -159,10 +162,11 @@ test('cancelled deployments do not count', function () {
 
 test('nothing is queued while another deployment is pending or running', function (DeploymentStatus $status) {
     $application = autoDeployApp();
-    Deployment::factory()->for($application)->create(['status' => $status, 'commit_hash' => null, 'requested_commit' => autoDeploySha('a')]);
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => autoDeploySha('a'), 'created_at' => now()->subHour()]);
+    Deployment::factory()->for($application)->create(['status' => $status, 'commit_hash' => null, 'requested_commit' => null]);
 
     expect(app(AutoDeploy::class)->observe($application, autoDeploySha('b'), 'push'))->toBeNull()
-        ->and(Deployment::count())->toBe(1);
+        ->and(Deployment::count())->toBe(2);
 
     Queue::assertNothingPushed();
 })->with([
@@ -206,6 +210,24 @@ test('auto deploy keeps the app on its branch head', function () {
 
     Queue::assertPushed(DeployApplication::class, 1);
 });
+
+test('a deploy that failed before git named its commit is passed over when comparing heads', function (string $head, int $queued) {
+    $application = autoDeployApp(['repository_head' => autoDeploySha($head), 'repository_head_source' => 'poll']);
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => autoDeploySha('a'), 'created_at' => now()->subHour()]);
+    Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Failed,
+        'triggered_by' => User::factory()->create()->id,
+        'commit_hash' => null,
+        'requested_commit' => null,
+    ]);
+
+    app(AutoDeploy::class)->reconcile($application);
+
+    expect(Queue::pushed(DeployApplication::class))->toHaveCount($queued);
+})->with([
+    'the live head' => ['a', 0],
+    'a newer head' => ['b', 1],
+]);
 
 test('nothing is deployed until a head has been seen', function () {
     $application = autoDeployApp();
@@ -280,6 +302,33 @@ test('a deploy releases its lock before auto deploy looks for the next head', fu
         ->and($standIn->sawLockFree)->toBe([true]);
 });
 
+test('a deploy that hands off to runtime installs does not follow up yet', function () {
+    $standIn = new class
+    {
+        public int $calls = 0;
+
+        public function afterDeployment(Deployment $deployment): ?Deployment
+        {
+            $this->calls++;
+
+            return null;
+        }
+    };
+
+    app()->instance(AutoDeploy::class, $standIn);
+    $deployment = Deployment::factory()->for(autoDeployApp(['php_version' => null, 'run_migrations' => false]))->create();
+    $transport = autoDeployTransport()
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['composer.json' => '{"require":{"php":"^8.4"}}']))
+        ->respondTo("ls -1 '/opt/asdf-data/installs/php'", "\n");
+
+    autoDeployRun($deployment, $transport);
+
+    Queue::assertPushed(InstallRuntimes::class, 1);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Running)
+        ->and($standIn->calls)->toBe(0);
+});
+
 test('a follow up that throws is reported and never hides how the deploy ended', function () {
     Exceptions::fake();
     app()->instance(AutoDeploy::class, new class
@@ -348,11 +397,16 @@ test('a deploy that stalls is followed up once it is marked failed', function ()
     Queue::assertPushed(DeployApplication::class, 1);
 });
 
-test('a manual deploy of a commit the poller has not seen is not deployed again', function () {
+test('a manual deploy of a commit the poller has not seen is not deployed again', function (?string $head, ?string $source, ?string $seenAt) {
     $application = autoDeployApp([
-        'repository_head' => autoDeploySha('a'),
+        'repository_head' => $head,
+        'repository_head_source' => $source,
+        'repository_head_at' => $seenAt,
+    ]);
+    $other = autoDeployApp([
+        'repository_head' => autoDeploySha('e'),
         'repository_head_source' => 'poll',
-        'repository_head_at' => now()->subMinutes(5),
+        'repository_head_at' => '2026-10-18 13:05:00',
     ]);
     $deployment = Deployment::factory()->for($application)->create(['triggered_by' => User::factory()->create()->id, 'commit_hash' => null]);
 
@@ -362,11 +416,16 @@ test('a manual deploy of a commit the poller has not seen is not deployed again'
 
     expect($deployment->fresh()->only(['status', 'commit_hash']))->toBe(['status' => DeploymentStatus::Succeeded, 'commit_hash' => autoDeploySha('b')])
         ->and($fresh->repository_head)->toBe(autoDeploySha('b'))
-        ->and($fresh->repository_head_source)->toBe('poll')
-        ->and($fresh->repository_head_at?->toDateTimeString())->toBe('2026-10-18 14:05:00');
+        ->and($fresh->repository_head_source)->toBe($source)
+        ->and($fresh->repository_head_at?->toDateTimeString())->toBe('2026-10-18 14:05:00')
+        ->and($other->fresh()->repository_head)->toBe(autoDeploySha('e'))
+        ->and($other->fresh()->repository_head_at?->toDateTimeString())->toBe('2026-10-18 13:05:00');
 
     Queue::assertNotPushed(DeployApplication::class);
-});
+})->with([
+    'a head polled before the deploy' => [str_repeat('a', 40), 'poll', '2026-10-18 14:00:00'],
+    'no head seen yet' => [null, null, null],
+]);
 
 test('a push that lands during a deploy is still deployed after it', function () {
     $application = autoDeployApp([

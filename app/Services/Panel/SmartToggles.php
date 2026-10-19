@@ -158,7 +158,7 @@ final class SmartToggles
         app(TeamNotifier::class)->send(
             $application->team,
             Preferences::TOGGLE_CHANGES,
-            new ApplicationToggledNotification($application, $this->label($key) . ' turned ' . ($on ? 'on' : 'off'), $actor?->name),
+            new ApplicationToggledNotification($application, $this->label($key) . ' turned ' . ($on ? 'on' : 'off'), $actor?->name, withoutDeployment: $key !== self::AUTO_DEPLOY),
             $actor instanceof User ? $actor : null,
         );
     }

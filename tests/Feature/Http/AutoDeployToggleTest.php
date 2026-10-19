@@ -8,15 +8,17 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Notifications\ApplicationToggledNotification;
 use App\Services\Panel\SmartToggles;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
 
-function autoDeployToggleMember(Team $team, TeamRole $role): User
+function autoDeployToggleMember(Team $team, TeamRole $role, array $attributes = []): User
 {
-    $user = User::factory()->create();
+    $user = User::factory()->create($attributes);
     $team->members()->attach($user, ['role' => $role->value]);
 
     return $user->fresh();
@@ -93,6 +95,22 @@ test('turning auto deploy on and off saves it and clears the last check', functi
 
     expect($application->fresh()->only(['quick_deploy', 'polled_at', 'poll_error']))->toBe(['quick_deploy' => false, 'polled_at' => null, 'poll_error' => null]);
 });
+
+test('the email for auto deploy does not say no deployment was needed, other toggles still do', function (string $toggle, string $line) {
+    Notification::fake();
+    $team = Team::factory()->create();
+    $application = autoDeployToggleApp($team);
+    $teammate = autoDeployToggleMember($team, TeamRole::Member);
+
+    $this->actingAs(autoDeployToggleMember($team, TeamRole::Admin, ['name' => 'Ada Lovelace']))
+        ->put(route('servers.applications.toggles.update', [$application->server_id, $application, $toggle]), ['on' => true])
+        ->assertSessionHas('success');
+
+    Notification::assertSentTo($teammate, ApplicationToggledNotification::class, fn(ApplicationToggledNotification $notification): bool => $notification->toMail($teammate)->introLines === [$line]);
+})->with([
+    'auto deploy' => ['auto_deploy', 'Ada Lovelace made the change from the panel.'],
+    'maintenance page' => ['maintenance_mode', 'Ada Lovelace made the change from the panel. No deployment was needed.'],
+]);
 
 test('a member cannot change auto deploy', function () {
     $team = Team::factory()->create();

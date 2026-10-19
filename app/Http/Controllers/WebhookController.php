@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Jobs\DeployApplication;
 use App\Models\Deployment;
 use App\Models\WebhookEndpoint;
+use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\Webhook\SignatureVerifier;
 use App\Services\Webhook\WebhookDeliveries;
 use Illuminate\Http\JsonResponse;
@@ -81,7 +82,7 @@ final class WebhookController extends Controller
     {
         $head = $request->input('after') ?? $request->input('checkout_sha');
 
-        return is_string($head) && preg_match('/^[0-9a-f]{40}$/D', $head) === 1 ? $head : null;
+        return is_string($head) && preg_match(AutoDeploy::COMMIT, $head) === 1 ? $head : null;
     }
 
     private function subject(mixed $message): ?string

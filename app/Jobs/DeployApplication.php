@@ -57,7 +57,6 @@ use App\Services\SSH\SSHConnectionManager;
 use Closure;
 use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -167,15 +166,7 @@ final class DeployApplication implements ShouldQueue
 
     private function followUp(): void
     {
-        try {
-            $deployment = $this->deployment->fresh();
-
-            if ($deployment !== null) {
-                app(AutoDeploy::class)->afterDeployment($deployment);
-            }
-        } catch (Throwable $e) {
-            report($e);
-        }
+        rescue(fn() => app(AutoDeploy::class)->afterDeployment($this->deployment->fresh() ?? $this->deployment), report: true);
     }
 
     private function lock(Application $application): ?Lock
@@ -537,7 +528,7 @@ final class DeployApplication implements ShouldQueue
         $result = $connection->execute("git --git-dir={$repo} log -1 --format='%H%n%an%n%s' {$branch} 2>/dev/null || true", sudo: true);
         $lines = array_values(array_filter(array_map(trim(...), preg_split('/\R/', $result->output) ?: []), static fn(string $line): bool => $line !== ''));
 
-        if (count($lines) < 2 || preg_match('/^[0-9a-f]{40}$/', $lines[0]) !== 1) {
+        if (count($lines) < 2 || preg_match(AutoDeploy::COMMIT, $lines[0]) !== 1) {
             return;
         }
 
@@ -562,19 +553,9 @@ final class DeployApplication implements ShouldQueue
             'tag_signed' => $signed,
         ])->save();
 
-        $this->recordBranchHead($hash);
+        app(AutoDeploy::class)->archived($this->deployment, $hash);
 
         $this->appendLog('commit ' . substr($hash, 0, 7) . ' by ' . $author . ($tag !== null ? ' · tag ' . $tag : ''));
-    }
-
-    private function recordBranchHead(string $hash): void
-    {
-        Application::query()
-            ->whereKey($this->deployment->application_id)
-            ->where(fn(Builder $head): Builder => $head
-                ->whereNull('repository_head_at')
-                ->orWhere('repository_head_at', '<', $this->deployment->started_at))
-            ->update(['repository_head' => $hash, 'repository_head_at' => now()]);
     }
 
     private function installDependencies(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void
