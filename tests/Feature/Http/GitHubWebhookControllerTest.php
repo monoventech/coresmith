@@ -3,14 +3,27 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\GitHubWebhookController;
+use App\Jobs\DeployApplication;
 use App\Models\Application;
+use App\Models\Deployment;
 use App\Models\GitHubApp;
+use App\Models\SourceProvider;
+use App\Models\Team;
 use App\Models\WebhookEndpoint;
+use App\Services\Git\GitHub\GitHubAppHealth;
+use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\GitHub\GitHubEventHandler;
+use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Teams\TeamUrls;
 use App\Services\Webhook\SignatureVerifier;
+use App\Services\Webhook\WebhookDeliveries;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\RouteCollection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -60,7 +73,51 @@ function githubHookRejections(): int
     return Activity::query()->where('description', 'webhook_signature_rejected')->count();
 }
 
+function githubHookConnection(?GitHubApp $app, array $attributes = []): SourceProvider
+{
+    return SourceProvider::factory()->for($app === null ? Team::factory()->create() : $app->team)->create([
+        'type' => 'github_app',
+        'github_app_id' => $app?->getKey(),
+        'name' => 'monoventech',
+        'installation_id' => '51842',
+        'account_type' => 'Organization',
+        'repository_selection' => 'all',
+        ...$attributes,
+    ]);
+}
+
+function githubHookLinkedTo(SourceProvider $connection, array $attributes = []): Application
+{
+    return Application::factory()->for($connection->team)->create([
+        'repository_url' => 'https://github.com/monoventech/atlas.git',
+        'repository_provider' => 'github',
+        'repository_branch' => 'main',
+        'source_provider_id' => $connection->id,
+        'repository_id' => '70000001',
+        'quick_deploy' => true,
+        ...$attributes,
+    ]);
+}
+
+function githubHookLinkedApp(GitHubApp $app, array $attributes = []): Application
+{
+    return githubHookLinkedTo(githubHookConnection($app), $attributes);
+}
+
+function githubHookPush(array $changes = []): array
+{
+    return array_replace_recursive([
+        'ref' => 'refs/heads/main',
+        'after' => str_repeat('c', 40),
+        'deleted' => false,
+        'installation' => ['id' => 51842],
+        'repository' => ['id' => 70000001, 'full_name' => 'monoventech/atlas'],
+        'head_commit' => ['message' => 'Ship it'],
+    ], $changes);
+}
+
 beforeEach(function () {
+    Queue::fake();
     Http::preventStrayRequests();
 
     config(['services.github' => [
@@ -336,9 +393,404 @@ test('a factory app points its webhook at this panel the way a registered one do
         ->assertExactJson(['message' => 'pong']);
 });
 
+test('a push to a linked branch head deploys it', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $after = str_repeat('c', 40);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), [
+        'ref' => 'refs/heads/main', 'after' => $after, 'deleted' => false,
+        'installation' => ['id' => 51842],
+        'repository' => ['id' => 70000001, 'full_name' => 'monoventech/atlas'],
+        'head_commit' => ['message' => 'Ship it'],
+    ], 'push')->assertStatus(202);
+
+    expect($application->fresh()->repository_head)->toBe($after)
+        ->and(Deployment::where('application_id', $application->id)->first())
+        ->trigger->toBe('push')
+        ->requested_commit->toBe($after);
+
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('only a push to the exact branch head deploys', function (array $changes) {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush($changes), 'push', delivery: 'skipped-1')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    expect($application->fresh()->repository_head)->toBeNull()
+        ->and(Deployment::count())->toBe(0)
+        ->and($application->sourceProvider->fresh()->last_delivery_id)->toBe('skipped-1');
+
+    Queue::assertNothingPushed();
+})->with([
+    'a tag' => [['ref' => 'refs/tags/v1.0']],
+    'the branch in another case' => [['ref' => 'refs/heads/Main']],
+    'a branch that starts with the name' => [['ref' => 'refs/heads/main-old']],
+    'a deleted branch' => [['deleted' => true]],
+    'no commit after the push' => [['after' => str_repeat('0', 40)]],
+    'a short commit' => [['after' => 'ccccccc']],
+]);
+
+test('a branch with slashes matches only itself', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp, ['repository_branch' => 'release/2.0']);
+    $url = route('webhooks.github.app', $githubApp);
+
+    githubHookPost($url, githubHookPush(['ref' => 'refs/heads/release']), 'push')->assertStatus(202);
+
+    expect($application->fresh()->repository_head)->toBeNull();
+    Queue::assertNothingPushed();
+
+    githubHookPost($url, githubHookPush(['ref' => 'refs/heads/release/2.0']), 'push')->assertStatus(202);
+
+    expect($application->fresh()->repository_head)->toBe(str_repeat('c', 40));
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('a push for another installation or another app deploys nothing', function () {
+    $githubApp = githubHookApp();
+    $other = GitHubApp::factory()->create(['webhook_secret' => 'other-secret']);
+    $application = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(['installation' => ['id' => 51843]]), 'push')->assertStatus(202);
+    githubHookPost(route('webhooks.github.app', $other), githubHookPush(), 'push', 'other-secret')->assertStatus(202);
+
+    expect($application->sourceProvider->fresh()->last_delivered_at)->toBeNull();
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(['repository' => ['id' => 70000002]]), 'push')->assertStatus(202);
+
+    expect($application->fresh()->repository_head)->toBeNull()
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+});
+
+test('the environment app and a registered app each reach only their own connections', function () {
+    githubHookConfigureEnv('env-secret');
+    $githubApp = githubHookApp();
+    $throughEnv = githubHookLinkedTo(githubHookConnection(null));
+    $throughApp = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github'), githubHookPush(), 'push', 'env-secret')->assertStatus(202);
+
+    expect($throughEnv->fresh()->repository_head)->toBe(str_repeat('c', 40))
+        ->and($throughApp->fresh()->repository_head)->toBeNull();
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(['after' => str_repeat('d', 40)]), 'push')->assertStatus(202);
+
+    expect($throughEnv->fresh()->repository_head)->toBe(str_repeat('c', 40))
+        ->and($throughApp->fresh()->repository_head)->toBe(str_repeat('d', 40));
+
+    Queue::assertPushed(DeployApplication::class, 2);
+});
+
+test('every app on the pushed branch observes the head', function () {
+    $githubApp = githubHookApp();
+    $connection = githubHookConnection($githubApp);
+    $production = githubHookLinkedTo($connection);
+    $staging = githubHookLinkedTo($connection);
+    $develop = githubHookLinkedTo($connection, ['repository_branch' => 'develop']);
+    $credentials = app(GitHubApps::class)->fromModel($githubApp);
+
+    expect(app(GitHubEventHandler::class)->push($credentials, githubHookPush(), 'push-delivery-1'))->toBe(2)
+        ->and($production->fresh()->repository_head)->toBe(str_repeat('c', 40))
+        ->and($staging->fresh()->repository_head)->toBe(str_repeat('c', 40))
+        ->and($develop->fresh()->repository_head)->toBeNull();
+
+    Queue::assertPushed(DeployApplication::class, 2);
+});
+
+test('a push with auto deploy off records the head only', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp, ['quick_deploy' => false]);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(), 'push')->assertStatus(202);
+
+    expect($application->fresh())
+        ->repository_head->toBe(str_repeat('c', 40))
+        ->repository_head_source->toBe('push')
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+});
+
+test('a renamed repository still deploys and its url follows the rename', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(['repository' => ['full_name' => 'monoventech/atlas-renamed']]), 'push')->assertStatus(202);
+
+    expect($application->fresh())
+        ->repository_url->toBe('https://github.com/monoventech/atlas-renamed.git')
+        ->repository_head->toBe(str_repeat('c', 40));
+
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('a repository name that is not an owner and a name keeps the stored url', function (?string $fullName) {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(['repository' => ['full_name' => $fullName]]), 'push')->assertStatus(202);
+
+    expect($application->fresh())
+        ->repository_url->toBe('https://github.com/monoventech/atlas.git')
+        ->repository_head->toBe(str_repeat('c', 40));
+
+    Queue::assertPushed(DeployApplication::class, 1);
+})->with([
+    'a deeper path' => ['monoventech/atlas/extra'],
+    'a trailing newline' => ["monoventech/atlas-renamed\n"],
+    'no owner' => ['atlas-renamed'],
+    'none' => [null],
+]);
+
+test('a push for a removed connection deploys nothing', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $application->sourceProvider->delete();
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(), 'push')->assertStatus(202);
+
+    expect($application->fresh()->repository_head)->toBeNull()
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+});
+
+test('a tag push records the delivery and deploys nothing', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(['ref' => 'refs/tags/v1.0']), 'push', delivery: 'tag-delivery-1')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    $connection = $application->sourceProvider->fresh();
+
+    expect($connection)
+        ->last_delivery_id->toBe('tag-delivery-1')
+        ->last_event->toBe('push')
+        ->last_status->toBe(202)
+        ->and($connection->last_delivered_at?->toDateTimeString())->toBe('2026-10-18 14:05:00')
+        ->and($application->fresh()->repository_head)->toBeNull()
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+});
+
+test('a push without a ref or a repository deploys nothing and still reaches its connection', function (string $missing) {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $payload = githubHookPush();
+    unset($payload[$missing]);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), $payload, 'push', delivery: 'partial-1')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    expect($application->fresh()->repository_head)->toBeNull()
+        ->and(Deployment::count())->toBe(0)
+        ->and($application->sourceProvider->fresh()->last_delivery_id)->toBe('partial-1');
+
+    Queue::assertNothingPushed();
+})->with(['ref', 'repository']);
+
+test('a push without an installation records nothing', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $payload = githubHookPush();
+    unset($payload['installation']);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), $payload, 'push')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    expect($application->fresh()->repository_head)->toBeNull()
+        ->and($application->sourceProvider->fresh()->last_delivered_at)->toBeNull()
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+});
+
+test('the connection records the delivery for the git page', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $elsewhere = githubHookConnection($githubApp, ['installation_id' => '51843']);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(), 'push', delivery: 'push-delivery-1')->assertStatus(202);
+
+    $connection = $application->sourceProvider->fresh();
+
+    expect($connection)
+        ->last_delivery_id->toBe('push-delivery-1')
+        ->last_event->toBe('push')
+        ->last_status->toBe(202)
+        ->and($connection->last_delivered_at?->toDateTimeString())->toBe('2026-10-18 14:05:00')
+        ->and($elsewhere->fresh()->last_delivered_at)->toBeNull();
+});
+
+test('every verified delivery counts as evidence that github reaches the panel', function () {
+    $githubApp = githubHookApp();
+    $credentials = app(GitHubApps::class)->fromModel($githubApp);
+    $url = route('webhooks.github.app', $githubApp);
+
+    githubHookPost($url, ['zen' => 'Keep it logically awesome.'], 'ping', 'forged-secret')->assertStatus(401);
+
+    expect(app(GitHubAppHealth::class)->mode($credentials)->instant)->toBeFalse();
+
+    githubHookPost($url, ['zen' => 'Keep it logically awesome.'], 'ping')->assertOk();
+
+    expect(app(GitHubAppHealth::class)->mode($credentials)->instant)->toBeTrue();
+});
+
+test('a replayed delivery still counts as evidence that github reaches the panel', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
+    $githubApp = githubHookApp();
+    $url = route('webhooks.github.app', $githubApp);
+
+    githubHookPost($url, ['action' => 'opened'], 'issues', delivery: 'redelivered-1')->assertStatus(202);
+
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:35:00'));
+
+    githubHookPost($url, ['action' => 'opened'], 'issues', delivery: 'redelivered-1')->assertStatus(409);
+
+    expect(app(GitHubAppHealth::class)->mode(app(GitHubApps::class)->fromModel($githubApp)))
+        ->instant->toBeTrue()
+        ->sentence->toBe('GitHub reached this panel just now.');
+});
+
+test('an uninstalled installation is forgotten', function () {
+    $githubApp = githubHookApp();
+    $connection = githubHookConnection($githubApp);
+    $otherInstallation = githubHookConnection($githubApp, ['installation_id' => '51843']);
+    $otherApp = githubHookConnection(GitHubApp::factory()->create());
+
+    githubHookPost(route('webhooks.github.app', $githubApp), ['action' => 'deleted', 'installation' => ['id' => 51842, 'account' => ['login' => 'monoventech']]], 'installation')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Installation updated.']);
+
+    expect($connection->fresh()->trashed())->toBeTrue()
+        ->and(Activity::query()->where('description', 'github_installation_removed')->sole()->subject_id)->toBe($connection->id)
+        ->and($otherInstallation->fresh()->trashed())->toBeFalse()
+        ->and($otherApp->fresh()->trashed())->toBeFalse();
+});
+
+test('a suspended installation is marked and unsuspended again', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
+    $githubApp = githubHookApp();
+    $connection = githubHookConnection($githubApp);
+    $url = route('webhooks.github.app', $githubApp);
+
+    githubHookPost($url, ['action' => 'suspend', 'installation' => ['id' => 51842, 'suspended_at' => '2026-10-18T13:30:52Z']], 'installation')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Installation updated.']);
+
+    expect($connection->fresh()->suspended_at?->toDateTimeString())->toBe('2026-10-18 13:30:52');
+
+    githubHookPost($url, ['action' => 'unsuspend', 'installation' => ['id' => 51842, 'suspended_at' => null]], 'installation')->assertStatus(202);
+
+    expect($connection->fresh()->suspended_at)->toBeNull();
+
+    githubHookPost($url, ['action' => 'suspend', 'installation' => ['id' => 51842]], 'installation')->assertStatus(202);
+
+    expect($connection->fresh()->suspended_at?->toDateTimeString())->toBe('2026-10-18 14:05:00');
+});
+
+test('an installation change the panel does not track leaves the connection alone', function () {
+    $githubApp = githubHookApp();
+    $connection = githubHookConnection($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), ['action' => 'new_permissions_accepted', 'installation' => ['id' => 51842, 'suspended_at' => '2026-10-18T13:30:52Z']], 'installation')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Installation updated.']);
+
+    expect($connection->fresh())
+        ->trashed()->toBeFalse()
+        ->suspended_at->toBeNull();
+});
+
+test('a change of repositories clears the cached list', function () {
+    $githubApp = githubHookApp();
+    $connection = githubHookConnection($githubApp);
+    $elsewhere = githubHookConnection($githubApp, ['installation_id' => '51843']);
+    $catalog = ['total' => 1, 'truncated' => false, 'repositories' => [['id' => '70000001', 'full_name' => 'monoventech/atlas', 'default_branch' => 'main']]];
+
+    Cache::put(RepositoryCatalog::key($connection), $catalog, 300);
+    Cache::put(RepositoryCatalog::key($elsewhere), $catalog, 300);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), [
+        'action' => 'removed',
+        'installation' => ['id' => 51842, 'repository_selection' => 'selected'],
+        'repository_selection' => 'selected',
+        'repositories_added' => [],
+        'repositories_removed' => [['id' => 70000002, 'full_name' => 'monoventech/vault']],
+    ], 'installation_repositories')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Repositories updated.']);
+
+    expect(Cache::has(RepositoryCatalog::key($connection)))->toBeFalse()
+        ->and($connection->fresh()->repository_selection)->toBe('selected')
+        ->and(Cache::has(RepositoryCatalog::key($elsewhere)))->toBeTrue()
+        ->and($elsewhere->fresh()->repository_selection)->toBe('all');
+});
+
+test('a delivery whose handling fails can be delivered again', function () {
+    Exceptions::fake();
+    $githubApp = githubHookApp();
+    githubHookLinkedApp($githubApp);
+    $url = route('webhooks.github.app', $githubApp);
+    $failing = true;
+
+    Deployment::creating(function () use (&$failing): void {
+        if ($failing) {
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    githubHookPost($url, githubHookPush(), 'push', delivery: 'redeliver-1')->assertStatus(500);
+
+    Exceptions::assertReported(fn(RuntimeException $failure): bool => $failure->getMessage() === 'The database went away.');
+
+    $failing = false;
+
+    githubHookPost($url, githubHookPush(), 'push', delivery: 'redeliver-1')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    githubHookPost($url, githubHookPush(), 'push', delivery: 'redeliver-1')->assertStatus(409);
+
+    expect(Deployment::count())->toBe(1);
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('releasing a delivery id frees it in its own scope only', function () {
+    $deliveries = app(WebhookDeliveries::class);
+
+    expect($deliveries->claim('github-delivery:env', 'delivery-1'))->toBeTrue()
+        ->and($deliveries->claim('github-delivery:01jaj4v0z8x6v3c2c2e8n1q6m7', 'delivery-1'))->toBeTrue();
+
+    $deliveries->release('github-delivery:env', 'delivery-1');
+
+    expect($deliveries->claim('github-delivery:env', 'delivery-1'))->toBeTrue()
+        ->and($deliveries->claim('github-delivery:env', 'delivery-1'))->toBeFalse()
+        ->and($deliveries->claim('github-delivery:01jaj4v0z8x6v3c2c2e8n1q6m7', 'delivery-1'))->toBeFalse();
+});
+
 test('the parameters that carry the app and its secret are marked sensitive', function () {
     $marked = [
         [GitHubWebhookController::class, 'handle', 'app'],
+        [GitHubWebhookController::class, 'process', 'app'],
+        [GitHubEventHandler::class, 'push', 'app'],
+        [GitHubEventHandler::class, 'installation', 'app'],
+        [GitHubEventHandler::class, 'installationRepositories', 'app'],
+        [GitHubEventHandler::class, 'connections', 'app'],
         [SignatureVerifier::class, 'verify', 'secret'],
         [SignatureVerifier::class, 'expected', 'secret'],
     ];

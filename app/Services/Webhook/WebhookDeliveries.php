@@ -39,6 +39,11 @@ final class WebhookDeliveries
         return Cache::add($scope . ':' . $delivery, true, now()->addHours(self::REPLAY_WINDOW_HOURS));
     }
 
+    public function release(string $scope, string $delivery): void
+    {
+        Cache::forget($scope . ':' . $delivery);
+    }
+
     /**
      * @param  array<string, mixed>  $properties
      */

@@ -10,11 +10,15 @@ namespace App\Http\Controllers;
 
 use App\Models\GitHubApp;
 use App\Services\Git\GitHub\GitHubAppCredentials;
+use App\Services\Git\GitHub\GitHubAppHealth;
 use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\GitHub\GitHubEventHandler;
 use App\Services\Webhook\SignatureVerifier;
 use App\Services\Webhook\WebhookDeliveries;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Throwable;
 
 final class GitHubWebhookController extends Controller
 {
@@ -22,6 +26,8 @@ final class GitHubWebhookController extends Controller
         private readonly GitHubApps $apps,
         private readonly SignatureVerifier $signatures,
         private readonly WebhookDeliveries $deliveries,
+        private readonly GitHubAppHealth $health,
+        private readonly GitHubEventHandler $events,
     ) {}
 
     public function environment(Request $request): JsonResponse
@@ -56,14 +62,45 @@ final class GitHubWebhookController extends Controller
 
         $delivery = $this->deliveries->header($request, ['X-GitHub-Delivery']);
         $event = $this->deliveries->header($request, ['X-GitHub-Event']);
+        $scope = 'github-delivery:' . $app->key;
 
-        if ($delivery !== null && !$this->deliveries->claim('github-delivery:' . $app->key, $delivery)) {
+        $this->health->received($app, (string) $event, $delivery);
+
+        if ($delivery !== null && !$this->deliveries->claim($scope, $delivery)) {
             return response()->json(['message' => 'This delivery was already processed.'], 409);
         }
 
+        $payload = json_decode($request->getContent(), true);
+
+        try {
+            return $this->process($app, $event, is_array($payload) ? $payload : [], $delivery);
+        } catch (Throwable $failure) {
+            if ($delivery !== null) {
+                $this->deliveries->release($scope, $delivery);
+            }
+
+            throw $failure;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function process(#[\SensitiveParameter] GitHubAppCredentials $app, ?string $event, array $payload, ?string $delivery): JsonResponse
+    {
         return match ($event) {
             'ping' => response()->json(['message' => 'pong']),
+            'push' => $this->accepted(fn() => $this->events->push($app, $payload, $delivery), 'Push received.'),
+            'installation' => $this->accepted(fn() => $this->events->installation($app, $payload), 'Installation updated.'),
+            'installation_repositories' => $this->accepted(fn() => $this->events->installationRepositories($app, $payload), 'Repositories updated.'),
             default => response()->json(['message' => 'Event ignored.'], 202),
         };
+    }
+
+    private function accepted(Closure $handle, string $message): JsonResponse
+    {
+        $handle();
+
+        return response()->json(['message' => $message], 202);
     }
 }
