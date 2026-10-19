@@ -42,6 +42,23 @@ function releasesUrl(Application $application, array $query = []): string
     return route('servers.applications.releases.index', [$application->server_id, $application, ...$query]);
 }
 
+function releasesRollback(Application $application, string $description, int $minutesAgo, string $to = '20260912090000'): void
+{
+    $activity = activity()->performedOn($application)->withProperties(['from' => '20260913120000', 'to' => $to])->log($description);
+    $activity->forceFill(['created_at' => now()->subMinutes($minutesAgo)])->save();
+}
+
+function releasesWentLive(Application $application, string $release, int $minutesAgo): Deployment
+{
+    return Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Failed,
+        'release' => $release,
+        'started_at' => now()->subMinutes($minutesAgo + 2),
+        'finished_at' => now()->subMinutes($minutesAgo),
+        'log' => "[13:00:01] swap: current → releases/{$release}\n[13:00:05] deploy failed after the symlink swap. releases/{$release} is live, check its processes.",
+    ]);
+}
+
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-13 14:05:09'));
 });
@@ -141,11 +158,12 @@ test('only the newest five releases and the live one are still on disk', functio
             ->where('releases.6.current', true));
 });
 
-test('a live release older than the newest is reported as rolled back', function () {
+test('an app is reported as rolled back when a rollback came after its last deploy that went live', function () {
     $team = Team::factory()->create();
     $application = releasesApp($team, ['current_release' => '20260912090000']);
     releasesShipped($application, '20260912090000', hoursAgo: 29);
     releasesShipped($application, '20260913120000', hoursAgo: 2);
+    releasesRollback($application, 'application_rolled_back', minutesAgo: 30);
 
     $this->actingAs(releasesMember($team))
         ->get(releasesUrl($application))
@@ -153,6 +171,93 @@ test('a live release older than the newest is reported as rolled back', function
             ->where('application.rolled_back', '20260912-090000')
             ->where('releases.0.current', false)
             ->where('releases.1.current', true));
+});
+
+test('a live release whose deploy failed is listed and marked current, and nothing claims a rollback', function () {
+    $team = Team::factory()->create();
+    $application = releasesApp($team, ['current_release' => '20260913130000']);
+    releasesShipped($application, '20260912090000', hoursAgo: 29);
+    releasesShipped($application, '20260913120000', hoursAgo: 2);
+    releasesWentLive($application, '20260913130000', minutesAgo: 60);
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed, 'release' => '20260913140000', 'finished_at' => now()->subMinutes(5)]);
+
+    $this->actingAs(releasesMember($team))
+        ->get(releasesUrl($application))
+        ->assertInertia(fn($page) => $page
+            ->where('application.rolled_back', null)
+            ->where('releases', fn($releases) => collect($releases)->map(fn($release) => [$release['release'], $release['current'], $release['on_disk']])->all() === [
+                ['20260913130000', true, true],
+                ['20260913120000', false, true],
+                ['20260912090000', false, true],
+            ]));
+});
+
+test('an app is not called rolled back unless its newest rollback started and came after its last live deploy', function (Closure $history) {
+    $team = Team::factory()->create();
+    $application = releasesApp($team, ['current_release' => '20260912090000']);
+    releasesShipped($application, '20260912090000', hoursAgo: 29);
+    releasesShipped($application, '20260913120000', hoursAgo: 2);
+    $history($application);
+
+    $this->actingAs(releasesMember($team))
+        ->get(releasesUrl($application))
+        ->assertInertia(fn($page) => $page
+            ->where('application.rolled_back', null)
+            ->where('releases.1.current', true));
+})->with([
+    'no rollback at all' => [fn(Application $application) => null],
+    'a rollback before the last deploy went live' => [fn(Application $application) => releasesRollback($application, 'application_rolled_back', minutesAgo: 3 * 60)],
+    'a rollback before a failed deploy went live' => [function (Application $application): void {
+        releasesRollback($application, 'application_rolled_back', minutesAgo: 30);
+        releasesWentLive($application, '20260913130000', minutesAgo: 10);
+    }],
+    'a rollback whose processes did not start' => [fn(Application $application) => releasesRollback($application, 'rollback_processes_failed', minutesAgo: 30)],
+    'a successful rollback followed by one that did not start' => [function (Application $application): void {
+        releasesRollback($application, 'application_rolled_back', minutesAgo: 40);
+        releasesRollback($application, 'rollback_processes_failed', minutesAgo: 30);
+    }],
+]);
+
+test('a rollback where only a worker did not start is still called a rollback, because its release serves', function () {
+    $team = Team::factory()->create();
+    $application = releasesApp($team, ['current_release' => '20260912090000']);
+    releasesShipped($application, '20260912090000', hoursAgo: 29);
+    releasesShipped($application, '20260913120000', hoursAgo: 2);
+    releasesRollback($application, 'rollback_worker_failed', minutesAgo: 30);
+
+    $this->actingAs(releasesMember($team))
+        ->get(releasesUrl($application))
+        ->assertInertia(fn($page) => $page->where('application.rolled_back', '20260912-090000'));
+});
+
+test('rolling forward again onto the release that went live last is not called a rollback', function () {
+    $team = Team::factory()->create();
+    $application = releasesApp($team, ['current_release' => '20260913120000']);
+    releasesShipped($application, '20260912090000', hoursAgo: 29);
+    releasesShipped($application, '20260913120000', hoursAgo: 2);
+    releasesRollback($application, 'application_rolled_back', minutesAgo: 60);
+    releasesRollback($application, 'application_rolled_back', minutesAgo: 30, to: '20260913120000');
+
+    $this->actingAs(releasesMember($team))
+        ->get(releasesUrl($application))
+        ->assertInertia(fn($page) => $page
+            ->where('application.rolled_back', null)
+            ->where('releases.0.current', true));
+});
+
+test('rolling back from a live release that did not start is called a rollback', function () {
+    $team = Team::factory()->create();
+    $application = releasesApp($team, ['current_release' => '20260913120000']);
+    releasesShipped($application, '20260913120000', hoursAgo: 2);
+    releasesWentLive($application, '20260913130000', minutesAgo: 60);
+    releasesRollback($application, 'application_rolled_back', minutesAgo: 30, to: '20260913120000');
+
+    $this->actingAs(releasesMember($team))
+        ->get(releasesUrl($application))
+        ->assertInertia(fn($page) => $page
+            ->where('application.rolled_back', '20260913-120000')
+            ->has('releases', 1)
+            ->where('releases.0.current', true));
 });
 
 test('an application on its newest release is not rolled back', function (?string $current) {

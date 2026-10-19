@@ -26,6 +26,8 @@
         phases: Phase[]
         failed_phase: string | null
         failure_reason: string | null
+        start_failed: boolean
+        failed_worker: string | null
         reached_users: boolean
         release: string | null
         branch: string | null
@@ -60,7 +62,8 @@
         build: 'The build failed',
         migrate: 'The migration failed',
         health: 'The health check failed',
-        swap: 'The deploy failed after the swap'
+        swap: 'The deploy failed after the swap',
+        watch: 'The processes did not start'
     }
 
     const FIXES: Record<string, string> = {
@@ -83,6 +86,7 @@
     const finished = $derived(['succeeded', 'failed', 'cancelled'].includes(live.status))
     const running = $derived(live.status === 'running' || live.status === 'pending')
     const lines = $derived(live.log === '' ? [] : live.log.split('\n'))
+    const liveFailure = $derived(live.failed_worker ? `${live.failed_worker} did not start` : live.start_failed ? FAILURES.watch : FAILURES.swap)
 
     const elapsed = $derived.by(() => {
         if (!live.started_at) {
@@ -229,7 +233,7 @@
         <OctagonAlert class="mt-0.5 size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal" data-testid="failure-reason">
             {#if live.reached_users}
-                <span class="font-semibold">{FAILURES.swap}.</span>
+                <span class="font-semibold">{liveFailure}.</span>
                 {live.failure_reason ? ` ${live.failure_reason}` : ` releases/${live.release} is live, check its processes before pushing again.`}
             {:else}
                 <span class="font-semibold">{FAILURES[live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span>

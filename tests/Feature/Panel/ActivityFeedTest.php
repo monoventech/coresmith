@@ -79,6 +79,8 @@ test('application events are described in plain words and link to the applicatio
     'process sync failed' => ['processes_sync_failed', ['error' => 'SSH command failed with exit code 1.'], "Couldn't apply the process change on shop, SSH command failed with exit code 1."],
     'process sync failed without detail' => ['processes_sync_failed', [], "Couldn't apply the process change on shop, the server did not respond"],
     'rollback processes failed' => ['rollback_processes_failed', ['from' => '20260913140000', 'to' => '20260912090000', 'error' => 'coresmith-app-shop-web did not start.'], 'shop rolled back to 20260912-090000, but its processes did not start. Open the app to see why, then deploy a release that starts.'],
+    'rollback worker did not start' => ['rollback_worker_failed', ['from' => '20260913140000', 'to' => '20260912090000', 'worker' => 'Sidekiq', 'error' => 'coresmith-app-shop-sidekiq did not start.'], 'shop rolled back to 20260912-090000, but Sidekiq did not start. Open the app to see why.'],
+    'worker did not start' => ['toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => 'coresmith-app-shop-solid-queue did not start, systemd reports it as activating.'], 'Solid Queue did not start on shop, so its toggle is off again'],
     'domain added' => ['domain_added', ['domain' => 'www.shop.test'], 'www.shop.test added to shop'],
     'port block moved' => ['port_block_moved', ['from' => 8000, 'to' => 8010, 'port' => 8005, 'process' => 'java'], 'shop moved to ports 8010–8019, java already listens on 8005'],
     'killed for memory' => ['app_oom_killed', ['process' => 'queue', 'at' => '2026-09-13T14:03:00+00:00', 'limit_mb' => 256], 'shop queue process killed for going over its 256 MB memory limit, systemd started it again'],
@@ -114,6 +116,15 @@ test('ssh command noise and events with no description are left out', function (
     feedLog($server, 'something_the_feed_does_not_know');
 
     expect((new ActivityFeed)->forTeam($team))->toBe([]);
+});
+
+test('a worker that started is bookkeeping, and stays out of the feed without taking a place in it', function () {
+    [$team,, $application] = feedFixture();
+
+    feedLog($application, 'application_started');
+    feedLog($application, 'toggle_started', ['toggle' => 'queue_worker', 'label' => 'Queue worker']);
+
+    expect(array_map(feedSentence(...), (new ActivityFeed)->forTeam($team, 1)))->toBe(['shop started again']);
 });
 
 test('database events are described without a link', function () {

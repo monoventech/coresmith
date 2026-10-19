@@ -68,6 +68,18 @@ test('the fpm unit can be reloaded gracefully', function () {
     expect((new FpmPoolBuilder(new AsdfManager))->unit(startApp()))->toContain('ExecReload=/bin/kill -USR2 $MAINPID');
 });
 
+test('only the php-fpm or web unit serves an app, never a worker', function () {
+    $php = new Application(['slug' => 'shop', 'type' => ApplicationType::Php, 'php_version' => '8.5.5', 'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']]]);
+    $node = new Application(['slug' => 'shop', 'type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '22.1.0', 'processes' => [['name' => 'worker', 'command' => 'node worker.js']]]);
+
+    expect(startManager()->serves($php, 'coresmith-app-shop-fpm'))->toBeTrue()
+        ->and(startManager()->serves($php, 'coresmith-app-shop-queue'))->toBeFalse()
+        ->and(startManager()->serves($php, 'coresmith-app-shop-web'))->toBeFalse()
+        ->and(startManager()->serves($node, 'coresmith-app-shop-web'))->toBeTrue()
+        ->and(startManager()->serves($node, 'coresmith-app-shop-worker'))->toBeFalse()
+        ->and(startManager()->serves($node, 'coresmith-app-shop-fpm'))->toBeFalse();
+});
+
 test('units that come up active pass after a short grace period', function () {
     $transport = new FakeSSHTransport;
 

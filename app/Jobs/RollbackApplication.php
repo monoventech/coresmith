@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Exceptions\NoPreviousReleaseException;
@@ -17,6 +18,8 @@ use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Panel\RollbackHistory;
+use App\Services\Panel\SmartToggles;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\Stack;
 use App\Services\SSH\SSHConnectionManager;
@@ -85,14 +88,21 @@ final class RollbackApplication implements ShouldQueue
                 try {
                     $processes->verifyStarted($connection, $this->application);
                 } catch (ProcessDidNotStart $e) {
+                    $worker = app(SmartToggles::class)->failedWorker($this->application, $e->unit);
+                    $error = app(LogSanitizer::class)->sanitize($e->getMessage(), $this->application);
+
+                    $this->settle($worker === null ? ApplicationStatus::Failed : ApplicationStatus::Active);
+
                     activity()
                         ->performedOn($this->application)
-                        ->withProperties(['from' => $previous, 'to' => $name, 'error' => app(LogSanitizer::class)->sanitize($e->getMessage(), $this->application)])
-                        ->log('rollback_processes_failed');
+                        ->withProperties(['from' => $previous, 'to' => $name, ...($worker === null ? [] : ['worker' => $worker]), 'error' => $error])
+                        ->log($worker === null ? RollbackHistory::DID_NOT_START : RollbackHistory::WORKER_DID_NOT_START);
 
                     throw $e;
                 }
             }
+
+            $this->settle(ApplicationStatus::Active);
 
             activity()
                 ->performedOn($this->application)
@@ -135,6 +145,14 @@ final class RollbackApplication implements ShouldQueue
         }
 
         return $wanted;
+    }
+
+    private function settle(ApplicationStatus $status): void
+    {
+        Application::query()
+            ->whereKey($this->application->getKey())
+            ->where('status', '!=', ApplicationStatus::Deploying->value)
+            ->update(['status' => $status->value]);
     }
 
     private function stackFor(string $release): ?Stack

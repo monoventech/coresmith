@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Runtime;
 
+use App\Enums\ApplicationType;
 use App\Models\Application;
 use Closure;
 
@@ -39,6 +40,24 @@ final class StackResolver
             $runtimes[$runtime] = $resolved;
         }
 
-        return new Stack($runtimes, $this->frameworks->detect($application, $facts), $detection->tooling, $notes);
+        return new Stack($runtimes, $this->frameworks->detect($application, $facts), $detection->tooling, $notes, $this->gems($application, $facts));
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function gems(Application $application, RepositoryFacts $facts): array
+    {
+        if ($application->type !== ApplicationType::Ruby) {
+            return [];
+        }
+
+        $gems = [];
+
+        foreach (Stack::GEMS as $gem) {
+            $gems[$gem] = $facts->locked($gem) !== null;
+        }
+
+        return $gems;
     }
 }

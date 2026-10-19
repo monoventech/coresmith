@@ -40,6 +40,15 @@ const PAGES: [string, Visit][] = [
     ['Stopped application', (page) => gotoApplication(page, 'bench-01', 'retired-blog')],
     ['Failed application', (page) => gotoApplication(page, 'forge-01', 'storefront')],
     ['Application whose deploy crashed after going live', (page) => gotoApplication(page, 'bench-01', 'crashy')],
+    ['Application whose new release did not start', (page) => gotoApplication(page, 'bench-01', 'dev-mode')],
+    ['Application whose rollback did not start', (page) => gotoApplication(page, 'bench-01', 'failed-rollback')],
+    ['Application whose worker did not start', (page) => gotoApplication(page, 'bench-01', 'stuck-worker')],
+    ['Application left live after a worker did not start', (page) => gotoApplication(page, 'bench-01', 'no-sidekiq')],
+    [
+        'Application left live after a rollback stopped a worker',
+        (page) => gotoApplication(page, 'bench-01', 'rollback-sidekiq')
+    ],
+    ['Rails application offered Solid Queue', (page) => gotoApplication(page, 'bench-01', 'solid-jobs')],
     ['Application killed for memory', (page) => gotoApplication(page, 'bench-01', 'hungry')],
     ['Application on an end-of-life runtime', (page) => gotoApplication(page, 'bench-01', 'legacy-api')],
     [
@@ -64,6 +73,33 @@ const PAGES: [string, Visit][] = [
             await gotoApplication(page, 'bench-01', 'crashy')
             await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
             await page.getByTestId('failure-banner').waitFor()
+        }
+    ],
+    [
+        'Deploy whose processes did not start',
+        async (page) => {
+            await gotoApplication(page, 'bench-01', 'dev-mode')
+            await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+            await page.getByTestId('failure-banner').waitFor()
+        }
+    ],
+    [
+        'Deploy whose worker did not start',
+        async (page) => {
+            await gotoApplication(page, 'bench-01', 'no-sidekiq')
+            await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+            await page.getByTestId('failure-banner').waitFor()
+        }
+    ],
+    [
+        'Releases with a live release whose deploy failed',
+        async (page) => {
+            await page.goto('/releases')
+            await page
+                .getByRole('navigation', { name: 'Applications' })
+                .getByRole('link', { name: 'dev-mode', exact: true })
+                .click()
+            await page.getByRole('heading', { level: 1, name: 'Releases · dev-mode' }).waitFor()
         }
     ],
     ['Database', (page) => gotoDatabase(page, 'forge-01', 'atlas_production')],

@@ -48,12 +48,39 @@ test('notes from reading and from resolving are both carried on the stack', func
 });
 
 test('a stack survives being stored and read back', function () {
-    $stack = new Stack(['php' => new ResolvedRuntime('php', '8.4.20', 'composer.json', '^8.4', true)], ['name' => 'laravel', 'major' => 13], new JsTooling('bun', true, true, false));
+    $stack = new Stack(['php' => new ResolvedRuntime('php', '8.4.20', 'composer.json', '^8.4', true)], ['name' => 'laravel', 'major' => 13], new JsTooling('bun', true, true, false), [], ['sidekiq' => false, 'solid_queue' => true]);
     $restored = Stack::fromArray($stack->toArray());
 
     expect($restored->toArray())->toBe($stack->toArray())
+        ->and($restored->gems)->toBe(['sidekiq' => false, 'solid_queue' => true])
         ->and($restored->missing())->toBe([])
         ->and(Stack::fromArray(null)->runtimes)->toBe([]);
+});
+
+test('a ruby app records whether its lockfile locks sidekiq and solid queue', function (array $locked, array $gems) {
+    $application = new Application(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
+    $facts = new RepositoryFacts(['.ruby-version' => "3.4.10\n"], [], $locked);
+
+    $stack = app(StackResolver::class)->resolve($application, $facts, fn(): array => ['3.4.10']);
+
+    expect($stack->gems)->toBe($gems)
+        ->and($stack->toArray()['gems'])->toBe($gems)
+        ->and($stack->applicationAttributes()['stack']['gems'])->toBe($gems);
+})->with([
+    'solid queue' => [['rails' => '8.0.2', 'solid_queue' => '1.1.5'], ['sidekiq' => false, 'solid_queue' => true]],
+    'sidekiq' => [['rails' => '7.2.1', 'sidekiq' => '7.3.9'], ['sidekiq' => true, 'solid_queue' => false]],
+    'neither' => [['rails' => '8.0.2'], ['sidekiq' => false, 'solid_queue' => false]],
+]);
+
+test('an app that is not ruby records no gems', function () {
+    $application = new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']);
+
+    expect(app(StackResolver::class)->resolve($application, new RepositoryFacts([], [], ['sidekiq' => '7.3.9']), fn(): array => [])->gems)->toBe([]);
+});
+
+test('a stack stored before gems were recorded reads back with none, so no worker is assumed', function () {
+    expect(Stack::fromArray(['runtimes' => [], 'framework' => ['name' => 'rails', 'major' => 8], 'tooling' => null])->gems)->toBe([])
+        ->and(Stack::fromArray(['gems' => ['sidekiq' => 'yes', 'solid_queue' => true, 3 => true]])->gems)->toBe(['solid_queue' => true]);
 });
 
 test('an application takes a stack as its live versions', function () {

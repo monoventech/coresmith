@@ -10,16 +10,20 @@ namespace App\Services\Runtime;
 
 final readonly class Stack
 {
+    public const GEMS = ['sidekiq', 'solid_queue'];
+
     /**
      * @param  array<string, ResolvedRuntime>  $runtimes
      * @param  array{name: string, major: int}|null  $framework
      * @param  list<string>  $notes
+     * @param  array<string, bool>  $gems
      */
     public function __construct(
         public array $runtimes = [],
         public ?array $framework = null,
         public ?JsTooling $tooling = null,
         public array $notes = [],
+        public array $gems = [],
     ) {}
 
     /**
@@ -39,7 +43,7 @@ final readonly class Stack
     }
 
     /**
-     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null}
+     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>}
      */
     public function toArray(): array
     {
@@ -47,6 +51,7 @@ final readonly class Stack
             'runtimes' => array_map(fn(ResolvedRuntime $runtime): array => $runtime->toArray(), $this->runtimes),
             'framework' => $this->framework,
             'tooling' => $this->tooling?->toArray(),
+            'gems' => $this->gems,
         ];
     }
 
@@ -65,11 +70,13 @@ final readonly class Stack
 
         $framework = $data['framework'] ?? null;
         $tooling = $data['tooling'] ?? null;
+        $gems = array_filter((array) ($data['gems'] ?? []), fn(mixed $locked, int|string $gem): bool => is_string($gem) && is_bool($locked), ARRAY_FILTER_USE_BOTH);
 
         return new self(
             $runtimes,
             is_array($framework) && isset($framework['name'], $framework['major']) ? ['name' => (string) $framework['name'], 'major' => (int) $framework['major']] : null,
             JsTooling::fromArray(is_array($tooling) ? $tooling : null),
+            gems: $gems,
         );
     }
 

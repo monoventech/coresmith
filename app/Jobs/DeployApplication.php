@@ -39,6 +39,7 @@ use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitProviderFactory;
+use App\Services\Panel\SmartToggles;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\AsdfManager;
@@ -93,7 +94,7 @@ final class DeployApplication implements ShouldQueue
 
     private ?string $failureReason = null;
 
-    private bool $crashLooping = false;
+    private bool $keepFailed = false;
 
     private ?string $cloneAdvice = null;
 
@@ -262,7 +263,7 @@ final class DeployApplication implements ShouldQueue
                 : new ResolvedRuntime($resolved->runtime, $resolved->version, $resolved->source, $resolved->detail, $installed, $resolved->note);
         }
 
-        return new Stack($runtimes, $stack->framework, $stack->tooling, $stack->notes);
+        return new Stack($runtimes, $stack->framework, $stack->tooling, $stack->notes, $stack->gems);
     }
 
     private function describe(ResolvedRuntime $runtime): string
@@ -636,13 +637,23 @@ final class DeployApplication implements ShouldQueue
             return;
         }
 
+        $units = $processes->unitNames($application);
+
+        if ($units !== []) {
+            $this->mark(DeploymentPhases::WATCH, 'starting ' . implode(', ', $units));
+        }
+
         $processes->refresh($connection, $application, $restart);
 
         try {
             $processes->verifyStarted($connection, $application);
         } catch (ProcessDidNotStart $e) {
+            $worker = app(SmartToggles::class)->failedWorker($application, $e->unit);
+
             $this->appendLog($e->journal);
+            $this->keepFailed = $worker === null;
             $this->failureReason = $e->getMessage();
+            $this->deployment->forceFill(['start_failed' => true, 'failed_worker' => $worker])->save();
 
             throw $e;
         }
@@ -671,7 +682,7 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->appendLog($loop->output);
-        $this->crashLooping = true;
+        $this->keepFailed = true;
         $this->failureReason = "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
 
         throw new DeploymentAborted($this->failureReason);
@@ -858,6 +869,6 @@ final class DeployApplication implements ShouldQueue
             return;
         }
 
-        $log->fail($this->deployment, $message, $this->failureReason, $this->swapped, $this->crashLooping);
+        $log->fail($this->deployment, $message, $this->failureReason, $this->swapped, $this->keepFailed);
     }
 }

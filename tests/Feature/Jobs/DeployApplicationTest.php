@@ -18,6 +18,7 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Deployment\DeploymentPhases;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\RepositoryProbe;
@@ -252,6 +253,84 @@ test('a process that does not start fails the deploy with the reason and its jou
         ->and($fresh->failure_reason)->toContain('coresmith-app-my-app-fpm did not start')
         ->and($fresh->failure_reason)->toContain('Port 8000 is already taken')
         ->and($fresh->log)->toContain('unable to bind listening socket');
+});
+
+test('a release whose web process does not start leaves the app failed, as a crash loop does', function (array $attributes, string $unit) {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000', ...$attributes]))->create();
+    $transport = healthyDeployTransport()
+        ->respondTo("systemctl is-active '{$unit}'", "failed\n", 3)
+        ->respondTo("journalctl -u '{$unit}'", 'ERROR: unable to bind listening socket: Address already in use');
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(ProcessDidNotStart::class);
+
+    $application = $deployment->application->fresh();
+
+    expect($application->status)->toBe(ApplicationStatus::Failed)
+        ->and($application->current_release)->toBe(TIMESTAMP)
+        ->and($deployment->fresh()->failure_reason)->toStartWith("{$unit} did not start")
+        ->and($deployment->fresh()->start_failed)->toBeTrue()
+        ->and($deployment->fresh()->failed_worker)->toBeNull()
+        ->and($deployment->fresh()->log)->toContain('deploy failed after the symlink swap');
+})->with([
+    'php-fpm' => [[], 'coresmith-app-my-app-fpm'],
+    'a web unit' => [['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0'], 'coresmith-app-my-app-web'],
+]);
+
+test('a worker that does not start fails the deploy with its own reason, but the app stays live because the site serves', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(deployableApp([
+        'current_release' => '20260101-000000',
+        'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']],
+    ]))->create();
+    $transport = healthyDeployTransport()
+        ->respondTo("systemctl is-active 'coresmith-app-my-app-queue'", "activating\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-my-app-queue'", "coresmith-app-my-app-queue.service: Main process exited, code=exited, status=1/FAILURE\n")
+        ->respondTo("tail -n 30 '/var/coresmith/logs/my-app/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(ProcessDidNotStart::class);
+
+    $fresh = $deployment->fresh();
+    $application = $deployment->application->fresh();
+
+    expect($fresh->status)->toBe(DeploymentStatus::Failed)
+        ->and($fresh->failure_reason)->toBe('coresmith-app-my-app-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.')
+        ->and($fresh->log)->toContain('Could not open input file: artisan')
+        ->and($fresh->start_failed)->toBeTrue()
+        ->and($fresh->failed_worker)->toBe('Queue worker')
+        ->and($application->status)->toBe(ApplicationStatus::Active)
+        ->and($application->current_release)->toBe(TIMESTAMP);
+});
+
+test('the processes are started under the watch marker, after the swap and before traffic is routed', function () {
+    $deployment = Deployment::factory()->for(deployableApp(['processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']]]))->create();
+
+    deploy($deployment, healthyDeployTransport());
+
+    $log = (string) $deployment->fresh()->log;
+    $swap = strpos($log, 'symlink: current → releases/' . TIMESTAMP);
+    $starting = strpos($log, ' watch: starting coresmith-app-my-app-fpm, coresmith-app-my-app-queue');
+    $route = strpos($log, 'caddy: route for app.example.com is in place');
+
+    expect($log)->toMatch('/^\[\d{2}:\d{2}:\d{2}\] watch: starting coresmith-app-my-app-fpm, coresmith-app-my-app-queue$/m')
+        ->and($swap)->toBeLessThan($starting)
+        ->and($starting)->toBeLessThan($route)
+        ->and($deployment->fresh()->start_failed)->toBeFalse();
+});
+
+test('a release whose processes do not start is recorded as a start failure, with every phase through the swap done', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()
+        ->respondTo("systemctl is-active 'coresmith-app-my-app-fpm'", "failed\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-my-app-fpm'", 'ERROR: unable to bind listening socket: Address already in use');
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(ProcessDidNotStart::class);
+
+    $fresh = $deployment->fresh();
+
+    expect($fresh->start_failed)->toBeTrue()
+        ->and(array_unique(array_column(app(DeploymentPhases::class)->states($fresh), 'state')))->toBe(['done']);
 });
 
 test('a stopped app gets the new release without its processes being started', function () {
@@ -518,6 +597,7 @@ test('a release that crash loops after the swap fails the deploy and says to rol
         ->and($fresh->failure_reason)->toContain('roll back')
         ->and($fresh->log)->toContain('Class "App\\Billing\\Gateway" not found')
         ->and($fresh->log)->toContain('deploy failed after the symlink swap')
+        ->and($fresh->start_failed)->toBeFalse()
         ->and($deployment->application->fresh()->status)->toBe(ApplicationStatus::Failed);
 });
 

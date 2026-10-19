@@ -168,6 +168,38 @@ test.describe('a deploy that failed with a known reason', () => {
         await page.waitForURL(/\/releases$/)
     })
 
+    test('a release whose processes did not start names the start, and every phase through the swap is done', async ({
+        page
+    }) => {
+        await gotoApplication(page, 'bench-01', 'dev-mode')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        const reason = page.getByTestId('failure-reason')
+        const rail = page.getByTestId('phase-rail')
+
+        await expect(reason).toContainText('The processes did not start.')
+        await expect(reason).toContainText('coresmith-app-dev-mode-web did not start, systemd reports it as activating.')
+        await expect(reason).not.toContainText('The deploy failed after the swap.')
+        await expect(rail.locator('[data-phase="swap"]')).toHaveAttribute('data-state', 'done')
+        await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
+        await expect(rail).toContainText('the swap went through')
+        await expect(page.getByTestId('deployment-log')).toContainText('watch: starting coresmith-app-dev-mode-web')
+    })
+
+    test('a worker that did not start is named on its deploy, and the swap still went through', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'no-sidekiq')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        const reason = page.getByTestId('failure-reason')
+        const rail = page.getByTestId('phase-rail')
+
+        await expect(reason).toContainText('Sidekiq did not start.')
+        await expect(reason).toContainText('coresmith-app-no-sidekiq-sidekiq did not start, systemd reports it as activating.')
+        await expect(reason).not.toContainText('The processes did not start.')
+        await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
+        await expect(rail).toContainText('the swap went through')
+    })
+
     test('a clone that failed names the branch it could not find', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'wrong-branch')
         await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()

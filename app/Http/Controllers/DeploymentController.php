@@ -105,6 +105,8 @@ final class DeploymentController extends Controller
             'phases' => $states,
             'failed_phase' => $failed['key'] ?? null,
             'failure_reason' => $deployment->failure_reason,
+            'start_failed' => (bool) $deployment->start_failed,
+            'failed_worker' => $deployment->failed_worker,
             'reached_users' => DeploymentPresenter::reachedUsers($deployment),
             'release' => Formats::release($deployment->release),
             'branch' => $deployment->branch,

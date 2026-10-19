@@ -21,7 +21,7 @@ use Spatie\Activitylog\Models\Activity;
 
 final class ActivityFeed
 {
-    private const QUIET = ['ssh_command_executed', 'authorized_keys_synced'];
+    private const QUIET = ['ssh_command_executed', 'authorized_keys_synced', SmartToggles::STARTED];
 
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
@@ -160,6 +160,7 @@ final class ActivityFeed
             'application_renamed' => [$this->text('Application renamed to '), $this->mono($application?->name)],
             'application_removed' => [$this->mono($application?->name), $this->text(' stopped and detached from ' . $application?->server?->name)],
             'application_rolled_back' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', no rebuild')],
+            RollbackHistory::WORKER_DID_NOT_START => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but ' . ($properties['worker'] ?? 'a worker') . ' did not start. Open the app to see why.')],
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
             'application_stopped' => [$this->mono($application?->name), $this->text(' stopped, visitors see the maintenance page')],
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
@@ -170,6 +171,7 @@ final class ActivityFeed
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
             'toggle_changed' => [$this->text('Smart toggle ' . (($properties['on'] ?? false) ? 'enabled' : 'disabled') . ', ' . ($properties['label'] ?? 'a toggle') . ' on '), $this->mono($application?->name), $this->text(', no deployment needed')],
             'processes_sync_failed' => [$this->text('Couldn\'t apply the process change on '), $this->mono($application?->name), $this->text(', ' . ($properties['error'] ?? 'the server did not respond'))],
+            SmartToggles::START_FAILED => [$this->text(($properties['label'] ?? 'A worker') . ' did not start on '), $this->mono($application?->name), $this->text(', so its toggle is off again')],
             'domain_added' => [$this->mono((string) ($properties['domain'] ?? '')), $this->text(' added to '), $this->mono($application?->name)],
             'port_block_moved' => [$this->mono($application?->name), $this->text(' moved to ports ' . (int) ($properties['to'] ?? 0) . '–' . ((int) ($properties['to'] ?? 0) + 9) . ', ' . ($properties['process'] ?? 'another process') . ' already listens on ' . (int) ($properties['port'] ?? 0))],
             'webhook_signature_rejected' => [$this->text('A webhook with a bad signature was rejected')],

@@ -36,11 +36,21 @@ test.describe('an application', () => {
         await expect(toggle(page, 'Maintenance page')).not.toBeChecked()
     })
 
-    test('a rails app gets sidekiq instead', async ({ page }) => {
+    test('a rails app that locks sidekiq gets sidekiq instead', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'ledger')
 
         await expect(toggle(page, 'Sidekiq')).toBeVisible()
         await expect(toggle(page, 'Queue worker')).toHaveCount(0)
+    })
+
+    test('a rails app that locks solid queue is offered it, and not sidekiq', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'solid-jobs')
+
+        await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
+        await expect(page.getByTestId('toggle-solid_queue')).toContainText(
+            'bin/jobs · systemd unit coresmith-app-solid-jobs-solid-queue'
+        )
+        await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
 
     test('the current release is shown', async ({ page }) => {
@@ -161,6 +171,21 @@ test.describe('changing an application', () => {
 
         await page.reload()
         await expect(toggle(page, 'Queue worker')).toBeChecked()
+
+        await toggle(page, 'Queue worker').click()
+        await expect(toggle(page, 'Queue worker')).not.toBeChecked()
+    })
+
+    test('a worker being turned on is checked on until the server reports how it started', async ({
+        page
+    }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
+
+        const checking = page.waitForRequest((request) => request.headers()['x-inertia-partial-data'] === 'toggles')
+
+        await toggle(page, 'Queue worker').click()
+        await expect(toggle(page, 'Queue worker')).toBeChecked()
+        await checking
 
         await toggle(page, 'Queue worker').click()
         await expect(toggle(page, 'Queue worker')).not.toBeChecked()
@@ -451,6 +476,94 @@ test.describe('adding an application', () => {
             expect(await blockingViolations(page)).toEqual([])
         })
     }
+})
+
+test.describe('an app whose processes did not start', () => {
+    function header(page: Page, name: string) {
+        return page.getByRole('heading', { level: 1, name, exact: true }).locator('..')
+    }
+
+    test('a release that went live but did not start says the app failed and why, not that it is serving', async ({
+        page
+    }) => {
+        await gotoApplication(page, 'bench-01', 'dev-mode')
+
+        const banner = page.getByTestId('failed-banner')
+
+        await expect(header(page, 'dev-mode')).toContainText('Failed')
+        await expect(header(page, 'dev-mode')).not.toContainText('Live')
+        await expect(banner).toContainText('The last deploy went live but did not finish.')
+        await expect(banner).toContainText(
+            'coresmith-app-dev-mode-web did not start, systemd reports it as activating.'
+        )
+        await expect(banner).toContainText('Set RAILS_ENV=production in its environment variables, then deploy again.')
+        await expect(banner).not.toContainText('is serving')
+
+        await banner.getByRole('link', { name: 'Read the log' }).click()
+
+        await expect(page.getByTestId('failure-reason')).toContainText('The processes did not start.')
+        await expect(page.getByTestId('failure-reason')).toContainText('coresmith-app-dev-mode-web did not start')
+        await expect(page.getByTestId('deployment-log')).toContainText('cannot load such file -- debug/prelude')
+    })
+
+    test('a worker that did not start after going live leaves the app live, and says which worker and why', async ({
+        page
+    }) => {
+        await gotoApplication(page, 'bench-01', 'no-sidekiq')
+
+        const banner = page.getByTestId('failed-banner')
+
+        await expect(header(page, 'no-sidekiq')).toContainText('Live')
+        await expect(header(page, 'no-sidekiq')).not.toContainText('Failed')
+        await expect(banner).toContainText('The last deploy went live but did not finish.')
+        await expect(banner).toContainText(
+            'coresmith-app-no-sidekiq-sidekiq did not start, systemd reports it as activating.'
+        )
+        await expect(toggle(page, 'Sidekiq')).toBeChecked()
+        await expect(toggle(page, 'Sidekiq')).toBeEnabled()
+    })
+
+    test('a rollback that did not start says so, with the reason and what to do', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'failed-rollback')
+
+        const banner = page.getByTestId('rollback-failed-banner')
+
+        await expect(header(page, 'failed-rollback')).toContainText('Failed')
+        await expect(banner).toContainText('The rollback did not start the app.')
+        await expect(banner).toContainText(/releases\/\d{8}-\d{6} is live again, but its processes did not start\./)
+        await expect(banner).toContainText(
+            'coresmith-app-failed-rollback-web did not start, systemd reports it as activating. Port 8310 is already taken by another process.'
+        )
+        await expect(page.getByTestId('failed-banner')).toHaveCount(0)
+    })
+
+    test('a rollback where only a worker did not start keeps the app live and names the worker', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'rollback-sidekiq')
+
+        const banner = page.getByTestId('rollback-failed-banner')
+
+        await expect(header(page, 'rollback-sidekiq')).toContainText('Live')
+        await expect(header(page, 'rollback-sidekiq')).not.toContainText('Failed')
+        await expect(banner).toContainText('Sidekiq did not start after the rollback.')
+        await expect(banner).toContainText(/releases\/\d{8}-\d{6} is live again, but Sidekiq did not start\./)
+        await expect(banner).toContainText(
+            'coresmith-app-rollback-sidekiq-sidekiq did not start, systemd reports it as activating.'
+        )
+        await expect(banner).not.toContainText('The rollback did not start the app.')
+    })
+
+    test('a worker that did not start says why, and its toggle is off again', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'stuck-worker')
+
+        const banner = page.getByTestId('toggle-failed-banner')
+
+        await expect(banner).toHaveCount(1)
+        await expect(banner).toContainText('Solid Queue did not start.')
+        await expect(banner).toContainText(
+            'The entry point was not found. Check the build produced the file the process starts, then deploy again.'
+        )
+        await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
+    })
 })
 
 test.describe('an app killed for memory', () => {

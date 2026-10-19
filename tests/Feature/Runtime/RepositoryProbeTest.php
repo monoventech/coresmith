@@ -72,6 +72,54 @@ test('the probe script reads a real directory', function () {
         ->and($facts->locked)->toBe(['laravel/framework' => '13.2.0', 'rails' => '8.0.2']);
 });
 
+function probeLockfile(string $lockfile): array
+{
+    $directory = sys_get_temp_dir() . '/coresmith-probe-' . Str::random(8);
+    File::ensureDirectoryExists($directory);
+    File::put($directory . '/Gemfile.lock', $lockfile);
+
+    $result = Process::env([RepositoryProbe::DIRECTORY_VARIABLE => $directory])->input(app(RepositoryProbe::class)->script())->run('bash -s');
+
+    File::deleteDirectory($directory);
+
+    return app(RepositoryProbe::class)->parse($result->output())->locked;
+}
+
+test('the probe reads whether Gemfile.lock locks sidekiq and solid queue, beside rails', function () {
+    $locked = probeLockfile(implode("\n", [
+        'GEM',
+        '  remote: https://rubygems.org/',
+        '  specs:',
+        '    rails (8.0.2)',
+        '      actioncable (= 8.0.2)',
+        '    sidekiq (7.3.9)',
+        '      redis-client (>= 0.22.2)',
+        '    solid_queue (1.1.5)',
+        '      activejob (>= 7.1)',
+        '',
+        'DEPENDENCIES',
+        '  rails (~> 8.0.2)',
+        '  sidekiq',
+        '  solid_queue',
+        '',
+    ]));
+
+    expect($locked)->toBe(['rails' => '8.0.2', 'sidekiq' => '7.3.9', 'solid_queue' => '1.1.5']);
+});
+
+test('a gem named only as another gem\'s dependency is not locked', function () {
+    $locked = probeLockfile(implode("\n", [
+        'GEM',
+        '  specs:',
+        '    mission_control-jobs (1.0.2)',
+        '      solid_queue (>= 1.0)',
+        '    rails (8.0.2)',
+        '',
+    ]));
+
+    expect($locked)->toBe(['rails' => '8.0.2']);
+});
+
 test('the probe script asks for exactly the files the parser keeps', function () {
     $script = app(RepositoryProbe::class)->script();
 

@@ -91,9 +91,12 @@ final class ProcessManager
         }
     }
 
-    public function verifyStarted(SSHConnection $connection, Application $application): void
+    /**
+     * @param  list<string>|null  $only
+     */
+    public function verifyStarted(SSHConnection $connection, Application $application, ?array $only = null): void
     {
-        $units = $this->unitNames($application);
+        $units = $only ?? $this->unitNames($application);
 
         if ($units === []) {
             return;
@@ -121,11 +124,20 @@ final class ProcessManager
         }
     }
 
+    public function serves(Application $application, string $unit): bool
+    {
+        return ($application->type === ApplicationType::Php && $unit === $this->fpm->unitName($application))
+            || ($this->units->webCommand($application) !== null && $unit === $this->units->unitName($application, 'web'));
+    }
+
+    public function process(Application $application, string $unit): string
+    {
+        return SafeName::assertProcess(Str::after($unit, 'coresmith-app-' . SafeName::assertSlug($application->slug) . '-'));
+    }
+
     public function processLog(SSHConnection $connection, Application $application, string $unit, int $lines): string
     {
-        $slug = SafeName::assertSlug($application->slug);
-        $process = SafeName::assertProcess(Str::after($unit, 'coresmith-app-' . $slug . '-'));
-        $log = escapeshellarg('/var/coresmith/logs/' . $slug . '/' . $process . '.log');
+        $log = escapeshellarg('/var/coresmith/logs/' . SafeName::assertSlug($application->slug) . '/' . $this->process($application, $unit) . '.log');
 
         return $connection->execute("tail -n {$lines} {$log} 2>/dev/null || true", sudo: true)->output;
     }

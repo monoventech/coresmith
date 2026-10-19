@@ -288,6 +288,27 @@ test('the process watch after the swap is not a phase of its own', function () {
         ->and($with)->toBe($without);
 });
 
+test('a deploy whose processes did not start does not blame the symlink swap, because the swap finished', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Failed, [
+        '[15:08:29] clone: fetching over https',
+        '[15:08:38] deps: installing dependencies',
+        '[15:09:10] build: building the release',
+        '[15:09:24] health: checking the release before it goes live',
+        '[15:09:25] swap: current → releases/20260916-150829',
+        '[15:09:26] watch: starting coresmith-app-shop-web',
+        '[15:09:29] deploy failed after the symlink swap. releases/20260916-150829 is live, check its processes.',
+    ]);
+
+    expect(phasesStates($deployment))->toBe([
+        'clone' => 'done',
+        'deps' => 'done',
+        'build' => 'done',
+        'migrate' => 'skipped',
+        'health' => 'done',
+        'swap' => 'done',
+    ]);
+});
+
 test('a deploy the crash loop watch failed does not blame the symlink swap, because the swap finished', function () {
     $deployment = phasesDeployment(DeploymentStatus::Failed, [
         '[15:08:29] clone: fetching over https',

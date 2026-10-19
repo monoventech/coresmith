@@ -12,6 +12,7 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Panel\SmartToggles;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
@@ -146,6 +147,98 @@ test('a sync the server rejects is logged against the application and rethrown',
     expect($activity->subject_id)->toBe($application->id)
         ->and($activity->properties['error'])->toBe('SSH command failed with exit code 1.')
         ->and($transport->connected())->toBeFalse();
+});
+
+function processJobsWorker(array $attributes = []): Application
+{
+    return processJobsApp([
+        'power_state' => PowerState::Active,
+        'processes' => [
+            ['name' => 'horizon', 'command' => 'php artisan horizon'],
+            ['name' => 'queue', 'command' => SmartToggles::QUEUE_COMMAND],
+        ],
+        ...$attributes,
+    ]);
+}
+
+test('a worker turned on by its toggle is checked once it has started, and only that worker', function () {
+    $application = processJobsWorker();
+    $transport = (new FakeSSHTransport)->respondTo("systemctl is-active 'coresmith-app-shop-fpm'", "failed\n", 3);
+
+    processJobsRun(new SyncApplicationProcesses($application, [], SmartToggles::QUEUE), $transport);
+
+    $commands = $transport->commands();
+    $started = array_search("systemctl enable --now 'coresmith-app-shop-queue'", $commands, true);
+    $checked = array_search("systemctl is-active 'coresmith-app-shop-queue'", $commands, true);
+
+    expect($started)->not->toBeFalse()
+        ->and($checked)->not->toBeFalse()
+        ->and($started)->toBeLessThan($checked)
+        ->and(implode("\n", $commands))->not->toContain("systemctl is-active 'coresmith-app-shop-fpm'")
+        ->and(implode("\n", $commands))->not->toContain("systemctl is-active 'coresmith-app-shop-horizon'")
+        ->and(collect($application->fresh()->processes)->pluck('name')->all())->toBe(['horizon', 'queue'])
+        ->and(Activity::query()->where('description', 'toggle_started')->sole()->properties->toArray())->toBe(['toggle' => 'queue_worker', 'label' => 'Queue worker'])
+        ->and(Activity::query()->where('description', 'toggle_start_failed')->exists())->toBeFalse();
+});
+
+test('a worker that does not start is stopped, removed and its toggle turned back off, with the reason and its advice', function () {
+    $application = processJobsWorker();
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-queue'", "activating\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-shop-queue'", "coresmith-app-shop-queue.service: Main process exited, code=exited, status=1/FAILURE\n")
+        ->respondTo("tail -n 30 '/var/coresmith/logs/shop/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
+
+    processJobsRun(new SyncApplicationProcesses($application, [], SmartToggles::QUEUE), $transport);
+
+    $commands = $transport->commands();
+    $checked = array_search("systemctl is-active 'coresmith-app-shop-queue'", $commands, true);
+    $disabled = array_search("systemctl disable --now 'coresmith-app-shop-queue' || true", $commands, true);
+    $deleted = array_search("rm -f '/etc/systemd/system/coresmith-app-shop-queue.service'", $commands, true);
+    $reloaded = array_keys(array_filter($commands, fn(string $command): bool => $command === 'systemctl daemon-reload'));
+    $activity = Activity::query()->where('description', 'toggle_start_failed')->sole();
+
+    expect($checked)->toBeLessThan($disabled)
+        ->and($disabled)->toBeLessThan($deleted)
+        ->and(end($reloaded))->toBeGreaterThan($deleted)
+        ->and(collect($application->fresh()->processes)->pluck('name')->all())->toBe(['horizon'])
+        ->and($activity->subject_id)->toBe($application->id)
+        ->and($activity->properties['toggle'])->toBe('queue_worker')
+        ->and($activity->properties['label'])->toBe('Queue worker')
+        ->and($activity->properties['error'])->toBe('coresmith-app-shop-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.')
+        ->and(Activity::query()->where('description', 'processes_sync_failed')->exists())->toBeFalse()
+        ->and(Activity::query()->where('description', 'toggle_started')->exists())->toBeFalse()
+        ->and($transport->connected())->toBeFalse();
+});
+
+test('a sync that was not started by a worker toggle checks nothing', function (?string $toggle) {
+    $application = processJobsWorker();
+    $transport = new FakeSSHTransport;
+
+    processJobsRun(new SyncApplicationProcesses($application, [], $toggle), $transport);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('systemctl is-active')
+        ->and(Activity::query()->whereIn('description', ['toggle_started', 'toggle_start_failed'])->exists())->toBeFalse();
+})->with(['no toggle' => null, 'the scheduler' => SmartToggles::SCHEDULER]);
+
+test('a worker toggled off again before its sync ran is not checked', function () {
+    $application = processJobsWorker(['processes' => [['name' => 'horizon', 'command' => 'php artisan horizon']]]);
+    $transport = new FakeSSHTransport;
+
+    processJobsRun(new SyncApplicationProcesses($application, [], SmartToggles::QUEUE), $transport);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('systemctl is-active')
+        ->and(Activity::query()->whereIn('description', ['toggle_started', 'toggle_start_failed'])->exists())->toBeFalse();
+});
+
+test('a stopped app has its toggled worker installed but neither started nor checked', function () {
+    $application = processJobsWorker(['power_state' => PowerState::Stopped]);
+    $transport = new FakeSSHTransport;
+
+    processJobsRun(new SyncApplicationProcesses($application, [], SmartToggles::QUEUE), $transport);
+
+    expect($transport->uploads())->toHaveKey('/etc/systemd/system/coresmith-app-shop-queue.service')
+        ->and(implode("\n", $transport->commands()))->not->toContain('systemctl is-active')
+        ->and(collect($application->fresh()->processes)->pluck('name')->all())->toBe(['horizon', 'queue']);
 });
 
 test('process syncs and detaches run on the server tasks queue', function () {

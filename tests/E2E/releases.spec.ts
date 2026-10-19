@@ -79,6 +79,19 @@ test.describe('releases', () => {
         await expect(rows(page).filter({ hasText: 'v1.5.0' }).getByRole('button', { name: 'Roll back to this' })).toBeVisible()
     })
 
+    test('a live release whose deploy failed is listed as current, and nothing claims a rollback', async ({ page }) => {
+        await gotoReleasesOf(page, 'dev-mode')
+
+        const current = rows(page).filter({ hasText: 'current →' })
+
+        await expect(rows(page)).toHaveCount(2)
+        await expect(current).toHaveCount(1)
+        await expect(current).toHaveAttribute('data-current', 'true')
+        await expect(current).toContainText('commit 5e1d0a2 by Priya Nair')
+        await expect(page.getByTestId('rolled-back')).toHaveCount(0)
+        await expect(rows(page).filter({ hasText: 'v1.2.0' }).getByRole('button', { name: 'Roll back to this' })).toBeVisible()
+    })
+
     test('the palette can start a rollback straight to the confirmation', async ({ page }) => {
         await page.goto('/dashboard')
         await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()

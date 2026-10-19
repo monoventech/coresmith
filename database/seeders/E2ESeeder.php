@@ -23,12 +23,14 @@ use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
+use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Activitylog\Models\Activity;
 
 final class E2ESeeder extends Seeder
 {
@@ -80,6 +82,12 @@ final class E2ESeeder extends Seeder
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
         $this->crashedAfterSwap($this->application('crashy', 8030));
+        $this->didNotStart($this->rails('dev-mode', 8300, "RAILS_ENV=development\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16))));
+        $this->rollbackDidNotStart($this->rails('failed-rollback', 8310));
+        $this->succeeded($this->rails('solid-jobs', 8320), 2 * 24 * 60, 'v1.0.0');
+        $this->workerDidNotStart($this->rails('stuck-worker', 8330));
+        $this->workerDidNotStartAfterGoingLive($this->rails('no-sidekiq', 8340, attributes: ['processes' => [['name' => 'sidekiq', 'command' => 'bundle exec sidekiq']]]));
+        $this->rollbackLeftAWorkerStopped($this->rails('rollback-sidekiq', 8350, attributes: ['processes' => [['name' => 'sidekiq', 'command' => 'bundle exec sidekiq']]]));
         $this->failedClone($this->application('wrong-branch', 8040, ['repository_branch' => 'release/2.0']));
 
         $hungry = $this->application('hungry', 8050, ['app_size' => 'small']);
@@ -289,7 +297,9 @@ final class E2ESeeder extends Seeder
     private function rolledBack(Application $application): void
     {
         $older = $this->succeeded($application, 3 * 24 * 60, 'v1.4.0');
-        $this->succeeded($application, 2 * 60, 'v1.5.0');
+        $newer = $this->succeeded($application, 2 * 60, 'v1.5.0');
+
+        $this->logAt($application, 'application_rolled_back', ['from' => $newer, 'to' => $older, 'runtimes' => 'unchanged'], CarbonImmutable::now()->subMinutes(90));
 
         $application->forceFill(['current_release' => $older])->save();
     }
@@ -351,7 +361,152 @@ final class E2ESeeder extends Seeder
             'created_at' => $started,
         ]);
 
+        $application->forceFill(['current_release' => $release, 'status' => ApplicationStatus::Failed])->save();
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function rails(string $name, int $port, ?string $env = null, array $attributes = []): Application
+    {
+        return $this->application($name, $port, [
+            'type' => ApplicationType::Ruby,
+            'framework' => 'rails',
+            'php_version' => null,
+            ...MonovenTenant::stack(['ruby' => ['3.4.10', '.ruby-version', '3.4.10']], ['name' => 'rails', 'major' => 8], null, ['sidekiq' => false, 'solid_queue' => true]),
+            'env_variables' => $env ?? "RAILS_ENV=production\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16)),
+            ...$attributes,
+        ]);
+    }
+
+    private function didNotStart(Application $application): void
+    {
+        $this->succeeded($application, 26 * 60, 'v1.2.0');
+
+        $release = $this->wentLiveButDidNotStart($application, CarbonImmutable::now()->subMinutes(20), '5e1d0a2', 'Add the stock alerts mailer', 'web', [
+            '*  Environment: development',
+            '! Unable to load application: LoadError: cannot load such file -- debug/prelude',
+        ], 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.');
+
+        $application->forceFill(['current_release' => $release, 'status' => ApplicationStatus::Failed])->save();
+    }
+
+    private function rollbackDidNotStart(Application $application): void
+    {
+        $healthy = $this->succeeded($application, 9 * 60, 'v2.0.0');
+        $port = $application->base_port;
+        $advice = "Port {$port} is already taken by another process. Find it with ss -tlnp | grep {$port}, stop it, then deploy again.";
+
+        $broken = $this->wentLiveButDidNotStart($application, CarbonImmutable::now()->subHours(5), '9b0c3f1', 'Serve the reports from Puma', 'web', [
+            "Address already in use - bind(2) for \"127.0.0.1\" port {$port} (Errno::EADDRINUSE)",
+        ], $advice);
+
+        $this->logAt($application, 'rollback_processes_failed', [
+            'from' => $broken,
+            'to' => $healthy,
+            'error' => "coresmith-app-{$application->slug}-web did not start, systemd reports it as activating. {$advice}",
+        ], CarbonImmutable::now()->subHours(4));
+
+        $application->forceFill(['current_release' => $healthy, 'status' => ApplicationStatus::Failed])->save();
+    }
+
+    private function rollbackLeftAWorkerStopped(Application $application): void
+    {
+        $older = $this->succeeded($application, 7 * 60, 'v1.0.0');
+        $newer = $this->succeeded($application, 4 * 60, 'v1.1.0');
+
+        $this->logAt($application, 'rollback_worker_failed', [
+            'from' => $newer,
+            'to' => $older,
+            'worker' => 'Sidekiq',
+            'error' => "coresmith-app-{$application->slug}-sidekiq did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.",
+        ], CarbonImmutable::now()->subHours(3));
+
+        $application->forceFill(['current_release' => $older])->save();
+    }
+
+    private function workerDidNotStartAfterGoingLive(Application $application): void
+    {
+        $this->succeeded($application, 30 * 60, 'v3.0.0');
+
+        $release = $this->wentLiveButDidNotStart($application, CarbonImmutable::now()->subMinutes(45), 'c0ffee1', 'Add the nightly export', 'sidekiq', [
+            'bundler: command not found: sidekiq',
+            'Install missing gem executables with `bundle install`',
+        ], 'The process log says why. Fix it and deploy again, or roll back to the previous release.');
+
         $application->forceFill(['current_release' => $release])->save();
+    }
+
+    /**
+     * @param  list<string>  $output
+     */
+    private function wentLiveButDidNotStart(Application $application, CarbonImmutable $started, string $sha, string $message, string $process, array $output, string $advice): string
+    {
+        $release = $started->format('Ymd-His');
+        $clock = fn(int $seconds): string => '[' . $started->addSeconds($seconds)->format('H:i:s') . ']';
+        $unit = 'coresmith-app-' . $application->slug . '-' . $process;
+        $units = ['coresmith-app-' . $application->slug . '-web', ...array_map(fn(array $worker): string => 'coresmith-app-' . $application->slug . '-' . $worker['name'], (array) $application->processes)];
+        $reason = "{$unit} did not start, systemd reports it as activating. {$advice}";
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => $sha . substr(hash('sha1', $application->name . $sha), 0, 33),
+            'commit_message' => $message,
+            'commit_author' => 'Priya Nair',
+            'status' => DeploymentStatus::Failed,
+            'failure_reason' => $reason,
+            'start_failed' => true,
+            'failed_worker' => app(SmartToggles::class)->failedWorker($application, $unit),
+            'log' => implode("\n", [
+                $clock(0) . " release {$release} · branch main · triggered by push",
+                $clock(1) . ' clone: fetching over https',
+                "commit {$sha} by Priya Nair",
+                $clock(9) . ' deps: installing dependencies',
+                '$ bundle install',
+                'Bundle complete! 23 Gemfile dependencies, 91 gems now installed.',
+                $clock(38) . ' build: building the release',
+                '$ RAILS_ENV=production bundle exec rails assets:precompile',
+                $clock(51) . " migrate: running migrations against release {$release}",
+                '$ RAILS_ENV=production bundle exec rails db:migrate',
+                $clock(54) . ' health: checking the release before it goes live',
+                'health: Gemfile present',
+                $clock(55) . " swap: current → releases/{$release}",
+                "symlink: current → releases/{$release} (atomic swap)",
+                $clock(55) . ' watch: starting ' . implode(', ', $units),
+                "{$unit}.service: Main process exited, code=exited, status=1/FAILURE",
+                ...$output,
+                $reason,
+                $clock(61) . " deploy failed after the symlink swap. releases/{$release} is live, check its processes.",
+            ]),
+            'started_at' => $started,
+            'finished_at' => $started->addSeconds(61),
+            'created_at' => $started,
+        ]);
+
+        return $release;
+    }
+
+    private function workerDidNotStart(Application $application): void
+    {
+        $this->succeeded($application, 3 * 24 * 60, 'v0.4.0');
+
+        $error = "coresmith-app-{$application->slug}-solid-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.";
+
+        $this->logAt($application, 'toggle_changed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'on' => true], CarbonImmutable::now()->subMinutes(35));
+        $this->logAt($application, 'toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => $error], CarbonImmutable::now()->subMinutes(34));
+    }
+
+    /**
+     * @param  array<string, mixed>  $properties
+     */
+    private function logAt(Application $application, string $description, array $properties, CarbonImmutable $at): void
+    {
+        $activity = activity()->performedOn($application)->withProperties($properties)->log($description);
+
+        if ($activity instanceof Activity) {
+            $activity->forceFill(['created_at' => $at, 'updated_at' => $at])->save();
+        }
     }
 
     private function failedClone(Application $application): void

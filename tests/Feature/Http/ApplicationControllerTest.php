@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
@@ -183,6 +184,133 @@ test('the app page knows when the last failed deploy had already gone live', fun
 })->with([
     'after the swap' => ["[14:03:11] swap: current → releases/20260914-140211\n[14:03:40] deploy failed after the symlink swap.", true],
     'before the swap' => ["[14:02:12] clone: fetching over https\n[14:02:15] deploy failed. the current release is untouched.", false],
+]);
+
+test('the app page gives the reason a release that went live is not serving, while that release is still live', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260914-140211']);
+    $reason = 'coresmith-app-shop-web did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.';
+    Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Failed,
+        'release' => '20260914-140211',
+        'failure_reason' => $reason,
+        'log' => "[14:03:11] swap: current → releases/20260914-140211\n[14:03:40] deploy failed after the symlink swap.",
+    ]);
+    $member = appTeamMember($team, TeamRole::Member);
+    $show = route('servers.applications.show', [$application->server_id, $application]);
+
+    $this->actingAs($member)->get($show)
+        ->assertInertia(fn($page) => $page->where('application.last_failed_live', true)->where('application.last_failed_reason', $reason));
+
+    $application->forceFill(['current_release' => '20260913-120000'])->save();
+
+    $this->actingAs($member)->get($show)
+        ->assertInertia(fn($page) => $page->where('application.last_failed_live', true)->where('application.last_failed_reason', null));
+});
+
+test('a worker that did not start after going live leaves the app live, with the worker named and why', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260914-140211', 'status' => ApplicationStatus::Active]);
+    $reason = 'coresmith-app-shop-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.';
+    Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Failed,
+        'release' => '20260914-140211',
+        'failure_reason' => $reason,
+        'log' => "[14:03:11] swap: current → releases/20260914-140211\n[14:03:12] watch: starting coresmith-app-shop-fpm, coresmith-app-shop-queue\n[14:03:16] deploy failed after the symlink swap.",
+    ]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $page
+            ->where('application.state.label', 'Live')
+            ->where('application.last_failed_live', true)
+            ->where('application.last_failed_reason', $reason));
+});
+
+test('a deploy that failed before going live gives no serving reason', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260913-120000']);
+    Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Failed,
+        'release' => '20260914-140211',
+        'failure_reason' => 'Branch release/2.0 is not in the repository.',
+        'log' => "[14:02:12] clone: fetching over https\n[14:02:15] deploy failed. the current release is untouched.",
+    ]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $page->where('application.last_failed', true)->where('application.last_failed_reason', null));
+});
+
+function appRollback(Application $application, string $description, int $minutesAgo, array $properties = []): void
+{
+    $activity = activity()->performedOn($application)->withProperties($properties)->log($description);
+    $activity->forceFill(['created_at' => now()->subMinutes($minutesAgo)])->save();
+}
+
+function appWithFailedRollback(Team $team): Application
+{
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260912-090000', 'status' => ApplicationStatus::Failed]);
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => '20260913-120000', 'finished_at' => now()->subHours(2)]);
+    appRollback($application, 'rollback_processes_failed', 30, [
+        'from' => '20260913-120000',
+        'to' => '20260912-090000',
+        'error' => 'coresmith-app-shop-web did not start, systemd reports it as activating. Port 8000 is already taken by another process. Find it with ss -tlnp | grep 8000, stop it, then deploy again.',
+    ]);
+
+    return $application;
+}
+
+test('the app page says a rollback did not start the app, with the reason it stored', function () {
+    $team = Team::factory()->create();
+    $application = appWithFailedRollback($team);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $page
+            ->where('application.state.label', 'Failed')
+            ->where('application.rollback_failed', [
+                'release' => '20260912-090000',
+                'error' => 'coresmith-app-shop-web did not start, systemd reports it as activating. Port 8000 is already taken by another process. Find it with ss -tlnp | grep 8000, stop it, then deploy again.',
+                'worker' => null,
+            ]));
+});
+
+test('the app page names the worker that did not start after a rollback, and the app stays live', function () {
+    $team = Team::factory()->create();
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260912-090000', 'status' => ApplicationStatus::Active]);
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => '20260913-120000', 'finished_at' => now()->subHours(2)]);
+    appRollback($application, 'rollback_worker_failed', 30, [
+        'from' => '20260913-120000',
+        'to' => '20260912-090000',
+        'worker' => 'Sidekiq',
+        'error' => 'coresmith-app-shop-sidekiq did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.',
+    ]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $page
+            ->where('application.state.label', 'Live')
+            ->where('application.rollback_failed', [
+                'release' => '20260912-090000',
+                'error' => 'coresmith-app-shop-sidekiq did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.',
+                'worker' => 'Sidekiq',
+            ]));
+});
+
+test('the failed rollback stays on the app page until a deploy or rollback starts the app', function (Closure $after, bool $shown) {
+    $team = Team::factory()->create();
+    $application = appWithFailedRollback($team);
+    $after($application);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->assertInertia(fn($page) => $shown ? $page->whereNot('application.rollback_failed', null) : $page->where('application.rollback_failed', null));
+})->with([
+    'a deploy that went live' => [fn(Application $application) => Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => '20260913-150000', 'finished_at' => now()->subMinutes(10)]), false],
+    'a rollback that started' => [fn(Application $application) => appRollback($application, 'application_rolled_back', 10, ['from' => '20260912-090000', 'to' => '20260913-120000']), false],
+    'a deploy that failed before going live' => [fn(Application $application) => Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed, 'release' => '20260913-150000', 'finished_at' => now()->subMinutes(10), 'log' => "[14:02:12] clone: fetching over https\n[14:02:15] deploy failed. the current release is untouched."]), true],
+    'a rollback that started before the one that did not' => [fn(Application $application) => appRollback($application, 'application_rolled_back', 60), true],
 ]);
 
 test('a member can deploy', function () {

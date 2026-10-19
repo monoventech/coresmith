@@ -14,6 +14,8 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\Formats;
+use App\Services\Panel\RollbackHistory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -45,14 +47,18 @@ final class ReleasesController extends Controller
         ]);
     }
 
-    public function index(Request $request, Server $server, Application $application): Response
+    public function index(Request $request, Server $server, Application $application, RollbackHistory $history): Response
     {
         $this->authorize('view', $application);
         abort_unless($application->server_id === $server->id, 404);
 
         $team = $application->team;
         $deployments = $application->deployments()
-            ->where('status', DeploymentStatus::Succeeded->value)
+            ->where(fn(Builder $query) => $query
+                ->where('status', DeploymentStatus::Succeeded->value)
+                ->when($application->current_release, fn(Builder $query, string $live) => $query->orWhere(fn(Builder $query) => $query
+                    ->where('status', DeploymentStatus::Failed->value)
+                    ->where('release', $live))))
             ->whereNotNull('release')
             ->with('triggeredBy')
             ->latest('finished_at')
@@ -60,8 +66,8 @@ final class ReleasesController extends Controller
             ->get();
 
         $onDisk = $deployments->take(ReleasePaths::KEEP_RELEASES)->pluck('release')->push($application->current_release)->filter()->all();
-        $latest = $deployments->first()?->release;
-        $current = $application->current_release ?? $latest;
+        $current = $application->current_release ?? $deployments->first()?->release;
+        $rolledBack = $history->rolledBack($application);
 
         return Inertia::render('releases/Index', [
             'application' => [
@@ -71,7 +77,7 @@ final class ReleasesController extends Controller
                 'href' => route('servers.applications.show', [$server, $application]),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
                 'rollback_href' => route('servers.applications.rollback', [$server, $application]),
-                'rolled_back' => $current !== null && $latest !== null && $current !== $latest ? Formats::release($current) : null,
+                'rolled_back' => $rolledBack ? Formats::release($current) : null,
             ],
             'applications' => $team?->applications()->orderBy('name')->get()->map(fn(Application $each): array => [
                 'id' => $each->id,

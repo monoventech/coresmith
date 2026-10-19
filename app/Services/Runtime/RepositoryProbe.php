@@ -35,6 +35,8 @@ final class RepositoryProbe
     fi
     if [ -f Gemfile.lock ]; then
       sed -n 's/^    rails (\([^)]*\))$/@@locked rails \1/p' Gemfile.lock | head -n 1
+      sed -n 's/^    sidekiq (\([^)]*\))$/@@locked sidekiq \1/p' Gemfile.lock | head -n 1
+      sed -n 's/^    solid_queue (\([^)]*\))$/@@locked solid_queue \1/p' Gemfile.lock | head -n 1
     fi
     exit 0
     BASH;

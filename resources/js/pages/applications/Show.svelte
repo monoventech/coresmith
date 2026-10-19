@@ -17,7 +17,18 @@
     import { Textarea } from '@/components/ui/textarea'
     import type { EntityState } from '@/lib/fleet'
 
-    type Toggle = { key: string; label: string; description: string; on: boolean; busy_on: string; busy_off: string; href: string; disabled: boolean }
+    type Toggle = {
+        key: string
+        label: string
+        description: string
+        on: boolean
+        busy_on: string
+        busy_off: string
+        href: string
+        disabled: boolean
+        starting: boolean
+        failure: string | null
+    }
     type LogLine = { time: string; text: string }
 
     let {
@@ -50,6 +61,8 @@
             logs_href: string
             last_failed: boolean
             last_failed_live: boolean
+            last_failed_reason: string | null
+            rollback_failed: { release: string; error: string; worker: string | null } | null
             oom: { process: string; when: string; limit_mb: number; size: string } | null
             runtime_eol: { runtime: string; ended: string; fix: string } | null
         }
@@ -69,14 +82,42 @@
     let copied = $state(false)
     let log = $state<{ lines: LogLine[]; error: string | null; loading: boolean }>({ lines: [], error: null, loading: true })
     let poll: ReturnType<typeof setInterval> | null = null
+    let checking: { cancel: () => void } | null = null
 
     const domains = $derived([...(application.domain ? [application.domain] : []), ...application.additional_domains])
+    const failedDeploy = $derived(
+        application.last_failed_live
+            ? (application.last_failed_reason ?? `releases/${application.current_release} is serving, read the log before pushing again.`)
+            : application.current_release
+              ? `releases/${application.current_release} is still live.`
+              : 'Nothing was live yet.'
+    )
+    const rollbackTitle = $derived(
+        application.rollback_failed?.worker ? `${application.rollback_failed.worker} did not start after the rollback.` : 'The rollback did not start the app.'
+    )
+    const starting = $derived(toggles.some((toggle) => toggle.starting))
+    const failedToggles = $derived(toggles.filter((toggle) => toggle.failure))
+
+    $effect(() => {
+        if (!starting) {
+            return
+        }
+
+        const timer = setInterval(() => {
+            if (!Object.values(busy).some(Boolean)) {
+                router.reload({ only: ['toggles'], onCancelToken: (token) => (checking = token) })
+            }
+        }, 3000)
+
+        return () => clearInterval(timer)
+    })
 
     function flip(toggle: Toggle, on: boolean) {
         if (busy[toggle.key]) {
             return
         }
 
+        checking?.cancel()
         busy = { ...busy, [toggle.key]: true }
         router.put(toggle.href, { on }, { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) })
     }
@@ -223,20 +264,34 @@
     </div>
 {/if}
 
-{#if application.last_failed && application.latest_deployment?.href}
+{#if application.rollback_failed}
+    <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="rollback-failed-banner">
+        <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+            <span class="font-semibold">{rollbackTitle}</span>
+            {` releases/${application.rollback_failed.release} is live again, but ${application.rollback_failed.worker ?? 'its processes'} did not start. ${application.rollback_failed.error}`}
+        </span>
+    </div>
+{:else if application.last_failed && application.latest_deployment?.href}
     <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="failed-banner">
         <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             <span class="font-semibold">{application.last_failed_live ? 'The last deploy went live but did not finish.' : 'The last deploy failed, so nothing changed.'}</span>
-            {application.last_failed_live
-                ? ` releases/${application.current_release} is serving, read the log before pushing again.`
-                : application.current_release
-                  ? ` releases/${application.current_release} is still live.`
-                  : ' Nothing was live yet.'}
+            {` ${failedDeploy}`}
         </span>
         <Link href={application.latest_deployment.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]!">Read the log</Link>
     </div>
 {/if}
+
+{#each failedToggles as toggle (toggle.key)}
+    <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="toggle-failed-banner">
+        <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+            <span class="font-semibold">{`${toggle.label} did not start.`}</span>
+            {` ${toggle.failure}`}
+        </span>
+    </div>
+{/each}
 
 {#if application.oom}
     <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="oom-banner">

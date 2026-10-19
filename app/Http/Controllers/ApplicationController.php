@@ -27,6 +27,7 @@ use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
+use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeDetector;
@@ -124,7 +125,7 @@ final class ApplicationController extends Controller
             ->with('success', 'Application created. Deploy it when you are ready.');
     }
 
-    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles): Response
+    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks): Response
     {
         $this->authorize('view', $application);
         $this->assertBelongsTo($server, $application);
@@ -133,6 +134,8 @@ final class ApplicationController extends Controller
         $canManageEnvironment = $user->can('manageEnvironment', $application);
         $latest = $application->deployments()->latest('created_at')->first();
         $running = $latest?->status === DeploymentStatus::Running ? $latest : null;
+        $failedLive = $latest !== null && $latest->status === DeploymentStatus::Failed && DeploymentPresenter::reachedUsers($latest);
+        $rollback = $rollbacks->sinceLastLive($application);
         $usesKey = $keys->usesDeployKey($application);
         $publicKey = $usesKey ? $keys->ensure($application)->deploy_key_public : null;
 
@@ -173,7 +176,13 @@ final class ApplicationController extends Controller
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
                 'logs_href' => route('servers.applications.logs', [$server, $application]),
                 'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
-                'last_failed_live' => $latest !== null && $latest->status === DeploymentStatus::Failed && DeploymentPresenter::reachedUsers($latest),
+                'last_failed_live' => $failedLive,
+                'last_failed_reason' => $failedLive && $latest->release === $application->current_release ? $latest->failure_reason : null,
+                'rollback_failed' => in_array($rollback?->description, [RollbackHistory::DID_NOT_START, RollbackHistory::WORKER_DID_NOT_START], true) ? [
+                    'release' => Formats::release((string) ($rollback->properties['to'] ?? $application->current_release)),
+                    'error' => (string) ($rollback->properties['error'] ?? ''),
+                    'worker' => $rollback->description === RollbackHistory::WORKER_DID_NOT_START ? (string) ($rollback->properties['worker'] ?? '') : null,
+                ] : null,
                 'oom' => $this->recentOomKill($application),
                 'runtime_eol' => ApplicationPresenter::runtimeEol($application),
             ],

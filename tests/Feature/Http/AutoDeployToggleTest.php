@@ -57,6 +57,8 @@ test('auto deploy is offered on apps with a repository', function () {
         'busy_off' => 'Turning off auto deploy…',
         'on' => false,
         'disabled' => false,
+        'starting' => false,
+        'failure' => null,
     ])
         ->and(collect($toggles->describe(autoDeployToggleApp($team, ['repository_url' => null])->fresh()))->pluck('key')->all())->not->toContain('auto_deploy');
 });

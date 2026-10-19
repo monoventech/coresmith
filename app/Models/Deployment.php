@@ -44,6 +44,7 @@ class Deployment extends Model
             'tag_signed' => 'boolean',
             'stack' => 'array',
             'seeded_shared_storage' => 'boolean',
+            'start_failed' => 'boolean',
             'stale_after' => 'datetime',
         ];
     }

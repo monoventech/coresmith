@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
@@ -209,6 +210,57 @@ test('a rollback whose processes do not come back up is recorded, not silent', f
         ->and($activity->properties['error'])->toContain('did not start')
         ->and(Activity::query()->where('description', 'application_rolled_back')->exists())->toBeFalse();
 });
+
+test('a rollback whose processes do not start leaves the app failed', function () {
+    $application = rollbackApp(['status' => ApplicationStatus::Active]);
+    $transport = rollbackTransport()
+        ->respondTo('systemctl is-active', "activating\n", 3)
+        ->respondTo('journalctl -u', "coresmith-app-my-app-fpm.service: Main process exited, code=exited, status=78/CONFIG\n");
+
+    expect(fn() => rollbackRun($application, $transport, '20260911-100000'))->toThrow(ProcessDidNotStart::class);
+
+    expect($application->fresh()->status)->toBe(ApplicationStatus::Failed)
+        ->and($application->fresh()->current_release)->toBe('20260911-100000');
+});
+
+test('a rollback where only a worker does not start keeps the app live and names the worker', function () {
+    $application = rollbackApp(['status' => ApplicationStatus::Failed, 'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']]]);
+    $transport = rollbackTransport()
+        ->respondTo("systemctl is-active 'coresmith-app-my-app-queue'", "activating\n", 3)
+        ->respondTo("tail -n 30 '/var/coresmith/logs/my-app/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
+
+    expect(fn() => rollbackRun($application, $transport, '20260911-100000'))->toThrow(ProcessDidNotStart::class);
+
+    $activity = Activity::query()->where('description', 'rollback_worker_failed')->sole();
+
+    expect($application->fresh()->status)->toBe(ApplicationStatus::Active)
+        ->and($application->fresh()->current_release)->toBe('20260911-100000')
+        ->and($activity->properties->toArray())->toBe([
+            'from' => '20260913-120000',
+            'to' => '20260911-100000',
+            'worker' => 'Queue worker',
+            'error' => 'coresmith-app-my-app-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.',
+        ])
+        ->and(Activity::query()->whereIn('description', ['rollback_processes_failed', 'application_rolled_back'])->exists())->toBeFalse();
+});
+
+test('a rollback whose processes start leaves a failed app live again', function () {
+    $application = rollbackApp(['status' => ApplicationStatus::Failed]);
+
+    rollbackRun($application, rollbackTransport(), '20260911-100000');
+
+    expect($application->fresh()->status)->toBe(ApplicationStatus::Active);
+});
+
+test('a rollback never overwrites the status of a deploy that is running', function (bool $starts) {
+    $application = rollbackApp(['status' => ApplicationStatus::Deploying]);
+    $transport = $starts ? rollbackTransport() : rollbackTransport()->respondTo('systemctl is-active', "failed\n", 3);
+    $run = fn() => rollbackRun($application, $transport, '20260911-100000');
+
+    $starts ? $run() : expect($run)->toThrow(ProcessDidNotStart::class);
+
+    expect($application->fresh()->status)->toBe(ApplicationStatus::Deploying);
+})->with(['processes start' => true, 'processes do not start' => false]);
 
 test('rolling back writes the current environment before the processes restart, so a fixed variable takes effect', function () {
     $application = rollbackApp(['env_variables' => "RAILS_ENV=production\nSECRET_KEY_BASE=abc\n"]);

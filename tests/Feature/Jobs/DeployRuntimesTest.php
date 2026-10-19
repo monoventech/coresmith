@@ -108,6 +108,21 @@ test('when every runtime is installed the deploy finishes in one job and the app
         ->and(implode("\n", $transport->commands()))->toContain("'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'composer install");
 });
 
+test('a rails deploy records which worker gems its lockfile locks on the deployment and the app', function () {
+    Queue::fake();
+    $application = stackApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'ruby_version' => null]);
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['.ruby-version' => "3.4.10\n", 'Gemfile' => "source 'https://rubygems.org'\n"], [], ['rails' => '8.0.2', 'solid_queue' => '1.1.5']));
+
+    stackDeploy($deployment, $transport);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($deployment->fresh()->stack['gems'])->toBe(['sidekiq' => false, 'solid_queue' => true])
+        ->and($application->fresh()->stack['gems'])->toBe(['sidekiq' => false, 'solid_queue' => true]);
+});
+
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();
     $application = stackApp();
@@ -235,6 +250,29 @@ test('a resumed deploy skips the clone, confirms the runtimes and finishes', fun
         ->and($commands)->not->toContain(' archive ')
         ->and($commands)->toContain("'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'composer install")
         ->and(Cache::lock('deploy:' . $application->id, 10)->get())->toBeTrue();
+});
+
+test('a resumed rails deploy keeps the worker gems it read before the runtimes were installed', function () {
+    $application = stackApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
+    $deployment = Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Running,
+        'started_at' => now()->subMinutes(20),
+        'stale_after' => now()->addMinute(),
+        'release' => STACK_RELEASE,
+        'stack' => [
+            'runtimes' => ['ruby' => ['runtime' => 'ruby', 'version' => '3.4.10', 'source' => '.ruby-version', 'detail' => '3.4.10']],
+            'framework' => ['name' => 'rails', 'major' => 8],
+            'tooling' => null,
+            'gems' => ['sidekiq' => true, 'solid_queue' => false],
+        ],
+    ]);
+    $lock = Cache::lock('deploy:' . $application->id, DeployApplication::LOCK_SECONDS);
+    $lock->get();
+
+    stackDeploy($deployment->fresh(), stackTransport()->respondTo("test -d '/opt/asdf-data/installs/ruby/3.4.10'", "yes\n"), $lock->owner());
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($application->fresh()->stack['gems'])->toBe(['sidekiq' => true, 'solid_queue' => false]);
 });
 
 test('a resumed deploy whose deployment was reclaimed after the job started stops without touching anything', function () {

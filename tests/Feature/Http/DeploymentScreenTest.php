@@ -164,6 +164,53 @@ test('the deploy screen carries the phases, the failure and the release details'
             ->where('can.deploy', true));
 });
 
+test('a deploy whose processes did not start is named a start failure, with every phase through the swap done', function () {
+    $team = Team::factory()->create();
+    $deployment = Deployment::factory()->for(screenApp($team, ['current_release' => '20260913140000']))->create([
+        'status' => DeploymentStatus::Failed,
+        'release' => '20260913140000',
+        'start_failed' => true,
+        'failure_reason' => 'coresmith-app-shop-web did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.',
+        'log' => implode("\n", [
+            '[14:00:09] clone: fetching over https',
+            '[14:00:12] deps: installing dependencies',
+            '[14:00:40] build: building the release',
+            '[14:00:51] migrate: running migrations against release 20260913140000',
+            '[14:00:53] health: checking the release before it goes live',
+            '[14:00:54] swap: current → releases/20260913140000',
+            '[14:00:55] watch: starting coresmith-app-shop-web',
+            '[14:00:58] deploy failed after the symlink swap. releases/20260913140000 is live, check its processes.',
+        ]),
+    ]);
+
+    $this->actingAs(screenMember($team))
+        ->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page
+            ->where('deployment.start_failed', true)
+            ->where('deployment.failed_worker', null)
+            ->where('deployment.reached_users', true)
+            ->where('deployment.failed_phase', null)
+            ->where('deployment.phases', fn($phases) => collect($phases)->pluck('state')->unique()->values()->all() === ['done']));
+});
+
+test('a deploy that failed any other way is not named a start failure', function () {
+    $team = Team::factory()->create();
+    $deployment = Deployment::factory()->for(screenApp($team))->create(['status' => DeploymentStatus::Failed]);
+
+    $this->actingAs(screenMember($team))
+        ->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page->where('deployment.start_failed', false)->where('deployment.failed_worker', null));
+});
+
+test('a deploy whose worker did not start names the worker', function () {
+    $team = Team::factory()->create();
+    $deployment = Deployment::factory()->for(screenApp($team))->create(['status' => DeploymentStatus::Failed, 'start_failed' => true, 'failed_worker' => 'Sidekiq']);
+
+    $this->actingAs(screenMember($team))
+        ->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page->where('deployment.start_failed', true)->where('deployment.failed_worker', 'Sidekiq'));
+});
+
 test('a failed deploy carries the reason it failed', function () {
     $team = Team::factory()->create();
     $reason = "Branch release/2.0 is not in the repository. Check the branch name in the app's settings, then deploy again.";
