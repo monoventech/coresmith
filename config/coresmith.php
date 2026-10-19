@@ -23,6 +23,12 @@ return [
         )
         : null,
 
+    'auto_deploy' => [
+        'poll_minutes' => (int) env('CORESMITH_POLL_MINUTES', 1),
+        'safety_net_minutes' => (int) env('CORESMITH_POLL_SAFETY_NET_MINUTES', 10),
+        'server_poll_minutes' => (int) env('CORESMITH_SERVER_POLL_MINUTES', 5),
+    ],
+
     'runtimes' => [
         'php' => [
             'label' => 'PHP',

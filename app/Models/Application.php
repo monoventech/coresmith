@@ -164,6 +164,8 @@ class Application extends Model
             'run_migrations' => 'boolean',
             'quick_deploy' => 'boolean',
             'last_request_at' => 'datetime',
+            'repository_head_at' => 'datetime',
+            'polled_at' => 'datetime',
             'runtime_pins' => 'array',
             'stack' => 'array',
         ];

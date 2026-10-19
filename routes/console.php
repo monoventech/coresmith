@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ServerStatus;
+use App\Jobs\CheckGitHubWebhooks;
 use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\IdleAppSleeper;
@@ -16,6 +17,8 @@ Schedule::call(function (): void {
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
 
 Schedule::job(new DetectStaleDeployments)->everyFiveMinutes()->name('coresmith:detect-stale-deployments');
+
+Schedule::job(new CheckGitHubWebhooks)->everyFifteenMinutes()->name('coresmith:check-github-webhooks')->withoutOverlapping();
 
 Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresmith:prune-metrics')->withoutOverlapping();
 
