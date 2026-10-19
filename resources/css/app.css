@@ -199,6 +199,37 @@
     --color-destructive-hover: color-mix(in oklab, var(--destructive) 94%, black);
     --color-scrim: oklch(0.2 0.02 60 / 0.4);
     --color-track-busy: color-mix(in oklab, var(--primary) 40%, var(--muted));
+
+    --animate-dialog-in: dialog-in var(--dur-slow) var(--ease-out-soft);
+    --animate-dialog-out: dialog-out var(--dur-slow) var(--ease-out-soft) forwards;
+    --animate-scrim-in: scrim-in var(--dur-slow) var(--ease-out-soft);
+    --animate-scrim-out: scrim-out var(--dur-slow) var(--ease-out-soft) forwards;
+
+    @keyframes dialog-in {
+        from {
+            opacity: 0;
+            transform: scale(0.98);
+        }
+    }
+
+    @keyframes dialog-out {
+        to {
+            opacity: 0;
+            transform: scale(0.98);
+        }
+    }
+
+    @keyframes scrim-in {
+        from {
+            opacity: 0;
+        }
+    }
+
+    @keyframes scrim-out {
+        to {
+            opacity: 0;
+        }
+    }
 }
 
 @layer base {

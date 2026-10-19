@@ -115,6 +115,30 @@ test('the interface avoids the anti-patterns the design language names', functio
     ['/\b(bg|text|border)-(black|white)\b/', 'colours come from the tokens, never hardcoded black or white'],
 ]);
 
+test('a dialog moves with opacity and scale only', function () {
+    $offenders = [];
+
+    foreach (['dialog-content', 'dialog-overlay'] as $part) {
+        $source = (string) file_get_contents(base_path("resources/js/components/ui/dialog/{$part}.svelte"));
+
+        if (preg_match('/\banimate-(in|out)\b/', $source) === 1) {
+            $offenders[] = $part;
+        }
+    }
+
+    $css = (string) file_get_contents(base_path('resources/css/app.css'));
+
+    expect($offenders)->toBe(
+        [],
+        'The tw-animate-css enter and exit keyframes animate filter and 3D transforms, and Playwright\'s Linux WebKit crashes its web process while a dialog runs them. '
+            . 'Use animate-dialog-in, animate-dialog-out, animate-scrim-in and animate-scrim-out, which `shadcn:update` must not overwrite. Offenders: ' . implode(', ', $offenders),
+    )
+        ->and($css)->toContain('@keyframes dialog-in')
+        ->and($css)->toContain('@keyframes dialog-out')
+        ->and($css)->toContain('@keyframes scrim-in')
+        ->and($css)->toContain('@keyframes scrim-out');
+});
+
 test('icons come from one set only', function () {
     $offenders = [];
 
