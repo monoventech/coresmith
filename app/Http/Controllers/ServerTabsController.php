@@ -25,7 +25,7 @@ final class ServerTabsController extends Controller
         'File permission enforcement',
         'Root-owned env, injected via systemd',
         'Dedicated database credentials',
-        'Memory limits per app (MemoryMax, MemoryHigh)',
+        'Memory limits per app (MemoryMax)',
         'Non-overlapping port blocks',
         'Per-app Caddy routing',
         'Separate log files',

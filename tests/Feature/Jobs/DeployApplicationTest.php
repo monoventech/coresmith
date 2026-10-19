@@ -16,6 +16,7 @@ use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Runtime\AsdfManager;
@@ -642,7 +643,7 @@ test('the release is handed to the app before anything runs in it', function () 
     deploy($deployment, $transport);
 
     $commands = $transport->commands();
-    $claim = array_search("chown -hR coresmith-app-my-app:caddy '/var/coresmith/apps/my-app/releases/" . TIMESTAMP . "' && chmod 750 '/var/coresmith/apps/my-app/releases/" . TIMESTAMP . "'", $commands, true);
+    $claim = array_search((new AppAccount)->claimRelease($deployment->application, '/var/coresmith/apps/my-app/releases/' . TIMESTAMP), $commands, true);
     $archive = collect($commands)->search(fn(string $c) => str_contains($c, ' archive '));
     $firstAsApp = collect($commands)->search(fn(string $c) => str_starts_with($c, 'systemd-run '));
 

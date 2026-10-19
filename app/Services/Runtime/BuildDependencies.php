@@ -66,8 +66,8 @@ final class BuildDependencies
             'dnf' => ['python3', 'gcc-c++', 'make'],
         ],
         'ruby' => [
-            'apt' => ['libssl-dev', 'libreadline-dev', 'zlib1g-dev', 'libyaml-dev', 'libffi-dev', 'libgmp-dev', 'patch'],
-            'dnf' => ['openssl-devel', 'readline-devel', 'zlib-devel', 'libyaml-devel', 'libffi-devel', 'gmp-devel', 'patch'],
+            'apt' => ['libssl-dev', 'libreadline-dev', 'zlib1g-dev', 'libyaml-dev', 'libffi-dev', 'libgmp-dev', 'patch', 'rustc'],
+            'dnf' => ['openssl-devel', 'readline-devel', 'zlib-devel', 'libyaml-devel', 'libffi-devel', 'gmp-devel', 'patch', 'rust'],
         ],
     ];
 

@@ -47,8 +47,13 @@ final class AppAccount
     public function claimRelease(Application $application, string $release): string
     {
         $user = SafeName::assertSystemUser($application->system_user);
+        $path = escapeshellarg($release);
 
-        return 'chown -hR ' . $user . ':' . self::WEB_GROUP . ' ' . escapeshellarg($release) . ' && chmod 750 ' . escapeshellarg($release);
+        return implode(' && ', [
+            'chown -hR ' . $user . ':' . self::WEB_GROUP . ' ' . $path,
+            'chmod -R u+rwX,g+rX,g-w,o-rwx ' . $path,
+            'chmod 750 ' . $path,
+        ]);
     }
 
     public static function home(Application $application): string

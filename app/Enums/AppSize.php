@@ -41,9 +41,4 @@ enum AppSize: string
             self::Large => 1024,
         };
     }
-
-    public function memoryHighMb(): int
-    {
-        return (int) floor($this->memoryMaxMb() * 0.8);
-    }
 }

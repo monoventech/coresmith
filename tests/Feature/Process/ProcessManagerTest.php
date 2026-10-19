@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
-use App\Enums\AppSize;
 use App\Enums\PowerState;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
@@ -42,6 +41,11 @@ function managedApp(array $attributes = []): Application
         'web_directory' => '/public',
         'directory' => '/',
     ], $attributes));
+}
+
+function rubyApp(array $attributes = []): Application
+{
+    return managedApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.3.6', ...$attributes]);
 }
 
 test('idle php apps cost no memory because the pool is ondemand', function () {
@@ -125,15 +129,54 @@ test('a unit reads env from the root owned file rather than embedding secrets', 
     expect($unit)->toContain('EnvironmentFile=/etc/coresmith/env/my-app.env');
 });
 
-test('memory limits follow the app size', function (string $size, int $max, int $high) {
+test('memory limits follow the app size', function (string $size, int $max) {
     $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(['app_size' => $size]), 'web', '/bin/true');
 
-    expect($unit)->toContain("MemoryMax={$max}M")->and($unit)->toContain("MemoryHigh={$high}M");
-})->with([['small', 256, 204], ['medium', 512, 409], ['large', 1024, 819]]);
+    expect($unit)->toContain("MemoryMax={$max}M");
+})->with([['small', 256], ['medium', 512], ['large', 1024], ['custom', 256]]);
 
-test('the soft memory limit sits below the hard limit so reclaim happens before an oom kill', function (AppSize $size) {
-    expect($size->memoryHighMb())->toBeLessThan($size->memoryMaxMb());
-})->with([AppSize::Small, AppSize::Medium, AppSize::Large, AppSize::Custom]);
+test('a unit over its size is killed and restarted rather than throttled', function (string $process, string $command) {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), $process, $command);
+
+    expect($unit)->not->toContain('MemoryHigh')
+        ->and($unit)->toContain("\nMemoryMax=256M\n")
+        ->and($unit)->toContain("\nRestart=always\n");
+})->with([
+    'web' => ['web', '/bin/true'],
+    'worker' => ['queue', 'php artisan queue:work'],
+]);
+
+test('no php-fpm unit sets a soft memory limit either', function () {
+    expect((new FpmPoolBuilder(new AsdfManager))->unit(managedApp()))->not->toContain('MemoryHigh');
+});
+
+test('every unit of a ruby app runs in production unless the app sets its own environment', function (string $process, string $command) {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(rubyApp(), $process, $command);
+    $file = strpos($unit, "\nEnvironmentFile=/etc/coresmith/env/my-app.env\n");
+
+    expect($unit)->toContain("Environment=\"RAILS_ENV=production\"\nEnvironment=\"RACK_ENV=production\"\n")
+        ->and($file)->not->toBeFalse()
+        ->and(strpos($unit, 'Environment="RAILS_ENV=production"'))->toBeLessThan($file)
+        ->and(strpos($unit, 'Environment="RACK_ENV=production"'))->toBeLessThan($file);
+})->with([
+    'web' => ['web', '/opt/asdf-data/installs/ruby/3.3.6/bin/bundle exec puma -b tcp://127.0.0.1:8000'],
+    'worker' => ['sidekiq', 'bundle exec sidekiq'],
+]);
+
+test('other app types get no rails or rack environment', function (array $attributes, string $process) {
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp($attributes), $process, '/bin/true');
+
+    expect($unit)->not->toContain('RAILS_ENV')
+        ->and($unit)->not->toContain('RACK_ENV');
+})->with([
+    'php worker' => [[], 'queue'],
+    'js web' => [['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0', 'php_version' => null], 'web'],
+]);
+
+test('puma listens on the loopback address only, so the app is reached through caddy', function () {
+    expect((new SystemdUnitBuilder(new AsdfManager))->webCommand(rubyApp(['base_port' => 8030])))
+        ->toBe('/opt/asdf-data/installs/ruby/3.3.6/bin/bundle exec puma -b tcp://127.0.0.1:8030');
+});
 
 test('a php app installs an fpm pool and unit', function () {
     $transport = new FakeSSHTransport;

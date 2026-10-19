@@ -12,18 +12,23 @@ use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
+use App\Services\Deployment\LogSanitizer;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 
 final class ProcessManager
 {
     public const START_GRACE_SECONDS = 3;
 
+    public const START_LOG_LINES = 30;
+
     public function __construct(
         private readonly SystemdUnitBuilder $units,
         private readonly FpmPoolBuilder $fpm,
         private readonly ProcessStartAdvice $advice = new ProcessStartAdvice,
+        private readonly LogSanitizer $sanitizer = new LogSanitizer,
     ) {}
 
     public function install(SSHConnection $connection, Application $application): void
@@ -96,6 +101,8 @@ final class ProcessManager
 
         Sleep::for(self::START_GRACE_SECONDS)->seconds();
 
+        $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;
+
         foreach ($units as $unit) {
             $state = trim($connection->execute('systemctl is-active ' . escapeshellarg($unit))->output);
 
@@ -107,9 +114,20 @@ final class ProcessManager
                 'journalctl -u ' . escapeshellarg($unit) . " --no-pager -n 30 --since '2 minutes ago' 2>/dev/null || true",
                 sudo: true,
             )->output;
+            $log = $unit === $fpm ? '' : trim($this->sanitizer->sanitize($this->processLog($connection, $application, $unit, self::START_LOG_LINES), $application));
+            $output = $log === '' ? $journal : trim(rtrim($journal) . "\n" . $log);
 
-            throw new ProcessDidNotStart($unit, $state === '' ? 'unknown' : $state, $journal, $this->advice->for($application, $journal));
+            throw new ProcessDidNotStart($unit, $state === '' ? 'unknown' : $state, $output, $this->advice->for($application, $output));
         }
+    }
+
+    public function processLog(SSHConnection $connection, Application $application, string $unit, int $lines): string
+    {
+        $slug = SafeName::assertSlug($application->slug);
+        $process = SafeName::assertProcess(Str::after($unit, 'coresmith-app-' . $slug . '-'));
+        $log = escapeshellarg('/var/coresmith/logs/' . $slug . '/' . $process . '.log');
+
+        return $connection->execute("tail -n {$lines} {$log} 2>/dev/null || true", sudo: true)->output;
     }
 
     public function sleep(SSHConnection $connection, Application $application): void

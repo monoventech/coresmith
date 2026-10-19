@@ -398,6 +398,30 @@ test.describe('adding an application', () => {
         await expect(toast(page)).toContainText('Application created.')
     })
 
+    test('a ruby app starts at medium, and a size picked by hand is kept', async ({ page }) => {
+        await gotoServer(page, 'bench-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+
+        const language = page.getByLabel('Language')
+        const size = page.getByLabel('Size', { exact: true })
+
+        await expect(size).toHaveValue('small')
+        await language.selectOption('ruby')
+        await expect(size).toHaveValue('medium')
+        await language.selectOption('php')
+        await expect(size).toHaveValue('small')
+
+        await language.selectOption('ruby')
+        await size.selectOption('small')
+        await language.selectOption('js')
+        await language.selectOption('ruby')
+        await expect(size).toHaveValue('small')
+
+        await size.selectOption('large')
+        await language.selectOption('static')
+        await expect(size).toHaveValue('large')
+    })
+
     test('the version list follows the javascript runtime', async ({ page }) => {
         await gotoServer(page, 'bench-01')
         await page.getByRole('link', { name: 'Add an app' }).click()

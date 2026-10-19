@@ -97,24 +97,27 @@ test('a stopped or sleeping application gets its units installed but not started
         ->and($application->fresh()->power_state)->toBe($state);
 })->with([PowerState::Stopped, PowerState::Sleeping]);
 
-test('the crontab is rewritten from the application cron jobs', function () {
+test('the cron file is rewritten from the application cron jobs', function () {
     $application = processJobsApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
     $transport = new FakeSSHTransport;
 
     processJobsRun(new SyncApplicationProcesses($application), $transport);
 
-    expect($transport->crontabFor('coresmith-app-shop'))->toContain('* * * * * cd /var/coresmith/apps/shop/current && php artisan schedule:run')
-        ->and($transport->uploads())->not->toHaveKey('/tmp/coresmith-cron-shop');
+    expect($transport->uploads()['/etc/cron.d/.coresmith-app-shop.new'] ?? '')->toContain("* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop -p 'WorkingDirectory=/var/coresmith/apps/shop/current'")
+        ->and($transport->uploads()['/etc/cron.d/.coresmith-app-shop.new'] ?? '')->toContain("-- /bin/bash -s < '/etc/coresmith/cron/shop/0.sh'")
+        ->and($transport->uploads()['/etc/coresmith/cron/.shop.new/0.sh'] ?? '')->toBe("{\nphp artisan schedule:run\n} >> '/var/coresmith/apps/shop/shared/logs/scheduler.log' 2>&1\n")
+        ->and(implode("\n", $transport->commands()))->toContain("mv -f '/etc/cron.d/.coresmith-app-shop.new' '/etc/cron.d/coresmith-app-shop'")
+        ->and(implode("\n", $transport->commands()))->toContain("crontab -u 'coresmith-app-shop' -r");
 });
 
-test('an application with no cron jobs gets an empty managed crontab so a removed schedule stops', function () {
+test('an application with no cron jobs has its cron file and scripts removed so a removed schedule stops', function () {
     $application = processJobsApp(['cron_jobs' => null]);
     $transport = new FakeSSHTransport;
 
     processJobsRun(new SyncApplicationProcesses($application), $transport);
 
-    expect($transport->crontabFor('coresmith-app-shop'))->not->toContain('schedule:run')
-        ->and($transport->crontabFor('coresmith-app-shop'))->toContain('# Coresmith managed crons for shop');
+    expect(implode("\n", $transport->commands()))->toContain("rm -f '/etc/cron.d/coresmith-app-shop' '/etc/cron.d/.coresmith-app-shop.new' && rm -rf '/etc/coresmith/cron/shop' '/etc/coresmith/cron/.shop.new'")
+        ->and($transport->uploads())->not->toHaveKey('/etc/cron.d/.coresmith-app-shop.new');
 });
 
 test('the sync works from the application as saved now, not the copy it was queued with', function () {
@@ -170,6 +173,27 @@ test('detaching stops every unit and removes the site from caddy', function () {
         ->and($commands)->toContain('mv -f /etc/caddy/caddy-config.staged.json /etc/caddy/caddy-config.json')
         ->and(Application::withTrashed()->find($application->id)->power_state)->toBe(PowerState::Stopped)
         ->and($transport->connected())->toBeFalse();
+});
+
+test('detaching removes the app cron file, its scripts and any old user crontab, so its scheduled jobs stop with it', function () {
+    $application = processJobsApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
+    $application->delete();
+    $transport = new FakeSSHTransport;
+
+    processJobsRun(new DetachApplication($application), $transport);
+
+    $commands = $transport->commands();
+    $stopped = array_search("systemctl stop 'coresmith-app-shop-fpm'", $commands, true);
+    $removed = array_search(
+        "rm -f '/etc/cron.d/coresmith-app-shop' '/etc/cron.d/.coresmith-app-shop.new' && rm -rf '/etc/coresmith/cron/shop' '/etc/coresmith/cron/.shop.new'"
+        . " && if crontab -u 'coresmith-app-shop' -l >/dev/null 2>&1; then crontab -u 'coresmith-app-shop' -r; fi",
+        $commands,
+        true,
+    );
+
+    expect($stopped)->not->toBeFalse()
+        ->and($removed)->not->toBeFalse()
+        ->and($stopped)->toBeLessThan($removed);
 });
 
 test('detaching an application without a domain never calls caddy', function () {

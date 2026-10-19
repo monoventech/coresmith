@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
 use App\Services\Runtime\AsdfManager;
+use Symfony\Component\Process\Process;
 
 function shellApp(): Application
 {
@@ -52,7 +53,53 @@ test('the app account owns only its releases and shared folder, and root keeps t
         ->and($command)->toContain('chown root:root /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
         ->and($command)->toContain('chmod 711 /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
         ->and($command)->toContain('chown -h coresmith-app-shop:caddy /var/coresmith/apps/shop/shared')
-        ->and($command)->toContain('chmod 750 /var/coresmith/apps/shop/shared')
-        ->and((new AppAccount)->claimRelease(shellApp(), '/var/coresmith/apps/shop/releases/20261018-120000'))
-        ->toBe("chown -hR coresmith-app-shop:caddy '/var/coresmith/apps/shop/releases/20261018-120000' && chmod 750 '/var/coresmith/apps/shop/releases/20261018-120000'");
+        ->and($command)->toContain('chmod 750 /var/coresmith/apps/shop/shared');
+});
+
+test('a claimed release belongs to the app user, readable but not writable by caddy and closed to everyone else', function () {
+    expect((new AppAccount)->claimRelease(shellApp(), '/var/coresmith/apps/shop/releases/20261018-120000'))
+        ->toBe("chown -hR coresmith-app-shop:caddy '/var/coresmith/apps/shop/releases/20261018-120000'"
+            . " && chmod -R u+rwX,g+rX,g-w,o-rwx '/var/coresmith/apps/shop/releases/20261018-120000'"
+            . " && chmod 750 '/var/coresmith/apps/shop/releases/20261018-120000'");
+});
+
+test('claiming a release turns the modes git archive leaves into owner write and group read only', function () {
+    $release = sys_get_temp_dir() . '/coresmith-claim-' . bin2hex(random_bytes(4));
+    $directories = ['' => 0775, '/app' => 0775, '/app/controllers' => 0777, '/config' => 0775, '/bin' => 0775];
+    $files = ['/app/controllers/application_controller.rb' => 0664, '/config/database.yml' => 0666, '/bin/rails' => 0775];
+
+    foreach ($directories as $path => $mode) {
+        mkdir($release . $path);
+        chmod($release . $path, $mode);
+    }
+
+    foreach ($files as $path => $mode) {
+        touch($release . $path);
+        chmod($release . $path, $mode);
+    }
+
+    $steps = array_slice(explode(' && ', (new AppAccount)->claimRelease(shellApp(), $release)), 1);
+    $process = new Process(['bash', '-c', implode(' && ', $steps)]);
+    $process->run();
+
+    $modes = [];
+
+    foreach ([...array_keys($directories), ...array_keys($files)] as $path) {
+        clearstatcache(true, $release . $path);
+        $modes[$path] = sprintf('%o', fileperms($release . $path) & 0777);
+    }
+
+    (new Process(['rm', '-rf', $release]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($modes)->toBe([
+            '' => '750',
+            '/app' => '750',
+            '/app/controllers' => '750',
+            '/config' => '750',
+            '/bin' => '750',
+            '/app/controllers/application_controller.rb' => '640',
+            '/config/database.yml' => '640',
+            '/bin/rails' => '750',
+        ]);
 });

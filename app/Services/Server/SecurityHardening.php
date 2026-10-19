@@ -79,6 +79,8 @@ final class SecurityHardening
         -w /etc/coresmith/ -p wa -k coresmith_config
 
         -w /etc/crontab -p wa -k crontab
+        -w /etc/cron.d/ -p wa -k crontab
+        -w /etc/coresmith/cron/ -p wa -k crontab
         -w /var/spool/cron/ -p wa -k crontab
 
         RULES;

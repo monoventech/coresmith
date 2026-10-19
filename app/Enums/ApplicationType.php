@@ -14,4 +14,15 @@ enum ApplicationType: string
     case Js = 'js';
     case Ruby = 'ruby';
     case Static = 'static';
+
+    /**
+     * @return array<string, string>
+     */
+    public function defaultEnvironment(): array
+    {
+        return match ($this) {
+            self::Ruby => ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production'],
+            default => [],
+        };
+    }
 }

@@ -15,44 +15,133 @@ use App\Services\SSH\SSHConnection;
 
 final class CrontabBuilder
 {
-    public const SCHEDULE_PATTERN = '/^[\d*\/,\-\s]{1,100}$/';
+    public const SCHEDULE_PATTERN = '/^[0-9*\/,-]+(?: [0-9*\/,-]+){4}$/D';
 
-    public function __construct(private readonly DeploymentCommands $commands) {}
+    public const DIRECTORY = '/etc/cron.d';
+
+    public const SCRIPTS = '/etc/coresmith/cron';
+
+    public function __construct(private readonly AppShell $shell) {}
+
+    public static function assertSchedule(string $schedule): string
+    {
+        if (preg_match(self::SCHEDULE_PATTERN, $schedule) !== 1) {
+            throw UnsafeNameException::cronSchedule($schedule);
+        }
+
+        return $schedule;
+    }
+
+    public function path(Application $application): string
+    {
+        return self::DIRECTORY . '/coresmith-app-' . SafeName::assertSlug($application->slug);
+    }
+
+    public function scriptDirectory(Application $application): string
+    {
+        return self::SCRIPTS . '/' . SafeName::assertSlug($application->slug);
+    }
 
     public function build(Application $application): string
     {
         $slug = SafeName::assertSlug($application->slug);
         $paths = new ReleasePaths($application);
         $current = $paths->appDirectory($paths->current());
-        $log = $paths->shared() . '/logs/scheduler.log';
-        $path = rtrim(str_replace(['PATH=', ':$PATH '], ['', ''], $this->commands->pathPrefix($application->runtimeVersions())), ' ');
-        $path = $path === '' ? '/usr/local/bin:/usr/bin:/bin' : $path . ':/usr/local/bin:/usr/bin:/bin';
+        $scripts = $this->scriptDirectory($application);
 
-        $lines = [
-            "# Coresmith managed crons for {$slug} - do not edit manually",
-            'SHELL=/bin/bash',
-            'PATH=' . $path,
-            '',
-        ];
+        $lines = ["# Coresmith managed crons for {$slug} - do not edit manually"];
 
-        foreach ($this->entries($application) as $entry) {
-            $lines[] = $entry['schedule'] . ' cd ' . $current . ' && ' . $entry['command'] . ' >> ' . $log . ' 2>&1';
+        foreach ($this->entries($application) as $index => $entry) {
+            $lines[] = $entry['schedule'] . ' root ' . $this->shell->scheduled($application, $scripts . '/' . $index . '.sh', $current, $application->runtimeVersions(), $application->type?->defaultEnvironment() ?? []);
         }
 
         return implode("\n", $lines) . "\n";
     }
 
-    public function install(Application $application): string
+    /**
+     * @return array<string, string>
+     */
+    public function scripts(Application $application): array
     {
-        return 'crontab -u ' . SafeName::assertSystemUser($application->system_user) . ' -';
+        $log = escapeshellarg((new ReleasePaths($application))->shared() . '/logs/scheduler.log');
+        $directory = $this->scriptDirectory($application);
+        $scripts = [];
+
+        foreach ($this->entries($application) as $index => $entry) {
+            $scripts[$directory . '/' . $index . '.sh'] = "{\n" . $entry['command'] . "\n} >> " . $log . " 2>&1\n";
+        }
+
+        return $scripts;
     }
 
     public function write(SSHConnection $connection, Application $application): void
     {
-        $connection->execute(
-            'echo ' . escapeshellarg(base64_encode($this->build($application))) . ' | base64 -d | ' . $this->install($application),
-            sudo: true,
-        )->throw();
+        $scripts = $this->scripts($application);
+
+        if ($scripts === []) {
+            $this->remove($connection, $application);
+
+            return;
+        }
+
+        $directory = $this->scriptDirectory($application);
+        $stagedDirectory = $this->staged($directory);
+        $file = $this->path($application);
+        $stagedFile = $this->staged($file);
+        $root = escapeshellarg(self::SCRIPTS);
+
+        $connection->execute(implode(' && ', [
+            'rm -rf ' . escapeshellarg($stagedDirectory),
+            'mkdir -p ' . escapeshellarg($stagedDirectory),
+            'chown root:root ' . $root . ' ' . escapeshellarg($stagedDirectory),
+            'chmod 700 ' . $root . ' ' . escapeshellarg($stagedDirectory),
+        ]), sudo: true)->throw();
+
+        $staged = [];
+
+        foreach ($scripts as $script => $content) {
+            $staged[] = $target = $stagedDirectory . '/' . basename($script);
+            $connection->uploadContent($content, $target);
+        }
+
+        $connection->uploadContent($this->build($application), $stagedFile);
+
+        $quoted = implode(' ', array_map(escapeshellarg(...), $staged));
+
+        $connection->execute(implode(' && ', [
+            'chown root:root ' . $quoted,
+            'chmod 600 ' . $quoted,
+            'chown root:root ' . escapeshellarg($stagedFile),
+            'chmod 644 ' . escapeshellarg($stagedFile),
+            'rm -rf ' . escapeshellarg($directory),
+            'mv -T ' . escapeshellarg($stagedDirectory) . ' ' . escapeshellarg($directory),
+            'mv -f ' . escapeshellarg($stagedFile) . ' ' . escapeshellarg($file),
+            $this->removeUserCrontab($application),
+        ]), sudo: true)->throw();
+    }
+
+    public function remove(SSHConnection $connection, Application $application): void
+    {
+        $file = $this->path($application);
+        $directory = $this->scriptDirectory($application);
+
+        $connection->execute(implode(' && ', [
+            'rm -f ' . escapeshellarg($file) . ' ' . escapeshellarg($this->staged($file)),
+            'rm -rf ' . escapeshellarg($directory) . ' ' . escapeshellarg($this->staged($directory)),
+            $this->removeUserCrontab($application),
+        ]), sudo: true)->throw();
+    }
+
+    private function staged(string $path): string
+    {
+        return dirname($path) . '/.' . basename($path) . '.new';
+    }
+
+    private function removeUserCrontab(Application $application): string
+    {
+        $user = escapeshellarg(SafeName::assertSystemUser($application->system_user));
+
+        return "if crontab -u {$user} -l >/dev/null 2>&1; then crontab -u {$user} -r; fi";
     }
 
     /**
@@ -63,22 +152,11 @@ final class CrontabBuilder
         $entries = [];
 
         foreach ((array) $application->cron_jobs as $job) {
-            if (!is_array($job) || !isset($job['schedule'], $job['command'])) {
+            if (!is_array($job) || !isset($job['schedule'], $job['command']) || trim((string) $job['command']) === '') {
                 continue;
             }
 
-            $schedule = trim((string) $job['schedule']);
-            $command = (string) $job['command'];
-
-            if (preg_match(self::SCHEDULE_PATTERN, $schedule) !== 1) {
-                throw UnsafeNameException::cronSchedule($schedule);
-            }
-
-            if (str_contains($command, "\n") || str_contains($command, "\r")) {
-                throw UnsafeNameException::cronCommand($command);
-            }
-
-            $entries[] = ['schedule' => $schedule, 'command' => $command];
+            $entries[] = ['schedule' => self::assertSchedule((string) $job['schedule']), 'command' => (string) $job['command']];
         }
 
         return $entries;

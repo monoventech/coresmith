@@ -45,12 +45,13 @@ final class SystemdUnitBuilder
         $logFile = '/var/coresmith/logs/' . $slug . '/' . $process . '.log';
         $path = $this->pathFor($application);
         $memoryMax = $size->memoryMaxMb();
-        $memoryHigh = $size->memoryHighMb();
         $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
         $listen = $process === 'web'
             ? "Environment=\"PORT={$application->base_port}\"\nEnvironment=\"HOST=127.0.0.1\"\n" . ($application->type === ApplicationType::Js ? "Environment=\"HOSTNAME=127.0.0.1\"\n" : '')
             : '';
+        $defaults = $application->type?->defaultEnvironment() ?? [];
+        $production = implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($defaults), $defaults));
         $command = $process === 'web' ? $command : $this->workerCommand($command);
 
         return <<<UNIT
@@ -65,7 +66,7 @@ final class SystemdUnitBuilder
         WorkingDirectory={$workingDirectory}
         Environment="HOME=/home/{$user}"
         Environment="PATH={$path}"
-        {$listen}EnvironmentFile={$envFile}
+        {$listen}{$production}EnvironmentFile={$envFile}
         BindPaths=-/home/{$user}
 
         ExecStart={$command}
@@ -76,7 +77,6 @@ final class SystemdUnitBuilder
         StandardError=append:{$logFile}
 
         MemoryMax={$memoryMax}M
-        MemoryHigh={$memoryHigh}M
 
         NoNewPrivileges=true
         ProtectSystem=strict
@@ -99,7 +99,7 @@ final class SystemdUnitBuilder
         return match ($application->type) {
             ApplicationType::Js => $this->jsCommand($application),
             ApplicationType::Ruby => $this->asdf->binaryPath('ruby', (string) $application->ruby_version, 'bundle')
-                . ' exec puma -p ' . $application->base_port,
+                . ' exec puma -b tcp://127.0.0.1:' . $application->base_port,
             default => null,
         };
     }

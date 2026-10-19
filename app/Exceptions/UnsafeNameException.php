@@ -29,12 +29,7 @@ final class UnsafeNameException extends InvalidArgumentException
 
     public static function cronSchedule(string $value): self
     {
-        return new self("[{$value}] is not a valid cron schedule expression.");
-    }
-
-    public static function cronCommand(string $value): self
-    {
-        return new self('A cron command cannot contain a newline, which would inject additional crontab entries.');
+        return new self('[' . addcslashes($value, "\0..\37") . '] is not a valid cron schedule. Write five fields separated by single spaces, using only digits and * / , - in each, such as */5 * * * *.');
     }
 
     public static function domain(string $value): self

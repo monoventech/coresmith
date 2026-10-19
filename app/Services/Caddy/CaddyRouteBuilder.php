@@ -18,6 +18,15 @@ final class CaddyRouteBuilder
 {
     public const APPS_ROOT = '/var/coresmith/apps';
 
+    private const SECURITY_HEADERS = [
+        'X-Frame-Options' => 'SAMEORIGIN',
+        'X-Content-Type-Options' => 'nosniff',
+        'X-XSS-Protection' => '1; mode=block',
+        'Referrer-Policy' => 'strict-origin-when-cross-origin',
+        'Permissions-Policy' => 'camera=(), microphone=(), geolocation=()',
+        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains; preload',
+    ];
+
     public static function routeId(Application $application): string
     {
         return 'app-' . $application->getKey();
@@ -166,20 +175,20 @@ final class CaddyRouteBuilder
      */
     private function securityHeaders(): array
     {
-        return [
-            [
+        $defaults = [];
+
+        foreach (self::SECURITY_HEADERS as $name => $value) {
+            $defaults[] = [
                 'handler' => 'headers',
                 'response' => [
-                    'set' => [
-                        'X-Frame-Options' => ['SAMEORIGIN'],
-                        'X-Content-Type-Options' => ['nosniff'],
-                        'X-XSS-Protection' => ['1; mode=block'],
-                        'Referrer-Policy' => ['strict-origin-when-cross-origin'],
-                        'Permissions-Policy' => ['camera=(), microphone=(), geolocation=()'],
-                        'Strict-Transport-Security' => ['max-age=31536000; includeSubDomains; preload'],
-                    ],
+                    'require' => ['headers' => [$name => null]],
+                    'set' => [$name => [$value]],
                 ],
-            ],
+            ];
+        }
+
+        return [
+            ...$defaults,
             [
                 'handler' => 'headers',
                 'response' => [

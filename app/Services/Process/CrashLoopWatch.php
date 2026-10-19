@@ -70,8 +70,6 @@ final class CrashLoopWatch
             return $connection->execute('journalctl -u ' . escapeshellarg($unit) . ' --no-pager -n 20 2>/dev/null || true', sudo: true)->output;
         }
 
-        $log = escapeshellarg('/var/coresmith/logs/' . $slug . '/' . SafeName::assertProcess($process) . '.log');
-
-        return $connection->execute("tail -n 20 {$log} 2>/dev/null || true", sudo: true)->output;
+        return $this->processes->processLog($connection, $application, $unit, 20);
     }
 }

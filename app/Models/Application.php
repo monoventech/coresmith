@@ -13,6 +13,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Enums\SourceProviderType;
+use App\Services\Deployment\CrontabBuilder;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\Repository;
 use App\Services\SafeName;
@@ -42,6 +43,14 @@ class Application extends Model
             foreach ((array) $application->processes as $process) {
                 if (is_array($process) && isset($process['name'])) {
                     SafeName::assertProcess((string) $process['name']);
+                }
+            }
+
+            if ($application->isDirty('cron_jobs')) {
+                foreach ((array) $application->cron_jobs as $job) {
+                    if (is_array($job) && isset($job['schedule'])) {
+                        CrontabBuilder::assertSchedule((string) $job['schedule']);
+                    }
                 }
             }
 

@@ -77,14 +77,41 @@ test('a static app is served by the file server only', function () {
         ->and($handlers->firstWhere('handler', 'reverse_proxy'))->toBeNull();
 });
 
-test('security headers are set up front and the fingerprint headers are deleted as the response is written', function () {
-    $headers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp())))->where('handler', 'headers')->values();
+function defaultHeader(string $name, string $value): array
+{
+    return ['handler' => 'headers', 'response' => ['require' => ['headers' => [$name => null]], 'set' => [$name => [$value]]]];
+}
 
-    expect($headers[0]['response']['set']['X-Content-Type-Options'])->toBe(['nosniff'])
-        ->and($headers[0]['response']['set']['X-Frame-Options'])->toBe(['SAMEORIGIN'])
-        ->and($headers[0]['response'])->not->toHaveKey('deferred')
-        ->and($headers[1]['response'])->toBe(['delete' => ['Server', 'X-Powered-By'], 'deferred' => true]);
+test('each security header is only a default, set when the app response does not send its own', function () {
+    $headers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp())))->where('handler', 'headers')->values()->all();
+
+    expect($headers)->toBe([
+        defaultHeader('X-Frame-Options', 'SAMEORIGIN'),
+        defaultHeader('X-Content-Type-Options', 'nosniff'),
+        defaultHeader('X-XSS-Protection', '1; mode=block'),
+        defaultHeader('Referrer-Policy', 'strict-origin-when-cross-origin'),
+        defaultHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'),
+        defaultHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload'),
+        ['handler' => 'headers', 'response' => ['delete' => ['Server', 'X-Powered-By'], 'deferred' => true]],
+    ]);
 });
+
+test('a default header reaches caddy as the json caddy adapts header ?Name value to', function () {
+    $json = json_encode((new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Ruby])), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
+    expect($json)->toContain('{"handler":"headers","response":{"require":{"headers":{"Strict-Transport-Security":null}},"set":{"Strict-Transport-Security":["max-age=31536000; includeSubDomains; preload"]}}}')
+        ->and($json)->toContain('{"handler":"headers","response":{"require":{"headers":{"X-Frame-Options":null}},"set":{"X-Frame-Options":["SAMEORIGIN"]}}}');
+});
+
+test('the defaults are in place before the app answers, so caddy can see what the app sent', function (ApplicationType $type) {
+    $handlers = collect(builtHandlers((new CaddyRouteBuilder)->build(phpApp(['type' => $type]))));
+    $lastDefault = $handlers->keys()->filter(fn(int $index): bool => isset($handlers[$index]['response']['require']))->last();
+    $answer = $handlers->keys()->first(fn(int $index): bool => in_array($handlers[$index]['handler'], ['reverse_proxy', 'file_server'], true));
+
+    expect($lastDefault)->not->toBeNull()
+        ->and($answer)->not->toBeNull()
+        ->and($lastDefault)->toBeLessThan($answer);
+})->with([ApplicationType::Php, ApplicationType::Js, ApplicationType::Ruby, ApplicationType::Static]);
 
 test('a subdirectory app resolves its document root', function () {
     $app = phpApp(['directory' => '/backend', 'web_directory' => '/public']);
@@ -93,11 +120,17 @@ test('a subdirectory app resolves its document root', function () {
         ->toBe('/var/coresmith/apps/my-app/current/backend/public');
 });
 
-test('a generated route passes validation', function () {
-    $app = phpApp();
+test('a generated route passes validation', function (array $attributes) {
+    $app = phpApp($attributes);
 
     (new RouteConfigValidator)->validate((new CaddyRouteBuilder)->build($app), $app);
-})->throwsNoExceptions();
+})->with([
+    'php' => [[]],
+    'js' => [['type' => ApplicationType::Js]],
+    'ruby' => [['type' => ApplicationType::Ruby]],
+    'static' => [['type' => ApplicationType::Static]],
+    'maintenance page' => [['toggles' => ['maintenance_mode' => true]]],
+])->throwsNoExceptions();
 
 test('an upstream pointing off box is refused', function () {
     $app = phpApp(['type' => ApplicationType::Js]);

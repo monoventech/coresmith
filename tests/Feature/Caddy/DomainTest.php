@@ -71,11 +71,12 @@ test('the server that carries every route pins a modern tls floor', function () 
     expect($server['tls_connection_policies'])->toBe([['protocol_min' => 'tls1.2']]);
 });
 
-test('responses carry the full hardening header set from the spec', function (string $header) {
+test('responses carry the full hardening header set from the spec, each unless the app sends its own', function (string $header) {
     $route = (new CaddyRouteBuilder)->build(domainApp());
-    $headers = collect($route['handle'][0]['routes'][1]['handle'])->firstWhere('handler', 'headers');
+    $headers = collect($route['handle'][0]['routes'][1]['handle'])->first(fn(array $handler): bool => isset($handler['response']['set'][$header]));
 
-    expect($headers['response']['set'])->toHaveKey($header);
+    expect($headers)->not->toBeNull()
+        ->and($headers['response']['require'])->toBe(['headers' => [$header => null]]);
 })->with([
     'X-Frame-Options',
     'X-Content-Type-Options',
@@ -92,9 +93,9 @@ test('the server and runtime fingerprint headers are removed', function () {
     expect($headers['response'])->toBe(['delete' => ['Server', 'X-Powered-By'], 'deferred' => true]);
 });
 
-test('hsts is set for a year with subdomains and preload', function () {
+test('hsts defaults to a year with subdomains and preload', function () {
     $route = (new CaddyRouteBuilder)->build(domainApp());
-    $headers = collect($route['handle'][0]['routes'][1]['handle'])->firstWhere('handler', 'headers');
+    $headers = collect($route['handle'][0]['routes'][1]['handle'])->first(fn(array $handler): bool => isset($handler['response']['set']['Strict-Transport-Security']));
 
     expect($headers['response']['set']['Strict-Transport-Security'])
         ->toBe(['max-age=31536000; includeSubDomains; preload']);

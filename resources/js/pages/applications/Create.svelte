@@ -53,6 +53,8 @@
     let framework = $derived(FRAMEWORKS[type]?.[0]?.value ?? '')
     let jsRuntime = $state('bun')
     const picker = $derived(pickerRuntime(type, jsRuntime))
+    let pickedSize = $state<string | null>(null)
+    const size = $derived(pickedSize ?? (type === 'ruby' ? 'medium' : 'small'))
 </script>
 
 <AppHead title="Add an app" />
@@ -183,7 +185,7 @@
                             <NativeSelect
                                 id="app_size"
                                 name="app_size"
-                                value="small"
+                                bind:value={() => size, (value: string) => (pickedSize = value)}
                                 options={[
                                     { value: 'small', label: 'Small, side projects' },
                                     { value: 'medium', label: 'Medium, production' },

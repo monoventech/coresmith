@@ -136,17 +136,6 @@ final class FakeSSHTransport implements SSHTransport
         return $this->uploads;
     }
 
-    public function crontabFor(string $user): ?string
-    {
-        foreach ($this->commands as $command) {
-            if (preg_match("~^echo '([A-Za-z0-9+/=]+)' \\| base64 -d \\| crontab -u " . preg_quote($user, '~') . ' -$~', $command, $matches) === 1) {
-                return (string) base64_decode($matches[1], true);
-            }
-        }
-
-        return null;
-    }
-
     public function loginAttempted(): bool
     {
         return $this->loginAttempted;

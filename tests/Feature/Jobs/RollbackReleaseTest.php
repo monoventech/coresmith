@@ -210,6 +210,33 @@ test('a rollback whose processes do not come back up is recorded, not silent', f
         ->and(Activity::query()->where('description', 'application_rolled_back')->exists())->toBeFalse();
 });
 
+test('rolling back writes the current environment before the processes restart, so a fixed variable takes effect', function () {
+    $application = rollbackApp(['env_variables' => "RAILS_ENV=production\nSECRET_KEY_BASE=abc\n"]);
+    $transport = rollbackTransport();
+
+    rollbackRun($application, $transport, '20260911-100000');
+
+    $commands = $transport->commands();
+    $written = array_search("chown root:root '/etc/coresmith/env/my-app.env' && chmod 600 '/etc/coresmith/env/my-app.env'", $commands, true);
+    $restarted = array_search("systemctl reload-or-restart 'coresmith-app-my-app-fpm'", $commands, true);
+
+    expect($transport->uploads()['/etc/coresmith/env/my-app.env'] ?? null)->toBe("RAILS_ENV=\"production\"\nSECRET_KEY_BASE=\"abc\"\n")
+        ->and($written)->not->toBeFalse()
+        ->and($restarted)->not->toBeFalse()
+        ->and($written)->toBeLessThan($restarted);
+});
+
+test('a stopped app rolled back still gets its current environment, so it starts with it', function () {
+    $application = rollbackApp(['power_state' => PowerState::Stopped, 'env_variables' => "RAILS_ENV=production\n"]);
+    $transport = rollbackTransport();
+
+    rollbackRun($application, $transport, '20260911-100000');
+
+    expect($transport->uploads()['/etc/coresmith/env/my-app.env'] ?? null)->toBe("RAILS_ENV=\"production\"\n")
+        ->and(implode("\n", $transport->commands()))->not->toContain('systemctl restart')
+        ->and(implode("\n", $transport->commands()))->not->toContain('systemctl reload-or-restart');
+});
+
 test('rollbacks run on the deployments queue', function () {
     expect((new RollbackApplication(rollbackApp()))->queue)->toBe('deployments');
 });
@@ -248,23 +275,25 @@ test('rolling back to a release with no recorded versions leaves the runtimes as
     rollbackRun($application, $transport);
 
     expect($application->fresh()->php_version)->toBe('8.5.10')
-        ->and($transport->uploads())->toBe([])
-        ->and($transport->crontabFor('coresmith-app-abcd'))->toContain('# Coresmith managed crons for my-app')
+        ->and(array_keys($transport->uploads()))->toBe(['/etc/coresmith/env/my-app.env'])
+        ->and(implode("\n", $transport->commands()))->toContain("rm -f '/etc/cron.d/coresmith-app-my-app' '/etc/cron.d/.coresmith-app-my-app.new' && rm -rf '/etc/coresmith/cron/my-app' '/etc/coresmith/cron/.my-app.new'")
         ->and(implode("\n", $transport->commands()))->toContain("systemctl reload-or-restart 'coresmith-app-my-app-fpm'")
         ->and(Activity::query()->where('description', 'application_rolled_back')->sole()->properties['runtimes'])->toBe('unchanged');
 });
 
-test('rolling back to a release on another php version installs a crontab whose PATH names that version', function () {
+test('rolling back to a release on another php version installs a cron file whose PATH names that version', function () {
     $application = rollbackApp(['php_version' => '8.5.10', 'cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
     Deployment::factory()->for($application)->create(['release' => '20260912-090000', 'status' => DeploymentStatus::Succeeded, 'stack' => rollbackStack('8.4.20')]);
     $transport = rollbackTransport();
 
     rollbackRun($application, $transport, '20260912-090000');
 
-    $crontab = $transport->crontabFor('coresmith-app-abcd') ?? '';
+    $crontab = $transport->uploads()['/etc/cron.d/.coresmith-app-my-app.new'] ?? '';
 
-    expect($crontab)->toContain("\nPATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin\n")
-        ->and($crontab)->toContain('* * * * * cd /var/coresmith/apps/my-app/current && php artisan schedule:run')
+    expect($crontab)->toContain(" -E 'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin' ")
+        ->and($crontab)->toContain("* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-abcd --gid=coresmith-app-abcd -p 'WorkingDirectory=/var/coresmith/apps/my-app/current'")
+        ->and($crontab)->toContain("-- /bin/bash -s < '/etc/coresmith/cron/my-app/0.sh'")
+        ->and($transport->uploads()['/etc/coresmith/cron/.my-app.new/0.sh'] ?? '')->toContain("\nphp artisan schedule:run\n")
         ->and($crontab)->not->toContain('8.5.10');
 });
 

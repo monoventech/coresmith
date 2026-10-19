@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Models\Application;
 use App\Services\Caddy\CaddyApiClient;
+use App\Services\Deployment\CrontabBuilder;
 use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -28,12 +29,13 @@ final class DetachApplication implements ShouldQueue
         $this->onQueue('server-tasks');
     }
 
-    public function handle(SSHConnectionManager $connections, ProcessManager $processes, CaddyApiClient $caddy): void
+    public function handle(SSHConnectionManager $connections, ProcessManager $processes, CaddyApiClient $caddy, CrontabBuilder $crontab): void
     {
         $connection = $connections->for($this->application->server);
 
         try {
             $processes->stop($connection, $this->application);
+            $crontab->remove($connection, $this->application);
 
             if ($this->application->allDomains() !== []) {
                 $caddy->removeSite($connection, $this->application);

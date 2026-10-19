@@ -104,5 +104,63 @@ test('a unit that is not running fails with its journal and advice for what the 
     'missing environment file' => ['coresmith-app-shop-queue.service: Failed to load environment files: No such file or directory', "The app's environment file is missing from the server. Deploy again to write it."],
     'missing linux user' => ['coresmith-app-shop-queue.service: Failed to determine user credentials: No such process', "The app's Linux user is missing from the server. Deploy again to create it."],
     'sandbox not set up' => ['coresmith-app-shop-queue.service: Failed to set up mount namespacing: /home/coresmith-app-shop: No such file or directory', "systemd could not set up the app's sandbox."],
+    'rails in development' => ["*  Environment: development\n! Unable to load application: LoadError: cannot load such file -- debug/prelude", 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.'],
+    'a missing ruby file in production' => ["*  Environment: production\n! Unable to load application: LoadError: cannot load such file -- stripe", 'The process log says why.'],
     'anything else' => ['Killed', 'The process log says why.'],
 ]);
+
+test('a process that did not start adds the end of its own log after the journal, with secrets removed', function () {
+    $application = startApp([
+        'type' => ApplicationType::Ruby,
+        'framework' => 'rails',
+        'php_version' => null,
+        'ruby_version' => '3.3.6',
+        'processes' => null,
+        'env_variables' => "SECRET_KEY_BASE=0f9c1e5a7b3d2c4e6f8a0b1c3d5e7f9a\n",
+    ]);
+    $journal = 'coresmith-app-shop-web.service: Main process exited, code=exited, status=1/FAILURE';
+    $log = "Puma starting in single mode...\n*  Environment: development\nsecret_key_base: 0f9c1e5a7b3d2c4e6f8a0b1c3d5e7f9a\n! Unable to load application: LoadError: cannot load such file -- debug/prelude\n";
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-web'", "activating\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-shop-web'", $journal . "\n")
+        ->respondTo("tail -n 30 '/var/coresmith/logs/shop/web.log'", $log);
+
+    try {
+        startManager()->verifyStarted(startConnection($transport), $application);
+        $this->fail('A unit that was not running passed the start check.');
+    } catch (ProcessDidNotStart $e) {
+        expect($e->journal)->toStartWith($journal . "\n")
+            ->and($e->journal)->toEndWith('LoadError: cannot load such file -- debug/prelude')
+            ->and($e->journal)->toContain("Puma starting in single mode...\n*  Environment: development")
+            ->and($e->journal)->not->toContain('0f9c1e5a7b3d2c4e6f8a0b1c3d5e7f9a')
+            ->and($e->journal)->toContain('[REDACTED:SECRET_KEY_BASE]')
+            ->and($e->getMessage())->toContain('This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.');
+    }
+
+    expect($transport->commands())->toContain("tail -n 30 '/var/coresmith/logs/shop/web.log' 2>/dev/null || true");
+});
+
+test('advice is taken from the process log when the journal only says the process exited', function () {
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-queue'", "failed\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-shop-queue'", 'coresmith-app-shop-queue.service: Main process exited, code=exited, status=1/FAILURE')
+        ->respondTo("tail -n 30 '/var/coresmith/logs/shop/queue.log'", "PHP Parse error: syntax error, unexpected token \"}\" in /var/coresmith/apps/shop/current/app/Jobs/Send.php on line 12\n");
+
+    try {
+        startManager()->verifyStarted(startConnection($transport), startApp());
+        $this->fail('A unit that was not running passed the start check.');
+    } catch (ProcessDidNotStart $e) {
+        expect($e->getMessage())->toContain('The code has a syntax error.')
+            ->and($e->journal)->toContain('app/Jobs/Send.php on line 12');
+    }
+});
+
+test('php-fpm is explained from its journal alone, since it has no log file of its own', function () {
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-fpm'", "failed\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-shop-fpm'", 'ERROR: failed to open configuration file');
+
+    expect(fn() => startManager()->verifyStarted(startConnection($transport), startApp()))->toThrow(ProcessDidNotStart::class);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('tail -n');
+});
