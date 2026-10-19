@@ -13,9 +13,9 @@ use App\Models\Application;
 use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\Deployment\GitFailure;
 use App\Services\Git\GitProviderFactory;
+use App\Services\SafeName;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Str;
 
 final class CheckGitHubHead implements ShouldQueue
 {
@@ -39,6 +39,12 @@ final class CheckGitHubHead implements ShouldQueue
             return;
         }
 
+        if (!SafeName::isBranch($application->repository_branch)) {
+            $autoDeploy->checked($application, null, AutoDeploy::UNCHECKABLE_BRANCH);
+
+            return;
+        }
+
         $sha = null;
         $error = null;
 
@@ -48,14 +54,6 @@ final class CheckGitHubHead implements ShouldQueue
             $error = $connection->markRefused($refusal) ? GitFailure::adviceFor($refusal, $application) : $refusal->getMessage();
         }
 
-        $application->forceFill(['poll_error' => $error === null ? null : Str::limit($error, 255, '')])->saveQuietly();
-
-        if ($sha !== null && $sha !== $application->repository_head) {
-            $autoDeploy->observe($application, $sha, 'poll');
-
-            return;
-        }
-
-        $autoDeploy->reconcile($application);
+        $autoDeploy->checked($application, $sha, $error);
     }
 }

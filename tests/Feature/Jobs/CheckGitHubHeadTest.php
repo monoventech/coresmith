@@ -172,6 +172,37 @@ test('a token github refuses marks the connection as a deploy would', function (
     'github failed in some other way' => [500, ['message' => 'Server Error'], 'unchanged', 'GitHub refused to issue an installation token: Server Error'],
 ]);
 
+test('a stored branch coresmith cannot check is not sent to github', function () {
+    $application = githubHeadApp(['repository_head' => githubHeadSha('a')]);
+    $application->forceFill(['repository_branch' => '--upload-pack=x'])->saveQuietly();
+
+    githubHeadRun($application);
+
+    expect($application->fresh()->poll_error)->toBe("This app's branch name is not one Coresmith can check. Change it in the app's settings.");
+
+    Http::assertNothingSent();
+});
+
+test('a push recorded while github was asked is not undone', function (string $answer, string $pushed) {
+    $application = githubHeadApp(['repository_head' => githubHeadSha('a'), 'repository_head_source' => 'push', 'repository_head_at' => now()->subHour()]);
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => githubHeadSha('a'), 'created_at' => now()->subHour()]);
+    githubHeadFake(function () use ($application, $answer, $pushed) {
+        Application::query()->whereKey($application->id)->update(['repository_head' => githubHeadSha($pushed), 'repository_head_source' => 'push', 'repository_head_at' => now()->subMinute()]);
+
+        return Http::response(githubHeadSha($answer));
+    });
+
+    githubHeadRun($application);
+
+    $fresh = $application->fresh();
+
+    expect([$fresh->repository_head, $fresh->repository_head_source, $fresh->repository_head_at?->toDateTimeString()])
+        ->toBe([githubHeadSha($pushed), 'push', '2026-10-19 14:04:00']);
+})->with([
+    'github answers the head the push recorded' => ['b', 'b'],
+    'github answers a head older than the push' => ['b', 'c'],
+]);
+
 test('an app that lost its github link before the check is left to its server', function () {
     $application = githubHeadApp(['repository_head' => githubHeadSha('a')]);
     $application->githubConnection()->delete();

@@ -548,3 +548,42 @@ test('the push time column is nullable and reverses cleanly', function () {
 
     expect(Schema::hasColumn('applications', 'repository_pushed_at'))->toBeTrue();
 });
+
+test('a check is concluded against the head stored now, not the one it started from', function (?string $pushedMeanwhile, string $found, string $head, string $source) {
+    $application = autoDeployApp(['repository_head' => autoDeploySha('a'), 'repository_head_source' => 'poll']);
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => autoDeploySha('a'), 'created_at' => now()->subHour()]);
+    $started = $application->fresh();
+
+    if ($pushedMeanwhile !== null) {
+        Application::query()->whereKey($application->id)->update(['repository_head' => autoDeploySha($pushedMeanwhile), 'repository_head_source' => 'push']);
+    }
+
+    app(AutoDeploy::class)->checked($started, autoDeploySha($found), null);
+
+    expect($application->fresh()->only(['repository_head', 'repository_head_source']))->toBe(['repository_head' => autoDeploySha($head), 'repository_head_source' => $source]);
+})->with([
+    'a new head, nothing changed meanwhile' => [null, 'b', 'b', 'poll'],
+    'the head a push stored meanwhile' => ['b', 'b', 'b', 'push'],
+    'an older head than a push stored meanwhile' => ['c', 'b', 'c', 'push'],
+]);
+
+test('a check writes its error cut to fit and still reconciles', function () {
+    $application = autoDeployApp(['repository_head' => autoDeploySha('a'), 'repository_head_source' => 'push']);
+
+    $deployment = app(AutoDeploy::class)->checked($application, null, 'GitHub refused the check. ' . str_repeat('a', 300));
+
+    expect(mb_strlen((string) $application->fresh()->poll_error))->toBe(255)
+        ->and($deployment?->requested_commit)->toBe(autoDeploySha('a'));
+
+    app(AutoDeploy::class)->checked($application, autoDeploySha('a'), null);
+
+    expect($application->fresh()->poll_error)->toBeNull();
+});
+
+test('a check whose app is gone concludes nothing', function () {
+    $application = autoDeployApp();
+    $application->forceDelete();
+
+    expect(app(AutoDeploy::class)->checked($application, autoDeploySha('a'), null))->toBeNull()
+        ->and(Deployment::count())->toBe(0);
+});

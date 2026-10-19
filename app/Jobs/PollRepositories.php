@@ -45,6 +45,12 @@ final class PollRepositories implements ShouldQueue
             if ($status->source($application) === AutoDeployStatus::SERVER) {
                 $fromServers[$application->server_id][] = $application;
 
+                if (count($fromServers[$application->server_id]) === CheckRemoteHeads::APPLICATIONS_PER_JOB) {
+                    $this->checkFromServer($fromServers[$application->server_id]);
+
+                    unset($fromServers[$application->server_id]);
+                }
+
                 return;
             }
 
@@ -54,10 +60,16 @@ final class PollRepositories implements ShouldQueue
         });
 
         foreach ($fromServers as $applications) {
-            foreach (array_chunk($applications, CheckRemoteHeads::APPLICATIONS_PER_JOB) as $chunk) {
-                CheckRemoteHeads::dispatch($chunk[0]->server, array_map(fn(Application $application): string => (string) $application->getKey(), $chunk));
-            }
+            $this->checkFromServer($applications);
         }
+    }
+
+    /**
+     * @param  non-empty-list<Application>  $applications
+     */
+    private function checkFromServer(array $applications): void
+    {
+        CheckRemoteHeads::dispatch($applications[0]->server, array_map(fn(Application $application): string => (string) $application->getKey(), $applications));
     }
 
     /**

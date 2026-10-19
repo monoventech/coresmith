@@ -15,10 +15,30 @@ use App\Models\Deployment;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 final class AutoDeploy
 {
     public const COMMIT = '/^[0-9a-f]{40}$/D';
+
+    public const UNCHECKABLE_BRANCH = "This app's branch name is not one Coresmith can check. Change it in the app's settings.";
+
+    public function checked(Application $application, ?string $sha, ?string $error): ?Deployment
+    {
+        $current = $application->fresh();
+
+        if ($current === null) {
+            return null;
+        }
+
+        $current->forceFill(['poll_error' => $error === null ? null : Str::limit($error, 255, '')])->saveQuietly();
+
+        if ($sha !== null && $sha !== $current->repository_head && $current->repository_head === $application->repository_head) {
+            return $this->observe($current, $sha, 'poll');
+        }
+
+        return $this->reconcile($current);
+    }
 
     public function observe(Application $application, string $sha, string $source, ?CarbonInterface $pushedAt = null): ?Deployment
     {

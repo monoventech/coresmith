@@ -144,6 +144,19 @@ test('a non-root upload is staged and copied into place as root, keeping an exis
         ]);
 });
 
+test('a staged upload runs each of its commands within the time it is given', function (?int $timeout, int $budget) {
+    $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+    $connection = connectTo($server, $transport);
+
+    $timeout === null ? $connection->uploadContent('x', '/etc/x') : $connection->uploadContent('x', '/etc/x', timeout: $timeout);
+
+    expect([$transport->budgetFor('mktemp '), $transport->budgetFor('then cat '), $transport->budgetFor("rm -f '" . FakeSSHTransport::STAGED_UPLOAD)])->toBe([$budget, $budget, $budget]);
+})->with([
+    'a short budget' => [10, 10],
+    'the default' => [null, 600],
+]);
+
 test('a staged upload is removed even when it cannot be copied into place', function () {
     $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
     $transport = (new FakeSSHTransport)->respondTo('install -m 644', 'install: cannot create regular file', 1);

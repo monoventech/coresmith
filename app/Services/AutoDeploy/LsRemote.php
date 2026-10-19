@@ -31,9 +31,13 @@ final class LsRemote
             throw new InvalidArgumentException(self::NOT_A_GIT_URL);
         }
 
+        if (!SafeName::isBranch($application->repository_branch)) {
+            throw new InvalidArgumentException(AutoDeploy::UNCHECKABLE_BRANCH);
+        }
+
         $command = 'GIT_TERMINAL_PROMPT=0 timeout ' . self::TIMEOUT_SECONDS . ' git ls-remote --exit-code -- '
             . escapeshellarg($url) . ' '
-            . escapeshellarg(self::HEADS . SafeName::assertBranch($application->repository_branch));
+            . escapeshellarg(self::HEADS . $application->repository_branch);
 
         return $this->keys->usesDeployKey($application)
             ? $this->keys->withKey($application, $command, $this->keys->pollKeyPath($application))

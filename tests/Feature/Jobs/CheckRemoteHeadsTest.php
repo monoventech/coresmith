@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ServerStatus;
 use App\Jobs\CheckRemoteHeads;
 use App\Jobs\DeployApplication;
+use App\Jobs\PollRepositories;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
@@ -13,6 +14,7 @@ use App\Models\SourceProvider;
 use App\Services\AutoDeploy\AutoDeployStatus;
 use App\Services\AutoDeploy\LsRemote;
 use App\Services\Deployment\GitFailure;
+use App\Services\Git\DeployKeyManager;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Process\ProcessResult;
@@ -70,6 +72,11 @@ function remoteHeadsRun(FakeSSHTransport $transport, Application ...$application
 function remoteHeadsIndex(FakeSSHTransport $transport, string $needle): int|false
 {
     return collect($transport->commands())->search(fn(string $command): bool => str_contains($command, $needle));
+}
+
+function remoteHeadsChecks(FakeSSHTransport $transport): int
+{
+    return count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, 'git ls-remote')));
 }
 
 function remoteHeadsGit(string $directory, string $command): ProcessResult
@@ -227,6 +234,132 @@ test('setting up the poll key is not a connection failure', function (Closure $f
         'root',
         'Coresmith could not connect to forge-01.',
     ],
+]);
+
+test('every command around the poll key has a short budget, so its removal always runs inside the job', function () {
+    $application = remoteHeadsApp(['server_id' => remoteHeadsServer(['ssh_user' => 'deployer'])->id, 'repository_url' => 'git@github.com:monoven/site.git']);
+    $transport = (new FakeSSHTransport)->respondTo('git ls-remote', remoteHeadsSha('c') . "\trefs/heads/main\n");
+
+    remoteHeadsRun($transport, $application);
+
+    expect([
+        'prepare' => $transport->budgetFor('mkdir -p '),
+        'reserve' => $transport->budgetFor('install -m 600 /dev/null'),
+        'stage' => $transport->budgetFor('mktemp '),
+        'copy into place' => $transport->budgetFor('then cat '),
+        'remove the staged copy' => $transport->budgetFor("rm -f '/tmp/coresmith-upload"),
+        'remove the key' => $transport->budgetFor("rm -f '/etc/coresmith/deploy-keys/my-app.poll'"),
+        'ls-remote' => $transport->budgetFor('git ls-remote'),
+    ])->toBe([
+        'prepare' => 10,
+        'reserve' => 10,
+        'stage' => 10,
+        'copy into place' => 10,
+        'remove the staged copy' => 10,
+        'remove the key' => 10,
+        'ls-remote' => 60,
+    ]);
+});
+
+test('a lost connection marks the rest of the chunk unreachable without reconnecting for each', function (Closure $lose) {
+    $server = remoteHeadsServer();
+    $apps = [
+        remoteHeadsApp(['server_id' => $server->id, 'slug' => 'site-a', 'repository_url' => 'git@github.com:monoven/a.git']),
+        remoteHeadsApp(['server_id' => $server->id, 'slug' => 'site-b']),
+        remoteHeadsApp(['server_id' => $server->id, 'slug' => 'site-c']),
+    ];
+    $transport = $lose((new FakeSSHTransport)->respondTo('git ls-remote', remoteHeadsSha('c') . "\trefs/heads/main\n"));
+
+    remoteHeadsRun($transport, ...$apps);
+
+    expect(remoteHeadsChecks($transport))->toBe(1)
+        ->and($transport->commands())->toContain("rm -f '/etc/coresmith/deploy-keys/site-a.poll'")
+        ->and(count(array_filter($transport->calls(), fn(string $call): bool => $call === 'connect')))->toBe(2);
+
+    foreach ($apps as $application) {
+        expect($application->fresh()->poll_error)->toBe('Coresmith could not connect to forge-01.')
+            ->and($application->fresh()->polled_at?->toDateTimeString())->toBe('2026-10-19 14:05:00');
+    }
+})->with([
+    'the connection drops' => [fn(FakeSSHTransport $transport) => $transport->dropConnectionOn('git ls-remote')],
+    'a command never returns' => [fn(FakeSSHTransport $transport) => $transport->timeOutOn('git ls-remote')],
+]);
+
+test('apps the check could not start in time keep their state for the next round', function () {
+    $server = remoteHeadsServer();
+    $apps = array_map(fn(string $slug): Application => remoteHeadsApp([
+        'server_id' => $server->id,
+        'slug' => $slug,
+        'polled_at' => now()->subMinutes(6),
+        'poll_error' => 'Branch main is not in the repository.',
+    ]), ['site-a', 'site-b', 'site-c']);
+    $transport = (new FakeSSHTransport)->respondTo('git ls-remote', remoteHeadsSha('c') . "\trefs/heads/main\n");
+    $start = now()->toImmutable();
+    $this->travelTo(fn() => $start->addSeconds(30 * remoteHeadsChecks($transport)));
+
+    remoteHeadsRun($transport, ...$apps);
+
+    [$first, $second, $third] = array_map(fn(Application $application): Application => $application->fresh(), $apps);
+
+    expect(remoteHeadsChecks($transport))->toBe(2)
+        ->and([$first->polled_at?->toDateTimeString(), $first->poll_error, $first->repository_head])->toBe(['2026-10-19 14:05:00', null, remoteHeadsSha('c')])
+        ->and([$second->polled_at?->toDateTimeString(), $second->poll_error, $second->repository_head])->toBe(['2026-10-19 14:05:30', null, remoteHeadsSha('c')])
+        ->and([$third->polled_at?->toDateTimeString(), $third->poll_error, $third->repository_head])->toBe(['2026-10-19 13:59:00', 'Branch main is not in the repository.', null]);
+
+    app()->call([new PollRepositories, 'handle']);
+
+    Queue::assertPushed(CheckRemoteHeads::class, 1);
+    Queue::assertPushed(CheckRemoteHeads::class, fn(CheckRemoteHeads $job): bool => $job->uniqueId() === "{$server->id}:{$third->id}");
+});
+
+test('a stored branch git could read as an option runs nothing', function () {
+    $application = remoteHeadsApp();
+    $application->forceFill(['repository_branch' => '--upload-pack=touch /tmp/coresmith-pwned'])->saveQuietly();
+    $transport = new FakeSSHTransport;
+
+    remoteHeadsRun($transport, $application);
+
+    expect($transport->commands())->toBe([])
+        ->and($application->fresh()->poll_error)->toBe("This app's branch name is not one Coresmith can check. Change it in the app's settings.")
+        ->and(fn() => app(LsRemote::class)->command($application->fresh()))->toThrow(InvalidArgumentException::class, "This app's branch name is not one Coresmith can check. Change it in the app's settings.");
+});
+
+test('one app whose key cannot be set up leaves the rest of the chunk checked', function () {
+    $server = remoteHeadsServer();
+    $keyed = remoteHeadsApp(['server_id' => $server->id, 'slug' => 'site-a', 'repository_url' => 'git@github.com:monoven/a.git']);
+    $public = remoteHeadsApp(['server_id' => $server->id, 'slug' => 'site-b']);
+    $transport = (new FakeSSHTransport)
+        ->respondTo('git ls-remote', remoteHeadsSha('c') . "\trefs/heads/main\n")
+        ->respondTo("install -m 600 /dev/null '/etc/coresmith/deploy-keys/site-a.poll'", "install: cannot create regular file '/etc/coresmith/deploy-keys/site-a.poll': Read-only file system\n", 1);
+
+    remoteHeadsRun($transport, $keyed, $public);
+
+    expect($keyed->fresh()->poll_error)->toBe('Coresmith could not set up the deploy key on forge-01.')
+        ->and($transport->commands())->toContain("rm -f '/etc/coresmith/deploy-keys/site-a.poll'")
+        ->and($public->fresh()->poll_error)->toBeNull()
+        ->and($public->fresh()->repository_head)->toBe(remoteHeadsSha('c'))
+        ->and(remoteHeadsChecks($transport))->toBe(1);
+});
+
+test('a deploy-key app gets a key the first time it is checked, and keeps the one it has', function (bool $hasKey) {
+    $application = remoteHeadsApp(['repository_url' => 'git@github.com:monoven/site.git']);
+    $existing = $hasKey ? (string) app(DeployKeyManager::class)->ensure($application)->deploy_key_private : null;
+    $transport = (new FakeSSHTransport)->respondTo('git ls-remote', remoteHeadsSha('c') . "\trefs/heads/main\n");
+
+    expect($application->fresh()->deploy_key_private === null)->toBe(!$hasKey);
+
+    remoteHeadsRun($transport, $application);
+
+    $fresh = $application->fresh();
+
+    expect($fresh->deploy_key_public)->toStartWith('ssh-ed25519 ')
+        ->and($fresh->deploy_key_private)->toContain('BEGIN OPENSSH PRIVATE KEY')
+        ->and($transport->uploads()['/etc/coresmith/deploy-keys/my-app.poll'])->toBe($fresh->deploy_key_private)
+        ->and($existing === null || $existing === $fresh->deploy_key_private)->toBeTrue()
+        ->and($fresh->repository_head)->toBe(remoteHeadsSha('c'));
+})->with([
+    'no key yet' => [false],
+    'a key already' => [true],
 ]);
 
 test('a refused repository gives the clone\'s own advice', function () {

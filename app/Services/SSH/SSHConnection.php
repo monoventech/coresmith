@@ -100,7 +100,7 @@ final class SSHConnection
         return $this->conclude($command, $output, $timeout);
     }
 
-    public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath): void
+    public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath, int $timeout = SSHTransport::COMMAND_SECONDS): void
     {
         if ($this->server->ssh_user === 'root') {
             $this->connect()->transport->uploadContent($content, $remotePath);
@@ -108,7 +108,7 @@ final class SSHConnection
             return;
         }
 
-        $staged = trim($this->execute('mktemp ' . self::STAGING_TEMPLATE)->throw()->output);
+        $staged = trim($this->execute('mktemp ' . self::STAGING_TEMPLATE, timeout: $timeout)->throw()->output);
 
         if (preg_match(self::STAGED_PATTERN, $staged) !== 1) {
             throw new RuntimeException("Could not stage the upload for [{$remotePath}] on {$this->server->name}.");
@@ -120,9 +120,9 @@ final class SSHConnection
             $source = escapeshellarg($staged);
             $target = escapeshellarg($remotePath);
 
-            $this->execute("if [ -e {$target} ]; then cat {$source} > {$target}; else install -m 644 {$source} {$target}; fi", sudo: true)->throw();
+            $this->execute("if [ -e {$target} ]; then cat {$source} > {$target}; else install -m 644 {$source} {$target}; fi", sudo: true, timeout: $timeout)->throw();
         } finally {
-            $this->execute('rm -f ' . escapeshellarg($staged));
+            $this->execute('rm -f ' . escapeshellarg($staged), timeout: $timeout);
         }
     }
 
