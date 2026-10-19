@@ -34,7 +34,7 @@ final class GitHubSettingsPresenter
     ) {}
 
     /**
-     * @return array{can_register: bool, registration: ?array<string, mixed>, elsewhere: ?string, connections: list<array<string, mixed>>, apps: list<array<string, mixed>>, connect: ?array{install_href: string, link_href: string}, choose: ?array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string}>, post_href: string}, can: array{manage: bool}}
+     * @return array{can_register: bool, registration: ?array<string, mixed>, elsewhere: ?string, connections: list<array<string, mixed>>, apps: list<array<string, mixed>>, connect: ?array{install_href: string, link_href: string}, choose: ?array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, refusal: ?string}>, post_href: string}, can: array{manage: bool}}
      */
     public function present(Team $team, User $user): array
     {
@@ -157,7 +157,7 @@ final class GitHubSettingsPresenter
 
     /**
      * @param  list<GitHubAppCredentials>  $available
-     * @return array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string}>, post_href: string}|null
+     * @return array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, refusal: ?string}>, post_href: string}|null
      */
     private function choice(Team $team, User $user, #[\SensitiveParameter] array $available): ?array
     {
@@ -175,6 +175,7 @@ final class GitHubSettingsPresenter
                 'account' => $installation['account'],
                 'account_type' => $installation['account_type'],
                 'repository_selection' => $installation['repository_selection'],
+                'refusal' => $installation['proven'] ? null : ($installation['refusal'] ?? GitHubConnector::UNREACHABLE),
             ], $pending['installations']),
             'post_href' => route('github.installations.store'),
         ];

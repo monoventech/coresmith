@@ -405,52 +405,128 @@ test('an account github will not name is an error that says why', function (int 
     'a login that is not a string' => [200, ['login' => 10], 'GitHub did not say which account is signed in.'],
 ]);
 
-test('the repositories a user can see in an installation are counted from one page', function () {
-    Http::fake(['api.github.com/user/installations/51842/repositories*' => Http::response(['total_count' => 3, 'repository_selection' => 'selected', 'repositories' => [['id' => 70000001]]])]);
+function githubApiRepositoryPages(array $ids): Closure
+{
+    return function (Request $request) use ($ids) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+        $page = array_slice($ids, ((int) $query['page'] - 1) * (int) $query['per_page'], (int) $query['per_page']);
 
-    expect(app(GitHubAppApi::class)->userRepositoryCount('ghu_user', '51842'))->toBe(3);
-    Http::assertSentCount(1);
-    Http::assertSent(fn($request) => $request->method() === 'GET'
-        && $request->url() === 'https://api.github.com/user/installations/51842/repositories?per_page=1'
-        && $request->hasHeader('Authorization', 'Bearer ghu_user')
-        && $request->hasHeader('Accept', 'application/vnd.github+json')
-        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+        return Http::response(['total_count' => count($ids), 'repositories' => array_map(fn(int $id): array => ['id' => $id, 'full_name' => "monoventech/repo-{$id}"], $page)]);
+    };
+}
+
+test('the repositories a user can see in an installation are read by id, a hundred at a time', function () {
+    Http::fake(['api.github.com/user/installations/51842/repositories*' => githubApiRepositoryPages(range(70000001, 70000150))]);
+
+    $ids = app(GitHubAppApi::class)->userRepositoryIds('ghu_user', '51842', 30);
+
+    expect($ids)->toHaveCount(150)
+        ->and($ids[0])->toBe('70000001')
+        ->and($ids[149])->toBe('70000150');
+    Http::assertSentCount(2);
+
+    foreach ([1, 2] as $page) {
+        Http::assertSent(fn($request) => $request->method() === 'GET'
+            && $request->url() === "https://api.github.com/user/installations/51842/repositories?per_page=100&page={$page}"
+            && $request->hasHeader('Authorization', 'Bearer ghu_user')
+            && $request->hasHeader('Accept', 'application/vnd.github+json')
+            && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+    }
 });
 
-test('an installation\'s own repositories are counted with an installation token', function () {
-    Http::fake(['api.github.com/installation/repositories*' => Http::response(['total_count' => 12, 'repositories' => [['id' => 70000001]]])]);
+test('an installation\'s own repositories are read by id with an installation token', function () {
+    Http::fake(['api.github.com/installation/repositories*' => githubApiRepositoryPages(range(70000001, 70000201))]);
 
-    expect(app(GitHubAppApi::class)->installationRepositoryCount('ghs_counting'))->toBe(12);
-    Http::assertSentCount(1);
+    $ids = app(GitHubAppApi::class)->installationRepositoryIds('ghs_checking', 30);
+
+    expect($ids)->toBe(array_map('strval', range(70000001, 70000201)));
+    Http::assertSentCount(3);
     Http::assertSent(fn($request) => $request->method() === 'GET'
-        && $request->url() === 'https://api.github.com/installation/repositories?per_page=1'
-        && $request->hasHeader('Authorization', 'Bearer ghs_counting')
-        && $request->hasHeader('Accept', 'application/vnd.github+json')
-        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+        && $request->url() === 'https://api.github.com/installation/repositories?per_page=100&page=3'
+        && $request->hasHeader('Authorization', 'Bearer ghs_checking'));
 });
 
-test('a count github will not give is an error rather than a number', function (string $count, int $status, array $body, string $message) {
+test('an empty installation reads as no repositories after one request', function () {
+    Http::fake(['api.github.com/installation/repositories*' => githubApiRepositoryPages([])]);
+
+    expect(app(GitHubAppApi::class)->installationRepositoryIds('ghs_checking', 30))->toBe([]);
+    Http::assertSentCount(1);
+});
+
+test('a list longer than the pages allowed is not read at all', function (string $side) {
+    $api = app(GitHubAppApi::class);
+    Http::fake(['api.github.com/*' => githubApiRepositoryPages(range(1, 3001))]);
+
+    $ids = $side === 'the user\'s'
+        ? $api->userRepositoryIds('ghu_user', '51842', 30)
+        : $api->installationRepositoryIds('ghs_checking', 30);
+
+    expect($ids)->toBeNull();
+    Http::assertSentCount(1);
+})->with(['the user\'s', 'the installation\'s']);
+
+test('a list of exactly the pages allowed is read to the end', function () {
+    Http::fake(['api.github.com/installation/repositories*' => githubApiRepositoryPages(range(1, 300))]);
+
+    expect(app(GitHubAppApi::class)->installationRepositoryIds('ghs_checking', 3))->toHaveCount(300);
+    Http::assertSentCount(3);
+});
+
+test('a list that changes or falls short while it is read is an error, never a partial list', function (string $case) {
+    $pages = match ($case) {
+        'a repository added between pages' => [
+            ['total_count' => 150, 'repositories' => array_map(fn(int $id): array => ['id' => $id], range(1, 100))],
+            ['total_count' => 151, 'repositories' => array_map(fn(int $id): array => ['id' => $id], range(101, 151))],
+        ],
+        'a page that comes back empty' => [
+            ['total_count' => 150, 'repositories' => array_map(fn(int $id): array => ['id' => $id], range(1, 100))],
+            ['total_count' => 150, 'repositories' => []],
+        ],
+        'the same repositories twice' => [
+            ['total_count' => 150, 'repositories' => array_map(fn(int $id): array => ['id' => $id], range(1, 100))],
+            ['total_count' => 150, 'repositories' => array_map(fn(int $id): array => ['id' => $id], range(51, 100))],
+        ],
+    };
+    Http::fake(['api.github.com/installation/repositories*' => Http::sequence()->push($pages[0])->push($pages[1])->push($pages[1])]);
+
+    expect(fn() => app(GitHubAppApi::class)->installationRepositoryIds('ghs_checking', 30))
+        ->toThrow(GitProviderException::class, 'GitHub\'s repository list changed while Coresmith was reading it.');
+})->with(['a repository added between pages', 'a page that comes back empty', 'the same repositories twice']);
+
+test('a list whose pages never add up to its total is an error, never a partial list', function (string $case) {
+    $page = fn(array $ids, int $total): array => ['total_count' => $total, 'repositories' => array_map(fn(int $id): array => ['id' => $id], $ids)];
+    Http::fake(['api.github.com/installation/repositories*' => match ($case) {
+        'pages shorter than a hundred' => Http::sequence()->push($page(range(1, 99), 200))->push($page(range(100, 198), 200)),
+        'more repositories than it counts' => Http::sequence()->push($page(range(1, 3), 2)),
+    }]);
+
+    expect(fn() => app(GitHubAppApi::class)->installationRepositoryIds('ghs_checking', 2))
+        ->toThrow(GitProviderException::class, 'GitHub\'s repository list changed while Coresmith was reading it.');
+})->with(['pages shorter than a hundred', 'more repositories than it counts']);
+
+test('a repository list github will not give is an error rather than a list', function (string $side, int $status, array $body, string $message) {
     Http::fake(['api.github.com/*' => Http::response($body, $status)]);
     $api = app(GitHubAppApi::class);
 
-    $call = $count === 'the user\'s'
-        ? fn() => $api->userRepositoryCount('ghu_user', '51842')
-        : fn() => $api->installationRepositoryCount('ghs_counting');
+    $call = $side === 'the user\'s'
+        ? fn() => $api->userRepositoryIds('ghu_user', '51842', 30)
+        : fn() => $api->installationRepositoryIds('ghs_checking', 30);
 
     expect($call)->toThrow(GitProviderException::class, $message);
 })->with([
-    'the user\'s, refused' => ['the user\'s', 403, ['message' => 'Resource not accessible by integration'], 'Resource not accessible by integration'],
-    'the user\'s, missing' => ['the user\'s', 200, ['repositories' => []], 'GitHub did not send a repository count.'],
-    'the user\'s, not a number' => ['the user\'s', 200, ['total_count' => '3'], 'GitHub did not send a repository count.'],
+    'the user\'s, refused' => ['the user\'s', 403, ['message' => 'Resource protected by organization SAML enforcement.'], 'Resource protected by organization SAML enforcement.'],
+    'the user\'s, no count' => ['the user\'s', 200, ['repositories' => []], 'GitHub did not send a repository count.'],
+    'the user\'s, a count that is not a number' => ['the user\'s', 200, ['total_count' => '3', 'repositories' => []], 'GitHub did not send a repository count.'],
+    'the user\'s, a repository with no id' => ['the user\'s', 200, ['total_count' => 1, 'repositories' => [['full_name' => 'monoventech/atlas']]], 'GitHub sent a repository without an id.'],
     'the installation\'s, refused' => ['the installation\'s', 401, ['message' => 'Bad credentials'], 'Bad credentials'],
-    'the installation\'s, missing' => ['the installation\'s', 200, [], 'GitHub did not send a repository count.'],
-    'the installation\'s, negative' => ['the installation\'s', 200, ['total_count' => -1], 'GitHub did not send a repository count.'],
+    'the installation\'s, a negative count' => ['the installation\'s', 200, ['total_count' => -1, 'repositories' => []], 'GitHub did not send a repository count.'],
+    'the installation\'s, an id that is not a number' => ['the installation\'s', 200, ['total_count' => 1, 'repositories' => [['id' => '70000001']]], 'GitHub sent a repository without an id.'],
 ]);
 
-test('a user count for an installation id that is not a number is refused before any request', function (string $installation) {
+test('a user list for an installation id that is not a number is refused before any request', function (string $installation) {
     Http::fake();
 
-    expect(fn() => app(GitHubAppApi::class)->userRepositoryCount('ghu_user', $installation))->toThrow(GitProviderException::class, 'is not a valid installation id.');
+    expect(fn() => app(GitHubAppApi::class)->userRepositoryIds('ghu_user', $installation, 30))->toThrow(GitProviderException::class, 'is not a valid installation id.');
     Http::assertNothingSent();
 })->with(['../51842', '51842/repositories', '', '5184 2']);
 
@@ -617,8 +693,8 @@ test('a request to github that gets no answer is a provider error for every app 
         fn() => $api->exchangeUserCode($app, 'c0de', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_user'),
         fn() => $api->userLogin('ghu_user'),
-        fn() => $api->userRepositoryCount('ghu_user', '51842'),
-        fn() => $api->installationRepositoryCount('ghs_x'),
+        fn() => $api->userRepositoryIds('ghu_user', '51842', 30),
+        fn() => $api->installationRepositoryIds('ghs_x', 30),
         fn() => $api->revokeUserToken($app, 'ghu_user'),
         fn() => $api->revokeToken('ghs_x'),
     ] as $call) {
@@ -702,8 +778,8 @@ test('every request waits at most twenty seconds and a post is never sent twice'
         fn() => $api->exchangeUserCode($app, 'c0de', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_user'),
         fn() => $api->userLogin('ghu_user'),
-        fn() => $api->userRepositoryCount('ghu_user', '51842'),
-        fn() => $api->installationRepositoryCount('ghs_x'),
+        fn() => $api->userRepositoryIds('ghu_user', '51842', 30),
+        fn() => $api->installationRepositoryIds('ghs_x', 30),
         fn() => $api->revokeUserToken($app, 'ghu_user'),
         fn() => $api->mintToken($app, '51842'),
         fn() => $api->revokeToken('ghs_x'),
@@ -734,8 +810,8 @@ test('no credential reaches an exception message', function (string $failure) {
         fn() => $api->exchangeUserCode($app, 'usercode456', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_secret_user'),
         fn() => $api->userLogin('ghu_secret_user'),
-        fn() => $api->userRepositoryCount('ghu_secret_user', '51842'),
-        fn() => $api->installationRepositoryCount('ghs_secret_install'),
+        fn() => $api->userRepositoryIds('ghu_secret_user', '51842', 30),
+        fn() => $api->installationRepositoryIds('ghs_secret_install', 30),
         fn() => $api->mintToken($app, '51842'),
         fn() => $api->revokeToken('ghs_secret_install'),
     ] as $call) {

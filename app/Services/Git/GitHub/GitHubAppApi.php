@@ -32,6 +32,10 @@ final class GitHubAppApi
 
     public const NO_ANSWER = 'GitHub did not answer.';
 
+    private const PER_PAGE = 100;
+
+    private const LIST_CHANGED = 'GitHub\'s repository list changed while Coresmith was reading it.';
+
     public function __construct(private readonly AppJwt $jwt) {}
 
     /**
@@ -162,11 +166,12 @@ final class GitHubAppApi
         return $login;
     }
 
-    public function userRepositoryCount(#[\SensitiveParameter] string $userToken, string $installationId): int
+    /**
+     * @return list<string>|null
+     */
+    public function userRepositoryIds(#[\SensitiveParameter] string $userToken, string $installationId, int $maxPages): ?array
     {
-        $url = self::API . '/user/installations/' . $this->installation($installationId) . '/repositories';
-
-        return $this->total($this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get($url, ['per_page' => 1]))));
+        return $this->repositoryIds($userToken, self::API . '/user/installations/' . $this->installation($installationId) . '/repositories', $maxPages);
     }
 
     public function revokeUserToken(#[\SensitiveParameter] GitHubAppCredentials $app, #[\SensitiveParameter] string $userToken): void
@@ -205,9 +210,12 @@ final class GitHubAppApi
         return ['token' => $token, 'expires_at' => CarbonImmutable::parse($expires)];
     }
 
-    public function installationRepositoryCount(#[\SensitiveParameter] string $installationToken): int
+    /**
+     * @return list<string>|null
+     */
+    public function installationRepositoryIds(#[\SensitiveParameter] string $installationToken, int $maxPages): ?array
     {
-        return $this->total($this->guard($this->call(fn(): Response => $this->http()->withToken($installationToken)->get(self::API . '/installation/repositories', ['per_page' => 1]))));
+        return $this->repositoryIds($installationToken, self::API . '/installation/repositories', $maxPages);
     }
 
     public function revokeToken(#[\SensitiveParameter] string $token): void
@@ -241,6 +249,53 @@ final class GitHubAppApi
         }
 
         return $response;
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function repositoryIds(#[\SensitiveParameter] string $token, string $url, int $maxPages): ?array
+    {
+        $ids = [];
+        $total = null;
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $response = $this->guard($this->call(fn(): Response => $this->http()->withToken($token)->get($url, ['per_page' => self::PER_PAGE, 'page' => $page])));
+            $count = $this->total($response);
+
+            if ($total === null && $count > $maxPages * self::PER_PAGE) {
+                return null;
+            }
+
+            if ($total !== null && $count !== $total) {
+                throw new GitProviderException(self::LIST_CHANGED);
+            }
+
+            $total = $count;
+            $known = count($ids);
+
+            foreach ((array) $response->json('repositories', []) as $repository) {
+                if (!is_array($repository) || !is_int($repository['id'] ?? null)) {
+                    throw new GitProviderException('GitHub sent a repository without an id.');
+                }
+
+                $ids[(string) $repository['id']] = true;
+            }
+
+            if (count($ids) >= $total) {
+                break;
+            }
+
+            if (count($ids) === $known) {
+                throw new GitProviderException(self::LIST_CHANGED);
+            }
+        }
+
+        if (count($ids) !== $total) {
+            throw new GitProviderException(self::LIST_CHANGED);
+        }
+
+        return array_map('strval', array_keys($ids));
     }
 
     private function total(Response $response): int

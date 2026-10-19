@@ -37,6 +37,10 @@ final class GitHubConnector
 
     public const EXPIRED = 'That choice expired. Connect GitHub again.';
 
+    public const PROOF_PAGES = 30;
+
+    public const TOO_MANY = 'This installation covers more repositories than Coresmith can check. Choose only the repositories Coresmith needs for the app on GitHub, then connect again.';
+
     public function __construct(
         private readonly GitHubAppApi $api,
         private readonly GitHubApps $apps,
@@ -142,14 +146,8 @@ final class GitHubConnector
             return $this->refuse($request, $team, self::UNREACHABLE);
         }
 
-        try {
-            $refusal = $this->refusal($app, $installation);
-        } catch (GitProviderException) {
-            return $this->refuse($request, $team, self::REFUSED);
-        }
-
-        if ($refusal !== null) {
-            return $this->refuse($request, $team, $refusal);
+        if ($installation['proven'] !== true) {
+            return $this->refuse($request, $team, $installation['refusal'] ?? self::UNREACHABLE);
         }
 
         $this->choices->forget();
@@ -249,79 +247,77 @@ final class GitHubConnector
 
             return $installation === null
                 ? $this->refuse($request, $team, self::UNREACHABLE)
-                : $this->connectProven($request, $team, $app, $this->witnessed([$installation], $token)[0]);
+                : $this->connectProven($request, $team, $app, $this->proven($app, [$installation], $token)[0]);
         }
 
         return match (count($installations)) {
             0 => $this->refuse($request, $team, "Your GitHub account cannot reach an installation of {$app->name}. Install it first, then connect."),
-            1 => $this->connectProven($request, $team, $app, $this->witnessed($installations, $token)[0]),
-            default => $this->offer($request, $team, $app, $this->witnessed($installations, $token)),
+            1 => $this->connectProven($request, $team, $app, $this->proven($app, $installations, $token)[0]),
+            default => $this->offer($request, $team, $app, $this->proven($app, $installations, $token)),
         };
     }
 
     /**
      * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}>  $installations
-     * @return list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}>
+     * @return list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, proven: bool, refusal: ?string}>
      */
-    private function witnessed(array $installations, #[\SensitiveParameter] string $token): array
+    private function proven(#[\SensitiveParameter] GitHubAppCredentials $app, array $installations, #[\SensitiveParameter] string $token): array
     {
-        $login = null;
-        $witnessed = [];
+        $signedIn = null;
+        $proven = [];
 
         foreach ($installations as $installation) {
-            $personal = $installation['account_type'] === 'User';
+            $account = $installation['account'];
 
-            if ($personal && $login === null) {
-                $login = $this->api->userLogin($token);
+            try {
+                if ($installation['account_type'] === 'User') {
+                    $signedIn ??= $this->api->userLogin($token);
+                    $refusal = $signedIn === $account ? null : "This installation belongs to {$account}. Sign in to GitHub as {$account} to connect it.";
+                } else {
+                    $refusal = $this->organizationRefusal($app, $installation, $token);
+                }
+            } catch (GitProviderException $e) {
+                $refusal = "Coresmith could not check the installation on {$account}. {$e->getMessage()}";
             }
 
-            $witnessed[] = [
-                ...$installation,
-                'user_login' => $personal ? $login : null,
-                'user_repositories' => $personal ? null : $this->api->userRepositoryCount($token, $installation['id']),
-            ];
+            $proven[] = [...$installation, 'proven' => $refusal === null, 'refusal' => $refusal];
         }
 
-        return $witnessed;
+        return $proven;
     }
 
     /**
-     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}  $installation
+     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}  $installation
+     */
+    private function organizationRefusal(#[\SensitiveParameter] GitHubAppCredentials $app, array $installation, #[\SensitiveParameter] string $token): ?string
+    {
+        $checking = $this->api->mintToken($app, $installation['id'], ['permissions' => ['metadata' => 'read']])['token'];
+
+        try {
+            $covered = $this->api->installationRepositoryIds($checking, self::PROOF_PAGES);
+        } finally {
+            $this->quietly(fn() => $this->api->revokeToken($checking));
+        }
+
+        $visible = $covered === null ? null : $this->api->userRepositoryIds($token, $installation['id'], self::PROOF_PAGES);
+
+        if ($covered === null || $visible === null) {
+            return self::TOO_MANY;
+        }
+
+        return array_diff($covered, $visible) === []
+            ? null
+            : "Your GitHub account can't see every repository this installation covers, so Coresmith won't link it. Ask an owner of {$installation['account']} to connect GitHub.";
+    }
+
+    /**
+     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, proven: bool, refusal: ?string}  $installation
      */
     private function connectProven(Request $request, Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): RedirectResponse
     {
-        $refusal = $this->refusal($app, $installation);
-
-        return $refusal === null ? $this->connected($request, $team, $app, $installation) : $this->refuse($request, $team, $refusal);
-    }
-
-    /**
-     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}  $installation
-     */
-    private function refusal(#[\SensitiveParameter] GitHubAppCredentials $app, array $installation): ?string
-    {
-        $account = $installation['account'];
-
-        if ($installation['account_type'] === 'User') {
-            return $installation['user_login'] !== null && $installation['user_login'] === $account
-                ? null
-                : "This installation belongs to {$account}. Sign in to GitHub as {$account} to connect it.";
-        }
-
-        return $installation['user_repositories'] !== null && $installation['user_repositories'] === $this->installationTotal($app, $installation['id'])
-            ? null
-            : "Your GitHub account can't see every repository this installation covers, so Coresmith won't link it. Ask an owner of {$account} to connect GitHub.";
-    }
-
-    private function installationTotal(#[\SensitiveParameter] GitHubAppCredentials $app, string $installationId): int
-    {
-        $token = $this->api->mintToken($app, $installationId, ['permissions' => ['metadata' => 'read']])['token'];
-
-        try {
-            return $this->api->installationRepositoryCount($token);
-        } finally {
-            $this->quietly(fn() => $this->api->revokeToken($token));
-        }
+        return $installation['proven'] === true
+            ? $this->connected($request, $team, $app, $installation)
+            : $this->refuse($request, $team, $installation['refusal'] ?? self::UNREACHABLE);
     }
 
     private function quietly(#[\SensitiveParameter] Closure $revoke): void
@@ -364,7 +360,7 @@ final class GitHubConnector
     }
 
     /**
-     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, user_login: ?string, user_repositories: ?int}>  $installations
+     * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, proven: bool, refusal: ?string}>  $installations
      */
     private function offer(Request $request, Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installations): RedirectResponse
     {
