@@ -12,17 +12,17 @@ use App\Jobs\DeployApplication;
 use App\Models\Deployment;
 use App\Models\WebhookEndpoint;
 use App\Services\Webhook\SignatureVerifier;
+use App\Services\Webhook\WebhookDeliveries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 final class WebhookController extends Controller
 {
-    public const REPLAY_WINDOW_HOURS = 24;
-
     private const DELIVERY_HEADERS = ['X-GitHub-Delivery', 'X-Gitlab-Event-UUID', 'X-Request-UUID', 'X-Coresmith-Delivery'];
 
     private const EVENT_HEADERS = ['X-GitHub-Event', 'X-Gitlab-Event', 'X-Event-Key', 'X-Coresmith-Event'];
+
+    public function __construct(private readonly WebhookDeliveries $deliveries) {}
 
     public function deploy(Request $request, WebhookEndpoint $webhook, SignatureVerifier $signatures): JsonResponse
     {
@@ -31,17 +31,14 @@ final class WebhookController extends Controller
         }
 
         if (!$signatures->verify($request, (string) $webhook->provider, (string) $webhook->secret)) {
-            activity()
-                ->performedOn($webhook)
-                ->withProperties(['provider' => $webhook->provider, 'ip' => $request->ip()])
-                ->log('webhook_signature_rejected');
+            $this->deliveries->signatureRejected($request, $webhook, ['provider' => $webhook->provider]);
 
             return $this->respond($webhook, $request, 401, 'Invalid signature.');
         }
 
-        $delivery = $this->header($request, self::DELIVERY_HEADERS);
+        $delivery = $this->deliveries->header($request, self::DELIVERY_HEADERS);
 
-        if ($delivery !== null && !Cache::add('webhook-delivery:' . $webhook->getKey() . ':' . $delivery, true, now()->addHours(self::REPLAY_WINDOW_HOURS))) {
+        if ($delivery !== null && !$this->deliveries->claim('webhook-delivery:' . $webhook->getKey(), $delivery)) {
             return $this->respond($webhook, $request, 409, 'This delivery was already processed.');
         }
 
@@ -71,28 +68,12 @@ final class WebhookController extends Controller
     private function respond(WebhookEndpoint $webhook, Request $request, int $status, string $message): JsonResponse
     {
         $webhook->forceFill([
-            'last_delivery_id' => $this->header($request, self::DELIVERY_HEADERS),
-            'last_event' => $this->header($request, self::EVENT_HEADERS, '/^[A-Za-z0-9:._ -]{1,64}$/'),
+            'last_delivery_id' => $this->deliveries->header($request, self::DELIVERY_HEADERS),
+            'last_event' => $this->deliveries->header($request, self::EVENT_HEADERS, '/^[A-Za-z0-9:._ -]{1,64}$/'),
             'last_status' => $status,
             'last_delivered_at' => now(),
         ])->save();
 
         return response()->json(['message' => $message], $status);
-    }
-
-    /**
-     * @param  list<string>  $names
-     */
-    private function header(Request $request, array $names, string $pattern = '/^[A-Za-z0-9:._-]{1,64}$/'): ?string
-    {
-        foreach ($names as $name) {
-            $value = $request->header($name);
-
-            if (is_string($value) && preg_match($pattern, $value) === 1) {
-                return $value;
-            }
-        }
-
-        return null;
     }
 }

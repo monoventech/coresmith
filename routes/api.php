@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ApplicationApiController;
 use App\Http\Controllers\Api\DeploymentApiController;
 use App\Http\Controllers\Api\ServerApiController;
 use App\Http\Controllers\CaddyAskController;
+use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,15 @@ Route::get('caddy/ask', CaddyAskController::class)
 Route::post('webhooks/{webhook}/deploy', [WebhookController::class, 'deploy'])
     ->middleware('throttle:30,1,webhook-deploy')
     ->name('webhooks.deploy');
+
+Route::post('webhooks/github', [GitHubWebhookController::class, 'environment'])
+    ->middleware('throttle:1200,1,github-webhook')
+    ->name('webhooks.github');
+
+Route::post('webhooks/github/{githubApp}', [GitHubWebhookController::class, 'registered'])
+    ->whereUlid('githubApp')
+    ->middleware('throttle:1200,1,github-webhook')
+    ->name('webhooks.github.app');
 
 Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1,api-v1'])->group(function () {
     Route::get('servers', [ServerApiController::class, 'index'])

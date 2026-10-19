@@ -10,6 +10,7 @@ namespace Database\Factories;
 
 use App\Models\GitHubApp;
 use App\Models\Team;
+use App\Services\Teams\TeamUrls;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -28,6 +29,7 @@ class GitHubAppFactory extends Factory
         $word = fake()->word();
 
         return [
+            'id' => strtolower((string) Str::ulid()),
             'team_id' => Team::factory(),
             'app_id' => (string) fake()->unique()->numberBetween(1000000, 9999999),
             'slug' => "coresmith-{$word}",
@@ -41,7 +43,7 @@ class GitHubAppFactory extends Factory
             'html_url' => "https://github.com/apps/coresmith-{$word}",
             'permissions' => ['contents' => 'read', 'metadata' => 'read', 'statuses' => 'write'],
             'events' => ['push'],
-            'hook_url' => null,
+            'hook_url' => fn(array $attributes): string => app(TeamUrls::class)->canonical(route('webhooks.github.app', $attributes['id'], false)),
         ];
     }
 

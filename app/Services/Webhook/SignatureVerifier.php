@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 
 final class SignatureVerifier
 {
-    public function verify(Request $request, string $provider, string $secret): bool
+    public function verify(Request $request, string $provider, #[\SensitiveParameter] string $secret): bool
     {
         $signature = $this->presentedSignature($request, $provider);
 
@@ -23,7 +23,7 @@ final class SignatureVerifier
         return hash_equals($this->expected($request->getContent(), $provider, $secret), $signature);
     }
 
-    public function expected(string $payload, string $provider, string $secret): string
+    public function expected(string $payload, string $provider, #[\SensitiveParameter] string $secret): string
     {
         $digest = hash_hmac('sha256', $payload, $secret);
 
