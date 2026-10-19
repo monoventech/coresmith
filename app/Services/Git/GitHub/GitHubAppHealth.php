@@ -66,7 +66,7 @@ final class GitHubAppHealth
 
     public function mode(#[\SensitiveParameter] GitHubAppCredentials $app): WebhookMode
     {
-        if (!$app->isEnv() && $app->hookUrl === null) {
+        if (!$app->isEnv() && !$this->hasWebhook($app)) {
             $verdict = $this->reachability->verdict();
 
             return $verdict->reachable
