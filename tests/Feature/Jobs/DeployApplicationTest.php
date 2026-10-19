@@ -732,7 +732,7 @@ test('the cached repository is pointed at the current url before it fetches', fu
     deploy($deployment, $transport);
 
     $commands = $transport->commands();
-    $setUrl = array_search("git --git-dir=/var/coresmith/apps/my-app/repo remote set-url origin 'https://github.com/monoven/example.git'", $commands, true);
+    $setUrl = array_search("git --git-dir=/var/coresmith/apps/my-app/repo remote set-url origin -- 'https://github.com/monoven/example.git'", $commands, true);
     $fetch = collect($commands)->search(fn(string $c) => str_contains($c, ' fetch '));
 
     expect($setUrl)->not->toBeFalse()

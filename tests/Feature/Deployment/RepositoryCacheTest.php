@@ -56,6 +56,21 @@ test('a force push replaces the cached branch', function () {
     File::deleteDirectory($dir);
 });
 
+test('a repository address that looks like an option is never run as one', function () {
+    $dir = repositoryCacheSandbox();
+    $marker = $dir . '/ran';
+    $cache = new RepositoryCache;
+
+    $clone = Process::path($dir)->run('git ' . $cache->cloneArguments('--upload-pack=touch ' . $marker, 'repo.git'));
+    Process::path($dir)->run($cache->setUrlCommand('repo.git', '--upload-pack=touch ' . $marker));
+    $fetch = Process::path($dir)->run('git ' . $cache->fetchArguments('repo.git'));
+
+    expect($clone->successful())->toBeFalse()
+        ->and($fetch->successful())->toBeFalse()
+        ->and(file_exists($marker))->toBeFalse();
+    File::deleteDirectory($dir);
+});
+
 test('a branch deleted upstream is pruned from the cache', function () {
     $dir = repositoryCacheSandbox();
     repositoryCacheRun('git branch release/2.0', $dir . '/origin');

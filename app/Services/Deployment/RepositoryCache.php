@@ -14,12 +14,12 @@ final class RepositoryCache
 
     public function cloneArguments(string $url, string $repo): string
     {
-        return 'clone --bare ' . escapeshellarg($url) . ' ' . $repo;
+        return 'clone --bare -- ' . escapeshellarg($url) . ' ' . $repo;
     }
 
     public function setUrlCommand(string $repo, string $url): string
     {
-        return 'git --git-dir=' . $repo . ' remote set-url origin ' . escapeshellarg($url);
+        return 'git --git-dir=' . $repo . ' remote set-url origin -- ' . escapeshellarg($url);
     }
 
     public function fetchArguments(string $repo): string

@@ -91,7 +91,7 @@ test('an app picked from github clones over https with a one-hour token for that
     $reserve = array_search("install -m 600 /dev/null '/etc/coresmith/deploy-keys/my-app.git-token'", $commands, true);
 
     expect($clone)->toContain('GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c ')
-        ->and($clone)->toContain("clone --bare 'https://github.com/monoventech/atlas.git'")
+        ->and($clone)->toContain("clone --bare -- 'https://github.com/monoventech/atlas.git'")
         ->and($reserve)->not->toBeFalse()
         ->and($transport->uploads()['/etc/coresmith/deploy-keys/my-app.git-token'])->toBe("username=x-access-token\npassword=ghs_1041207_eyJhbGciOiJSUzI1NiJ9.e30.c2lnbmF0dXJl\n")
         ->and(implode("\n", $commands))->not->toContain('ghs_')
