@@ -9,6 +9,7 @@ use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
 use App\Http\Controllers\Settings\SourceProviderController;
+use App\Http\Controllers\Settings\SourceRepositoryController;
 use App\Http\Controllers\Settings\TeamDomainController;
 use App\Http\Controllers\Settings\TeamUrlController;
 use App\Http\Controllers\TeamController;
@@ -62,4 +63,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:10,1,source-callback')
         ->name('source-providers.callback');
     Route::delete('settings/source-providers/{sourceProvider}', [SourceProviderController::class, 'destroy'])->name('source-providers.destroy');
+    Route::get('settings/source-providers/{sourceProvider}/repositories', [SourceRepositoryController::class, 'index'])
+        ->middleware('throttle:30,1,source-repositories')
+        ->name('source-providers.repositories');
+    Route::get('settings/source-providers/{sourceProvider}/repositories/{repositoryId}/branches', [SourceRepositoryController::class, 'branches'])
+        ->whereNumber('repositoryId')
+        ->middleware('throttle:30,1,source-branches')
+        ->name('source-providers.branches');
 });

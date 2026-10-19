@@ -12,6 +12,7 @@ use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\SafeName;
@@ -325,6 +326,69 @@ test('a partial update still validates the fields it does send', function () {
     $this->actingAs(appTeamMember($team, TeamRole::Admin))
         ->put(route('servers.applications.update', [$server, $application]), ['domain' => 'evil.com, other.com'])
         ->assertSessionHasErrors('domain');
+});
+
+function appLinkedToGitHub(Team $team, Server $server): Application
+{
+    return Application::factory()->for($team)->for($server)->create([
+        'repository_url' => 'https://github.com/monoventech/atlas.git',
+        'repository_provider' => 'github',
+        'source_provider_id' => SourceProvider::factory()->for($team)->githubApp()->create()->id,
+        'repository_id' => '70000001',
+    ]);
+}
+
+test('an app linked to github cannot have its repository address changed', function (array $sent) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = appLinkedToGitHub($team, $server);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), $sent)
+        ->assertSessionHasErrors(['repository_url' => "This app's repository comes from its GitHub connection, so it can't be changed here."]);
+
+    $fresh = $application->fresh();
+
+    expect($fresh->repository_url)->toBe('https://github.com/monoventech/atlas.git')
+        ->and($fresh->repository_id)->toBe('70000001')
+        ->and($fresh->source_provider_id)->toBe($application->source_provider_id);
+})->with([
+    'another repository' => [['repository_url' => 'https://github.com/someone/else.git']],
+    'an ssh address' => [['repository_url' => 'git@github.com:someone/else.git']],
+    'the same address' => [['repository_url' => 'https://github.com/monoventech/atlas.git']],
+    'a blank address' => [['repository_url' => '']],
+    'a null address' => [['repository_url' => null]],
+    'beside a change that is allowed' => [['repository_url' => 'https://github.com/someone/else.git', 'repository_branch' => 'release']],
+]);
+
+test('a linked app can still change everything but its repository address', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = appLinkedToGitHub($team, $server);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['repository_branch' => 'release', 'domain' => 'shop.example.com'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    $fresh = $application->fresh();
+
+    expect($fresh->repository_branch)->toBe('release')
+        ->and($fresh->domain)->toBe('shop.example.com')
+        ->and($fresh->repository_url)->toBe('https://github.com/monoventech/atlas.git')
+        ->and($fresh->repository_id)->toBe('70000001');
+});
+
+test('an app that is not linked can still change its repository address', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['repository_url' => 'https://github.com/monoven/old.git']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['repository_url' => 'https://github.com/monoven/new.git'])
+        ->assertSessionHasNoErrors();
+
+    expect($application->fresh()->repository_url)->toBe('https://github.com/monoven/new.git');
 });
 
 test('additional domains are validated one by one', function () {

@@ -12,6 +12,9 @@ use App\Casts\Vaulted;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
+use App\Enums\SourceProviderType;
+use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\Repository;
 use App\Services\SafeName;
 use Database\Factories\ApplicationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -110,6 +113,37 @@ class Application extends Model
     public function webhookEndpoints(): HasMany
     {
         return $this->hasMany(WebhookEndpoint::class);
+    }
+
+    public function sourceProvider(): BelongsTo
+    {
+        return $this->belongsTo(SourceProvider::class)->withTrashed();
+    }
+
+    public function githubConnection(): ?SourceProvider
+    {
+        if ($this->source_provider_id === null) {
+            return null;
+        }
+
+        $provider = $this->sourceProvider;
+
+        return $provider?->type === SourceProviderType::GitHubApp ? $provider : null;
+    }
+
+    public function usesGitHubToken(): bool
+    {
+        $connection = $this->githubConnection();
+
+        return $connection !== null
+            && !$connection->trashed()
+            && $connection->connected()
+            && app(GitHubApps::class)->for($connection) !== null;
+    }
+
+    public function repositoryFullName(): ?string
+    {
+        return Repository::slug((string) $this->repository_url);
     }
 
     /**

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Application;
 
 use App\Enums\ApplicationType;
+use App\Models\Application;
 use App\Services\SafeName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -25,7 +26,7 @@ final class UpdateApplicationRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             'type' => ['sometimes', 'required', Rule::enum(ApplicationType::class)],
             'js_runtime' => ['sometimes', 'nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['sometimes', 'nullable', 'string', 'max:64'],
@@ -39,6 +40,12 @@ final class UpdateApplicationRequest extends FormRequest
             'app_size' => ['sometimes', 'required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['sometimes', 'boolean'],
         ];
+
+        if ($this->linkedToGitHub()) {
+            $rules['repository_url'] = ['missing'];
+        }
+
+        return $rules;
     }
 
     /**
@@ -52,6 +59,14 @@ final class UpdateApplicationRequest extends FormRequest
             'directory.regex' => 'Use a folder inside the repository, like / or apps/web.',
             'web_directory.regex' => 'Use a folder inside the app, like /public or dist.',
             'additional_domains.*.regex' => 'Each additional domain must be a valid domain name.',
+            'repository_url.missing' => "This app's repository comes from its GitHub connection, so it can't be changed here.",
         ];
+    }
+
+    private function linkedToGitHub(): bool
+    {
+        $application = $this->route('application');
+
+        return $application instanceof Application && $application->source_provider_id !== null;
     }
 }

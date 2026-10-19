@@ -13,12 +13,14 @@ use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
+use App\Enums\SourceProviderType;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
 use App\Models\Application;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
@@ -56,6 +58,24 @@ final class ApplicationController extends Controller
                 'sources' => RuntimeDetector::SOURCES[$runtime],
                 'options' => $lifecycle->options($runtime),
             ]])->all(),
+            'github' => [
+                'connections' => SourceProvider::query()
+                    ->where('team_id', $server->team_id)
+                    ->where('type', SourceProviderType::GitHubApp->value)
+                    ->orderBy('name')
+                    ->orderBy('id')
+                    ->get()
+                    ->filter(fn(SourceProvider $provider): bool => $provider->connected())
+                    ->map(fn(SourceProvider $provider): array => [
+                        'id' => $provider->id,
+                        'account' => $provider->name,
+                        'repositories_href' => route('source-providers.repositories', $provider),
+                        'manage_url' => $provider->manageUrl(),
+                    ])
+                    ->values()
+                    ->all(),
+                'settings_href' => route('source-providers.index'),
+            ],
         ]);
     }
 
@@ -70,8 +90,17 @@ final class ApplicationController extends Controller
         $runtime = $request->runtime();
         $line = $request->runtimeLine();
 
+        $connection = $request->githubConnection();
+        $repository = $request->githubRepository();
+
         $application = Application::create([
-            ...$request->safe()->except(['runtime_version', 'acknowledge_eol']),
+            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id']),
+            ...($connection === null || $repository === null ? [] : [
+                'repository_url' => 'https://github.com/' . $repository['full_name'] . '.git',
+                'repository_provider' => 'github',
+                'source_provider_id' => $connection->getKey(),
+                'repository_id' => $repository['id'],
+            ]),
             'runtime_pins' => $line === null ? null : [$runtime => $line],
             'server_id' => $server->id,
             'team_id' => $server->team_id,
