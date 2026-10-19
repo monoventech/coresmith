@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Services\SSH\Phpseclib3Transport;
+use phpseclib3\Crypt\EC;
+use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
 
 test('the exit status left by the previous command is cleared before the next one', function () {
@@ -15,6 +17,49 @@ test('the exit status left by the previous command is cleared before the next on
 
     expect($ssh->getExitStatus())->toBeFalse();
 });
+
+function phpseclibTransportUploading(bool $accepted): Phpseclib3Transport
+{
+    $transport = new Phpseclib3Transport;
+    $sftp = new class('192.0.2.1') extends SFTP
+    {
+        public bool $accepted = true;
+
+        public function put($remote_file, $data, $mode = self::SOURCE_STRING, $start = -1, $local_start = -1, $progressCallback = null)
+        {
+            return $this->accepted;
+        }
+
+        public function getLastSFTPError()
+        {
+            return $this->accepted ? '' : 'SSH_FX_PERMISSION_DENIED: Permission denied';
+        }
+    };
+    $sftp->accepted = $accepted;
+
+    (new ReflectionProperty(Phpseclib3Transport::class, 'key'))->setValue($transport, EC::createKey('Ed25519'));
+    (new ReflectionProperty(Phpseclib3Transport::class, 'sftp'))->setValue($transport, $sftp);
+
+    return $transport;
+}
+
+test('an upload the server refuses fails with the path and the reason, never the content', function () {
+    $thrown = null;
+
+    try {
+        phpseclibTransportUploading(accepted: false)->uploadContent('KEEP-THIS-SECRET', '/etc/coresmith/env/shop.env');
+    } catch (RuntimeException $e) {
+        $thrown = $e;
+    }
+
+    expect($thrown)->not->toBeNull()
+        ->and($thrown->getMessage())->toBe('Could not upload [/etc/coresmith/env/shop.env]: SSH_FX_PERMISSION_DENIED: Permission denied')
+        ->and($thrown->getMessage())->not->toContain('KEEP-THIS-SECRET');
+});
+
+test('an upload the server accepts returns quietly', function () {
+    phpseclibTransportUploading(accepted: true)->uploadContent('content', '/tmp/coresmith-upload.Fake000001');
+})->throwsNoExceptions();
 
 test('a command that never reported an exit status counts as failed', function () {
     $transport = new Phpseclib3Transport;

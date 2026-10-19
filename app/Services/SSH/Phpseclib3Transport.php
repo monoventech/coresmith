@@ -14,6 +14,7 @@ use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
 use ReflectionProperty;
+use RuntimeException;
 
 final class Phpseclib3Transport implements SSHTransport
 {
@@ -114,7 +115,13 @@ final class Phpseclib3Transport implements SSHTransport
 
     public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath): void
     {
-        $this->sftp()->put($remotePath, $content);
+        $sftp = $this->sftp();
+
+        if ($sftp->put($remotePath, $content) !== true) {
+            $reason = (string) $sftp->getLastSFTPError();
+
+            throw new RuntimeException("Could not upload [{$remotePath}]: " . ($reason !== '' ? $reason : 'the server did not accept the file.'));
+        }
     }
 
     public function disconnect(): void
