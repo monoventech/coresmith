@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Notifications\ApplicationToggledNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
+use App\Services\AutoDeploy\AutoDeployStatus;
 use InvalidArgumentException;
 
 final class SmartToggles
@@ -28,6 +29,8 @@ final class SmartToggles
     public const SCHEDULER = 'scheduler';
 
     public const SIDEKIQ = 'sidekiq';
+
+    public const AUTO_DEPLOY = 'auto_deploy';
 
     public const SCHEDULE_COMMAND = 'php artisan schedule:run';
 
@@ -47,6 +50,7 @@ final class SmartToggles
             $framework === 'laravel' ? self::SCHEDULER : null,
             $application->type === ApplicationType::Ruby && $framework === 'rails' ? self::SIDEKIQ : null,
             self::MAINTENANCE,
+            filled($application->repository_url) ? self::AUTO_DEPLOY : null,
         ]));
     }
 
@@ -86,6 +90,15 @@ final class SmartToggles
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
+            self::AUTO_DEPLOY => [
+                'key' => $key,
+                'label' => 'Auto deploy',
+                'description' => app(AutoDeployStatus::class)->describe($application),
+                'busy_on' => 'Turning on auto deploy…',
+                'busy_off' => 'Turning off auto deploy…',
+                'on' => $this->isOn($application, $key),
+                'disabled' => false,
+            ],
             default => [
                 'key' => $key,
                 'label' => 'Maintenance page',
@@ -105,6 +118,7 @@ final class SmartToggles
             self::QUEUE => $this->hasProcess($application, 'queue'),
             self::SIDEKIQ => $this->hasProcess($application, 'sidekiq'),
             self::SCHEDULER => collect((array) $application->cron_jobs)->contains(fn(mixed $job): bool => is_array($job) && ($job['command'] ?? null) === self::SCHEDULE_COMMAND),
+            self::AUTO_DEPLOY => (bool) $application->quick_deploy,
             default => false,
         };
     }
@@ -115,6 +129,7 @@ final class SmartToggles
             self::QUEUE => 'Queue worker',
             self::SCHEDULER => 'Scheduler',
             self::SIDEKIQ => 'Sidekiq',
+            self::AUTO_DEPLOY => 'Auto deploy',
             default => 'Maintenance page',
         };
     }
@@ -130,6 +145,7 @@ final class SmartToggles
             self::QUEUE => $this->process($application, 'queue', self::QUEUE_COMMAND, $on),
             self::SIDEKIQ => $this->process($application, 'sidekiq', self::SIDEKIQ_COMMAND, $on),
             self::SCHEDULER => $this->scheduler($application, $on),
+            self::AUTO_DEPLOY => $this->autoDeploy($application, $on),
         };
 
         activity()
@@ -181,6 +197,11 @@ final class SmartToggles
         $application->forceFill(['cron_jobs' => $jobs === [] ? null : $jobs])->save();
 
         SyncApplicationProcesses::dispatch($application, []);
+    }
+
+    private function autoDeploy(Application $application, bool $on): void
+    {
+        $application->forceFill(['quick_deploy' => $on, 'polled_at' => null, 'poll_error' => null])->save();
     }
 
     private function hasProcess(Application $application, string $name): bool

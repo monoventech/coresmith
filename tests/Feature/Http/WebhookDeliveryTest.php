@@ -184,10 +184,10 @@ test('ignored and replayed deliveries are recorded too', function () {
     Queue::fake();
     $endpoint = deliveryEndpoint();
 
-    deliveryPost($endpoint, ['X-GitHub-Delivery' => 'ping-1', 'X-GitHub-Event' => 'ping'], ['zen' => 'Keep it logically awesome.'])->assertStatus(202);
+    deliveryPost($endpoint, ['X-GitHub-Delivery' => 'ping-1', 'X-GitHub-Event' => 'ping'], ['zen' => 'Keep it logically awesome.'])->assertOk();
 
     expect($endpoint->fresh()->only(['last_delivery_id', 'last_event', 'last_status']))
-        ->toBe(['last_delivery_id' => 'ping-1', 'last_event' => 'ping', 'last_status' => 202]);
+        ->toBe(['last_delivery_id' => 'ping-1', 'last_event' => 'ping', 'last_status' => 200]);
 
     deliveryPost($endpoint, ['X-GitHub-Delivery' => 'branch-1', 'X-GitHub-Event' => 'push'], ['ref' => 'refs/heads/other'])->assertStatus(202);
 

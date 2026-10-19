@@ -82,7 +82,7 @@ test('a toggle reads as off when nothing matching is configured', function () {
 test('the description of each toggle names what it changes on the server', function () {
     $described = collect(togglesService()->describe(togglesApp(['slug' => 'shop'])))->keyBy('key');
 
-    expect($described->keys()->all())->toBe(['queue_worker', 'scheduler', 'maintenance_mode'])
+    expect($described->keys()->all())->toBe(['queue_worker', 'scheduler', 'maintenance_mode', 'auto_deploy'])
         ->and($described['queue_worker'])->toMatchArray(['label' => 'Queue worker', 'on' => false, 'disabled' => false])
         ->and($described['queue_worker']['description'])->toContain('coresmith-app-shop-queue')
         ->and($described['scheduler']['label'])->toBe('Scheduler')

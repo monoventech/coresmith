@@ -23,21 +23,18 @@ function endpointFor(array $applicationAttributes = [], array $endpointAttribute
     ], $endpointAttributes));
 }
 
-function signedPost(WebhookEndpoint $endpoint, array $payload, ?string $signature = null, string $header = 'X-Hub-Signature-256')
+function signedPost(WebhookEndpoint $endpoint, array $payload, ?string $signature = null, string $header = 'X-Hub-Signature-256', array $headers = [])
 {
     $body = json_encode($payload, JSON_THROW_ON_ERROR);
+    $server = ['CONTENT_TYPE' => 'application/json'];
 
     $signature ??= (new SignatureVerifier)->expected($body, (string) $endpoint->provider, (string) $endpoint->secret);
 
-    return test()->call(
-        'POST',
-        route('webhooks.deploy', $endpoint),
-        [],
-        [],
-        [],
-        ['CONTENT_TYPE' => 'application/json', 'HTTP_' . str_replace('-', '_', strtoupper($header)) => $signature],
-        $body,
-    );
+    foreach ([$header => $signature, ...$headers] as $name => $value) {
+        $server['HTTP_' . str_replace('-', '_', strtoupper($name))] = $value;
+    }
+
+    return test()->call('POST', route('webhooks.deploy', $endpoint), [], [], [], $server, $body);
 }
 
 test('a correctly signed push queues a deployment', function () {
@@ -119,20 +116,99 @@ test('a disabled webhook does not reveal that it exists', function () {
     Queue::assertNothingPushed();
 });
 
-test('the commit hash and message are recorded from the payload', function () {
+test('the message is recorded from the payload and the commit hash is left for git to record', function () {
     Queue::fake();
     $endpoint = endpointFor();
 
     signedPost($endpoint, [
         'ref' => 'refs/heads/main',
-        'after' => 'c0ffee1234',
+        'after' => str_repeat('c', 40),
         'head_commit' => ['message' => 'Ship the thing'],
     ])->assertStatus(202);
 
     $deployment = Deployment::first();
 
-    expect($deployment->commit_hash)->toBe('c0ffee1234')
+    expect($deployment->commit_hash)->toBeNull()
         ->and($deployment->commit_message)->toBe('Ship the thing');
+});
+
+test('a push records the commit it asked for and that a push triggered it', function (string $provider, string $header, array $payload, ?string $requested) {
+    Queue::fake();
+    $endpoint = endpointFor([], ['provider' => $provider]);
+
+    signedPost($endpoint, $payload, null, $header)->assertStatus(202);
+
+    expect(Deployment::sole()->only(['trigger', 'requested_commit', 'commit_hash']))->toBe([
+        'trigger' => 'push',
+        'requested_commit' => $requested,
+        'commit_hash' => null,
+    ]);
+})->with([
+    'github' => ['github', 'X-Hub-Signature-256', ['ref' => 'refs/heads/main', 'after' => str_repeat('c', 40)], str_repeat('c', 40)],
+    'gitlab' => ['gitlab', 'X-Gitlab-Token', ['ref' => 'refs/heads/main', 'checkout_sha' => str_repeat('d', 40)], str_repeat('d', 40)],
+    'a head that is not a full commit' => ['github', 'X-Hub-Signature-256', ['ref' => 'refs/heads/main', 'after' => 'c0ffee1234'], null],
+    'a head in capitals' => ['github', 'X-Hub-Signature-256', ['ref' => 'refs/heads/main', 'after' => str_repeat('C', 40)], null],
+]);
+
+test('a long commit message keeps its first line', function (string $message, string $stored) {
+    Queue::fake();
+
+    signedPost(endpointFor(), ['ref' => 'refs/heads/main', 'head_commit' => ['message' => $message]])->assertStatus(202);
+
+    expect(mb_strlen($message))->toBe(600)
+        ->and(Deployment::sole()->commit_message)->toBe($stored);
+})->with([
+    'a short subject' => ['Ship the release notes page' . "\n" . str_repeat('x', 572), 'Ship the release notes page'],
+    'a subject longer than the column' => [str_repeat('a', 300) . "\n" . str_repeat('b', 299), str_repeat('a', 250)],
+]);
+
+test('a github ping is answered without deploying', function () {
+    Queue::fake();
+    $endpoint = endpointFor();
+
+    signedPost($endpoint, ['zen' => 'Keep it logically awesome.'], headers: ['X-GitHub-Event' => 'ping', 'X-GitHub-Delivery' => 'ping-1'])
+        ->assertOk()
+        ->assertExactJson(['message' => 'pong']);
+
+    expect(Deployment::count())->toBe(0)
+        ->and($endpoint->fresh()->only(['last_delivery_id', 'last_event', 'last_status']))->toBe(['last_delivery_id' => 'ping-1', 'last_event' => 'ping', 'last_status' => 200]);
+
+    Queue::assertNothingPushed();
+});
+
+test('a github event that is not a push is acknowledged and ignored', function () {
+    Queue::fake();
+    $endpoint = endpointFor();
+
+    signedPost($endpoint, ['ref' => 'refs/heads/main', 'action' => 'opened'], headers: ['X-GitHub-Event' => 'issues'])
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Event ignored.']);
+
+    expect(Deployment::count())->toBe(0)
+        ->and($endpoint->fresh()->last_status)->toBe(202);
+
+    Queue::assertNothingPushed();
+});
+
+test('a github push event still deploys', function () {
+    Queue::fake();
+
+    signedPost(endpointFor(), ['ref' => 'refs/heads/main', 'after' => str_repeat('c', 40)], headers: ['X-GitHub-Event' => 'push'])
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Deployment queued.']);
+
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('only github webhooks read github event names', function () {
+    Queue::fake();
+    $endpoint = endpointFor([], ['provider' => 'gitlab']);
+
+    signedPost($endpoint, ['ref' => 'refs/heads/main'], null, 'X-Gitlab-Token', ['X-GitHub-Event' => 'issues'])
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Deployment queued.']);
+
+    Queue::assertPushed(DeployApplication::class, 1);
 });
 
 test('gitlab uses its own header and a bare digest', function () {

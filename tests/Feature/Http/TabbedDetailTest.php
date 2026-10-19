@@ -104,7 +104,7 @@ test('the application page carries the toggles and what the application runs', f
             ->where('application.stopped', true)
             ->where('application.maintenance', true)
             ->has('application.processes', 1)
-            ->has('toggles', 3)
+            ->has('toggles', 4)
             ->where('toggles.0.key', 'queue_worker')
             ->where('toggles.0.on', true)
             ->where('toggles.2.key', 'maintenance_mode')

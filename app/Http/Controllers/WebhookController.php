@@ -15,6 +15,7 @@ use App\Services\Webhook\SignatureVerifier;
 use App\Services\Webhook\WebhookDeliveries;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 final class WebhookController extends Controller
 {
@@ -48,6 +49,16 @@ final class WebhookController extends Controller
             return $this->respond($webhook, $request, 404, 'This webhook has no application.');
         }
 
+        $event = $webhook->provider === 'github' ? $request->header('X-GitHub-Event') : null;
+
+        if ($event === 'ping') {
+            return $this->respond($webhook, $request, 200, 'pong');
+        }
+
+        if ($event !== null && $event !== 'push') {
+            return $this->respond($webhook, $request, 202, 'Event ignored.');
+        }
+
         $branch = $signatures->branchFromPayload($request);
 
         if ($branch !== null && $branch !== $application->repository_branch) {
@@ -56,13 +67,26 @@ final class WebhookController extends Controller
 
         $deployment = Deployment::create([
             'application_id' => $application->id,
-            'commit_hash' => $request->input('after') ?? $request->input('checkout_sha'),
-            'commit_message' => $request->input('head_commit.message'),
+            'trigger' => 'push',
+            'requested_commit' => $this->requestedCommit($request),
+            'commit_message' => $this->subject($request->input('head_commit.message')),
         ]);
 
         DeployApplication::dispatch($deployment, now()->format('Ymd-His'));
 
         return $this->respond($webhook, $request, 202, 'Deployment queued.');
+    }
+
+    private function requestedCommit(Request $request): ?string
+    {
+        $head = $request->input('after') ?? $request->input('checkout_sha');
+
+        return is_string($head) && preg_match('/^[0-9a-f]{40}$/D', $head) === 1 ? $head : null;
+    }
+
+    private function subject(mixed $message): ?string
+    {
+        return is_string($message) ? Str::limit(trim(Str::before($message, "\n")), 250, '') : null;
     }
 
     private function respond(WebhookEndpoint $webhook, Request $request, int $status, string $message): JsonResponse

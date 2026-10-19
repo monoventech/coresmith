@@ -23,6 +23,7 @@ use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\SourceProvider;
+use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
@@ -56,6 +57,7 @@ use App\Services\SSH\SSHConnectionManager;
 use Closure;
 use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -156,6 +158,23 @@ final class DeployApplication implements ShouldQueue
             }
 
             $connections->disconnect($application->server);
+
+            if (!$this->handedOff) {
+                $this->followUp();
+            }
+        }
+    }
+
+    private function followUp(): void
+    {
+        try {
+            $deployment = $this->deployment->fresh();
+
+            if ($deployment !== null) {
+                app(AutoDeploy::class)->afterDeployment($deployment);
+            }
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 
@@ -543,7 +562,19 @@ final class DeployApplication implements ShouldQueue
             'tag_signed' => $signed,
         ])->save();
 
+        $this->recordBranchHead($hash);
+
         $this->appendLog('commit ' . substr($hash, 0, 7) . ' by ' . $author . ($tag !== null ? ' · tag ' . $tag : ''));
+    }
+
+    private function recordBranchHead(string $hash): void
+    {
+        Application::query()
+            ->whereKey($this->deployment->application_id)
+            ->where(fn(Builder $head): Builder => $head
+                ->whereNull('repository_head_at')
+                ->orWhere('repository_head_at', '<', $this->deployment->started_at))
+            ->update(['repository_head' => $hash, 'repository_head_at' => now()]);
     }
 
     private function installDependencies(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void
@@ -817,9 +848,11 @@ final class DeployApplication implements ShouldQueue
 
     private function trigger(): string
     {
-        $user = $this->deployment->triggeredBy;
-
-        return $user === null ? 'push' : $user->name;
+        return match ($this->deployment->trigger) {
+            'poll' => 'polling',
+            'push' => 'push',
+            default => $this->deployment->triggeredBy?->name ?? 'push',
+        };
     }
 
     private function appendLog(string $output): void

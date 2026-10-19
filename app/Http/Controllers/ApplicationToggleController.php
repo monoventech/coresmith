@@ -39,6 +39,8 @@ final class ApplicationToggleController extends Controller
         $message = match (true) {
             $toggle === SmartToggles::MAINTENANCE && $on => 'Maintenance page is on. Visitors see it now, your processes keep running.',
             $toggle === SmartToggles::MAINTENANCE => 'Maintenance page is off. Traffic reaches the app again.',
+            $toggle === SmartToggles::AUTO_DEPLOY && $on => "Auto deploy is on, {$application->repository_branch} deploys whenever it changes.",
+            $toggle === SmartToggles::AUTO_DEPLOY => 'Auto deploy is off, deploy from this page when you are ready.',
             $on => "{$label} is starting on {$server->name}, no deployment needed.",
             default => "{$label} stopped. Nothing else was touched.",
         };
