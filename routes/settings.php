@@ -62,11 +62,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/source-providers/{type}/callback', [SourceProviderConnectController::class, 'callback'])
         ->middleware('throttle:10,1,source-callback')
         ->name('source-providers.callback');
-    Route::delete('settings/source-providers/{sourceProvider}', [SourceProviderController::class, 'destroy'])->name('source-providers.destroy');
+    Route::post('settings/source-providers/github_app/installations', [SourceProviderConnectController::class, 'chooseInstallation'])
+        ->middleware('throttle:10,1,github-choose')
+        ->name('github.installations.store');
+    Route::delete('settings/source-providers/{sourceProvider}', [SourceProviderController::class, 'destroy'])
+        ->whereUlid('sourceProvider')
+        ->name('source-providers.destroy');
     Route::get('settings/source-providers/{sourceProvider}/repositories', [SourceRepositoryController::class, 'index'])
+        ->whereUlid('sourceProvider')
         ->middleware('throttle:30,1,source-repositories')
         ->name('source-providers.repositories');
     Route::get('settings/source-providers/{sourceProvider}/repositories/{repositoryId}/branches', [SourceRepositoryController::class, 'branches'])
+        ->whereUlid('sourceProvider')
         ->whereNumber('repositoryId')
         ->middleware('throttle:30,1,source-branches')
         ->name('source-providers.branches');

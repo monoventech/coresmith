@@ -101,15 +101,11 @@ final class SourceProviderController extends Controller
             }
         }
 
-        $sourceProvider->forceFill([
-            'access_token' => null,
-            'refresh_token' => null,
-            'token_expires_at' => null,
-        ])->save();
+        $sourceProvider->disconnect();
 
-        $sourceProvider->delete();
-
-        return back()->with('success', 'Disconnected. Apps keep deploying with their own deploy keys.');
+        return back()->with('success', $sourceProvider->type === SourceProviderType::GitHubApp
+            ? 'Disconnected. To remove the app\'s access on GitHub too, uninstall it there.'
+            : 'Disconnected. Apps keep deploying with their own deploy keys.');
     }
 
     private function isConfigured(SourceProviderType $type, Team $team): bool

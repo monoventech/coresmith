@@ -324,7 +324,8 @@ test('both endpoints sit behind sign-in and named rate limits', function () {
         ->and(Route::getRoutes()->getByName('source-providers.branches')->gatherMiddleware())->toContain('throttle:30,1,source-branches')
         ->and(Route::getRoutes()->getByName('source-providers.repositories')->uri())->toBe('settings/source-providers/{sourceProvider}/repositories')
         ->and(Route::getRoutes()->getByName('source-providers.branches')->uri())->toBe('settings/source-providers/{sourceProvider}/repositories/{repositoryId}/branches')
-        ->and(Route::getRoutes()->getByName('source-providers.branches')->wheres)->toBe(['repositoryId' => '[0-9]+']);
+        ->and(Route::getRoutes()->getByName('source-providers.repositories')->wheres)->toBe(['sourceProvider' => '[0-7][0-9a-hjkmnp-tv-zA-HJKMNP-TV-Z]{25}'])
+        ->and(Route::getRoutes()->getByName('source-providers.branches')->wheres)->toBe(['sourceProvider' => '[0-7][0-9a-hjkmnp-tv-zA-HJKMNP-TV-Z]{25}', 'repositoryId' => '[0-9]+']);
 });
 
 test('the rate limit stops a person who hammers an endpoint and leaves the other bucket alone', function () {

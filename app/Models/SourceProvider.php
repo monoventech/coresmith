@@ -44,13 +44,18 @@ class SourceProvider extends Model
         };
     }
 
-    public function markUninstalled(): void
+    public function disconnect(): void
     {
-        $this->forceFill(['access_token' => null, 'token_expires_at' => null])->save();
-
-        activity()->performedOn($this)->log('github_installation_removed');
+        $this->forceFill(['access_token' => null, 'refresh_token' => null, 'token_expires_at' => null])->save();
 
         $this->delete();
+    }
+
+    public function markUninstalled(): void
+    {
+        $this->disconnect();
+
+        activity()->performedOn($this)->log('github_installation_removed');
     }
 
     public function markSuspended(?CarbonInterface $at): void

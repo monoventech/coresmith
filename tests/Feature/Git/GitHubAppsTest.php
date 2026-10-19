@@ -426,7 +426,7 @@ test('manage url opens the installation on the account that installed it', funct
 });
 
 test('an uninstalled installation forgets its token and leaves', function () {
-    $provider = SourceProvider::factory()->create(['access_token' => 'ghs_to_forget']);
+    $provider = SourceProvider::factory()->create(['access_token' => 'ghs_to_forget', 'refresh_token' => 'rt_to_forget']);
 
     $provider->markUninstalled();
 
@@ -434,13 +434,15 @@ test('an uninstalled installation forgets its token and leaves', function () {
     $activity = Activity::query()->where('description', 'github_installation_removed')->sole();
 
     expect($row->access_token)->toBeNull()
+        ->and($row->refresh_token)->toBeNull()
         ->and($row->token_expires_at)->toBeNull()
         ->and($row->deleted_at)->not->toBeNull()
         ->and(SourceProvider::find($provider->id))->toBeNull()
         ->and(SourceProvider::withTrashed()->find($provider->id)->access_token)->toBeNull()
         ->and($activity->subject_id)->toBe($provider->id)
         ->and($activity->subject_type)->toBe($provider->getMorphClass())
-        ->and(json_encode($activity->properties))->not->toContain('ghs_to_forget');
+        ->and(json_encode($activity->properties))->not->toContain('ghs_to_forget')
+        ->and(json_encode($activity->properties))->not->toContain('rt_to_forget');
 });
 
 test('the link migration reverses cleanly and puts the dropped columns back as nullable', function () {

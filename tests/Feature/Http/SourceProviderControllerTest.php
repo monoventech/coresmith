@@ -175,7 +175,8 @@ test('disconnecting revokes the token at the provider and erases it locally', fu
 
     $this->actingAs(providerUser($team, TeamRole::Owner))
         ->delete(route('source-providers.destroy', $source))
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Disconnected. Apps keep deploying with their own deploy keys.');
 
     $trashed = SourceProvider::withTrashed()->find($source->getKey());
 
@@ -190,16 +191,18 @@ test('disconnecting revokes the token at the provider and erases it locally', fu
 test('disconnecting a github connection revokes its live installation token and erases it locally', function () {
     Http::fake(['api.github.com/installation/token' => Http::response(null, 204)]);
     $team = Team::factory()->create();
-    $source = SourceProvider::factory()->for($team)->githubApp()->create(['access_token' => 'ghs_to_revoke', 'token_expires_at' => now()->addHour()]);
+    $source = SourceProvider::factory()->for($team)->githubApp()->create(['access_token' => 'ghs_to_revoke', 'refresh_token' => 'rt_left_over', 'token_expires_at' => now()->addHour()]);
 
     $this->actingAs(providerUser($team, TeamRole::Owner))
         ->delete(route('source-providers.destroy', $source))
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Disconnected. To remove the app\'s access on GitHub too, uninstall it there.');
 
     $trashed = SourceProvider::withTrashed()->find($source->getKey());
 
     expect($trashed->trashed())->toBeTrue()
         ->and($trashed->access_token)->toBeNull()
+        ->and($trashed->refresh_token)->toBeNull()
         ->and($trashed->token_expires_at)->toBeNull();
 
     Http::assertSentCount(1);
@@ -220,7 +223,8 @@ test('a github connection with nothing to revoke is still disconnected without a
 
     $this->actingAs(providerUser($team, TeamRole::Owner))
         ->delete(route('source-providers.destroy', $source))
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Disconnected. To remove the app\'s access on GitHub too, uninstall it there.');
 
     $trashed = SourceProvider::withTrashed()->find($source->getKey());
 

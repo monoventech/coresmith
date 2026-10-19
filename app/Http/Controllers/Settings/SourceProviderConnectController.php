@@ -11,8 +11,11 @@ namespace App\Http\Controllers\Settings;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Controller;
+use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
+use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\GitHub\GitHubConnector;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Http\RedirectResponse;
@@ -24,12 +27,24 @@ final class SourceProviderConnectController extends Controller
 {
     public const STATE_KEY = 'source_provider_state';
 
+    public const UNVERIFIED = 'That connection attempt could not be verified. Start again from this page.';
+
+    private const GITHUB_ELSEWHERE = 'GitHub connects through its app installation, not this flow.';
+
+    public function __construct(private readonly GitHubConnector $github) {}
+
     public function redirect(Request $request, string $type, TeamContext $context, TeamUrls $urls): RedirectResponse
     {
         $provider = $this->type($type);
 
         if ($context->viaHost()) {
-            return redirect()->away($urls->canonical(route('source-providers.connect', $provider->value, false)));
+            $query = $request->getQueryString();
+
+            return redirect()->away($urls->canonical(route('source-providers.connect', $provider->value, false)) . ($query === null ? '' : '?' . $query));
+        }
+
+        if ($provider === SourceProviderType::GitHubApp) {
+            return $this->startGitHub($request, $context);
         }
 
         $team = $this->team($request);
@@ -46,11 +61,16 @@ final class SourceProviderConnectController extends Controller
     public function callback(Request $request, string $type): RedirectResponse
     {
         $provider = $this->type($type);
+
+        if ($provider === SourceProviderType::GitHubApp) {
+            return $this->github->finish($request);
+        }
+
         $expected = (array) $request->session()->pull(self::STATE_KEY, []);
 
         if (($expected['state'] ?? null) === null || !hash_equals((string) $expected['state'], (string) $request->query('state'))) {
             return redirect()->route('source-providers.index')
-                ->with('error', 'That connection attempt could not be verified. Start again from this page.');
+                ->with('error', self::UNVERIFIED);
         }
 
         if (($expected['type'] ?? null) !== $provider->value) {
@@ -76,6 +96,42 @@ final class SourceProviderConnectController extends Controller
 
         return redirect()->route('source-providers.index')
             ->with('success', $provider->label() . ' connected. Cloning still uses each application\'s own deploy key.');
+    }
+
+    public function chooseInstallation(Request $request): RedirectResponse
+    {
+        $installation = $request->input('installation_id');
+
+        return $this->github->choose($request, is_int($installation) || is_string($installation) ? (string) $installation : '');
+    }
+
+    private function startGitHub(Request $request, TeamContext $context): RedirectResponse
+    {
+        $key = $request->query('app');
+
+        abort_unless($key === null || is_string($key), 404);
+
+        $team = $key === null || $key === GitHubApps::ENV_KEY ? $this->currentTeam() : $this->teamOfApp($request, $context, $key);
+
+        abort_if($team === null, 404);
+        $this->authorize('update', $team);
+
+        $app = $this->github->appFor($team, $key);
+
+        abort_if($app === null, 404);
+
+        return redirect()->away($this->github->start($team, $app, $request->query('mode') === 'link'));
+    }
+
+    private function teamOfApp(Request $request, TeamContext $context, string $key): ?Team
+    {
+        $team = GitHubApp::query()->find($key)?->team;
+
+        if (!$team instanceof Team || !$request->user()->belongsToTeam($team)) {
+            return null;
+        }
+
+        return $context->explicit() && $context->team()?->isNot($team) ? null : $team;
     }
 
     private function store(SourceProviderType $provider, Team $team, string $code, ?string $installationId): void
@@ -122,10 +178,9 @@ final class SourceProviderConnectController extends Controller
     private function accountName(SourceProviderType $provider, string $token): string
     {
         $response = match ($provider) {
-            SourceProviderType::GitHubApp => Http::withToken($token)->get('https://api.github.com/user'),
             SourceProviderType::GitLab => Http::withToken($token)->get('https://gitlab.com/api/v4/user'),
             SourceProviderType::Bitbucket => Http::withToken($token)->get('https://api.bitbucket.org/2.0/user'),
-            SourceProviderType::Custom => null,
+            SourceProviderType::GitHubApp, SourceProviderType::Custom => null,
         };
 
         if ($response === null || $response->failed()) {
@@ -148,8 +203,6 @@ final class SourceProviderConnectController extends Controller
         $redirect = $this->callbackUrl($provider);
 
         return match ($provider) {
-            SourceProviderType::GitHubApp => 'https://github.com/apps/' . rawurlencode((string) config('services.github.app_slug', 'coresmith')) . '/installations/new?'
-                . http_build_query(['state' => $state]),
             SourceProviderType::GitLab => 'https://gitlab.com/oauth/authorize?' . http_build_query([
                 'client_id' => (string) config('services.gitlab.client_id'),
                 'redirect_uri' => $redirect,
@@ -162,6 +215,7 @@ final class SourceProviderConnectController extends Controller
                 'response_type' => 'code',
                 'state' => $state,
             ]),
+            SourceProviderType::GitHubApp => throw new GitProviderException(self::GITHUB_ELSEWHERE),
             SourceProviderType::Custom => throw new GitProviderException('A custom provider is connected with an SSH deploy key, not OAuth.'),
         };
     }
@@ -174,9 +228,9 @@ final class SourceProviderConnectController extends Controller
     private function tokenUrl(SourceProviderType $provider): string
     {
         return match ($provider) {
-            SourceProviderType::GitHubApp => 'https://github.com/login/oauth/access_token',
             SourceProviderType::GitLab => 'https://gitlab.com/oauth/token',
             SourceProviderType::Bitbucket => 'https://bitbucket.org/site/oauth2/access_token',
+            SourceProviderType::GitHubApp => throw new GitProviderException(self::GITHUB_ELSEWHERE),
             SourceProviderType::Custom => throw new GitProviderException('A custom provider has no token endpoint.'),
         };
     }
@@ -184,9 +238,9 @@ final class SourceProviderConnectController extends Controller
     private function configKey(SourceProviderType $provider): string
     {
         return match ($provider) {
-            SourceProviderType::GitHubApp => 'github',
             SourceProviderType::GitLab => 'gitlab',
             SourceProviderType::Bitbucket => 'bitbucket',
+            SourceProviderType::GitHubApp => throw new GitProviderException(self::GITHUB_ELSEWHERE),
             SourceProviderType::Custom => throw new GitProviderException('A custom provider has no credentials.'),
         };
     }
