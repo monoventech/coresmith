@@ -70,6 +70,7 @@ function tokenCloneFake(int $mintStatus = 201, ?Closure $revoke = null): void
             ? Http::response(['token' => 'ghs_1041207_eyJhbGciOiJSUzI1NiJ9.e30.c2lnbmF0dXJl', 'expires_at' => '2026-10-19T13:00:00Z', 'permissions' => ['contents' => 'read'], 'repository_selection' => 'selected'], 201)
             : Http::response(['message' => 'GitHub turned this request down'], $mintStatus),
         'api.github.com/installation/token' => $revoke ?? Http::response(null, 204),
+        'api.github.com/repos/*/statuses/*' => Http::response(['id' => 1], 201),
     ]);
 }
 
@@ -307,7 +308,7 @@ test('a token github could not issue is put down to github, not to the repositor
 
 test('a github app whose key cannot be read is named when the clone needs a token', function () {
     tokenCloneFake();
-    $deployment = Deployment::factory()->for(tokenCloneApp(['github_app_id' => GitHubApp::factory()->create(['private_key' => 'not a private key'])->id]))->create();
+    $deployment = Deployment::factory()->for(tokenCloneApp(['github_app_id' => GitHubApp::factory()->create(['private_key' => 'not a private key'])->id]))->create(['commit_hash' => null]);
 
     expect(fn() => tokenCloneRun($deployment, tokenCloneRefusedTransport()))->toThrow(DeploymentAborted::class);
 

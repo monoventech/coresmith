@@ -557,6 +557,8 @@ final class DeployApplication implements ShouldQueue
         app(AutoDeploy::class)->archived($this->deployment, $hash);
 
         $this->appendLog('commit ' . substr($hash, 0, 7) . ' by ' . $author . ($tag !== null ? ' · tag ' . $tag : ''));
+
+        PostCommitStatus::dispatchFor($this->deployment);
     }
 
     private function installDependencies(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void
