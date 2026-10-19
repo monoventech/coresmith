@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\DeploymentStatus;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
@@ -111,9 +112,17 @@ function githubHookPush(array $changes = []): array
         'after' => str_repeat('c', 40),
         'deleted' => false,
         'installation' => ['id' => 51842],
-        'repository' => ['id' => 70000001, 'full_name' => 'monoventech/atlas'],
+        'repository' => ['id' => 70000001, 'full_name' => 'monoventech/atlas', 'pushed_at' => 1792332000],
         'head_commit' => ['message' => 'Ship it'],
     ], $changes);
+}
+
+function githubHookShipAll(): void
+{
+    Deployment::query()->get()->each(fn(Deployment $deployment): bool => $deployment->forceFill([
+        'status' => DeploymentStatus::Succeeded,
+        'commit_hash' => $deployment->requested_commit,
+    ])->save());
 }
 
 beforeEach(function () {
@@ -546,8 +555,90 @@ test('a repository name that is not an owner and a name keeps the stored url', f
     'a deeper path' => ['monoventech/atlas/extra'],
     'a trailing newline' => ["monoventech/atlas-renamed\n"],
     'no owner' => ['atlas-renamed'],
+    'a parent directory' => ['monoventech/..'],
+    'a current directory' => ['./atlas'],
     'none' => [null],
 ]);
+
+test('a newer push still deploys', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $url = route('webhooks.github.app', $githubApp);
+
+    githubHookPost($url, githubHookPush(['after' => str_repeat('a', 40)]), 'push')->assertStatus(202);
+    githubHookShipAll();
+    githubHookPost($url, githubHookPush(['after' => str_repeat('b', 40), 'repository' => ['pushed_at' => 1792332600]]), 'push')->assertStatus(202);
+
+    $application = $application->fresh();
+
+    expect($application->repository_head)->toBe(str_repeat('b', 40))
+        ->and($application->repository_pushed_at?->toDateTimeString())->toBe('2026-10-18 14:10:00')
+        ->and(Deployment::where('requested_commit', str_repeat('b', 40))->count())->toBe(1);
+
+    Queue::assertPushed(DeployApplication::class, 2);
+});
+
+test('an older push after a newer one changes neither head nor url and deploys nothing', function (int|string $newer, int|string $older) {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $url = route('webhooks.github.app', $githubApp);
+
+    githubHookPost($url, githubHookPush(['after' => str_repeat('b', 40), 'repository' => ['pushed_at' => $newer]]), 'push')->assertStatus(202);
+    githubHookShipAll();
+
+    githubHookPost($url, githubHookPush(['after' => str_repeat('a', 40), 'repository' => ['full_name' => 'monoventech/atlas-old', 'pushed_at' => $older]]), 'push')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    expect($application->fresh())
+        ->repository_head->toBe(str_repeat('b', 40))
+        ->repository_url->toBe('https://github.com/monoventech/atlas.git')
+        ->and(Deployment::count())->toBe(1);
+
+    Queue::assertPushed(DeployApplication::class, 1);
+})->with([
+    'unix times' => [1792332600, 1792332000],
+    'iso times, the older one in another offset' => ['2026-10-18T14:10:00Z', '2026-10-18T15:00:00+02:00'],
+]);
+
+test('a redelivered old push deploys nothing', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+    $url = route('webhooks.github.app', $githubApp);
+    $old = githubHookPush(['after' => str_repeat('a', 40)]);
+
+    githubHookPost($url, $old, 'push', delivery: 'push-a')->assertStatus(202);
+    githubHookShipAll();
+    githubHookPost($url, githubHookPush(['after' => str_repeat('b', 40), 'repository' => ['pushed_at' => 1792332600]]), 'push', delivery: 'push-b')->assertStatus(202);
+    githubHookShipAll();
+
+    $this->travel(25)->hours();
+
+    githubHookPost($url, $old, 'push', delivery: 'push-a')
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Push received.']);
+
+    expect($application->fresh()->repository_head)->toBe(str_repeat('b', 40))
+        ->and(Deployment::count())->toBe(2);
+
+    Queue::assertPushed(DeployApplication::class, 2);
+});
+
+test('a push with a bad signature changes nothing', function () {
+    $githubApp = githubHookApp();
+    $application = githubHookLinkedApp($githubApp);
+
+    githubHookPost(route('webhooks.github.app', $githubApp), githubHookPush(), 'push', 'forged-secret')
+        ->assertStatus(401)
+        ->assertExactJson(['message' => 'Invalid signature.']);
+
+    expect($application->fresh()->repository_head)->toBeNull()
+        ->and(Deployment::count())->toBe(0)
+        ->and($application->sourceProvider->fresh()->last_delivered_at)->toBeNull()
+        ->and(Cache::has(app(GitHubAppHealth::class)->key(app(GitHubApps::class)->fromModel($githubApp))))->toBeFalse();
+
+    Queue::assertNothingPushed();
+});
 
 test('a push for a removed connection deploys nothing', function () {
     $githubApp = githubHookApp();

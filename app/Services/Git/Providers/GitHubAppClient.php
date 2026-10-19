@@ -29,6 +29,11 @@ final class GitHubAppClient implements GitProvider
         private readonly GitHubAppApi $api,
     ) {}
 
+    public static function isFullName(string $fullName): bool
+    {
+        return preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/D', $fullName) === 1 && array_intersect(explode('/', $fullName), ['.', '..']) === [];
+    }
+
     public function listRepositories(): Collection
     {
         return collect($this->installationRepositories()['repositories'])->map(fn(array $repository): Repository => new Repository(
@@ -233,7 +238,7 @@ final class GitHubAppClient implements GitProvider
 
     private function path(string $repository): string
     {
-        if (preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/D', $repository) !== 1 || array_intersect(explode('/', $repository), ['.', '..']) !== []) {
+        if (!self::isFullName($repository)) {
             throw new GitProviderException("\"{$repository}\" is not a valid owner/repo name.");
         }
 

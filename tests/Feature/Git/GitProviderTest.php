@@ -107,6 +107,7 @@ test('a repository name carrying a path escape is refused before any request', f
     'monoven/coresmith/../../other',
     'monoven',
     'monoven/core smith',
+    'monoven/..',
 ])->throws(GitProviderException::class);
 
 test('a live github token is reused rather than reminted', function () {

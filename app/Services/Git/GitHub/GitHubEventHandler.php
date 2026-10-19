@@ -12,6 +12,7 @@ use App\Enums\SourceProviderType;
 use App\Models\Application;
 use App\Models\SourceProvider;
 use App\Services\AutoDeploy\AutoDeploy;
+use App\Services\Git\Providers\GitHubAppClient;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
@@ -19,8 +20,6 @@ use Illuminate\Database\Eloquent\Collection;
 final class GitHubEventHandler
 {
     private const HEADS = 'refs/heads/';
-
-    private const FULL_NAME = '/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\z/';
 
     private const SELECTIONS = ['all', 'selected'];
 
@@ -93,31 +92,47 @@ final class GitHubEventHandler
      */
     private function observeHead(Collection $connections, array $payload): int
     {
-        $ref = $payload['ref'] ?? null;
-        $after = $payload['after'] ?? null;
-        $repository = $this->id($payload['repository']['id'] ?? null);
+        $branch = $this->pushedBranch($connections, $payload);
 
-        if ($connections->isEmpty() || !is_string($ref) || !str_starts_with($ref, self::HEADS) || ($payload['deleted'] ?? false) === true || !$this->isCommit($after) || $repository === null) {
+        if ($branch === null) {
             return 0;
         }
 
-        $branch = substr($ref, strlen(self::HEADS));
+        $after = (string) $payload['after'];
+        $pushedAt = $this->pushedAt($payload);
         $fullName = $this->fullName($payload);
         $applications = Application::query()
             ->whereIn('source_provider_id', $connections->modelKeys())
-            ->where('repository_id', $repository)
+            ->where('repository_id', (string) $payload['repository']['id'])
             ->get()
-            ->filter(fn(Application $application): bool => $application->repository_branch === $branch);
+            ->filter(fn(Application $application): bool => $application->repository_branch === $branch && !$this->autoDeploy->stale($application, $after, $pushedAt));
 
         foreach ($applications as $application) {
             if ($fullName !== null && $fullName !== $application->repositoryFullName()) {
                 $application->forceFill(['repository_url' => "https://github.com/{$fullName}.git"])->save();
             }
 
-            $this->autoDeploy->observe($application, $after, 'push');
+            $this->autoDeploy->observe($application, $after, 'push', $pushedAt);
         }
 
         return $applications->count();
+    }
+
+    /**
+     * @param  Collection<int, SourceProvider>  $connections
+     * @param  array<string, mixed>  $payload
+     */
+    private function pushedBranch(Collection $connections, array $payload): ?string
+    {
+        $ref = $payload['ref'] ?? null;
+        $branchHead = $connections->isNotEmpty()
+            && is_string($ref)
+            && str_starts_with($ref, self::HEADS)
+            && ($payload['deleted'] ?? false) !== true
+            && $this->isCommit($payload['after'] ?? null)
+            && $this->id($payload['repository']['id'] ?? null) !== null;
+
+        return $branchHead ? substr($ref, strlen(self::HEADS)) : null;
     }
 
     /**
@@ -156,7 +171,18 @@ final class GitHubEventHandler
     {
         $fullName = $payload['repository']['full_name'] ?? null;
 
-        return is_string($fullName) && preg_match(self::FULL_NAME, $fullName) === 1 ? $fullName : null;
+        return is_string($fullName) && GitHubAppClient::isFullName($fullName) ? $fullName : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function pushedAt(array $payload): ?CarbonImmutable
+    {
+        $at = $payload['repository']['pushed_at'] ?? null;
+        $timestamp = is_string($at) ? strtotime($at) : $at;
+
+        return is_int($timestamp) ? CarbonImmutable::createFromTimestamp($timestamp, date_default_timezone_get()) : null;
     }
 
     /**

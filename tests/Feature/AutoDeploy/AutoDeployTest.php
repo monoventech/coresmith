@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\FakeSSHTransport;
 use Tests\Support\ProbeOutput;
 
@@ -463,3 +464,87 @@ test('the log says what triggered an automatic deploy', function (string $trigge
     'polling' => ['poll', 'triggered by polling'],
     'a push' => ['push', 'triggered by push'],
 ]);
+
+test('a push older than the last one seen changes nothing', function (string $pushedAt) {
+    $application = autoDeployApp([
+        'repository_head' => autoDeploySha('b'),
+        'repository_head_source' => 'push',
+        'repository_head_at' => '2026-10-18 13:55:00',
+        'repository_pushed_at' => '2026-10-18 13:50:00',
+    ]);
+
+    expect(app(AutoDeploy::class)->observe($application, autoDeploySha('a'), 'push', CarbonImmutable::parse($pushedAt)))->toBeNull();
+
+    $fresh = $application->fresh();
+
+    expect($fresh->repository_head)->toBe(autoDeploySha('b'))
+        ->and($fresh->repository_head_at?->toDateTimeString())->toBe('2026-10-18 13:55:00')
+        ->and($fresh->repository_pushed_at?->toDateTimeString())->toBe('2026-10-18 13:50:00')
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+})->with([
+    'an earlier push' => '2026-10-18 13:40:00',
+    'another commit pushed at the same moment' => '2026-10-18 13:50:00',
+]);
+
+test('the same push seen again is still deployed when its first attempt never queued', function () {
+    $application = autoDeployApp([
+        'repository_head' => autoDeploySha('a'),
+        'repository_head_source' => 'push',
+        'repository_pushed_at' => '2026-10-18 13:50:00',
+    ]);
+
+    expect(app(AutoDeploy::class)->observe($application, autoDeploySha('a'), 'push', CarbonImmutable::parse('2026-10-18 13:50:00')))
+        ->toBeInstanceOf(Deployment::class);
+
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('a newer push moves the head and records when it was pushed', function () {
+    $application = autoDeployApp([
+        'repository_head' => autoDeploySha('a'),
+        'repository_head_source' => 'push',
+        'repository_pushed_at' => '2026-10-18 13:50:00',
+    ]);
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => autoDeploySha('a')]);
+
+    expect(app(AutoDeploy::class)->observe($application, autoDeploySha('b'), 'push', CarbonImmutable::parse('2026-10-18 14:00:00')))
+        ->toBeInstanceOf(Deployment::class);
+
+    $fresh = $application->fresh();
+
+    expect($fresh->repository_head)->toBe(autoDeploySha('b'))
+        ->and($fresh->repository_pushed_at?->toDateTimeString())->toBe('2026-10-18 14:00:00');
+});
+
+test('a poll still observes and keeps the time of the last push', function () {
+    $application = autoDeployApp([
+        'repository_head' => autoDeploySha('a'),
+        'repository_head_source' => 'push',
+        'repository_pushed_at' => '2026-10-18 13:50:00',
+    ]);
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => autoDeploySha('a')]);
+
+    expect(app(AutoDeploy::class)->observe($application, autoDeploySha('b'), 'poll'))->toBeInstanceOf(Deployment::class);
+
+    $fresh = $application->fresh();
+
+    expect($fresh->repository_head)->toBe(autoDeploySha('b'))
+        ->and($fresh->repository_head_source)->toBe('poll')
+        ->and($fresh->repository_pushed_at?->toDateTimeString())->toBe('2026-10-18 13:50:00');
+});
+
+test('the push time column is nullable and reverses cleanly', function () {
+    $migration = require base_path('database/migrations/2026_10_18_200500_add_pushed_at_to_applications.php');
+
+    expect(collect(Schema::getColumns('applications'))->firstWhere('name', 'repository_pushed_at')['nullable'] ?? null)->toBeTrue();
+
+    $migration->down();
+
+    expect(Schema::hasColumn('applications', 'repository_pushed_at'))->toBeFalse();
+
+    $migration->up();
+
+    expect(Schema::hasColumn('applications', 'repository_pushed_at'))->toBeTrue();
+});

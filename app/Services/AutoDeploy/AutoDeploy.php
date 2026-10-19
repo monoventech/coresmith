@@ -12,6 +12,7 @@ use App\Enums\DeploymentStatus;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 
@@ -19,9 +20,9 @@ final class AutoDeploy
 {
     public const COMMIT = '/^[0-9a-f]{40}$/D';
 
-    public function observe(Application $application, string $sha, string $source): ?Deployment
+    public function observe(Application $application, string $sha, string $source, ?CarbonInterface $pushedAt = null): ?Deployment
     {
-        if (preg_match(self::COMMIT, $sha) !== 1) {
+        if (preg_match(self::COMMIT, $sha) !== 1 || $this->stale($application, $sha, $pushedAt)) {
             return null;
         }
 
@@ -29,9 +30,21 @@ final class AutoDeploy
             'repository_head' => $sha,
             'repository_head_source' => $source,
             'repository_head_at' => now(),
+            ...($pushedAt === null ? [] : ['repository_pushed_at' => $pushedAt]),
         ])->saveQuietly();
 
         return $this->reconcile($application);
+    }
+
+    public function stale(Application $application, string $sha, ?CarbonInterface $pushedAt): bool
+    {
+        $last = $application->repository_pushed_at;
+
+        if ($pushedAt === null || $last === null) {
+            return false;
+        }
+
+        return $last->greaterThan($pushedAt) || ($last->equalTo($pushedAt) && $application->repository_head !== $sha);
     }
 
     public function archived(Deployment $deployment, string $hash): void
