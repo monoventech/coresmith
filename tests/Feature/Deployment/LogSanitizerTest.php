@@ -70,6 +70,13 @@ test('common secret shapes are redacted even when not in the environment', funct
     ['ghp_abcdefghijklmnopqrstuvwxyz1234', 'token ghp_abcdefghijklmnopqrstuvwxyz1234 rejected'],
 ]);
 
+test('stateless installation tokens and fine-grained tokens are redacted', function (string $line, string $clean) {
+    expect((new LogSanitizer)->sanitize($line))->toBe($clean);
+})->with([
+    'a stateless installation token' => ['token ghs_1041207_eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiIxIn0.c2ln rejected', 'token [REDACTED_GITHUB_TOKEN] rejected'],
+    'a fine-grained personal token' => ['using github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyzAB now', 'using [REDACTED_GITHUB_TOKEN] now'],
+]);
+
 test('a bearer token is redacted', function () {
     expect((new LogSanitizer)->sanitize('Authorization: Bearer abc.def.ghi'))
         ->toContain('Bearer [REDACTED]')

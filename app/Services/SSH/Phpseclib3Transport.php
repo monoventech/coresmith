@@ -112,7 +112,7 @@ final class Phpseclib3Transport implements SSHTransport
         (new ReflectionProperty(SSH2::class, 'exit_status'))->setValue($ssh, null);
     }
 
-    public function uploadContent(string $content, string $remotePath): void
+    public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath): void
     {
         $this->sftp()->put($remotePath, $content);
     }

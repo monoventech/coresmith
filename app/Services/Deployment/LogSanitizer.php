@@ -23,7 +23,8 @@ final class LogSanitizer
         '/Bearer\s+[A-Za-z0-9\-._~+\/]+=*/i' => 'Bearer [REDACTED]',
         '/(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}/' => '[REDACTED_STRIPE_KEY]',
         '/AKIA[A-Z0-9]{16}/' => '[REDACTED_AWS_KEY]',
-        '/gh[pousr]_[A-Za-z0-9]{20,}/' => '[REDACTED_GITHUB_TOKEN]',
+        '/gh[pousr]_[A-Za-z0-9][A-Za-z0-9_.\-]{19,}/' => '[REDACTED_GITHUB_TOKEN]',
+        '/github_pat_[A-Za-z0-9_]{22,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/' => '[REDACTED_PRIVATE_KEY]',
     ];
 

@@ -3,11 +3,24 @@
 declare(strict_types=1);
 
 use App\Models\Application;
+use App\Models\SourceProvider;
 use App\Services\Deployment\GitFailure;
 
 function gitFailureApp(string $url = 'https://github.com/monoven/atlas.git'): Application
 {
     return Application::factory()->make(['repository_url' => $url, 'repository_branch' => 'release/2.0']);
+}
+
+function gitFailureLinkedApp(array $connection = []): Application
+{
+    $provider = SourceProvider::factory()->githubApp()->create(array_merge(['name' => 'monoventech', 'installation_id' => '51842'], $connection));
+
+    return Application::factory()->make([
+        'repository_url' => 'https://github.com/monoventech/atlas.git',
+        'repository_branch' => 'main',
+        'source_provider_id' => $provider->id,
+        'repository_id' => '70000001',
+    ]);
 }
 
 test('git output becomes a reason people can act on', function (string $output, string $reason, bool $retryable) {
@@ -27,6 +40,38 @@ test('git output becomes a reason people can act on', function (string $output, 
 
 test('the host is named for ssh style urls too', function () {
     expect(GitFailure::from('Connection timed out', gitFailureApp('git@gitlab.example.com:ops/atlas.git'))->reason)->toContain('gitlab.example.com');
+});
+
+test("a linked app's authentication failure points at the github app", function (string $output) {
+    expect(GitFailure::from($output, gitFailureLinkedApp())->reason)
+        ->toBe('GitHub did not let Coresmith read monoventech/atlas. Check the repository is still selected for the Coresmith app on GitHub, then deploy again.');
+})->with([
+    'no username' => ["fatal: could not read Username for 'https://github.com': terminal prompts disabled"],
+    'a refused token' => ["remote: Invalid username or token.\nfatal: Authentication failed for 'https://github.com/monoventech/atlas.git/'"],
+]);
+
+test('advice from a refused token wins', function () {
+    $failure = GitFailure::from("fatal: could not read Username for 'https://github.com': terminal prompts disabled", gitFailureLinkedApp(), 'Coresmith could not get a clone token from GitHub. Try again in a minute.');
+
+    expect($failure->reason)->toBe('Coresmith could not get a clone token from GitHub. Try again in a minute.')
+        ->and($failure->retryable)->toBeFalse();
+});
+
+test('advice from a refused token only answers for an authentication failure', function () {
+    $failure = GitFailure::from('Failed to connect to github.com port 443: Connection timed out', gitFailureLinkedApp(), 'Coresmith could not get a clone token from GitHub. Try again in a minute.');
+
+    expect($failure->reason)->toBe('The server could not reach github.com. Check its firewall allows outbound HTTPS and SSH, then deploy again.')
+        ->and($failure->retryable)->toBeTrue();
+});
+
+test("a linked app whose connection is gone names the connection, not the repository's settings", function () {
+    expect(GitFailure::from('fatal: could not read Username', gitFailureLinkedApp(['deleted_at' => now()]))->reason)
+        ->toBe("This app's GitHub connection was removed, so the private repository monoventech/atlas could not be read. Connect GitHub again from Settings, Git, then deploy.");
+});
+
+test('a linked app whose installation is suspended says to unsuspend it', function () {
+    expect(GitFailure::from('fatal: could not read Username', gitFailureLinkedApp(['suspended_at' => now()]))->reason)
+        ->toBe("Coresmith's GitHub app is suspended on monoventech. Unsuspend it on GitHub, then deploy.");
 });
 
 test('a token in the repository url never reaches the reason', function () {

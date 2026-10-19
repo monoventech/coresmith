@@ -98,7 +98,7 @@ final class SSHConnection
         return $this->conclude($command, $output, $timeout);
     }
 
-    public function uploadContent(string $content, string $remotePath): void
+    public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath): void
     {
         if ($this->server->ssh_user === 'root') {
             $this->connect()->transport->uploadContent($content, $remotePath);

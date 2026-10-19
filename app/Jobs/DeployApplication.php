@@ -16,10 +16,13 @@ use App\Events\DeploymentSucceeded;
 use App\Events\DeploymentUpdated;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\ExplainsFailure;
+use App\Exceptions\GitHubInstallationException;
+use App\Exceptions\GitProviderException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\SourceProvider;
 use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
@@ -32,7 +35,10 @@ use App\Services\Deployment\GitFailure;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\RepositoryCache;
+use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
+use App\Services\Git\GitHub\GitHubAppApi;
+use App\Services\Git\GitProviderFactory;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\AsdfManager;
@@ -88,6 +94,8 @@ final class DeployApplication implements ShouldQueue
     private ?string $failureReason = null;
 
     private bool $crashLooping = false;
+
+    private ?string $cloneAdvice = null;
 
     public function __construct(
         private readonly Deployment $deployment,
@@ -370,7 +378,7 @@ final class DeployApplication implements ShouldQueue
             }
 
             $this->appendLog($result->output);
-            $failure = GitFailure::from($result->output, $application);
+            $failure = GitFailure::from($result->output, $application, $this->cloneAdvice);
 
             if (!$failure->retryable || $attempt >= $attempts) {
                 $this->failureReason = $failure->reason;
@@ -428,28 +436,54 @@ final class DeployApplication implements ShouldQueue
         $url = (string) $application->repository_url;
         $branch = escapeshellarg(SafeName::assertBranch($application->repository_branch));
         $keys = app(DeployKeyManager::class);
+        $tokens = app(CloneToken::class);
         $cache = app(RepositoryCache::class);
         $account = app(AppAccount::class);
-        $private = $keys->usesDeployKey($application);
-
-        $this->mark(DeploymentPhases::CLONE, $private ? 'fetching via deploy key (ed25519, read-only)' : 'fetching over https');
-
-        $account->ensure($connection, $application);
-        app(EnvironmentFile::class)->write($connection, $application);
-
-        if ($private) {
-            $this->installDeployKey($connection, $keys, $application);
-        }
+        $credential = 'none';
+        $token = null;
 
         try {
-            $git = fn(string $arguments): string => $private ? $keys->withKey($application, 'git ' . $arguments) : 'git ' . $arguments;
+            $this->cloneAdvice = null;
+            $github = $application->usesGitHubToken() ? $application->githubConnection() : null;
+            $token = $github === null ? null : $this->mintCloneToken($application, $github);
+            $credential = match (true) {
+                $token !== null => 'token',
+                $github === null && $keys->usesDeployKey($application) => 'key',
+                default => 'none',
+            };
+
+            $this->mark(DeploymentPhases::CLONE, match ($credential) {
+                'token' => 'fetching with a one-hour GitHub token (read-only, ' . $application->repositoryFullName() . ')',
+                'key' => 'fetching via deploy key (ed25519, read-only)',
+                default => $github === null ? 'fetching over https' : 'GitHub gave no token, fetching without credentials',
+            });
+
+            $account->ensure($connection, $application);
+            app(EnvironmentFile::class)->write($connection, $application);
+
+            if ($token !== null) {
+                $this->installCloneToken($connection, $keys, $tokens, $application, $token);
+            } elseif ($credential === 'key') {
+                $this->installDeployKey($connection, $keys, $application);
+            }
+
+            $git = fn(string $arguments): string => match ($credential) {
+                'token' => $tokens->wrap($application, $arguments),
+                'key' => $keys->withKey($application, 'git ' . $arguments),
+                default => 'git ' . $arguments,
+            };
 
             $this->git($connection, "test -d {$repo} || " . $git($cache->cloneArguments($url, $repo)), 'clone', fn() => $connection->execute('rm -rf ' . $repo, sudo: true));
             $connection->execute($cache->setUrlCommand($repo, $url), sudo: true)->throw();
             $this->git($connection, $git($cache->fetchArguments($repo)), 'fetch');
         } finally {
-            if ($private) {
+            if ($credential === 'key') {
                 $connection->execute($keys->removeCommand($application), sudo: true);
+            }
+
+            if ($token !== null) {
+                $this->revokeCloneToken($token);
+                $connection->execute($tokens->removeCommand($application), sudo: true);
             }
         }
 
@@ -649,6 +683,42 @@ final class DeployApplication implements ShouldQueue
         $connection->execute($keys->prepareDirectory($application), sudo: true)->throw();
         $connection->execute($keys->reserveFile($application), sudo: true)->throw();
         $connection->uploadContent((string) $application->deploy_key_private, $keys->keyPath($application));
+    }
+
+    private function mintCloneToken(Application $application, SourceProvider $github): ?string
+    {
+        try {
+            return app(GitProviderFactory::class)->github($github)->cloneToken((string) $application->repository_id);
+        } catch (GitProviderException $refusal) {
+            $kind = $refusal instanceof GitHubInstallationException ? $refusal->kind : null;
+
+            if ($kind === GitHubInstallationException::UNINSTALLED) {
+                $github->markUninstalled();
+            }
+
+            if ($kind === GitHubInstallationException::SUSPENDED) {
+                $github->markSuspended(now());
+            }
+
+            $this->cloneAdvice = GitFailure::adviceFor($refusal, $application);
+
+            return null;
+        }
+    }
+
+    private function installCloneToken(SSHConnection $connection, DeployKeyManager $keys, CloneToken $tokens, Application $application, #[\SensitiveParameter] string $token): void
+    {
+        $connection->execute($keys->prepareDirectory($application), sudo: true)->throw();
+        $connection->execute($tokens->reserveCommand($application), sudo: true)->throw();
+        $connection->uploadContent($tokens->content($token), $tokens->path($application));
+    }
+
+    private function revokeCloneToken(#[\SensitiveParameter] string $token): void
+    {
+        try {
+            app(GitHubAppApi::class)->revokeToken($token);
+        } catch (Throwable) {
+        }
     }
 
     private function hasCustomBlueprint(Application $application): bool
