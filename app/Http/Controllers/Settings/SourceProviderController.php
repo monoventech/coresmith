@@ -16,6 +16,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\WebhookEndpoint;
 use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Repository;
 use App\Services\SSH\HostKeyFingerprint;
@@ -29,7 +30,7 @@ final class SourceProviderController extends Controller
 {
     public function __construct(private readonly GitProviderFactory $clients) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request, GitHubSettingsPresenter $github): Response
     {
         $team = $this->currentTeam();
 
@@ -83,6 +84,7 @@ final class SourceProviderController extends Controller
                     'scopes' => $type->scopes(),
                     'configured' => $this->isConfigured($type, $team),
                 ])->values(),
+            'github' => fn(): array => $github->present($team, $request->user()),
             'can' => ['manage' => $request->user()->can('update', $team)],
         ]);
     }

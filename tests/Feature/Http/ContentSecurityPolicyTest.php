@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\ContentSecurityPolicy;
 use Illuminate\Support\Facades\Vite;
 
 function cspNonceFrom(string $header): string
@@ -71,4 +72,11 @@ test('a running vite dev server is left alone so hot reloading keeps working', f
 
 test('the horizon dashboard is left to its own scripts', function () {
     expect($this->get('/' . trim((string) config('horizon.path'), '/'))->headers->has('Content-Security-Policy'))->toBeFalse();
+});
+
+test('the policy never stops the app registration form from reaching github', function () {
+    $directives = array_map('trim', explode(';', ContentSecurityPolicy::policy('n')));
+    $formAction = array_values(array_filter($directives, fn(string $directive): bool => str_starts_with($directive, 'form-action')));
+
+    expect($formAction === [] || str_contains($formAction[0], 'https://github.com'))->toBeTrue();
 });

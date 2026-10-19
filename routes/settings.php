@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\BillingController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
+use App\Http\Controllers\Settings\GitHubAppController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
@@ -51,6 +52,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('settings/api-tokens/{token}', [ApiTokenController::class, 'destroy'])->name('api-tokens.destroy');
 
     Route::get('settings/git', [SourceProviderController::class, 'index'])->name('source-providers.index');
+    Route::get('settings/git/github/registered', [GitHubAppController::class, 'registered'])
+        ->middleware('throttle:10,1,github-app-registered')
+        ->name('github-apps.registered');
     Route::get('settings/source-providers/{type}/connect', [SourceProviderConnectController::class, 'redirect'])
         ->middleware('throttle:10,1,source-connect')
         ->name('source-providers.connect');
