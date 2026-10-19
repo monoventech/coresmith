@@ -38,6 +38,15 @@ test('git output becomes a reason people can act on', function (string $output, 
     'unknown' => ['fatal: something new', 'Its full output is in the log.', false],
 ]);
 
+test('a caller with no log to point at says what an unrecognised failure means', function () {
+    $unrecognised = 'git ls-remote failed with exit code 1. A deploy shows the full output.';
+
+    expect(GitFailure::from('fatal: something new', gitFailureApp(), unrecognised: $unrecognised)->reason)->toBe($unrecognised)
+        ->and(GitFailure::from('fatal: something new', gitFailureApp(), unrecognised: $unrecognised)->retryable)->toBeFalse()
+        ->and(GitFailure::from('git@github.com: Permission denied (publickey).', gitFailureApp(), unrecognised: $unrecognised)->reason)->toStartWith('Coresmith could not read the repository on github.com.')
+        ->and(GitFailure::from('fatal: something new', gitFailureApp())->reason)->toBe('Git failed with an error Coresmith does not recognise. Its full output is in the log.');
+});
+
 test('the host is named for ssh style urls too', function () {
     expect(GitFailure::from('Connection timed out', gitFailureApp('git@gitlab.example.com:ops/atlas.git'))->reason)->toContain('gitlab.example.com');
 });

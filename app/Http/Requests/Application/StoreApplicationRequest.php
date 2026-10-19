@@ -56,7 +56,7 @@ final class StoreApplicationRequest extends FormRequest
             'js_runtime' => ['nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['nullable', 'string', 'max:64'],
             'domain' => ['nullable', 'string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
-            'repository_url' => ['nullable', 'string', 'max:2048', 'regex:/^(https:\\/\\/[^\\s]+|git@[A-Za-z0-9.-]+:[^\\s]+)$/'],
+            'repository_url' => ['nullable', 'string', 'max:2048', 'regex:' . SafeName::GIT_URL_PATTERN],
             'source_provider_id' => ['nullable', 'required_with:repository_id', 'string', Rule::exists('source_providers', 'id')->where('team_id', $server->team_id)->where('type', SourceProviderType::GitHubApp->value)->whereNull('deleted_at')],
             'repository_id' => ['nullable', 'required_with:source_provider_id', 'string', 'regex:/^[0-9]{1,20}\\z/'],
             'repository_branch' => ['required', 'string', 'max:255', 'regex:' . SafeName::BRANCH_PATTERN],

@@ -10,6 +10,8 @@ namespace App\Models;
 
 use App\Casts\Vaulted;
 use App\Enums\SourceProviderType;
+use App\Exceptions\GitHubInstallationException;
+use App\Exceptions\GitProviderException;
 use App\Services\Git\ProviderHost;
 use Carbon\CarbonInterface;
 use Database\Factories\SourceProviderFactory;
@@ -61,6 +63,25 @@ class SourceProvider extends Model
     public function markSuspended(?CarbonInterface $at): void
     {
         $this->forceFill(['suspended_at' => $at])->save();
+    }
+
+    public function markRefused(GitProviderException $refusal): bool
+    {
+        $kind = $refusal instanceof GitHubInstallationException ? $refusal->kind : null;
+
+        if ($kind === GitHubInstallationException::UNINSTALLED) {
+            $this->markUninstalled();
+
+            return true;
+        }
+
+        if ($kind === GitHubInstallationException::SUSPENDED) {
+            $this->markSuspended(now());
+
+            return true;
+        }
+
+        return false;
     }
 
     public function manageUrl(): ?string

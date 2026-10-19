@@ -19,7 +19,7 @@ final readonly class GitFailure
         public bool $retryable,
     ) {}
 
-    public static function from(string $output, Application $application, ?string $advice = null): self
+    public static function from(string $output, Application $application, ?string $advice = null, ?string $unrecognised = null): self
     {
         $url = self::displayUrl((string) $application->repository_url);
         $host = self::host($url);
@@ -31,7 +31,7 @@ final readonly class GitFailure
             self::mentions($output, ["Remote branch {$branch} not found", 'did not match any', 'not a valid object name', 'unknown revision', "couldn't find remote ref"]) => new self("Branch {$branch} is not in the repository. Check the branch name in the app's settings, then deploy again.", false),
             self::mentions($output, ['Could not resolve host']) => new self("The server could not look up {$host}. Check its DNS settings, then deploy again.", true),
             self::mentions($output, ['Connection timed out', 'Connection refused', 'Operation timed out', 'Failed to connect', 'early EOF', 'RPC failed', 'Connection reset', 'The remote end hung up unexpectedly']) => new self("The server could not reach {$host}. Check its firewall allows outbound HTTPS and SSH, then deploy again.", true),
-            default => new self('Git failed with an error Coresmith does not recognise. Its full output is in the log.', false),
+            default => new self($unrecognised ?? 'Git failed with an error Coresmith does not recognise. Its full output is in the log.', false),
         };
     }
 

@@ -16,6 +16,8 @@ final class DeployKeyManager
 {
     public const KEY_DIR = '/etc/coresmith/deploy-keys';
 
+    public const POLL_SUFFIX = '.poll';
+
     public function __construct(private readonly KeyPairGenerator $keys) {}
 
     public function ensure(Application $application): Application
@@ -39,6 +41,11 @@ final class DeployKeyManager
         return self::KEY_DIR . '/' . SafeName::assertSlug($application->slug);
     }
 
+    public function pollKeyPath(Application $application): string
+    {
+        return $this->keyPath($application) . self::POLL_SUFFIX;
+    }
+
     public function prepareDirectory(Application $application): string
     {
         $dir = escapeshellarg(self::KEY_DIR);
@@ -46,9 +53,9 @@ final class DeployKeyManager
         return "mkdir -p {$dir} && chown root:root {$dir} && chmod 700 {$dir}";
     }
 
-    public function reserveFile(Application $application): string
+    public function reserveFile(Application $application, ?string $path = null): string
     {
-        return 'install -m 600 /dev/null ' . escapeshellarg($this->keyPath($application));
+        return 'install -m 600 /dev/null ' . escapeshellarg($path ?? $this->keyPath($application));
     }
 
     /**
@@ -59,22 +66,22 @@ final class DeployKeyManager
         return [$this->prepareDirectory($application), $this->reserveFile($application)];
     }
 
-    public function removeCommand(Application $application): string
+    public function removeCommand(Application $application, ?string $path = null): string
     {
-        return 'rm -f ' . escapeshellarg($this->keyPath($application));
+        return 'rm -f ' . escapeshellarg($path ?? $this->keyPath($application));
     }
 
-    public function sshCommand(Application $application): string
+    public function sshCommand(Application $application, ?string $path = null): string
     {
-        return 'ssh -i ' . escapeshellarg($this->keyPath($application))
+        return 'ssh -i ' . escapeshellarg($path ?? $this->keyPath($application))
             . ' -o IdentitiesOnly=yes'
             . ' -o StrictHostKeyChecking=accept-new'
             . ' -o UserKnownHostsFile=' . escapeshellarg(self::KEY_DIR . '/known_hosts');
     }
 
-    public function withKey(Application $application, string $gitCommand): string
+    public function withKey(Application $application, string $gitCommand, ?string $path = null): string
     {
-        return 'GIT_SSH_COMMAND=' . escapeshellarg($this->sshCommand($application)) . ' ' . $gitCommand;
+        return 'GIT_SSH_COMMAND=' . escapeshellarg($this->sshCommand($application, $path)) . ' ' . $gitCommand;
     }
 
     public function usesDeployKey(Application $application): bool

@@ -104,6 +104,22 @@ test('git is told to use only this key and to pin the host', function () {
         ->and($command)->toEndWith('git clone --bare a b');
 });
 
+test('a poll key has a path of its own', function () {
+    $application = Application::factory()->create(['slug' => 'my-app']);
+    $path = deployKeys()->pollKeyPath($application);
+
+    expect(DeployKeyManager::POLL_SUFFIX)->toBe('.poll')
+        ->and($path)->toBe('/etc/coresmith/deploy-keys/my-app.poll')
+        ->and(deployKeys()->sshCommand($application, $path))->toContain("-i '/etc/coresmith/deploy-keys/my-app.poll'")
+        ->and(deployKeys()->withKey($application, 'git x', $path))->toContain("-i '\\''/etc/coresmith/deploy-keys/my-app.poll'\\''")
+        ->and(deployKeys()->withKey($application, 'git x', $path))->toEndWith(' git x')
+        ->and(deployKeys()->reserveFile($application, $path))->toBe("install -m 600 /dev/null '/etc/coresmith/deploy-keys/my-app.poll'")
+        ->and(deployKeys()->removeCommand($application, $path))->toBe("rm -f '/etc/coresmith/deploy-keys/my-app.poll'")
+        ->and(deployKeys()->withKey($application, 'git x'))->toContain("-i '\\''/etc/coresmith/deploy-keys/my-app'\\'' ")
+        ->and(deployKeys()->reserveFile($application))->toBe("install -m 600 /dev/null '/etc/coresmith/deploy-keys/my-app'")
+        ->and(deployKeys()->removeCommand($application))->toBe("rm -f '/etc/coresmith/deploy-keys/my-app'");
+});
+
 test('a traversing slug cannot escape the key directory', function () {
     deployKeys()->keyPath(Application::factory()->make(['slug' => '../../root/.ssh/authorized_keys']));
 })->throws(UnsafeNameException::class);

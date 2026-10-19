@@ -15,7 +15,6 @@ use App\Events\DeploymentSucceeded;
 use App\Events\DeploymentUpdated;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\ExplainsFailure;
-use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
@@ -703,15 +702,7 @@ final class DeployApplication implements ShouldQueue
         try {
             return app(GitProviderFactory::class)->github($github)->cloneToken((string) $application->repository_id);
         } catch (GitProviderException $refusal) {
-            $kind = $refusal instanceof GitHubInstallationException ? $refusal->kind : null;
-
-            if ($kind === GitHubInstallationException::UNINSTALLED) {
-                $github->markUninstalled();
-            }
-
-            if ($kind === GitHubInstallationException::SUSPENDED) {
-                $github->markSuspended(now());
-            }
+            $github->markRefused($refusal);
 
             $this->cloneAdvice = GitFailure::adviceFor($refusal, $application);
 

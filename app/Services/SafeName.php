@@ -26,6 +26,8 @@ final class SafeName
 
     public const RELATIVE_PATH_PATTERN = '~^/?(?:(?!\.\.?(?:/|\z))[A-Za-z0-9._-]+(?:/(?!\.\.?(?:/|\z))[A-Za-z0-9._-]+)*/?)?\z~';
 
+    public const GIT_URL_PATTERN = '/^(https:\/\/[^\s]+|git@[A-Za-z0-9.-]+:[^\s]+)$/D';
+
     public static function isSlug(?string $value): bool
     {
         return $value !== null && preg_match(self::SLUG_PATTERN, $value) === 1;
