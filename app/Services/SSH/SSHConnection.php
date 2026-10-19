@@ -23,6 +23,8 @@ final class SSHConnection
 {
     public const TIMEOUT_SECONDS = 30;
 
+    public const COMMAND_ACTIVITY = 'ssh_command_executed';
+
     public const STAGING_TEMPLATE = '/tmp/coresmith-upload.XXXXXXXXXX';
 
     private const STAGED_PATTERN = '~^/tmp/coresmith-upload\.[A-Za-z0-9]{10}\z~';
@@ -203,7 +205,7 @@ final class SSHConnection
                 'exit_code' => $exitCode,
                 'output_length' => strlen($output),
             ])
-            ->log('ssh_command_executed');
+            ->log(self::COMMAND_ACTIVITY);
 
         return new SSHResult($output, $exitCode);
     }

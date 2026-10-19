@@ -24,6 +24,7 @@ Schedule::job(new CheckGitHubWebhooks)->everyFifteenMinutes()->name('coresmith:c
 Schedule::job(new PollRepositories)->everyMinute()->name('coresmith:poll-repositories')->withoutOverlapping();
 
 Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresmith:prune-metrics')->withoutOverlapping();
+Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith:prune-activity')->withoutOverlapping();
 
 Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup')->withoutOverlapping();
 

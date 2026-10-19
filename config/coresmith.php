@@ -23,6 +23,10 @@ return [
         )
         : null,
 
+    'activity' => [
+        'ssh_command_days' => (int) env('CORESMITH_SSH_ACTIVITY_DAYS', 90),
+    ],
+
     'auto_deploy' => [
         'poll_minutes' => (int) env('CORESMITH_POLL_MINUTES', 1),
         'safety_net_minutes' => (int) env('CORESMITH_POLL_SAFETY_NET_MINUTES', 10),
