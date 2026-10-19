@@ -113,7 +113,10 @@ test.describe('a deploy', () => {
     test('a finished deploy links to the releases it made', async ({ page }, testInfo) => {
         await gotoDeployments(page, isMobile(testInfo))
 
-        await filters(page).getByRole('link', { name: /^Deployed\s*\d+$/ }).click()
+        const deployed = filters(page).getByRole('link', { name: /^Deployed\s*\d+$/ })
+
+        await deployed.click()
+        await expect(deployed).toHaveAttribute('aria-current', 'page')
         await rows(page).filter({ hasText: 'warehouse' }).first().click()
 
         await expect(page.getByTestId('deployment-status')).toHaveText('Deployed')

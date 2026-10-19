@@ -12,6 +12,8 @@ import {
     useTheme
 } from './support/fixtures'
 
+test.use({ reducedMotion: 'reduce' })
+
 type Visit = (page: Page) => Promise<void>
 
 const direct =
