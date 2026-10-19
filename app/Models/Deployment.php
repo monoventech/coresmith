@@ -43,6 +43,7 @@ class Deployment extends Model
             'finished_at' => 'datetime',
             'tag_signed' => 'boolean',
             'stack' => 'array',
+            'seeded_shared_storage' => 'boolean',
             'stale_after' => 'datetime',
         ];
     }

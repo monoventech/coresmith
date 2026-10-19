@@ -17,11 +17,13 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Deployment\SharedStorage;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeBinaries;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -164,11 +166,7 @@ final class InstallRuntimes implements ShouldQueue
             $log->append($this->deployment, implode("\n", array_slice(preg_split('/\R/', trim($e->output())) ?: [], -30)));
         }
 
-        try {
-            $connection->execute('rm -rf ' . $this->releasePath(), sudo: true);
-        } catch (Throwable) {
-            $log->append($this->deployment, $this->cannotRemoveReleaseMessage());
-        }
+        $this->removeRelease($connection, $this->deployment);
 
         if ($this->deployment->fresh()?->status === DeploymentStatus::Running) {
             $log->fail($this->deployment, $e->getMessage(), $this->reason($e));
@@ -189,11 +187,24 @@ final class InstallRuntimes implements ShouldQueue
         $connections->disconnect($server);
 
         try {
-            $connections->for($server)->execute('rm -rf ' . $this->releasePath(), sudo: true);
-        } catch (Throwable) {
-            app(DeploymentLog::class)->append($deployment, $this->cannotRemoveReleaseMessage());
+            $this->removeRelease($connections->for($server), $deployment);
         } finally {
             $connections->disconnect($server);
+        }
+    }
+
+    private function removeRelease(SSHConnection $connection, Deployment $deployment): void
+    {
+        try {
+            $connection->execute('rm -rf ' . $this->releasePath(), sudo: true);
+        } catch (Throwable) {
+            app(DeploymentLog::class)->append($deployment, $this->cannotRemoveReleaseMessage());
+        }
+
+        $lock = Cache::restoreLock('deploy:' . $deployment->application_id, $this->lockOwner);
+
+        if ($lock instanceof Lock && rescue(fn(): bool => $lock->isOwnedByCurrentProcess(), false, false)) {
+            app(SharedStorage::class)->discard($connection, $deployment);
         }
     }
 

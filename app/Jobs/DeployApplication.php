@@ -9,7 +9,6 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ApplicationStatus;
-use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Events\DeploymentSucceeded;
@@ -36,6 +35,7 @@ use App\Services\Deployment\GitFailure;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\RepositoryCache;
+use App\Services\Deployment\SharedStorage;
 use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\GitHubAppApi;
@@ -510,17 +510,18 @@ final class DeployApplication implements ShouldQueue
 
     private function prepareShared(SSHConnection $connection, ReleasePaths $paths, string $release, Application $application): void
     {
-        $logs = escapeshellarg($paths->shared() . '/logs');
-        $shared = escapeshellarg($paths->shared() . '/storage');
-        $local = escapeshellarg($paths->appDirectory($release) . '/storage');
-        $seed = $application->type === ApplicationType::Php
-            ? "if [ -d {$local} ] && [ ! -L {$local} ] && [ ! -e {$shared} ]; then cp -a {$local} {$shared}; fi; "
-            : '';
-
-        $connection->execute(
-            app(AppShell::class)->run($application, "mkdir -p {$logs}; {$seed}if [ -d {$shared} ]; then rm -rf {$local} && ln -sfn {$shared} {$local}; fi", $release),
+        $storage = app(SharedStorage::class);
+        $result = $connection->execute(
+            app(AppShell::class)->run($application, 'mkdir -p ' . escapeshellarg($paths->shared() . '/logs') . '; ' . $storage->script($application, $release), $release),
             sudo: true,
-        )->throw();
+        );
+
+        if ($storage->seeded($result->output)) {
+            $this->deployment->forceFill(['seeded_shared_storage' => true])->save();
+            $this->appendLog("storage: copied the live release's data into shared/storage. Changes made while this deploy runs stay in the previous release.");
+        }
+
+        $result->throw();
     }
 
     private function recordCommit(SSHConnection $connection, string $repo, string $branch): void
@@ -772,6 +773,10 @@ final class DeployApplication implements ShouldQueue
             $connection->execute('rm -rf ' . $release, sudo: true);
         } catch (Throwable) {
             $this->appendLog("Could not remove the half-built release. Remove releases/{$this->timestamp} by hand if it is still there.");
+        }
+
+        if (!$this->lockLost) {
+            app(SharedStorage::class)->discard($connection, $this->deployment);
         }
     }
 
