@@ -5,6 +5,15 @@ function member(page: Page, email: string) {
     return page.getByTestId('member-row').filter({ hasText: email })
 }
 
+async function removeMember(page: Page, email: string, name: string) {
+    await member(page, email).getByRole('button', { name: `Remove ${name}` }).click()
+    await expect(dialog(page)).toContainText(`Remove ${name}?`)
+    await dialog(page).getByRole('button', { name: 'Remove from the team' }).click()
+
+    await expect(toast(page)).toContainText('Member removed.')
+    await expect(member(page, email)).toHaveCount(0)
+}
+
 test.describe('the team', () => {
     test('everyone is listed with their role and whether they use two-factor', async ({ page }) => {
         await gotoSettings(page, 'Team')
@@ -46,6 +55,11 @@ test.describe('the team', () => {
         const name = `Invitee ${own(testInfo, 'invitee').split('-')[1]}`
 
         await gotoSettings(page, 'Team')
+        await expect(member(page, 'owner@coresmith.test')).toBeVisible()
+
+        if ((await member(page, email).count()) > 0) {
+            await removeMember(page, email, name)
+        }
 
         await page.getByRole('button', { name: 'Invite someone' }).click()
         await dialog(page).getByLabel('Email address').fill(email)
@@ -54,12 +68,7 @@ test.describe('the team', () => {
         await expect(toast(page)).toContainText('Member added.')
         await expect(member(page, email)).toBeVisible()
 
-        await member(page, email).getByRole('button', { name: `Remove ${name}` }).click()
-        await expect(dialog(page)).toContainText(`Remove ${name}?`)
-        await dialog(page).getByRole('button', { name: 'Remove from the team' }).click()
-
-        await expect(toast(page)).toContainText('Member removed.')
-        await expect(member(page, email)).toHaveCount(0)
+        await removeMember(page, email, name)
     })
 
     test('an address without an account is refused in the dialog', async ({ page }) => {
@@ -70,6 +79,19 @@ test.describe('the team', () => {
         await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
 
         await expect(dialog(page).getByLabel('Email address')).toHaveAttribute('aria-invalid', 'true')
+    })
+
+    test('someone already on the team is refused in the dialog', async ({ page }) => {
+        await gotoSettings(page, 'Team')
+
+        await page.getByRole('button', { name: 'Invite someone' }).click()
+        await dialog(page).getByLabel('Email address').fill('jonas@coresmith.test')
+        await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
+
+        await expect(dialog(page).getByLabel('Email address')).toHaveAttribute('aria-invalid', 'true')
+        await expect(dialog(page)).toContainText('That person is already on this team.')
+        await expect(page.locator('iframe')).toHaveCount(0)
+        await expect(member(page, 'jonas@coresmith.test')).toHaveCount(1)
     })
 })
 

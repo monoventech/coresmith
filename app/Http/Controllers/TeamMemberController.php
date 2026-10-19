@@ -15,9 +15,16 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 final class TeamMemberController extends Controller
 {
+    private const ALREADY_ON_TEAM = 'That person is already on this team.';
+
+    private const OWNER_GRANT = 'Only an owner can grant the owner role.';
+
+    private const LAST_OWNER = 'A team must keep at least one owner. Make someone else an owner first.';
+
     public function store(Request $request, Team $team): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
@@ -27,13 +34,19 @@ final class TeamMemberController extends Controller
             'role' => ['required', Rule::enum(TeamRole::class)],
         ]);
 
-        $this->guardOwnerRole($request, $team, $validated['role']);
-
+        $role = TeamRole::from($validated['role']);
         $user = User::where('email', $validated['email'])->firstOrFail();
 
-        abort_if($team->members()->whereKey($user->getKey())->exists(), 422, 'That person is already on this team.');
+        $errors = array_filter([
+            'email' => $team->members()->whereKey($user->getKey())->exists() ? self::ALREADY_ON_TEAM : null,
+            'role' => $this->refusesOwnerGrant($request, $team, $role) ? self::OWNER_GRANT : null,
+        ]);
 
-        $team->members()->attach($user, ['role' => $validated['role']]);
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $team->members()->attach($user, ['role' => $role->value]);
 
         $this->syncServers($team);
 
@@ -46,10 +59,17 @@ final class TeamMemberController extends Controller
 
         $validated = $request->validate(['role' => ['required', Rule::enum(TeamRole::class)]]);
 
-        $this->guardOwnerRole($request, $team, $validated['role']);
-        $this->guardLastOwner($team, $user, TeamRole::from($validated['role']));
+        $role = TeamRole::from($validated['role']);
 
-        $team->members()->updateExistingPivot($user->getKey(), ['role' => $validated['role']]);
+        if ($this->refusesOwnerGrant($request, $team, $role)) {
+            return back()->with('error', self::OWNER_GRANT);
+        }
+
+        if ($this->leavesNoOwner($team, $user, $role)) {
+            return back()->with('error', self::LAST_OWNER);
+        }
+
+        $team->members()->updateExistingPivot($user->getKey(), ['role' => $role->value]);
 
         $this->syncServers($team);
 
@@ -60,7 +80,9 @@ final class TeamMemberController extends Controller
     {
         $this->authorize('manageMembers', $team);
 
-        $this->guardLastOwner($team, $user, null);
+        if ($this->leavesNoOwner($team, $user, null)) {
+            return back()->with('error', self::LAST_OWNER);
+        }
 
         $team->members()->detach($user->getKey());
 
@@ -74,27 +96,19 @@ final class TeamMemberController extends Controller
         SyncAuthorizedKeys::dispatchForServers(SyncAuthorizedKeys::activeServersOf([$team->getKey()]));
     }
 
-    private function guardOwnerRole(Request $request, Team $team, string $role): void
+    private function refusesOwnerGrant(Request $request, Team $team, TeamRole $role): bool
     {
-        if ($role !== TeamRole::Owner->value) {
-            return;
-        }
-
-        abort_unless($request->user()->roleIn($team) === TeamRole::Owner, 403, 'Only an owner can grant the owner role.');
+        return $role === TeamRole::Owner && $request->user()->roleIn($team) !== TeamRole::Owner;
     }
 
-    private function guardLastOwner(Team $team, User $user, ?TeamRole $newRole): void
+    private function leavesNoOwner(Team $team, User $user, ?TeamRole $newRole): bool
     {
         if ($newRole === TeamRole::Owner) {
-            return;
+            return false;
         }
 
         $owners = $team->members()->wherePivot('role', TeamRole::Owner->value)->pluck('users.id');
 
-        abort_if(
-            $owners->count() === 1 && $owners->first() === $user->getKey(),
-            422,
-            'A team must keep at least one owner.',
-        );
+        return $owners->count() === 1 && $owners->first() === $user->getKey();
     }
 }

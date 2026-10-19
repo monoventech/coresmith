@@ -156,10 +156,25 @@ test('a membership change that is refused syncs nothing', function () {
     $team = Team::factory()->create();
     keySyncServers($team);
     $owner = keySyncJoin($team, TeamRole::Owner);
+    $admin = keySyncJoin($team, TeamRole::Admin);
+    $deployer = keySyncJoin($team, TeamRole::Member);
+    $outsider = User::factory()->create();
+    $lastOwner = 'A team must keep at least one owner. Make someone else an owner first.';
+    $ownerOnly = 'Only an owner can grant the owner role.';
 
-    $this->actingAs($owner)->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])->assertStatus(422);
-    $this->actingAs($owner)->delete(route('teams.members.destroy', [$team, $owner]))->assertStatus(422);
-    $this->actingAs(keySyncJoin($team, TeamRole::Member))->post(route('teams.members.store', $team), ['email' => User::factory()->create()->email, 'role' => 'member'])->assertForbidden();
+    $this->actingAs($admin)->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])->assertRedirect()->assertSessionHas('error', $lastOwner);
+    $this->actingAs($admin)->delete(route('teams.members.destroy', [$team, $owner]))->assertRedirect()->assertSessionHas('error', $lastOwner);
+    $this->actingAs($admin)->put(route('teams.members.update', [$team, $deployer]), ['role' => 'owner'])->assertRedirect()->assertSessionHas('error', $ownerOnly);
+    $this->actingAs($admin)->post(route('teams.members.store', $team), ['email' => $outsider->email, 'role' => 'owner'])->assertSessionHasErrors(['role' => $ownerOnly]);
+    $this->actingAs($admin)->post(route('teams.members.store', $team), ['email' => $deployer->email, 'role' => 'member'])->assertSessionHasErrors(['email' => 'That person is already on this team.']);
+    $this->actingAs($deployer)->put(route('teams.members.update', [$team, $admin]), ['role' => 'member'])->assertForbidden();
+    $this->actingAs($deployer)->delete(route('teams.members.destroy', [$team, $admin]))->assertForbidden();
+    $this->actingAs($deployer)->post(route('teams.members.store', $team), ['email' => $outsider->email, 'role' => 'member'])->assertForbidden();
+
+    expect($team->members()->count())->toBe(3)
+        ->and($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner')
+        ->and($team->members()->whereKey($admin->getKey())->first()->pivot->role)->toBe('admin')
+        ->and($team->members()->whereKey($deployer->getKey())->first()->pivot->role)->toBe('member');
 
     Queue::assertNothingPushed();
 });
