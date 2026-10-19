@@ -13,13 +13,11 @@ use App\Models\SourceProvider;
 use App\Services\Git\Contracts\GitProvider;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\GitHubAppCredentials;
+use App\Services\Git\RefusalReason;
 use App\Services\Git\Repository;
-use Closure;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 
 final class GitHubAppClient implements GitProvider
 {
@@ -95,7 +93,7 @@ final class GitHubAppClient implements GitProvider
         }
 
         $request = $this->request(retry: false)->replaceHeaders($headers);
-        $response = $this->send(fn(): Response => $request->get(GitHubAppApi::API . $path));
+        $response = $this->api->call(fn(): Response => $request->get(GitHubAppApi::API . $path));
 
         if ($response->status() === 304) {
             return null;
@@ -106,7 +104,7 @@ final class GitHubAppClient implements GitProvider
         }
 
         if (!$response->successful()) {
-            throw new GitProviderException('GitHub refused the check. ' . $this->reason($response));
+            throw new GitProviderException('GitHub refused the check. ' . RefusalReason::for($response));
         }
 
         $sha = trim($response->body());
@@ -255,9 +253,7 @@ final class GitHubAppClient implements GitProvider
 
     private function request(bool $retry = true): PendingRequest
     {
-        $request = Http::withToken($this->token())
-            ->withHeaders(['Accept' => GitHubAppApi::ACCEPT, 'X-GitHub-Api-Version' => GitHubAppApi::VERSION])
-            ->timeout(GitHubAppApi::TIMEOUT);
+        $request = $this->api->http()->withToken($this->token());
 
         return $retry ? $request->retry(2, 200, throw: false) : $request;
     }
@@ -269,7 +265,7 @@ final class GitHubAppClient implements GitProvider
     {
         $request = $this->request();
 
-        return $this->guard($this->send(fn(): Response => $request->get(GitHubAppApi::API . $path, $query)));
+        return $this->guard($this->api->call(fn(): Response => $request->get(GitHubAppApi::API . $path, $query)));
     }
 
     /**
@@ -279,38 +275,22 @@ final class GitHubAppClient implements GitProvider
     {
         $request = $this->request(retry: false);
 
-        return $this->guard($this->send(fn(): Response => $request->post(GitHubAppApi::API . $path, $payload)));
+        return $this->guard($this->api->call(fn(): Response => $request->post(GitHubAppApi::API . $path, $payload)));
     }
 
     private function delete(string $path): void
     {
         $request = $this->request();
 
-        $this->send(fn(): Response => $request->delete(GitHubAppApi::API . $path));
-    }
-
-    private function send(Closure $send): Response
-    {
-        try {
-            return $send();
-        } catch (ConnectionException) {
-            throw new GitProviderException(GitHubAppApi::NO_ANSWER);
-        }
+        $this->api->call(fn(): Response => $request->delete(GitHubAppApi::API . $path));
     }
 
     private function guard(Response $response): Response
     {
         if ($response->failed()) {
-            throw new GitProviderException('GitHub rejected the request: ' . $this->reason($response));
+            throw new GitProviderException('GitHub rejected the request: ' . RefusalReason::for($response));
         }
 
         return $response;
-    }
-
-    private function reason(Response $response): string
-    {
-        $message = (string) ($response->json('message') ?? '');
-
-        return $message !== '' ? $message : 'HTTP ' . $response->status();
     }
 }

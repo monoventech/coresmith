@@ -11,6 +11,7 @@ namespace App\Services\Git\Providers;
 use App\Exceptions\GitProviderException;
 use App\Models\SourceProvider;
 use App\Services\Git\Contracts\GitProvider;
+use App\Services\Git\RefusalReason;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -67,7 +68,7 @@ abstract class OAuthGitClient implements GitProvider
         ]));
 
         if ($response->failed()) {
-            throw new GitProviderException("{$this->providerName()} refused to refresh the connection: " . $this->reason($response));
+            throw new GitProviderException("{$this->providerName()} refused to refresh the connection: " . RefusalReason::for($response));
         }
 
         $token = (string) $response->json('access_token');
@@ -114,22 +115,9 @@ abstract class OAuthGitClient implements GitProvider
     protected function guard(Response $response): Response
     {
         if ($response->failed()) {
-            throw new GitProviderException("{$this->providerName()} rejected the request: " . $this->reason($response));
+            throw new GitProviderException("{$this->providerName()} rejected the request: " . RefusalReason::for($response));
         }
 
         return $response;
-    }
-
-    protected function reason(Response $response): string
-    {
-        foreach (['message', 'error_description', 'error'] as $key) {
-            $value = $response->json($key);
-
-            if (is_string($value) && $value !== '') {
-                return $value;
-            }
-        }
-
-        return 'HTTP ' . $response->status();
     }
 }

@@ -554,6 +554,61 @@ test('a request to github that gets no answer is a provider error for every app 
     }
 });
 
+test('an unanswered call is a provider error with one sentence wherever it is made', function () {
+    Http::fake(['api.github.com/*' => Http::response(['ok' => true])]);
+    $api = app(GitHubAppApi::class);
+
+    $answered = $api->call(fn() => Http::get('https://api.github.com/zen'));
+    $silent = githubApiThrown(fn() => $api->call(fn() => throw new ConnectionException('down')));
+    $other = githubApiThrown(fn() => $api->call(fn() => throw new RuntimeException('boom')));
+
+    expect($answered->json('ok'))->toBeTrue()
+        ->and($silent)->toBeInstanceOf(GitProviderException::class)
+        ->and($silent->getMessage())->toBe('GitHub did not answer.')
+        ->and($silent->getPrevious())->toBeNull()
+        ->and($other)->toBeInstanceOf(RuntimeException::class)
+        ->and($other)->not->toBeInstanceOf(GitProviderException::class)
+        ->and($other->getMessage())->toBe('boom');
+});
+
+test('the installation client and the api say a refusal in the same words', function () {
+    $refusal = ['error' => 'access_denied', 'error_description' => 'The token was revoked'];
+    Http::fake([
+        'api.github.com/installation/repositories*' => Http::response($refusal, 401),
+        'api.github.com/repos/monoven/atlas/commits/heads/main' => Http::response($refusal, 403),
+        'api.github.com/app/hook/config' => Http::response($refusal, 401),
+    ]);
+    $client = githubApiClient();
+
+    expect(githubApiThrown(fn() => $client->installationRepositories())->getMessage())->toBe('GitHub rejected the request: The token was revoked')
+        ->and(githubApiThrown(fn() => $client->branchHead('monoven/atlas', 'main', null))->getMessage())->toBe('GitHub refused the check. The token was revoked')
+        ->and(githubApiThrown(fn() => app(GitHubAppApi::class)->hookUrl(githubApiCredentials()))->getMessage())->toBe('The token was revoked');
+});
+
+test('the installation client sends the media type, api version and timeout the api does', function () {
+    $seen = [];
+    Http::fake(function (Request $request, array $options) use (&$seen) {
+        $seen[] = [$request->header('Accept'), $request->header('X-GitHub-Api-Version'), $request->header('Authorization'), $options['timeout'] ?? null];
+
+        return Http::response([], 200);
+    });
+    $client = githubApiClient();
+
+    $client->branches('monoven/atlas');
+    $client->postDeployStatus('monoven/atlas', githubApiSha(), 'success', 'https://panel.test/d', 'Live', 'coresmith/atlas');
+    $client->deleteWebhook('monoven/atlas', '12');
+    $client->installationRepositories();
+
+    expect($seen)->toHaveCount(4);
+
+    foreach ($seen as [$accept, $version, $authorization, $timeout]) {
+        expect($accept)->toBe(['application/vnd.github+json'])
+            ->and($version)->toBe(['2022-11-28'])
+            ->and($authorization)->toBe(['Bearer ghs_live'])
+            ->and($timeout)->toBe(20);
+    }
+});
+
 test('every request waits at most twenty seconds and a post is never sent twice', function () {
     $timeouts = [];
     Http::fake(function (Request $request, array $options) use (&$timeouts) {

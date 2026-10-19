@@ -10,6 +10,7 @@ namespace App\Services\Git\GitHub;
 
 use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
+use App\Services\Git\RefusalReason;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Http\Client\ConnectionException;
@@ -23,11 +24,11 @@ final class GitHubAppApi
 
     public const WEB = 'https://github.com';
 
-    public const ACCEPT = 'application/vnd.github+json';
+    private const ACCEPT = 'application/vnd.github+json';
 
-    public const VERSION = '2022-11-28';
+    private const VERSION = '2022-11-28';
 
-    public const TIMEOUT = 20;
+    private const TIMEOUT = 20;
 
     public const NO_ANSWER = 'GitHub did not answer.';
 
@@ -123,7 +124,7 @@ final class GitHubAppApi
         $token = $response->json('access_token');
 
         if ($response->json('error') !== null || !$response->successful()) {
-            throw new GitProviderException($this->reason($response));
+            throw new GitProviderException(RefusalReason::for($response));
         }
 
         if (!is_string($token) || $token === '') {
@@ -173,7 +174,7 @@ final class GitHubAppApi
         }
 
         if (!$response->successful()) {
-            throw new GitHubInstallationException('GitHub refused to issue an installation token: ' . $this->reason($response), $this->refusal($response));
+            throw new GitHubInstallationException('GitHub refused to issue an installation token: ' . RefusalReason::for($response), $this->refusal($response));
         }
 
         $token = $response->json('token');
@@ -191,17 +192,12 @@ final class GitHubAppApi
         $this->call(fn(): Response => $this->http()->withToken($token)->delete(self::API . '/installation/token'));
     }
 
-    private function http(): PendingRequest
+    public function http(): PendingRequest
     {
         return Http::withHeaders(['Accept' => self::ACCEPT, 'X-GitHub-Api-Version' => self::VERSION])->timeout(self::TIMEOUT);
     }
 
-    private function asApp(#[\SensitiveParameter] GitHubAppCredentials $app): PendingRequest
-    {
-        return $this->http()->withToken($this->jwt->for($app));
-    }
-
-    private function call(Closure $send): Response
+    public function call(Closure $send): Response
     {
         try {
             return $send();
@@ -210,26 +206,18 @@ final class GitHubAppApi
         }
     }
 
+    private function asApp(#[\SensitiveParameter] GitHubAppCredentials $app): PendingRequest
+    {
+        return $this->http()->withToken($this->jwt->for($app));
+    }
+
     private function guard(Response $response): Response
     {
         if (!$response->successful()) {
-            throw new GitProviderException($this->reason($response));
+            throw new GitProviderException(RefusalReason::for($response));
         }
 
         return $response;
-    }
-
-    private function reason(Response $response): string
-    {
-        foreach (['message', 'error_description', 'error'] as $key) {
-            $value = $response->json($key);
-
-            if (is_string($value) && $value !== '') {
-                return $value;
-            }
-        }
-
-        return 'HTTP ' . $response->status();
     }
 
     private function refusal(Response $response): string
@@ -246,7 +234,7 @@ final class GitHubAppApi
     {
         return $response->header('Retry-After') !== ''
             || $response->header('X-RateLimit-Remaining') === '0'
-            || stripos($this->reason($response), 'rate limit') !== false;
+            || stripos(RefusalReason::for($response), 'rate limit') !== false;
     }
 
     private function manifestCode(#[\SensitiveParameter] string $code): string

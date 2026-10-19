@@ -310,6 +310,28 @@ test('a failing provider response is reported with the reason the provider gave'
     client(provider(SourceProviderType::GitHubApp))->listRepositories();
 })->throws(GitProviderException::class, 'Bad credentials');
 
+test('an oauth provider says what its refusal said, then its description, then its code, then the status', function (SourceProviderType $type, string $url, array $body, int $status, string $expected) {
+    Http::preventStrayRequests();
+    Http::fake([$url => Http::response($body, $status)]);
+
+    expect(fn() => client(provider($type))->listRepositories())->toThrow(GitProviderException::class, $expected);
+})->with([
+    'gitlab message' => [SourceProviderType::GitLab, 'gitlab.com/api/v4/*', ['message' => '401 Unauthorized'], 401, 'GitLab rejected the request: 401 Unauthorized'],
+    'gitlab description' => [SourceProviderType::GitLab, 'gitlab.com/api/v4/*', ['error' => 'invalid_token', 'error_description' => 'Token is expired'], 401, 'GitLab rejected the request: Token is expired'],
+    'gitlab code' => [SourceProviderType::GitLab, 'gitlab.com/api/v4/*', ['error' => 'invalid_token'], 401, 'GitLab rejected the request: invalid_token'],
+    'gitlab nothing to say' => [SourceProviderType::GitLab, 'gitlab.com/api/v4/*', [], 500, 'GitLab rejected the request: HTTP 500'],
+    'bitbucket message' => [SourceProviderType::Bitbucket, 'api.bitbucket.org/*', ['message' => 'Bad credentials'], 401, 'Bitbucket rejected the request: Bad credentials'],
+    'bitbucket nothing to say' => [SourceProviderType::Bitbucket, 'api.bitbucket.org/*', [], 502, 'Bitbucket rejected the request: HTTP 502'],
+]);
+
+test('an oauth provider that refuses to refresh says why', function () {
+    Http::preventStrayRequests();
+    Http::fake(['gitlab.com/oauth/token' => Http::response(['error' => 'invalid_grant', 'error_description' => 'The refresh token is invalid'], 400)]);
+    $source = provider(SourceProviderType::GitLab, ['refresh_token' => 'r', 'token_expires_at' => now()->addMinute()]);
+
+    expect(fn() => client($source)->listRepositories())->toThrow(GitProviderException::class, 'GitLab refused to refresh the connection: The refresh token is invalid');
+});
+
 test('provider tokens are encrypted at rest', function () {
     $source = provider(SourceProviderType::GitLab, ['access_token' => 'plaintext-token', 'refresh_token' => 'plaintext-refresh']);
 
