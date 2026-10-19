@@ -102,7 +102,7 @@ function sharedStorageCommandFor(Application $application): string
 
 function sharedStorageScript(string $command): string
 {
-    return str_replace("'\\''", "'", substr(Str::after($command, ' /bin/bash -c '), 1, -1));
+    return str_replace('$$', '$', str_replace("'\\''", "'", substr(Str::after($command, ' /bin/bash -c '), 1, -1)));
 }
 
 function sharedStorageRoot(): string

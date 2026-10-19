@@ -24,7 +24,7 @@ final class AppShell
      */
     public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS): string
     {
-        return $this->unit($application, $directory, $versions, $this->build($seconds)) . ' /bin/bash -c ' . escapeshellarg($command);
+        return $this->unit($application, $directory, $versions, $this->build($seconds)) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
     }
 
     /**

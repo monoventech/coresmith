@@ -27,6 +27,12 @@ test('a step runs as the app in a transient unit with its environment file and r
     );
 });
 
+test('dollar signs in a step reach bash rather than systemd, which would expand them itself', function () {
+    $command = (new AppShell(new AsdfManager))->run(shellApp(), 'db="${1:-app}"; echo "$db" $$', '/var/coresmith/apps/shop/current');
+
+    expect($command)->toEndWith(' -- /bin/bash -c ' . escapeshellarg('db="$${1:-app}"; echo "$$db" $$$$'));
+});
+
 test('a script is fed to the app on stdin, so its contents never reach a command line', function () {
     $command = (new AppShell(new AsdfManager))->runScript(shellApp(), '/etc/coresmith/blueprints/shop.sh', '/var/coresmith/apps/shop/releases/20261018-120000');
 
