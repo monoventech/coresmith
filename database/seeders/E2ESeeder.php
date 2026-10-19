@@ -42,6 +42,10 @@ final class E2ESeeder extends Seeder
 
     public const ROLE_EMAIL = 'rowan@coresmith.test';
 
+    public const ACME_OWNER_EMAIL = 'elin@coresmith.test';
+
+    public const ACME_MEMBER_EMAIL = 'tomas@coresmith.test';
+
     public const PASSWORD = 'password-for-e2e';
 
     public const PROJECTS = ['chromium' => 'chr', 'firefox' => 'ffx', 'webkit' => 'wbk', 'mobile-chrome' => 'mch', 'mobile-safari' => 'msf'];
@@ -113,7 +117,7 @@ final class E2ESeeder extends Seeder
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->auditFixtures();
 
-        $this->otherTeams($tenant->owner);
+        $this->otherTeams($tenant->owner, $password);
     }
 
     private function auditFixtures(): void
@@ -152,10 +156,12 @@ final class E2ESeeder extends Seeder
         }
     }
 
-    private function otherTeams(User $owner): void
+    private function otherTeams(User $owner, string $password): void
     {
         $acme = Team::factory()->create(['name' => 'Acme Labs', 'slug' => 'acme', 'owner_id' => $owner->id]);
         $acme->members()->attach($owner, ['role' => TeamRole::Admin->value]);
+        $acme->members()->attach(User::factory()->create(['name' => 'Elin Larsen', 'email' => self::ACME_OWNER_EMAIL, 'password' => $password]), ['role' => TeamRole::Owner->value]);
+        $acme->members()->attach(User::factory()->create(['name' => 'Tomas Novak', 'email' => self::ACME_MEMBER_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
 
         $acmeWeb = Server::factory()->for($acme)->create([
             'name' => 'acme-web',

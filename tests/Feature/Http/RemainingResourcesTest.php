@@ -185,16 +185,20 @@ test('a member cannot change or remove a team member', function () {
 });
 
 test('an admin cannot grant the owner role', function () {
+    Queue::fake();
     $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
     $newcomer = User::factory()->create();
 
     $this->actingAs(joined($team, TeamRole::Admin))
         ->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => 'owner'])
-        ->assertSessionHasErrors(['role' => 'Only an owner can grant the owner role.'])
+        ->assertSessionHasErrors(['role' => 'Only an owner can grant the owner role. Ask an owner of this team to do it.'])
         ->assertSessionDoesntHaveErrors('email');
 
     expect($team->members()->count())->toBe(1)
         ->and($team->members()->whereKey($newcomer->getKey())->exists())->toBeFalse();
+
+    Queue::assertNothingPushed();
 });
 
 test('an admin cannot make someone an owner by changing their role', function () {
@@ -206,7 +210,7 @@ test('an admin cannot make someone an owner by changing their role', function ()
     $this->actingAs(joined($team, TeamRole::Admin))
         ->put(route('teams.members.update', [$team, $deployer]), ['role' => 'owner'])
         ->assertRedirect()
-        ->assertSessionHas('error', 'Only an owner can grant the owner role.')
+        ->assertSessionHas('error', 'Only an owner can grant the owner role. Ask an owner of this team to do it.')
         ->assertSessionMissing('success');
 
     expect($team->members()->whereKey($deployer->getKey())->first()->pivot->role)->toBe('member');
@@ -259,7 +263,45 @@ test('the last owner cannot be removed', function () {
     Queue::assertNothingPushed();
 });
 
-test('an admin cannot demote or remove the only owner', function () {
+test('an admin cannot change an owners role', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Owner);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->count())->toBe(3)
+        ->and($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner');
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin cannot remove an owner', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Owner);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->delete(route('teams.members.destroy', [$team, $owner]))
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->count())->toBe(3)
+        ->and($team->members()->whereKey($owner->getKey())->exists())->toBeTrue();
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin is told to ask an owner even when the owner is the only one', function () {
     Queue::fake();
     $team = Team::factory()->create();
     Server::factory()->for($team)->active()->create();
@@ -269,12 +311,12 @@ test('an admin cannot demote or remove the only owner', function () {
     $this->actingAs($admin)
         ->put(route('teams.members.update', [$team, $owner]), ['role' => 'admin'])
         ->assertRedirect()
-        ->assertSessionHas('error', 'A team must keep at least one owner. Make someone else an owner first.');
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.');
 
     $this->actingAs($admin)
         ->delete(route('teams.members.destroy', [$team, $owner]))
         ->assertRedirect()
-        ->assertSessionHas('error', 'A team must keep at least one owner. Make someone else an owner first.');
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.');
 
     expect($team->members()->count())->toBe(2)
         ->and($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner');
@@ -292,6 +334,47 @@ test('an owner can be demoted once another owner exists', function () {
         ->assertRedirect();
 
     expect($team->members()->whereKey($second->getKey())->first()->pivot->role)->toBe('admin');
+});
+
+test('an owner can demote themselves once another owner exists', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->put(route('teams.members.update', [$team, $first]), ['role' => 'admin'])
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Role updated.');
+
+    expect($team->members()->whereKey($first->getKey())->first()->pivot->role)->toBe('admin');
+});
+
+test('an owner can remove another owner while one remains', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    $second = joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->delete(route('teams.members.destroy', [$team, $second]))
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Member removed.');
+
+    expect($team->members()->whereKey($second->getKey())->exists())->toBeFalse()
+        ->and($team->members()->whereKey($first->getKey())->exists())->toBeTrue();
+});
+
+test('an owner can remove themselves once another owner exists', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    $second = joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->delete(route('teams.members.destroy', [$team, $first]))
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Member removed.');
+
+    expect($team->members()->whereKey($first->getKey())->exists())->toBeFalse()
+        ->and($team->members()->whereKey($second->getKey())->first()->pivot->role)->toBe('owner');
 });
 
 test('adding someone twice is refused', function () {
@@ -312,17 +395,21 @@ test('adding someone twice is refused', function () {
 });
 
 test('an invitation refused for two reasons says both', function () {
+    Queue::fake();
     $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
     $existing = joined($team, TeamRole::Member);
 
     $this->actingAs(joined($team, TeamRole::Admin))
         ->post(route('teams.members.store', $team), ['email' => $existing->email, 'role' => 'owner'])
         ->assertSessionHasErrors([
             'email' => 'That person is already on this team.',
-            'role' => 'Only an owner can grant the owner role.',
+            'role' => 'Only an owner can grant the owner role. Ask an owner of this team to do it.',
         ]);
 
     expect($team->members()->whereKey($existing->getKey())->first()->pivot->role)->toBe('member');
+
+    Queue::assertNothingPushed();
 });
 
 test('the team page lists members with their roles', function () {

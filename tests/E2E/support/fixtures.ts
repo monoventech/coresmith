@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test as base } from '@playwright/test'
 import type { Locator, Page, TestInfo } from '@playwright/test'
+import { test as base, expect } from '@playwright/test'
 
 export const test = base
 
@@ -84,11 +84,17 @@ export async function gotoServerTab(page: Page, server: string, tab: 'Apps' | 'D
 }
 
 export function applicationRow(page: Page, name: string): Locator {
-    return page.getByTestId('applications-table').getByRole('link').filter({ has: page.getByText(name, { exact: true }) })
+    return page
+        .getByTestId('applications-table')
+        .getByRole('link')
+        .filter({ has: page.getByText(name, { exact: true }) })
 }
 
 export function databaseRow(page: Page, name: string): Locator {
-    return page.getByTestId('databases-table').getByRole('link').filter({ has: page.getByText(name, { exact: true }) })
+    return page
+        .getByTestId('databases-table')
+        .getByRole('link')
+        .filter({ has: page.getByText(name, { exact: true }) })
 }
 
 export async function gotoApplication(page: Page, server: string, name: string) {
@@ -105,15 +111,26 @@ export async function gotoDatabase(page: Page, server: string, name: string) {
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
 }
 
-export async function gotoSettings(page: Page, tab: 'General' | 'Team' | 'Git' | 'Notifications' | 'API tokens' | 'Billing') {
+export async function gotoSettings(
+    page: Page,
+    tab: 'General' | 'Team' | 'Git' | 'Notifications' | 'API tokens' | 'Billing'
+) {
     await page.goto('/dashboard')
     await nav(page).getByRole('link', { name: 'Settings' }).click()
     await page.waitForURL(/\/settings$/)
 
     if (tab !== 'General') {
         await tabs(page, 'Settings').getByRole('link', { name: tab, exact: true }).click()
-        await expect(tabs(page, 'Settings').getByRole('link', { name: tab, exact: true })).toHaveAttribute('aria-current', 'page')
+        await expect(tabs(page, 'Settings').getByRole('link', { name: tab, exact: true })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
     }
+}
+
+export async function backToMonoven(page: Page) {
+    await page.goto('/monoven/dashboard')
+    await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
 }
 
 export async function openSecurity(page: Page) {
@@ -136,7 +153,9 @@ export async function blockingViolations(page: Page): Promise<string[]> {
 
     return results.violations
         .filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
-        .flatMap((violation) => violation.nodes.map((node) => `${violation.id}: ${node.target.join(' ')} ${node.failureSummary ?? ''}`))
+        .flatMap((violation) =>
+            violation.nodes.map((node) => `${violation.id}: ${node.target.join(' ')} ${node.failureSummary ?? ''}`)
+        )
 }
 
 export async function noSidewaysScroll(page: Page) {

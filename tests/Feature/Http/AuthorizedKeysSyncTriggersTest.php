@@ -160,13 +160,16 @@ test('a membership change that is refused syncs nothing', function () {
     $deployer = keySyncJoin($team, TeamRole::Member);
     $outsider = User::factory()->create();
     $lastOwner = 'A team must keep at least one owner. Make someone else an owner first.';
-    $ownerOnly = 'Only an owner can grant the owner role.';
+    $ownerChange = 'Only an owner can change or remove an owner. Ask an owner of this team to do it.';
+    $ownerGrant = 'Only an owner can grant the owner role. Ask an owner of this team to do it.';
 
-    $this->actingAs($admin)->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])->assertRedirect()->assertSessionHas('error', $lastOwner);
-    $this->actingAs($admin)->delete(route('teams.members.destroy', [$team, $owner]))->assertRedirect()->assertSessionHas('error', $lastOwner);
-    $this->actingAs($admin)->put(route('teams.members.update', [$team, $deployer]), ['role' => 'owner'])->assertRedirect()->assertSessionHas('error', $ownerOnly);
-    $this->actingAs($admin)->post(route('teams.members.store', $team), ['email' => $outsider->email, 'role' => 'owner'])->assertSessionHasErrors(['role' => $ownerOnly]);
+    $this->actingAs($admin)->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])->assertRedirect()->assertSessionHas('error', $ownerChange);
+    $this->actingAs($admin)->delete(route('teams.members.destroy', [$team, $owner]))->assertRedirect()->assertSessionHas('error', $ownerChange);
+    $this->actingAs($admin)->put(route('teams.members.update', [$team, $deployer]), ['role' => 'owner'])->assertRedirect()->assertSessionHas('error', $ownerGrant);
+    $this->actingAs($admin)->post(route('teams.members.store', $team), ['email' => $outsider->email, 'role' => 'owner'])->assertSessionHasErrors(['role' => $ownerGrant]);
     $this->actingAs($admin)->post(route('teams.members.store', $team), ['email' => $deployer->email, 'role' => 'member'])->assertSessionHasErrors(['email' => 'That person is already on this team.']);
+    $this->actingAs($owner)->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])->assertRedirect()->assertSessionHas('error', $lastOwner);
+    $this->actingAs($owner)->delete(route('teams.members.destroy', [$team, $owner]))->assertRedirect()->assertSessionHas('error', $lastOwner);
     $this->actingAs($deployer)->put(route('teams.members.update', [$team, $admin]), ['role' => 'member'])->assertForbidden();
     $this->actingAs($deployer)->delete(route('teams.members.destroy', [$team, $admin]))->assertForbidden();
     $this->actingAs($deployer)->post(route('teams.members.store', $team), ['email' => $outsider->email, 'role' => 'member'])->assertForbidden();

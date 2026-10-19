@@ -1,10 +1,4 @@
-import type { Page } from '@playwright/test'
-import { asMember, dialog, expect, isMobile, nav, own, tabs, test, toast } from './support/fixtures'
-
-async function backToMonoven(page: Page) {
-    await page.goto('/monoven/dashboard')
-    await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
-}
+import { asMember, backToMonoven, dialog, expect, isMobile, nav, own, tabs, test, toast } from './support/fixtures'
 
 test.afterEach(async ({ page }) => {
     await backToMonoven(page)
@@ -24,7 +18,9 @@ test.describe('switching teams', () => {
 
         await page.waitForURL(/\/acme\/dashboard$/)
         await expect(page.getByTestId('server-card').getByRole('link', { name: 'acme-web', exact: true })).toBeVisible()
-        await expect(page.getByTestId('server-card').getByRole('link', { name: 'forge-01', exact: true })).toHaveCount(0)
+        await expect(page.getByTestId('server-card').getByRole('link', { name: 'forge-01', exact: true })).toHaveCount(
+            0
+        )
     })
 
     test('a page opened without a team address follows the last team used', async ({ page }) => {
@@ -41,9 +37,13 @@ test.describe('team addresses', () => {
     test('every link inside a team address keeps it', async ({ page }, testInfo) => {
         await page.goto('/monoven/dashboard')
 
-        await nav(page).getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true }).click()
+        await nav(page)
+            .getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })
+            .click()
         await page.waitForURL(/\/monoven\/deployments$/)
-        await expect(nav(page).getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })).toHaveAttribute('aria-current', 'page')
+        await expect(
+            nav(page).getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })
+        ).toHaveAttribute('aria-current', 'page')
 
         await page.getByTestId('deployment-row').filter({ hasText: 'ledger' }).first().click()
         await page.waitForURL(/\/monoven\/servers\/[A-Za-z0-9]+\/applications\/[A-Za-z0-9]+\/deployments\/[A-Za-z0-9]+/)
@@ -58,7 +58,10 @@ test.describe('team addresses', () => {
         await tabs(page, 'Settings').getByRole('link', { name: 'Team', exact: true }).click()
 
         await page.waitForURL(/\/monoven\/settings\/team$/)
-        await expect(tabs(page, 'Settings').getByRole('link', { name: 'Team', exact: true })).toHaveAttribute('aria-current', 'page')
+        await expect(tabs(page, 'Settings').getByRole('link', { name: 'Team', exact: true })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
         await expect(page.getByTestId('team-address-card')).toContainText('/monoven')
     })
 
@@ -144,17 +147,28 @@ test.describe('a team on its own domain', () => {
 
     test.use({ proxy: { server: origin } })
 
-    test('a verified domain opens its team, keeps links on it and switching leaves for the panel address', async ({ page, context }, testInfo) => {
+    test('a verified domain opens its team, keeps links on it and switching leaves for the panel address', async ({
+        page,
+        context
+    }, testInfo) => {
         const cookies = await context.cookies(origin)
 
-        await context.addCookies(cookies.map(({ name, value }) => ({ name, value, domain: 'panel.northwind.test', path: '/' })))
+        await context.addCookies(
+            cookies.map(({ name, value }) => ({ name, value, domain: 'panel.northwind.test', path: '/' }))
+        )
 
         await page.goto('http://panel.northwind.test/dashboard')
 
-        await expect(page.getByTestId('server-card').getByRole('link', { name: 'northwind-web', exact: true })).toBeVisible()
-        await expect(page.getByTestId('server-card').getByRole('link', { name: 'forge-01', exact: true })).toHaveCount(0)
+        await expect(
+            page.getByTestId('server-card').getByRole('link', { name: 'northwind-web', exact: true })
+        ).toBeVisible()
+        await expect(page.getByTestId('server-card').getByRole('link', { name: 'forge-01', exact: true })).toHaveCount(
+            0
+        )
 
-        await nav(page).getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true }).click()
+        await nav(page)
+            .getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })
+            .click()
         await page.waitForURL('http://panel.northwind.test/deployments')
 
         expect((await page.goto('http://panel.northwind.test/monoven/dashboard'))?.status()).toBe(404)
@@ -170,12 +184,16 @@ test.describe('a team on its own domain', () => {
     test('a domain still waiting for DNS does not open its team', async ({ page, context }) => {
         const cookies = await context.cookies(origin)
 
-        await context.addCookies(cookies.map(({ name, value }) => ({ name, value, domain: 'panel.acme.test', path: '/' })))
+        await context.addCookies(
+            cookies.map(({ name, value }) => ({ name, value, domain: 'panel.acme.test', path: '/' }))
+        )
 
         await page.goto('http://panel.acme.test/dashboard')
 
         await expect(page.getByTestId('server-card').getByRole('link', { name: 'forge-01', exact: true })).toBeVisible()
-        await expect(page.getByTestId('server-card').getByRole('link', { name: 'acme-web', exact: true })).toHaveCount(0)
+        await expect(page.getByTestId('server-card').getByRole('link', { name: 'acme-web', exact: true })).toHaveCount(
+            0
+        )
     })
 })
 

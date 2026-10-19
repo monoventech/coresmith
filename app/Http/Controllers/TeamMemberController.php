@@ -21,7 +21,9 @@ final class TeamMemberController extends Controller
 {
     private const ALREADY_ON_TEAM = 'That person is already on this team.';
 
-    private const OWNER_GRANT = 'Only an owner can grant the owner role.';
+    private const OWNER_GRANT = 'Only an owner can grant the owner role. Ask an owner of this team to do it.';
+
+    private const OWNER_CHANGE = 'Only an owner can change or remove an owner. Ask an owner of this team to do it.';
 
     private const LAST_OWNER = 'A team must keep at least one owner. Make someone else an owner first.';
 
@@ -61,6 +63,10 @@ final class TeamMemberController extends Controller
 
         $role = TeamRole::from($validated['role']);
 
+        if ($this->refusesOwnerChange($request, $team, $user)) {
+            return back()->with('error', self::OWNER_CHANGE);
+        }
+
         if ($this->refusesOwnerGrant($request, $team, $role)) {
             return back()->with('error', self::OWNER_GRANT);
         }
@@ -76,9 +82,13 @@ final class TeamMemberController extends Controller
         return back()->with('success', 'Role updated.');
     }
 
-    public function destroy(Team $team, User $user): RedirectResponse
+    public function destroy(Request $request, Team $team, User $user): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
+
+        if ($this->refusesOwnerChange($request, $team, $user)) {
+            return back()->with('error', self::OWNER_CHANGE);
+        }
 
         if ($this->leavesNoOwner($team, $user, null)) {
             return back()->with('error', self::LAST_OWNER);
@@ -94,6 +104,11 @@ final class TeamMemberController extends Controller
     private function syncServers(Team $team): void
     {
         SyncAuthorizedKeys::dispatchForServers(SyncAuthorizedKeys::activeServersOf([$team->getKey()]));
+    }
+
+    private function refusesOwnerChange(Request $request, Team $team, User $user): bool
+    {
+        return $user->roleIn($team) === TeamRole::Owner && $request->user()->roleIn($team) !== TeamRole::Owner;
     }
 
     private function refusesOwnerGrant(Request $request, Team $team, TeamRole $role): bool
