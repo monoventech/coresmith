@@ -451,10 +451,74 @@ test('a vault key that the vault would refuse is replaced, and a good one is kep
 test('a re-run restarts the queue workers and websockets so they run the new code', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('run sudo -u coresmith php "$INSTALL_DIR/artisan" horizon:terminate')
+    expect($body)->toContain('horizon_pid="$(systemctl show -p MainPID --value coresmith-horizon)"')
+        ->and($body)->toContain('run sudo -u coresmith php "$INSTALL_DIR/artisan" horizon:terminate')
         ->and($body)->toContain('run systemctl restart coresmith-reverb')
         ->and($body)->not->toContain('systemctl enable --now coresmith-horizon')
-        ->and($body)->toContain('until systemctl is-active --quiet "$service" || [ "$waited" -ge 30 ]; do');
+        ->and($body)->toContain('wait_for_service caddy || healthy=false')
+        ->and($body)->toContain('wait_for_service coresmith-horizon "$horizon_pid" || healthy=false')
+        ->and($body)->toContain('wait_for_service coresmith-reverb || healthy=false');
+});
+
+function installWaitForService(string $systemctl, string $arguments): array
+{
+    $steps = (string) tempnam(sys_get_temp_dir(), 'coresmith-wait-');
+    file_put_contents($steps, '0');
+
+    $stubs = <<<'BASH'
+        set -euo pipefail
+        log() { printf 'log: %s\n' "$1"; }
+        success() { printf 'ok: %s\n' "$1"; }
+        error() { printf 'error: %s\n' "$1"; }
+        step() { cat "$STEPS"; }
+        sleep() { echo $(($(step) + 1)) > "$STEPS"; }
+        BASH;
+
+    $process = new Process(['bash', '-c', $stubs . "\n" . $systemctl . "\n" . installScriptFunctions('wait_for_service') . "\nwait_for_service " . $arguments], null, ['STEPS' => $steps]);
+    $process->run();
+    $waited = (int) file_get_contents($steps);
+    @unlink($steps);
+
+    return [$process, $waited];
+}
+
+test('a re-run waits for the new horizon process before calling it running', function () {
+    [$process, $waited] = installWaitForService(<<<'BASH'
+        systemctl() {
+            case "$1" in
+                is-active) [ "$(step)" -lt 1 ] || [ "$(step)" -ge 3 ] ;;
+                show) if [ "$(step)" -lt 3 ]; then echo 4242; else echo 5151; fi ;;
+            esac
+        }
+        BASH, 'coresmith-horizon 4242');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("ok: coresmith-horizon is running\n")
+        ->and($waited)->toBe(3);
+});
+
+test('a horizon still finishing its jobs is reported as moving over, not as failed', function () {
+    [$process, $waited] = installWaitForService('systemctl() { case "$1" in is-active) return 0 ;; show) echo 4242 ;; esac; }', 'coresmith-horizon 4242');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("log: coresmith-horizon is finishing its current jobs and moves to the new version once they are done\n")
+        ->and($waited)->toBe(60);
+});
+
+test('a service that never comes up fails the run and says where to look', function () {
+    [$process, $waited] = installWaitForService('systemctl() { case "$1" in is-active) return 3 ;; show) echo 0 ;; esac; }', 'caddy');
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getOutput())->toBe("error: caddy did not start. Inspect it with: journalctl -u caddy -n 50\n")
+        ->and($waited)->toBe(60);
+});
+
+test('a service that is already up is reported without waiting', function () {
+    [$process, $waited] = installWaitForService('systemctl() { case "$1" in is-active) return 0 ;; show) echo 777 ;; esac; }', 'caddy');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("ok: caddy is running\n")
+        ->and($waited)->toBe(0);
 });
 
 test('without a domain the panel answers on the address the server owns, not one a router owns', function () {

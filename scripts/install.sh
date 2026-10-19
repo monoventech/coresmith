@@ -950,6 +950,26 @@ F2BJAIL
     success "fail2ban is watching panel logins"
 }
 
+wait_for_service() {
+    local service="$1" previous="${2:-}" waited=0
+
+    until { systemctl is-active --quiet "$service" && [ "$(systemctl show -p MainPID --value "$service")" != "$previous" ]; } || [ "$waited" -ge 60 ]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    if ! systemctl is-active --quiet "$service"; then
+        error "$service did not start. Inspect it with: journalctl -u $service -n 50"
+        return 1
+    fi
+
+    if [ -n "$previous" ] && [ "$(systemctl show -p MainPID --value "$service")" = "$previous" ]; then
+        log "$service is finishing its current jobs and moves to the new version once they are done"
+    else
+        success "$service is running"
+    fi
+}
+
 finalize() {
     log "Phase 8/8: starting services..."
 
@@ -959,7 +979,10 @@ finalize() {
     run systemctl restart caddy
     run systemctl enable coresmith-horizon coresmith-reverb
 
+    local horizon_pid=""
+
     if systemctl is-active --quiet coresmith-horizon; then
+        horizon_pid="$(systemctl show -p MainPID --value coresmith-horizon)"
         run sudo -u coresmith php "$INSTALL_DIR/artisan" horizon:terminate
     else
         run systemctl start coresmith-horizon
@@ -972,21 +995,9 @@ finalize() {
     configure_fail2ban
 
     local healthy=true
-    for service in caddy coresmith-horizon coresmith-reverb; do
-        local waited=0
-
-        until systemctl is-active --quiet "$service" || [ "$waited" -ge 30 ]; do
-            sleep 1
-            waited=$((waited + 1))
-        done
-
-        if systemctl is-active --quiet "$service"; then
-            success "$service is running"
-        else
-            error "$service did not start. Inspect it with: journalctl -u $service -n 50"
-            healthy=false
-        fi
-    done
+    wait_for_service caddy || healthy=false
+    wait_for_service coresmith-horizon "$horizon_pid" || healthy=false
+    wait_for_service coresmith-reverb || healthy=false
 
     local setup_token="" setup_output="" already_set_up=false
 
