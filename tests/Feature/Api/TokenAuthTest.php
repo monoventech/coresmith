@@ -60,6 +60,19 @@ test('a token with the right ability lists only its own teams servers', function
         ->and($response->json('data.0.name'))->toBe('ours');
 });
 
+test('a server still being created is listed without an address', function () {
+    $team = Team::factory()->create();
+    $user = apiUser($team, TeamRole::Owner);
+    Server::factory()->for($team)->creating()->create();
+
+    $this->withHeaders(asToken(tokenFor($user, $team, [Ability::ViewServer])))
+        ->getJson('/api/v1/servers')
+        ->assertOk()
+        ->assertJsonStructure(['data' => ['*' => ['id', 'name', 'ip_address', 'status']]])
+        ->assertJsonPath('data.0.ip_address', null)
+        ->assertJsonPath('data.0.status', 'creating');
+});
+
 test('a token bound to one team cannot reach another teams server even when the user belongs to both', function () {
     $team = Team::factory()->create();
     $other = Team::factory()->create();

@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Casts\Vaulted;
 use App\Enums\ServerStatus;
 use Database\Factories\ServerFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +33,25 @@ class Server extends Model
         return $this->belongsTo(Team::class);
     }
 
+    public function cloudProvider(): BelongsTo
+    {
+        return $this->belongsTo(CloudProvider::class)->withTrashed();
+    }
+
+    public function fromProvider(): bool
+    {
+        return $this->cloud_provider_id !== null;
+    }
+
+    public function sshAddress(): ?string
+    {
+        if ($this->ip_address === null) {
+            return null;
+        }
+
+        return "{$this->ssh_user}@{$this->ip_address}:{$this->ssh_port}";
+    }
+
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class);
@@ -45,6 +65,14 @@ class Server extends Model
     public function metrics(): HasMany
     {
         return $this->hasMany(ServerMetric::class);
+    }
+
+    protected function ipAddress(): Attribute
+    {
+        return Attribute::make(
+            get: fn(?string $value): ?string => $value === null || $value === '' ? null : $value,
+            set: fn(?string $value): string => $value ?? '',
+        );
     }
 
     /**
@@ -62,6 +90,8 @@ class Server extends Model
             'last_connected_at' => 'datetime',
             'host_key_changed_at' => 'datetime',
             'booted_at' => 'datetime',
+            'provider_task' => 'array',
+            'provider_monthly_cost' => 'decimal:2',
         ];
     }
 }

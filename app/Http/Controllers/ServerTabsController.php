@@ -68,7 +68,7 @@ final class ServerTabsController extends Controller
                     ])->values(),
             ],
             'access' => [
-                'ssh' => $server->ssh_user . '@' . $server->ip_address . ':' . $server->ssh_port,
+                'ssh' => $server->sshAddress(),
                 'fingerprint' => $server->host_key_fingerprint,
                 'public_key' => $server->ssh_public_key,
                 'audit_logging' => (bool) $server->audit_logging_enabled,

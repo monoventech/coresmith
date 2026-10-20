@@ -58,7 +58,9 @@
             tabindex="0"
             role="region"
             aria-label="SSH public key">{provisioning.public_key}</pre>
-        <p class="mt-2 font-mono text-[12px] text-muted-foreground">{provisioning.ssh}</p>
+        {#if provisioning.ssh}
+            <p class="mt-2 font-mono text-[12px] text-muted-foreground">{provisioning.ssh}</p>
+        {/if}
         <div class="mt-4 flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onclick={copyKey}>{copied ? 'Copied' : 'Copy the key'}</Button>
             {#if server.can.update}

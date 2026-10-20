@@ -134,7 +134,7 @@ final class ServerPresenter
             'failed_phase' => $failed ? $completed + 1 : null,
             'log' => $server->provisioning_log,
             'public_key' => $server->ssh_public_key,
-            'ssh' => $server->ssh_user . '@' . $server->ip_address . ':' . $server->ssh_port,
+            'ssh' => $server->sshAddress(),
             'ssh_user' => $server->ssh_user,
             'audit' => $this->audit($server),
         ];

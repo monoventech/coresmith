@@ -27,7 +27,7 @@
         isolation: string[]
         hardening: string[]
         firewall: { open: number[]; ssh_port: number; changes: Change[] }
-        access: { ssh: string; fingerprint: string | null; public_key: string; audit_logging: boolean }
+        access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
     } = $props()
 
     let auditBusy = $state(false)
@@ -132,7 +132,7 @@
         <h3 class="type-h3 m-0 mb-1">SSH access</h3>
         <p class="mb-3 text-[12.5px] text-muted-foreground">Coresmith signs in with a key it generated for this server alone. Password login is off.</p>
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-            <div class="text-foreground">{access.ssh}</div>
+            <div class="text-foreground">{access.ssh ?? 'no address yet'}</div>
             <div class="break-all">host key {access.fingerprint ?? 'not recorded yet'}</div>
         </div>
         <pre class="terminal mt-3 max-h-24 text-[11px] leading-[1.6] break-all whitespace-pre-wrap">{access.public_key}</pre>
