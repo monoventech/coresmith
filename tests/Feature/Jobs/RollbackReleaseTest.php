@@ -227,7 +227,7 @@ test('a rollback where only a worker does not start keeps the app live and names
     $application = rollbackApp(['status' => ApplicationStatus::Failed, 'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']]]);
     $transport = rollbackTransport()
         ->respondTo("systemctl is-active 'coresmith-app-my-app-queue'", "activating\n", 3)
-        ->respondTo("tail -n 30 '/var/coresmith/logs/my-app/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
+        ->respondTo("tail -n 200 '/var/coresmith/logs/my-app/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
 
     expect(fn() => rollbackRun($application, $transport, '20260911-100000'))->toThrow(ProcessDidNotStart::class);
 

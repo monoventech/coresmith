@@ -10,6 +10,7 @@ use App\Jobs\DeployApplication;
 use App\Jobs\InstallRuntimes;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\ReleasePaths;
@@ -235,6 +236,34 @@ test('a laravel app copies its release storage into place only when the whole co
             . "if [ -d {$shared} ]; then rm -rf {$local} && ln -sfn {$shared} {$local}; fi",
         $release,
     ));
+});
+
+test('a laravel deploy hands its shared storage folders to caddy after seeding them and before its processes start', function () {
+    $application = sharedStorageApp(['type' => ApplicationType::Php, 'framework' => 'laravel', 'php_version' => '8.5.5', 'ruby_version' => null]);
+    $transport = sharedStorageTransport();
+
+    sharedStorageDeploy(Deployment::factory()->for($application)->create(), $transport);
+
+    $commands = collect($transport->commands());
+    $seeded = $commands->search(fn(string $command): bool => str_contains($command, '/shared/logs'));
+    $shared = $commands->search((new AppAccount)->shareStorage($application));
+    $started = $commands->search("systemctl enable 'coresmith-app-shop-fpm'");
+
+    expect($seeded)->toBeInt()
+        ->and($shared)->toBeInt()
+        ->and($started)->toBeInt()
+        ->and($seeded)->toBeLessThan($shared)
+        ->and($shared)->toBeLessThan($started);
+});
+
+test('a rails deploy never hands its shared storage to caddy', function () {
+    $application = sharedStorageApp();
+    $transport = sharedStorageTransport();
+
+    sharedStorageDeploy(Deployment::factory()->for($application)->create(), $transport);
+
+    expect($transport->commands())->toContain("systemctl enable 'coresmith-app-shop-web'")
+        ->and($transport->commands())->not->toContain((new AppAccount)->shareStorage($application));
 });
 
 test('a rails deploy runs its storage script as the app through the app shell, and the script parses', function () {

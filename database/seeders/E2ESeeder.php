@@ -383,10 +383,13 @@ final class E2ESeeder extends Seeder
     {
         $this->succeeded($application, 26 * 60, 'v1.2.0');
 
-        $release = $this->wentLiveButDidNotStart($application, CarbonImmutable::now()->subMinutes(20), '5e1d0a2', 'Add the stock alerts mailer', 'web', [
-            '*  Environment: development',
-            '! Unable to load application: LoadError: cannot load such file -- debug/prelude',
-        ], 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.');
+        $started = CarbonImmutable::now()->subMinutes(20);
+        $gems = "/var/coresmith/apps/{$application->slug}/releases/" . $started->format('Ymd-His') . '/vendor/bundle/ruby/3.4.0/gems';
+
+        $release = $this->wentLiveButDidNotStart($application, $started, '5e1d0a2', 'Add the stock alerts mailer', 'web', [
+            "{$gems}/bootsnap-1.18.4/lib/bootsnap/load_path_cache/core_ext/kernel_require.rb:30:in 'Kernel#require': cannot load such file -- debug/prelude (LoadError)",
+            "\tfrom {$gems}/railties-8.0.2/lib/rails/initializable.rb:32:in 'Rails::Initializable::Initializer#run'",
+        ], 'This Rails app runs with RAILS_ENV=development, but its gems were installed for production only. Set RAILS_ENV=production in its environment variables, then deploy again.');
 
         $application->forceFill(['current_release' => $release, 'status' => ApplicationStatus::Failed])->save();
     }
@@ -491,7 +494,7 @@ final class E2ESeeder extends Seeder
     {
         $this->succeeded($application, 3 * 24 * 60, 'v0.4.0');
 
-        $error = "coresmith-app-{$application->slug}-solid-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.";
+        $error = "coresmith-app-{$application->slug}-jobs did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.";
 
         $this->logAt($application, 'toggle_changed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'on' => true], CarbonImmutable::now()->subMinutes(35));
         $this->logAt($application, 'toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => $error], CarbonImmutable::now()->subMinutes(34));

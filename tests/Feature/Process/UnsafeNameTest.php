@@ -6,6 +6,7 @@ use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Panel\SmartToggles;
 use App\Services\Process\FpmPoolBuilder;
 use App\Services\Process\SystemdUnitBuilder;
 use App\Services\Runtime\AsdfManager;
@@ -68,7 +69,26 @@ test('legitimate names are accepted', function (string $slug) {
 
 test('legitimate process names are accepted', function (string $name) {
     expect(SafeName::isProcess($name))->toBeTrue();
-})->with(['web', 'worker', 'queue-worker', 'ssr']);
+})->with(['web', 'fpm', 'queue', 'sidekiq', 'jobs', 'worker2', str_repeat('a', 32)]);
+
+test('a process name with a dash or a newline is refused, so a unit name can only be read one way', function (string $name) {
+    (new SystemdUnitBuilder(new AsdfManager))->unitName(Application::factory()->make(['slug' => 'shop']), $name);
+})->with(['solid-queue', 'queue-worker', '-queue', 'queue-', "queue\n", "jobs\n", str_repeat('a', 33)])->throws(UnsafeNameException::class);
+
+test('a process name with a dash cannot be persisted in the processes column', function () {
+    Application::factory()->create(['processes' => [['name' => 'solid-queue', 'command' => 'bin/jobs']]]);
+})->throws(UnsafeNameException::class);
+
+test('two apps whose slug and worker could run together still get different unit names', function () {
+    $units = new SystemdUnitBuilder(new AsdfManager);
+    $toggles = app(SmartToggles::class);
+    $solidQueue = $units->unitName(Application::factory()->make(['slug' => 'shop']), (string) $toggles->process(SmartToggles::SOLID_QUEUE));
+    $queue = $units->unitName(Application::factory()->make(['slug' => 'shop-solid']), (string) $toggles->process(SmartToggles::QUEUE));
+
+    expect($solidQueue)->toBe('coresmith-app-shop-jobs')
+        ->and($queue)->toBe('coresmith-app-shop-solid-queue')
+        ->and($solidQueue)->not->toBe($queue);
+});
 
 test('a branch git would read as an option or a pattern cannot be persisted', function (string $branch) {
     Application::factory()->create(['repository_branch' => $branch]);

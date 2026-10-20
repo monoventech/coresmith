@@ -286,7 +286,7 @@ test('a worker that does not start fails the deploy with its own reason, but the
     $transport = healthyDeployTransport()
         ->respondTo("systemctl is-active 'coresmith-app-my-app-queue'", "activating\n", 3)
         ->respondTo("journalctl -u 'coresmith-app-my-app-queue'", "coresmith-app-my-app-queue.service: Main process exited, code=exited, status=1/FAILURE\n")
-        ->respondTo("tail -n 30 '/var/coresmith/logs/my-app/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
+        ->respondTo("tail -n 200 '/var/coresmith/logs/my-app/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
 
     expect(fn() => deploy($deployment, $transport))->toThrow(ProcessDidNotStart::class);
 

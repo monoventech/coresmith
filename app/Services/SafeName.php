@@ -14,7 +14,7 @@ final class SafeName
 {
     public const SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{0,62}$/';
 
-    public const PROCESS_PATTERN = '/^[a-z0-9][a-z0-9-]{0,31}$/';
+    public const PROCESS_PATTERN = '/^[a-z0-9]{1,32}$/D';
 
     public const SYSTEM_USER_PATTERN = '/^[a-z_][a-z0-9_-]{0,31}$/';
 

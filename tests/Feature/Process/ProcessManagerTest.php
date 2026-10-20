@@ -7,6 +7,7 @@ use App\Enums\PowerState;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Deployment\AppAccount;
 use App\Services\Process\FpmPoolBuilder;
 use App\Services\Process\ProcessManager;
 use App\Services\Process\SystemdUnitBuilder;
@@ -150,6 +151,47 @@ test('no php-fpm unit sets a soft memory limit either', function () {
     expect((new FpmPoolBuilder(new AsdfManager))->unit(managedApp()))->not->toContain('MemoryHigh');
 });
 
+test('every unit creates files that others cannot read, so caddy reads them only through the group', function (string $process, string $command) {
+    expect((new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), $process, $command))->toContain("\nGroup=coresmith-app-abcd\nUMask=0027\n");
+})->with([
+    'web' => ['web', '/bin/true'],
+    'worker' => ['queue', 'php artisan queue:work'],
+]);
+
+test('php-fpm gives its workers the umask from its unit, because a pool has no umask setting and fails to load with one', function () {
+    $fpm = new FpmPoolBuilder(new AsdfManager);
+    $application = managedApp();
+
+    expect($fpm->unit($application))->toContain("\nUser=root\nUMask=0027\n")
+        ->and(strtolower($fpm->pool($application)))->not->toContain('umask');
+});
+
+test('a php app has its shared storage handed to caddy when its processes are installed, before systemd reloads', function () {
+    $transport = new FakeSSHTransport;
+    $application = managedApp();
+
+    processManager()->install(processConnection($transport), $application);
+
+    $commands = $transport->commands();
+    $shared = array_search((new AppAccount)->shareStorage($application), $commands, true);
+
+    expect($shared)->not->toBeFalse()
+        ->and($shared)->toBeLessThan(array_search('systemctl daemon-reload', $commands, true));
+});
+
+test('only a php app has its storage handed to caddy, so a rails app keeps its storage to itself', function (array $attributes) {
+    $transport = new FakeSSHTransport;
+
+    processManager()->install(processConnection($transport), managedApp($attributes));
+
+    expect(implode("\n", $transport->commands()))->not->toContain('chmod g+s')
+        ->and(implode("\n", $transport->commands()))->not->toContain('/shared/storage');
+})->with([
+    'rails' => [['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.3.6']],
+    'node' => [['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0', 'php_version' => null]],
+    'static' => [['type' => ApplicationType::Static, 'php_version' => null]],
+]);
+
 test('every unit of a ruby app runs in production unless the app sets its own environment', function (string $process, string $command) {
     $unit = (new SystemdUnitBuilder(new AsdfManager))->build(rubyApp(), $process, $command);
     $file = strpos($unit, "\nEnvironmentFile=/etc/coresmith/env/my-app.env\n");
@@ -257,6 +299,23 @@ test('waking starts every unit and records the request time', function () {
     expect(implode("\n", $transport->commands()))->toContain("systemctl enable --now 'coresmith-app-my-app-fpm'")
         ->and($app->fresh()->power_state)->toBe(PowerState::Active)
         ->and($app->fresh()->last_request_at)->not->toBeNull();
+});
+
+test('uninstalling disables and deletes each unit by its name, deletes the php-fpm pool, then reloads systemd', function () {
+    $transport = new FakeSSHTransport;
+    $app = managedApp(['power_state' => PowerState::Active, 'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']]]);
+
+    processManager()->uninstall(processConnection($transport), $app);
+
+    expect($transport->commands())->toBe([
+        "systemctl disable --now 'coresmith-app-my-app-fpm' || true",
+        "rm -f '/etc/systemd/system/coresmith-app-my-app-fpm.service'",
+        "systemctl disable --now 'coresmith-app-my-app-queue' || true",
+        "rm -f '/etc/systemd/system/coresmith-app-my-app-queue.service'",
+        "rm -f '/etc/php-fpm.d/coresmith-app-my-app.conf'",
+        'systemctl daemon-reload',
+    ])
+        ->and($app->fresh()->power_state)->toBe(PowerState::Stopped);
 });
 
 test('stopping is distinct from sleeping', function () {

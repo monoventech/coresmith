@@ -186,7 +186,7 @@ test('a worker that does not start is stopped, removed and its toggle turned bac
     $transport = (new FakeSSHTransport)
         ->respondTo("systemctl is-active 'coresmith-app-shop-queue'", "activating\n", 3)
         ->respondTo("journalctl -u 'coresmith-app-shop-queue'", "coresmith-app-shop-queue.service: Main process exited, code=exited, status=1/FAILURE\n")
-        ->respondTo("tail -n 30 '/var/coresmith/logs/shop/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
+        ->respondTo("tail -n 200 '/var/coresmith/logs/shop/queue.log'", "Could not open input file: artisan\nNo such file or directory\n");
 
     processJobsRun(new SyncApplicationProcesses($application, [], SmartToggles::QUEUE), $transport);
 
@@ -248,7 +248,15 @@ test('process syncs and detaches run on the server tasks queue', function () {
         ->and((new DetachApplication($application))->queue)->toBe('server-tasks');
 });
 
-test('detaching stops every unit and removes the site from caddy', function () {
+function detachUnitCommands(string $slug, array $processes): array
+{
+    return collect($processes)->flatMap(fn(string $process): array => [
+        "systemctl disable --now 'coresmith-app-{$slug}-{$process}' || true",
+        "rm -f '/etc/systemd/system/coresmith-app-{$slug}-{$process}.service'",
+    ])->values()->all();
+}
+
+test('detaching disables and deletes every unit of the app and its php-fpm pool, then removes the site from caddy', function () {
     $application = processJobsApp([
         'domain' => 'shop.example.com',
         'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']],
@@ -260,12 +268,72 @@ test('detaching stops every unit and removes the site from caddy', function () {
 
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain("systemctl stop 'coresmith-app-shop-fpm'")
-        ->and($commands)->toContain("systemctl stop 'coresmith-app-shop-queue'")
+    expect(array_slice($transport->commands(), 0, 6))->toBe([
+        ...detachUnitCommands('shop', ['fpm', 'queue']),
+        "rm -f '/etc/php-fpm.d/coresmith-app-shop.conf'",
+        'systemctl daemon-reload',
+    ])
         ->and($commands)->toContain("-X DELETE 'http://localhost:2019/id/app-{$application->id}'")
         ->and($commands)->toContain('mv -f /etc/caddy/caddy-config.staged.json /etc/caddy/caddy-config.json')
         ->and(Application::withTrashed()->find($application->id)->power_state)->toBe(PowerState::Stopped)
         ->and($transport->connected())->toBeFalse();
+});
+
+test('detaching removes the units the app has by their exact names and never touches another app on the server', function () {
+    $application = processJobsApp(['domain' => null, 'processes' => [['name' => 'queue', 'command' => SmartToggles::QUEUE_COMMAND]]]);
+    Application::factory()->create([
+        'server_id' => $application->server_id,
+        'team_id' => $application->team_id,
+        'slug' => 'shop-api',
+        'system_user' => 'coresmith-app-shop-api',
+        'type' => ApplicationType::Js,
+        'js_runtime' => 'node',
+        'node_version' => '24.15.0',
+        'php_version' => null,
+        'processes' => [['name' => 'queue', 'command' => 'node queue.js']],
+    ]);
+    $application->delete();
+    $transport = new FakeSSHTransport;
+
+    processJobsRun(new DetachApplication($application), $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($transport->commands())->toContain(...detachUnitCommands('shop', ['fpm', 'queue']))
+        ->and($commands)->not->toContain('shop-api')
+        ->and($commands)->not->toContain('*');
+});
+
+test('detaching a rails app removes its web and worker units, and it has no php-fpm pool to remove', function () {
+    $application = processJobsApp([
+        'type' => ApplicationType::Ruby,
+        'framework' => 'rails',
+        'php_version' => null,
+        'ruby_version' => '3.3.6',
+        'domain' => null,
+        'processes' => [['name' => 'sidekiq', 'command' => SmartToggles::SIDEKIQ_COMMAND], ['name' => 'jobs', 'command' => SmartToggles::SOLID_QUEUE_COMMAND]],
+    ]);
+    $application->delete();
+    $transport = new FakeSSHTransport;
+
+    processJobsRun(new DetachApplication($application), $transport);
+
+    expect(array_slice($transport->commands(), 0, 7))->toBe([...detachUnitCommands('shop', ['web', 'sidekiq', 'jobs']), 'systemctl daemon-reload'])
+        ->and(implode("\n", $transport->commands()))->not->toContain('php-fpm');
+});
+
+test('a unit systemd no longer knows does not stop the rest of the app from being removed', function () {
+    $application = processJobsApp(['domain' => null, 'processes' => [['name' => 'queue', 'command' => SmartToggles::QUEUE_COMMAND]]]);
+    $application->delete();
+    $transport = (new FakeSSHTransport)->respondTo("systemctl disable --now 'coresmith-app-shop-fpm'", 'Failed to disable unit: Unit file coresmith-app-shop-fpm.service does not exist.', 1);
+
+    processJobsRun(new DetachApplication($application), $transport);
+
+    expect(array_slice($transport->commands(), 0, 6))->toBe([
+        ...detachUnitCommands('shop', ['fpm', 'queue']),
+        "rm -f '/etc/php-fpm.d/coresmith-app-shop.conf'",
+        'systemctl daemon-reload',
+    ]);
 });
 
 test('detaching removes the app cron file, its scripts and any old user crontab, so its scheduled jobs stop with it', function () {
@@ -276,7 +344,7 @@ test('detaching removes the app cron file, its scripts and any old user crontab,
     processJobsRun(new DetachApplication($application), $transport);
 
     $commands = $transport->commands();
-    $stopped = array_search("systemctl stop 'coresmith-app-shop-fpm'", $commands, true);
+    $stopped = array_search("systemctl disable --now 'coresmith-app-shop-fpm' || true", $commands, true);
     $removed = array_search(
         "rm -f '/etc/cron.d/coresmith-app-shop' '/etc/cron.d/.coresmith-app-shop.new' && rm -rf '/etc/coresmith/cron/shop' '/etc/coresmith/cron/.shop.new'"
         . " && if crontab -u 'coresmith-app-shop' -l >/dev/null 2>&1; then crontab -u 'coresmith-app-shop' -r; fi",
@@ -296,7 +364,7 @@ test('detaching an application without a domain never calls caddy', function () 
     processJobsRun(new DetachApplication($application), $transport);
 
     expect(implode("\n", $transport->commands()))->not->toContain('curl')
-        ->and(implode("\n", $transport->commands()))->toContain("systemctl stop 'coresmith-app-shop-fpm'");
+        ->and($transport->commands())->toContain("systemctl disable --now 'coresmith-app-shop-fpm' || true");
 });
 
 test('removing an application soft deletes it and queues the detach', function () {

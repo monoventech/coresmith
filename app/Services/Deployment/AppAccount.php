@@ -16,6 +16,8 @@ final class AppAccount
 {
     public const WEB_GROUP = 'caddy';
 
+    public const UMASK = '0027';
+
     public function ensure(SSHConnection $connection, Application $application): void
     {
         $connection->execute($this->command($application), sudo: true)->throw();
@@ -39,7 +41,7 @@ final class AppAccount
             "chown root:root {$base} {$releases}",
             "chmod 711 {$base} {$releases}",
             "chown -h {$user}:{$group} {$shared}",
-            "chmod 750 {$shared}",
+            "chmod 2750 {$shared}",
             "find {$releases} -mindepth 1 -maxdepth 1 -type d -regextype posix-extended -regex '.*/[0-9]{8}-?[0-9]{6}' ! -user {$user} -exec chown -hR {$user}:{$group} {} + -exec chmod 750 {} +",
         ]);
     }
@@ -50,10 +52,24 @@ final class AppAccount
         $path = escapeshellarg($release);
 
         return implode(' && ', [
-            'chown -hR ' . $user . ':' . self::WEB_GROUP . ' ' . $path,
             'chmod -R u+rwX,g+rX,g-w,o-rwx ' . $path,
             'chmod 750 ' . $path,
+            'find ' . $path . ' -type d -exec chmod g+s {} +',
+            'chown -hR ' . $user . ':' . self::WEB_GROUP . ' ' . $path,
         ]);
+    }
+
+    public function shareStorage(Application $application): string
+    {
+        $shared = (new ReleasePaths($application))->shared();
+        $storage = escapeshellarg($shared . '/storage');
+        $group = self::WEB_GROUP;
+        $folders = 'systemd-run --quiet --wait --pipe --collect --service-type=exec'
+            . ' -p ProtectSystem=strict -p ' . escapeshellarg('ReadWritePaths=' . $shared)
+            . ' -p PrivateDevices=yes -p PrivateTmp=yes -p ProtectKernelTunables=yes -p ProtectControlGroups=yes -p NoNewPrivileges=yes'
+            . " -- /usr/bin/find {$storage} -type d";
+
+        return "if [ -d {$storage} ]; then {$folders} '!' -group {$group} -exec chgrp {$group} '{}' + && {$folders} '!' -perm -2000 -exec chmod g+s '{}' +; fi";
     }
 
     public static function home(Application $application): string

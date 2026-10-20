@@ -11,6 +11,7 @@ namespace App\Services\Process;
 use App\Enums\AppSize;
 use App\Models\Application;
 use App\Services\Caddy\CaddyRouteBuilder;
+use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
@@ -79,6 +80,7 @@ final class FpmPoolBuilder
         $base = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
         $envFile = (new ReleasePaths($application))->envFile();
+        $umask = AppAccount::UMASK;
 
         return <<<UNIT
         [Unit]
@@ -88,6 +90,7 @@ final class FpmPoolBuilder
         [Service]
         Type=simple
         User=root
+        UMask={$umask}
         EnvironmentFile={$envFile}
         ExecStart={$binary} --nodaemonize --fpm-config {$pool}
         ExecReload=/bin/kill -USR2 \$MAINPID

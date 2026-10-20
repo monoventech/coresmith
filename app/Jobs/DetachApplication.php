@@ -34,7 +34,7 @@ final class DetachApplication implements ShouldQueue
         $connection = $connections->for($this->application->server);
 
         try {
-            $processes->stop($connection, $this->application);
+            $processes->uninstall($connection, $this->application);
             $crontab->remove($connection, $this->application);
 
             if ($this->application->allDomains() !== []) {

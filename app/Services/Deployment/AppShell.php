@@ -76,6 +76,7 @@ final class AppShell
             ...array_map(fn(string $name, string $value): string => '-E ' . escapeshellarg($name . '=' . $value), array_keys($environment), $environment),
             '-p ' . escapeshellarg('EnvironmentFile=' . (new ReleasePaths($application))->envFile()),
             ...array_map(fn(string $property): string => '-p ' . $property, $properties),
+            '-p UMask=' . AppAccount::UMASK,
             '-p NoNewPrivileges=yes',
             '-E ' . escapeshellarg('PATH=' . $this->path($versions)),
             '--',

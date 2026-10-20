@@ -12,6 +12,7 @@ use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
+use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
@@ -22,13 +23,30 @@ final class ProcessManager
 {
     public const START_GRACE_SECONDS = 3;
 
-    public const START_LOG_LINES = 30;
+    public const START_LOG_LINES = 200;
+
+    private const NAMED_ERROR = '/\b[A-Z][A-Za-z0-9_]*(?:Error|Exception)\b|(?i:cannot load such file|fatal error|fatal:|permission denied)/';
+
+    private const ERROR_WORD = '/error|exception|cannot|failed|fatal|not found|denied/i';
+
+    private const REQUEST_LINE = '/\b(?:Started (?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS) "|Processing by |Completed \d{3} )/';
+
+    private const FRAME_LINE = '/^\s+at |^#\d+ |^\s+File "|^\s+from |:\d+:in [`\'][^`\']*\'\s*$/';
+
+    private const ERROR_LINES = 15;
+
+    private const END_LINES = 10;
+
+    private const FALLBACK_LINES = 30;
+
+    private const EXCERPT_LINES = 60;
 
     public function __construct(
         private readonly SystemdUnitBuilder $units,
         private readonly FpmPoolBuilder $fpm,
         private readonly ProcessStartAdvice $advice = new ProcessStartAdvice,
         private readonly LogSanitizer $sanitizer = new LogSanitizer,
+        private readonly AppAccount $account = new AppAccount,
     ) {}
 
     public function install(SSHConnection $connection, Application $application): void
@@ -36,6 +54,7 @@ final class ProcessManager
         $connection->execute('mkdir -p /var/coresmith/logs/' . SafeName::assertSlug($application->slug), sudo: true)->throw();
 
         if ($application->type === ApplicationType::Php) {
+            $connection->execute($this->account->shareStorage($application), sudo: true)->throw();
             $connection->execute('mkdir -p /etc/php-fpm.d /var/run/php', sudo: true)->throw();
             $connection->uploadContent($this->fpm->pool($application), $this->fpm->poolPath($application));
             $connection->uploadContent(
@@ -81,6 +100,22 @@ final class ProcessManager
         $application->forceFill(['power_state' => $state])->save();
     }
 
+    public function uninstall(SSHConnection $connection, Application $application): void
+    {
+        foreach ($this->unitNames($application) as $unit) {
+            $connection->execute('systemctl disable --now ' . escapeshellarg($unit) . ' || true', sudo: true);
+            $connection->execute('rm -f ' . escapeshellarg(SystemdUnitBuilder::UNIT_DIR . '/' . $unit . '.service'), sudo: true)->throw();
+        }
+
+        if ($application->type === ApplicationType::Php) {
+            $connection->execute('rm -f ' . escapeshellarg($this->fpm->poolPath($application)), sudo: true)->throw();
+        }
+
+        $connection->execute('systemctl daemon-reload', sudo: true)->throw();
+
+        $application->forceFill(['power_state' => PowerState::Stopped])->save();
+    }
+
     public function refresh(SSHConnection $connection, Application $application, bool $restart = false): void
     {
         $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;
@@ -117,7 +152,7 @@ final class ProcessManager
                 'journalctl -u ' . escapeshellarg($unit) . " --no-pager -n 30 --since '2 minutes ago' 2>/dev/null || true",
                 sudo: true,
             )->output;
-            $log = $unit === $fpm ? '' : trim($this->sanitizer->sanitize($this->processLog($connection, $application, $unit, self::START_LOG_LINES), $application));
+            $log = $unit === $fpm ? '' : trim($this->excerpt($this->sanitizer->sanitize($this->processLog($connection, $application, $unit, self::START_LOG_LINES), $application)));
             $output = $log === '' ? $journal : trim(rtrim($journal) . "\n" . $log);
 
             throw new ProcessDidNotStart($unit, $state === '' ? 'unknown' : $state, $output, $this->advice->for($application, $output));
@@ -174,6 +209,22 @@ final class ProcessManager
         }
 
         return $names;
+    }
+
+    private function excerpt(string $log): string
+    {
+        $lines = preg_split('/\R/', rtrim($log, "\r\n")) ?: [];
+        $candidates = preg_grep(self::REQUEST_LINE, $lines, PREG_GREP_INVERT) ?: [];
+        $candidates = preg_grep(self::FRAME_LINE, $candidates, PREG_GREP_INVERT) ?: [];
+        $error = array_key_last(preg_grep(self::NAMED_ERROR, $candidates) ?: []) ?? array_key_last(preg_grep(self::ERROR_WORD, $candidates) ?: []);
+
+        $excerpt = match (true) {
+            $error === null => array_slice($lines, -self::FALLBACK_LINES),
+            count($lines) - self::END_LINES > $error + self::ERROR_LINES => [...array_slice($lines, $error, self::ERROR_LINES), '...', ...array_slice($lines, -self::END_LINES)],
+            default => array_slice($lines, $error),
+        };
+
+        return implode("\n", array_slice($excerpt, 0, self::EXCERPT_LINES));
     }
 
     /**

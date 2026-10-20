@@ -55,7 +55,7 @@ final class SmartToggles
     private const WORKERS = [
         self::QUEUE => ['queue', self::QUEUE_COMMAND],
         self::SIDEKIQ => ['sidekiq', self::SIDEKIQ_COMMAND],
-        self::SOLID_QUEUE => ['solid-queue', self::SOLID_QUEUE_COMMAND],
+        self::SOLID_QUEUE => ['jobs', self::SOLID_QUEUE_COMMAND],
     ];
 
     private const GEMS = [
@@ -144,7 +144,7 @@ final class SmartToggles
             self::SOLID_QUEUE => [
                 'key' => $key,
                 'label' => 'Solid Queue',
-                'description' => 'bin/jobs · systemd unit coresmith-app-' . $slug . '-solid-queue',
+                'description' => 'bin/jobs · systemd unit coresmith-app-' . $slug . '-jobs',
                 'busy_on' => 'Creating the systemd unit and starting Solid Queue…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),

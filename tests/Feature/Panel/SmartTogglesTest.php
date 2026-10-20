@@ -91,7 +91,7 @@ test('a toggle reads as on from what the application actually runs', function ()
         ->and(togglesService()->isOn($application, SmartToggles::SCHEDULER))->toBeTrue()
         ->and(togglesService()->isOn($application, SmartToggles::SIDEKIQ))->toBeFalse()
         ->and(togglesService()->isOn($application, SmartToggles::SOLID_QUEUE))->toBeFalse()
-        ->and(togglesService()->isOn(new Application(['processes' => [['name' => 'solid-queue', 'command' => 'bin/jobs']]]), SmartToggles::SOLID_QUEUE))->toBeTrue()
+        ->and(togglesService()->isOn(new Application(['processes' => [['name' => 'jobs', 'command' => 'bin/jobs']]]), SmartToggles::SOLID_QUEUE))->toBeTrue()
         ->and(togglesService()->isOn($application, 'warp_drive'))->toBeFalse();
 });
 
@@ -266,13 +266,13 @@ test('turning solid queue on runs bin/jobs as its own unit and off tears the uni
 
     togglesService()->apply($application, SmartToggles::SOLID_QUEUE, true);
 
-    expect($application->fresh()->processes)->toBe([['name' => 'solid-queue', 'command' => 'bin/jobs']]);
+    expect($application->fresh()->processes)->toBe([['name' => 'jobs', 'command' => 'bin/jobs']]);
 
     togglesService()->apply($application->fresh(), SmartToggles::SOLID_QUEUE, false);
 
     expect($application->fresh()->processes)->toBeNull();
 
-    Queue::assertPushed(SyncApplicationProcesses::class, fn(SyncApplicationProcesses $job): bool => togglesRemoved($job) === ['solid-queue']);
+    Queue::assertPushed(SyncApplicationProcesses::class, fn(SyncApplicationProcesses $job): bool => togglesRemoved($job) === ['jobs']);
 });
 
 test('the solid queue toggle is described the way the other workers are', function () {
@@ -280,7 +280,7 @@ test('the solid queue toggle is described the way the other workers are', functi
 
     expect($described)->toMatchArray([
         'label' => 'Solid Queue',
-        'description' => 'bin/jobs · systemd unit coresmith-app-shop-solid-queue',
+        'description' => 'bin/jobs · systemd unit coresmith-app-shop-jobs',
         'busy_on' => 'Creating the systemd unit and starting Solid Queue…',
         'busy_off' => 'Stopping the unit and removing it…',
         'on' => false,
@@ -391,7 +391,7 @@ test('a unit that did not start is named by its worker label, and the unit that 
 })->with([
     'the web unit' => ['coresmith-app-shop-web', null],
     'sidekiq' => ['coresmith-app-shop-sidekiq', 'Sidekiq'],
-    'solid queue' => ['coresmith-app-shop-solid-queue', 'Solid Queue'],
+    'solid queue' => ['coresmith-app-shop-jobs', 'Solid Queue'],
     'the queue worker' => ['coresmith-app-shop-queue', 'Queue worker'],
     'a worker no toggle made' => ['coresmith-app-shop-horizon', 'Horizon'],
 ]);

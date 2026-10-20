@@ -12,6 +12,7 @@ use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
+use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\JsTooling;
@@ -53,6 +54,7 @@ final class SystemdUnitBuilder
         $defaults = $application->type?->defaultEnvironment() ?? [];
         $production = implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($defaults), $defaults));
         $command = $process === 'web' ? $command : $this->workerCommand($command);
+        $umask = AppAccount::UMASK;
 
         return <<<UNIT
         [Unit]
@@ -63,6 +65,7 @@ final class SystemdUnitBuilder
         Type=simple
         User={$user}
         Group={$user}
+        UMask={$umask}
         WorkingDirectory={$workingDirectory}
         Environment="HOME=/home/{$user}"
         Environment="PATH={$path}"

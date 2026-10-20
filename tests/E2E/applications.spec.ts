@@ -48,7 +48,7 @@ test.describe('an application', () => {
 
         await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
         await expect(page.getByTestId('toggle-solid_queue')).toContainText(
-            'bin/jobs · systemd unit coresmith-app-solid-jobs-solid-queue'
+            'bin/jobs · systemd unit coresmith-app-solid-jobs-jobs'
         )
         await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
