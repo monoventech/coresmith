@@ -197,7 +197,7 @@ final class GitHubAppApi
         }
 
         if (!$response->successful()) {
-            throw new GitHubInstallationException('GitHub refused to issue an installation token: ' . RefusalReason::for($response), $this->refusal($response));
+            throw new GitHubInstallationException('GitHub refused to issue an installation token: ' . RefusalReason::for($response), $this->refusal($response), $response->status());
         }
 
         $token = $response->json('token');

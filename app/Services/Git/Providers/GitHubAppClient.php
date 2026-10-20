@@ -293,7 +293,7 @@ final class GitHubAppClient implements GitProvider
     private function guard(Response $response): Response
     {
         if ($response->failed()) {
-            throw new GitProviderException('GitHub rejected the request: ' . RefusalReason::for($response));
+            throw new GitProviderException('GitHub rejected the request: ' . RefusalReason::for($response), $response->status());
         }
 
         return $response;

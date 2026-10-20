@@ -18,8 +18,8 @@ final class GitHubInstallationException extends GitProviderException
 
     public const UNREACHABLE = 'unreachable';
 
-    public function __construct(string $message, public readonly string $kind)
+    public function __construct(string $message, public readonly string $kind, int $status = 0)
     {
-        parent::__construct($message);
+        parent::__construct($message, $status);
     }
 }

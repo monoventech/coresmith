@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\DeploymentStatus;
 use App\Exceptions\GitHubInstallationException;
+use App\Exceptions\GitProviderException;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
@@ -22,7 +23,6 @@ use App\Services\Teams\TeamUrls;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
 use Throwable;
 
 final class PostCommitStatus implements ShouldQueue
@@ -82,7 +82,7 @@ final class PostCommitStatus implements ShouldQueue
             default => null,
         };
 
-        if ($state === null || $server === null || !$application->usesGitHubToken() || !GitHubAppClient::isFullName($repository) || preg_match(AutoDeploy::COMMIT, (string) $deployment->commit_hash) !== 1) {
+        if ($state === null || $server === null || !$application->usesGitHubToken() || !GitHubAppClient::isFullName($repository) || preg_match(AutoDeploy::COMMIT, (string) $deployment->commit_hash) !== 1 || $this->superseded($deployment)) {
             return;
         }
 
@@ -94,24 +94,52 @@ final class PostCommitStatus implements ShouldQueue
                 $deployment->commit_hash,
                 $state,
                 $urls->canonical(route('servers.applications.deployments.show', [$server, $application, $deployment], false)),
-                Str::limit($this->description($deployment, $application, $server, $state), self::DESCRIPTION_LIMIT, ''),
+                $this->description($deployment, $application, $server, $state),
                 'coresmith/' . $application->slug,
             );
-        } catch (GitHubInstallationException $refusal) {
-            if (!$connection->markRefused($refusal)) {
+        } catch (GitProviderException $refusal) {
+            if ($refusal instanceof GitHubInstallationException && $connection->markRefused($refusal)) {
+                return;
+            }
+
+            if (!$this->refusedForGood($refusal)) {
                 throw $refusal;
             }
+
+            report($refusal);
+            $this->fail($refusal);
         }
+    }
+
+    private function refusedForGood(GitProviderException $refusal): bool
+    {
+        $status = $refusal->getCode();
+
+        return $status >= 400 && $status < 500 && $status !== 429 && stripos($refusal->getMessage(), 'rate limit') === false;
+    }
+
+    private function superseded(Deployment $deployment): bool
+    {
+        return Deployment::query()
+            ->where('application_id', $deployment->application_id)
+            ->where('commit_hash', $deployment->commit_hash)
+            ->where('id', '>', $deployment->getKey())
+            ->exists();
     }
 
     private function description(Deployment $deployment, Application $application, Server $server, string $state): string
     {
         return match (true) {
-            $state === 'pending' => 'Deploying to ' . $server->name,
-            $state === 'success' => 'Live on ' . $server->name . ' as ' . Formats::release($deployment->release),
+            $state === 'pending' => $this->fitServer('Deploying to ', $server),
+            $state === 'success' => $this->fitServer('Live on ', $server, ' as ' . Formats::release($deployment->release)),
             DeploymentPresenter::reachedUsers($deployment) => 'Deploy failed after going live, read the log',
             $application->current_release === null => 'Deploy failed, the app has no live release yet',
             default => 'Deploy failed, the previous release is still live',
         };
+    }
+
+    private function fitServer(string $before, Server $server, string $after = ''): string
+    {
+        return $before . mb_substr((string) $server->name, 0, max(0, self::DESCRIPTION_LIMIT - mb_strlen($before . $after))) . $after;
     }
 }

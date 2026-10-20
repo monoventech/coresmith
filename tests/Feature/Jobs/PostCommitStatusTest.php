@@ -11,6 +11,7 @@ use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\DeployApplication;
 use App\Jobs\DetectStaleDeployments;
+use App\Jobs\InstallRuntimes;
 use App\Jobs\PostCommitStatus;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -22,6 +23,7 @@ use App\Services\Deployment\DeploymentCommands;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
@@ -69,16 +71,16 @@ function commitStatusDeployment(Application $application, DeploymentStatus $stat
     ], $attributes));
 }
 
-function commitStatusFake(int $statuses = 201, int $mint = 201): void
+function commitStatusFake(int $statuses = 201, int $mint = 201, ?string $refusal = null): void
 {
     Http::fake([
         'api.github.com/app/installations/51842/access_tokens' => $mint === 201
             ? Http::response(['token' => 'ghs_1041207_eyJhbGciOiJSUzI1NiJ9.e30.Y2xvbmU', 'expires_at' => '2026-10-19T13:00:00Z', 'permissions' => ['contents' => 'read'], 'repository_selection' => 'selected'], 201)
-            : Http::response(['message' => 'GitHub turned this request down'], $mint),
+            : Http::response(['message' => $refusal ?? 'GitHub turned this request down'], $mint),
         'api.github.com/installation/token' => Http::response(null, 204),
         'api.github.com/repos/monoventech/atlas/statuses/*' => $statuses === 201
             ? Http::response(['id' => 1, 'state' => 'pending'], 201)
-            : Http::response(['message' => 'Server Error'], $statuses),
+            : Http::response(['message' => $refusal ?? 'Server Error'], $statuses),
     ]);
 }
 
@@ -314,14 +316,76 @@ test('a status job whose github link is no longer usable posts nothing', functio
     'app gone from the panel' => [['github_app_id' => '01jabcdefghjkmnpqrstvwxyz0'], []],
 ]);
 
-test('a description longer than github accepts is cut to its 140 characters', function () {
+test('a server name too long for github is shortened to fit, so the rest of the description stays whole', function (DeploymentStatus $status, string $description) {
     commitStatusFake();
-    $application = commitStatusApp();
+    $application = commitStatusApp(application: ['current_release' => '20261018090000']);
     $application->server->forceFill(['name' => str_repeat('a', 200)])->save();
 
-    app()->call([new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Running)), 'handle']);
+    app()->call([new PostCommitStatus(commitStatusDeployment($application, $status)), 'handle']);
 
-    expect(commitStatusPosts()[0]['description'])->toBe('Deploying to ' . str_repeat('a', 127));
+    expect(commitStatusPosts()[0]['description'])->toBe($description)
+        ->and(mb_strlen($description))->toBeLessThanOrEqual(140);
+})->with([
+    'pending' => [DeploymentStatus::Running, 'Deploying to ' . str_repeat('a', 127)],
+    'success' => [DeploymentStatus::Succeeded, 'Live on ' . str_repeat('a', 113) . ' as 20261019-120000'],
+    'failure' => [DeploymentStatus::Failed, 'Deploy failed, the previous release is still live'],
+]);
+
+test('an older deployment retried late never overwrites a newer deploy of the same commit', function () {
+    commitStatusFake();
+    $application = commitStatusApp();
+    $older = commitStatusDeployment($application, DeploymentStatus::Failed);
+    commitStatusDeployment($application, DeploymentStatus::Succeeded);
+
+    app()->call([new PostCommitStatus($older), 'handle']);
+
+    expect(commitStatusPosts())->toBe([]);
+});
+
+test('a redeploy of a commit an older deployment already shipped still posts its own state', function () {
+    commitStatusFake();
+    $application = commitStatusApp();
+    commitStatusDeployment($application, DeploymentStatus::Succeeded);
+    $newer = commitStatusDeployment($application, DeploymentStatus::Running);
+
+    app()->call([new PostCommitStatus($newer), 'handle']);
+
+    expect(commitStatusStates())->toBe(['pending']);
+});
+
+test('a newer deploy that will not post on the same status line leaves the older one to post', function (array $newer, bool $sameApp) {
+    commitStatusFake();
+    $application = commitStatusApp();
+    $older = commitStatusDeployment($application, DeploymentStatus::Failed);
+    commitStatusDeployment($sameApp ? $application : commitStatusApp(application: ['slug' => 'my-app-staging', 'base_port' => 8010]), DeploymentStatus::Succeeded, $newer);
+
+    app()->call([new PostCommitStatus($older), 'handle']);
+
+    expect(commitStatusStates())->toBe(['failure']);
+})->with([
+    'another commit' => [['commit_hash' => '9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d'], true],
+    'cancelled before it learned a commit' => [['status' => DeploymentStatus::Cancelled, 'commit_hash' => null], true],
+    'another app on the same repository' => [[], false],
+]);
+
+test('a deploy whose runtime install fails posts failure', function () {
+    commitStatusFake();
+    $deployment = commitStatusDeployment(commitStatusApp(application: ['current_release' => '20261018090000']), DeploymentStatus::Running);
+    $transport = (new FakeSSHTransport)->respondTo('test -d', "no\n")
+        ->respondTo('asdf install', "configure: error: Package requirements (libxml-2.0 >= 2.9.0) were not met\n", 1);
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        expect(fn() => app()->call([new InstallRuntimes($deployment, '20261019120000', [['runtime' => 'php', 'version' => '8.5.10']], 'owner-1'), 'handle']))
+            ->toThrow(SSHCommandFailedException::class);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and(commitStatusStates())->toBe(['failure'])
+        ->and(commitStatusPosts()[0]['description'])->toBe('Deploy failed, the previous release is still live');
 });
 
 test('a success that lands while a pending post is in flight waits for it, so success is the last post', function () {
@@ -375,11 +439,13 @@ test('a status job kept waiting for the lock posts what the deployment says once
 test('a token request github refuses marks the connection and gives up on the status', function (int $mint, string $marked) {
     commitStatusFake(mint: $mint);
     $application = commitStatusApp(['access_token' => null, 'token_expires_at' => null]);
-    $job = new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Succeeded));
+    $job = (new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
 
-    expect(fn() => app()->call([$job, 'handle']))->not->toThrow(GitProviderException::class);
+    app()->call([$job, 'handle']);
 
     $connection = SourceProvider::withTrashed()->find($application->source_provider_id);
+
+    $job->assertNotFailed();
 
     expect($connection->{$marked})->not->toBeNull()
         ->and(commitStatusPosts())->toBe([]);
@@ -390,18 +456,97 @@ test('a token request github refuses marks the connection and gives up on the st
     'suspended' => [403, 'suspended_at'],
 ]);
 
-test('a token github could not issue is left to the retries and the connection is left alone', function () {
-    commitStatusFake(mint: 500);
+test('a token request github turns down for good fails the job once instead of using its retries', function (int $mint) {
+    Exceptions::fake();
+    commitStatusFake(mint: $mint);
     $application = commitStatusApp(['access_token' => null, 'token_expires_at' => null]);
-    $job = new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Succeeded));
+    $job = (new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
 
-    expect(fn() => app()->call([$job, 'handle']))->toThrow(GitHubInstallationException::class, 'GitHub refused to issue an installation token: GitHub turned this request down');
+    app()->call([$job, 'handle']);
 
     $connection = SourceProvider::withTrashed()->find($application->source_provider_id);
+
+    $job->assertFailedWith(GitHubInstallationException::class);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(GitHubInstallationException $refusal): bool => $refusal->getCode() === $mint);
+    Http::assertSentCount(1);
+
+    expect(commitStatusPosts())->toBe([])
+        ->and($connection->trashed())->toBeFalse()
+        ->and($connection->suspended_at)->toBeNull();
+})->with([
+    'bad credentials' => [401],
+    'unprocessable' => [422],
+]);
+
+test('a token github could not issue is left to the retries and the connection is left alone', function (int $mint, string $refusal) {
+    Exceptions::fake();
+    commitStatusFake(mint: $mint, refusal: $refusal);
+    $application = commitStatusApp(['access_token' => null, 'token_expires_at' => null]);
+    $job = (new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
+
+    expect(fn() => app()->call([$job, 'handle']))->toThrow(GitHubInstallationException::class, "GitHub refused to issue an installation token: {$refusal}");
+
+    $connection = SourceProvider::withTrashed()->find($application->source_provider_id);
+
+    $job->assertNotFailed();
+    Exceptions::assertNothingReported();
 
     expect($connection->trashed())->toBeFalse()
         ->and($connection->suspended_at)->toBeNull()
         ->and(commitStatusPosts())->toBe([]);
+})->with([
+    'server error' => [500, 'GitHub turned this request down'],
+    'too many requests' => [429, 'Too Many Requests'],
+    'a secondary rate limit' => [403, 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.'],
+    'a rate limit sent as 403' => [403, 'API rate limit exceeded for installation ID 51842.'],
+]);
+
+test('a status github turns down for good fails the job once instead of using its retries', function (int $status, string $refusal) {
+    Exceptions::fake();
+    commitStatusFake(statuses: $status, refusal: $refusal);
+    $job = (new PostCommitStatus(commitStatusDeployment(commitStatusApp(), DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
+
+    app()->call([$job, 'handle']);
+
+    $job->assertFailedWith(GitProviderException::class);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(GitProviderException $failure): bool => $failure->getCode() === $status && $failure->getMessage() === "GitHub rejected the request: {$refusal}");
+
+    expect(commitStatusPosts())->toHaveCount(1);
+})->with([
+    'not found' => [404, 'Not Found'],
+    'not accessible by the app' => [403, 'Resource not accessible by integration'],
+    'unprocessable' => [422, 'No commit found for SHA: 4f3c2b1a0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b'],
+    'bad credentials' => [401, 'Bad credentials'],
+]);
+
+test('a status github may take later is left to the retries', function (int $status, string $refusal) {
+    Exceptions::fake();
+    commitStatusFake(statuses: $status, refusal: $refusal);
+    $job = (new PostCommitStatus(commitStatusDeployment(commitStatusApp(), DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
+
+    expect(fn() => app()->call([$job, 'handle']))->toThrow(GitProviderException::class, "GitHub rejected the request: {$refusal}");
+
+    $job->assertNotFailed();
+    Exceptions::assertNothingReported();
+})->with([
+    'server error' => [500, 'Server Error'],
+    'unavailable' => [503, 'Service Unavailable'],
+    'too many requests' => [429, 'Too Many Requests'],
+    'a secondary rate limit' => [403, 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.'],
+    'a rate limit sent as 403' => [403, 'API rate limit exceeded for installation ID 51842.'],
+]);
+
+test('a status github never answered is left to the retries', function () {
+    Http::fake([
+        'api.github.com/repos/monoventech/atlas/statuses/*' => fn() => throw new ConnectionException('cURL error 28: Operation timed out'),
+    ]);
+    $job = (new PostCommitStatus(commitStatusDeployment(commitStatusApp(), DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
+
+    expect(fn() => app()->call([$job, 'handle']))->toThrow(GitProviderException::class, 'GitHub did not answer.');
+
+    $job->assertNotFailed();
 });
 
 test('the job waits on the default queue and retries what github turns down', function () {
