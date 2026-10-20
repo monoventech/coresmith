@@ -304,7 +304,20 @@ test('a line that names an error is shown before any line with a looser word, wh
     'a php fatal error' => 'PHP Fatal error:  Allowed memory size of 134217728 bytes exhausted',
     'a fatal: line' => 'fatal: not a git repository (or any of the parent directories): .git',
     'a permission refused' => 'open /var/run/app.sock: Permission denied',
+    'a ruby system error' => "/var/coresmith/apps/shop/current/vendor/bundle/ruby/3.4.0/gems/puma-6.6.0/lib/puma/binder.rb:334:in 'TCPServer#initialize': Address already in use - bind(2) for \"127.0.0.1\" port 8100 (Errno::EADDRINUSE)",
+    'a port another process holds' => '! Unable to load application: Errno::EADDRINUSE: Address already in use - bind(2) for "127.0.0.1" port 8100',
 ]);
+
+test('a ruby app whose port is taken gets the port advice, even under a long backtrace', function () {
+    $log = [
+        '! Unable to load application: Errno::EADDRINUSE: Address already in use - bind(2) for "127.0.0.1" port 8100',
+        "/var/coresmith/apps/shop/current/vendor/bundle/ruby/3.4.0/gems/puma-6.6.0/lib/puma/binder.rb:334:in 'TCPServer#initialize': Address already in use - bind(2) for \"127.0.0.1\" port 8100 (Errno::EADDRINUSE)",
+        ...array_map(fn(int $line): string => "\tfrom /var/coresmith/apps/shop/current/vendor/bundle/ruby/3.4.0/gems/puma-6.6.0/lib/puma/binder.rb:{$line}:in 'Puma::Binder#add_tcp_listener'", range(100, 140)),
+    ];
+    $e = startFailure(startRailsApp(), implode("\n", $log) . "\n");
+
+    expect($e->getMessage())->toContain('Port 8100 is already taken by another process.');
+});
 
 test('with no line that names an error, the last line with a looser word is shown, in any case', function (string $error) {
     $log = ['Job FAILED after 3 attempts', ...array_map(fn(int $line): string => "boot step {$line}", range(1, 20)), $error, ...array_map(fn(int $line): string => "boot step {$line}", range(22, 41))];

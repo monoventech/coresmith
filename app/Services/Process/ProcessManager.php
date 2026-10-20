@@ -25,7 +25,7 @@ final class ProcessManager
 
     public const START_LOG_LINES = 200;
 
-    private const NAMED_ERROR = '/\b[A-Z][A-Za-z0-9_]*(?:Error|Exception)\b|(?i:cannot load such file|fatal error|fatal:|permission denied)/';
+    private const NAMED_ERROR = '/\b[A-Z][A-Za-z0-9_]*(?:Error|Exception)\b|\bErrno::E[A-Z]+\b|(?i:cannot load such file|fatal error|fatal:|permission denied|address already in use)/';
 
     private const ERROR_WORD = '/error|exception|cannot|failed|fatal|not found|denied/i';
 
