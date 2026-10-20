@@ -23,6 +23,7 @@ use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
+use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use Carbon\CarbonImmutable;
@@ -89,6 +90,7 @@ final class E2ESeeder extends Seeder
         $this->workerDidNotStartAfterGoingLive($this->rails('no-sidekiq', 8340, attributes: ['processes' => [['name' => 'sidekiq', 'command' => 'bundle exec sidekiq']]]));
         $this->rollbackLeftAWorkerStopped($this->rails('rollback-sidekiq', 8350, attributes: ['processes' => [['name' => 'sidekiq', 'command' => 'bundle exec sidekiq']]]));
         $this->failedClone($this->application('wrong-branch', 8040, ['repository_branch' => 'release/2.0']));
+        $this->failedStorageCopy($this->rails('storage-copy', 8360));
 
         $hungry = $this->application('hungry', 8050, ['app_size' => 'small']);
         $this->succeeded($hungry, 6 * 60, 'v3.1.0');
@@ -533,6 +535,37 @@ final class E2ESeeder extends Seeder
             ]),
             'started_at' => $started,
             'finished_at' => $started->addSeconds(4),
+            'created_at' => $started,
+        ]);
+    }
+
+    private function failedStorageCopy(Application $application): void
+    {
+        $this->succeeded($application, 3 * 60, 'v1.4.0');
+
+        $started = CarbonImmutable::now()->subMinutes(25);
+        $release = $started->format('Ymd-His');
+        $sha = substr(hash('sha1', $application->name . 'uploads'), 0, 7);
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => $sha . substr(hash('sha1', $sha), 0, 33),
+            'commit_message' => 'Keep uploads in Active Storage',
+            'commit_author' => 'Priya Nair',
+            'status' => DeploymentStatus::Failed,
+            'failed_step' => DeploymentPhases::STORAGE,
+            'log' => implode("\n", [
+                '[' . $started->format('H:i:s') . "] release {$release} · branch main · triggered by push",
+                '[' . $started->addSecond()->format('H:i:s') . '] clone: fetching over https',
+                "commit {$sha} by Priya Nair",
+                'Error: file is not a database',
+                "Could not copy /var/coresmith/apps/{$application->slug}/current/storage/production.sqlite3.",
+                "Could not copy the live release's storage into shared/storage, so nothing was changed. Fix the error above, then deploy again.",
+                '[' . $started->addSeconds(6)->format('H:i:s') . '] deploy failed. the current release is untouched.',
+            ]),
+            'started_at' => $started,
+            'finished_at' => $started->addSeconds(6),
             'created_at' => $started,
         ]);
     }

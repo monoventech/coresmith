@@ -154,6 +154,7 @@ test('the deploy screen carries the phases, the failure and the release details'
             ->has('deployment.phases', 6)
             ->where('deployment.phases.3', ['key' => 'migrate', 'label' => 'Run migrations', 'state' => 'failed', 'duration' => '11s'])
             ->where('deployment.failed_phase', 'migrate')
+            ->where('deployment.failed_step', null)
             ->where('deployment.reached_users', false)
             ->where('deployment.release', '20260913-140000')
             ->where('deployment.branch', 'production')
@@ -162,6 +163,29 @@ test('the deploy screen carries the phases, the failure and the release details'
             ->where('deployment.tag', 'v2.4.0')
             ->where('deployment.started_at', '2026-09-13T14:00:09+00:00')
             ->where('can.deploy', true));
+});
+
+test('a deploy whose storage copy failed names that step, while the rail shows the clone phase failed', function () {
+    $team = Team::factory()->create();
+    $deployment = Deployment::factory()->for(screenApp($team, ['current_release' => '20260912090000']))->create([
+        'status' => DeploymentStatus::Failed,
+        'release' => '20260913140000',
+        'failed_step' => 'storage',
+        'failure_reason' => null,
+        'log' => implode("\n", [
+            '[14:00:09] clone: fetching over https',
+            "Could not copy the live release's storage into shared/storage, so nothing was changed. Fix the error above, then deploy again.",
+            '[14:00:11] deploy failed. the current release is untouched.',
+        ]),
+    ]);
+
+    $this->actingAs(screenMember($team))
+        ->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page
+            ->where('deployment.failed_step', 'storage')
+            ->where('deployment.failed_phase', 'clone')
+            ->where('deployment.phases.0.state', 'failed')
+            ->where('deployment.failure_reason', null));
 });
 
 test('a deploy whose processes did not start is named a start failure, with every phase through the swap done', function () {

@@ -208,6 +208,19 @@ test.describe('a deploy that failed with a known reason', () => {
         await expect(page.getByTestId('failure-reason')).toContainText('Branch release/2.0 is not in the repository.')
         await expect(page.getByRole('link', { name: 'Roll back' })).toHaveCount(0)
     })
+
+    test('a storage step that failed is named by that step, not by the clone', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'storage-copy')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        const reason = page.getByTestId('failure-reason')
+
+        await expect(reason).toContainText("Preparing the app's storage failed, so nothing changed.")
+        await expect(reason).toContainText("Fix the app's storage and push again, or retry.")
+        await expect(reason).not.toContainText('clone')
+        await expect(page.getByTestId('phase-rail').locator('[data-phase="clone"]')).toHaveAttribute('data-state', 'failed')
+        await expect(page.getByTestId('deployment-log')).toContainText("Could not copy the live release's storage into shared/storage")
+    })
 })
 
 test.describe('a deploy that installs a runtime first', () => {

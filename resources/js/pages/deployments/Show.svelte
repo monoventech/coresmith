@@ -28,6 +28,7 @@
         failure_reason: string | null
         start_failed: boolean
         failed_worker: string | null
+        failed_step: string | null
         reached_users: boolean
         release: string | null
         branch: string | null
@@ -58,6 +59,7 @@
 
     const FAILURES: Record<string, string> = {
         clone: 'The clone failed',
+        storage: "Preparing the app's storage failed",
         deps: 'Installing dependencies failed',
         build: 'The build failed',
         migrate: 'The migration failed',
@@ -68,6 +70,7 @@
 
     const FIXES: Record<string, string> = {
         clone: 'the repository access',
+        storage: "the app's storage",
         deps: 'the dependencies',
         build: 'the build',
         migrate: 'the migration',
@@ -236,13 +239,13 @@
                 <span class="font-semibold">{liveFailure}.</span>
                 {live.failure_reason ? ` ${live.failure_reason}` : ` releases/${live.release} is live, check its processes before pushing again.`}
             {:else}
-                <span class="font-semibold">{FAILURES[live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span>
+                <span class="font-semibold">{FAILURES[live.failed_step ?? live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span>
                 {#if live.failure_reason}
                     {` ${live.failure_reason}`}
                 {:else if application.current_release}
                     <span class="max-sm:hidden">
                         The symlink still points at <span class="font-mono text-[12.5px]">{application.current_release}</span>, users never saw an error page.
-                        Fix {FIXES[live.failed_phase ?? ''] ?? 'it'} and push again, or retry.
+                        Fix {FIXES[live.failed_step ?? live.failed_phase ?? ''] ?? 'it'} and push again, or retry.
                     </span>
                     <span class="sm:hidden">The old release is still live, users saw no error page.</span>
                 {:else}

@@ -521,6 +521,10 @@ final class DeployApplication implements ShouldQueue
             $this->appendLog("storage: copied the live release's data into shared/storage. Changes made while this deploy runs stay in the previous release.");
         }
 
+        if (!$result->successful()) {
+            $this->deployment->forceFill(['failed_step' => DeploymentPhases::STORAGE])->save();
+        }
+
         $result->throw();
     }
 

@@ -27,6 +27,8 @@ final class DeploymentPhases
 
     public const WATCH = 'watch';
 
+    public const STORAGE = 'storage';
+
     public const ORDER = [self::CLONE, self::DEPENDENCIES, self::BUILD, self::MIGRATIONS, self::HEALTH, self::SWAP];
 
     public const LABELS = [

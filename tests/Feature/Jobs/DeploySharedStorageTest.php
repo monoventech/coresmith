@@ -562,6 +562,26 @@ test('a rails deploy whose storage seed fails stops with the seed output in its 
         ->and(implode("\n", $transport->commands()))->not->toContain('mv -Tf');
 });
 
+test('a storage copy that fails is recorded as that step, so the deployment page does not blame the clone', function () {
+    $deployment = Deployment::factory()->for(sharedStorageApp())->create();
+    $transport = sharedStorageTransport()->respondTo('/var/coresmith/apps/shop/current/storage', "Error: file is not a database\n", 1);
+
+    expect(fn() => sharedStorageDeploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->failed_step)->toBe('storage')
+        ->and($deployment->fresh()->failure_reason)->toBeNull();
+});
+
+test('a deploy that fails after its storage step records no failed step', function () {
+    $deployment = Deployment::factory()->for(sharedStorageApp())->create();
+    $transport = sharedStorageTransport()->respondTo('rails db:migrate', "ActiveRecord::StatementInvalid\n", 1);
+
+    expect(fn() => sharedStorageDeploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($deployment->fresh()->failed_step)->toBeNull();
+});
+
 test('a deploy says once when it copies the live data, and records it on the deployment', function (bool $seeded, int $lines) {
     $deployment = Deployment::factory()->for(sharedStorageApp())->create();
 
