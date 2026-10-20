@@ -19,17 +19,20 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Services\Deployment\DeploymentPhases;
+use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Activitylog\Models\Activity;
 
@@ -63,6 +66,8 @@ final class E2ESeeder extends Seeder
 
     private Server $bench;
 
+    private SourceProvider $github;
+
     public function run(): void
     {
         $tenant = (new MonovenTenant(self::METRICS_AHEAD_MINUTES, self::METRICS_AHEAD_MINUTES))->build([
@@ -73,6 +78,7 @@ final class E2ESeeder extends Seeder
         ]);
 
         $this->team = $tenant->team;
+        $this->github = $tenant->github;
         $password = Hash::make(self::PASSWORD);
 
         $this->team->members()->attach(User::factory()->create(['name' => 'Sam Okafor', 'email' => self::SIGNOUT_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
@@ -123,6 +129,8 @@ final class E2ESeeder extends Seeder
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
         }
 
+        $this->githubFixtures();
+
         $this->rekeyed('rekeyed-server', '203.0.113.30');
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->auditFixtures();
@@ -164,6 +172,61 @@ final class E2ESeeder extends Seeder
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $failed($this->server("stalled-{$code}", '203.0.113.' . (90 + $index), ServerStatus::Pending));
         }
+    }
+
+    private function githubFixtures(): void
+    {
+        $this->repositoryCatalog();
+
+        $this->linkedApplication('linked-app', 8070);
+        $this->linkedApplication('pushing-app', 8080, ['quick_deploy' => true, 'polled_at' => now()->subSeconds(30)]);
+        $this->linkedApplication('orphaned-app', 8090, ['source_provider_id' => $this->removedConnection()->id]);
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->linkedApplication("linked-{$code}", 8400 + $index * 10);
+        }
+    }
+
+    private function repositoryCatalog(): void
+    {
+        $listing = [
+            ['70000001', 'monoventech/atlas', true, 'main', ['main', 'dev']],
+            ['70000002', 'monoventech/ledger', true, 'main', ['main', 'dev']],
+            ['70000003', 'monoventech/relay', true, 'trunk', ['trunk', 'release/2.0']],
+            ['70000004', 'monoventech/storefront', false, 'main', ['main', 'dev']],
+        ];
+        $expires = now()->addYear();
+        $repositories = [];
+
+        foreach ($listing as $position => [$id, $fullName, $private, $default, $branches]) {
+            $repositories[] = [
+                'id' => $id,
+                'full_name' => $fullName,
+                'private' => $private,
+                'default_branch' => $default,
+                'archived' => false,
+                'pushed_at' => now()->subHours(($position + 1) * 18)->toIso8601ZuluString(),
+            ];
+
+            Cache::put(RepositoryCatalog::branchesKey($this->github, $id), $branches, $expires);
+        }
+
+        Cache::put(RepositoryCatalog::key($this->github), ['total' => count($repositories), 'truncated' => false, 'repositories' => $repositories], $expires);
+    }
+
+    private function removedConnection(): SourceProvider
+    {
+        $connection = SourceProvider::factory()->for($this->team)->create([
+            'github_app_id' => $this->github->github_app_id,
+            'name' => 'monoven-labs',
+            'account_type' => 'Organization',
+            'repository_selection' => 'selected',
+            'installation_id' => '51843',
+        ]);
+
+        $connection->disconnect();
+
+        return $connection;
     }
 
     private function otherTeams(User $owner, string $password): void
@@ -292,6 +355,21 @@ final class E2ESeeder extends Seeder
             'base_port' => $port,
             'status' => ApplicationStatus::Active,
             'env_variables' => "APP_ENV=staging\nDB_PASSWORD=" . bin2hex(random_bytes(12)),
+            ...$attributes,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function linkedApplication(string $name, int $port, array $attributes = []): Application
+    {
+        return $this->application($name, $port, [
+            'source_provider_id' => $this->github->id,
+            'repository_id' => '70000003',
+            'repository_url' => 'https://github.com/monoventech/relay.git',
+            'repository_provider' => 'github',
+            'repository_branch' => 'trunk',
             ...$attributes,
         ]);
     }

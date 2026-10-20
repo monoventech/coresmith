@@ -16,6 +16,7 @@ use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\ServerMetric;
@@ -46,6 +47,8 @@ final class MonovenTenant
     public User $owner;
 
     public User $member;
+
+    public SourceProvider $github;
 
     public function __construct(
         private readonly int $metricsAhead = 0,
@@ -116,9 +119,21 @@ final class MonovenTenant
 
     private function sourceProvider(): void
     {
-        SourceProvider::factory()->for($this->team)->create([
+        $app = GitHubApp::factory()->withoutWebhook()->for($this->team)->create([
+            'app_id' => '1041207',
+            'slug' => 'coresmith-monoven',
+            'name' => 'Coresmith Monoven',
+            'owner_login' => 'monoventech',
+            'owner_type' => 'Organization',
+            'html_url' => 'https://github.com/apps/coresmith-monoven',
+            'created_by' => $this->owner->id,
+        ]);
+
+        $this->github = SourceProvider::factory()->for($this->team)->githubApp($app)->create([
             'type' => SourceProviderType::GitHubApp->value,
             'name' => 'monoventech',
+            'account_type' => 'Organization',
+            'repository_selection' => 'selected',
             'access_token' => 'ghs_demo_never_rendered',
             'installation_id' => '51842',
             'token_expires_at' => now()->addMinutes($this->tokenMinutes),
