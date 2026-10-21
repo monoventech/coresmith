@@ -81,7 +81,7 @@ abstract class HttpCloudApi
      */
     protected function getJson(string $path, array $query = [], array $headers = []): Response
     {
-        return $this->guard($this->send(fn(): Response => $this->reading($headers)->get($path, $query)));
+        return $this->parsed($this->guard($this->send(fn(): Response => $this->reading($headers)->get($path, $query))));
     }
 
     /**
@@ -92,13 +92,13 @@ abstract class HttpCloudApi
     {
         $response = $this->send(fn(): Response => $this->reading($headers)->get($path, $query));
 
-        return $response->status() === 404 ? null : $this->guard($response);
+        return $response->status() === 404 ? null : $this->parsed($this->guard($response));
     }
 
     /**
      * @param  array<string, mixed>  $payload
      */
-    protected function postJson(string $path, array $payload = []): Response
+    protected function postJson(string $path, #[\SensitiveParameter] array $payload = []): Response
     {
         return $this->guard($this->send(fn(): Response => $this->request()->post($path, $this->body($payload))));
     }
@@ -106,7 +106,7 @@ abstract class HttpCloudApi
     /**
      * @param  array<string, mixed>  $payload
      */
-    protected function patchJson(string $path, array $payload = []): Response
+    protected function patchJson(string $path, #[\SensitiveParameter] array $payload = []): Response
     {
         return $this->guard($this->send(fn(): Response => $this->request()->patch($path, $this->body($payload))));
     }
@@ -194,6 +194,15 @@ abstract class HttpCloudApi
     {
         if ($response->failed() || $response->redirect()) {
             throw $this->failure($response);
+        }
+
+        return $response;
+    }
+
+    private function parsed(Response $response): Response
+    {
+        if (!is_array($response->json())) {
+            throw new CloudProviderException(CloudFailure::Unavailable, $this->type(), 'answered without JSON');
         }
 
         return $response;

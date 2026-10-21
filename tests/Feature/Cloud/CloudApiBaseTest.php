@@ -228,6 +228,41 @@ test('a write with no fields still sends a json object', function () {
     expect($bodies)->toBe([['POST', '{}'], ['PATCH', '{}']]);
 });
 
+test('a read whose answer is not json is unavailable, so a page in its place never reads as nothing found', function (string $body, array $headers) {
+    Http::fake([
+        'api.hetzner.cloud/v1/servers' => Http::response($body, 200, $headers),
+        'api.hetzner.cloud/v1/servers/7' => Http::response($body, 200, $headers),
+    ]);
+    $api = cloudBaseApi();
+    $unavailable = function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->detail)->toBe('answered without JSON')
+            ->and($e->getMessage())->toBe('Hetzner Cloud had a problem answering. Try again in a minute.');
+    };
+
+    expect(fn() => $api->probe())->toThrow($unavailable)
+        ->and(fn() => $api->call('getJsonOrNull', '/servers/7'))->toThrow($unavailable);
+})->with([
+    'an html page' => ['<html><body>Gateway</body></html>', ['Content-Type' => 'text/html']],
+    'nothing at all' => ['', []],
+    'a bare value' => ['true', ['Content-Type' => 'application/json']],
+]);
+
+test('a write and a delete still accept an answer with no body', function () {
+    Http::fake(['api.hetzner.cloud/v1/*' => Http::response('', 204)]);
+    $api = cloudBaseApi();
+
+    expect($api->write()->status())->toBe(204);
+
+    $api->call('deleteOrGone', '/servers/7');
+
+    Http::assertSentCount(2);
+});
+
+test('the fields a write sends are sensitive, since a root password can be one of them', function (string $method) {
+    expect((new ReflectionMethod(HttpCloudApi::class, $method))->getParameters()[1]->getAttributes(SensitiveParameter::class))->toHaveCount(1);
+})->with(['postJson', 'patchJson']);
+
 test('a read that meets a redirect is refused and not retried', function () {
     Http::fake(['api.hetzner.cloud/v1/servers' => Http::response('', 302, ['Location' => 'http://169.254.169.254/'])]);
 
