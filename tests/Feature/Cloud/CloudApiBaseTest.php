@@ -766,7 +766,7 @@ test('the copy names the provider, its host and its own permission advice', func
         ->and($unreachable->getMessage())->toBe("Coresmith couldn't reach {$label} at {$host}. Check this panel can make outbound HTTPS requests, then try again.");
 })->with([
     [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.'],
-    [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes for droplets, SSH keys and tags.'],
+    [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.'],
     [CloudProviderType::Vultr, 'Vultr', 'api.vultr.com', "Allow this panel's IP address in Vultr's API access control."],
     [CloudProviderType::Linode, 'Linode', 'api.linode.com', 'Give it read/write access to Linodes.'],
 ]);

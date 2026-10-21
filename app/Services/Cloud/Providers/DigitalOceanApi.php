@@ -29,7 +29,7 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
 {
     private const PAGE_SIZE = 200;
 
-    private const IMAGE_SLUG = '/^(ubuntu|debian)-(\d+)(?:-(\d+))?-x64$/';
+    private const IMAGE_SLUG = '/^(ubuntu|debian)-(\d+)(?:-(\d+))?-x64$/D';
 
     public function type(): CloudProviderType
     {

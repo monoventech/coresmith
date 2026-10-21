@@ -454,6 +454,7 @@ test('digitalocean skips distribution slugs it does not provision', function (mi
     'a slug with a prefix' => ['custom-ubuntu-24-04-x64'],
     'a slug with no version' => ['debian-x64'],
     'a slug in another case' => ['Ubuntu-24-04-x64'],
+    'a slug ending in a newline' => ["ubuntu-24-04-x64\n"],
     'a slug that is not text' => [42],
     'no slug' => [null],
 ]);
