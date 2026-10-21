@@ -39,6 +39,7 @@ export type GitHubRegisteredApp = {
     settings_url: string | null
     installed: boolean
     install_href: string
+    link_href: string
     remove_href: string | null
 }
 

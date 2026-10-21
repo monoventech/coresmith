@@ -236,6 +236,7 @@ test('a registered app with no installation is offered for install', function ()
                 'settings_url' => 'https://github.com/organizations/monoventech/settings/apps/coresmith-monoven',
                 'installed' => false,
                 'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->id]),
+                'link_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->id, 'mode' => 'link']),
                 'remove_href' => route('github-apps.destroy', $app),
             ]));
 });

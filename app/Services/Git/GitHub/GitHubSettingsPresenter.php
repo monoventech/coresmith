@@ -155,7 +155,7 @@ final class GitHubSettingsPresenter
                 'owner_type' => $app->ownerType,
                 'settings_url' => $app->settingsUrl(),
                 'installed' => $inUse,
-                'install_href' => route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->key]),
+                ...$this->connectLinks($app->key),
                 'remove_href' => $canManage && !$inUse ? route('github-apps.destroy', $app->key) : null,
             ];
         }

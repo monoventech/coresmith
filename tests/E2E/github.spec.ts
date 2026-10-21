@@ -5,6 +5,7 @@ import {
     escape,
     expect,
     own,
+    tabs,
     test,
     toast,
     useTheme
@@ -140,31 +141,51 @@ test.describe('creating a GitHub App from the panel', () => {
 })
 
 test.describe('a GitHub App registered but not installed', () => {
-    test('says who can install it and offers both ways to connect', async ({ page }, testInfo) => {
+    test('says who can install it and offers both ways to connect from its own card', async ({ page }, testInfo) => {
         const lab = own(testInfo, 'lab')
+        const captured = { location: '', navigation: false }
 
+        await page.route('**/settings/source-providers/github_app/connect**', async (route) => {
+            const response = await route.fetch({ maxRedirects: 0 })
+
+            captured.location = response.headers()['location'] ?? ''
+            captured.navigation = route.request().isNavigationRequest()
+            await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' })
+        })
         await page.goto(`/${lab}/settings/git`)
 
         const card = page.getByTestId('github-app-card')
+        const install = card.getByRole('link', { name: 'Install on GitHub' })
+        const link = card.getByRole('link', { name: 'Link an existing installation' })
 
         await expect(card).toContainText('Not installed')
         await expect(card).toContainText(
             `Coresmith ${lab} is registered on GitHub under ${lab}. Install it on the account that holds your repositories.`
         )
         await expect(card).toContainText(`While the app is private, only ${lab} can install it.`)
-        await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute(
+        await expect(install).toHaveAttribute(
             'href',
             new RegExp(`/${lab}/settings/source-providers/github_app/connect\\?app=[0-9a-z]{26}$`)
         )
-        await expect(
-            page.getByTestId('github-connect').getByRole('link', { name: 'Link an existing installation' })
-        ).toHaveAttribute('href', /\/settings\/source-providers\/github_app\/connect\?app=[0-9a-z]{26}&mode=link$/)
+        await expect(install).toHaveAttribute('target', '_self')
+        await expect(link).toHaveAttribute(
+            'href',
+            new RegExp(`/${lab}/settings/source-providers/github_app/connect\\?app=[0-9a-z]{26}&mode=link$`)
+        )
+        await expect(link).toHaveAttribute('target', '_self')
+        await expect(page.getByRole('link', { name: 'Install on GitHub' })).toHaveCount(1)
+        await expect(page.getByTestId('github-connect')).toHaveCount(0)
         await expect(page.getByTestId('webhooks-card')).toContainText(
             'GitHub cannot reach 127.0.0.1, it only answers on this machine.'
         )
         await expect(
             page.getByTestId('webhooks-card').getByRole('button', { name: 'Point the webhook here' })
         ).toBeVisible()
+
+        await link.click()
+
+        await expect.poll(() => captured.location).toMatch(/^https:\/\/github\.com\/login\/oauth\/authorize\?/)
+        expect(captured.navigation).toBe(true)
     })
 
     for (const theme of ['light', 'dark'] as const) {
@@ -242,5 +263,86 @@ test.describe('a team on its own domain', () => {
             `${origin}/northwind/settings/git`
         )
         await expect(page.getByTestId('github-registration')).toHaveCount(0)
+    })
+})
+
+test.describe('with the environment GitHub App', () => {
+    test('a team with nothing connected is offered both ways to connect as real navigations', async ({ page }) => {
+        const baseURL = test.info().project.use.baseURL ?? 'http://127.0.0.1:8123'
+        const connect = `${baseURL}/acme/settings/source-providers/github_app/connect?app=env`
+        const captured = { url: '', navigation: false }
+
+        await page.route('**/acme/settings/git', async (route) => {
+            if (route.request().headers()['x-inertia'] === undefined) {
+                await route.continue()
+
+                return
+            }
+
+            const response = await route.fetch()
+            const body = await response.json()
+
+            body.props.github = {
+                ...body.props.github,
+                can_register: false,
+                registration: null,
+                apps: [],
+                connect: { install_href: connect, link_href: `${connect}&mode=link` }
+            }
+            await route.fulfill({ response, json: body })
+        })
+        await page.route('**/settings/source-providers/github_app/connect**', async (route) => {
+            captured.url = route.request().url()
+            captured.navigation = route.request().isNavigationRequest()
+            await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' })
+        })
+        await page.goto('/acme/settings')
+        await tabs(page, 'Settings').getByRole('link', { name: 'Git', exact: true }).click()
+
+        const card = page.getByTestId('github-connect')
+
+        await expect(card).toContainText(
+            'Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only, commit statuses and webhooks, per repository, not your whole account.'
+        )
+        await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('href', connect)
+        await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('target', '_self')
+        await expect(card.getByRole('link', { name: 'Link an existing installation' })).toHaveAttribute(
+            'href',
+            `${connect}&mode=link`
+        )
+        await expect(card.getByRole('link', { name: 'Link an existing installation' })).toHaveAttribute(
+            'target',
+            '_self'
+        )
+        await expect(page.getByTestId('github-registration')).toHaveCount(0)
+
+        await card.getByRole('link', { name: 'Install on GitHub' }).click()
+
+        await expect.poll(() => captured.url).toBe(connect)
+        expect(captured.navigation).toBe(true)
+    })
+})
+
+test.describe('other Git providers', () => {
+    test('GitLab connects through the panel as a real navigation', async ({ page }) => {
+        const captured = { location: '', navigation: false }
+
+        await page.route('**/settings/source-providers/gitlab/connect**', async (route) => {
+            const response = await route.fetch({ maxRedirects: 0 })
+
+            captured.location = response.headers()['location'] ?? ''
+            captured.navigation = route.request().isNavigationRequest()
+            await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' })
+        })
+        await page.goto('/acme/settings/git')
+
+        const connect = page.getByTestId('connect-card').getByRole('link', { name: 'Connect GitLab' })
+
+        await expect(connect).toHaveAttribute('target', '_self')
+
+        await connect.click()
+
+        await expect.poll(() => captured.location).toMatch(/^https:\/\/gitlab\.com\/oauth\/authorize\?/)
+        expect(captured.navigation).toBe(true)
     })
 })

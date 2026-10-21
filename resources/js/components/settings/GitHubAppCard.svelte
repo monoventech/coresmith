@@ -42,7 +42,10 @@
     </p>
     {#if canManage}
         <div class="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" href={app.install_href} target="_self">Install on GitHub</Button>
+            <Button size="sm" href={app.install_href} target="_self">Install on GitHub</Button>
+            <Button variant="outline" size="sm" href={app.link_href} target="_self"
+                >Link an existing installation</Button
+            >
             {#if app.remove_href}
                 <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}
                     >Remove</Button

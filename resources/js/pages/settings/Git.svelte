@@ -128,7 +128,7 @@
         {/each}
 
         {#if github.connections.length === 0}
-            {#if github.connect}
+            {#if github.connect && github.apps.length === 0}
                 <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="github-connect">
                     <div class="mb-1 flex flex-wrap items-center gap-2.5">
                         <GitBranch class="size-4.5 text-muted-foreground" />
