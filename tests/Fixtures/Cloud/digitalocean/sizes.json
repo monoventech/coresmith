@@ -1,0 +1,88 @@
+{
+    "sizes": [
+        {
+            "slug": "s-1vcpu-512mb-10gb",
+            "memory": 512,
+            "vcpus": 1,
+            "disk": 10,
+            "transfer": 0.5,
+            "price_monthly": 4.0,
+            "price_hourly": 0.00595,
+            "regions": ["fra1", "nyc3"],
+            "available": true,
+            "description": "Basic",
+            "disk_info": [{ "type": "local", "size": { "amount": 10, "unit": "gib" } }]
+        },
+        {
+            "slug": "s-1vcpu-1gb",
+            "memory": 1024,
+            "vcpus": 1,
+            "disk": 25,
+            "transfer": 1.0,
+            "price_monthly": 6.0,
+            "price_hourly": 0.00893,
+            "regions": ["fra1", "nyc3", "sgp1"],
+            "available": true,
+            "description": "Basic",
+            "disk_info": [{ "type": "local", "size": { "amount": 25, "unit": "gib" } }]
+        },
+        {
+            "slug": "s-1vcpu-2gb",
+            "memory": 2048,
+            "vcpus": 1,
+            "disk": 50,
+            "transfer": 2.0,
+            "price_monthly": 12.0,
+            "price_hourly": 0.01786,
+            "regions": ["fra1", "nyc3", "sgp1"],
+            "available": true,
+            "description": "Basic",
+            "disk_info": [{ "type": "local", "size": { "amount": 50, "unit": "gib" } }]
+        },
+        {
+            "slug": "s-2vcpu-4gb",
+            "memory": 4096,
+            "vcpus": 2,
+            "disk": 80,
+            "transfer": 4.0,
+            "price_monthly": 24.0,
+            "price_hourly": 0.03571,
+            "regions": ["fra1", "nyc3", "sgp1"],
+            "available": true,
+            "description": "Basic",
+            "disk_info": [{ "type": "local", "size": { "amount": 80, "unit": "gib" } }]
+        },
+        {
+            "slug": "gpu-h100x1-80gb",
+            "memory": 245760,
+            "vcpus": 20,
+            "disk": 720,
+            "transfer": 15.0,
+            "price_monthly": 2475.0,
+            "price_hourly": 3.39,
+            "regions": ["nyc3"],
+            "available": true,
+            "description": "H100 GPU - 1X",
+            "gpu_info": { "count": 1, "vram": { "amount": 80, "unit": "gib" }, "model": "nvidia_h100" },
+            "disk_info": [
+                { "type": "local", "size": { "amount": 720, "unit": "gib" } },
+                { "type": "scratch", "size": { "amount": 5000, "unit": "gib" } }
+            ]
+        },
+        {
+            "slug": "s-8vcpu-16gb",
+            "memory": 16384,
+            "vcpus": 8,
+            "disk": 320,
+            "transfer": 6.0,
+            "price_monthly": 96.0,
+            "price_hourly": 0.14286,
+            "regions": ["fra1", "nyc3", "sgp1"],
+            "available": false,
+            "description": "Basic",
+            "disk_info": [{ "type": "local", "size": { "amount": 320, "unit": "gib" } }]
+        }
+    ],
+    "links": {},
+    "meta": { "total": 6 }
+}
