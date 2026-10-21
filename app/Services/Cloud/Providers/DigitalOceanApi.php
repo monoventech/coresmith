@@ -70,7 +70,10 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
     public function sizes(): Collection
     {
         return $this->pages('/sizes', [], 'sizes')
-            ->filter(fn(mixed $size): bool => is_array($size) && self::text($size['slug'] ?? null) !== null && self::offered($size))
+            ->filter(fn(mixed $size): bool => is_array($size)
+                && self::text($size['slug'] ?? null) !== null
+                && self::hasNumbers($size, 'vcpus', 'memory', 'disk')
+                && self::offered($size))
             ->map(fn(array $size): CloudSize => self::size($size))
             ->values();
     }
@@ -104,7 +107,7 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
 
     public function deleteKey(string $keyId): void
     {
-        $this->deleteOrGone("/account/keys/{$this->id($keyId)}");
+        $this->deleteOrGone("/account/keys/{$this->segment($keyId)}");
     }
 
     public function create(CloudServerSpec $spec): CloudInstance
@@ -130,16 +133,19 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
 
     public function find(string $instanceId): ?CloudInstance
     {
-        $response = $this->getJsonOrNull("/droplets/{$this->id($instanceId)}");
+        $response = $this->getJsonOrNull("/droplets/{$this->segment($instanceId)}");
 
         return $response === null ? null : $this->instance($response->json('droplet'));
     }
 
     public function findTagged(string $tag): ?CloudInstance
     {
-        $droplets = $this->listed($this->getJson('/droplets', ['tag_name' => $tag]), 'droplets');
+        $droplet = $this->firstMatch(
+            $this->listed($this->getJson('/droplets', ['tag_name' => $tag]), 'droplets'),
+            fn(array $droplet): bool => self::carries($droplet, $tag),
+        );
 
-        return $droplets === [] ? null : $this->instance($droplets[0]);
+        return $droplet === null ? null : $this->instance($droplet);
     }
 
     public function reboot(string $instanceId): void
@@ -169,12 +175,19 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
 
     public function destroy(string $instanceId): void
     {
-        $this->deleteOrGone("/droplets/{$this->id($instanceId)}");
+        $this->deleteOrGone("/droplets/{$this->segment($instanceId)}");
     }
 
     protected function message(Response $response): ?string
     {
         return self::text($response->json('message'));
+    }
+
+    protected function classify(Response $response): ?CloudFailure
+    {
+        return $response->status() === 422 && str_contains(strtolower((string) $this->message($response)), 'pending event')
+            ? CloudFailure::Busy
+            : null;
     }
 
     /**
@@ -185,11 +198,7 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
     {
         $query = [...$query, 'per_page' => self::PAGE_SIZE];
 
-        return $this->paginate($path, $query, $key, function (Response $response) use ($query, $key): ?array {
-            if (!is_array($response->json($key))) {
-                throw $this->unusable();
-            }
-
+        return $this->paginate($path, $query, $key, function (Response $response) use ($query): ?array {
             $page = self::nextPage($response->json('links.pages.next'));
 
             return $page === null ? null : [...$query, 'page' => $page];
@@ -213,7 +222,7 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
      */
     private function act(string $instanceId, array $action): void
     {
-        $this->postJson("/droplets/{$this->id($instanceId)}/actions", $action);
+        $this->postJson("/droplets/{$this->segment($instanceId)}/actions", $action);
     }
 
     /**
@@ -235,9 +244,9 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
 
         return new CloudSize(
             (string) $size['slug'],
-            (int) ($size['vcpus'] ?? 0),
-            (int) ($size['memory'] ?? 0),
-            (int) ($size['disk'] ?? 0),
+            (int) $size['vcpus'],
+            (int) $size['memory'],
+            (int) $size['disk'],
             'x86',
             is_numeric($monthly) ? CloudPrice::fromNumber($monthly, 'USD') : null,
             [],
@@ -285,16 +294,6 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
     }
 
     /**
-     * @return list<mixed>
-     */
-    private function listed(Response $response, string $key): array
-    {
-        $items = $response->json($key);
-
-        return is_array($items) ? array_values($items) : throw $this->unusable();
-    }
-
-    /**
      * @return list<string>
      */
     private static function names(mixed $values): array
@@ -304,28 +303,14 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
             : [];
     }
 
-    private function identifier(mixed $id): string
+    /**
+     * @param  array<string, mixed>  $droplet
+     */
+    private static function carries(array $droplet, string $tag): bool
     {
-        return match (true) {
-            is_int($id) => (string) $id,
-            is_string($id) && $id !== '' => $id,
-            default => throw $this->unusable(),
-        };
-    }
+        $tags = $droplet['tags'] ?? null;
 
-    private function unusable(): CloudProviderException
-    {
-        return new CloudProviderException(CloudFailure::Unavailable, $this->type(), 'answered without the data it was asked for');
-    }
-
-    private function id(string $id): string
-    {
-        return rawurlencode($id);
-    }
-
-    private static function text(mixed $value): ?string
-    {
-        return is_string($value) && $value !== '' ? $value : null;
+        return is_array($tags) && in_array($tag, $tags, true);
     }
 
     private static function state(mixed $status): CloudInstanceState

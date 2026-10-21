@@ -281,6 +281,37 @@ test('digitalocean reads a size with no price or no regions without inventing ei
         ->and($sizes['s-2vcpu-4gb']->price)->toBeNull();
 });
 
+test('digitalocean skips a size that leaves out how big it is', function (string $field) {
+    $body = CloudFixtures::json('digitalocean/sizes');
+    unset($body['sizes'][2][$field]);
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response($body)]);
+
+    expect(cloudDigitalOcean()->sizes()->pluck('id')->all())->toBe(['s-1vcpu-512mb-10gb', 's-1vcpu-1gb', 's-2vcpu-4gb']);
+})->with(['vcpus', 'memory', 'disk']);
+
+test('digitalocean skips a size whose numbers are not numbers', function (string $field, mixed $value) {
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', ["sizes.2.{$field}" => $value]))]);
+
+    expect(cloudDigitalOcean()->sizes()->pluck('id')->all())->toBe(['s-1vcpu-512mb-10gb', 's-1vcpu-1gb', 's-2vcpu-4gb']);
+})->with([
+    'vcpus that are null' => ['vcpus', null],
+    'vcpus that are a word' => ['vcpus', 'many'],
+    'memory that is a flag' => ['memory', true],
+    'a disk that is a list' => ['disk', [50]],
+]);
+
+test('digitalocean keeps a size that reports its numbers as digits', function () {
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', [
+        'sizes.2.vcpus' => '1',
+        'sizes.2.memory' => '2048',
+        'sizes.2.disk' => '50',
+    ]))]);
+
+    $medium = cloudDigitalOcean()->sizes()->keyBy('id')['s-1vcpu-2gb'];
+
+    expect($medium->cpus)->toBe(1)->and($medium->memoryMb)->toBe(2048)->and($medium->diskGb)->toBe(50);
+});
+
 test('digitalocean lists only the regions of a size that are named', function (mixed $regions, array $expected) {
     Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', ['sizes.2.regions' => $regions]))]);
 
@@ -713,6 +744,37 @@ test('digitalocean takes the first droplet when a tag matches several', function
     expect(cloudDigitalOcean()->findTagged(cloudDigitalOceanTag())->id)->toBe('3164444');
 });
 
+test('digitalocean returns the droplet that carries the tag itself, not just the first one listed', function () {
+    $body = cloudDigitalOceanFixture('droplets-tagged');
+    $mine = $body['droplets'][0];
+    $elsewhere = cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.id' => 3164445, 'droplets.0.tags' => ['coresmith', 'coresmith-01jother']])['droplets'][0];
+    $untagged = cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.id' => 3164446, 'droplets.0.tags' => []])['droplets'][0];
+    $body['droplets'] = [$elsewhere, $untagged, 'oops', $mine];
+    Http::fake(['api.digitalocean.com/v2/droplets*' => Http::response($body)]);
+
+    expect(cloudDigitalOcean()->findTagged(cloudDigitalOceanTag())->id)->toBe('3164444');
+});
+
+test('digitalocean fails a tag lookup that lists droplets but none that carries the tag, so an unrelated droplet is never handed back', function (mixed $tags) {
+    Http::fake(['api.digitalocean.com/v2/droplets*' => Http::response(cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.tags' => $tags]))]);
+
+    expect(fn() => cloudDigitalOcean()->findTagged(cloudDigitalOceanTag()))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->getMessage())->toBe('DigitalOcean had a problem answering. Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'another tag' => [['coresmith', 'coresmith-01jother']],
+    'only the shared tag' => [['coresmith']],
+    'the tag with more after it' => [['coresmith', 'coresmith-01jcp7m3zq9x4v6t8w2y5b1n0dx']],
+    'the tag in another case' => [['coresmith', 'CORESMITH-01JCP7M3ZQ9X4V6T8W2Y5B1N0D']],
+    'no tags' => [[]],
+    'tags given as text' => ['coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d'],
+    'tags that are null' => [null],
+]);
+
 test('digitalocean reads the size of a droplet from its size slug', function () {
     Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::sequence()
         ->push(cloudDigitalOceanFixture('droplet-active', ['droplet.size_slug' => 's-2vcpu-4gb']))
@@ -794,6 +856,48 @@ test('digitalocean treats a droplet that is already gone as destroyed', function
     Http::assertSent(fn(Request $request) => $request->method() === 'DELETE' && $request->url() === 'https://api.digitalocean.com/v2/account/keys/512189');
 });
 
+test('digitalocean refuses an id that names nothing before it sends anything', function (string $call, string $id) {
+    $arguments = $call === 'resize' ? [$id, 's-2vcpu-4gb'] : [$id];
+
+    expect(fn() => cloudDigitalOcean()->{$call}(...$arguments))->toThrow(LogicException::class, 'A cloud id must name one resource.');
+
+    Http::assertNothingSent();
+})->with(['find', 'reboot', 'powerOff', 'powerOn', 'resize', 'destroy', 'deleteKey'])->with(['', ' ', '.', '..']);
+
+test('digitalocean reads an id that is not a whole number as unavailable, so the tag is checked before anything is made again', function (string $call, mixed $id) {
+    Http::fake([
+        'api.digitalocean.com/v2/account/keys/*' => $call === 'adopt'
+            ? Http::response(cloudDigitalOceanFixture('ssh_key', ['ssh_key.id' => $id]))
+            : cloudDigitalOceanMissing(),
+        'api.digitalocean.com/v2/account/keys' => Http::response(cloudDigitalOceanFixture('ssh_key', ['ssh_key.id' => $id]), 201),
+        'api.digitalocean.com/v2/droplets/3164444' => Http::response(cloudDigitalOceanFixture('droplet-active', ['droplet.id' => $id])),
+        'api.digitalocean.com/v2/droplets?*' => Http::response(cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.id' => $id])),
+        'api.digitalocean.com/v2/droplets' => Http::response(cloudDigitalOceanFixture('droplet-new', ['droplet.id' => $id]), 202),
+    ]);
+    $api = cloudDigitalOcean();
+    $attempt = match ($call) {
+        'create' => fn() => $api->create(cloudDigitalOceanSpec()),
+        'find' => fn() => $api->find('3164444'),
+        'findTagged' => fn() => $api->findTagged(cloudDigitalOceanTag()),
+        'adopt', 'upload' => fn() => $api->uploadKey('coresmith-outpost-02-b1n0d', cloudDigitalOceanKey()),
+    };
+
+    expect($attempt)->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->getMessage())->toBe('DigitalOcean had a problem answering. Try again in a minute.');
+    });
+})->with(['create', 'find', 'findTagged', 'adopt', 'upload'])->with([
+    'zero' => [0],
+    'a negative number' => [-3164444],
+    'a fraction' => [3164444.5],
+    'a flag' => [true],
+    'a word' => ['abc'],
+    'empty text' => [''],
+    'a path' => ['../3164444'],
+    'a list' => [[3164444]],
+]);
+
 test('digitalocean keeps an id inside its own path segment', function (string $call, array $arguments, string $method, string $url) {
     Http::fake(['api.digitalocean.com/*' => Http::response(['droplet' => ['id' => 7, 'status' => 'active']])]);
 
@@ -838,6 +942,52 @@ test('digitalocean says a size is not offered in that region in its own words', 
 
     Http::assertSentCount(1);
 });
+
+test('digitalocean reads a droplet that already has a pending event as busy, so a retry waits for it', function (string $call, array $arguments) {
+    Http::fake(['api.digitalocean.com/v2/droplets/3164444*' => Http::response(['id' => 'unprocessable_entity', 'message' => 'Droplet already has a pending event.'], 422)]);
+
+    expect(fn() => cloudDigitalOcean()->{$call}(...$arguments))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Busy)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(422)
+            ->and($e->detail)->toBe('Droplet already has a pending event.')
+            ->and($e->getMessage())->toBe('DigitalOcean is busy with another change to it. DigitalOcean said: Droplet already has a pending event. Coresmith tries again shortly.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'reboot' => ['reboot', ['3164444']],
+    'power off' => ['powerOff', ['3164444']],
+    'power on' => ['powerOn', ['3164444']],
+    'resize' => ['resize', ['3164444', 's-2vcpu-4gb']],
+    'destroy' => ['destroy', ['3164444']],
+]);
+
+test('digitalocean reads the words of a pending event in any case', function (string $message) {
+    Http::fake(['api.digitalocean.com/v2/droplets/3164444/actions' => Http::response(['id' => 'unprocessable_entity', 'message' => $message], 422)]);
+
+    expect(fn() => cloudDigitalOcean()->powerOn('3164444'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Busy);
+    });
+})->with([
+    'in capitals' => ['DROPLET ALREADY HAS A PENDING EVENT.'],
+    'with more said' => ['Droplet already has a pending event. Wait for it to finish.'],
+]);
+
+test('digitalocean keeps every other refusal a refusal', function (int $status, mixed $message) {
+    Http::fake(['api.digitalocean.com/v2/droplets/3164444/actions' => Http::response(['id' => 'unprocessable_entity', 'message' => $message], $status)]);
+
+    expect(fn() => cloudDigitalOcean()->powerOn('3164444'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Refused)->and($e->retryable())->toBeFalse();
+    });
+})->with([
+    'a 422 about something else' => [422, 'Size is not available in this region.'],
+    'a 422 about an event that is not pending' => [422, 'Droplet has no such event.'],
+    'a 422 with no message' => [422, null],
+    'a 422 whose message is not text' => [422, ['Droplet already has a pending event.']],
+    'the pending event words on a 400' => [400, 'Droplet already has a pending event.'],
+    'the pending event words on a 409' => [409, 'Droplet already has a pending event.'],
+]);
 
 test('digitalocean never retries a create that met a server error', function () {
     Http::fake(['api.digitalocean.com/v2/droplets' => Http::response(['id' => 'server_error', 'message' => 'Server Error'], 503)]);

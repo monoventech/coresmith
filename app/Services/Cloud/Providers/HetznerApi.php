@@ -8,10 +8,8 @@ declare(strict_types=1);
 
 namespace App\Services\Cloud\Providers;
 
-use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
-use App\Exceptions\CloudProviderException;
 use App\Services\Cloud\CloudAccount;
 use App\Services\Cloud\CloudImage;
 use App\Services\Cloud\CloudInstance;
@@ -57,7 +55,11 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
     public function sizes(): Collection
     {
         return $this->pages('/server_types', ['per_page' => self::PAGE_SIZE], 'server_types')
-            ->filter(fn(mixed $type): bool => is_array($type) && self::text($type['name'] ?? null) !== null && !self::deprecated($type))
+            ->filter(fn(mixed $type): bool => is_array($type)
+                && self::text($type['name'] ?? null) !== null
+                && self::text($type['architecture'] ?? null) !== null
+                && self::hasNumbers($type, 'cores', 'memory', 'disk')
+                && !self::deprecated($type))
             ->map(fn(array $type): CloudSize => $this->size($type))
             ->values();
     }
@@ -90,11 +92,13 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
         $fingerprint = HostKeyFingerprint::md5FromPublicKey($publicKey);
 
         if ($fingerprint !== null) {
-            $response = $this->getJson('/ssh_keys', ['fingerprint' => $fingerprint]);
-            $held = $this->listed($response, 'ssh_keys');
+            $held = $this->firstMatch(
+                $this->listed($this->getJson('/ssh_keys', ['fingerprint' => $fingerprint]), 'ssh_keys'),
+                fn(array $key): bool => self::digest($key['fingerprint'] ?? null) === self::digest($fingerprint),
+            );
 
-            if ($held !== []) {
-                return $this->identifier(data_get($held[0], 'id'));
+            if ($held !== null) {
+                return $this->identifier($held['id'] ?? null);
             }
         }
 
@@ -109,7 +113,7 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
 
     public function deleteKey(string $keyId): void
     {
-        $this->deleteOrGone("/ssh_keys/{$this->id($keyId)}");
+        $this->deleteOrGone("/ssh_keys/{$this->segment($keyId)}");
     }
 
     public function create(CloudServerSpec $spec): CloudInstance
@@ -134,21 +138,24 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
 
     public function find(string $instanceId): ?CloudInstance
     {
-        $response = $this->getJsonOrNull("/servers/{$this->id($instanceId)}");
+        $response = $this->getJsonOrNull("/servers/{$this->segment($instanceId)}");
 
         return $response === null ? null : $this->instance($response->json('server'));
     }
 
     public function findTagged(string $tag): ?CloudInstance
     {
-        $servers = $this->listed($this->getJson('/servers', ['label_selector' => "coresmith={$tag}"]), 'servers');
+        $server = $this->firstMatch(
+            $this->listed($this->getJson('/servers', ['label_selector' => "coresmith={$tag}"]), 'servers'),
+            fn(array $server): bool => data_get($server, 'labels.coresmith') === $tag,
+        );
 
-        return $servers === [] ? null : $this->instance($servers[0]);
+        return $server === null ? null : $this->instance($server);
     }
 
     public function reboot(string $instanceId): void
     {
-        $this->postJson("/servers/{$this->id($instanceId)}/actions/reboot");
+        $this->postJson("/servers/{$this->segment($instanceId)}/actions/reboot");
     }
 
     public function resizeNeedsPowerOff(): bool
@@ -158,17 +165,17 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
 
     public function powerOff(string $instanceId): void
     {
-        $this->postJson("/servers/{$this->id($instanceId)}/actions/shutdown");
+        $this->postJson("/servers/{$this->segment($instanceId)}/actions/shutdown");
     }
 
     public function powerOn(string $instanceId): void
     {
-        $this->postJson("/servers/{$this->id($instanceId)}/actions/poweron");
+        $this->postJson("/servers/{$this->segment($instanceId)}/actions/poweron");
     }
 
     public function resize(string $instanceId, string $size): void
     {
-        $this->postJson("/servers/{$this->id($instanceId)}/actions/change_type", [
+        $this->postJson("/servers/{$this->segment($instanceId)}/actions/change_type", [
             'server_type' => $size,
             'upgrade_disk' => false,
         ]);
@@ -176,7 +183,7 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
 
     public function destroy(string $instanceId): void
     {
-        $this->deleteOrGone("/servers/{$this->id($instanceId)}");
+        $this->deleteOrGone("/servers/{$this->segment($instanceId)}");
     }
 
     protected function message(Response $response): ?string
@@ -217,10 +224,10 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
 
         return new CloudSize(
             (string) $type['name'],
-            (int) ($type['cores'] ?? 0),
-            (int) round((float) ($type['memory'] ?? 0) * 1024),
-            (int) ($type['disk'] ?? 0),
-            self::text($type['architecture'] ?? null) ?? '',
+            (int) $type['cores'],
+            (int) round((float) $type['memory'] * 1024),
+            (int) $type['disk'],
+            (string) $type['architecture'],
             null,
             $prices,
             is_array($locations) ? $this->offeredIn($locations) : array_keys($prices),
@@ -237,7 +244,7 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
             ->filter(fn(mixed $location): bool => is_array($location)
                 && self::text($location['name'] ?? null) !== null
                 && ($location['available'] ?? null) !== false
-                && ($location['deprecation'] ?? null) === null)
+                && !self::deprecated($location))
             ->map(fn(array $location): string => (string) $location['name'])
             ->values()
             ->all();
@@ -254,47 +261,28 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
     }
 
     /**
-     * @return list<mixed>
-     */
-    private function listed(Response $response, string $key): array
-    {
-        $items = $response->json($key);
-
-        return is_array($items) ? array_values($items) : throw $this->unusable();
-    }
-
-    private function identifier(mixed $id): string
-    {
-        return match (true) {
-            is_int($id) => (string) $id,
-            is_string($id) && $id !== '' => $id,
-            default => throw $this->unusable(),
-        };
-    }
-
-    private function unusable(): CloudProviderException
-    {
-        return new CloudProviderException(CloudFailure::Unavailable, $this->type(), 'answered without the data it was asked for');
-    }
-
-    private function id(string $id): string
-    {
-        return rawurlencode($id);
-    }
-
-    private static function text(mixed $value): ?string
-    {
-        return is_string($value) && $value !== '' ? $value : null;
-    }
-
-    /**
      * @param  array<string, mixed>  $entry
      */
     private static function deprecated(array $entry): bool
     {
         $flag = $entry['deprecated'] ?? null;
+        $notice = $entry['deprecation'] ?? null;
 
-        return $flag === true || (is_string($flag) && $flag !== '') || ($entry['deprecation'] ?? null) !== null;
+        return ($notice !== null && self::due(data_get($notice, 'unavailable_after')))
+            || (is_string($flag) && $flag !== '' && self::due($flag))
+            || ($flag === true && $notice === null);
+    }
+
+    private static function digest(mixed $fingerprint): ?string
+    {
+        return is_string($fingerprint) ? strtolower(str_replace(':', '', $fingerprint)) : null;
+    }
+
+    private static function due(mixed $time): bool
+    {
+        $at = is_string($time) ? strtotime($time) : false;
+
+        return $at === false || $at <= now()->getTimestamp();
     }
 
     private static function state(mixed $status): CloudInstanceState

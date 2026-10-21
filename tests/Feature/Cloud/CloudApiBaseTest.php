@@ -16,6 +16,7 @@ use App\Services\Cloud\CloudServerSpec;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Providers\HttpCloudApi;
 use Carbon\CarbonInterval;
+use GuzzleHttp\Psr7\Response as GuzzleResponse;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -58,6 +59,60 @@ function cloudBaseApi(string $token = 'secret-token-123'): object
 function cloudBaseFailure(CloudFailure $failure, ?string $detail = 'server is locked', ?int $status = null, CloudProviderType $provider = CloudProviderType::Hetzner): CloudProviderException
 {
     return new CloudProviderException($failure, $provider, $detail, $status);
+}
+
+function cloudBaseAnswer(string $json): Response
+{
+    return new Response(new GuzzleResponse(200, ['Content-Type' => 'application/json'], $json));
+}
+
+function cloudBaseUuidApi(): object
+{
+    return new class('secret-token-123') extends HttpCloudApi
+    {
+        protected const ID_PATTERN = '/\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z/';
+
+        public function type(): CloudProviderType
+        {
+            return CloudProviderType::Vultr;
+        }
+
+        protected function message(Response $response): ?string
+        {
+            return null;
+        }
+
+        public function call(string $method, mixed ...$arguments): mixed
+        {
+            return $this->{$method}(...$arguments);
+        }
+    };
+}
+
+function cloudBaseBusyApi(): object
+{
+    return new class('secret-token-123') extends HttpCloudApi
+    {
+        public function type(): CloudProviderType
+        {
+            return CloudProviderType::DigitalOcean;
+        }
+
+        protected function message(Response $response): ?string
+        {
+            return $response->json('message');
+        }
+
+        protected function classify(Response $response): ?CloudFailure
+        {
+            return str_contains((string) $this->message($response), 'pending event') ? CloudFailure::Busy : null;
+        }
+
+        public function write(): Response
+        {
+            return $this->postJson('/droplets/7/actions', ['type' => 'reboot']);
+        }
+    };
 }
 
 test('requests carry the token, json headers and the panel agent', function () {
@@ -434,14 +489,206 @@ test('pagination stops after twenty pages whatever the provider says', function 
     Http::assertSentCount(20);
 });
 
-test('a page without the list contributes nothing', function () {
-    Http::fake(['api.hetzner.cloud/v1/items*' => Http::response(['other' => 1])]);
+test('a page without its list is unavailable, so a catalog is never kept as empty because a list went missing', function (array $body) {
+    Http::fake(['api.hetzner.cloud/v1/items*' => Http::response($body)]);
 
-    $items = cloudBaseApi()->call('paginate', '/items', [], 'items', fn(Response $response): ?array => null);
+    expect(fn() => cloudBaseApi()->call('paginate', '/items', [], 'items', fn(Response $response): ?array => null))
+        ->toThrow(function (CloudProviderException $e) {
+            expect($e->failure)->toBe(CloudFailure::Unavailable)
+                ->and($e->retryable())->toBeTrue()
+                ->and($e->getMessage())->toBe('Hetzner Cloud had a problem answering. Try again in a minute.');
+        });
 
-    expect($items->all())->toBe([]);
+    Http::assertSentCount(1);
+})->with([
+    'no list' => [['other' => 1]],
+    'nothing in its place' => [['items' => null]],
+    'text in its place' => [['items' => 'none']],
+    'an object in its place' => [['items' => ['a' => 1]]],
+]);
+
+test('a later page without its list fails the whole read', function () {
+    Http::fake(['api.hetzner.cloud/v1/items*' => Http::sequence()
+        ->push(['items' => [['id' => 1]]])
+        ->push(['other' => 1])]);
+
+    expect(fn() => cloudBaseApi()->call('paginate', '/items', [], 'items', fn(Response $response): ?array => ['page' => 2]))
+        ->toThrow(function (CloudProviderException $e) {
+            expect($e->failure)->toBe(CloudFailure::Unavailable);
+        });
+
+    Http::assertSentCount(2);
+});
+
+test('a page with an empty list is an empty catalog', function () {
+    Http::fake(['api.hetzner.cloud/v1/items*' => Http::response(['items' => []])]);
+
+    expect(cloudBaseApi()->call('paginate', '/items', [], 'items', fn(Response $response): ?array => null)->all())->toBe([]);
     Http::assertSentCount(1);
 });
+
+test('a list is read out of an answer, and anything else in its place is unavailable', function (string $json, ?array $expected) {
+    $api = cloudBaseApi();
+
+    if ($expected !== null) {
+        expect($api->call('listed', cloudBaseAnswer($json), 'items'))->toBe($expected);
+
+        return;
+    }
+
+    expect(fn() => $api->call('listed', cloudBaseAnswer($json), 'items'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->status)->toBeNull()
+            ->and($e->detail)->toBe('answered without the data it was asked for')
+            ->and($e->getMessage())->toBe('Hetzner Cloud had a problem answering. Try again in a minute.');
+    });
+})->with([
+    'two entries' => ['{"items":[{"id":1},"b"]}', [['id' => 1], 'b']],
+    'no entries' => ['{"items":[]}', []],
+    'no list' => ['{"other":1}', null],
+    'nothing in its place' => ['{"items":null}', null],
+    'text in its place' => ['{"items":"x"}', null],
+    'an object in its place' => ['{"items":{"a":1}}', null],
+]);
+
+test('an id read from an answer is a whole number, given as a number or as digits', function (mixed $id, ?string $expected) {
+    $api = cloudBaseApi();
+
+    if ($expected !== null) {
+        expect($api->call('identifier', $id))->toBe($expected);
+
+        return;
+    }
+
+    expect(fn() => $api->call('identifier', $id))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)->and($e->retryable())->toBeTrue();
+    });
+})->with([
+    'a number' => [4711, '4711'],
+    'the number one' => [1, '1'],
+    'the largest number' => [PHP_INT_MAX, (string) PHP_INT_MAX],
+    'digits' => ['4711', '4711'],
+    'zero' => [0, null],
+    'a negative number' => [-5, null],
+    'a fraction' => [4.5, null],
+    'a whole float' => [4711.0, null],
+    'a flag' => [true, null],
+    'nothing' => [null, null],
+    'a list' => [[4711], null],
+    'an object' => [['id' => 4711], null],
+    'empty text' => ['', null],
+    'zero as text' => ['0', null],
+    'digits with a leading zero' => ['007', null],
+    'digits with a space before' => [' 4711', null],
+    'digits with a newline after' => ["4711\n", null],
+    'digits with a gap' => ['47 11', null],
+    'a word' => ['abc', null],
+    'a path' => ['../7', null],
+    'an exponent' => ['1e3', null],
+    'digits that are not ascii' => ["\u{0664}\u{0667}", null],
+]);
+
+test('a provider whose ids look different says so once, and its ids are checked that way', function (mixed $id, bool $accepted) {
+    $api = cloudBaseUuidApi();
+
+    if ($accepted) {
+        expect($api->call('identifier', $id))->toBe($id);
+
+        return;
+    }
+
+    expect(fn() => $api->call('identifier', $id))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable);
+    });
+})->with([
+    'a uuid' => ['cb676a46-66fd-4dfb-b839-443f2e6c0b60', true],
+    'digits' => ['4711', false],
+    'a number' => [4711, false],
+    'a uuid with a newline after' => ["cb676a46-66fd-4dfb-b839-443f2e6c0b60\n", false],
+    'a uuid with more after it' => ['cb676a46-66fd-4dfb-b839-443f2e6c0b60-1', false],
+]);
+
+test('an id goes into a path as one encoded segment', function (string $id, string $expected) {
+    expect(cloudBaseApi()->call('segment', $id))->toBe($expected);
+})->with([
+    'digits' => ['4711', '4711'],
+    'a uuid' => ['cb676a46-66fd-4dfb-b839-443f2e6c0b60', 'cb676a46-66fd-4dfb-b839-443f2e6c0b60'],
+    'a slash' => ['a/b', 'a%2Fb'],
+    'a path up a level' => ['../7', '..%2F7'],
+    'a space' => ['a b', 'a%20b'],
+    'a dot inside text' => ['v1.2', 'v1.2'],
+]);
+
+test('an id that names nothing is refused as a mistake in the code, before anything is sent', function (string $id) {
+    expect(fn() => cloudBaseApi()->call('segment', $id))->toThrow(LogicException::class, 'A cloud id must name one resource.');
+
+    Http::assertNothingSent();
+})->with([
+    'nothing' => [''],
+    'a space' => [' '],
+    'whitespace' => ["\t\n"],
+    'a dot' => ['.'],
+    'two dots' => ['..'],
+]);
+
+test('text is a string with something in it, or nothing', function (mixed $value, ?string $expected) {
+    expect(cloudBaseApi()->call('text', $value))->toBe($expected);
+})->with([
+    'text' => ['fsn1', 'fsn1'],
+    'empty text' => ['', null],
+    'nothing' => [null, null],
+    'a number' => [42, null],
+    'a flag' => [true, null],
+    'a list' => [['fsn1'], null],
+]);
+
+test('a lookup by tag trusts only an entry that carries the tag itself', function () {
+    $api = cloudBaseApi();
+    $mine = fn(array $entry): bool => ($entry['tag'] ?? null) === 'mine';
+
+    expect($api->call('firstMatch', [], $mine))->toBeNull()
+        ->and($api->call('firstMatch', [['id' => 1, 'tag' => 'other'], ['id' => 2, 'tag' => 'mine'], ['id' => 3, 'tag' => 'mine']], $mine))->toBe(['id' => 2, 'tag' => 'mine'])
+        ->and($api->call('firstMatch', ['oops', null, 42, ['id' => 4, 'tag' => 'mine']], $mine))->toBe(['id' => 4, 'tag' => 'mine']);
+});
+
+test('a lookup that lists entries but none that matches means the provider ignored its filter, so it is unavailable', function (array $entries) {
+    expect(fn() => cloudBaseApi()->call('firstMatch', $entries, fn(array $entry): bool => ($entry['tag'] ?? null) === 'mine'))
+        ->toThrow(function (CloudProviderException $e) {
+            expect($e->failure)->toBe(CloudFailure::Unavailable)->and($e->retryable())->toBeTrue();
+        });
+})->with([
+    'an entry for something else' => [[['id' => 1, 'tag' => 'other']]],
+    'several entries for something else' => [[['id' => 1, 'tag' => 'other'], ['id' => 2]]],
+    'entries that are not objects' => [['oops', null, 42]],
+]);
+
+test('an entry carries its numbers when each one is a number or digits', function (array $entry, bool $expected) {
+    expect(cloudBaseApi()->call('hasNumbers', $entry, 'cores', 'memory', 'disk'))->toBe($expected);
+})->with([
+    'all three' => [['cores' => 2, 'memory' => 4.0, 'disk' => 40], true],
+    'digits' => [['cores' => '2', 'memory' => '4.5', 'disk' => '40'], true],
+    'zeros' => [['cores' => 0, 'memory' => 0, 'disk' => 0], true],
+    'one missing' => [['cores' => 2, 'memory' => 4.0], false],
+    'one null' => [['cores' => null, 'memory' => 4.0, 'disk' => 40], false],
+    'one word' => [['cores' => 'many', 'memory' => 4.0, 'disk' => 40], false],
+    'one flag' => [['cores' => true, 'memory' => 4.0, 'disk' => 40], false],
+    'one list' => [['cores' => [2], 'memory' => 4.0, 'disk' => 40], false],
+    'none' => [[], false],
+]);
+
+test('a provider can read a failure its own way before the status is read', function (int $status, string $message, CloudFailure $failure) {
+    Http::fake(['api.digitalocean.com/v2/droplets/7/actions' => Http::response(['message' => $message], $status)]);
+
+    expect(fn() => cloudBaseBusyApi()->write())->toThrow(function (CloudProviderException $e) use ($failure, $status) {
+        expect($e->failure)->toBe($failure)->and($e->status)->toBe($status);
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'a pending event' => [422, 'Droplet already has a pending event.', CloudFailure::Busy],
+    'anything else on the same status' => [422, 'Size is not available in this region.', CloudFailure::Refused],
+    'a status the provider leaves to the base' => [404, 'The resource you were accessing could not be found.', CloudFailure::NotFound],
+]);
 
 test('a provider failure on a later page is a failure of the whole read', function () {
     Http::fake(['api.hetzner.cloud/v1/items*' => Http::sequence()

@@ -20,6 +20,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use LogicException;
 use Throwable;
 
 abstract class HttpCloudApi
@@ -29,6 +30,8 @@ abstract class HttpCloudApi
     public const TIMEOUT_SECONDS = 10;
 
     public const MAX_PAGES = 20;
+
+    protected const ID_PATTERN = '/\A[1-9]\d*\z/';
 
     private const READ_ATTEMPTS = 3;
 
@@ -132,9 +135,8 @@ abstract class HttpCloudApi
 
         for ($page = 0; $page < self::MAX_PAGES; $page++) {
             $response = $this->getJson($path, $query, $headers);
-            $batch = $response->json($key);
 
-            $items = $items->concat(is_array($batch) ? $batch : []);
+            $items = $items->concat($this->listed($response, $key));
             $query = $next($response);
 
             if ($query === null) {
@@ -155,6 +157,81 @@ abstract class HttpCloudApi
         $text = trim((string) preg_replace('/\s+/', ' ', $text));
 
         return Str::limit(app(LogSanitizer::class)->sanitize($text), self::DETAIL_LENGTH);
+    }
+
+    protected function classify(Response $response): ?CloudFailure
+    {
+        return null;
+    }
+
+    protected function segment(string $id): string
+    {
+        if (trim($id) === '' || $id === '.' || $id === '..') {
+            throw new LogicException('A cloud id must name one resource.');
+        }
+
+        return rawurlencode($id);
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    protected function listed(Response $response, string $key): array
+    {
+        $items = $response->json($key);
+
+        return is_array($items) && array_is_list($items) ? $items : throw $this->unusable();
+    }
+
+    protected function identifier(mixed $id): string
+    {
+        $text = is_int($id) ? (string) $id : $id;
+
+        return is_string($text) && preg_match(static::ID_PATTERN, $text) === 1 ? $text : throw $this->unusable();
+    }
+
+    /**
+     * @param  list<mixed>  $entries
+     * @param  Closure(array<string, mixed>): bool  $matches
+     * @return array<string, mixed>|null
+     */
+    protected function firstMatch(array $entries, Closure $matches): ?array
+    {
+        if ($entries === []) {
+            return null;
+        }
+
+        foreach ($entries as $entry) {
+            if (is_array($entry) && $matches($entry)) {
+                return $entry;
+            }
+        }
+
+        throw $this->unusable();
+    }
+
+    protected function unusable(): CloudProviderException
+    {
+        return new CloudProviderException(CloudFailure::Unavailable, $this->type(), 'answered without the data it was asked for');
+    }
+
+    protected static function text(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     */
+    protected static function hasNumbers(array $entry, string ...$keys): bool
+    {
+        foreach ($keys as $key) {
+            if (!is_numeric($entry[$key] ?? null)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -216,7 +293,7 @@ abstract class HttpCloudApi
             return new CloudProviderException(CloudFailure::Refused, $this->type(), 'answered with a redirect', $status);
         }
 
-        $failure = match (true) {
+        $failure = $this->classify($response) ?? match (true) {
             $status === 401 => CloudFailure::TokenRejected,
             $status === 403 => CloudFailure::Forbidden,
             $status === 404 => CloudFailure::NotFound,
