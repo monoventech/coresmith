@@ -7,7 +7,7 @@ use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\GitHub\GitHubAppHealth;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\WebhookMode;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;

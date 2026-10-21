@@ -190,7 +190,7 @@ final class EnvironmentFile
         $variables = [];
 
         foreach ($decoded as $key => $value) {
-            if (is_string($key) && preg_match('/^' . self::KEY . '$/', $key) === 1 && is_scalar($value)) {
+            if (is_string($key) && preg_match('/^' . self::KEY . '$/D', $key) === 1 && is_scalar($value)) {
                 $variables[$key] = (string) $value;
             }
         }

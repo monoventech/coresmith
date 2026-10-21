@@ -66,6 +66,13 @@ test('a cidr range is accepted', function () {
     expect((new UfwFirewallManager)->allowFrom('10.0.0.0/8', 6379))->toContain('10.0.0.0/8');
 });
 
+test('a source address ending in a newline is rejected, so it cannot cut the firewall rule short', function (string $address) {
+    (new UfwFirewallManager)->allowFrom($address, 6379);
+})->with([
+    'a cidr range' => ["10.0.0.0/8\n"],
+    'a single address' => ["10.0.0.1\n"],
+])->throws(InvalidArgumentException::class);
+
 test('the firewall always opens the servers real ssh port, never assuming 22', function () {
     expect((new FirewallConfigurator)->requiredPorts(2222))->toBe([2222, 80, 443]);
 });

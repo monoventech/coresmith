@@ -10,7 +10,7 @@ use App\Models\TeamDomain;
 use App\Models\User;
 use App\Services\Git\GitHub\GitHubAppRegistrar;
 use App\Services\Git\GitHub\ManifestBuilder;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;

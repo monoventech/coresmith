@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Git\GitHub;
 
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 

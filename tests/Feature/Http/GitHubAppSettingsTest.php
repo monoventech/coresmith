@@ -12,7 +12,7 @@ use App\Models\WebhookEndpoint;
 use App\Services\Git\GitHub\GitHubAppHealth;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\ManifestBuilder;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;

@@ -149,15 +149,16 @@ test('a release name that is not a release timestamp is refused before the job e
     'an injection' => '20260913-120000; rm -rf /',
     'an underscore' => '20260913_120000',
     'empty' => '',
+    'a trailing newline' => "20261019-120000\n",
 ]);
 
 test('a release name carrying a trailing newline never reaches a shell command', function () {
     $application = rollbackApp();
     $transport = rollbackTransport();
 
-    expect(fn() => rollbackRun($application, $transport, "20260911-100000\n"))->toThrow(NoPreviousReleaseException::class);
+    expect(fn() => rollbackRun($application, $transport, "20260911-100000\n"))->toThrow(InvalidArgumentException::class);
 
-    expect(implode("\n", $transport->commands()))->not->toContain('ln -sfn');
+    expect($transport->commands())->toBe([]);
 });
 
 test('both release name formats are accepted', function (string $release) {

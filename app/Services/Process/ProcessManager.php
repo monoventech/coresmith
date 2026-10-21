@@ -14,6 +14,7 @@ use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\LogSanitizer;
+use App\Services\Deployment\ReleasePaths;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
@@ -47,11 +48,12 @@ final class ProcessManager
         private readonly ProcessStartAdvice $advice = new ProcessStartAdvice,
         private readonly LogSanitizer $sanitizer = new LogSanitizer,
         private readonly AppAccount $account = new AppAccount,
+        private readonly LogRotateBuilder $rotation = new LogRotateBuilder,
     ) {}
 
     public function install(SSHConnection $connection, Application $application): void
     {
-        $connection->execute('mkdir -p /var/coresmith/logs/' . SafeName::assertSlug($application->slug), sudo: true)->throw();
+        $connection->execute('mkdir -p ' . (new ReleasePaths($application))->logs(), sudo: true)->throw();
 
         if ($application->type === ApplicationType::Php) {
             $connection->execute($this->account->shareStorage($application), sudo: true)->throw();
@@ -64,12 +66,14 @@ final class ProcessManager
         }
 
         $webCommand = $this->units->webCommand($application);
+        $logged = [];
 
         if ($webCommand !== null) {
             $connection->uploadContent(
                 $this->units->build($application, 'web', $webCommand),
                 $this->units->unitPath($application, 'web'),
             );
+            $logged[] = 'web';
         }
 
         foreach ($this->workerProcesses($application) as $name => $command) {
@@ -77,9 +81,12 @@ final class ProcessManager
                 $this->units->build($application, $name, $command),
                 $this->units->unitPath($application, $name),
             );
+            $logged[] = $name;
         }
 
         $connection->execute('systemctl daemon-reload', sudo: true)->throw();
+
+        $this->rotation->write($connection, $application, $logged);
     }
 
     public function start(SSHConnection $connection, Application $application): void
@@ -112,6 +119,7 @@ final class ProcessManager
         }
 
         $connection->execute('systemctl daemon-reload', sudo: true)->throw();
+        $this->rotation->remove($connection, $application);
 
         $application->forceFill(['power_state' => PowerState::Stopped])->save();
     }
@@ -172,7 +180,7 @@ final class ProcessManager
 
     public function processLog(SSHConnection $connection, Application $application, string $unit, int $lines): string
     {
-        $log = escapeshellarg('/var/coresmith/logs/' . SafeName::assertSlug($application->slug) . '/' . $this->process($application, $unit) . '.log');
+        $log = escapeshellarg((new ReleasePaths($application))->processLog($this->process($application, $unit)));
 
         return $connection->execute("tail -n {$lines} {$log} 2>/dev/null || true", sudo: true)->output;
     }

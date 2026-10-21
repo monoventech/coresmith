@@ -7,7 +7,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Git\GitHub\RepositoryCatalog;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 

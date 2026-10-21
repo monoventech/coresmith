@@ -15,6 +15,8 @@ final class ReleasePaths
 {
     public const ROOT = '/var/coresmith/apps';
 
+    public const LOGS = '/var/coresmith/logs';
+
     public const KEEP_RELEASES = 5;
 
     public function __construct(private readonly Application $application) {}
@@ -47,6 +49,21 @@ final class ReleasePaths
     public function repo(): string
     {
         return $this->base() . '/repo';
+    }
+
+    public function logs(): string
+    {
+        return self::LOGS . '/' . SafeName::assertSlug($this->application->slug);
+    }
+
+    public function processLog(string $process): string
+    {
+        return $this->logs() . '/' . SafeName::assertProcess($process) . '.log';
+    }
+
+    public function schedulerLog(): string
+    {
+        return $this->shared() . '/logs/scheduler.log';
     }
 
     public function envFile(): string

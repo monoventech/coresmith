@@ -12,6 +12,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
 
 function screenMember(Team $team, TeamRole $role = TeamRole::Member): User
@@ -354,6 +355,20 @@ test('a release that does not belong to this application is refused', function (
     'not a release name' => '../../etc/passwd',
     'an injection' => '20260912090000; reboot',
 ]);
+
+test('a release name ending in a newline is refused by its format, even when the request is not trimmed', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $application = screenApp($team);
+    Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => "20261019-120000\n"]);
+
+    $this->withoutMiddleware(TrimStrings::class)
+        ->actingAs(screenMember($team))
+        ->post(route('servers.applications.rollback', [$application->server_id, $application]), ['release' => "20261019-120000\n"])
+        ->assertSessionHasErrors(['release' => 'The release field format is invalid.']);
+
+    Queue::assertNothingPushed();
+});
 
 test('another team cannot roll back, and a rollback through another server is a not found', function () {
     Queue::fake();

@@ -11,7 +11,7 @@ use App\Services\Git\ProviderHost;
 use App\Services\Git\Providers\BitbucketClient;
 use App\Services\Git\Providers\GitHubAppClient;
 use App\Services\Git\Providers\GitLabClient;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
@@ -109,6 +109,22 @@ test('a repository name carrying a path escape is refused before any request', f
     'monoven/core smith',
     'monoven/..',
 ])->throws(GitProviderException::class);
+
+test('a bitbucket repository name with a dot segment is refused before any request', function (string $repository) {
+    Http::fake();
+
+    expect(fn() => client(provider(SourceProviderType::Bitbucket))->createDeployKey($repository, 'ssh-ed25519 AAAA', 'x'))->toThrow(GitProviderException::class);
+
+    Http::assertNothingSent();
+})->with(['monoven/..', '../coresmith', 'monoven/.']);
+
+test('a repository name ending in a newline is refused before any request', function (SourceProviderType $type) {
+    Http::fake();
+
+    expect(fn() => client(provider($type))->createDeployKey("monoven/coresmith\n", 'ssh-ed25519 AAAA', 'x'))->toThrow(GitProviderException::class);
+
+    Http::assertNothingSent();
+})->with([SourceProviderType::GitHubApp, SourceProviderType::Bitbucket]);
 
 test('a live github token is reused rather than reminted', function () {
     Http::fake(['api.github.com/*' => Http::response(['repositories' => [], 'total_count' => 0])]);

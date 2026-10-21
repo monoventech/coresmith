@@ -10,6 +10,7 @@ namespace App\Http\Requests\Server;
 
 use App\Enums\Ability;
 use App\Models\Team;
+use App\Services\SafeName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -34,7 +35,7 @@ final class StoreServerRequest extends FormRequest
             'region' => ['nullable', 'string', 'max:32', 'regex:/^[A-Za-z0-9 ._()-]+$/'],
             'ip_address' => ['required', 'ip'],
             'ssh_port' => ['required', 'integer', 'min:1', 'max:65535'],
-            'ssh_user' => ['required', 'string', 'regex:/^[a-z_][a-z0-9_-]{0,31}$/'],
+            'ssh_user' => ['required', 'string', 'regex:' . SafeName::SYSTEM_USER_PATTERN],
             'audit_logging_enabled' => ['boolean'],
         ];
     }

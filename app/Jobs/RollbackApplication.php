@@ -31,7 +31,7 @@ final class RollbackApplication implements ShouldQueue
 {
     use Queueable;
 
-    public const RELEASE_PATTERN = '/^\d{8}-?\d{6}$/';
+    public const RELEASE_PATTERN = '/^\d{8}-?\d{6}$/D';
 
     public int $tries = 1;
 

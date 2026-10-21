@@ -59,6 +59,10 @@ test('a json object of variables is read as well', function () {
     expect(environmentFile()->parse('{"APP_ENV":"production","PORT":3000,"bad key":"x"}'))->toBe(['APP_ENV' => 'production', 'PORT' => '3000']);
 });
 
+test('a json key ending in a newline is dropped, so it cannot split a line of the file', function () {
+    expect(environmentFile()->parse('{"APP_ENV":"production","BROKEN\n":"x"}'))->toBe(['APP_ENV' => 'production']);
+});
+
 test('the file systemd reads quotes every value so nothing in it is expanded or cut short', function () {
     expect(environmentFile()->render(['A' => 'plain', 'B' => 'say "hi" to $HOME and `id` \\ ok', 'C' => "two\nlines"]))
         ->toBe("A=\"plain\"\nB=\"say \\\"hi\\\" to \\\$HOME and \\`id\\` \\\\ ok\"\nC=\"two\nlines\"\n")

@@ -58,6 +58,8 @@ use Closure;
 use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
@@ -109,6 +111,13 @@ final class DeployApplication implements ShouldQueue
     public function handle(SSHConnectionManager $connections, DeploymentCommands $commands): void
     {
         $application = $this->deployment->application;
+
+        if ($application === null) {
+            $this->cancelForRemovedApplication();
+
+            return;
+        }
+
         $lock = $this->lock($application);
 
         if ($lock === null) {
@@ -164,6 +173,113 @@ final class DeployApplication implements ShouldQueue
         }
     }
 
+    public function failed(Throwable $e): void
+    {
+        $deployment = $this->deployment->fresh();
+        $failed = $deployment !== null && $this->endKilled($deployment, $e);
+
+        if ($this->lockOwner !== null) {
+            Cache::restoreLock($this->lockKey(), $this->lockOwner)->release();
+        } elseif ($failed) {
+            Cache::lock($this->lockKey())->forceRelease();
+        }
+    }
+
+    private function endKilled(Deployment $deployment, Throwable $e): bool
+    {
+        if ($deployment->status !== DeploymentStatus::Running) {
+            return false;
+        }
+
+        $swapped = $deployment->application?->current_release === $this->timestamp;
+
+        if (!app(DeploymentLog::class)->failIfRunning($deployment, $this->killedReason($e), $swapped)) {
+            return false;
+        }
+
+        if (!$swapped) {
+            $this->removeKilledRelease($deployment);
+        }
+
+        return true;
+    }
+
+    private function killedReason(Throwable $e): string
+    {
+        return match (true) {
+            $e instanceof TimeoutExceededException => 'The deploy ran longer than ' . intdiv(self::TIMEOUT, 60) . ' minutes, so Coresmith stopped it. Deploy again.',
+            $e instanceof MaxAttemptsExceededException => 'The worker running this deploy stopped before the deploy finished, so Coresmith ended it. Deploy again.',
+            default => 'The deploy stopped before it finished, so Coresmith ended it. Deploy again.',
+        };
+    }
+
+    private function removeKilledRelease(Deployment $deployment): void
+    {
+        $application = $deployment->application;
+        $server = $application?->server;
+
+        if ($application === null || $server === null || preg_match(RollbackApplication::RELEASE_PATTERN, $this->timestamp) !== 1) {
+            return;
+        }
+
+        $connections = app(SSHConnectionManager::class);
+        $paths = new ReleasePaths($application);
+
+        $connections->disconnect($server);
+
+        try {
+            $connection = $connections->for($server);
+            $current = $connection->execute('readlink ' . escapeshellarg($paths->current()), sudo: true);
+
+            if ($current->successful() && basename(rtrim(trim($current->output), '/')) === $this->timestamp) {
+                return;
+            }
+
+            $connection->execute('rm -rf ' . escapeshellarg($paths->release($this->timestamp)), sudo: true)->throw();
+
+            if ($this->holdsLock()) {
+                app(SharedStorage::class)->discard($connection, $deployment);
+            }
+        } catch (Throwable $e) {
+            report($e);
+            rescue(fn() => app(DeploymentLog::class)->append($deployment, "Could not remove the half-built release. Remove releases/{$this->timestamp} by hand if it is still there."), report: true);
+        } finally {
+            $connections->disconnect($server);
+        }
+    }
+
+    private function holdsLock(): bool
+    {
+        if ($this->lockOwner === null) {
+            return true;
+        }
+
+        $lock = Cache::restoreLock($this->lockKey(), $this->lockOwner);
+
+        return $lock instanceof Lock && rescue(fn(): bool => $lock->isOwnedByCurrentProcess(), false, false);
+    }
+
+    private function lockKey(): string
+    {
+        return 'deploy:' . $this->deployment->application_id;
+    }
+
+    private function cancelForRemovedApplication(): void
+    {
+        Deployment::query()
+            ->whereKey($this->deployment->getKey())
+            ->whereIn('status', [DeploymentStatus::Pending->value, DeploymentStatus::Running->value])
+            ->update([
+                'status' => DeploymentStatus::Cancelled->value,
+                'finished_at' => now(),
+                'log' => trim((string) $this->deployment->log . "\nThe app was removed while it deployed."),
+            ]);
+
+        if ($this->lockOwner !== null) {
+            Cache::restoreLock($this->lockKey(), $this->lockOwner)->release();
+        }
+    }
+
     private function followUp(): void
     {
         rescue(fn() => app(AutoDeploy::class)->afterDeployment($this->deployment->fresh() ?? $this->deployment), report: true);
@@ -173,11 +289,11 @@ final class DeployApplication implements ShouldQueue
     {
         if ($this->lockOwner !== null) {
             return $this->deployment->status === DeploymentStatus::Running
-                ? Cache::restoreLock('deploy:' . $application->getKey(), $this->lockOwner)
+                ? Cache::restoreLock($this->lockKey(), $this->lockOwner)
                 : null;
         }
 
-        $lock = Cache::lock('deploy:' . $application->getKey(), self::LOCK_SECONDS);
+        $lock = Cache::lock($this->lockKey(), self::LOCK_SECONDS);
 
         if (!$lock->get()) {
             $this->deployment->forceFill([
@@ -541,7 +657,7 @@ final class DeployApplication implements ShouldQueue
         $subject = $lines[2] ?? null;
 
         $tag = trim($connection->execute("git --git-dir={$repo} describe --tags --exact-match {$hash} 2>/dev/null || true", sudo: true)->output);
-        $tag = preg_match('/^[A-Za-z0-9._\/-]{1,120}$/', $tag) === 1 ? $tag : null;
+        $tag = preg_match('/^[A-Za-z0-9._\/-]{1,120}$/D', $tag) === 1 ? $tag : null;
 
         $signed = null;
 

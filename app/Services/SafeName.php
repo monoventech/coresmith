@@ -12,15 +12,15 @@ use App\Exceptions\UnsafeNameException;
 
 final class SafeName
 {
-    public const SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{0,62}$/';
+    public const SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{0,62}$/D';
 
     public const PROCESS_PATTERN = '/^[a-z0-9]{1,32}$/D';
 
-    public const SYSTEM_USER_PATTERN = '/^[a-z_][a-z0-9_-]{0,31}$/';
+    public const SYSTEM_USER_PATTERN = '/^[a-z_][a-z0-9_-]{0,31}$/D';
 
-    public const DATABASE_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/';
+    public const DATABASE_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/D';
 
-    public const DOMAIN_PATTERN = '/^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i';
+    public const DOMAIN_PATTERN = '/^(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/iD';
 
     public const BRANCH_PATTERN = '/^(?![-\/.])(?!.*(?:\.\.|\/\/|\/\.|\.lock\/))(?!.*(?:\/|\.|\.lock)\z)[A-Za-z0-9._\/+-]{1,255}\z/';
 

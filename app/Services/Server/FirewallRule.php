@@ -40,7 +40,7 @@ final class FirewallRule
             throw new InvalidArgumentException("[{$ip}] is not a valid IP address.");
         }
 
-        if (isset($address[1]) && preg_match('/^\d{1,3}$/', $address[1]) !== 1) {
+        if (isset($address[1]) && preg_match('/^\d{1,3}$/D', $address[1]) !== 1) {
             throw new InvalidArgumentException("[{$ip}] is not a valid CIDR range.");
         }
 

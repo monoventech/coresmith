@@ -11,6 +11,7 @@ use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
 
 function joined(Team $team, TeamRole $role): User
@@ -74,6 +75,23 @@ test('a database user carrying sql metacharacters is rejected', function () {
         ->post(route('servers.databases.store', $server), databasePayload(['db_user' => "evil'@'%"]))
         ->assertSessionHasErrors('db_user');
 });
+
+test('a database name, user or extension ending in a newline is refused, even when the request is not trimmed', function (array $payload, string $field) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->withoutMiddleware(TrimStrings::class)
+        ->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('servers.databases.store', $server), databasePayload($payload))
+        ->assertSessionHasErrors($field);
+
+    Queue::assertNothingPushed();
+})->with([
+    'a name' => [['name' => "shop_production\n"], 'name'],
+    'a user' => [['db_user' => "shop_user\n"], 'db_user'],
+    'an extension' => [['type' => 'postgresql', 'extensions' => ["pgcrypto\n"]], 'extensions.0'],
+]);
 
 test('a member cannot back up or delete a database', function () {
     Queue::fake();

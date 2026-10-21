@@ -63,7 +63,7 @@ final class CrontabBuilder
      */
     public function scripts(Application $application): array
     {
-        $log = escapeshellarg((new ReleasePaths($application))->shared() . '/logs/scheduler.log');
+        $log = escapeshellarg((new ReleasePaths($application))->schedulerLog());
         $directory = $this->scriptDirectory($application);
         $scripts = [];
 
