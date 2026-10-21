@@ -1,0 +1,33 @@
+{
+    "instance": {
+        "id": "cb676a46-66fd-4dfb-b839-443f2e6c0b60",
+        "os": "Ubuntu 24.04 LTS x64",
+        "ram": 2048,
+        "disk": 55,
+        "main_ip": "203.0.113.42",
+        "vcpu_count": 1,
+        "region": "fra",
+        "plan": "vc2-1c-2gb",
+        "date_created": "2026-10-18T12:00:00+00:00",
+        "status": "active",
+        "allowed_bandwidth": 2048,
+        "netmask_v4": "255.255.254.0",
+        "gateway_v4": "203.0.113.1",
+        "power_status": "running",
+        "server_status": "ok",
+        "v6_network": "2001:db8:0:1::",
+        "v6_main_ip": "2001:db8:0:1:5400:ff:fe12:3456",
+        "v6_network_size": 64,
+        "label": "outpost-02",
+        "internal_ip": "",
+        "kvm": "https://my.vultr.com/subs/vps/novnc/api.php?data=EXAMPLE",
+        "hostname": "outpost-02",
+        "tags": ["coresmith", "coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d"],
+        "os_id": 2284,
+        "app_id": 0,
+        "image_id": "",
+        "firewall_group_id": "",
+        "features": ["ipv6"],
+        "user_scheme": "root"
+    }
+}
