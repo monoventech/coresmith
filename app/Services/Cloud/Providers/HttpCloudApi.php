@@ -1,0 +1,222 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+namespace App\Services\Cloud\Providers;
+
+use App\Enums\CloudFailure;
+use App\Enums\CloudProviderType;
+use App\Exceptions\CloudProviderException;
+use App\Services\Deployment\LogSanitizer;
+use Closure;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+use Throwable;
+
+abstract class HttpCloudApi
+{
+    public const CONNECT_SECONDS = 5;
+
+    public const TIMEOUT_SECONDS = 10;
+
+    public const MAX_PAGES = 20;
+
+    private const READ_ATTEMPTS = 3;
+
+    private const READ_PAUSE_MILLISECONDS = 500;
+
+    private const RETRYABLE_STATUSES = [423, 429, 500, 502, 503, 504];
+
+    private const DETAIL_LENGTH = 240;
+
+    public function __construct(#[\SensitiveParameter] private readonly string $token) {}
+
+    abstract public function type(): CloudProviderType;
+
+    abstract protected function message(Response $response): ?string;
+
+    public static function publicIpv4(mixed $ip): ?string
+    {
+        if (!is_string($ip)) {
+            return null;
+        }
+
+        $accepted = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+
+        return $accepted === false ? null : $ip;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function __debugInfo(): array
+    {
+        return ['type' => $this->type()->value];
+    }
+
+    protected function request(): PendingRequest
+    {
+        return Http::baseUrl($this->type()->apiUrl())
+            ->withToken($this->token)
+            ->acceptJson()
+            ->asJson()
+            ->withUserAgent('Coresmith/' . config('coresmith.version'))
+            ->withOptions(['allow_redirects' => false])
+            ->connectTimeout(self::CONNECT_SECONDS)
+            ->timeout(self::TIMEOUT_SECONDS);
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $headers
+     */
+    protected function getJson(string $path, array $query = [], array $headers = []): Response
+    {
+        return $this->guard($this->send(fn(): Response => $this->reading($headers)->get($path, $query)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $headers
+     */
+    protected function getJsonOrNull(string $path, array $query = [], array $headers = []): ?Response
+    {
+        $response = $this->send(fn(): Response => $this->reading($headers)->get($path, $query));
+
+        return $response->status() === 404 ? null : $this->guard($response);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function postJson(string $path, array $payload = []): Response
+    {
+        return $this->guard($this->send(fn(): Response => $this->request()->post($path, $this->body($payload))));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function patchJson(string $path, array $payload = []): Response
+    {
+        return $this->guard($this->send(fn(): Response => $this->request()->patch($path, $this->body($payload))));
+    }
+
+    protected function deleteOrGone(string $path): void
+    {
+        $response = $this->send(fn(): Response => $this->reading([])->delete($path));
+
+        if ($response->status() !== 404) {
+            $this->guard($response);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @param  Closure(Response): (array<string, mixed>|null)  $next
+     * @param  array<string, string>  $headers
+     * @return Collection<int, mixed>
+     */
+    protected function paginate(string $path, array $query, string $key, Closure $next, array $headers = []): Collection
+    {
+        $items = new Collection;
+
+        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+            $response = $this->getJson($path, $query, $headers);
+            $batch = $response->json($key);
+
+            $items = $items->concat(is_array($batch) ? $batch : []);
+            $query = $next($response);
+
+            if ($query === null) {
+                break;
+            }
+        }
+
+        return $items->values();
+    }
+
+    protected function detail(?string $raw): ?string
+    {
+        if ($raw === null || trim($raw) === '') {
+            return null;
+        }
+
+        $text = str_replace($this->token, '[REDACTED]', $raw);
+        $text = trim((string) preg_replace('/\s+/', ' ', $text));
+
+        return Str::limit(app(LogSanitizer::class)->sanitize($text), self::DETAIL_LENGTH);
+    }
+
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function reading(array $headers): PendingRequest
+    {
+        return $this->request()
+            ->withHeaders($headers)
+            ->retry(self::READ_ATTEMPTS, self::READ_PAUSE_MILLISECONDS, fn(?Throwable $e): bool => self::worthRetrying($e), throw: false);
+    }
+
+    private static function worthRetrying(?Throwable $e): bool
+    {
+        return $e instanceof ConnectionException
+            || ($e instanceof RequestException && in_array($e->response->status(), self::RETRYABLE_STATUSES, true));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function body(array $payload): array|object
+    {
+        return $payload === [] ? (object) [] : $payload;
+    }
+
+    private function send(Closure $call): Response
+    {
+        try {
+            return $call();
+        } catch (ConnectionException $e) {
+            throw new CloudProviderException(CloudFailure::Unreachable, $this->type(), previous: $e);
+        }
+    }
+
+    private function guard(Response $response): Response
+    {
+        if ($response->failed() || $response->redirect()) {
+            throw $this->failure($response);
+        }
+
+        return $response;
+    }
+
+    private function failure(Response $response): CloudProviderException
+    {
+        $status = $response->status();
+
+        if ($response->redirect()) {
+            return new CloudProviderException(CloudFailure::Refused, $this->type(), 'answered with a redirect', $status);
+        }
+
+        $failure = match (true) {
+            $status === 401 => CloudFailure::TokenRejected,
+            $status === 403 => CloudFailure::Forbidden,
+            $status === 404 => CloudFailure::NotFound,
+            $status === 423 => CloudFailure::Busy,
+            $status === 429 => CloudFailure::RateLimited,
+            $status >= 500 => CloudFailure::Unavailable,
+            default => CloudFailure::Refused,
+        };
+
+        return new CloudProviderException($failure, $this->type(), $this->detail($this->message($response)), $status);
+    }
+}

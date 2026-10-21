@@ -17,9 +17,23 @@ final class HostKeyFingerprint
 
     public static function fromPublicKey(string $publicKey): ?string
     {
+        $blob = self::blob($publicKey);
+
+        return $blob === null ? null : self::fromHostKey($blob);
+    }
+
+    public static function md5FromPublicKey(string $publicKey): ?string
+    {
+        $blob = self::blob($publicKey);
+
+        return $blob === null ? null : implode(':', str_split(md5($blob), 2));
+    }
+
+    private static function blob(string $publicKey): ?string
+    {
         $parts = preg_split('/\s+/', trim($publicKey)) ?: [];
         $blob = isset($parts[1]) ? base64_decode($parts[1], true) : false;
 
-        return $blob === false || $blob === '' ? null : self::fromHostKey($blob);
+        return $blob === false || $blob === '' ? null : $blob;
     }
 }
