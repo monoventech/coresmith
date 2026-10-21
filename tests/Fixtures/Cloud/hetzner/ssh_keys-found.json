@@ -1,0 +1,22 @@
+{
+    "ssh_keys": [
+        {
+            "id": 2323,
+            "name": "coresmith-outpost-02",
+            "fingerprint": "17:35:e1:e3:93:03:56:7d:6d:58:c3:98:5c:5b:c1:c2",
+            "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBoM6eEh29z9GyfaiV/OH8xLRwdtOyw0trj85BenDW4 coresmith-test",
+            "labels": { "managed-by": "coresmith" },
+            "created": "2026-10-10T09:00:00+00:00"
+        }
+    ],
+    "meta": {
+        "pagination": {
+            "page": 1,
+            "per_page": 25,
+            "previous_page": null,
+            "next_page": null,
+            "last_page": 1,
+            "total_entries": 1
+        }
+    }
+}
