@@ -56,6 +56,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/git/github/registered', [GitHubAppController::class, 'registered'])
         ->middleware('throttle:10,1,github-app-registered')
         ->name('github-apps.registered');
+    Route::post('settings/git/github/apps/{githubApp}/webhook', [GitHubAppController::class, 'webhook'])
+        ->whereUlid('githubApp')
+        ->middleware('throttle:6,1,github-app-webhook-sync')
+        ->name('github-apps.webhook');
+    Route::delete('settings/git/github/apps/{githubApp}', [GitHubAppController::class, 'destroy'])
+        ->whereUlid('githubApp')
+        ->name('github-apps.destroy');
     Route::get('settings/source-providers/{type}/connect', [SourceProviderConnectController::class, 'redirect'])
         ->middleware('throttle:10,1,source-connect')
         ->name('source-providers.connect');

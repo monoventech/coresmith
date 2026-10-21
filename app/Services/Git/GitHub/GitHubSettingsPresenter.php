@@ -34,7 +34,7 @@ final class GitHubSettingsPresenter
     ) {}
 
     /**
-     * @return array{can_register: bool, registration: ?array<string, mixed>, elsewhere: ?string, connections: list<array<string, mixed>>, apps: list<array<string, mixed>>, connect: ?array{install_href: string, link_href: string}, choose: ?array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, refusal: ?string}>, post_href: string}, can: array{manage: bool}}
+     * @return array{can_register: bool, registration: ?array<string, mixed>, elsewhere: ?string, connections: list<array<string, mixed>>, apps: list<array<string, mixed>>, connect: ?array{install_href: string, link_href: string}, choose: ?array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, refusal: ?string}>, post_href: string}, webhook: list<array{app_name: string, instant: bool, sentence: string, sync_href: ?string}>, can: array{manage: bool}}
      */
     public function present(Team $team, User $user): array
     {
@@ -47,15 +47,17 @@ final class GitHubSettingsPresenter
             ->orderBy('name')
             ->orderBy('id')
             ->get();
+        $connected = $this->connectionApps($connections);
 
         return [
             'can_register' => $canRegister,
             'registration' => $canRegister && !$viaHost ? $this->registration($team, $user) : null,
             'elsewhere' => $canRegister && $viaHost ? $this->gitSettingsUrl($team, request()) : null,
-            'connections' => $connections->map(fn(SourceProvider $provider): array => $this->connection($provider))->values()->all(),
-            'apps' => $this->registered($available, $connections),
+            'connections' => $connections->map(fn(SourceProvider $provider): array => $this->connection($provider, $connected[$provider->id]))->values()->all(),
+            'apps' => $this->registered($available, $connections, $canManage),
             'connect' => $canManage && $available !== [] ? $this->connectLinks($available[0]->key) : null,
             'choose' => $canManage ? $this->choice($team, $user, $available) : null,
+            'webhook' => $this->webhooks($available, $connected, $canManage),
             'can' => ['manage' => $canManage],
         ];
     }
@@ -90,11 +92,25 @@ final class GitHubSettingsPresenter
     }
 
     /**
+     * @param  Collection<int, SourceProvider>  $connections
+     * @return array<string, ?GitHubAppCredentials>
+     */
+    private function connectionApps(Collection $connections): array
+    {
+        $apps = [];
+
+        foreach ($connections as $connection) {
+            $apps[$connection->id] = $this->apps->for($connection);
+        }
+
+        return $apps;
+    }
+
+    /**
      * @return array<string, mixed>
      */
-    private function connection(SourceProvider $provider): array
+    private function connection(SourceProvider $provider, #[\SensitiveParameter] ?GitHubAppCredentials $app): array
     {
-        $app = $this->apps->for($provider);
         $expires = $provider->token_expires_at;
         $holdsToken = $provider->getRawOriginal('access_token') !== null && $expires !== null && $expires->isFuture();
 
@@ -119,7 +135,7 @@ final class GitHubSettingsPresenter
      * @param  Collection<int, SourceProvider>  $connections
      * @return list<array<string, mixed>>
      */
-    private function registered(#[\SensitiveParameter] array $available, Collection $connections): array
+    private function registered(#[\SensitiveParameter] array $available, Collection $connections, bool $canManage): array
     {
         $installed = $connections->pluck('github_app_id')->filter()->all();
         $registered = [];
@@ -129,6 +145,8 @@ final class GitHubSettingsPresenter
                 continue;
             }
 
+            $inUse = in_array($app->key, $installed, true);
+
             $registered[] = [
                 'key' => $app->key,
                 'name' => $app->name,
@@ -136,12 +154,59 @@ final class GitHubSettingsPresenter
                 'owner' => $app->ownerLogin,
                 'owner_type' => $app->ownerType,
                 'settings_url' => $app->settingsUrl(),
-                'installed' => in_array($app->key, $installed, true),
+                'installed' => $inUse,
                 'install_href' => route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->key]),
+                'remove_href' => $canManage && !$inUse ? route('github-apps.destroy', $app->key) : null,
             ];
         }
 
         return $registered;
+    }
+
+    /**
+     * @param  list<GitHubAppCredentials>  $available
+     * @param  array<string, ?GitHubAppCredentials>  $connected
+     * @return list<array{app_name: string, instant: bool, sentence: string, sync_href: ?string}>
+     */
+    private function webhooks(#[\SensitiveParameter] array $available, #[\SensitiveParameter] array $connected, bool $canManage): array
+    {
+        $used = [];
+
+        foreach ($connected as $app) {
+            if ($app !== null) {
+                $used[$app->key] ??= $app;
+            }
+        }
+
+        foreach ($available as $app) {
+            if (!$app->isEnv()) {
+                $used[$app->key] ??= $app;
+            }
+        }
+
+        $webhooks = [];
+
+        foreach ($used as $app) {
+            $webhooks[] = $this->webhook($app, $canManage);
+        }
+
+        return $webhooks;
+    }
+
+    /**
+     * @return array{app_name: string, instant: bool, sentence: string, sync_href: ?string}
+     */
+    private function webhook(#[\SensitiveParameter] GitHubAppCredentials $app, bool $canManage): array
+    {
+        $mode = $this->health->mode($app);
+        $repointable = $canManage && !$app->isEnv() && $app->hookUrl !== $this->health->expectedHookUrl($app);
+
+        return [
+            'app_name' => $app->name,
+            'instant' => $mode->instant,
+            'sentence' => $mode->sentence,
+            'sync_href' => $repointable ? route('github-apps.webhook', $app->key) : null,
+        ];
     }
 
     /**

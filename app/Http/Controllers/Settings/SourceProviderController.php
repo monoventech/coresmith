@@ -13,9 +13,7 @@ use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\SourceProvider;
-use App\Models\Team;
 use App\Models\WebhookEndpoint;
-use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Repository;
@@ -38,8 +36,10 @@ final class SourceProviderController extends Controller
         $this->authorize('view', $team);
 
         $applications = $team->applications()->with(['server', 'webhookEndpoints'])->orderBy('name')->get();
+        $providers = $team->sourceProviders()->latest()->get();
         $lastDelivery = $applications->flatMap(fn(Application $application) => $application->webhookEndpoints)
-            ->filter(fn(WebhookEndpoint $endpoint): bool => $endpoint->last_delivered_at !== null)
+            ->concat($providers)
+            ->filter(fn(WebhookEndpoint|SourceProvider $source): bool => $source->last_delivered_at !== null)
             ->sortByDesc('last_delivered_at')
             ->first();
 
@@ -63,7 +63,7 @@ final class SourceProviderController extends Controller
                     'when' => $lastDelivery->last_delivered_at?->diffForHumans(),
                 ],
             ],
-            'providers' => $team->sourceProviders()->latest()->get()->map(fn(SourceProvider $provider): array => [
+            'providers' => $providers->map(fn(SourceProvider $provider): array => [
                 'id' => $provider->id,
                 'type' => $provider->type->value,
                 'label' => $provider->type->label(),
@@ -76,13 +76,12 @@ final class SourceProviderController extends Controller
                 'expires_at' => $provider->token_expires_at?->toIso8601String(),
                 'connected_at' => $provider->created_at?->toIso8601String(),
             ]),
-            'connectable' => collect(SourceProviderType::cases())
-                ->filter(fn(SourceProviderType $type): bool => $type->usesTokens())
+            'connectable' => collect([SourceProviderType::GitLab, SourceProviderType::Bitbucket])
                 ->map(fn(SourceProviderType $type): array => [
                     'type' => $type->value,
                     'label' => $type->label(),
                     'scopes' => $type->scopes(),
-                    'configured' => $this->isConfigured($type, $team),
+                    'configured' => (string) config("services.{$type->value}.client_id") !== '',
                 ])->values(),
             'github' => fn(): array => $github->present($team, $request->user()),
             'can' => ['manage' => $request->user()->can('update', $team)],
@@ -106,15 +105,5 @@ final class SourceProviderController extends Controller
         return back()->with('success', $sourceProvider->type === SourceProviderType::GitHubApp
             ? 'Disconnected. To remove the app\'s access on GitHub too, uninstall it there.'
             : 'Disconnected. Apps keep deploying with their own deploy keys.');
-    }
-
-    private function isConfigured(SourceProviderType $type, Team $team): bool
-    {
-        return match ($type) {
-            SourceProviderType::GitHubApp => app(GitHubApps::class)->available($team) !== [],
-            SourceProviderType::GitLab => (string) config('services.gitlab.client_id') !== '',
-            SourceProviderType::Bitbucket => (string) config('services.bitbucket.client_id') !== '',
-            SourceProviderType::Custom => true,
-        };
     }
 }

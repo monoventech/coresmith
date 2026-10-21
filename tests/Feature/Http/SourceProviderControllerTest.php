@@ -88,13 +88,14 @@ test('the page advertises the exact scopes each provider asks for', function () 
     $this->actingAs(providerUser($team, TeamRole::Owner))
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page
-            ->has('connectable', 3)
-            ->where('connectable.0.scopes', SourceProviderType::GitHubApp->scopes())
-            ->where('connectable.1.scopes', ['read_repository', 'read_api', 'api'])
-            ->where('connectable.2.scopes', ['repository', 'webhook', 'repository:admin']));
+            ->has('connectable', 2)
+            ->where('connectable.0.type', 'gitlab')
+            ->where('connectable.0.scopes', ['read_repository', 'read_api', 'api'])
+            ->where('connectable.1.type', 'bitbucket')
+            ->where('connectable.1.scopes', ['repository', 'webhook', 'repository:admin']));
 });
 
-test('github counts as configured when the team has registered an app or the environment has one', function (string $setup, bool $expected) {
+test('github is offered through its own cards once the team has registered an app or the environment has one', function (string $setup, bool $expected) {
     config(['services.github' => ['app_id' => null, 'app_slug' => 'coresmith', 'client_id' => null, 'client_secret' => null, 'private_key' => null, 'webhook_secret' => null]]);
     $team = Team::factory()->create();
 
@@ -110,11 +111,12 @@ test('github counts as configured when the team has registered an app or the env
         config(['services.github' => ['app_id' => '1041207', 'app_slug' => 'coresmith', 'client_id' => 'Iv1.env', 'client_secret' => 'env-secret', 'private_key' => "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----", 'webhook_secret' => null]]);
     }
 
-    $this->actingAs(providerUser($team, TeamRole::Owner))
+    $response = $this->actingAs(providerUser($team, TeamRole::Owner))
         ->get(route('source-providers.index'))
-        ->assertInertia(fn($page) => $page
-            ->where('connectable.0.type', 'github_app')
-            ->where('connectable.0.configured', $expected));
+        ->assertOk();
+
+    expect(array_column($response->inertiaProps('connectable'), 'type'))->toBe(['gitlab', 'bitbucket'])
+        ->and($response->inertiaProps('github.connect') !== null)->toBe($expected);
 })->with([
     'nothing registered' => ['nothing', false],
     'only another teams app' => ['another teams app', false],
