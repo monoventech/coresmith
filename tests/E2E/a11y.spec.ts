@@ -60,6 +60,14 @@ const PAGES: [string, Visit][] = [
         }
     ],
     [
+        'Add an app from GitHub',
+        async (page) => {
+            await gotoServer(page, 'bench-01')
+            await page.getByRole('link', { name: 'Add an app' }).click()
+            await page.getByRole('listbox', { name: /repositories/i }).waitFor()
+        }
+    ],
+    [
         'Running deploy',
         async (page) => {
             await page.goto('/dashboard')

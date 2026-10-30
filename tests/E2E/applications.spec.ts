@@ -17,6 +17,47 @@ function toggle(page: Page, name: string) {
     return page.getByTestId('smart-toggles').getByRole('switch', { name })
 }
 
+async function openAddApp(page: Page) {
+    await gotoServer(page, 'bench-01')
+    await page.getByRole('link', { name: 'Add an app' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+}
+
+function repositories(page: Page) {
+    return page.getByRole('listbox', { name: 'Repositories on monoventech' })
+}
+
+function repositorySearch(page: Page) {
+    return page.getByRole('combobox', { name: 'Search repositories on monoventech' })
+}
+
+function branchSuggestions(page: Page) {
+    return page
+        .locator('#repository-branches option')
+        .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value))
+}
+
+function isApplicationStore(url: string, method: string) {
+    return method === 'POST' && /\/servers\/[^/]+\/applications$/.test(new URL(url).pathname)
+}
+
+function scrollUnderPointer(page: Page, distance: number) {
+    return repositories(page).evaluate((listbox, pixels) => {
+        let scroller = listbox.parentElement
+
+        while (
+            scroller &&
+            !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY))
+        ) {
+            scroller = scroller.parentElement
+        }
+
+        const target = scroller ?? document.scrollingElement
+
+        target?.scrollBy(0, pixels)
+    }, distance)
+}
+
 test.describe('an application', () => {
     test('the header names it and says how it is served', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
@@ -346,6 +387,9 @@ test.describe('adding an application', () => {
 
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
         await expect(page.getByRole('main')).toContainText('What a deploy does')
+        await expect(page.getByRole('main')).toContainText(
+            'Clone release, fetched with a one-hour token or a read-only deploy key'
+        )
     })
 
     test('an app is created and opens on its own page', async ({ page }) => {
@@ -354,6 +398,7 @@ test.describe('adding an application', () => {
         await gotoServer(page, 'bench-01')
         await page.getByRole('link', { name: 'Add an app' }).click()
 
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
         await page.getByLabel('Name', { exact: true }).fill(name)
         await page.getByLabel('Language').selectOption('js')
         await expect(page.getByLabel('Framework')).toHaveValue('sveltekit')
@@ -411,6 +456,7 @@ test.describe('adding an application', () => {
 
         await gotoServer(page, 'bench-01')
         await page.getByRole('link', { name: 'Add an app' }).click()
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
         await page.getByLabel('Name', { exact: true }).fill(name)
         await page
             .getByRole('radiogroup', { name: 'PHP version' })
@@ -474,6 +520,300 @@ test.describe('adding an application', () => {
             await expect(dialog(page)).toBeVisible()
 
             expect(await blockingViolations(page)).toEqual([])
+        })
+    }
+})
+
+test.describe('adding an application from GitHub', () => {
+    test('repositories from the connected installation are offered and searchable', async ({ page }) => {
+        await openAddApp(page)
+
+        const source = page.getByLabel('Source', { exact: true })
+
+        await expect(source.locator('option:checked')).toHaveText('GitHub · monoventech')
+        await expect(source.locator('option')).toHaveText(['GitHub · monoventech', 'A Git URL'])
+        await expect(repositorySearch(page)).toHaveAttribute('placeholder', 'Search repositories')
+        await expect(repositories(page).getByRole('option')).toHaveCount(4)
+        await expect(repositories(page).getByRole('option', { name: /monoventech\/storefront/ })).not.toContainText(
+            'private'
+        )
+
+        await repositorySearch(page).fill('led')
+
+        await expect(repositories(page).getByRole('option')).toHaveCount(1)
+        await expect(repositories(page).getByRole('option')).toContainText('monoventech/ledger')
+        await expect(repositories(page).getByRole('option').getByText('private', { exact: true })).toBeVisible()
+    })
+
+    test('picking a repository fills its default branch and suggests the others', async ({ page }) => {
+        await openAddApp(page)
+
+        const branch = page.getByLabel('Branch', { exact: true })
+        const relay = repositories(page).getByRole('option', { name: /monoventech\/relay/ })
+
+        await expect(branch).toHaveValue('main')
+        await relay.click()
+
+        await expect(relay).toHaveAttribute('aria-selected', 'true')
+        await expect(branch).toHaveValue('trunk')
+        await expect(branch).toHaveAttribute('list', 'repository-branches')
+        await expect.poll(() => branchSuggestions(page)).toEqual(['trunk', 'release/2.0'])
+    })
+
+    test('a branch typed by hand is kept when a repository is picked', async ({ page }) => {
+        await openAddApp(page)
+
+        const branch = page.getByLabel('Branch', { exact: true })
+
+        await branch.fill('release/2.0')
+        await repositories(page)
+            .getByRole('option', { name: /monoventech\/relay/ })
+            .click()
+
+        await expect.poll(() => branchSuggestions(page)).toEqual(['trunk', 'release/2.0'])
+        await expect(branch).toHaveValue('release/2.0')
+    })
+
+    test('an app picked from GitHub is created', async ({ page }, testInfo) => {
+        const name = `${own(testInfo, 'picked')}-${Date.now().toString(36)}`
+
+        await openAddApp(page)
+        await page.getByLabel('Name', { exact: true }).fill(name)
+        await repositories(page)
+            .getByRole('option', { name: /monoventech\/ledger/ })
+            .click()
+        await expect(page.getByLabel('Branch', { exact: true })).toHaveValue('main')
+
+        const posted = page.waitForRequest((request) => isApplicationStore(request.url(), request.method()))
+
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        const sent = (await posted).postDataJSON()
+
+        expect(sent.repository_id).toBe('70000002')
+        expect(sent.source_provider_id).toMatch(/^[0-9a-z]{26}$/i)
+        expect(sent).not.toHaveProperty('repository_url')
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
+        await expect(toast(page)).toContainText('Application created.')
+    })
+
+    test('a Git URL still works without picking', async ({ page }, testInfo) => {
+        const name = `${own(testInfo, 'by-url')}-${Date.now().toString(36)}`
+
+        await openAddApp(page)
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
+
+        const url = page.getByLabel('Repository', { exact: true })
+
+        await expect(page.getByRole('listbox', { name: /repositories/i })).toHaveCount(0)
+        await expect(url).toBeVisible()
+        await expect(url).toHaveAttribute('placeholder', 'git@github.com:you/atlas.git')
+
+        await page.getByLabel('Name', { exact: true }).fill(name)
+        await url.fill('https://github.com/monoventech/storefront.git')
+
+        const posted = page.waitForRequest((request) => isApplicationStore(request.url(), request.method()))
+
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        const sent = (await posted).postDataJSON()
+
+        expect(sent.repository_url).toBe('https://github.com/monoventech/storefront.git')
+        expect(sent).not.toHaveProperty('source_provider_id')
+        expect(sent).not.toHaveProperty('repository_id')
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
+        await expect(toast(page)).toContainText('Application created.')
+    })
+
+    test('adding an app from GitHub without picking a repository asks for one', async ({ page }) => {
+        await openAddApp(page)
+        await expect(repositories(page).getByRole('option')).toHaveCount(4)
+
+        await page.getByLabel('Name', { exact: true }).fill('unpicked')
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        await expect(page.getByRole('main')).toContainText('Pick a repository from the list.')
+        await expect(repositorySearch(page)).toHaveAttribute('aria-invalid', 'true')
+        await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+    })
+
+    test('nothing matching says so', async ({ page }) => {
+        await openAddApp(page)
+        await expect(repositories(page).getByRole('option')).toHaveCount(4)
+
+        await repositorySearch(page).fill('zzz')
+
+        await expect(page.getByRole('main')).toContainText('No repository matches "zzz".')
+        await expect(repositorySearch(page)).toHaveAttribute('aria-expanded', 'false')
+    })
+
+    test('the keyboard moves through repositories and enter picks one', async ({ page }, testInfo) => {
+        await openAddApp(page)
+
+        const search = repositorySearch(page)
+        const option = (name: string) => repositories(page).getByRole('option', { name: new RegExp(name) })
+
+        const stored: string[] = []
+
+        page.on('request', (request) => {
+            if (isApplicationStore(request.url(), request.method())) {
+                stored.push(request.url())
+            }
+        })
+
+        await page.getByLabel('Name', { exact: true }).fill(own(testInfo, 'keyed'))
+        await expect(repositories(page).getByRole('option')).toHaveCount(4)
+        await search.focus()
+        await page.keyboard.press('ArrowDown')
+        await page.keyboard.press('ArrowDown')
+
+        await expect(search).toHaveAttribute('aria-activedescendant', (await option('ledger').getAttribute('id')) ?? '')
+
+        const branches = page.waitForResponse((response) =>
+            new URL(response.url()).pathname.endsWith('/repositories/70000002/branches')
+        )
+
+        await page.keyboard.press('Enter')
+        await branches
+
+        expect(stored).toEqual([])
+        await expect(option('ledger')).toHaveAttribute('aria-selected', 'true')
+        await expect(option('atlas')).toHaveAttribute('aria-selected', 'false')
+        await expect(page.locator('input[name="repository_id"]')).toHaveValue('70000002')
+        await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+
+        await page.keyboard.press('ArrowUp')
+        await page.keyboard.press('ArrowUp')
+
+        await expect(search).toHaveAttribute(
+            'aria-activedescendant',
+            (await option('storefront').getAttribute('id')) ?? ''
+        )
+
+        await page.keyboard.press('ArrowDown')
+
+        await expect(search).toHaveAttribute('aria-activedescendant', (await option('atlas').getAttribute('id')) ?? '')
+    })
+
+    test('a pointer resting over the list does not move the keyboard highlight', async ({ page }) => {
+        await openAddApp(page)
+
+        const search = repositorySearch(page)
+        const option = (name: string) => repositories(page).getByRole('option', { name: new RegExp(name) })
+
+        await expect(repositories(page).getByRole('option')).toHaveCount(4)
+        await search.focus()
+
+        const atlas = await option('atlas').boundingBox()
+
+        await page.mouse.move((atlas?.x ?? 0) + 40, (atlas?.y ?? 0) + (atlas?.height ?? 0) / 2)
+        await scrollUnderPointer(page, 88)
+        await page.keyboard.press('ArrowDown')
+
+        await expect(search).toHaveAttribute('aria-activedescendant', (await option('atlas').getAttribute('id')) ?? '')
+    })
+
+    test('the list loads, and one GitHub would not send says why and can be fetched again', async ({ page }) => {
+        let answer: () => void = () => undefined
+        const answered = new Promise<void>((resolve) => (answer = resolve))
+
+        await page.route('**/settings/source-providers/*/repositories', async (route) => {
+            await answered
+            await route.fulfill({
+                status: 502,
+                json: {
+                    message:
+                        'GitHub did not send the repository list. This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.'
+                }
+            })
+        })
+        await openAddApp(page)
+
+        await expect(page.getByRole('main')).toContainText('Loading repositories from GitHub…')
+
+        answer()
+
+        await expect(page.getByRole('main')).toContainText(
+            'GitHub did not send the repository list. This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.'
+        )
+        await expect(page.getByRole('listbox', { name: /repositories/i })).toHaveCount(0)
+
+        await page.unroute('**/settings/source-providers/*/repositories')
+        await page.getByRole('button', { name: 'Try again' }).click()
+
+        await expect(repositories(page).getByRole('option')).toHaveCount(4)
+        await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0)
+    })
+
+    test('an installation that shares no repositories says where to choose some', async ({ page }) => {
+        await page.route('**/settings/source-providers/*/repositories', (route) =>
+            route.fulfill({ status: 200, json: { repositories: [], total: 0, truncated: false } })
+        )
+        await openAddApp(page)
+
+        await expect(page.getByRole('main')).toContainText(
+            'The GitHub App can see no repositories on monoventech yet. Choose some under Manage repositories on GitHub.'
+        )
+
+        const manage = page.getByRole('link', { name: 'Manage repositories' })
+
+        await expect(manage).toHaveAttribute(
+            'href',
+            'https://github.com/organizations/monoventech/settings/installations/51842'
+        )
+        await expect(manage).toHaveAttribute('target', '_blank')
+        await expect(manage).toHaveAttribute('rel', 'noopener noreferrer')
+    })
+
+    test('a list cut short by GitHub says how much is shown', async ({ page }) => {
+        await page.route('**/settings/source-providers/*/repositories', (route) =>
+            route.fulfill({
+                status: 200,
+                json: {
+                    total: 2345,
+                    truncated: true,
+                    repositories: [
+                        { id: '70000001', full_name: 'monoventech/atlas', private: true, default_branch: 'main' },
+                        { id: '70000002', full_name: 'monoventech/ledger', private: true, default_branch: 'main' },
+                        { id: '70000003', full_name: 'monoventech/relay', private: true, default_branch: 'trunk' }
+                    ]
+                }
+            })
+        )
+        await openAddApp(page)
+
+        await expect(repositories(page).getByRole('option')).toHaveCount(3)
+        await expect(page.getByRole('main')).toContainText(
+            'Showing the first 3 of 2,345 repositories. Use a Git URL for one that is not listed.'
+        )
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`a team without GitHub gets the URL field and the way to connect GitHub, in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+
+            try {
+                await page.goto('/acme/dashboard')
+                await page.getByTestId('server-card').getByRole('link', { name: 'acme-web', exact: true }).click()
+                await expect(page.getByRole('heading', { level: 1, name: 'acme-web' })).toBeVisible()
+                await page.getByRole('link', { name: 'Add an app' }).click()
+                await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+
+                await expect(page.getByLabel('Source', { exact: true })).toHaveCount(0)
+                await expect(page.getByLabel('Repository', { exact: true })).toBeVisible()
+                await expect(page.getByRole('main')).toContainText(
+                    'Connect GitHub in Settings, Git to pick a private repository from a list.'
+                )
+                await expect(page.getByRole('link', { name: 'Settings, Git' })).toHaveAttribute(
+                    'href',
+                    /\/acme\/settings\/git$/
+                )
+                expect(await blockingViolations(page)).toEqual([])
+            } finally {
+                await page.goto('/monoven/dashboard')
+            }
         })
     }
 })

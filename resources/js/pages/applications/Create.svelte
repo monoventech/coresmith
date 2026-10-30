@@ -3,22 +3,32 @@
 </script>
 
 <script lang="ts">
-    import { Form } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
+    import RepositoryPicker from '@/components/applications/RepositoryPicker.svelte'
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import TextLink from '@/components/TextLink.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
-    import { pickerRuntime } from '@/lib/runtimes'
+    import type { GitHubPick, GitHubSource } from '@/lib/github'
     import type { RuntimeChoices } from '@/lib/runtimes'
+    import { pickerRuntime } from '@/lib/runtimes'
+    import { Form } from '@inertiajs/svelte'
 
     let {
         server,
-        runtimes
-    }: { server: { id: string; name: string; href: string }; runtimes: Record<string, RuntimeChoices> } = $props()
+        runtimes,
+        github
+    }: {
+        server: { id: string; name: string; href: string }
+        runtimes: Record<string, RuntimeChoices>
+        github: { connections: GitHubSource[]; settings_href: string }
+    } = $props()
+
+    const GIT_URL = 'url'
 
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = {
         php: [
@@ -41,7 +51,7 @@
     }
 
     const STEPS = [
-        { name: 'Clone release', desc: 'fetched with a read-only deploy key' },
+        { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
         { name: 'Install dependencies', desc: 'composer, bun or bundler' },
         { name: 'Build assets', desc: 'into a new timestamped directory' },
         { name: 'Run migrations', desc: 'against the new release' },
@@ -55,6 +65,25 @@
     const picker = $derived(pickerRuntime(type, jsRuntime))
     let pickedSize = $state<string | null>(null)
     const size = $derived(pickedSize ?? (type === 'ruby' ? 'medium' : 'small'))
+    let chosenSource = $state<string | null>(null)
+    const source = $derived(chosenSource ?? github.connections[0]?.id ?? GIT_URL)
+    const connection = $derived(github.connections.find((candidate) => candidate.id === source) ?? null)
+    let branch = $state('main')
+    let branchEdited = $state(false)
+    let branches = $state<string[]>([])
+
+    function chooseSource(value: string) {
+        chosenSource = value
+        branches = []
+    }
+
+    function picked(pick: GitHubPick) {
+        if (!branchEdited) {
+            branch = pick.default_branch
+        }
+
+        branches = pick.branches
+    }
 </script>
 
 <AppHead title="Add an app" />
@@ -130,29 +159,69 @@
                             <RuntimeVersionPicker runtime={runtimes[picker]} error={errors.runtime_version} />
                         {/key}
                     {/if}
-                    <div>
-                        <Label for="repository_url" class="mb-1.5">Repository</Label>
-                        <Input
-                            id="repository_url"
-                            name="repository_url"
-                            placeholder="git@github.com:you/atlas.git"
-                            autocomplete="off"
-                            class="font-mono text-[13px]"
-                            aria-invalid={errors.repository_url ? true : undefined}
-                        />
-                        <FieldError message={errors.repository_url} />
-                    </div>
+                    {#if github.connections.length > 0}
+                        <div>
+                            <Label for="source" class="mb-1.5">Source</Label>
+                            <NativeSelect
+                                id="source"
+                                bind:value={() => source, chooseSource}
+                                options={[
+                                    ...github.connections.map((option) => ({
+                                        value: option.id,
+                                        label: `GitHub · ${option.account}`
+                                    })),
+                                    { value: GIT_URL, label: 'A Git URL' }
+                                ]}
+                                aria-invalid={errors.source_provider_id ? true : undefined}
+                            />
+                            <FieldError message={errors.source_provider_id} />
+                        </div>
+                    {/if}
+                    {#if connection}
+                        {#key connection.id}
+                            <RepositoryPicker {connection} error={errors.repository_id} onpick={picked} />
+                        {/key}
+                    {:else}
+                        <div>
+                            <Label for="repository_url" class="mb-1.5">Repository</Label>
+                            <Input
+                                id="repository_url"
+                                name="repository_url"
+                                placeholder="git@github.com:you/atlas.git"
+                                autocomplete="off"
+                                class="font-mono text-[13px]"
+                                aria-invalid={errors.repository_url ? true : undefined}
+                            />
+                            <FieldError message={errors.repository_url} />
+                            {#if github.connections.length === 0 && !errors.repository_url}
+                                <p class="mt-1.5 text-[12px] text-muted-foreground">
+                                    Connect GitHub in <TextLink href={github.settings_href}>Settings, Git</TextLink> to pick
+                                    a private repository from a list.
+                                </p>
+                            {/if}
+                        </div>
+                    {/if}
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <Label for="repository_branch" class="mb-1.5">Branch</Label>
                             <Input
                                 id="repository_branch"
                                 name="repository_branch"
-                                value="main"
+                                bind:value={branch}
+                                oninput={() => (branchEdited = true)}
+                                list={branches.length > 0 ? 'repository-branches' : undefined}
                                 required
+                                autocomplete="off"
                                 class="font-mono text-[13px]"
                                 aria-invalid={errors.repository_branch ? true : undefined}
                             />
+                            {#if branches.length > 0}
+                                <datalist id="repository-branches">
+                                    {#each branches as name (name)}
+                                        <option value={name}></option>
+                                    {/each}
+                                </datalist>
+                            {/if}
                             <FieldError message={errors.repository_branch} />
                         </div>
                         <div>
