@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Jobs\CheckGitHubWebhooks;
 use App\Models\Application;
 use App\Models\GitHubApp;
 use App\Models\Server;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Spatie\Activitylog\Models\Activity;
 
 function githubAppSettingsTeam(string $role = 'owner'): array
@@ -55,6 +58,38 @@ function githubAppSettingsConnection(Team $team, ?GitHubApp $app, array $attribu
 function githubAppSettingsExpectedHook(GitHubApp $app): string
 {
     return app(GitHubAppHealth::class)->expectedHookUrl(app(GitHubApps::class)->fromModel($app));
+}
+
+function githubAppSettingsDelivery(int $code, string $status, string $at): array
+{
+    return ['id' => crc32($at), 'guid' => (string) Str::uuid(), 'delivered_at' => $at, 'redelivery' => false, 'duration' => 0.31, 'status' => $status, 'status_code' => $code, 'event' => 'push', 'action' => null];
+}
+
+function githubAppSettingsGitHub(array &$log): void
+{
+    Http::fake([
+        'api.github.com/app/hook/config' => Http::response(['url' => 'set', 'content_type' => 'json', 'insecure_ssl' => '0']),
+        'api.github.com/app/hook/deliveries*' => function () use (&$log) {
+            return Http::response($log);
+        },
+    ]);
+}
+
+function githubAppSettingsWebhook(User $user): array
+{
+    return test()->actingAs($user)->get(route('source-providers.index'))->assertOk()->inertiaProps('github.webhook.0');
+}
+
+function githubAppSettingsPing(GitHubApp $app): TestResponse
+{
+    $body = json_encode(['zen' => 'Keep it logically awesome.', 'hook_id' => 1], JSON_THROW_ON_ERROR);
+
+    return test()->call('POST', route('webhooks.github.app', $app), [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_GITHUB_EVENT' => 'ping',
+        'HTTP_X_GITHUB_DELIVERY' => (string) Str::uuid(),
+        'HTTP_X_HUB_SIGNATURE_256' => 'sha256=' . hash_hmac('sha256', $body, (string) $app->fresh()->webhook_secret),
+    ], $body);
 }
 
 function githubAppSettingsEnv(): void
@@ -135,7 +170,9 @@ test('a webhook github will not change says so and keeps the old settings', func
     $app = githubAppSettingsApp($team, ['hook_url' => 'https://old.example.com/api/webhooks/github/x', 'webhook_secret' => 'old-webhook-secret']);
     $credentials = app(GitHubApps::class)->fromModel($app);
     $health = app(GitHubAppHealth::class);
+    $health->received($credentials, 'push', 'before-the-move');
     $health->checked($credentials, ['status_code' => 0, 'status' => 'timed out', 'delivered_at' => now()->subMinutes(10)]);
+    $evidence = Cache::get($health->key($credentials));
 
     $this->actingAs($owner)
         ->from(route('source-providers.index'))
@@ -148,7 +185,8 @@ test('a webhook github will not change says so and keeps the old settings', func
 
     expect($fresh->hook_url)->toBe('https://old.example.com/api/webhooks/github/x')
         ->and($fresh->webhook_secret)->toBe('old-webhook-secret')
-        ->and(Cache::has($health->key($credentials)))->toBeTrue()
+        ->and(Cache::get($health->key($credentials)))->toBe($evidence)
+        ->and($evidence['latest'])->not->toBeNull()
         ->and($error)->not->toContain('GitHub rejected the request');
 })->with([
     'a refused address' => ['a refused address', 'GitHub did not change the webhook: Validation Failed. Try again in a minute.'],
@@ -156,38 +194,82 @@ test('a webhook github will not change says so and keeps the old settings', func
     'no answer' => ['no answer', 'GitHub did not change the webhook: GitHub did not answer. Try again in a minute.'],
 ]);
 
-test('a repoint github accepts forgets the failed delivery it was reporting', function () {
-    Http::fake(['api.github.com/app/hook/config' => Http::response(['url' => 'set', 'content_type' => 'json', 'insecure_ssl' => '0'])]);
+test('a repointed webhook reports no delivery until a new one arrives, whatever the next poll brings back', function () {
+    $log = [githubAppSettingsDelivery(0, 'timed out', '2026-10-18T13:55:00Z')];
+    githubAppSettingsGitHub($log);
     [$team, $owner] = githubAppSettingsTeam();
     $app = githubAppSettingsApp($team, ['hook_url' => 'https://old.example.com/api/webhooks/github/x', 'webhook_secret' => 'old-webhook-secret']);
     githubAppSettingsConnection($team, $app);
-    $credentials = app(GitHubApps::class)->fromModel($app);
     $health = app(GitHubAppHealth::class);
+    $key = $health->key(app(GitHubApps::class)->fromModel($app));
 
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 13:00:00'));
+    $health->received(app(GitHubApps::class)->fromModel($app), 'push', 'before-the-move');
     $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
-    $health->checked($credentials, ['status_code' => 0, 'status' => 'timed out', 'delivered_at' => CarbonImmutable::parse('2026-10-18 13:55:00')]);
+    CheckGitHubWebhooks::dispatchSync();
 
-    $this->actingAs($owner)
-        ->get(route('source-providers.index'))
-        ->assertInertia(fn($page) => $page
-            ->where('github.webhook.0.instant', false)
-            ->where('github.webhook.0.sentence', 'GitHub\'s last delivery here failed Oct 18, 2026 at 13:55 UTC: timed out.'));
+    expect(githubAppSettingsWebhook($owner))->toMatchArray(['instant' => false, 'sentence' => 'GitHub\'s last delivery here failed Oct 18, 2026 at 13:55 UTC: timed out.']);
 
     $this->actingAs($owner)
         ->from(route('source-providers.index'))
         ->post(route('github-apps.webhook', $app))
         ->assertSessionHas('success', 'Saved. On GitHub, check the app\'s webhook is active and sends push events.');
 
-    expect(Cache::has($health->key($credentials)))->toBeFalse();
+    expect(Cache::get($key))->toMatchArray(['repointed_at' => now()->getTimestamp(), 'received_at' => null, 'event' => null, 'delivery_id' => null, 'latest' => null])
+        ->and(githubAppSettingsWebhook($owner)['sentence'])->toBe('No delivery from GitHub has reached this panel yet.');
 
-    $this->actingAs($owner)
-        ->get(route('source-providers.index'))
-        ->assertInertia(fn($page) => $page->where('github.webhook', [[
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:20:00'));
+    CheckGitHubWebhooks::dispatchSync();
+
+    expect(Cache::get($key)['repointed_at'])->toBe(CarbonImmutable::parse('2026-10-18 14:05:00')->getTimestamp())
+        ->and(Cache::get($key)['latest']['delivered_at'])->toBe(CarbonImmutable::parse('2026-10-18T13:55:00Z')->getTimestamp())
+        ->and(githubAppSettingsWebhook($owner))->toBe([
             'app_name' => 'Coresmith Monoven',
             'instant' => false,
             'sentence' => 'No delivery from GitHub has reached this panel yet.',
             'sync_href' => null,
-        ]]));
+        ]);
+});
+
+test('a failed delivery after the repoint shows as failing again', function () {
+    $log = [githubAppSettingsDelivery(0, 'timed out', '2026-10-18T13:55:00Z')];
+    githubAppSettingsGitHub($log);
+    [$team, $owner] = githubAppSettingsTeam();
+    $app = githubAppSettingsApp($team, ['hook_url' => 'https://old.example.com/api/webhooks/github/x', 'webhook_secret' => 'old-webhook-secret']);
+    githubAppSettingsConnection($team, $app);
+
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
+    CheckGitHubWebhooks::dispatchSync();
+    $this->actingAs($owner)->from(route('source-providers.index'))->post(route('github-apps.webhook', $app))->assertSessionHas('success');
+
+    $log[] = githubAppSettingsDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T14:10:00Z');
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:20:00'));
+    CheckGitHubWebhooks::dispatchSync();
+
+    expect(githubAppSettingsWebhook($owner))->toMatchArray([
+        'instant' => false,
+        'sentence' => 'GitHub\'s last delivery here failed Oct 18, 2026 at 14:10 UTC: Invalid HTTP Response: 502.',
+    ]);
+});
+
+test('a delivery received after the repoint shows as healthy', function () {
+    $log = [githubAppSettingsDelivery(0, 'timed out', '2026-10-18T13:55:00Z')];
+    githubAppSettingsGitHub($log);
+    [$team, $owner] = githubAppSettingsTeam();
+    $app = githubAppSettingsApp($team, ['hook_url' => 'https://old.example.com/api/webhooks/github/x', 'webhook_secret' => 'old-webhook-secret']);
+    githubAppSettingsConnection($team, $app);
+
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
+    CheckGitHubWebhooks::dispatchSync();
+    $this->actingAs($owner)->from(route('source-providers.index'))->post(route('github-apps.webhook', $app))->assertSessionHas('success');
+
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:07:00'));
+    githubAppSettingsPing($app)->assertOk();
+
+    $this->travelTo(CarbonImmutable::parse('2026-10-18 14:10:00'));
+    CheckGitHubWebhooks::dispatchSync();
+
+    expect(githubAppSettingsWebhook($owner))->toMatchArray(['instant' => true, 'sentence' => 'GitHub reached this panel 3 minutes ago.']);
 });
 
 test('removing an app with no live installation forgets its secrets', function () {

@@ -261,6 +261,7 @@ test('evidence belongs to one app in one environment', function () {
             'checked_at' => now()->getTimestamp(),
             'latest' => ['status_code' => 502, 'status' => 'Invalid HTTP Response: 502', 'delivered_at' => CarbonImmutable::parse('2026-10-18T13:00:00Z')->getTimestamp(), 'event' => 'push'],
             'hook_url' => 'https://panel.example.com/api/webhooks/github/x',
+            'repointed_at' => null,
         ])
         ->and($health->mode($first)->instant)->toBeTrue()
         ->and($health->mode($second)->reason)->toBe('unproven')
@@ -270,6 +271,34 @@ test('evidence belongs to one app in one environment', function () {
 
     expect($health->key($first))->toBe("github:app-health:production:{$first->key}")
         ->and($health->mode($first)->reason)->toBe('unproven');
+});
+
+test('a repoint clears what was received and logged before it, and every later write keeps it', function () {
+    $app = healthApp();
+    $health = app(GitHubAppHealth::class);
+    $health->received($app, 'push', 'delivery-1');
+    $health->checked($app, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:00:00Z'), 'https://panel.example.com/api/webhooks/github/x');
+    $health->repointed($app);
+
+    expect(Cache::get($health->key($app)))->toBe([
+        'received_at' => null,
+        'event' => null,
+        'delivery_id' => null,
+        'checked_at' => now()->getTimestamp(),
+        'latest' => null,
+        'hook_url' => 'https://panel.example.com/api/webhooks/github/x',
+        'repointed_at' => now()->getTimestamp(),
+    ]);
+
+    healthAt('2026-10-18 14:10:00', fn(GitHubAppHealth $health) => $health->checked($app, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:00:00Z')));
+
+    expect(Cache::get($health->key($app))['repointed_at'])->toBe(now()->getTimestamp())
+        ->and($health->mode($app)->reason)->toBe('unproven');
+
+    healthAt('2026-10-18 14:12:00', fn(GitHubAppHealth $health) => $health->received($app, 'ping', 'delivery-2'));
+
+    expect(Cache::get($health->key($app))['repointed_at'])->toBe(now()->getTimestamp())
+        ->and($health->mode($app)->instant)->toBeTrue();
 });
 
 test('evidence the cache cannot read is no evidence at all', function (mixed $garbage) {

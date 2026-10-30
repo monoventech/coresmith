@@ -22,7 +22,7 @@ final class GitHubAppHealth
 
     private const NO_DELIVERY = 'No delivery from GitHub has reached this panel yet.';
 
-    private const EVIDENCE = ['received_at' => null, 'event' => null, 'delivery_id' => null, 'checked_at' => null, 'latest' => null, 'hook_url' => null];
+    private const EVIDENCE = ['received_at' => null, 'event' => null, 'delivery_id' => null, 'checked_at' => null, 'latest' => null, 'hook_url' => null, 'repointed_at' => null];
 
     public function __construct(
         private readonly PanelReachability $reachability,
@@ -57,6 +57,11 @@ final class GitHubAppHealth
             ] : null,
             'hook_url' => $hookUrl,
         ]);
+    }
+
+    public function repointed(#[\SensitiveParameter] GitHubAppCredentials $app): void
+    {
+        $this->record($app, ['repointed_at' => now()->getTimestamp(), 'received_at' => null, 'event' => null, 'delivery_id' => null, 'latest' => null]);
     }
 
     public function expectedHookUrl(#[\SensitiveParameter] GitHubAppCredentials $app): string
@@ -110,6 +115,11 @@ final class GitHubAppHealth
         $stored = Cache::get($this->key($app));
         $latest = is_array($stored) ? ($stored['latest'] ?? null) : null;
         $delivered = is_array($latest) ? $this->moment($latest['delivered_at'] ?? null) : null;
+        $repointed = is_array($stored) ? $this->moment($stored['repointed_at'] ?? null) : null;
+
+        if ($delivered !== null && $repointed !== null && $delivered->lessThan($repointed)) {
+            $delivered = null;
+        }
 
         return [
             'received' => is_array($stored) ? $this->moment($stored['received_at'] ?? null) : null,
