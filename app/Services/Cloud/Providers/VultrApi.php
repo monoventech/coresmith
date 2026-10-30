@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Cloud\Providers;
 
+use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
 use App\Services\Cloud\CloudAccount;
@@ -182,6 +183,13 @@ final class VultrApi extends HttpCloudApi implements CloudApi
         return self::text($response->json('error'));
     }
 
+    protected function classify(Response $response): ?CloudFailure
+    {
+        return $response->status() === 401 && str_contains(strtolower((string) $this->message($response)), 'unauthorized ip address')
+            ? CloudFailure::Forbidden
+            : null;
+    }
+
     /**
      * @return Collection<int, mixed>
      */
@@ -222,7 +230,7 @@ final class VultrApi extends HttpCloudApi implements CloudApi
             'x86',
             is_numeric($monthly) ? CloudPrice::fromNumber($monthly, 'USD') : null,
             [],
-            self::locations($plan['locations'] ?? null),
+            self::texts($plan['locations'] ?? null),
         );
     }
 
@@ -253,16 +261,6 @@ final class VultrApi extends HttpCloudApi implements CloudApi
         return is_string($text) && preg_match(self::SYSTEM_ID, $text) === 1 ? $text : null;
     }
 
-    /**
-     * @return list<string>
-     */
-    private static function locations(mixed $values): array
-    {
-        return is_array($values)
-            ? array_values(array_filter($values, fn(mixed $value): bool => self::text($value) !== null))
-            : [];
-    }
-
     private function instance(mixed $instance): CloudInstance
     {
         return new CloudInstance(
@@ -273,16 +271,6 @@ final class VultrApi extends HttpCloudApi implements CloudApi
         );
     }
 
-    /**
-     * @param  array<string, mixed>  $instance
-     */
-    private static function carries(array $instance, string $tag): bool
-    {
-        $tags = $instance['tags'] ?? null;
-
-        return is_array($tags) && in_array($tag, $tags, true);
-    }
-
     private static function state(mixed $instance): CloudInstanceState
     {
         $status = data_get($instance, 'status');
@@ -291,6 +279,7 @@ final class VultrApi extends HttpCloudApi implements CloudApi
         return match (true) {
             $status === 'pending' => CloudInstanceState::Starting,
             $status === 'resizing' => CloudInstanceState::Busy,
+            $status === 'suspended' => CloudInstanceState::Unknown,
             $power === 'stopped' => CloudInstanceState::Stopped,
             $status === 'active' && $power === 'running' => data_get($instance, 'server_status') === 'ok'
                 ? CloudInstanceState::Running

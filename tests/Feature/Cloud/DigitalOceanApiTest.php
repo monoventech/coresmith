@@ -12,7 +12,6 @@ use App\Services\Cloud\CloudServerSpec;
 use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Cloud\Providers\DigitalOceanApi;
 use App\Services\Cloud\Providers\HttpCloudApi;
-use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
@@ -38,22 +37,6 @@ function cloudDigitalOceanKey(): string
 function cloudDigitalOceanSpec(?string $keyId = '512189'): CloudServerSpec
 {
     return new CloudServerSpec('outpost-02', 'fra1', 's-1vcpu-2gb', 'ubuntu-24-04-x64', cloudDigitalOceanTag(), cloudDigitalOceanKey(), $keyId);
-}
-
-function cloudDigitalOceanMissing(): PromiseInterface
-{
-    return Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404);
-}
-
-function cloudDigitalOceanFixture(string $name, array $changes = []): array
-{
-    $body = CloudFixtures::json("digitalocean/{$name}");
-
-    foreach ($changes as $path => $value) {
-        data_set($body, $path, $value);
-    }
-
-    return $body;
 }
 
 function cloudDigitalOceanPage(string $list, array $items, array $pages): array
@@ -89,7 +72,7 @@ test('digitalocean names the account by its email when it has no team', function
 });
 
 test('digitalocean names the account by its email when its team has no name', function (mixed $name) {
-    Http::fake(['api.digitalocean.com/v2/account' => Http::response(cloudDigitalOceanFixture('account', ['account.team.name' => $name]))]);
+    Http::fake(['api.digitalocean.com/v2/account' => Http::response(CloudFixtures::with('digitalocean/account', ['account.team.name' => $name]))]);
 
     expect(cloudDigitalOcean()->verify()->label)->toBe('maya@monoven.io');
 })->with([
@@ -122,7 +105,7 @@ test('digitalocean refuses a locked account with its reason', function () {
 });
 
 test('digitalocean refuses an account that is not active even when it does not say why', function (string $status) {
-    Http::fake(['api.digitalocean.com/v2/account' => Http::response(cloudDigitalOceanFixture('account', [
+    Http::fake(['api.digitalocean.com/v2/account' => Http::response(CloudFixtures::with('digitalocean/account', [
         'account.status' => $status,
         'account.status_message' => '',
     ]))]);
@@ -259,7 +242,7 @@ test('digitalocean skips a gpu size whether it shows in its slug or in its detai
 ]);
 
 test('digitalocean keeps a size whose gpu details are empty', function (mixed $details) {
-    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', ['sizes.2.gpu_info' => $details]))]);
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(CloudFixtures::with('digitalocean/sizes', ['sizes.2.gpu_info' => $details]))]);
 
     expect(cloudDigitalOcean()->sizes()->pluck('id')->all())->toContain('s-1vcpu-2gb');
 })->with([
@@ -290,7 +273,7 @@ test('digitalocean skips a size that leaves out how big it is', function (string
 })->with(['vcpus', 'memory', 'disk']);
 
 test('digitalocean skips a size whose numbers are not numbers', function (string $field, mixed $value) {
-    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', ["sizes.2.{$field}" => $value]))]);
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(CloudFixtures::with('digitalocean/sizes', ["sizes.2.{$field}" => $value]))]);
 
     expect(cloudDigitalOcean()->sizes()->pluck('id')->all())->toBe(['s-1vcpu-512mb-10gb', 's-1vcpu-1gb', 's-2vcpu-4gb']);
 })->with([
@@ -301,7 +284,7 @@ test('digitalocean skips a size whose numbers are not numbers', function (string
 ]);
 
 test('digitalocean keeps a size that reports its numbers as digits', function () {
-    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', [
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(CloudFixtures::with('digitalocean/sizes', [
         'sizes.2.vcpus' => '1',
         'sizes.2.memory' => '2048',
         'sizes.2.disk' => '50',
@@ -313,7 +296,7 @@ test('digitalocean keeps a size that reports its numbers as digits', function ()
 });
 
 test('digitalocean lists only the regions of a size that are named', function (mixed $regions, array $expected) {
-    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', ['sizes.2.regions' => $regions]))]);
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(CloudFixtures::with('digitalocean/sizes', ['sizes.2.regions' => $regions]))]);
 
     expect(cloudDigitalOcean()->sizes()->keyBy('id')['s-1vcpu-2gb']->regions)->toBe($expected);
 })->with([
@@ -369,7 +352,7 @@ test('digitalocean keeps its image filter on every page of images', function () 
 });
 
 test('digitalocean stops at a next link it cannot follow', function (mixed $next) {
-    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(cloudDigitalOceanFixture('sizes', ['links.pages.next' => $next]))]);
+    Http::fake(['api.digitalocean.com/v2/sizes*' => Http::response(CloudFixtures::with('digitalocean/sizes', ['links.pages.next' => $next]))]);
 
     expect(cloudDigitalOcean()->sizes())->toHaveCount(4);
 
@@ -431,7 +414,7 @@ test('digitalocean passes over a list entry that is not an object', function (st
 ]);
 
 test('digitalocean reads the family and version out of a distribution slug', function (string $slug, string $family, string $version) {
-    Http::fake(['api.digitalocean.com/v2/images*' => Http::response(cloudDigitalOceanFixture('images', ['images.0.slug' => $slug]))]);
+    Http::fake(['api.digitalocean.com/v2/images*' => Http::response(CloudFixtures::with('digitalocean/images', ['images.0.slug' => $slug]))]);
 
     $image = cloudDigitalOcean()->images()->first();
 
@@ -444,7 +427,7 @@ test('digitalocean reads the family and version out of a distribution slug', fun
 ]);
 
 test('digitalocean skips distribution slugs it does not provision', function (mixed $slug) {
-    Http::fake(['api.digitalocean.com/v2/images*' => Http::response(cloudDigitalOceanFixture('images', ['images.0.slug' => $slug]))]);
+    Http::fake(['api.digitalocean.com/v2/images*' => Http::response(CloudFixtures::with('digitalocean/images', ['images.0.slug' => $slug]))]);
 
     expect(cloudDigitalOcean()->images()->pluck('id')->all())->toBe(['ubuntu-22-04-x64', 'debian-12-x64']);
 })->with([
@@ -460,7 +443,7 @@ test('digitalocean skips distribution slugs it does not provision', function (mi
 ]);
 
 test('digitalocean skips images that are not available', function (?string $status) {
-    Http::fake(['api.digitalocean.com/v2/images*' => Http::response(cloudDigitalOceanFixture('images', ['images.0.status' => $status]))]);
+    Http::fake(['api.digitalocean.com/v2/images*' => Http::response(CloudFixtures::with('digitalocean/images', ['images.0.status' => $status]))]);
 
     expect(cloudDigitalOcean()->images()->pluck('id')->all())->toBe(['ubuntu-22-04-x64', 'debian-12-x64']);
 })->with([
@@ -516,7 +499,7 @@ test('digitalocean adopts a key it already holds by fingerprint', function () {
 
 test('digitalocean uploads a key it does not hold', function () {
     Http::fake([
-        'api.digitalocean.com/v2/account/keys/*' => cloudDigitalOceanMissing(),
+        'api.digitalocean.com/v2/account/keys/*' => Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404),
         'api.digitalocean.com/v2/account/keys' => Http::response(CloudFixtures::json('digitalocean/ssh_key'), 201),
     ]);
 
@@ -562,7 +545,7 @@ test('digitalocean does not upload a second key because a lookup it could not re
 
 test('digitalocean reads a key upload whose answer has no key in it as unavailable', function (string $body, array $headers) {
     Http::fake([
-        'api.digitalocean.com/v2/account/keys/*' => cloudDigitalOceanMissing(),
+        'api.digitalocean.com/v2/account/keys/*' => Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404),
         'api.digitalocean.com/v2/account/keys' => Http::response($body, 201, $headers),
     ]);
 
@@ -646,7 +629,7 @@ test('digitalocean reads a droplet with only a private address as not ready', fu
 });
 
 test('digitalocean reads a droplet whose networks are missing or malformed as having no address', function (mixed $networks) {
-    Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::response(cloudDigitalOceanFixture('droplet-active', ['droplet.networks.v4' => $networks]))]);
+    Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::response(CloudFixtures::with('digitalocean/droplet-active', ['droplet.networks.v4' => $networks]))]);
 
     $found = cloudDigitalOcean()->find('3164444');
 
@@ -670,7 +653,7 @@ test('digitalocean ignores an address that the droplet does not list as public',
 });
 
 test('digitalocean reads a droplet whose public entry is not a public address as having none', function () {
-    Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::response(cloudDigitalOceanFixture('droplet-active', [
+    Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::response(CloudFixtures::with('digitalocean/droplet-active', [
         'droplet.networks.v4.1.ip_address' => '10.128.0.9',
     ]))]);
 
@@ -678,7 +661,7 @@ test('digitalocean reads a droplet whose public entry is not a public address as
 });
 
 test('digitalocean reads a droplet that is not there as nothing', function () {
-    Http::fake(['api.digitalocean.com/v2/droplets/9999' => cloudDigitalOceanMissing()]);
+    Http::fake(['api.digitalocean.com/v2/droplets/9999' => Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404)]);
 
     expect(cloudDigitalOcean()->find('9999'))->toBeNull();
 
@@ -686,7 +669,7 @@ test('digitalocean reads a droplet that is not there as nothing', function () {
 });
 
 test('digitalocean maps every droplet status', function (string $status, CloudInstanceState $state) {
-    Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::response(cloudDigitalOceanFixture('droplet-active', ['droplet.status' => $status]))]);
+    Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::response(CloudFixtures::with('digitalocean/droplet-active', ['droplet.status' => $status]))]);
 
     expect(cloudDigitalOcean()->find('3164444')->state)->toBe($state);
 })->with([
@@ -699,8 +682,8 @@ test('digitalocean maps every droplet status', function (string $status, CloudIn
 
 test('digitalocean accepts an id it is given as text', function () {
     Http::fake([
-        'api.digitalocean.com/v2/droplets/3164444' => Http::response(cloudDigitalOceanFixture('droplet-active', ['droplet.id' => '3164444'])),
-        'api.digitalocean.com/v2/account/keys/*' => Http::response(cloudDigitalOceanFixture('ssh_key', ['ssh_key.id' => '512189'])),
+        'api.digitalocean.com/v2/droplets/3164444' => Http::response(CloudFixtures::with('digitalocean/droplet-active', ['droplet.id' => '3164444'])),
+        'api.digitalocean.com/v2/account/keys/*' => Http::response(CloudFixtures::with('digitalocean/ssh_key', ['ssh_key.id' => '512189'])),
     ]);
     $api = cloudDigitalOcean();
 
@@ -746,10 +729,10 @@ test('digitalocean takes the first droplet when a tag matches several', function
 });
 
 test('digitalocean returns the droplet that carries the tag itself, not just the first one listed', function () {
-    $body = cloudDigitalOceanFixture('droplets-tagged');
+    $body = CloudFixtures::with('digitalocean/droplets-tagged');
     $mine = $body['droplets'][0];
-    $elsewhere = cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.id' => 3164445, 'droplets.0.tags' => ['coresmith', 'coresmith-01jother']])['droplets'][0];
-    $untagged = cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.id' => 3164446, 'droplets.0.tags' => []])['droplets'][0];
+    $elsewhere = CloudFixtures::with('digitalocean/droplets-tagged', ['droplets.0.id' => 3164445, 'droplets.0.tags' => ['coresmith', 'coresmith-01jother']])['droplets'][0];
+    $untagged = CloudFixtures::with('digitalocean/droplets-tagged', ['droplets.0.id' => 3164446, 'droplets.0.tags' => []])['droplets'][0];
     $body['droplets'] = [$elsewhere, $untagged, 'oops', $mine];
     Http::fake(['api.digitalocean.com/v2/droplets*' => Http::response($body)]);
 
@@ -757,7 +740,7 @@ test('digitalocean returns the droplet that carries the tag itself, not just the
 });
 
 test('digitalocean fails a tag lookup that lists droplets but none that carries the tag, so an unrelated droplet is never handed back', function (mixed $tags) {
-    Http::fake(['api.digitalocean.com/v2/droplets*' => Http::response(cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.tags' => $tags]))]);
+    Http::fake(['api.digitalocean.com/v2/droplets*' => Http::response(CloudFixtures::with('digitalocean/droplets-tagged', ['droplets.0.tags' => $tags]))]);
 
     expect(fn() => cloudDigitalOcean()->findTagged(cloudDigitalOceanTag()))->toThrow(function (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unavailable)
@@ -774,12 +757,36 @@ test('digitalocean fails a tag lookup that lists droplets but none that carries 
     'no tags' => [[]],
     'tags given as text' => ['coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d'],
     'tags that are null' => [null],
+    'a flag among the tags' => [[true]],
+    'a list among the tags' => [[['coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d']]],
+]);
+
+test('digitalocean reads a list that is an object, even an empty one, as unavailable', function (string $call, string $list, mixed $value) {
+    Http::fake(['api.digitalocean.com/v2/*' => Http::response([$list => $value])]);
+    $attempt = match ($call) {
+        'findTagged' => fn() => cloudDigitalOcean()->findTagged(cloudDigitalOceanTag()),
+        default => fn() => cloudDigitalOcean()->{$call}(),
+    };
+
+    expect($attempt)->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->getMessage())->toBe('DigitalOcean had a problem answering. Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'regions that are an object' => ['regions', 'regions', ['fra1' => ['slug' => 'fra1']]],
+    'regions that are an empty object' => ['regions', 'regions', new stdClass],
+    'sizes that are an empty object' => ['sizes', 'sizes', new stdClass],
+    'images that are an empty object' => ['images', 'images', new stdClass],
+    'droplets that are an empty object' => ['findTagged', 'droplets', new stdClass],
 ]);
 
 test('digitalocean reads the size of a droplet from its size slug', function () {
     Http::fake(['api.digitalocean.com/v2/droplets/3164444' => Http::sequence()
-        ->push(cloudDigitalOceanFixture('droplet-active', ['droplet.size_slug' => 's-2vcpu-4gb']))
-        ->push(Arr::except(cloudDigitalOceanFixture('droplet-active'), 'droplet.size_slug'))]);
+        ->push(CloudFixtures::with('digitalocean/droplet-active', ['droplet.size_slug' => 's-2vcpu-4gb']))
+        ->push(Arr::except(CloudFixtures::with('digitalocean/droplet-active'), 'droplet.size_slug'))]);
     $api = cloudDigitalOcean();
 
     expect($api->find('3164444')->size)->toBe('s-2vcpu-4gb')
@@ -842,10 +849,38 @@ test('digitalocean deletes a droplet and a key it holds', function () {
     ]);
 });
 
+test('digitalocean does not take a not found page for a droplet or key that is gone', function (string $call, string $id) {
+    Http::fake(['api.digitalocean.com/v2/*' => Http::response('<html><body>404 Not Found</body></html>', 404, ['Content-Type' => 'text/html'])]);
+
+    expect(fn() => cloudDigitalOcean()->{$call}($id))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(404)
+            ->and($e->getMessage())->toBe('DigitalOcean had a problem answering (HTTP 404). Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'a lookup' => ['find', '3164444'],
+    'a destroy' => ['destroy', '3164444'],
+    'a key delete' => ['deleteKey', '512189'],
+]);
+
+test('digitalocean does not upload a key because a lookup answered with a not found page', function () {
+    Http::fake(['api.digitalocean.com/v2/account/keys/*' => Http::response('<html><body>404 Not Found</body></html>', 404, ['Content-Type' => 'text/html'])]);
+
+    expect(fn() => cloudDigitalOcean()->uploadKey('coresmith-outpost-02-b1n0d', cloudDigitalOceanKey()))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)->and($e->retryable())->toBeTrue()->and($e->status)->toBe(404);
+    });
+
+    Http::assertSentCount(1);
+    Http::assertNotSent(fn(Request $request) => $request->method() === 'POST');
+});
+
 test('digitalocean treats a droplet that is already gone as destroyed', function () {
     Http::fake([
-        'api.digitalocean.com/v2/droplets/3164444' => cloudDigitalOceanMissing(),
-        'api.digitalocean.com/v2/account/keys/512189' => cloudDigitalOceanMissing(),
+        'api.digitalocean.com/v2/droplets/3164444' => Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404),
+        'api.digitalocean.com/v2/account/keys/512189' => Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404),
     ]);
     $api = cloudDigitalOcean();
 
@@ -868,12 +903,12 @@ test('digitalocean refuses an id that names nothing before it sends anything', f
 test('digitalocean reads an id that is not a whole number as unavailable, so the tag is checked before anything is made again', function (string $call, mixed $id) {
     Http::fake([
         'api.digitalocean.com/v2/account/keys/*' => $call === 'adopt'
-            ? Http::response(cloudDigitalOceanFixture('ssh_key', ['ssh_key.id' => $id]))
-            : cloudDigitalOceanMissing(),
-        'api.digitalocean.com/v2/account/keys' => Http::response(cloudDigitalOceanFixture('ssh_key', ['ssh_key.id' => $id]), 201),
-        'api.digitalocean.com/v2/droplets/3164444' => Http::response(cloudDigitalOceanFixture('droplet-active', ['droplet.id' => $id])),
-        'api.digitalocean.com/v2/droplets?*' => Http::response(cloudDigitalOceanFixture('droplets-tagged', ['droplets.0.id' => $id])),
-        'api.digitalocean.com/v2/droplets' => Http::response(cloudDigitalOceanFixture('droplet-new', ['droplet.id' => $id]), 202),
+            ? Http::response(CloudFixtures::with('digitalocean/ssh_key', ['ssh_key.id' => $id]))
+            : Http::response(CloudFixtures::json('digitalocean/error-not-found'), 404),
+        'api.digitalocean.com/v2/account/keys' => Http::response(CloudFixtures::with('digitalocean/ssh_key', ['ssh_key.id' => $id]), 201),
+        'api.digitalocean.com/v2/droplets/3164444' => Http::response(CloudFixtures::with('digitalocean/droplet-active', ['droplet.id' => $id])),
+        'api.digitalocean.com/v2/droplets?*' => Http::response(CloudFixtures::with('digitalocean/droplets-tagged', ['droplets.0.id' => $id])),
+        'api.digitalocean.com/v2/droplets' => Http::response(CloudFixtures::with('digitalocean/droplet-new', ['droplet.id' => $id]), 202),
     ]);
     $api = cloudDigitalOcean();
     $attempt = match ($call) {

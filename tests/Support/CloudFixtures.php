@@ -21,4 +21,19 @@ final class CloudFixtures
 
         return json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
     }
+
+    /**
+     * @param  array<string, mixed>  $changes
+     * @return array<string, mixed>
+     */
+    public static function with(string $path, array $changes = []): array
+    {
+        $body = self::json($path);
+
+        foreach ($changes as $key => $value) {
+            data_set($body, $key, $value);
+        }
+
+        return $body;
+    }
 }

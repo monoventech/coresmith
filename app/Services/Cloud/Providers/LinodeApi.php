@@ -20,7 +20,6 @@ use App\Services\Cloud\CloudRegion;
 use App\Services\Cloud\CloudServerSpec;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Contracts\CloudApi;
-use DateTimeZone;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -34,9 +33,13 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
 
     private const IMAGE_ID = '/^linode\/(ubuntu|debian)(\d+(?:\.\d+)?)$/D';
 
+    private const SCOPES_HEADER = 'X-OAuth-Scopes';
+
     private const SCOPE_SEPARATOR = '/[\s,]+/D';
 
-    private const WRITE_SCOPE = 'linodes:read_write';
+    private const LINODES_SCOPE = 'linodes:read_write';
+
+    private const IMAGES_SCOPES = ['images:read_only', 'images:read_write'];
 
     private const ROOT_PASSWORD_LENGTH = 48;
 
@@ -54,7 +57,7 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
             throw $this->unusable();
         }
 
-        if (!self::mayWriteLinodes($response->header('X-OAuth-Scopes'))) {
+        if (!self::mayManage($response)) {
             throw new CloudProviderException(CloudFailure::Forbidden, $this->type());
         }
 
@@ -90,7 +93,7 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
 
     public function images(): Collection
     {
-        return $this->pages('/images', ['X-Filter' => self::filter(['is_public' => true])])
+        return $this->pages('/images', ['X-Filter' => self::filterHeader(['is_public' => true])])
             ->map(fn(mixed $image): ?CloudImage => is_array($image) ? self::image($image) : null)
             ->filter()
             ->values();
@@ -141,7 +144,7 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
     public function findTagged(string $tag): ?CloudInstance
     {
         $instance = $this->firstMatch(
-            $this->listed($this->getJson('/linode/instances', [], ['X-Filter' => self::filter(['tags' => $tag])]), 'data'),
+            $this->listed($this->getJson('/linode/instances', [], ['X-Filter' => self::filterHeader(['tags' => $tag])]), 'data'),
             fn(array $instance): bool => self::carries($instance, $tag),
         );
 
@@ -194,6 +197,17 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
         return $field === null ? $reason : "{$field}: {$reason}";
     }
 
+    protected function classify(Response $response): ?CloudFailure
+    {
+        $reason = strtolower((string) self::text($response->json('errors.0.reason')));
+
+        return match (true) {
+            $response->status() === 401 && str_contains($reason, 'not authorized to use') => CloudFailure::Forbidden,
+            $response->status() === 400 && str_contains($reason, 'linode busy') => CloudFailure::Busy,
+            default => null,
+        };
+    }
+
     /**
      * @param  array<string, string>  $headers
      * @return Collection<int, mixed>
@@ -213,16 +227,21 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
     /**
      * @param  array<string, mixed>  $conditions
      */
-    private static function filter(array $conditions): string
+    private static function filterHeader(array $conditions): string
     {
         return json_encode($conditions, JSON_THROW_ON_ERROR);
     }
 
-    private static function mayWriteLinodes(string $scopeHeader): bool
+    private static function mayManage(Response $response): bool
     {
-        $scopes = preg_split(self::SCOPE_SEPARATOR, trim($scopeHeader), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (!$response->toPsrResponse()->hasHeader(self::SCOPES_HEADER)) {
+            return true;
+        }
 
-        return $scopes === [] || in_array('*', $scopes, true) || in_array(self::WRITE_SCOPE, $scopes, true);
+        $scopes = preg_split(self::SCOPE_SEPARATOR, trim($response->header(self::SCOPES_HEADER)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return in_array('*', $scopes, true)
+            || (in_array(self::LINODES_SCOPE, $scopes, true) && array_intersect(self::IMAGES_SCOPES, $scopes) !== []);
     }
 
     /**
@@ -286,15 +305,7 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
      */
     private static function retired(array $image): bool
     {
-        return ($image['deprecated'] ?? null) === true || self::ended($image['eol'] ?? null);
-    }
-
-    private static function ended(mixed $date): bool
-    {
-        $text = self::text($date);
-        $at = $text === null ? false : date_create_immutable($text, new DateTimeZone('UTC'));
-
-        return $at !== false && $at->getTimestamp() <= now()->getTimestamp();
+        return ($image['deprecated'] ?? null) === true || self::hasPassed($image['eol'] ?? null, false);
     }
 
     private function instance(mixed $instance): CloudInstance
@@ -320,23 +331,13 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
         return null;
     }
 
-    /**
-     * @param  array<string, mixed>  $instance
-     */
-    private static function carries(array $instance, string $tag): bool
-    {
-        $tags = $instance['tags'] ?? null;
-
-        return is_array($tags) && in_array($tag, $tags, true);
-    }
-
     private static function state(mixed $status): CloudInstanceState
     {
         return match ($status) {
             'provisioning', 'booting' => CloudInstanceState::Starting,
             'running' => CloudInstanceState::Running,
             'offline', 'stopped' => CloudInstanceState::Stopped,
-            'shutting_down', 'rebooting', 'migrating', 'rebuilding', 'cloning', 'restoring', 'resizing' => CloudInstanceState::Busy,
+            'shutting_down', 'rebooting', 'migrating', 'rebuilding', 'cloning', 'restoring', 'resizing', 'busy' => CloudInstanceState::Busy,
             'deleting' => CloudInstanceState::Deleting,
             default => CloudInstanceState::Unknown,
         };

@@ -53,10 +53,11 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
     {
         $label = $this->provider->label();
         $said = $this->said();
+        $afterFixing = $this->provider->hasScopedTokens() ? 'Then replace the token in Settings → Team.' : 'Then try again.';
 
         return match ($this->failure) {
             CloudFailure::TokenRejected => "{$label} refused this account's token.{$said} Replace it in Settings → Team, then try again.",
-            CloudFailure::Forbidden => "{$label} says this token isn't allowed to do that.{$said} {$this->provider->permissionHint()} Then replace the token in Settings → Team.",
+            CloudFailure::Forbidden => "{$label} says this token isn't allowed to do that.{$said} {$this->provider->permissionHint()} {$afterFixing}",
             CloudFailure::NotFound => "{$label} can't find it any more.{$said}",
             CloudFailure::Busy => "{$label} is busy with another change to it.{$said} Coresmith tries again shortly.",
             CloudFailure::RateLimited => "{$label} is rate limiting this account.{$said} Coresmith tries again shortly.",

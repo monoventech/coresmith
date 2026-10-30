@@ -12,7 +12,6 @@ use App\Services\Cloud\CloudServerSpec;
 use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Cloud\Providers\HttpCloudApi;
 use App\Services\Cloud\Providers\VultrApi;
-use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\CloudFixtures;
@@ -54,22 +53,6 @@ function cloudVultrSpec(?string $keyId = 'd8a4c1f3-52b6-4e7d-9a30-6c1b8e2f4d57')
     return new CloudServerSpec('outpost-02', 'fra', 'vc2-1c-2gb', '2284', cloudVultrTag(), cloudVultrKey(), $keyId);
 }
 
-function cloudVultrMissing(): PromiseInterface
-{
-    return Http::response(CloudFixtures::json('vultr/error-not-found'), 404);
-}
-
-function cloudVultrFixture(string $name, array $changes = []): array
-{
-    $body = CloudFixtures::json("vultr/{$name}");
-
-    foreach ($changes as $path => $value) {
-        data_set($body, $path, $value);
-    }
-
-    return $body;
-}
-
 function cloudVultrPage(string $list, array $items, string $next = ''): array
 {
     return [$list => $items, 'meta' => ['total' => count($items), 'links' => ['next' => $next, 'prev' => '']]];
@@ -95,7 +78,7 @@ test('vultr names the account by its email', function () {
 });
 
 test('vultr leaves the account unnamed when it has no email it can use', function (mixed $email) {
-    Http::fake(['api.vultr.com/v2/account' => Http::response(cloudVultrFixture('account', ['account.email' => $email]))]);
+    Http::fake(['api.vultr.com/v2/account' => Http::response(CloudFixtures::with('vultr/account', ['account.email' => $email]))]);
 
     expect(cloudVultr()->verify()->label)->toBeNull();
 })->with([
@@ -125,15 +108,53 @@ test("vultr says when the key is refused for the panel's address", function () {
     Http::fake(['api.vultr.com/v2/account' => Http::response(CloudFixtures::json('vultr/error-acl'), 401)]);
 
     expect(fn() => cloudVultr()->verify())->toThrow(function (CloudProviderException $e) {
-        expect($e->failure)->toBe(CloudFailure::TokenRejected)
+        expect($e->failure)->toBe(CloudFailure::Forbidden)
             ->and($e->status)->toBe(401)
             ->and($e->retryable())->toBeFalse()
             ->and($e->detail)->toBe('Unauthorized IP address: 198.51.100.7')
-            ->and($e->connectMessage())->toContain('Unauthorized IP address');
+            ->and($e->connectMessage())->toBe("Vultr accepted the token, but it isn't allowed to manage servers. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control.")
+            ->and($e->getMessage())->toBe("Vultr says this token isn't allowed to do that. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control. Then try again.");
     });
 
     Http::assertSentCount(1);
 });
+
+test("vultr reads a refusal for the panel's address as forbidden wherever it comes", function (string $call, string $message) {
+    Http::fake(['api.vultr.com/v2/*' => Http::response(['error' => $message, 'status' => 401], 401)]);
+    $attempt = match ($call) {
+        'verify' => fn() => cloudVultr()->verify(),
+        'regions' => fn() => cloudVultr()->regions(),
+        'create' => fn() => cloudVultr()->create(cloudVultrSpec()),
+        'destroy' => fn() => cloudVultr()->destroy(cloudVultrInstanceId()),
+    };
+
+    expect($attempt)->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Forbidden)
+            ->and($e->retryable())->toBeFalse()
+            ->and($e->getMessage())->not->toContain('Settings');
+    });
+})->with(['verify', 'regions', 'create', 'destroy'])->with([
+    'as vultr words it' => ['Unauthorized IP address: 198.51.100.7'],
+    'in capitals' => ['UNAUTHORIZED IP ADDRESS: 198.51.100.7'],
+    'with more said' => ['Unauthorized IP address: 198.51.100.7. Add it to your access control list.'],
+]);
+
+test('vultr keeps every other refusal what it was', function (int $status, mixed $message, CloudFailure $failure) {
+    Http::fake(['api.vultr.com/v2/account' => Http::response(['error' => $message, 'status' => $status], $status)]);
+
+    expect(fn() => cloudVultr()->verify())->toThrow(function (CloudProviderException $e) use ($failure) {
+        expect($e->failure)->toBe($failure);
+    });
+})->with([
+    'an invalid key' => [401, 'Invalid API token.', CloudFailure::TokenRejected],
+    'a 401 with no message' => [401, null, CloudFailure::TokenRejected],
+    'a 401 whose message is not text' => [401, ['Unauthorized IP address'], CloudFailure::TokenRejected],
+    'a 401 about the address of something else' => [401, 'Invalid IP address format.', CloudFailure::TokenRejected],
+    'the same words on a 400' => [400, 'Unauthorized IP address: 198.51.100.7', CloudFailure::Refused],
+    'the same words on a 422' => [422, 'Unauthorized IP address: 198.51.100.7', CloudFailure::Refused],
+    'the same words on a 503' => [503, 'Unauthorized IP address: 198.51.100.7', CloudFailure::Unavailable],
+    'a 403' => [403, 'Insufficient permissions.', CloudFailure::Forbidden],
+]);
 
 test('vultr reports a refused key in words', function () {
     Http::fake(['api.vultr.com/v2/account' => Http::response(CloudFixtures::json('vultr/error-invalid-key'), 401)]);
@@ -240,7 +261,7 @@ test('vultr reads every page of plans and keeps only compute plans', function ()
 });
 
 test('vultr keeps the compute plan types and no other', function (mixed $type, bool $kept) {
-    Http::fake(['api.vultr.com/v2/plans*' => Http::response(cloudVultrFixture('plans-2', ['plans.0.type' => $type]))]);
+    Http::fake(['api.vultr.com/v2/plans*' => Http::response(CloudFixtures::with('vultr/plans-2', ['plans.0.type' => $type]))]);
 
     expect(cloudVultr()->sizes()->pluck('id')->contains('vc2-2c-4gb'))->toBe($kept);
 })->with([
@@ -253,11 +274,13 @@ test('vultr keeps the compute plan types and no other', function (mixed $type, b
     'dedicated cloud' => ['vdc', false],
     'a type in another case' => ['VC2', false],
     'a type that is not text' => [42, false],
+    'a type that is a flag' => [true, false],
+    'a type that is a list' => [['vc2'], false],
     'no type' => [null, false],
 ]);
 
 test('vultr skips a plan that has no id', function (mixed $id) {
-    Http::fake(['api.vultr.com/v2/plans*' => Http::response(cloudVultrFixture('plans-2', ['plans.0.id' => $id]))]);
+    Http::fake(['api.vultr.com/v2/plans*' => Http::response(CloudFixtures::with('vultr/plans-2', ['plans.0.id' => $id]))]);
 
     expect(cloudVultr()->sizes()->pluck('id')->all())->toBe(['vhf-1c-2gb']);
 })->with([
@@ -275,7 +298,7 @@ test('vultr skips a plan that leaves out how big it is', function (string $field
 })->with(['vcpu_count', 'ram', 'disk']);
 
 test('vultr skips a plan whose numbers are not numbers', function (string $field, mixed $value) {
-    Http::fake(['api.vultr.com/v2/plans*' => Http::response(cloudVultrFixture('plans-2', ["plans.0.{$field}" => $value]))]);
+    Http::fake(['api.vultr.com/v2/plans*' => Http::response(CloudFixtures::with('vultr/plans-2', ["plans.0.{$field}" => $value]))]);
 
     expect(cloudVultr()->sizes()->pluck('id')->all())->toBe(['vhf-1c-2gb']);
 })->with([
@@ -286,7 +309,7 @@ test('vultr skips a plan whose numbers are not numbers', function (string $field
 ]);
 
 test('vultr keeps a plan that reports its numbers as digits', function () {
-    Http::fake(['api.vultr.com/v2/plans*' => Http::response(cloudVultrFixture('plans-2', [
+    Http::fake(['api.vultr.com/v2/plans*' => Http::response(CloudFixtures::with('vultr/plans-2', [
         'plans.0.vcpu_count' => '2',
         'plans.0.ram' => '4096',
         'plans.0.disk' => '80',
@@ -317,7 +340,7 @@ test('vultr reads a plan with no price or no locations without inventing either'
 });
 
 test('vultr lists only the locations of a plan that are named', function (mixed $locations, array $expected) {
-    Http::fake(['api.vultr.com/v2/plans*' => Http::response(cloudVultrFixture('plans-2', ['plans.0.locations' => $locations]))]);
+    Http::fake(['api.vultr.com/v2/plans*' => Http::response(CloudFixtures::with('vultr/plans-2', ['plans.0.locations' => $locations]))]);
 
     expect(cloudVultr()->sizes()->keyBy('id')['vc2-2c-4gb']->regions)->toBe($expected);
 })->with([
@@ -339,7 +362,7 @@ test('vultr passes over a list entry that is not an object', function (string $c
 ]);
 
 test('vultr skips a region that has no id', function (mixed $id) {
-    Http::fake(['api.vultr.com/v2/regions*' => Http::response(cloudVultrFixture('regions', ['regions.0.id' => $id]))]);
+    Http::fake(['api.vultr.com/v2/regions*' => Http::response(CloudFixtures::with('vultr/regions', ['regions.0.id' => $id]))]);
 
     expect(cloudVultr()->regions()->pluck('id')->all())->toBe(['ewr', 'fra']);
 })->with([
@@ -349,7 +372,7 @@ test('vultr skips a region that has no id', function (mixed $id) {
 ]);
 
 test('vultr stops at a cursor it cannot follow', function (mixed $next) {
-    Http::fake(['api.vultr.com/v2/plans*' => Http::response(cloudVultrFixture('plans-2', ['meta.links.next' => $next]))]);
+    Http::fake(['api.vultr.com/v2/plans*' => Http::response(CloudFixtures::with('vultr/plans-2', ['meta.links.next' => $next]))]);
 
     expect(cloudVultr()->sizes())->toHaveCount(2);
 
@@ -400,7 +423,7 @@ test('vultr keeps ubuntu and debian systems', function () {
 });
 
 test('vultr skips systems it does not provision', function (array $changes) {
-    Http::fake(['api.vultr.com/v2/os*' => Http::response(cloudVultrFixture('os', $changes))]);
+    Http::fake(['api.vultr.com/v2/os*' => Http::response(CloudFixtures::with('vultr/os', $changes))]);
 
     expect(cloudVultr()->images()->pluck('id')->all())->toBe(['1743', '2136']);
 })->with([
@@ -426,13 +449,13 @@ test('vultr skips systems it does not provision', function (array $changes) {
 ]);
 
 test('vultr keeps a system whose id is given as digits', function () {
-    Http::fake(['api.vultr.com/v2/os*' => Http::response(cloudVultrFixture('os', ['os.0.id' => '2284']))]);
+    Http::fake(['api.vultr.com/v2/os*' => Http::response(CloudFixtures::with('vultr/os', ['os.0.id' => '2284']))]);
 
     expect(cloudVultr()->images()->first()->id)->toBe('2284');
 });
 
 test('vultr reads the version out of the system name', function (string $family, string $name, string $version) {
-    Http::fake(['api.vultr.com/v2/os*' => Http::response(cloudVultrFixture('os', ['os.0.family' => $family, 'os.0.name' => $name]))]);
+    Http::fake(['api.vultr.com/v2/os*' => Http::response(CloudFixtures::with('vultr/os', ['os.0.family' => $family, 'os.0.name' => $name]))]);
 
     $image = cloudVultr()->images()->first();
 
@@ -466,6 +489,9 @@ test('vultr reads a list that is not a list as unavailable', function (string $c
     'regions that are null' => ['regions', 'regions', null],
     'plans that are text' => ['sizes', 'plans', 'none'],
     'systems that are an object' => ['images', 'os', ['ubuntu' => ['id' => 2284]]],
+    'regions that are an empty object' => ['regions', 'regions', new stdClass],
+    'plans that are an empty object' => ['sizes', 'plans', new stdClass],
+    'systems that are an empty object' => ['images', 'os', new stdClass],
 ]);
 
 test('vultr fails a catalog read when a later page lacks the list', function () {
@@ -513,9 +539,9 @@ test('vultr adopts a key whose body matches whatever its comment', function () {
 });
 
 test('vultr adopts the key that carries the same body, not just the first one listed', function (string $held) {
-    $body = cloudVultrFixture('ssh_keys', ['ssh_keys.0.ssh_key' => $held]);
+    $body = CloudFixtures::with('vultr/ssh_keys', ['ssh_keys.0.ssh_key' => $held]);
     $mine = $body['ssh_keys'][0];
-    $elsewhere = cloudVultrFixture('ssh_keys', [
+    $elsewhere = CloudFixtures::with('vultr/ssh_keys', [
         'ssh_keys.0.id' => '7c2f9a10-3d4e-4b58-8a61-0e9f1b2c3d4e',
         'ssh_keys.0.ssh_key' => cloudVultrOtherKey(),
     ])['ssh_keys'][0];
@@ -536,7 +562,7 @@ test('vultr adopts the key that carries the same body, not just the first one li
 
 test('vultr looks for a key on every page before it uploads one', function () {
     $held = CloudFixtures::json('vultr/ssh_keys')['ssh_keys'];
-    $elsewhere = cloudVultrFixture('ssh_keys', [
+    $elsewhere = CloudFixtures::with('vultr/ssh_keys', [
         'ssh_keys.0.id' => '7c2f9a10-3d4e-4b58-8a61-0e9f1b2c3d4e',
         'ssh_keys.0.ssh_key' => cloudVultrOtherKey(),
     ])['ssh_keys'];
@@ -574,7 +600,7 @@ test('vultr uploads a key it does not hold', function () {
 
 test('vultr uploads a key when the account holds only other keys', function () {
     Http::fake([
-        'api.vultr.com/v2/ssh-keys?*' => Http::response(cloudVultrFixture('ssh_keys', ['ssh_keys.0.ssh_key' => cloudVultrOtherKey()])),
+        'api.vultr.com/v2/ssh-keys?*' => Http::response(CloudFixtures::with('vultr/ssh_keys', ['ssh_keys.0.ssh_key' => cloudVultrOtherKey()])),
         'api.vultr.com/v2/ssh-keys' => Http::response(CloudFixtures::json('vultr/ssh_key'), 201),
     ]);
 
@@ -585,7 +611,7 @@ test('vultr uploads a key when the account holds only other keys', function () {
 
 test('vultr does not adopt a key that only looks like the one it wants', function (mixed $listed) {
     Http::fake([
-        'api.vultr.com/v2/ssh-keys?*' => Http::response(cloudVultrFixture('ssh_keys', ['ssh_keys.0.ssh_key' => $listed])),
+        'api.vultr.com/v2/ssh-keys?*' => Http::response(CloudFixtures::with('vultr/ssh_keys', ['ssh_keys.0.ssh_key' => $listed])),
         'api.vultr.com/v2/ssh-keys' => Http::response(CloudFixtures::json('vultr/ssh_key'), 201),
     ]);
 
@@ -628,6 +654,7 @@ test('vultr does not upload a second key because a lookup it could not read', fu
 })->with([
     'a json object without a list' => ['{"unexpected":true}', ['Content-Type' => 'application/json']],
     'a list that is an object' => ['{"ssh_keys":{"a":1}}', ['Content-Type' => 'application/json']],
+    'a list that is an empty object' => ['{"ssh_keys":{}}', ['Content-Type' => 'application/json']],
     'an html page' => ['<html><body>Gateway</body></html>', ['Content-Type' => 'text/html']],
     'nothing at all' => ['', []],
 ]);
@@ -699,8 +726,8 @@ test('vultr never keeps the default password', function () {
 test('vultr drops a default password wherever an answer carries one', function () {
     $password = 'v5{Ex4mple}Pass';
     Http::fake([
-        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(cloudVultrFixture('instance-ready', ['instance.default_password' => $password])),
-        'api.vultr.com/v2/instances?*' => Http::response(cloudVultrFixture('instances-tagged', ['instances.0.default_password' => $password])),
+        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::with('vultr/instance-ready', ['instance.default_password' => $password])),
+        'api.vultr.com/v2/instances?*' => Http::response(CloudFixtures::with('vultr/instances-tagged', ['instances.0.default_password' => $password])),
     ]);
     $api = cloudVultr();
 
@@ -736,7 +763,7 @@ test('vultr is only ready once the os reports ok', function () {
 });
 
 test('vultr maps every instance state', function (?string $status, ?string $power, ?string $server, CloudInstanceState $state) {
-    Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(cloudVultrFixture('instance-ready', [
+    Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::with('vultr/instance-ready', [
         'instance.status' => $status,
         'instance.power_status' => $power,
         'instance.server_status' => $server,
@@ -756,8 +783,12 @@ test('vultr maps every instance state', function (?string $status, ?string $powe
     'active, running and the os not reporting yet' => ['active', 'running', 'none', CloudInstanceState::Starting],
     'active, running and the instance locked' => ['active', 'running', 'locked', CloudInstanceState::Starting],
     'active, running and no server status at all' => ['active', 'running', null, CloudInstanceState::Starting],
-    'suspended' => ['suspended', 'running', 'ok', CloudInstanceState::Unknown],
+    'suspended while the power reads running' => ['suspended', 'running', 'ok', CloudInstanceState::Unknown],
+    'suspended while the power reads stopped' => ['suspended', 'stopped', 'ok', CloudInstanceState::Unknown],
+    'suspended while the power reads stopped and the os is not reporting' => ['suspended', 'stopped', 'none', CloudInstanceState::Unknown],
+    'suspended with no power status' => ['suspended', null, 'ok', CloudInstanceState::Unknown],
     'a status it has not heard of' => ['something-new', 'running', 'ok', CloudInstanceState::Unknown],
+    'a status it has not heard of while the power reads stopped' => ['something-new', 'stopped', 'ok', CloudInstanceState::Stopped],
     'no status' => [null, 'running', 'ok', CloudInstanceState::Unknown],
     'active and no power status' => ['active', null, 'ok', CloudInstanceState::Unknown],
     'active and a power status it has not heard of' => ['active', 'rebooting', 'ok', CloudInstanceState::Unknown],
@@ -772,7 +803,7 @@ test('vultr reads an instance with none of its states as unknown', function () {
 });
 
 test('vultr reads an instance with no usable public address as not ready', function (mixed $address) {
-    Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(cloudVultrFixture('instance-ready', ['instance.main_ip' => $address]))]);
+    Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::with('vultr/instance-ready', ['instance.main_ip' => $address]))]);
 
     $found = cloudVultr()->find(cloudVultrInstanceId());
 
@@ -790,7 +821,7 @@ test('vultr reads an instance with no usable public address as not ready', funct
 ]);
 
 test('vultr reads an instance that is not there as nothing', function () {
-    Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => cloudVultrMissing()]);
+    Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::json('vultr/error-not-found'), 404)]);
 
     expect(cloudVultr()->find(cloudVultrInstanceId()))->toBeNull();
 
@@ -799,8 +830,8 @@ test('vultr reads an instance that is not there as nothing', function () {
 
 test('vultr reads the size of an instance from its plan', function () {
     Http::fake(['api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::sequence()
-        ->push(cloudVultrFixture('instance-ready', ['instance.plan' => 'vc2-2c-4gb']))
-        ->push(cloudVultrFixture('instance-ready', ['instance.plan' => '']))]);
+        ->push(CloudFixtures::with('vultr/instance-ready', ['instance.plan' => 'vc2-2c-4gb']))
+        ->push(CloudFixtures::with('vultr/instance-ready', ['instance.plan' => '']))]);
     $api = cloudVultr();
 
     expect($api->find(cloudVultrInstanceId())->size)->toBe('vc2-2c-4gb')
@@ -837,13 +868,13 @@ test('vultr takes the first instance when a tag matches several', function () {
 });
 
 test('vultr returns the instance that carries the tag itself, not just the first one listed', function () {
-    $body = cloudVultrFixture('instances-tagged');
+    $body = CloudFixtures::with('vultr/instances-tagged');
     $mine = $body['instances'][0];
-    $elsewhere = cloudVultrFixture('instances-tagged', [
+    $elsewhere = CloudFixtures::with('vultr/instances-tagged', [
         'instances.0.id' => '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
         'instances.0.tags' => ['coresmith', 'coresmith-01jother'],
     ])['instances'][0];
-    $untagged = cloudVultrFixture('instances-tagged', [
+    $untagged = CloudFixtures::with('vultr/instances-tagged', [
         'instances.0.id' => '1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e',
         'instances.0.tags' => [],
     ])['instances'][0];
@@ -854,7 +885,7 @@ test('vultr returns the instance that carries the tag itself, not just the first
 });
 
 test('vultr fails a tag lookup that lists instances but none that carries the tag, so an unrelated instance is never handed back', function (array $changes) {
-    Http::fake(['api.vultr.com/v2/instances*' => Http::response(cloudVultrFixture('instances-tagged', $changes))]);
+    Http::fake(['api.vultr.com/v2/instances*' => Http::response(CloudFixtures::with('vultr/instances-tagged', $changes))]);
 
     expect(fn() => cloudVultr()->findTagged(cloudVultrTag()))->toThrow(function (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unavailable)
@@ -871,8 +902,22 @@ test('vultr fails a tag lookup that lists instances but none that carries the ta
     'no tags' => [['instances.0.tags' => []]],
     'tags given as text' => [['instances.0.tags' => 'coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d']],
     'tags that are null' => [['instances.0.tags' => null]],
+    'a flag among the tags' => [['instances.0.tags' => [true]]],
+    'a list among the tags' => [['instances.0.tags' => [['coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d']]]],
     'only the old single tag field' => [['instances.0.tags' => [], 'instances.0.tag' => 'coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d']],
 ]);
+
+test('vultr does not take an empty object for an empty list of instances', function () {
+    Http::fake(['api.vultr.com/v2/instances*' => Http::response('{"instances":{}}', 200, ['Content-Type' => 'application/json'])]);
+
+    expect(fn() => cloudVultr()->findTagged(cloudVultrTag()))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->getMessage())->toBe('Vultr had a problem answering. Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+});
 
 test('vultr resizes by changing the plan and reboots, halts and starts', function () {
     Http::fake([
@@ -933,10 +978,27 @@ test('vultr deletes an instance and a key it holds', function () {
     ]);
 });
 
+test('vultr does not take a not found page for an instance or key that is gone', function (string $call, string $id) {
+    Http::fake(['api.vultr.com/v2/*' => Http::response('<html><body>404 Not Found</body></html>', 404, ['Content-Type' => 'text/html'])]);
+
+    expect(fn() => cloudVultr()->{$call}($id))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(404)
+            ->and($e->getMessage())->toBe('Vultr had a problem answering (HTTP 404). Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'a lookup' => ['find', 'cb676a46-66fd-4dfb-b839-443f2e6c0b60'],
+    'a destroy' => ['destroy', 'cb676a46-66fd-4dfb-b839-443f2e6c0b60'],
+    'a key delete' => ['deleteKey', 'd8a4c1f3-52b6-4e7d-9a30-6c1b8e2f4d57'],
+]);
+
 test('vultr treats an instance that is already gone as destroyed', function () {
     Http::fake([
-        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => cloudVultrMissing(),
-        'api.vultr.com/v2/ssh-keys/d8a4c1f3-52b6-4e7d-9a30-6c1b8e2f4d57' => cloudVultrMissing(),
+        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::json('vultr/error-not-found'), 404),
+        'api.vultr.com/v2/ssh-keys/d8a4c1f3-52b6-4e7d-9a30-6c1b8e2f4d57' => Http::response(CloudFixtures::json('vultr/error-not-found'), 404),
     ]);
     $api = cloudVultr();
 
@@ -990,8 +1052,8 @@ test('vultr keeps an id inside its own path segment', function (string $call, ar
 
 test('vultr accepts an id however its uuid is cased', function (string $id) {
     Http::fake([
-        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(cloudVultrFixture('instance-ready', ['instance.id' => $id])),
-        'api.vultr.com/v2/ssh-keys?*' => Http::response(cloudVultrFixture('ssh_keys', ['ssh_keys.0.id' => $id])),
+        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::with('vultr/instance-ready', ['instance.id' => $id])),
+        'api.vultr.com/v2/ssh-keys?*' => Http::response(CloudFixtures::with('vultr/ssh_keys', ['ssh_keys.0.id' => $id])),
     ]);
     $api = cloudVultr();
 
@@ -1006,12 +1068,12 @@ test('vultr accepts an id however its uuid is cased', function (string $id) {
 test('vultr reads an id that is not a uuid as unavailable, so the tag is checked before anything is made again', function (string $call, mixed $id) {
     Http::fake([
         'api.vultr.com/v2/ssh-keys?*' => Http::response($call === 'adopt'
-            ? cloudVultrFixture('ssh_keys', ['ssh_keys.0.id' => $id])
+            ? CloudFixtures::with('vultr/ssh_keys', ['ssh_keys.0.id' => $id])
             : CloudFixtures::json('vultr/ssh_keys-empty')),
-        'api.vultr.com/v2/ssh-keys' => Http::response(cloudVultrFixture('ssh_key', ['ssh_key.id' => $id]), 201),
-        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(cloudVultrFixture('instance-ready', ['instance.id' => $id])),
-        'api.vultr.com/v2/instances?*' => Http::response(cloudVultrFixture('instances-tagged', ['instances.0.id' => $id])),
-        'api.vultr.com/v2/instances' => Http::response(cloudVultrFixture('instance-pending', ['instance.id' => $id]), 202),
+        'api.vultr.com/v2/ssh-keys' => Http::response(CloudFixtures::with('vultr/ssh_key', ['ssh_key.id' => $id]), 201),
+        'api.vultr.com/v2/instances/cb676a46-66fd-4dfb-b839-443f2e6c0b60' => Http::response(CloudFixtures::with('vultr/instance-ready', ['instance.id' => $id])),
+        'api.vultr.com/v2/instances?*' => Http::response(CloudFixtures::with('vultr/instances-tagged', ['instances.0.id' => $id])),
+        'api.vultr.com/v2/instances' => Http::response(CloudFixtures::with('vultr/instance-pending', ['instance.id' => $id]), 202),
     ]);
     $api = cloudVultr();
     $attempt = match ($call) {

@@ -13,6 +13,7 @@ use App\Enums\CloudProviderType;
 use App\Exceptions\CloudProviderException;
 use App\Services\Deployment\LogSanitizer;
 use Closure;
+use DateTimeZone;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -21,6 +22,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use LogicException;
+use stdClass;
 use Throwable;
 
 abstract class HttpCloudApi
@@ -31,7 +33,7 @@ abstract class HttpCloudApi
 
     public const MAX_PAGES = 20;
 
-    protected const ID_PATTERN = '/\A[1-9]\d*\z/';
+    protected const ID_PATTERN = '/\A[1-9]\d*\z/D';
 
     private const READ_ATTEMPTS = 3;
 
@@ -95,7 +97,13 @@ abstract class HttpCloudApi
     {
         $response = $this->send(fn(): Response => $this->reading($headers)->get($path, $query));
 
-        return $response->status() === 404 ? null : $this->parsed($this->guard($response));
+        if ($response->status() === 404) {
+            $this->requireJsonObject($response);
+
+            return null;
+        }
+
+        return $this->parsed($this->guard($response));
     }
 
     /**
@@ -118,9 +126,13 @@ abstract class HttpCloudApi
     {
         $response = $this->send(fn(): Response => $this->reading([])->delete($path));
 
-        if ($response->status() !== 404) {
-            $this->guard($response);
+        if ($response->status() === 404) {
+            $this->requireJsonObject($response);
+
+            return;
         }
+
+        $this->guard($response);
     }
 
     /**
@@ -179,8 +191,9 @@ abstract class HttpCloudApi
     protected function listed(Response $response, string $key): array
     {
         $items = $response->json($key);
+        $declared = data_get(json_decode($response->body()), $key);
 
-        return is_array($items) && array_is_list($items) ? $items : throw $this->unusable();
+        return is_array($items) && is_array($declared) ? $items : throw $this->unusable();
     }
 
     protected function identifier(mixed $id): string
@@ -210,6 +223,16 @@ abstract class HttpCloudApi
         throw $this->unusable();
     }
 
+    /**
+     * @param  array<string, mixed>  $entry
+     */
+    protected static function carries(array $entry, string $tag): bool
+    {
+        $tags = $entry['tags'] ?? null;
+
+        return is_array($tags) && in_array($tag, $tags, true);
+    }
+
     protected function unusable(): CloudProviderException
     {
         return new CloudProviderException(CloudFailure::Unavailable, $this->type(), 'answered without the data it was asked for');
@@ -218,6 +241,24 @@ abstract class HttpCloudApi
     protected static function text(mixed $value): ?string
     {
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected static function texts(mixed $values): array
+    {
+        return is_array($values)
+            ? array_values(array_filter($values, fn(mixed $value): bool => self::text($value) !== null))
+            : [];
+    }
+
+    protected static function hasPassed(mixed $time, bool $whenUnreadable): bool
+    {
+        $text = self::text($time);
+        $at = $text === null ? false : date_create_immutable($text, new DateTimeZone('UTC'));
+
+        return $at === false ? $whenUnreadable : $at->getTimestamp() <= now()->getTimestamp();
     }
 
     /**
@@ -258,12 +299,12 @@ abstract class HttpCloudApi
         return $payload === [] ? (object) [] : $payload;
     }
 
-    private function send(Closure $call): Response
+    private function send(#[\SensitiveParameter] Closure $call): Response
     {
         try {
             return $call();
         } catch (ConnectionException $e) {
-            throw new CloudProviderException(CloudFailure::Unreachable, $this->type(), previous: $e);
+            throw new CloudProviderException(CloudFailure::Unreachable, $this->type(), previous: new ConnectionException($e->getMessage()));
         }
     }
 
@@ -283,6 +324,13 @@ abstract class HttpCloudApi
         }
 
         return $response;
+    }
+
+    private function requireJsonObject(Response $response): void
+    {
+        if (!json_decode($response->body()) instanceof stdClass) {
+            throw new CloudProviderException(CloudFailure::Unavailable, $this->type(), 'answered without JSON', $response->status());
+        }
     }
 
     private function failure(Response $response): CloudProviderException

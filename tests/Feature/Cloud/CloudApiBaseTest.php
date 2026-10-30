@@ -15,6 +15,7 @@ use App\Services\Cloud\CloudRegion;
 use App\Services\Cloud\CloudServerSpec;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Providers\HttpCloudApi;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterval;
 use GuzzleHttp\Psr7\Response as GuzzleResponse;
 use Illuminate\Http\Client\ConnectionException;
@@ -22,8 +23,14 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use Tests\Support\TraceSecrets;
 
 beforeEach(fn() => Http::preventStrayRequests());
+
+function cloudBaseSecret(): string
+{
+    return 'Zq7' . str_repeat('x9', 20);
+}
 
 function cloudBaseApi(string $token = 'secret-token-123'): object
 {
@@ -49,6 +56,11 @@ function cloudBaseApi(string $token = 'secret-token-123'): object
             return $this->postJson('/servers', ['name' => 'x']);
         }
 
+        public function writeSecret(): Response
+        {
+            return $this->postJson('/servers', ['root_pass' => cloudBaseSecret()]);
+        }
+
         public function call(string $method, mixed ...$arguments): mixed
         {
             return $this->{$method}(...$arguments);
@@ -70,7 +82,7 @@ function cloudBaseUuidApi(): object
 {
     return new class('secret-token-123') extends HttpCloudApi
     {
-        protected const ID_PATTERN = '/\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z/';
+        protected const ID_PATTERN = '/\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z/D';
 
         public function type(): CloudProviderType
         {
@@ -167,8 +179,56 @@ test('a provider that cannot be reached is unreachable', function () {
     } catch (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unreachable)
             ->and($e->getMessage())->toBe("Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check this panel can make outbound HTTPS requests, then try again.")
-            ->and($e->getPrevious())->toBeInstanceOf(ConnectionException::class);
+            ->and($e->getPrevious())->toBeInstanceOf(ConnectionException::class)
+            ->and($e->getPrevious()->getPrevious())->toBeNull();
     }
+});
+
+test('a write that cannot connect keeps its payload out of every exception it throws', function () {
+    $reason = 'cURL error 28: Operation timed out after 10001 milliseconds with 0 bytes received';
+    Http::fake(['api.hetzner.cloud/*' => Http::failedConnection($reason)]);
+
+    $error = TraceSecrets::thrownBy(fn() => cloudBaseApi()->writeSecret());
+
+    expect($error)->toBeInstanceOf(CloudProviderException::class)
+        ->and($error->failure)->toBe(CloudFailure::Unreachable)
+        ->and($error->getPrevious())->toBeInstanceOf(ConnectionException::class)
+        ->and($error->getPrevious()->getMessage())->toBe($reason)
+        ->and($error->getPrevious()->getPrevious())->toBeNull()
+        ->and(TraceSecrets::held($error, cloudBaseSecret()))->toBeFalse();
+    Http::assertSentCount(1);
+});
+
+test('a write the provider refuses keeps its payload out of the exception too', function () {
+    Http::fake(['api.hetzner.cloud/*' => Http::response(['error' => ['message' => 'nope']], 422)]);
+
+    $error = TraceSecrets::thrownBy(fn() => cloudBaseApi()->writeSecret());
+
+    expect($error)->toBeInstanceOf(CloudProviderException::class)
+        ->and($error->failure)->toBe(CloudFailure::Refused)
+        ->and(TraceSecrets::held($error, cloudBaseSecret()))->toBeFalse();
+});
+
+test('the check for a secret in an exception finds one in an argument, in a closure and in a previous exception', function () {
+    $inArray = TraceSecrets::thrownBy(fn() => (function (array $payload) {
+        throw new RuntimeException('boom');
+    })(['root_pass' => cloudBaseSecret()]));
+    $inClosure = TraceSecrets::thrownBy(function () {
+        $kept = cloudBaseSecret();
+
+        (function (Closure $call) {
+            throw new RuntimeException('boom');
+        })(fn() => $kept);
+    });
+    $hidden = TraceSecrets::thrownBy(fn() => (function (#[SensitiveParameter] array $payload) {
+        throw new RuntimeException('boom');
+    })(['root_pass' => cloudBaseSecret()]));
+    $inPrevious = new RuntimeException('outer', 0, $inArray);
+
+    expect(TraceSecrets::held($inArray, cloudBaseSecret()))->toBeTrue()
+        ->and(TraceSecrets::held($inClosure, cloudBaseSecret()))->toBeTrue()
+        ->and(TraceSecrets::held($inPrevious, cloudBaseSecret()))->toBeTrue()
+        ->and(TraceSecrets::held($hidden, cloudBaseSecret()))->toBeFalse();
 });
 
 test('reads are retried after a server error but a write is sent once', function () {
@@ -377,7 +437,7 @@ test('a read is not tried again when the answer will not change', function (int 
 })->with([400, 401, 403, 404, 409, 422]);
 
 test('a lookup answers null for a missing resource and the response otherwise', function () {
-    Http::fakeSequence('api.hetzner.cloud/v1/servers/7')->pushStatus(404)->push(['server' => ['id' => 7]]);
+    Http::fakeSequence('api.hetzner.cloud/v1/servers/7')->push(['error' => ['message' => 'not found']], 404)->push(['server' => ['id' => 7]]);
     $api = cloudBaseApi();
 
     expect($api->call('getJsonOrNull', '/servers/7'))->toBeNull()
@@ -385,6 +445,43 @@ test('a lookup answers null for a missing resource and the response otherwise', 
 
     Http::assertSentCount(2);
 });
+
+test('a missing resource counts as gone only when the provider answers with a json object', function (string $body, array $headers, bool $gone) {
+    Http::fake(['api.hetzner.cloud/v1/servers/7' => Http::response($body, 404, $headers)]);
+    $api = cloudBaseApi();
+
+    if ($gone) {
+        expect($api->call('getJsonOrNull', '/servers/7'))->toBeNull();
+
+        $api->call('deleteOrGone', '/servers/7');
+        Http::assertSentCount(2);
+
+        return;
+    }
+
+    $unavailable = function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(404)
+            ->and($e->detail)->toBe('answered without JSON')
+            ->and($e->getMessage())->toBe('Hetzner Cloud had a problem answering (HTTP 404). Try again in a minute.');
+    };
+
+    expect(fn() => $api->call('getJsonOrNull', '/servers/7'))->toThrow($unavailable)
+        ->and(fn() => $api->call('deleteOrGone', '/servers/7'))->toThrow($unavailable);
+
+    Http::assertSentCount(2);
+})->with([
+    'an error object' => ['{"error":{"code":"not_found","message":"not found"}}', ['Content-Type' => 'application/json'], true],
+    'an empty object' => ['{}', ['Content-Type' => 'application/json'], true],
+    'an object sent without a content type' => ['{"message":"not found"}', [], true],
+    'an empty list' => ['[]', ['Content-Type' => 'application/json'], false],
+    'a list of errors' => ['[{"message":"not found"}]', ['Content-Type' => 'application/json'], false],
+    'a bare word' => ['"not found"', ['Content-Type' => 'application/json'], false],
+    'null' => ['null', ['Content-Type' => 'application/json'], false],
+    'an html page' => ['<html><body>404 Not Found</body></html>', ['Content-Type' => 'text/html'], false],
+    'nothing at all' => ['', [], false],
+]);
 
 test('a lookup still fails for anything but a missing resource', function (int $status, CloudFailure $failure) {
     Http::fake(['api.hetzner.cloud/v1/servers/7' => Http::response(['error' => ['message' => 'nope']], $status)]);
@@ -505,6 +602,7 @@ test('a page without its list is unavailable, so a catalog is never kept as empt
     'nothing in its place' => [['items' => null]],
     'text in its place' => [['items' => 'none']],
     'an object in its place' => [['items' => ['a' => 1]]],
+    'an empty object in its place' => [['items' => new stdClass]],
 ]);
 
 test('a later page without its list fails the whole read', function () {
@@ -549,6 +647,10 @@ test('a list is read out of an answer, and anything else in its place is unavail
     'nothing in its place' => ['{"items":null}', null],
     'text in its place' => ['{"items":"x"}', null],
     'an object in its place' => ['{"items":{"a":1}}', null],
+    'an empty object in its place' => ['{"items":{}}', null],
+    'an empty object with room around it' => ["{\n  \"items\": { }\n}", null],
+    'an empty object after an empty list' => ['{"other":[],"items":{}}', null],
+    'a list after an empty object' => ['{"other":{},"items":[1]}', [1]],
 ]);
 
 test('an id read from an answer is a whole number, given as a number or as digits', function (mixed $id, ?string $expected) {
@@ -662,6 +764,87 @@ test('a lookup that lists entries but none that matches means the provider ignor
     'entries that are not objects' => [['oops', null, 42]],
 ]);
 
+test('a tag is carried only by an entry that lists it among its own tags', function (array $entry, bool $carried) {
+    expect(cloudBaseApi()->call('carries', $entry, 'mine'))->toBe($carried);
+})->with([
+    'listed among others' => [['tags' => ['coresmith', 'mine']], true],
+    'listed alone' => [['tags' => ['mine']], true],
+    'another tag' => [['tags' => ['coresmith', 'other']], false],
+    'the tag with more after it' => [['tags' => ['mine-2']], false],
+    'the tag in another case' => [['tags' => ['MINE']], false],
+    'no tags' => [['tags' => []], false],
+    'no tags field' => [['id' => 1], false],
+    'tags given as text' => [['tags' => 'mine'], false],
+    'tags that are null' => [['tags' => null], false],
+    'a flag among the tags' => [['tags' => [true]], false],
+    'a number among the tags' => [['tags' => [0]], false],
+    'a list among the tags' => [['tags' => [['mine']]], false],
+]);
+
+test('a list of texts keeps what is text and nothing else', function (mixed $values, array $expected) {
+    expect(cloudBaseApi()->call('texts', $values))->toBe($expected);
+})->with([
+    'texts' => [['fra', 'ewr'], ['fra', 'ewr']],
+    'texts among other things' => [['fra', '', null, 42, ['ewr'], 'ewr', true], ['fra', 'ewr']],
+    'a list with gaps' => [[3 => 'fra', 7 => 'ewr'], ['fra', 'ewr']],
+    'an object' => [['a' => 'fra', 'b' => 'ewr'], ['fra', 'ewr']],
+    'one text' => ['fra', []],
+    'nothing' => [null, []],
+    'an empty list' => [[], []],
+]);
+
+test('a time has passed once it is not in the future', function (string $time, bool $passed, bool $whenUnreadable) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-21 12:00:00'));
+
+    expect(cloudBaseApi()->call('hasPassed', $time, $whenUnreadable))->toBe($passed);
+})->with([
+    'a second ago' => ['2026-10-21T11:59:59+00:00', true],
+    'this very second' => ['2026-10-21T12:00:00+00:00', true],
+    'a second away' => ['2026-10-21T12:00:01+00:00', false],
+    'a year ago' => ['2025-10-21T12:00:00+00:00', true],
+    'a year away' => ['2027-10-21T12:00:00+00:00', false],
+    'an offset time just passed' => ['2026-10-21T13:59:59+02:00', true],
+    'an offset time just ahead' => ['2026-10-21T14:00:01+02:00', false],
+    'a time without a zone just passed' => ['2026-10-21T11:59:59', true],
+    'a time without a zone just ahead' => ['2026-10-21T12:00:01', false],
+])->with([true, false]);
+
+test('a time it cannot read answers what the caller asked for', function (mixed $time, bool $whenUnreadable) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-21 12:00:00'));
+
+    expect(cloudBaseApi()->call('hasPassed', $time, $whenUnreadable))->toBe($whenUnreadable);
+})->with([
+    'text that is not a date' => ['soon'],
+    'an empty text' => [''],
+    'nothing' => [null],
+    'a number' => [20260101],
+    'a flag' => [true],
+    'a list' => [['2026-01-01T00:00:00+00:00']],
+])->with([true, false]);
+
+test('a time without a zone is read as universal time, whatever the server clock is set to', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-10-21 12:00:00'));
+    $zone = date_default_timezone_get();
+    date_default_timezone_set('Pacific/Auckland');
+
+    try {
+        $api = cloudBaseApi();
+
+        expect($api->call('hasPassed', '2026-10-21T12:00:01', false))->toBeFalse()
+            ->and($api->call('hasPassed', '2026-10-21T11:59:59', false))->toBeTrue();
+    } finally {
+        date_default_timezone_set($zone);
+    }
+});
+
+test('the default id pattern ends with the D modifier, as every pattern here does', function () {
+    $pattern = (string) (new ReflectionClassConstant(HttpCloudApi::class, 'ID_PATTERN'))->getValue();
+
+    expect(substr($pattern, -2))->toBe('/D')
+        ->and(preg_match($pattern, '4711'))->toBe(1)
+        ->and(preg_match($pattern, "4711\n"))->toBe(0);
+});
+
 test('an entry carries its numbers when each one is a number or digits', function (array $entry, bool $expected) {
     expect(cloudBaseApi()->call('hasNumbers', $entry, 'cores', 'memory', 'disk'))->toBe($expected);
 })->with([
@@ -757,19 +940,34 @@ test('every failure has its own copy for tasks and for token forms', function (C
     'unreachable' => [CloudFailure::Unreachable, null, "Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check this panel can make outbound HTTPS requests, then try again.", "Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check this panel can make outbound HTTPS requests, then try again."],
 ]);
 
-test('the copy names the provider, its host and its own permission advice', function (CloudProviderType $provider, string $label, string $host, string $hint) {
+test('the copy names the provider, its host and its own permission advice', function (CloudProviderType $provider, string $label, string $host, string $hint, string $next) {
     $forbidden = cloudBaseFailure(CloudFailure::Forbidden, 'denied', 403, $provider);
     $unreachable = cloudBaseFailure(CloudFailure::Unreachable, null, null, $provider);
 
-    expect($forbidden->getMessage())->toBe("{$label} says this token isn't allowed to do that. {$label} said: denied. {$hint} Then replace the token in Settings → Team.")
+    expect($forbidden->getMessage())->toBe("{$label} says this token isn't allowed to do that. {$label} said: denied. {$hint} {$next}")
         ->and($forbidden->connectMessage())->toBe("{$label} accepted the token, but it isn't allowed to manage servers. {$label} said: denied. {$hint}")
         ->and($unreachable->getMessage())->toBe("Coresmith couldn't reach {$label} at {$host}. Check this panel can make outbound HTTPS requests, then try again.");
 })->with([
-    [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.'],
-    [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.'],
-    [CloudProviderType::Vultr, 'Vultr', 'api.vultr.com', "Allow this panel's IP address in Vultr's API access control."],
-    [CloudProviderType::Linode, 'Linode', 'api.linode.com', 'Give it read/write access to Linodes.'],
+    [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.', 'Then replace the token in Settings → Team.'],
+    [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.', 'Then replace the token in Settings → Team.'],
+    [CloudProviderType::Vultr, 'Vultr', 'api.vultr.com', "Allow this panel's IP address in Vultr's API access control.", 'Then try again.'],
+    [CloudProviderType::Linode, 'Linode', 'api.linode.com', 'Give it read/write access to Linodes and read access to Images.', 'Then replace the token in Settings → Team.'],
 ]);
+
+test('a vultr key refused for the panel address is told to allow the address, never to replace the key', function () {
+    $e = new CloudProviderException(CloudFailure::Forbidden, CloudProviderType::Vultr, 'Unauthorized IP address: 198.51.100.7', 401);
+
+    expect($e->getMessage())->toBe("Vultr says this token isn't allowed to do that. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control. Then try again.")
+        ->and($e->getMessage())->not->toContain('Settings')
+        ->and($e->getMessage())->not->toContain('replace')
+        ->and($e->connectMessage())->toBe("Vultr accepted the token, but it isn't allowed to manage servers. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control.");
+});
+
+test('the other providers still tell a forbidden token to be replaced', function (CloudProviderType $provider) {
+    $e = new CloudProviderException(CloudFailure::Forbidden, $provider, 'denied', 403);
+
+    expect($e->getMessage())->toEndWith(' Then replace the token in Settings → Team.');
+})->with([CloudProviderType::Hetzner, CloudProviderType::DigitalOcean, CloudProviderType::Linode]);
 
 test('a failure with no detail says nothing about what the provider said', function () {
     $e = cloudBaseFailure(CloudFailure::TokenRejected, null, 401);

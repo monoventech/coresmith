@@ -250,7 +250,7 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
             'x86',
             is_numeric($monthly) ? CloudPrice::fromNumber($monthly, 'USD') : null,
             [],
-            self::names($size['regions'] ?? null),
+            self::texts($size['regions'] ?? null),
         );
     }
 
@@ -291,26 +291,6 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
         }
 
         return null;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function names(mixed $values): array
-    {
-        return is_array($values)
-            ? array_values(array_filter($values, fn(mixed $value): bool => self::text($value) !== null))
-            : [];
-    }
-
-    /**
-     * @param  array<string, mixed>  $droplet
-     */
-    private static function carries(array $droplet, string $tag): bool
-    {
-        $tags = $droplet['tags'] ?? null;
-
-        return is_array($tags) && in_array($tag, $tags, true);
     }
 
     private static function state(mixed $status): CloudInstanceState

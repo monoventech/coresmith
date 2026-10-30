@@ -268,21 +268,14 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
         $flag = $entry['deprecated'] ?? null;
         $notice = $entry['deprecation'] ?? null;
 
-        return ($notice !== null && self::due(data_get($notice, 'unavailable_after')))
-            || (is_string($flag) && $flag !== '' && self::due($flag))
+        return ($notice !== null && self::hasPassed(data_get($notice, 'unavailable_after'), true))
+            || (is_string($flag) && $flag !== '' && self::hasPassed($flag, true))
             || ($flag === true && $notice === null);
     }
 
     private static function digest(mixed $fingerprint): ?string
     {
         return is_string($fingerprint) ? strtolower(str_replace(':', '', $fingerprint)) : null;
-    }
-
-    private static function due(mixed $time): bool
-    {
-        $at = is_string($time) ? strtotime($time) : false;
-
-        return $at === false || $at <= now()->getTimestamp();
     }
 
     private static function state(mixed $status): CloudInstanceState

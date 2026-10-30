@@ -99,6 +99,20 @@ test('each provider type names itself and where its token comes from', function 
     [CloudProviderType::Linode, 'Linode', 'api.linode.com'],
 ]);
 
+test('only vultr has keys without scopes, so only there is a refusal not fixed by a new token', function (CloudProviderType $type, bool $scoped) {
+    expect($type->hasScopedTokens())->toBe($scoped);
+})->with([
+    [CloudProviderType::Hetzner, true],
+    [CloudProviderType::DigitalOcean, true],
+    [CloudProviderType::Vultr, false],
+    [CloudProviderType::Linode, true],
+]);
+
+test('the linode help asks for read access to images as well as read and write access to linodes', function () {
+    expect(CloudProviderType::Linode->tokenHelp())->toContain('read/write access to Linodes and read access to Images')
+        ->and(CloudProviderType::Linode->permissionHint())->toBe('Give it read/write access to Linodes and read access to Images.');
+});
+
 test('a configured api base url is used without its trailing slash', function () {
     config(['services.hetzner.api_url' => 'http://127.0.0.1:9/v1/']);
 

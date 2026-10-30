@@ -12,7 +12,6 @@ use App\Services\Cloud\CloudServerSpec;
 use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Cloud\Providers\HetznerApi;
 use App\Services\Cloud\Providers\HttpCloudApi;
-use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\CloudFixtures;
@@ -37,22 +36,6 @@ function cloudHetznerKey(): string
 function cloudHetznerSpec(?string $keyId = '2324'): CloudServerSpec
 {
     return new CloudServerSpec('outpost-02', 'fsn1', 'cx22', 'ubuntu-24.04', cloudHetznerTag(), cloudHetznerKey(), $keyId);
-}
-
-function cloudHetznerMissing(): PromiseInterface
-{
-    return Http::response(['error' => ['code' => 'not_found', 'message' => 'server with ID 4711 not found', 'details' => []]], 404);
-}
-
-function cloudHetznerFixture(string $name, array $changes = []): array
-{
-    $body = CloudFixtures::json("hetzner/{$name}");
-
-    foreach ($changes as $path => $value) {
-        data_set($body, $path, $value);
-    }
-
-    return $body;
 }
 
 function cloudHetznerNotice(bool $inForce = true): array
@@ -150,7 +133,7 @@ test('hetzner reads every page of server types and skips deprecated ones', funct
 });
 
 test('hetzner skips a size once its deprecation has passed', function () {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-1', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-1', [
         'server_types.0.deprecation' => cloudHetznerNotice(),
         'meta.pagination.next_page' => null,
     ]))]);
@@ -159,7 +142,7 @@ test('hetzner skips a size once its deprecation has passed', function () {
 });
 
 test('hetzner keeps a size whose deprecation is only announced', function () {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-1', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-1', [
         'server_types.0.deprecated' => true,
         'server_types.0.deprecation' => cloudHetznerNotice(false),
         'meta.pagination.next_page' => null,
@@ -169,7 +152,7 @@ test('hetzner keeps a size whose deprecation is only announced', function () {
 });
 
 test('hetzner skips a size whose deprecation has no date it can read', function (array $changes) {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-1', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-1', [
         ...$changes,
         'meta.pagination.next_page' => null,
     ]))]);
@@ -183,7 +166,7 @@ test('hetzner skips a size whose deprecation has no date it can read', function 
 ]);
 
 test('hetzner offers a size only in the locations that are not past their deprecation', function () {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-2', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-2', [
         'server_types.0.locations.1.deprecation' => cloudHetznerNotice(),
         'meta.pagination.next_page' => null,
     ]))]);
@@ -196,7 +179,7 @@ test('hetzner offers a size only in the locations that are not past their deprec
 });
 
 test('hetzner keeps a location whose deprecation is only announced', function () {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-2', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-2', [
         'server_types.0.locations.1.deprecation' => cloudHetznerNotice(false),
         'meta.pagination.next_page' => null,
     ]))]);
@@ -205,7 +188,7 @@ test('hetzner keeps a location whose deprecation is only announced', function ()
 });
 
 test('hetzner skips a size that leaves out how big it is or what it runs on', function (string $field) {
-    $page = cloudHetznerFixture('server_types-1', ['meta.pagination.next_page' => null]);
+    $page = CloudFixtures::with('hetzner/server_types-1', ['meta.pagination.next_page' => null]);
     unset($page['server_types'][0][$field]);
     Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response($page)]);
 
@@ -213,7 +196,7 @@ test('hetzner skips a size that leaves out how big it is or what it runs on', fu
 })->with(['cores', 'memory', 'disk', 'architecture']);
 
 test('hetzner skips a size whose numbers are not numbers', function (string $field, mixed $value) {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-1', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-1', [
         "server_types.0.{$field}" => $value,
         'meta.pagination.next_page' => null,
     ]))]);
@@ -229,7 +212,7 @@ test('hetzner skips a size whose numbers are not numbers', function (string $fie
 ]);
 
 test('hetzner keeps a size that reports its numbers as digits', function () {
-    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(cloudHetznerFixture('server_types-1', [
+    Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response(CloudFixtures::with('hetzner/server_types-1', [
         'server_types.0.cores' => '2',
         'server_types.0.memory' => '4.0',
         'server_types.0.disk' => '40',
@@ -242,7 +225,7 @@ test('hetzner keeps a size that reports its numbers as digits', function () {
 });
 
 test('hetzner falls back to the priced locations when a size lists none', function () {
-    $page = cloudHetznerFixture('server_types-2', ['meta.pagination.next_page' => null]);
+    $page = CloudFixtures::with('hetzner/server_types-2', ['meta.pagination.next_page' => null]);
     unset($page['server_types'][0]['locations']);
     Http::fake(['api.hetzner.cloud/v1/server_types*' => Http::response($page)]);
 
@@ -271,8 +254,8 @@ test('hetzner groups system images by name across architectures', function () {
 });
 
 test('hetzner reads every page of images', function () {
-    $first = cloudHetznerFixture('images', ['meta.pagination.next_page' => 2]);
-    $second = cloudHetznerFixture('images', ['meta.pagination.page' => 2, 'meta.pagination.previous_page' => 1]);
+    $first = CloudFixtures::with('hetzner/images', ['meta.pagination.next_page' => 2]);
+    $second = CloudFixtures::with('hetzner/images', ['meta.pagination.page' => 2, 'meta.pagination.previous_page' => 1]);
     $first['images'] = array_slice($first['images'], 0, 2);
     $second['images'] = array_slice($second['images'], 2);
     Http::fake([
@@ -288,7 +271,7 @@ test('hetzner reads every page of images', function () {
 });
 
 test('hetzner skips images once their deprecation has passed', function () {
-    Http::fake(['api.hetzner.cloud/v1/images*' => Http::response(cloudHetznerFixture('images', [
+    Http::fake(['api.hetzner.cloud/v1/images*' => Http::response(CloudFixtures::with('hetzner/images', [
         'images.1.deprecated' => now()->subDay()->toIso8601String(),
         'images.2.deprecated' => now()->subYear()->toIso8601String(),
         'images.3.deprecation' => cloudHetznerNotice(),
@@ -301,7 +284,7 @@ test('hetzner skips images once their deprecation has passed', function () {
 });
 
 test('hetzner keeps images whose deprecation is only announced, so an operating system does not vanish early', function () {
-    Http::fake(['api.hetzner.cloud/v1/images*' => Http::response(cloudHetznerFixture('images', [
+    Http::fake(['api.hetzner.cloud/v1/images*' => Http::response(CloudFixtures::with('hetzner/images', [
         'images.1.deprecated' => now()->addMonths(6)->toIso8601String(),
         'images.2.deprecated' => now()->addDay()->toIso8601String(),
         'images.3.deprecation' => cloudHetznerNotice(false),
@@ -314,7 +297,7 @@ test('hetzner keeps images whose deprecation is only announced, so an operating 
 });
 
 test('hetzner skips an image whose deprecation has no date it can read', function (array $changes) {
-    Http::fake(['api.hetzner.cloud/v1/images*' => Http::response(cloudHetznerFixture('images', $changes))]);
+    Http::fake(['api.hetzner.cloud/v1/images*' => Http::response(CloudFixtures::with('hetzner/images', $changes))]);
 
     expect(cloudHetzner()->images()->pluck('id')->all())->toBe(['ubuntu-24.04', 'rocky-9']);
 })->with([
@@ -337,9 +320,9 @@ test('hetzner adopts a key it already holds', function () {
 });
 
 test('hetzner adopts the key that carries the fingerprint itself, not just the first one listed', function (string $fingerprint) {
-    $body = cloudHetznerFixture('ssh_keys-found', ['ssh_keys.0.fingerprint' => $fingerprint]);
+    $body = CloudFixtures::with('hetzner/ssh_keys-found', ['ssh_keys.0.fingerprint' => $fingerprint]);
     $mine = $body['ssh_keys'][0];
-    $elsewhere = cloudHetznerFixture('ssh_keys-found', [
+    $elsewhere = CloudFixtures::with('hetzner/ssh_keys-found', [
         'ssh_keys.0.id' => 2400,
         'ssh_keys.0.fingerprint' => 'aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99',
     ])['ssh_keys'][0];
@@ -359,7 +342,7 @@ test('hetzner adopts the key that carries the fingerprint itself, not just the f
 ]);
 
 test('hetzner fails a key lookup that lists keys but none that carries the fingerprint, so an unrelated key is never adopted', function (mixed $fingerprint) {
-    Http::fake(['api.hetzner.cloud/v1/ssh_keys*' => Http::response(cloudHetznerFixture('ssh_keys-found', ['ssh_keys.0.fingerprint' => $fingerprint]))]);
+    Http::fake(['api.hetzner.cloud/v1/ssh_keys*' => Http::response(CloudFixtures::with('hetzner/ssh_keys-found', ['ssh_keys.0.fingerprint' => $fingerprint]))]);
 
     expect(fn() => cloudHetzner()->uploadKey('coresmith-outpost-02', cloudHetznerKey()))->toThrow(function (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unavailable)
@@ -438,7 +421,7 @@ test('hetzner creates a server with the key, its tag and both address families',
 
 test('hetzner ignores the root password a create answers with', function () {
     $password = 'Zx9-root-Pass-not-for-logs';
-    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response(cloudHetznerFixture('server-initializing', ['root_password' => $password]), 201)]);
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response(CloudFixtures::with('hetzner/server-initializing', ['root_password' => $password]), 201)]);
 
     $instance = cloudHetzner()->create(cloudHetznerSpec());
 
@@ -456,7 +439,7 @@ test('hetzner will not create a server without a key to put on it', function () 
 test('hetzner finds a running server and its public address', function () {
     Http::fake([
         'api.hetzner.cloud/v1/servers/4711' => Http::response(CloudFixtures::json('hetzner/server-running')),
-        'api.hetzner.cloud/v1/servers/9999' => cloudHetznerMissing(),
+        'api.hetzner.cloud/v1/servers/9999' => Http::response(CloudFixtures::json('hetzner/error-not-found'), 404),
     ]);
 
     $found = cloudHetzner()->find('4711');
@@ -471,7 +454,7 @@ test('hetzner finds a running server and its public address', function () {
 });
 
 test('hetzner maps every server status', function (string $status, CloudInstanceState $state) {
-    Http::fake(['api.hetzner.cloud/v1/servers/4711' => Http::response(cloudHetznerFixture('server-running', ['server.status' => $status]))]);
+    Http::fake(['api.hetzner.cloud/v1/servers/4711' => Http::response(CloudFixtures::with('hetzner/server-running', ['server.status' => $status]))]);
 
     expect(cloudHetzner()->find('4711')->state)->toBe($state);
 })->with([
@@ -487,7 +470,7 @@ test('hetzner maps every server status', function (string $status, CloudInstance
 ]);
 
 test('hetzner reads a server with no status as unknown', function () {
-    $body = cloudHetznerFixture('server-running');
+    $body = CloudFixtures::with('hetzner/server-running');
     unset($body['server']['status']);
     Http::fake(['api.hetzner.cloud/v1/servers/4711' => Http::response($body)]);
 
@@ -495,7 +478,7 @@ test('hetzner reads a server with no status as unknown', function () {
 });
 
 test('hetzner reads a running server with no public ipv4 as not ready', function () {
-    Http::fake(['api.hetzner.cloud/v1/servers/4711' => Http::response(cloudHetznerFixture('server-running', ['server.public_net.ipv4' => null]))]);
+    Http::fake(['api.hetzner.cloud/v1/servers/4711' => Http::response(CloudFixtures::with('hetzner/server-running', ['server.public_net.ipv4' => null]))]);
 
     $found = cloudHetzner()->find('4711');
 
@@ -523,10 +506,10 @@ test('hetzner finds a server by its coresmith label', function () {
 });
 
 test('hetzner returns the server that carries the tag itself, not just the first one listed', function () {
-    $body = cloudHetznerFixture('servers-tagged');
+    $body = CloudFixtures::with('hetzner/servers-tagged');
     $mine = $body['servers'][0];
-    $elsewhere = cloudHetznerFixture('servers-tagged', ['servers.0.id' => 4712, 'servers.0.labels.coresmith' => 'coresmith-01jother'])['servers'][0];
-    $unlabelled = cloudHetznerFixture('servers-tagged', ['servers.0.id' => 4713, 'servers.0.labels' => []])['servers'][0];
+    $elsewhere = CloudFixtures::with('hetzner/servers-tagged', ['servers.0.id' => 4712, 'servers.0.labels.coresmith' => 'coresmith-01jother'])['servers'][0];
+    $unlabelled = CloudFixtures::with('hetzner/servers-tagged', ['servers.0.id' => 4713, 'servers.0.labels' => []])['servers'][0];
     $body['servers'] = [$elsewhere, $unlabelled, 'oops', $mine];
     Http::fake(['api.hetzner.cloud/v1/servers*' => Http::response($body)]);
 
@@ -534,7 +517,7 @@ test('hetzner returns the server that carries the tag itself, not just the first
 });
 
 test('hetzner fails a tag lookup that lists servers but none that carries the tag, so an unrelated server is never handed back', function (mixed $labels) {
-    Http::fake(['api.hetzner.cloud/v1/servers*' => Http::response(cloudHetznerFixture('servers-tagged', ['servers.0.labels' => $labels]))]);
+    Http::fake(['api.hetzner.cloud/v1/servers*' => Http::response(CloudFixtures::with('hetzner/servers-tagged', ['servers.0.labels' => $labels]))]);
 
     expect(fn() => cloudHetzner()->findTagged(cloudHetznerTag()))->toThrow(function (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unavailable)
@@ -615,8 +598,8 @@ test('hetzner deletes a server and a key it holds', function () {
 
 test('hetzner treats a server that is already gone as destroyed', function () {
     Http::fake([
-        'api.hetzner.cloud/v1/servers/4711' => cloudHetznerMissing(),
-        'api.hetzner.cloud/v1/ssh_keys/2324' => cloudHetznerMissing(),
+        'api.hetzner.cloud/v1/servers/4711' => Http::response(CloudFixtures::json('hetzner/error-not-found'), 404),
+        'api.hetzner.cloud/v1/ssh_keys/2324' => Http::response(CloudFixtures::json('hetzner/error-not-found'), 404),
     ]);
     $api = cloudHetzner();
 
@@ -638,8 +621,8 @@ test('hetzner refuses an id that names nothing before it sends anything', functi
 
 test('hetzner accepts an id it is given as text', function () {
     Http::fake([
-        'api.hetzner.cloud/v1/servers/4711' => Http::response(cloudHetznerFixture('server-running', ['server.id' => '4711'])),
-        'api.hetzner.cloud/v1/ssh_keys?fingerprint=*' => Http::response(cloudHetznerFixture('ssh_keys-found', ['ssh_keys.0.id' => '2323'])),
+        'api.hetzner.cloud/v1/servers/4711' => Http::response(CloudFixtures::with('hetzner/server-running', ['server.id' => '4711'])),
+        'api.hetzner.cloud/v1/ssh_keys?fingerprint=*' => Http::response(CloudFixtures::with('hetzner/ssh_keys-found', ['ssh_keys.0.id' => '2323'])),
     ]);
     $api = cloudHetzner();
 
@@ -650,12 +633,12 @@ test('hetzner accepts an id it is given as text', function () {
 test('hetzner reads an id that is not a whole number as unavailable, so the tag is checked before anything is made again', function (string $call, mixed $id) {
     Http::fake([
         'api.hetzner.cloud/v1/ssh_keys?fingerprint=*' => Http::response($call === 'adopt'
-            ? cloudHetznerFixture('ssh_keys-found', ['ssh_keys.0.id' => $id])
+            ? CloudFixtures::with('hetzner/ssh_keys-found', ['ssh_keys.0.id' => $id])
             : CloudFixtures::json('hetzner/ssh_keys-empty')),
-        'api.hetzner.cloud/v1/ssh_keys' => Http::response(cloudHetznerFixture('ssh_key-created', ['ssh_key.id' => $id]), 201),
-        'api.hetzner.cloud/v1/servers/4711' => Http::response(cloudHetznerFixture('server-running', ['server.id' => $id])),
-        'api.hetzner.cloud/v1/servers?*' => Http::response(cloudHetznerFixture('servers-tagged', ['servers.0.id' => $id])),
-        'api.hetzner.cloud/v1/servers' => Http::response(cloudHetznerFixture('server-initializing', ['server.id' => $id]), 201),
+        'api.hetzner.cloud/v1/ssh_keys' => Http::response(CloudFixtures::with('hetzner/ssh_key-created', ['ssh_key.id' => $id]), 201),
+        'api.hetzner.cloud/v1/servers/4711' => Http::response(CloudFixtures::with('hetzner/server-running', ['server.id' => $id])),
+        'api.hetzner.cloud/v1/servers?*' => Http::response(CloudFixtures::with('hetzner/servers-tagged', ['servers.0.id' => $id])),
+        'api.hetzner.cloud/v1/servers' => Http::response(CloudFixtures::with('hetzner/server-initializing', ['server.id' => $id]), 201),
     ]);
     $api = cloudHetzner();
     $attempt = match ($call) {
@@ -833,6 +816,46 @@ test('hetzner fails a catalog read whose answer has no list in it, so an empty c
     'locations that are null' => ['regions', ['locations' => null]],
     'server types that are text' => ['sizes', ['server_types' => 'none']],
     'images that are an object' => ['images', ['images' => ['ubuntu-24.04' => ['id' => 1]]]],
+    'locations that are an empty object' => ['regions', ['locations' => new stdClass]],
+    'server types that are an empty object' => ['sizes', ['server_types' => new stdClass]],
+    'images that are an empty object' => ['images', ['images' => new stdClass]],
+]);
+
+test('hetzner does not take an empty object for an empty list of servers or keys', function (string $call) {
+    Http::fake([
+        'api.hetzner.cloud/v1/servers*' => Http::response('{"servers":{}}', 200, ['Content-Type' => 'application/json']),
+        'api.hetzner.cloud/v1/ssh_keys*' => Http::response('{"ssh_keys":{}}', 200, ['Content-Type' => 'application/json']),
+    ]);
+    $attempt = match ($call) {
+        'findTagged' => fn() => cloudHetzner()->findTagged(cloudHetznerTag()),
+        'uploadKey' => fn() => cloudHetzner()->uploadKey('coresmith-outpost-02', cloudHetznerKey()),
+    };
+
+    expect($attempt)->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->getMessage())->toBe('Hetzner Cloud had a problem answering. Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+    Http::assertNotSent(fn(Request $request) => $request->method() === 'POST');
+})->with(['findTagged', 'uploadKey']);
+
+test('hetzner does not take a not found page for a server or key that is gone', function (string $call, string $id) {
+    Http::fake(['api.hetzner.cloud/v1/*' => Http::response('<html><body>404 Not Found</body></html>', 404, ['Content-Type' => 'text/html'])]);
+
+    expect(fn() => cloudHetzner()->{$call}($id))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(404)
+            ->and($e->getMessage())->toBe('Hetzner Cloud had a problem answering (HTTP 404). Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'a lookup' => ['find', '4711'],
+    'a destroy' => ['destroy', '4711'],
+    'a key delete' => ['deleteKey', '2324'],
 ]);
 
 test('hetzner fails a catalog read when a later page has no list in it', function () {

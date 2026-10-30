@@ -18,6 +18,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\CloudFixtures;
+use Tests\Support\TraceSecrets;
 
 beforeEach(function () {
     Http::preventStrayRequests();
@@ -42,22 +43,6 @@ function cloudLinodeKey(): string
 function cloudLinodeSpec(): CloudServerSpec
 {
     return new CloudServerSpec('outpost-02', 'eu-central', 'g6-standard-1', 'linode/ubuntu24.04', cloudLinodeTag(), cloudLinodeKey(), null);
-}
-
-function cloudLinodeMissing(): PromiseInterface
-{
-    return Http::response(CloudFixtures::json('linode/error-not-found'), 404);
-}
-
-function cloudLinodeFixture(string $name, array $changes = []): array
-{
-    $body = CloudFixtures::json("linode/{$name}");
-
-    foreach ($changes as $path => $value) {
-        data_set($body, $path, $value);
-    }
-
-    return $body;
 }
 
 function cloudLinodePage(array $items, int $page = 1, int $pages = 1): array
@@ -89,7 +74,7 @@ test('linode names the account by its username', function () {
         && $request->hasHeader('Authorization', 'Bearer linode-token'));
 });
 
-test('linode accepts a token whose scopes include writing linodes, or every scope, or that names none', function (array $headers) {
+test('linode accepts a token whose scopes include writing linodes and reading images, or every scope, or that sends no scope header', function (array $headers) {
     Http::fake(['api.linode.com/v4/profile' => cloudLinodeProfile($headers)]);
 
     expect(cloudLinode()->verify()->label)->toBe('monoven-ops');
@@ -97,14 +82,13 @@ test('linode accepts a token whose scopes include writing linodes, or every scop
     Http::assertSentCount(1);
 })->with([
     'writing linodes and reading images' => [['X-OAuth-Scopes' => 'linodes:read_write images:read_only']],
-    'writing linodes alone' => [['X-OAuth-Scopes' => 'linodes:read_write']],
-    'writing linodes among others' => [['X-OAuth-Scopes' => 'account:read_only domains:read_write linodes:read_write images:read_write']],
+    'writing linodes and writing images' => [['X-OAuth-Scopes' => 'linodes:read_write images:read_write']],
+    'writing linodes among others' => [['X-OAuth-Scopes' => 'account:read_only domains:read_write linodes:read_write images:read_only']],
+    'the scopes in another order' => [['X-OAuth-Scopes' => 'images:read_only linodes:read_write']],
     'scopes split by commas' => [['X-OAuth-Scopes' => 'images:read_only,linodes:read_write']],
     'scopes split by commas and spaces' => [['X-OAuth-Scopes' => 'images:read_only, linodes:read_write']],
     'every scope' => [['X-OAuth-Scopes' => '*']],
     'no scope header' => [[]],
-    'an empty scope header' => [['X-OAuth-Scopes' => '']],
-    'a scope header of whitespace' => [['X-OAuth-Scopes' => ' ']],
 ]);
 
 test('linode refuses a token that can only read linodes', function () {
@@ -117,24 +101,38 @@ test('linode refuses a token that can only read linodes', function () {
             ->and($e->status)->toBeNull()
             ->and($e->retryable())->toBeFalse()
             ->and($e->getMessage())->toContain('read/write access to Linodes')
-            ->and($e->connectMessage())->toBe("Linode accepted the token, but it isn't allowed to manage servers. Give it read/write access to Linodes.");
+            ->and($e->connectMessage())->toBe("Linode accepted the token, but it isn't allowed to manage servers. Give it read/write access to Linodes and read access to Images.");
     });
 
     Http::assertSentCount(1);
 });
 
-test('linode refuses a token whose scopes leave out writing linodes', function (string $scopes) {
+test('linode refuses a token whose scopes leave out writing linodes or reading images', function (string $scopes) {
     Http::fake(['api.linode.com/v4/profile' => cloudLinodeProfile(['X-OAuth-Scopes' => $scopes])]);
 
     expect(fn() => cloudLinode()->verify())->toThrow(function (CloudProviderException $e) {
-        expect($e->failure)->toBe(CloudFailure::Forbidden)->and($e->retryable())->toBeFalse();
+        expect($e->failure)->toBe(CloudFailure::Forbidden)
+            ->and($e->retryable())->toBeFalse()
+            ->and($e->getMessage())->toContain('read/write access to Linodes and read access to Images');
     });
+
+    Http::assertSentCount(1);
 })->with([
     'reading linodes' => ['linodes:read_only'],
+    'reading linodes and images' => ['linodes:read_only images:read_only'],
     'reading linodes and writing images' => ['images:read_write linodes:read_only'],
+    'writing linodes and nothing on images' => ['linodes:read_write'],
+    'writing linodes and other things but not images' => ['linodes:read_write account:read_write domains:read_write'],
     'writing everything but linodes' => ['account:read_write domains:read_write images:read_write'],
-    'a scope that only starts with it' => ['linodes:read_write_all'],
-    'a scope that only ends with it' => ['all_linodes:read_write'],
+    'images alone' => ['images:read_only'],
+    'a linodes scope that only starts with it' => ['linodes:read_write_all images:read_only'],
+    'a linodes scope that only ends with it' => ['all_linodes:read_write images:read_only'],
+    'an images scope that only starts with it' => ['linodes:read_write images:read_only_all'],
+    'an images scope that only ends with it' => ['linodes:read_write all_images:read_only'],
+    'a scope header that is present but empty, so the token has no scopes' => [''],
+    'a scope header of whitespace' => [' '],
+    'a scope header of a tab' => ["\t"],
+    'a scope header of commas' => [' , '],
 ]);
 
 test('linode does not take an answer without a username for a verified account', function (array $body) {
@@ -197,7 +195,7 @@ test('linode keeps core regions that host linodes', function () {
 });
 
 test('linode skips a region that cannot host linodes, is not healthy or is not a core site', function (array $changes) {
-    Http::fake(['api.linode.com/v4/regions*' => Http::response(cloudLinodeFixture('regions', $changes))]);
+    Http::fake(['api.linode.com/v4/regions*' => Http::response(CloudFixtures::with('linode/regions', $changes))]);
 
     expect(cloudLinode()->regions()->pluck('id')->all())->toBe(['us-east', 'id-cgk']);
 })->with([
@@ -206,6 +204,8 @@ test('linode skips a region that cannot host linodes, is not healthy or is not a
     'linodes in another case' => [['data.0.capabilities' => ['linodes']]],
     'capabilities given as text' => [['data.0.capabilities' => 'Linodes']],
     'capabilities that are null' => [['data.0.capabilities' => null]],
+    'a flag among the capabilities' => [['data.0.capabilities' => [true]]],
+    'a list among the capabilities' => [['data.0.capabilities' => [['Linodes']]]],
     'an outage' => [['data.0.status' => 'outage']],
     'a status in another case' => [['data.0.status' => 'OK']],
     'no status' => [['data.0.status' => null]],
@@ -234,7 +234,7 @@ test('linode labels a region that has no label by its id', function () {
 });
 
 test('linode reads the country of a region in capitals', function (mixed $country, ?string $expected) {
-    Http::fake(['api.linode.com/v4/regions*' => Http::response(cloudLinodeFixture('regions', ['data.0.country' => $country]))]);
+    Http::fake(['api.linode.com/v4/regions*' => Http::response(CloudFixtures::with('linode/regions', ['data.0.country' => $country]))]);
 
     expect(cloudLinode()->regions()->first()->country)->toBe($expected);
 })->with([
@@ -247,7 +247,7 @@ test('linode reads the country of a region in capitals', function (mixed $countr
 ]);
 
 test('linode skips a region that has no id', function (mixed $id) {
-    Http::fake(['api.linode.com/v4/regions*' => Http::response(cloudLinodeFixture('regions', ['data.0.id' => $id]))]);
+    Http::fake(['api.linode.com/v4/regions*' => Http::response(CloudFixtures::with('linode/regions', ['data.0.id' => $id]))]);
 
     expect(cloudLinode()->regions()->pluck('id')->all())->toBe(['us-east', 'id-cgk']);
 })->with([
@@ -314,7 +314,7 @@ test('linode lists plans with their regional prices and disk in gigabytes', func
 });
 
 test('linode keeps the plan classes it provisions and no other', function (mixed $class, bool $kept) {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', ['data.1.class' => $class]))]);
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ['data.1.class' => $class]))]);
 
     expect(cloudLinode()->sizes()->pluck('id')->contains('g6-standard-1'))->toBe($kept);
 })->with([
@@ -327,11 +327,13 @@ test('linode keeps the plan classes it provisions and no other', function (mixed
     'accelerated' => ['accelerated', false],
     'a class in another case' => ['Standard', false],
     'a class that is not text' => [42, false],
+    'a class that is a flag' => [true, false],
+    'a class that is a list' => [['standard'], false],
     'no class' => [null, false],
 ]);
 
 test('linode skips a plan that has no id', function (mixed $id) {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', ['data.0.id' => $id]))]);
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ['data.0.id' => $id]))]);
 
     expect(cloudLinode()->sizes()->pluck('id')->all())->toBe(['g6-standard-1', 'g6-standard-2']);
 })->with([
@@ -349,7 +351,7 @@ test('linode skips a plan that leaves out how big it is', function (string $fiel
 })->with(['vcpus', 'memory', 'disk']);
 
 test('linode skips a plan whose numbers are not numbers', function (string $field, mixed $value) {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', ["data.1.{$field}" => $value]))]);
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ["data.1.{$field}" => $value]))]);
 
     expect(cloudLinode()->sizes()->pluck('id')->all())->toBe(['g6-nanode-1', 'g6-standard-2']);
 })->with([
@@ -360,7 +362,7 @@ test('linode skips a plan whose numbers are not numbers', function (string $fiel
 ]);
 
 test('linode keeps a plan that reports its numbers as digits', function () {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', [
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', [
         'data.2.vcpus' => '2',
         'data.2.memory' => '4096',
         'data.2.disk' => '81920',
@@ -376,7 +378,7 @@ test('linode keeps a plan that reports its numbers as digits', function () {
 });
 
 test('linode counts only the whole gigabytes of a disk', function (int $megabytes, int $gigabytes) {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', ['data.1.disk' => $megabytes]))]);
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ['data.1.disk' => $megabytes]))]);
 
     expect(cloudLinode()->sizes()->keyBy('id')['g6-standard-1']->diskGb)->toBe($gigabytes);
 })->with([
@@ -402,7 +404,7 @@ test('linode reads a plan with no price without inventing one', function () {
 });
 
 test('linode reads only the regional prices of a plan that it can use', function (mixed $prices, array $expected) {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', ['data.1.region_prices' => $prices]))]);
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ['data.1.region_prices' => $prices]))]);
 
     expect(cloudLinode()->sizes()->keyBy('id')['g6-standard-1']->prices)->toEqual($expected);
 })->with([
@@ -466,7 +468,7 @@ test('linode keeps its image filter on every page of images', function () {
 });
 
 test('linode stops at a page count it cannot follow', function (mixed $pages) {
-    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(cloudLinodeFixture('types', ['pages' => $pages]))]);
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ['pages' => $pages]))]);
 
     expect(cloudLinode()->sizes())->toHaveCount(3);
 
@@ -515,6 +517,9 @@ test('linode reads a list that is not a list as unavailable', function (string $
     'regions that are null' => ['regions', null],
     'plans that are text' => ['sizes', 'none'],
     'images that are an object' => ['images', ['linode/ubuntu24.04' => ['id' => 'linode/ubuntu24.04']]],
+    'regions that are an empty object' => ['regions', new stdClass],
+    'plans that are an empty object' => ['sizes', new stdClass],
+    'images that are an empty object' => ['images', new stdClass],
 ]);
 
 test('linode fails a catalog read when a later page lacks the list', function () {
@@ -570,7 +575,7 @@ test('linode lists public, current ubuntu and debian images', function () {
 });
 
 test('linode skips images it does not provision', function (array $changes) {
-    Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', $changes))]);
+    Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', $changes))]);
 
     expect(cloudLinode()->images()->pluck('id')->all())->toBe(['linode/ubuntu22.04', 'linode/debian12']);
 })->with([
@@ -592,7 +597,7 @@ test('linode skips images it does not provision', function (array $changes) {
 ]);
 
 test('linode reads the family and version out of an image id', function (string $id, string $family, string $version) {
-    Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', ['data.0.id' => $id]))]);
+    Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', ['data.0.id' => $id]))]);
 
     $image = cloudLinode()->images()->first();
 
@@ -605,7 +610,7 @@ test('linode reads the family and version out of an image id', function (string 
 ]);
 
 test('linode skips an image once its end of life has passed', function (string $eol) {
-    Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', ['data.1.eol' => $eol]))]);
+    Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', ['data.1.eol' => $eol]))]);
 
     expect(cloudLinode()->images()->pluck('id')->all())->toBe(['linode/ubuntu24.04', 'linode/debian12']);
 })->with([
@@ -618,7 +623,7 @@ test('linode skips an image once its end of life has passed', function (string $
 ]);
 
 test('linode keeps an image whose end of life has not come yet, so an operating system does not vanish early', function (?string $eol) {
-    Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', ['data.1.eol' => $eol]))]);
+    Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', ['data.1.eol' => $eol]))]);
 
     expect(cloudLinode()->images()->pluck('id')->all())->toBe(['linode/ubuntu24.04', 'linode/ubuntu22.04', 'linode/debian12']);
 })->with([
@@ -634,7 +639,7 @@ test('linode reads an end of life without a zone as universal time', function ()
     date_default_timezone_set('Pacific/Auckland');
 
     try {
-        Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', [
+        Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', [
             'data.0.eol' => '2026-10-21T12:00:01',
             'data.1.eol' => '2026-10-21T11:59:59',
         ]))]);
@@ -646,7 +651,7 @@ test('linode reads an end of life without a zone as universal time', function ()
 });
 
 test('linode skips an image the provider marks deprecated, whatever its end of life', function (?string $eol) {
-    Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', ['data.1.deprecated' => true, 'data.1.eol' => $eol]))]);
+    Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', ['data.1.deprecated' => true, 'data.1.eol' => $eol]))]);
 
     expect(cloudLinode()->images()->pluck('id')->all())->toBe(['linode/ubuntu24.04', 'linode/debian12']);
 })->with([
@@ -657,7 +662,7 @@ test('linode skips an image the provider marks deprecated, whatever its end of l
 
 test('linode keeps an image whose end of life it cannot read, since only a date that has passed counts', function (mixed $eol) {
     $this->travelTo(CarbonImmutable::parse('2100-01-01 00:00:00'));
-    Http::fake(['api.linode.com/v4/images*' => Http::response(cloudLinodeFixture('images', [
+    Http::fake(['api.linode.com/v4/images*' => Http::response(CloudFixtures::with('linode/images', [
         'data.0.eol' => null,
         'data.1.eol' => $eol,
         'data.2.eol' => null,
@@ -710,29 +715,40 @@ test('linode takes the public key inline and sets a strong root password it neve
         ->and($instance)->toEqual(new CloudInstance('123456', CloudInstanceState::Starting, '203.0.113.43', 'g6-standard-1'))
         ->and(serialize($instance))->not->toContain($password)
         ->and(print_r($instance, true))->not->toContain($password)
-        ->and((string) json_encode($instance))->not->toContain($password)
-        ->and(print_r($api, true))->not->toContain($password);
+        ->and((string) json_encode($instance))->not->toContain($password);
 
-    expect(fn() => $api->create(cloudLinodeSpec()))->toThrow(function (CloudProviderException $e) use ($password) {
-        $refused = Http::recorded()->last()[0]->data()['root_pass'];
-
-        expect($refused)->toBeString()->toHaveLength(48)->not->toBe($password)
-            ->and($e->failure)->toBe(CloudFailure::Refused)
-            ->and($e->detail)->toBe('type: Region does not support this Linode type')
-            ->and($e->getMessage())->not->toContain($refused)->not->toContain($password)
-            ->and($e->connectMessage())->not->toContain($refused)->not->toContain($password)
-            ->and($e->getTraceAsString())->not->toContain($refused)->not->toContain($password)
-            ->and((string) $e)->not->toContain($refused)->not->toContain($password)
-            ->and($e->getPrevious())->toBeNull();
-    });
-
+    $error = TraceSecrets::thrownBy(fn() => $api->create(cloudLinodeSpec()));
+    $refused = Http::recorded()->last()[0]->data()['root_pass'];
     $own = array_filter(
         (new ReflectionClass(LinodeApi::class))->getProperties(),
         fn(ReflectionProperty $property): bool => $property->getDeclaringClass()->getName() === LinodeApi::class,
     );
 
-    expect($own)->toBe([])->and(print_r($api, true))->not->toContain($password);
+    expect($refused)->toBeString()->toHaveLength(48)->not->toBe($password)
+        ->and($error)->toBeInstanceOf(CloudProviderException::class)
+        ->and($error->failure)->toBe(CloudFailure::Refused)
+        ->and($error->detail)->toBe('type: Region does not support this Linode type')
+        ->and($error->getMessage())->not->toContain($refused)->not->toContain($password)
+        ->and($error->connectMessage())->not->toContain($refused)->not->toContain($password)
+        ->and(TraceSecrets::held($error, $refused))->toBeFalse()
+        ->and($error->getPrevious())->toBeNull()
+        ->and($own)->toBe([]);
     Http::assertSentCount(2);
+});
+
+test('linode keeps the root password out of an exception from a create that could not connect', function () {
+    Http::fake(['api.linode.com/*' => Http::failedConnection('cURL error 28: Operation timed out after 10001 milliseconds with 0 bytes received')]);
+
+    $error = TraceSecrets::thrownBy(fn() => cloudLinode()->create(cloudLinodeSpec()));
+    $password = Http::recorded()->first()[0]->data()['root_pass'];
+
+    expect($password)->toBeString()->toHaveLength(48)
+        ->and($error)->toBeInstanceOf(CloudProviderException::class)
+        ->and($error->failure)->toBe(CloudFailure::Unreachable)
+        ->and($error->getMessage())->not->toContain($password)
+        ->and($error->getPrevious()->getMessage())->toBe('cURL error 28: Operation timed out after 10001 milliseconds with 0 bytes received')
+        ->and(TraceSecrets::held($error, $password))->toBeFalse();
+    Http::assertSentCount(1);
 });
 
 test('linode will not create an instance without a key to put on it', function (string $publicKey) {
@@ -779,7 +795,7 @@ test('linode uses the public address when a private one is listed first', functi
 });
 
 test('linode uses the public address wherever the instance lists it', function () {
-    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(cloudLinodeFixture('instance-running', [
+    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::with('linode/instance-running', [
         'ipv4' => ['203.0.113.43', '192.168.128.10'],
     ]))]);
 
@@ -787,7 +803,7 @@ test('linode uses the public address wherever the instance lists it', function (
 });
 
 test('linode reads an instance with no usable public address as not ready', function (mixed $addresses) {
-    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(cloudLinodeFixture('instance-running', ['ipv4' => $addresses]))]);
+    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::with('linode/instance-running', ['ipv4' => $addresses]))]);
 
     $found = cloudLinode()->find('123456');
 
@@ -843,7 +859,7 @@ test('linode needs no uploaded key id to create an instance', function (?string 
 ]);
 
 test('linode reads an instance that is not there as nothing', function () {
-    Http::fake(['api.linode.com/v4/linode/instances/123456' => cloudLinodeMissing()]);
+    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::json('linode/error-not-found'), 404)]);
 
     expect(cloudLinode()->find('123456'))->toBeNull();
 
@@ -852,8 +868,8 @@ test('linode reads an instance that is not there as nothing', function () {
 
 test('linode reads the size of an instance from its type', function () {
     Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::sequence()
-        ->push(cloudLinodeFixture('instance-running', ['type' => 'g6-standard-2']))
-        ->push(cloudLinodeFixture('instance-running', ['type' => '']))]);
+        ->push(CloudFixtures::with('linode/instance-running', ['type' => 'g6-standard-2']))
+        ->push(CloudFixtures::with('linode/instance-running', ['type' => '']))]);
     $api = cloudLinode();
 
     expect($api->find('123456')->size)->toBe('g6-standard-2')
@@ -890,10 +906,10 @@ test('linode takes the first instance when a tag matches several', function () {
 });
 
 test('linode returns the instance that carries the tag itself, not just the first one listed', function () {
-    $body = cloudLinodeFixture('instances-tagged');
+    $body = CloudFixtures::with('linode/instances-tagged');
     $mine = $body['data'][0];
-    $elsewhere = cloudLinodeFixture('instances-tagged', ['data.0.id' => 123457, 'data.0.tags' => ['coresmith', 'coresmith-01jother']])['data'][0];
-    $untagged = cloudLinodeFixture('instances-tagged', ['data.0.id' => 123458, 'data.0.tags' => []])['data'][0];
+    $elsewhere = CloudFixtures::with('linode/instances-tagged', ['data.0.id' => 123457, 'data.0.tags' => ['coresmith', 'coresmith-01jother']])['data'][0];
+    $untagged = CloudFixtures::with('linode/instances-tagged', ['data.0.id' => 123458, 'data.0.tags' => []])['data'][0];
     $body['data'] = [$elsewhere, $untagged, 'oops', $mine];
     Http::fake(['api.linode.com/v4/linode/instances*' => Http::response($body)]);
 
@@ -901,7 +917,7 @@ test('linode returns the instance that carries the tag itself, not just the firs
 });
 
 test('linode fails a tag lookup that lists instances but none that carries the tag, so an unrelated instance is never handed back', function (mixed $tags) {
-    Http::fake(['api.linode.com/v4/linode/instances*' => Http::response(cloudLinodeFixture('instances-tagged', ['data.0.tags' => $tags]))]);
+    Http::fake(['api.linode.com/v4/linode/instances*' => Http::response(CloudFixtures::with('linode/instances-tagged', ['data.0.tags' => $tags]))]);
 
     expect(fn() => cloudLinode()->findTagged(cloudLinodeTag()))->toThrow(function (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unavailable)
@@ -918,10 +934,24 @@ test('linode fails a tag lookup that lists instances but none that carries the t
     'no tags' => [[]],
     'tags given as text' => ['coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d'],
     'tags that are null' => [null],
+    'a flag among the tags' => [[true]],
+    'a list among the tags' => [[['coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d']]],
 ]);
 
+test('linode does not take an empty object for an empty list of instances', function () {
+    Http::fake(['api.linode.com/v4/linode/instances*' => Http::response('{"data":{},"page":1,"pages":1,"results":0}', 200, ['Content-Type' => 'application/json'])]);
+
+    expect(fn() => cloudLinode()->findTagged(cloudLinodeTag()))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->getMessage())->toBe('Linode had a problem answering. Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+});
+
 test('linode maps every status', function (mixed $status, CloudInstanceState $state) {
-    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(cloudLinodeFixture('instance-running', ['status' => $status]))]);
+    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::with('linode/instance-running', ['status' => $status]))]);
 
     expect(cloudLinode()->find('123456')->state)->toBe($state);
 })->with([
@@ -937,6 +967,7 @@ test('linode maps every status', function (mixed $status, CloudInstanceState $st
     'cloning' => ['cloning', CloudInstanceState::Busy],
     'restoring' => ['restoring', CloudInstanceState::Busy],
     'resizing' => ['resizing', CloudInstanceState::Busy],
+    'busy' => ['busy', CloudInstanceState::Busy],
     'deleting' => ['deleting', CloudInstanceState::Deleting],
     'suspended for billing' => ['billing_suspension', CloudInstanceState::Unknown],
     'a status it has not heard of' => ['something-new', CloudInstanceState::Unknown],
@@ -954,16 +985,16 @@ test('linode reads an instance with no status as unknown', function () {
 });
 
 test('linode accepts an id it is given as text', function () {
-    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(cloudLinodeFixture('instance-running', ['id' => '123456']))]);
+    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::with('linode/instance-running', ['id' => '123456']))]);
 
     expect(cloudLinode()->find('123456')->id)->toBe('123456');
 });
 
 test('linode reads an id that is not a whole number as unavailable, so the tag is checked before anything is made again', function (string $call, mixed $id) {
     Http::fake(match ($call) {
-        'create' => ['api.linode.com/v4/linode/instances' => Http::response(cloudLinodeFixture('instance-provisioning', ['id' => $id]))],
-        'find' => ['api.linode.com/v4/linode/instances/123456' => Http::response(cloudLinodeFixture('instance-running', ['id' => $id]))],
-        'findTagged' => ['api.linode.com/v4/linode/instances' => Http::response(cloudLinodeFixture('instances-tagged', ['data.0.id' => $id]))],
+        'create' => ['api.linode.com/v4/linode/instances' => Http::response(CloudFixtures::with('linode/instance-provisioning', ['id' => $id]))],
+        'find' => ['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::with('linode/instance-running', ['id' => $id]))],
+        'findTagged' => ['api.linode.com/v4/linode/instances' => Http::response(CloudFixtures::with('linode/instances-tagged', ['data.0.id' => $id]))],
     });
     $api = cloudLinode();
     $attempt = match ($call) {
@@ -1040,8 +1071,21 @@ test('linode deletes an instance it holds', function () {
         && $request->url() === 'https://api.linode.com/v4/linode/instances/123456');
 });
 
+test('linode does not take a not found page for an instance that is gone', function (string $call) {
+    Http::fake(['api.linode.com/v4/*' => Http::response('<html><body>404 Not Found</body></html>', 404, ['Content-Type' => 'text/html'])]);
+
+    expect(fn() => cloudLinode()->{$call}('123456'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(404)
+            ->and($e->getMessage())->toBe('Linode had a problem answering (HTTP 404). Try again in a minute.');
+    });
+
+    Http::assertSentCount(1);
+})->with(['find', 'destroy']);
+
 test('linode treats an instance that is already gone as destroyed', function () {
-    Http::fake(['api.linode.com/v4/linode/instances/123456' => cloudLinodeMissing()]);
+    Http::fake(['api.linode.com/v4/linode/instances/123456' => Http::response(CloudFixtures::json('linode/error-not-found'), 404)]);
 
     cloudLinode()->destroy('123456');
 
@@ -1158,10 +1202,109 @@ test('linode says a token without access to linodes cannot create', function () 
             ->and($e->retryable())->toBeFalse()
             ->and($e->status)->toBe(403)
             ->and($e->detail)->toBe('Unauthorized')
-            ->and($e->getMessage())->toContain('Give it read/write access to Linodes.');
+            ->and($e->getMessage())->toBe("Linode says this token isn't allowed to do that. Linode said: Unauthorized. Give it read/write access to Linodes and read access to Images. Then replace the token in Settings → Team.");
     });
 
     Http::assertSentCount(1);
+});
+
+test('linode reads a token the endpoint does not allow as forbidden, not as a rejected one', function (string $call) {
+    Http::fake(['api.linode.com/v4/*' => Http::response(['errors' => [['reason' => 'Your OAuth token is not authorized to use this endpoint.']]], 401)]);
+    $attempt = match ($call) {
+        'images' => fn() => cloudLinode()->images(),
+        'regions' => fn() => cloudLinode()->regions(),
+        'find' => fn() => cloudLinode()->find('123456'),
+        'create' => fn() => cloudLinode()->create(cloudLinodeSpec()),
+        'reboot' => fn() => cloudLinode()->reboot('123456'),
+        'destroy' => fn() => cloudLinode()->destroy('123456'),
+    };
+
+    expect($attempt)->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Forbidden)
+            ->and($e->retryable())->toBeFalse()
+            ->and($e->status)->toBe(401)
+            ->and($e->detail)->toBe('Your OAuth token is not authorized to use this endpoint.')
+            ->and($e->getMessage())->toBe("Linode says this token isn't allowed to do that. Linode said: Your OAuth token is not authorized to use this endpoint. Give it read/write access to Linodes and read access to Images. Then replace the token in Settings → Team.")
+            ->and($e->connectMessage())->toBe("Linode accepted the token, but it isn't allowed to manage servers. Linode said: Your OAuth token is not authorized to use this endpoint. Give it read/write access to Linodes and read access to Images.");
+    });
+
+    Http::assertSentCount(1);
+})->with(['images', 'regions', 'find', 'create', 'reboot', 'destroy']);
+
+test('linode reads the words of an endpoint the token may not use in any case, and with more said', function (string $reason) {
+    Http::fake(['api.linode.com/v4/profile' => Http::response(['errors' => [['reason' => $reason]]], 401)]);
+
+    expect(fn() => cloudLinode()->verify())->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Forbidden);
+    });
+})->with([
+    'in capitals' => ['YOUR OAUTH TOKEN IS NOT AUTHORIZED TO USE THIS ENDPOINT.'],
+    'without the full stop' => ['Your OAuth token is not authorized to use this endpoint'],
+    'with more said' => ['Your OAuth token is not authorized to use this endpoint. Check its scopes.'],
+    'about the endpoint in other words' => ['This token is not authorized to use the endpoint.'],
+]);
+
+test('linode keeps every other refusal what it was', function (int $status, mixed $reason, CloudFailure $failure) {
+    Http::fake(['api.linode.com/v4/profile' => Http::response(['errors' => [['reason' => $reason]]], $status)]);
+
+    expect(fn() => cloudLinode()->verify())->toThrow(function (CloudProviderException $e) use ($failure) {
+        expect($e->failure)->toBe($failure);
+    });
+})->with([
+    'an invalid token' => [401, 'Invalid Token', CloudFailure::TokenRejected],
+    'an unauthorized answer' => [401, 'Unauthorized', CloudFailure::TokenRejected],
+    'a 401 with no reason' => [401, null, CloudFailure::TokenRejected],
+    'a 401 whose reason is not text' => [401, ['Your OAuth token is not authorized to use this endpoint.'], CloudFailure::TokenRejected],
+    'a 401 about a busy linode' => [401, 'Linode busy.', CloudFailure::TokenRejected],
+    'the words of an unusable endpoint on a 400' => [400, 'Your OAuth token is not authorized to use this endpoint.', CloudFailure::Refused],
+    'the words of an unusable endpoint on a 422' => [422, 'Your OAuth token is not authorized to use this endpoint.', CloudFailure::Refused],
+    'the words of an unusable endpoint on a 403' => [403, 'Your OAuth token is not authorized to use this endpoint.', CloudFailure::Forbidden],
+    'a 400 about a bad field' => [400, 'Region does not support this Linode type', CloudFailure::Refused],
+    'a 400 about something else being busy' => [400, 'The load balancer is busy.', CloudFailure::Refused],
+    'the words of a busy linode on a 409' => [409, 'Linode busy.', CloudFailure::Refused],
+    'the words of a busy linode on a 422' => [422, 'Linode busy.', CloudFailure::Refused],
+    'the words of a busy linode on a 503' => [503, 'Linode busy.', CloudFailure::Unavailable],
+]);
+
+test('linode reads a linode with a job in progress as busy, so a retry waits for it', function (string $call, array $arguments) {
+    Http::fake(['api.linode.com/v4/linode/instances/123456*' => Http::response(['errors' => [['reason' => 'Linode busy.']]], 400)]);
+
+    expect(fn() => cloudLinode()->{$call}(...$arguments))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Busy)
+            ->and($e->retryable())->toBeTrue()
+            ->and($e->status)->toBe(400)
+            ->and($e->detail)->toBe('Linode busy.')
+            ->and($e->getMessage())->toBe('Linode is busy with another change to it. Linode said: Linode busy. Coresmith tries again shortly.');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'reboot' => ['reboot', ['123456']],
+    'power off' => ['powerOff', ['123456']],
+    'power on' => ['powerOn', ['123456']],
+    'resize' => ['resize', ['123456', 'g6-standard-2']],
+    'destroy' => ['destroy', ['123456']],
+]);
+
+test('linode reads the words of a busy linode in any case, and with more said', function (string $reason) {
+    Http::fake(['api.linode.com/v4/linode/instances/123456/reboot' => Http::response(['errors' => [['reason' => $reason]]], 400)]);
+
+    expect(fn() => cloudLinode()->reboot('123456'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Busy);
+    });
+})->with([
+    'in capitals' => ['LINODE BUSY.'],
+    'without the full stop' => ['Linode busy'],
+    'with more said' => ['Linode busy. Wait for its current job to finish.'],
+]);
+
+test('linode reads a field with a busy linode in its reason as busy too', function () {
+    Http::fake(['api.linode.com/v4/linode/instances/123456/resize' => Http::response(['errors' => [['reason' => 'Linode busy.', 'field' => 'type']]], 400)]);
+
+    expect(fn() => cloudLinode()->resize('123456', 'g6-standard-2'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Busy)
+            ->and($e->detail)->toBe('type: Linode busy.');
+    });
 });
 
 test('linode never retries a create or a resize that met a server error', function (string $call) {
