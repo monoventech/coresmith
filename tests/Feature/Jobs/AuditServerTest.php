@@ -10,7 +10,9 @@ use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Database\QueryException;
 use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use phpseclib3\Exception\NoSupportedAlgorithmsException;
 use Spatie\Activitylog\Models\Activity;
@@ -40,6 +42,19 @@ function cloudAuditBegin(Server $server, string $probe, bool $provisionAfter = f
     }
 
     return $transport;
+}
+
+function cloudAuditWork(AuditServer $job, string $probe): void
+{
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)->respondTo('base64 -d', $probe));
+
+    try {
+        app()->call([$job, 'handle']);
+    } catch (Throwable $e) {
+        $job->failed($e);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
 }
 
 function cloudAuditCleanProbe(): string
@@ -193,5 +208,36 @@ test('an audit asked to provision afterwards leaves a server that moved on alone
     Queue::assertNotPushed(ProvisionServer::class);
 })->with([
     'someone already started provisioning it' => [fn(Server $server) => $server->forceFill(['status' => ServerStatus::Provisioning])->save(), ServerStatus::Provisioning],
+    'it was marked disconnected' => [fn(Server $server) => $server->forceFill(['status' => ServerStatus::Disconnected])->save(), ServerStatus::Disconnected],
     'it was detached while the audit ran' => [fn(Server $server) => $server->delete(), ServerStatus::Pending],
 ]);
+
+test('an audit whose hand-off to provisioning fails stays finished and reports why', function () {
+    Exceptions::fake();
+    config(['queue.connections.unqueueable' => ['driver' => 'database', 'table' => 'no_such_jobs', 'queue' => 'provisioning'], 'queue.default' => 'unqueueable']);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
+
+    cloudAuditWork(new AuditServer($server, provisionAfter: true), cloudAuditCleanProbe());
+
+    expect($server->fresh())
+        ->status->toBe(ServerStatus::Pending)
+        ->audit->toMatchArray(['state' => 'done'])
+        ->and(ServerAudit::blocks($server->fresh()))->toBeFalse();
+    Exceptions::assertReported(QueryException::class);
+});
+
+test('an audit queued before it could hand over to provisioning runs as a plain audit', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
+    $values = (new AuditServer($server, provisionAfter: true))->__serialize();
+    unset($values["\0" . AuditServer::class . "\0provisionAfter"]);
+    $job = unserialize('O:' . strlen(AuditServer::class) . ':"' . AuditServer::class . '":' . substr(serialize($values), 2));
+
+    cloudAuditWork($job, cloudAuditCleanProbe());
+
+    expect($job)->toBeInstanceOf(AuditServer::class)
+        ->and($server->fresh())
+        ->status->toBe(ServerStatus::Pending)
+        ->audit->toMatchArray(['state' => 'done']);
+    Queue::assertNotPushed(ProvisionServer::class);
+});

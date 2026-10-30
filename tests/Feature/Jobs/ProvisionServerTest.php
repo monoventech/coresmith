@@ -13,8 +13,10 @@ use App\Services\Caddy\CaddyInstaller;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Database\QueryException;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSSHTransport;
 
 function provisioningTransport(): FakeSSHTransport
@@ -344,4 +346,61 @@ test('installing the base packages gets twenty minutes, not the ten every other 
 
     expect($transport->budgetFor('apt-get update'))->toBe(SSHTransport::PACKAGE_SECONDS)
         ->and(SSHTransport::PACKAGE_SECONDS)->toBe(1200);
+});
+
+test('provisioning starts once when two callers saw the server waiting', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending]);
+    $stale = Server::query()->findOrFail($server->getKey());
+
+    ProvisionServer::begin($server);
+    ProvisionServer::begin($stale);
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Provisioning)
+        ->and($server->status)->toBe(ServerStatus::Provisioning)
+        ->and($server->isDirty('status'))->toBeFalse();
+    Queue::assertPushed(ProvisionServer::class, 1);
+    Queue::assertPushed(ProvisionServer::class, fn(ProvisionServer $job): bool => (fn() => $this->server)->call($job)->is($server));
+});
+
+test('a server that is not waiting to be provisioned is left alone', function (ServerStatus $status) {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => $status]);
+
+    ProvisionServer::begin($server);
+
+    expect($server->fresh()->status)->toBe($status);
+    Queue::assertNotPushed(ProvisionServer::class);
+})->with([ServerStatus::Provisioning, ServerStatus::Active, ServerStatus::Failed, ServerStatus::Creating]);
+
+test('a detached server is not provisioned', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending]);
+    $server->delete();
+
+    ProvisionServer::begin($server);
+
+    expect(Server::withTrashed()->findOrFail($server->getKey())->status)->toBe(ServerStatus::Pending);
+    Queue::assertNotPushed(ProvisionServer::class);
+});
+
+test('a disconnected server can be provisioned', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Disconnected]);
+
+    ProvisionServer::begin($server);
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Provisioning);
+    Queue::assertPushed(ProvisionServer::class, 1);
+});
+
+test('a provisioning job that cannot be queued puts the server back', function () {
+    config(['queue.connections.unqueueable' => ['driver' => 'database', 'table' => 'no_such_jobs', 'queue' => 'provisioning'], 'queue.default' => 'unqueueable']);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending]);
+
+    expect(fn() => ProvisionServer::begin($server))->toThrow(QueryException::class);
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Pending)
+        ->and($server->status)->toBe(ServerStatus::Pending)
+        ->and($server->isDirty('status'))->toBeFalse();
 });

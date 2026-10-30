@@ -21,6 +21,7 @@ use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Cloud\Tasks\CloudTaskHandlers;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Deployment\LogSanitizer;
+use App\Services\Server\ProvisioningLog;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonInterval;
@@ -362,10 +363,24 @@ test('a failed ssh attempt keeps a short, cleaned copy of what went wrong', func
         ->step->toBe('ssh')
         ->and($error)->toStartWith('Cannot connect to 203.0.113.40:22 as Bearer [REDACTED] here. Connection refused.')
         ->and($error)->not->toContain('sk-live-abcdef0123456789')
-        ->and(mb_strlen($error))->toBeLessThanOrEqual(163);
+        ->and(mb_strlen($error))->toBeLessThanOrEqual(160)
+        ->and($error)->toEndWith('...');
     Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 18);
     Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey());
 });
+
+test('an ssh error is kept whole up to 160 characters and cut with a mark beyond that', function (string $message, string $kept) {
+    $server = cloudCreatingAt('ssh', '203.0.113.40');
+    $this->transport->refuseConnections(message: $message);
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server)->data['last_error'])->toBe($kept);
+})->with([
+    'exactly 160 characters' => [str_repeat('x', 160), str_repeat('x', 160)],
+    'one character more' => [str_repeat('x', 161), str_repeat('x', 157) . '...'],
+    'a cut that lands on a space' => [str_repeat('x', 156) . ' ' . str_repeat('y', 10), str_repeat('x', 156) . '...'],
+]);
 
 test('a changed host key while starting stops creation', function () {
     $server = cloudCreating();
@@ -403,6 +418,10 @@ test('ssh past its deadline says where the server is and what went wrong last', 
     'with nothing recorded' => [
         [],
         "outpost-02 is running at 203.0.113.40, but Coresmith couldn't sign in over SSH within 10 minutes. Try again to keep waiting, or destroy it and provision another.",
+    ],
+    'with a last error that was cut' => [
+        ['last_error' => 'Cannot connect to 203.0.113.40:22. Error 110. Connection timed out while the server was still star...'],
+        "outpost-02 is running at 203.0.113.40, but Coresmith couldn't sign in over SSH within 10 minutes. The last error was: Cannot connect to 203.0.113.40:22. Error 110. Connection timed out while the server was still star... Try again to keep waiting, or destroy it and provision another.",
     ],
 ]);
 
@@ -624,3 +643,43 @@ test('a key that could not be removed after a failure is kept for the cleanup', 
         $server->cloudProvider->delete();
     }],
 ]);
+
+test('a creation tried again while its key was being removed keeps running', function (array $retried, ?string $keyId) {
+    $server = cloudCreating();
+    $this->api->failing('create', cloudCreatingFailure(CloudFailure::Refused, 'no capacity', 422));
+    Activity::created(function (Activity $activity) use ($server, $retried): void {
+        if ($activity->description === 'server_creation_failed') {
+            $elsewhere = Server::query()->findOrFail($server->getKey());
+            CloudTask::resume($elsewhere);
+            CloudTask::touch($elsewhere, $retried);
+        }
+    });
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server))
+        ->state->toBe(CloudTask::RUNNING)
+        ->error->toBeNull()
+        ->data->toMatchArray(['key_id' => $keyId])
+        ->and($this->api->calls('deleteKey'))->toBe([['deleteKey', ['key-1']]]);
+})->with([
+    'with the removed key still recorded' => [[], null],
+    'after it uploaded a new key' => [['key_id' => 'key-2'], 'key-2'],
+]);
+
+test('a line written while a leftover key was being removed is kept', function () {
+    $server = cloudCreating();
+    $this->api->failing('deleteKey', cloudCreatingFailure(CloudFailure::Unavailable, status: 503));
+    Activity::created(function (Activity $activity) use ($server): void {
+        if ($activity->description === 'server_created_at_provider') {
+            ProvisioningLog::append(Server::query()->findOrFail($server->getKey()), 'phase 1 of 8, Operating system: started');
+        }
+    });
+
+    cloudCreatingRun($server);
+
+    expect($server->fresh()->provisioning_log)
+        ->toContain('first-boot setup finished, checking the server before provisioning')
+        ->toContain('phase 1 of 8, Operating system: started')
+        ->toContain("couldn't remove the uploaded key from Hetzner Cloud, delete " . CreateServerTask::keyName($server) . ' there');
+});

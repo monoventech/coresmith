@@ -21,7 +21,6 @@ use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Server\ProvisioningLog;
 use App\Services\SSH\SSHConnectionManager;
-use Illuminate\Support\Str;
 use Throwable;
 
 final class CreateServerTask implements CloudTaskHandler
@@ -41,6 +40,8 @@ final class CreateServerTask implements CloudTaskHandler
     private const SSH_SECONDS = 15;
 
     private const ERROR_LENGTH = 160;
+
+    private const CUT = '...';
 
     private const CLOUD_INIT_STATE = '/status:\s*([a-z ]+)/D';
 
@@ -103,7 +104,7 @@ final class CreateServerTask implements CloudTaskHandler
         AuditServer::begin($server, provisionAfter: true);
 
         if (!$this->removeKey($server, $task, $api)) {
-            ProvisioningLog::append($server->fresh() ?? $server, "couldn't remove the uploaded key from {$label}, delete " . self::keyName($server) . ' there');
+            ProvisioningLog::append($server, "couldn't remove the uploaded key from {$label}, delete " . self::keyName($server) . ' there');
         }
     }
 
@@ -244,7 +245,7 @@ final class CreateServerTask implements CloudTaskHandler
         } catch (HostKeyChangedException) {
             return StepResult::fail("{$server->name} presented a different SSH host key while it was starting. Review it on this page before trying again.");
         } catch (Throwable $e) {
-            return StepResult::wait(self::POLL_SECONDS, ['last_error' => Str::limit($this->sanitizer->sanitize($e->getMessage()), self::ERROR_LENGTH)]);
+            return StepResult::wait(self::POLL_SECONDS, ['last_error' => self::cut($this->sanitizer->sanitize($e->getMessage()))]);
         } finally {
             $this->connections->disconnect($server);
         }
@@ -331,11 +332,25 @@ final class CreateServerTask implements CloudTaskHandler
         return ($api?->type() ?? $server->cloudProvider?->type)?->label() ?? 'the provider';
     }
 
+    private static function cut(string $message): string
+    {
+        if (mb_strlen($message) <= self::ERROR_LENGTH) {
+            return $message;
+        }
+
+        return rtrim(mb_substr($message, 0, self::ERROR_LENGTH - mb_strlen(self::CUT))) . self::CUT;
+    }
+
     private static function lastError(mixed $error): string
     {
-        $error = is_string($error) ? rtrim(trim($error), '. ') : '';
+        $error = is_string($error) ? trim($error) : '';
 
-        return $error === '' ? '' : " The last error was: {$error}.";
+        if (!str_ends_with($error, self::CUT)) {
+            $error = rtrim($error, '. ');
+            $error = $error === '' ? '' : "{$error}.";
+        }
+
+        return $error === '' ? '' : " The last error was: {$error}";
     }
 
     private static function unanswered(Server $server, string $label): string

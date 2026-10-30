@@ -16,9 +16,11 @@ final class ProvisioningLog
     public static function append(Server $server, string $line, bool $stamped = true): void
     {
         $line = app(LogSanitizer::class)->sanitize($line);
+        $current = Server::withTrashed()->whereKey($server->getKey())->value('provisioning_log');
+        $log = trim((string) $current . "\n" . ($stamped ? '[' . now()->format('H:i:s') . '] ' : '') . $line);
 
-        $server->forceFill([
-            'provisioning_log' => trim((string) $server->provisioning_log . "\n" . ($stamped ? '[' . now()->format('H:i:s') . '] ' : '') . $line),
-        ])->save();
+        Server::withTrashed()->whereKey($server->getKey())->update(['provisioning_log' => $log]);
+
+        $server->forceFill(['provisioning_log' => $log])->syncOriginalAttribute('provisioning_log');
     }
 }

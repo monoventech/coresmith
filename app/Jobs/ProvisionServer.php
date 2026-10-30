@@ -49,9 +49,19 @@ final class ProvisionServer implements ShouldQueue
 
     public static function begin(Server $server): void
     {
-        $server->forceFill(['status' => ServerStatus::Provisioning])->save();
+        $waiting = $server->status;
 
-        self::dispatch($server);
+        if (!$waiting->isBeforeProvisioning() || !self::move($server, $waiting, ServerStatus::Provisioning)) {
+            return;
+        }
+
+        try {
+            self::dispatch($server);
+        } catch (Throwable $e) {
+            self::move($server, ServerStatus::Provisioning, $waiting);
+
+            throw $e;
+        }
     }
 
     public function handle(SSHConnectionManager $connections, OsDetector $detector): void
@@ -173,6 +183,17 @@ final class ProvisionServer implements ShouldQueue
     private function log(string $line, bool $stamped = true): void
     {
         ProvisioningLog::append($this->server, $line, $stamped);
+    }
+
+    private static function move(Server $server, ServerStatus $from, ServerStatus $to): bool
+    {
+        $moved = Server::query()->whereKey($server->getKey())->where('status', $from->value)->update(['status' => $to->value]) === 1;
+
+        if ($moved) {
+            $server->forceFill(['status' => $to])->syncOriginalAttribute('status');
+        }
+
+        return $moved;
     }
 
     private function tail(string $output): string

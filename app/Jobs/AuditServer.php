@@ -33,10 +33,11 @@ final class AuditServer implements ShouldQueue
 
     public int $timeout = 60;
 
-    public function __construct(
-        private readonly Server $server,
-        private readonly bool $provisionAfter = false,
-    ) {
+    private bool $provisionAfter = false;
+
+    public function __construct(private readonly Server $server, bool $provisionAfter = false)
+    {
+        $this->provisionAfter = $provisionAfter;
         $this->onQueue('default');
     }
 
@@ -73,10 +74,14 @@ final class AuditServer implements ShouldQueue
             return;
         }
 
-        $server = Server::query()->find($this->server->getKey());
+        try {
+            $server = Server::query()->find($this->server->getKey());
 
-        if ($server?->status === ServerStatus::Pending) {
-            ProvisionServer::begin($server);
+            if ($server?->status === ServerStatus::Pending) {
+                ProvisionServer::begin($server);
+            }
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 
