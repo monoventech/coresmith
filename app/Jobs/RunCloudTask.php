@@ -25,6 +25,7 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Throwable;
 
 final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
@@ -38,6 +39,8 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
     public const RETRY_SECONDS = 30;
 
     public const NO_ACCOUNT = 'The provider account this server was created with is no longer connected. Connect it again in Settings → Team, then try again.';
+
+    public const NO_HANDLER = 'Coresmith could not continue this task after an update. Start it again.';
 
     public int $tries = 1;
 
@@ -66,7 +69,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
     public function handle(CloudApiFactory $apis, CloudTaskHandlers $handlers, LogSanitizer $sanitizer): void
     {
         $waited = 0;
-        $began = microtime(true);
+        $began = now();
 
         for ($steps = 0; $steps < self::MAX_STEPS; $steps++) {
             $server = Server::query()->find($this->server->getKey());
@@ -76,7 +79,15 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 return;
             }
 
-            $handler = $handlers->for($task->type);
+            try {
+                $handler = $handlers->for($task->type);
+            } catch (InvalidArgumentException $e) {
+                report($e);
+                CloudTask::fail($server, self::NO_HANDLER);
+
+                return;
+            }
+
             $account = $server->cloudProvider;
 
             if ($account === null || $account->trashed()) {
@@ -96,7 +107,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
             if ($result->kind === 'wait') {
                 CloudTask::touch($server, $result->data);
 
-                if ($waited + $result->seconds > self::BUDGET_SECONDS || microtime(true) - $began > self::BUDGET_SECONDS) {
+                if ($waited + $result->seconds > self::BUDGET_SECONDS || $began->diffInSeconds(now()) > self::BUDGET_SECONDS) {
                     self::dispatch($server)->delay(now()->addSeconds($result->seconds));
 
                     return;
@@ -122,10 +133,10 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
     private function attempt(CloudApiFactory $apis, CloudProvider $account, Server $server, CloudTask $task, CloudTaskHandler $handler, LogSanitizer $sanitizer): array
     {
         $api = null;
+        $expired = $task->stepSeconds() > (int) config("coresmith.cloud.step_seconds.{$task->step}", 600);
 
         try {
             $api = $apis->for($account);
-            $expired = $task->stepSeconds() > (int) config("coresmith.cloud.step_seconds.{$task->step}", 600);
 
             return [$api, $expired ? $handler->expired($server, $task, $api) : $handler->step($server, $task, $api)];
         } catch (CloudProviderException $e) {
@@ -133,7 +144,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 $account->forceFill(['token_failed_at' => now()])->save();
             }
 
-            return [$api, $e->retryable() ? StepResult::wait(self::RETRY_SECONDS, ['last_error' => $e->getMessage()]) : StepResult::fail($e->getMessage())];
+            return [$api, $e->retryable() && !$expired ? StepResult::wait(self::RETRY_SECONDS, ['last_error' => $e->getMessage()]) : StepResult::fail($e->getMessage())];
         } catch (Throwable $e) {
             report($e);
 

@@ -10,9 +10,11 @@ namespace App\Services\Cloud;
 
 use App\Models\CloudProvider;
 use App\Services\Cloud\Contracts\CloudApiFactory;
+use ErrorException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use TypeError;
 
 final class CloudCatalog
 {
@@ -30,16 +32,39 @@ final class CloudCatalog
 
     public function for(CloudProvider $account): CatalogData
     {
-        return CatalogData::fromArray(Cache::remember(
-            self::cacheKey($account),
-            (int) config('coresmith.cloud.catalog_seconds'),
-            fn(): array => $this->fetch($account)->toArray(),
-        ));
+        $key = self::cacheKey($account);
+        $stored = Cache::get($key);
+        $cached = is_array($stored) ? self::read($stored) : null;
+
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        if ($stored !== null) {
+            Cache::forget($key);
+        }
+
+        $fetched = $this->fetch($account)->toArray();
+        Cache::put($key, $fetched, (int) config('coresmith.cloud.catalog_seconds'));
+
+        return CatalogData::fromArray($fetched);
     }
 
     public function forget(CloudProvider $account): void
     {
         Cache::forget(self::cacheKey($account));
+    }
+
+    /**
+     * @param  array<string, mixed>  $stored
+     */
+    private static function read(array $stored): ?CatalogData
+    {
+        try {
+            return CatalogData::fromArray($stored);
+        } catch (ErrorException | TypeError) {
+            return null;
+        }
     }
 
     private function fetch(CloudProvider $account): CatalogData
@@ -107,21 +132,14 @@ final class CloudCatalog
 
         return (new Collection($offered))
             ->filter()
-            ->sortBy(fn(CloudPrice $price): float => (float) $price->monthly)
+            ->sortBy(fn(CloudPrice $price): float => CatalogData::amount($price))
             ->first();
     }
 
     private static function bySize(CloudSize $a, CloudSize $b): int
     {
-        return [self::amount($a), $a->memoryMb, self::rank($a->architecture)] <=> [self::amount($b), $b->memoryMb, self::rank($b->architecture)]
+        return [CatalogData::amount(self::lowestPrice($a)), $a->memoryMb, self::rank($a->architecture)] <=> [CatalogData::amount(self::lowestPrice($b)), $b->memoryMb, self::rank($b->architecture)]
             ?: strcmp($a->id, $b->id);
-    }
-
-    private static function amount(CloudSize $size): float
-    {
-        $price = self::lowestPrice($size);
-
-        return $price === null ? INF : (float) $price->monthly;
     }
 
     private static function rank(string $architecture): int

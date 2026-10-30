@@ -10,6 +10,7 @@ namespace App\Services\Cloud;
 
 use App\Enums\CloudProviderType;
 use App\Exceptions\CloudProviderException;
+use App\Exceptions\VaultDecryptionException;
 use App\Models\CloudProvider;
 use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Cloud\Contracts\CloudApiFactory;
@@ -22,7 +23,11 @@ final class HttpCloudApiFactory implements CloudApiFactory
 {
     public function for(CloudProvider $account): CloudApi
     {
-        $token = $account->api_token;
+        try {
+            $token = $account->api_token;
+        } catch (VaultDecryptionException) {
+            $token = null;
+        }
 
         if ($token === null || trim($token) === '') {
             throw CloudProviderException::noToken($account->type);

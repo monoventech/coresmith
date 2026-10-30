@@ -18,11 +18,14 @@ use App\Services\Cloud\Tasks\CloudTaskHandler;
 use App\Services\Cloud\Tasks\CloudTaskHandlers;
 use App\Services\Cloud\Tasks\StepResult;
 use App\Services\Deployment\LogSanitizer;
+use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterval;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -203,6 +206,41 @@ test('waits in one job share a ninety second budget', function (array $waits, ar
     'a wait that fills it exactly' => [[90, 1], [90], 1],
 ]);
 
+test('steps that use up the budget hand the task to a fresh job at the next wait', function () {
+    Queue::fake();
+    $this->freezeTime();
+    $server = cloudTaskServer();
+    cloudTaskResults(function (): StepResult {
+        $this->travel(91)->seconds();
+
+        return StepResult::wait(5);
+    });
+
+    cloudTaskRun($server);
+
+    Sleep::assertNeverSlept();
+    Queue::assertPushed(RunCloudTask::class, 1);
+    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->delay->equalTo(now()->addSeconds(5)));
+    expect(cloudTaskOf($server)->state)->toBe(CloudTask::RUNNING);
+});
+
+test('steps that stay inside the budget still sleep in the job', function () {
+    Queue::fake();
+    $this->freezeTime();
+    $server = cloudTaskServer();
+    cloudTaskResults(function (): StepResult {
+        $this->travel(90)->seconds();
+
+        return StepResult::wait(5);
+    }, StepResult::done());
+
+    cloudTaskRun($server);
+
+    Sleep::assertSlept(cloudTaskSlept(5), 1);
+    Queue::assertNothingPushed();
+    expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
+});
+
 test('a task that keeps stepping hands over to a fresh job', function () {
     Queue::fake();
     $this->freezeTime();
@@ -233,6 +271,18 @@ test('a provider hiccup waits and is remembered', function () {
         ->error->toBeNull()
         ->data->toBe(['last_error' => 'Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.'])
         ->and(cloudTaskCalls())->toBe(['step one', 'step one', 'finished one']);
+});
+
+test('a hiccup in one step is forgotten once the task moves on', function () {
+    $server = cloudTaskServer();
+    cloudTaskResults(cloudTaskFailure(CloudFailure::Unavailable, status: 503), StepResult::next('two', ['key_id' => 'key-1']), StepResult::done());
+
+    cloudTaskRun($server);
+
+    expect(cloudTaskCalls())->toBe(['step one', 'step one', 'step two', 'finished two'])
+        ->and(cloudTaskHandler()->calls[1]['task']->data)->toBe(['last_error' => 'Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.'])
+        ->and(cloudTaskHandler()->calls[2]['task']->data)->toBe(['key_id' => 'key-1'])
+        ->and(cloudTaskOf($server)->data)->toBe(['key_id' => 'key-1']);
 });
 
 test('every failure that can pass is waited out', function (CloudFailure $failure) {
@@ -297,10 +347,11 @@ test('a refused token marks the account', function () {
         ->and(cloudTaskCalls())->toBe(['step one', 'failed one']);
 });
 
-test('an account with no token stored fails before anything is sent', function () {
+test('an account with no token stored fails before anything is sent', function (Closure $spoil) {
+    Exceptions::fake();
     app()->instance(CloudApiFactory::class, new HttpCloudApiFactory);
     $server = cloudTaskServer();
-    $server->cloudProvider->forceFill(['api_token' => null])->save();
+    $spoil($server->cloudProvider);
 
     cloudTaskRun($server);
 
@@ -311,7 +362,13 @@ test('an account with no token stored fails before anything is sent', function (
         ->and(cloudTaskCalls())->toBe(['failed one'])
         ->and(cloudTaskHandler()->calls[0]['api'])->toBeNull();
     Http::assertNothingSent();
-});
+    Exceptions::assertNothingReported();
+})->with([
+    'no token' => [fn(CloudProvider $account) => $account->forceFill(['api_token' => null])->save()],
+    'a token sealed with another vault key' => [fn(CloudProvider $account) => DB::table('cloud_providers')
+        ->where('id', $account->getKey())
+        ->update(['api_token' => (new VaultEncryptor(base64_encode(str_repeat('k', 32))))->encrypt('the-account-token')])],
+]);
 
 test('an unexpected error fails the task and is reported', function () {
     Exceptions::fake();
@@ -328,7 +385,7 @@ test('an unexpected error fails the task and is reported', function () {
     Exceptions::assertReported(RuntimeException::class);
 });
 
-test('an unexpected error is cleaned and cut before anyone reads it', function (string $message, string $shown) {
+test('the error stored for an unexpected failure is cleaned and cut', function (string $message, string $shown) {
     Exceptions::fake();
     $server = cloudTaskServer();
     cloudTaskResults(new RuntimeException($message));
@@ -376,6 +433,26 @@ test('each step keeps its own deadline', function (int $seconds, string $called)
     'at it' => [60, 'step one'],
     'past it' => [61, 'expired one'],
 ]);
+
+test('a step past its deadline that cannot reach the provider fails instead of waiting again', function (CloudFailure $failure) {
+    Exceptions::fake();
+    Queue::fake();
+    $server = cloudTaskServer();
+    $unanswered = cloudTaskFailure($failure);
+    cloudTaskResults($unanswered);
+    $this->travel(11)->minutes();
+
+    cloudTaskRun($server);
+
+    expect(cloudTaskCalls())->toBe(['expired one', 'failed one'])
+        ->and(cloudTaskHandler()->calls[1]['reason'])->toBe($unanswered->getMessage())
+        ->and(cloudTaskOf($server))
+        ->state->toBe(CloudTask::FAILED)
+        ->error->toBe($unanswered->getMessage());
+    Sleep::assertNeverSlept();
+    Queue::assertNothingPushed();
+    Exceptions::assertNothingReported();
+})->with([CloudFailure::Unreachable, CloudFailure::Unavailable, CloudFailure::Busy, CloudFailure::RateLimited]);
 
 test('what a step wrote before the task ended is handed on', function (Closure $end, string $method, array $data) {
     $server = cloudTaskServer();
@@ -435,6 +512,25 @@ test('a server whose account was removed fails with how to reconnect', function 
     'gone' => [fn(CloudProvider $account) => $account->forceDelete()],
 ]);
 
+test('a task this version has no handler for fails once instead of coming back every minute', function () {
+    Exceptions::fake();
+    Queue::fake();
+    $server = cloudTaskServer(['type' => 'retired']);
+
+    cloudTaskRun($server);
+    $this->travel(3)->minutes();
+    (new ResumeCloudTasks)->handle();
+
+    expect(cloudTaskOf($server))
+        ->state->toBe(CloudTask::FAILED)
+        ->error->toBe(RunCloudTask::NO_HANDLER)
+        ->and(RunCloudTask::NO_HANDLER)->toBe('Coresmith could not continue this task after an update. Start it again.')
+        ->and(cloudTaskHandler()->calls)->toBe([])
+        ->and(cloudTaskApis()->accounts())->toBe([]);
+    Queue::assertNothingPushed();
+    Exceptions::assertReported(InvalidArgumentException::class);
+});
+
 test('one task runs per server', function () {
     Queue::fake();
     $server = cloudTaskServer();
@@ -458,6 +554,49 @@ test('one task runs per server', function () {
         ->and($job->tries)->toBe(1)
         ->and($job->timeout)->toBe(150)
         ->and([RunCloudTask::BUDGET_SECONDS, RunCloudTask::MAX_STEPS, RunCloudTask::RETRY_SECONDS])->toBe([90, 25, 30]);
+});
+
+test('a task that stops running between two steps of one job stops the loop', function (Closure $stop) {
+    $server = cloudTaskServer();
+    $left = null;
+    cloudTaskResults(StepResult::wait(5), StepResult::done());
+    Sleep::whenFakingSleep(function () use ($server, $stop, &$left): void {
+        $stop(Server::withTrashed()->findOrFail($server->getKey()));
+        $left = Server::withTrashed()->findOrFail($server->getKey())->provider_task;
+    });
+
+    cloudTaskRun($server);
+
+    expect(cloudTaskCalls())->toBe(['step one'])
+        ->and(Server::withTrashed()->findOrFail($server->getKey())->provider_task)->toBe($left);
+    Sleep::assertSleptTimes(1);
+})->with([
+    'failed elsewhere' => [fn(Server $server) => CloudTask::fail($server, 'Stopped elsewhere.')],
+    'cleared' => [fn(Server $server) => CloudTask::clear($server)],
+    'the server was removed' => [fn(Server $server) => $server->delete()],
+]);
+
+test('a job dispatched while another holds the server does nothing', function () {
+    $server = cloudTaskServer();
+    cloudTaskResults(StepResult::done());
+    $job = new RunCloudTask($server);
+    $held = Cache::lock($job->middleware()[0]->getLockKey($job), 180);
+
+    expect($held->get())->toBeTrue();
+
+    RunCloudTask::dispatch($server);
+
+    expect(cloudTaskHandler()->calls)->toBe([])
+        ->and(cloudTaskApis()->accounts())->toBe([])
+        ->and(cloudTaskOf($server))
+        ->state->toBe(CloudTask::RUNNING)
+        ->step->toBe('one');
+
+    $held->release();
+    RunCloudTask::dispatch($server);
+
+    expect(cloudTaskCalls())->toBe(['step one', 'finished one'])
+        ->and(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
 });
 
 test('the queued job carries the server, never the token', function () {
@@ -545,6 +684,19 @@ test('a task is kept on the server in the shape the panel reads', function () {
         ->startedAt->toEqual(CarbonImmutable::parse('2026-10-30 12:00:00'))
         ->stepStartedAt->toEqual(CarbonImmutable::parse('2026-10-30 12:00:40'))
         ->heartbeatAt->toEqual(CarbonImmutable::parse('2026-10-30 12:00:40'));
+});
+
+test('the last error belongs to its step and is dropped when the task moves on', function () {
+    $server = cloudTaskServer();
+    CloudTask::touch($server, ['key_id' => 'key-1', 'last_error' => 'Hetzner Cloud had a problem answering. Try again in a minute.']);
+
+    CloudTask::advance($server, 'two');
+
+    expect(cloudTaskOf($server)->data)->toBe(['key_id' => 'key-1']);
+
+    CloudTask::advance($server, 'three', ['last_error' => 'Connection refused']);
+
+    expect(cloudTaskOf($server)->data)->toBe(['key_id' => 'key-1', 'last_error' => 'Connection refused']);
 });
 
 test('a failed task keeps its error until it is resumed at the step it reached', function () {

@@ -18,9 +18,13 @@ use App\Services\Cloud\Providers\DigitalOceanApi;
 use App\Services\Cloud\Providers\HetznerApi;
 use App\Services\Cloud\Providers\LinodeApi;
 use App\Services\Cloud\Providers\VultrApi;
+use App\Services\VaultEncryptor;
+use Carbon\CarbonImmutable;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\CloudFixtures;
 use Tests\Support\FakeCloudApi;
@@ -152,6 +156,23 @@ test('an account with no token stored cannot be used', function (?string $token)
     'a blank token' => ["  \n "],
 ]);
 
+test('an account whose token can no longer be read is treated as having none', function () {
+    $account = cloudCatalogAccount(['type' => CloudProviderType::Linode->value]);
+    DB::table('cloud_providers')
+        ->where('id', $account->getKey())
+        ->update(['api_token' => (new VaultEncryptor(base64_encode(str_repeat('k', 32))))->encrypt('linode-token')]);
+    $account = $account->fresh();
+
+    expect(fn() => app(CloudApiFactory::class)->for($account))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::TokenRejected)
+            ->and($e->provider)->toBe(CloudProviderType::Linode)
+            ->and($e->getMessage())->toBe(CloudProviderException::noToken(CloudProviderType::Linode)->getMessage());
+    });
+    expect(fn() => app(CloudCatalog::class)->for($account))->toThrow(CloudProviderException::class)
+        ->and(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse();
+    Http::assertNothingSent();
+});
+
 test('the catalog is fetched once and then served from the cache until forgotten', function () {
     cloudCatalogHetznerFakes();
     $account = cloudCatalogAccount();
@@ -216,7 +237,8 @@ test('each account is fetched with its own token and cached on its own', functio
     $catalog->for($staging);
 
     expect(Http::recorded()->map(fn(array $pair): string => $pair[0]->header('Authorization')[0])->countBy()->all())
-        ->toBe(['Bearer token-production' => 4, 'Bearer token-staging' => 4]);
+        ->toBe(['Bearer token-production' => 4, 'Bearer token-staging' => 4])
+        ->and(json_encode(Cache::get(CloudCatalog::cacheKey($production)), JSON_THROW_ON_ERROR))->toContain('fsn1')->not->toContain('token-production');
 
     $catalog->forget($staging);
 
@@ -246,6 +268,114 @@ test('a catalog put in the cache is served without asking the provider', functio
 
     expect(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse();
 });
+
+test('a cached catalog that can no longer be read is fetched again', function (mixed $stored) {
+    cloudCatalogHetznerFakes();
+    $account = cloudCatalogAccount();
+    Cache::put(CloudCatalog::cacheKey($account), $stored, now()->addDays(30));
+
+    $catalog = app(CloudCatalog::class)->for($account);
+
+    expect(cloudCatalogIds($catalog->regions()))->toBe(['ash', 'fsn1'])
+        ->and(cloudCatalogIds($catalog->sizes()))->toBe(['cx22', 'cax11', 'cpx21'])
+        ->and(Cache::get(CloudCatalog::cacheKey($account)))->toBe($catalog->toArray())
+        ->and(app(CloudCatalog::class)->for($account))->toEqual($catalog);
+    Http::assertSentCount(4);
+})->with([
+    'a region kept in an older shape' => [['regions' => [['id' => 'fsn1', 'name' => 'Falkenstein']], 'sizes' => [], 'images' => []]],
+    'a size whose field changed type' => [['regions' => [], 'sizes' => [['id' => 'cx22', 'cpus' => '2', 'memory_mb' => 4096, 'disk_gb' => 40, 'architecture' => 'x86', 'price' => '3.79', 'prices' => [], 'regions' => null]], 'images' => []]],
+    'a list it no longer has' => [['regions' => [], 'sizes' => []]],
+    'something that is not a catalog at all' => ['cx22'],
+]);
+
+test('a cached catalog that can no longer be read is dropped even when the provider cannot answer', function () {
+    cloudCatalogHetznerFakes([CLOUD_CATALOG_LOCATIONS => Http::response(CloudFixtures::json('hetzner/error-unavailable'), 503)]);
+    $account = cloudCatalogAccount();
+    Cache::put(CloudCatalog::cacheKey($account), ['regions' => [['id' => 'fsn1']], 'sizes' => [], 'images' => []], now()->addDays(30));
+
+    expect(fn() => app(CloudCatalog::class)->for($account))->toThrow(CloudProviderException::class)
+        ->and(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse();
+});
+
+test('the catalog reads each provider through its own client', function (CloudProviderType $type, array $fixtures, array $regions, array $sizes, array $images, array $defaults, Closure $also) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-30 12:00:00'));
+    Http::fake(array_map(fn(array $fixture): PromiseInterface => Http::response(CloudFixtures::with(...$fixture)), $fixtures));
+    $account = cloudCatalogAccount(['type' => $type->value, 'api_token' => 'the-catalog-token']);
+
+    $catalog = app(CloudCatalog::class)->for($account);
+    $sent = Http::recorded()->count();
+    $cached = app(CloudCatalog::class)->for($account);
+
+    expect($catalog->regions()->pluck('label', 'id')->all())->toBe($regions)
+        ->and(cloudCatalogIds($catalog->sizes()))->toBe($sizes)
+        ->and($catalog->images()->pluck('label', 'id')->all())->toBe($images)
+        ->and($catalog->defaults())->toBe($defaults)
+        ->and($cached)->toEqual($catalog)
+        ->and(Http::recorded()->count())->toBe($sent)
+        ->and(json_encode(Cache::get(CloudCatalog::cacheKey($account)), JSON_THROW_ON_ERROR))->not->toContain('the-catalog-token');
+    $also($cached);
+})->with([
+    'digitalocean' => [
+        CloudProviderType::DigitalOcean,
+        [
+            'api.digitalocean.com/v2/regions*' => ['digitalocean/regions'],
+            'api.digitalocean.com/v2/sizes*' => ['digitalocean/sizes'],
+            'api.digitalocean.com/v2/images*' => ['digitalocean/images'],
+        ],
+        ['fra1' => 'Frankfurt 1 (fra1)', 'nyc3' => 'New York 3 (nyc3)', 'sgp1' => 'Singapore 1 (sgp1)'],
+        ['s-1vcpu-1gb', 's-1vcpu-2gb', 's-2vcpu-4gb'],
+        ['ubuntu-24-04-x64' => 'Ubuntu 24.04', 'ubuntu-22-04-x64' => 'Ubuntu 22.04', 'debian-12-x64' => 'Debian 12'],
+        ['region' => 'fra1', 'size' => 's-1vcpu-2gb', 'image' => 'ubuntu-24-04-x64'],
+        function (CatalogData $catalog): void {
+            expect($catalog->size('s-1vcpu-2gb'))
+                ->price->toEqual(new CloudPrice('12.00', 'USD'))
+                ->regions->toBe(['fra1', 'nyc3', 'sgp1'])
+                ->and($catalog->size('s-1vcpu-512mb-10gb'))->toBeNull()
+                ->and($catalog->region('ams2'))->toBeNull();
+        },
+    ],
+    'vultr' => [
+        CloudProviderType::Vultr,
+        [
+            'api.vultr.com/v2/regions*' => ['vultr/regions'],
+            'api.vultr.com/v2/plans?per_page=500' => ['vultr/plans-1'],
+            'api.vultr.com/v2/plans?per_page=500&cursor=*' => ['vultr/plans-2'],
+            'api.vultr.com/v2/os*' => ['vultr/os'],
+        ],
+        ['ams' => 'Amsterdam (ams)', 'fra' => 'Frankfurt (fra)', 'ewr' => 'New Jersey (ewr)'],
+        ['vc2-1c-1gb', 'vc2-1c-2gb', 'vhf-1c-2gb', 'vc2-2c-4gb'],
+        ['2284' => 'Ubuntu 24.04', '1743' => 'Ubuntu 22.04', '2136' => 'Debian 12'],
+        ['region' => 'fra', 'size' => 'vc2-1c-2gb', 'image' => '2284'],
+        function (CatalogData $catalog): void {
+            expect($catalog->image('2284')->id)->toBe('2284')
+                ->and(cloudCatalogIds($catalog->sizesIn('ams')))->toBe(['vc2-1c-1gb', 'vc2-1c-2gb', 'vc2-2c-4gb'])
+                ->and(cloudCatalogIds($catalog->resizeOptions($catalog->size('vc2-1c-2gb'), 'fra', true)))->toBe(['vhf-1c-2gb', 'vc2-2c-4gb']);
+        },
+    ],
+    'linode, with a regional price nobody knows' => [
+        CloudProviderType::Linode,
+        [
+            'api.linode.com/v4/regions*' => ['linode/regions'],
+            'api.linode.com/v4/linode/types*' => ['linode/types', ['data.2.region_prices' => [['id' => 'id-cgk', 'hourly' => null, 'monthly' => null]]]],
+            'api.linode.com/v4/images*' => ['linode/images'],
+        ],
+        ['eu-central' => 'Frankfurt, DE (eu-central)', 'id-cgk' => 'Jakarta, ID (id-cgk)', 'us-east' => 'Newark, NJ (us-east)'],
+        ['g6-nanode-1', 'g6-standard-1', 'g6-standard-2'],
+        ['linode/ubuntu24.04' => 'Ubuntu 24.04', 'linode/ubuntu22.04' => 'Ubuntu 22.04', 'linode/debian12' => 'Debian 12'],
+        ['region' => 'eu-central', 'size' => 'g6-standard-1', 'image' => 'linode/ubuntu24.04'],
+        function (CatalogData $catalog): void {
+            $standard = $catalog->size('g6-standard-1');
+
+            expect($catalog->size('g6-standard-2')->priceIn('id-cgk'))->toBeNull()
+                ->and($catalog->size('g6-standard-2')->priceIn('eu-central'))->toEqual(new CloudPrice('24.00', 'USD'))
+                ->and($standard->priceIn('id-cgk'))->toEqual(new CloudPrice('14.40', 'USD'))
+                ->and($standard->diskGb)->toBe(50)
+                ->and(cloudCatalogIds($catalog->sizesIn('id-cgk')))->toBe(['g6-nanode-1', 'g6-standard-1', 'g6-standard-2'])
+                ->and(cloudCatalogIds($catalog->resizeOptions($standard, 'id-cgk', false)))->toBe(['g6-standard-2'])
+                ->and(cloudCatalogIds($catalog->resizeOptions($standard, 'id-cgk', true)))->toBe([]);
+        },
+    ],
+]);
 
 test('a provider failure is not cached', function (string $failing, string $fixture) {
     cloudCatalogHetznerFakes([

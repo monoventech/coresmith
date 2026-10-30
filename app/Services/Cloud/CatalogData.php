@@ -65,6 +65,11 @@ final readonly class CatalogData
         );
     }
 
+    public static function amount(?CloudPrice $price): float
+    {
+        return $price === null ? INF : (float) $price->monthly;
+    }
+
     /**
      * @return Collection<int, CloudRegion>
      */
@@ -192,12 +197,7 @@ final readonly class CatalogData
 
     private static function costsMore(?CloudPrice $price, ?CloudPrice $than): bool
     {
-        return $price !== null && $than !== null && (float) $price->monthly > (float) $than->monthly;
-    }
-
-    private static function amount(?CloudPrice $price): float
-    {
-        return $price === null ? INF : (float) $price->monthly;
+        return $price !== null && $than !== null && self::amount($price) > self::amount($than);
     }
 
     /**

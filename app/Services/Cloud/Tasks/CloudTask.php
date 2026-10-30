@@ -97,7 +97,7 @@ final readonly class CloudTask
     {
         $now = now()->toIso8601String();
 
-        self::change($server, ['step' => $step, 'step_started_at' => $now, 'heartbeat_at' => $now], $data);
+        self::change($server, ['step' => $step, 'step_started_at' => $now, 'heartbeat_at' => $now], $data, ['last_error']);
     }
 
     /**
@@ -155,8 +155,9 @@ final readonly class CloudTask
     /**
      * @param  array<string, mixed>  $changes
      * @param  array<string, mixed>  $data
+     * @param  list<string>  $forget
      */
-    private static function change(Server $server, array $changes, array $data = []): void
+    private static function change(Server $server, array $changes, array $data = [], array $forget = []): void
     {
         $task = $server->provider_task;
 
@@ -164,9 +165,9 @@ final readonly class CloudTask
             return;
         }
 
-        $merged = array_replace(is_array($task['data'] ?? null) ? $task['data'] : [], $data);
+        $kept = array_diff_key(is_array($task['data'] ?? null) ? $task['data'] : [], array_flip($forget));
 
-        $server->forceFill(['provider_task' => array_replace($task, $changes, ['data' => $merged])])->save();
+        $server->forceFill(['provider_task' => array_replace($task, $changes, ['data' => array_replace($kept, $data)])])->save();
     }
 
     private static function time(mixed $value): ?CarbonImmutable
