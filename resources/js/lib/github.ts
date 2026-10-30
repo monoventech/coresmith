@@ -75,6 +75,9 @@ export type GitHubSettings = {
     can: { manage: boolean }
 }
 
+export const REPOSITORY_NOT_VISIBLE =
+    'GitHub does not give Coresmith access to that repository. Pick another, or add it under Manage repositories on GitHub.'
+
 export const ORGANIZATION_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/
 
 export const APP_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 -]{0,33}$/

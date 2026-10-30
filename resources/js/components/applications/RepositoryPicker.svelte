@@ -7,7 +7,9 @@
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { REPOSITORY_NOT_VISIBLE } from '@/lib/github'
     import type { GitHubPick, GitHubRepository, GitHubSource } from '@/lib/github'
+    import { trackedPointer } from '@/lib/pointer'
     import { cn } from '@/lib/utils'
     import { Check, CircleAlert, Search } from '@lucide/svelte'
     import { onMount, tick } from 'svelte'
@@ -34,7 +36,11 @@
     let picked = $state.raw<GitHubRepository | null>(null)
     let branchFailure = $state<string | null>(null)
     let search = $state<HTMLInputElement | null>(null)
-    let pointer: [number, number] = [-1, -1]
+
+    const pointer = trackedPointer()
+    const controller = new AbortController()
+
+    let touched = false
 
     const needle = $derived(query.trim().toLowerCase())
     const filtered = $derived(repositories.filter((repository) => repository.full_name.toLowerCase().includes(needle)))
@@ -64,7 +70,7 @@
         highlighted = -1
 
         try {
-            const response = await fetch(connection.repositories_href, { headers: HEADERS })
+            const response = await fetch(connection.repositories_href, { headers: HEADERS, signal: controller.signal })
             const body = (await response.json()) as {
                 repositories?: GitHubRepository[]
                 total?: number
@@ -101,7 +107,8 @@
 
         try {
             const response = await fetch(route('source-providers.branches', [connection.id, repository.id]), {
-                headers: HEADERS
+                headers: HEADERS,
+                signal: controller.signal
             })
             const body = (await response.json()) as { branches?: string[]; message?: string }
 
@@ -109,9 +116,7 @@
                 return { branches: body.branches, failure: null }
             }
 
-            return (response.status === 404 || response.status === 502) && body.message
-                ? { ...fallback, failure: body.message }
-                : fallback
+            return body.message === REPOSITORY_NOT_VISIBLE ? { ...fallback, failure: REPOSITORY_NOT_VISIBLE } : fallback
         } catch {
             return fallback
         }
@@ -129,7 +134,7 @@
 
         const result = await branchesOf(repository)
 
-        if (picked?.id !== repository.id) {
+        if (controller.signal.aborted || picked?.id !== repository.id) {
             return
         }
 
@@ -141,17 +146,23 @@
         })
     }
 
-    function track(event: PointerEvent) {
-        pointer = [event.screenX, event.screenY]
+    function hover(event: PointerEvent, index: number) {
+        if (pointer.moved(event)) {
+            highlighted = index
+        }
     }
 
-    function hover(event: PointerEvent, index: number) {
-        if (event.pointerType === 'touch' || (event.screenX === pointer[0] && event.screenY === pointer[1])) {
-            return
+    function press(event: PointerEvent) {
+        touched = event.pointerType === 'touch'
+    }
+
+    function choose(repository: GitHubRepository) {
+        if (touched) {
+            touched = false
+            search?.blur()
         }
 
-        track(event)
-        highlighted = index
+        void pick(repository)
     }
 
     async function reveal() {
@@ -190,11 +201,14 @@
 
     onMount(() => {
         void load()
+
+        return () => controller.abort()
     })
 </script>
 
 <div>
     <Label for="repository-search" class="mb-1.5">Repository</Label>
+    <span id="repository-search-description" class="sr-only">{`Search repositories on ${connection.account}`}</span>
     <div class="relative">
         <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -202,7 +216,7 @@
             bind:ref={search}
             bind:value={query}
             role="combobox"
-            aria-label={`Search repositories on ${connection.account}`}
+            aria-describedby="repository-search-description"
             aria-controls="repository-options"
             aria-expanded={filtered.length > 0}
             aria-autocomplete="list"
@@ -237,9 +251,11 @@
                             'flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-md border px-3 py-1.5 text-left text-foreground transition-colors duration-(--dur-fast) ease-(--ease-out-soft) data-highlighted:bg-muted',
                             selected ? 'option-selected' : 'border-transparent'
                         )}
-                        onpointerenter={track}
+                        onpointerenter={pointer.enter}
                         onpointermove={(event) => hover(event, index)}
-                        onclick={() => void pick(repository)}
+                        onpointerdown={press}
+                        onmousedown={(event) => event.preventDefault()}
+                        onclick={() => choose(repository)}
                     >
                         <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
                             <span class="max-w-full truncate font-mono text-[13px] font-medium"

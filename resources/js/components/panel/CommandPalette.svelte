@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { PaletteCommand } from '@/lib/panel'
+    import { trackedPointer } from '@/lib/pointer'
     import { themeState } from '@/lib/theme.svelte'
     import { cn } from '@/lib/utils'
     import { page, router } from '@inertiajs/svelte'
@@ -40,6 +41,8 @@
     let input = $state<HTMLInputElement | null>(null)
     let returnFocus: HTMLElement | null = null
 
+    const pointer = trackedPointer()
+
     const commands = $derived((page.props.palette as PaletteCommand[] | undefined) ?? [])
     const filtered = $derived(
         commands.filter((command) => command.label.toLowerCase().includes(query.trim().toLowerCase()))
@@ -77,6 +80,12 @@
 
         if (command.href) {
             router.visit(command.href)
+        }
+    }
+
+    function hover(event: PointerEvent, index: number) {
+        if (pointer.moved(event)) {
+            highlighted = index
         }
     }
 
@@ -154,7 +163,8 @@
                             'flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left font-sans text-[13.5px] text-foreground transition-colors duration-(--dur-fast) hover:bg-muted',
                             index === highlighted && 'bg-muted'
                         )}
-                        onmouseenter={() => (highlighted = index)}
+                        onpointerenter={pointer.enter}
+                        onpointermove={(event) => hover(event, index)}
                         onclick={() => run(command)}
                     >
                         <Icon class="size-4 text-muted-foreground" />

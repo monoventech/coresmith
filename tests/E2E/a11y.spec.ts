@@ -68,6 +68,40 @@ const PAGES: [string, Visit][] = [
         }
     ],
     [
+        'Add an app with a repository picked',
+        async (page) => {
+            await gotoServer(page, 'bench-01')
+            await page.getByRole('link', { name: 'Add an app' }).click()
+            await page.getByRole('option', { name: /monoventech\/relay/ }).click()
+            await page.getByRole('option', { name: /monoventech\/relay/, selected: true }).waitFor()
+        }
+    ],
+    [
+        'Add an app whose repository list did not load',
+        async (page) => {
+            await page.route('**/settings/source-providers/*/repositories', (route) =>
+                route.fulfill({
+                    status: 502,
+                    json: { message: 'GitHub did not send the repository list. GitHub did not answer.' }
+                })
+            )
+            await gotoServer(page, 'bench-01')
+            await page.getByRole('link', { name: 'Add an app' }).click()
+            await page.getByRole('button', { name: 'Try again' }).waitFor()
+        }
+    ],
+    [
+        'Add an app on an installation with no repositories',
+        async (page) => {
+            await page.route('**/settings/source-providers/*/repositories', (route) =>
+                route.fulfill({ status: 200, json: { repositories: [], total: 0, truncated: false } })
+            )
+            await gotoServer(page, 'bench-01')
+            await page.getByRole('link', { name: 'Add an app' }).click()
+            await page.getByRole('link', { name: 'Manage repositories' }).waitFor()
+        }
+    ],
+    [
         'Running deploy',
         async (page) => {
             await page.goto('/dashboard')

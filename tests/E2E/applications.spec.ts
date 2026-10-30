@@ -28,7 +28,29 @@ function repositories(page: Page) {
 }
 
 function repositorySearch(page: Page) {
-    return page.getByRole('combobox', { name: 'Search repositories on monoventech' })
+    return page.getByRole('combobox', { name: 'Repository', exact: true })
+}
+
+function repository(page: Page, name: string) {
+    return repositories(page).getByRole('option', { name: new RegExp(`monoventech/${name}`) })
+}
+
+function serveCatalog(page: Page) {
+    return page.route('**/settings/source-providers/*/repositories', (route) =>
+        route.fulfill({
+            status: 200,
+            json: {
+                total: 4,
+                truncated: false,
+                repositories: [
+                    { id: '70000001', full_name: 'monoventech/atlas', private: true, default_branch: 'main' },
+                    { id: '70000002', full_name: 'monoventech/ledger', private: true, default_branch: 'main' },
+                    { id: '70000003', full_name: 'monoventech/relay', private: true, default_branch: 'trunk' },
+                    { id: '70000004', full_name: 'monoventech/storefront', private: false, default_branch: 'main' }
+                ]
+            }
+        })
+    )
 }
 
 function branchSuggestions(page: Page) {
@@ -533,6 +555,7 @@ test.describe('adding an application from GitHub', () => {
         await expect(source.locator('option:checked')).toHaveText('GitHub · monoventech')
         await expect(source.locator('option')).toHaveText(['GitHub · monoventech', 'A Git URL'])
         await expect(repositorySearch(page)).toHaveAttribute('placeholder', 'Search repositories')
+        await expect(repositorySearch(page)).toHaveAccessibleDescription('Search repositories on monoventech')
         await expect(repositories(page).getByRole('option')).toHaveCount(4)
         await expect(repositories(page).getByRole('option', { name: /monoventech\/storefront/ })).not.toContainText(
             'private'
@@ -561,6 +584,7 @@ test.describe('adding an application from GitHub', () => {
     })
 
     test('a branch typed by hand is kept when a repository is picked', async ({ page }) => {
+        await serveCatalog(page)
         await openAddApp(page)
 
         const branch = page.getByLabel('Branch', { exact: true })
@@ -600,6 +624,7 @@ test.describe('adding an application from GitHub', () => {
     test('a Git URL still works without picking', async ({ page }, testInfo) => {
         const name = `${own(testInfo, 'by-url')}-${Date.now().toString(36)}`
 
+        await serveCatalog(page)
         await openAddApp(page)
         await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
 
@@ -638,6 +663,7 @@ test.describe('adding an application from GitHub', () => {
     })
 
     test('nothing matching says so', async ({ page }) => {
+        await serveCatalog(page)
         await openAddApp(page)
         await expect(repositories(page).getByRole('option')).toHaveCount(4)
 
@@ -648,6 +674,7 @@ test.describe('adding an application from GitHub', () => {
     })
 
     test('the keyboard moves through repositories and enter picks one', async ({ page }, testInfo) => {
+        await serveCatalog(page)
         await openAddApp(page)
 
         const search = repositorySearch(page)
@@ -696,6 +723,7 @@ test.describe('adding an application from GitHub', () => {
     })
 
     test('a pointer resting over the list does not move the keyboard highlight', async ({ page }) => {
+        await serveCatalog(page)
         await openAddApp(page)
 
         const search = repositorySearch(page)
@@ -786,6 +814,173 @@ test.describe('adding an application from GitHub', () => {
         await expect(page.getByRole('main')).toContainText(
             'Showing the first 3 of 2,345 repositories. Use a Git URL for one that is not listed.'
         )
+    })
+
+    test('a branch list that arrives after the source changed is ignored', async ({ page }) => {
+        let answer: () => void = () => undefined
+        const answered = new Promise<void>((resolve) => (answer = resolve))
+        let settle: () => void = () => undefined
+        const settled = new Promise<void>((resolve) => (settle = resolve))
+
+        await page.route('**/repositories/70000003/branches', async (route) => {
+            await answered
+            await route
+                .fulfill({ status: 200, json: { branches: ['trunk', 'release/2.0'], default: 'trunk' } })
+                .catch(() => undefined)
+            settle()
+        })
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        const branch = page.getByLabel('Branch', { exact: true })
+
+        await repository(page, 'relay').click()
+        await expect(branch).toHaveValue('trunk')
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
+        await expect(page.getByLabel('Repository', { exact: true })).toBeVisible()
+        await expect(branch).toHaveValue('main')
+        expect(await branchSuggestions(page)).toEqual([])
+
+        answer()
+        await settled
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+
+        await expect(branch).toHaveValue('main')
+        expect(await branchSuggestions(page)).toEqual([])
+    })
+
+    test('changing the source drops a branch a pick filled and keeps one typed by hand', async ({ page }) => {
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        const branch = page.getByLabel('Branch', { exact: true })
+        const source = page.getByLabel('Source', { exact: true })
+
+        await repository(page, 'relay').click()
+        await expect.poll(() => branchSuggestions(page)).toEqual(['trunk', 'release/2.0'])
+        await expect(branch).toHaveValue('trunk')
+
+        await source.selectOption({ label: 'A Git URL' })
+
+        await expect(branch).toHaveValue('main')
+        expect(await branchSuggestions(page)).toEqual([])
+
+        await source.selectOption({ label: 'GitHub · monoventech' })
+        await branch.fill('release/2.0')
+        await repository(page, 'relay').click()
+        await expect.poll(() => branchSuggestions(page)).toEqual(['trunk', 'release/2.0'])
+        await source.selectOption({ label: 'A Git URL' })
+
+        await expect(branch).toHaveValue('release/2.0')
+    })
+
+    test('a GitHub connection that is gone when the form comes back still says why', async ({ page }) => {
+        await serveCatalog(page)
+        await openAddApp(page)
+        await page.getByLabel('Name', { exact: true }).fill('gone-connection')
+        await repository(page, 'ledger').click()
+        await page.route(
+            (url) => /\/servers\/[^/]+\/applications$/.test(url.pathname),
+            async (route) => {
+                if (route.request().method() !== 'POST') {
+                    await route.continue()
+
+                    return
+                }
+
+                const sent = route.request().postDataJSON()
+                const response = await route.fetch({
+                    postData: { ...sent, source_provider_id: '01jzzzzzzzzzzzzzzzzzzzzzzz' }
+                })
+                const returned = await response.json()
+
+                await route.fulfill({
+                    response,
+                    json: {
+                        ...returned,
+                        props: { ...returned.props, github: { ...returned.props.github, connections: [] } }
+                    }
+                })
+            }
+        )
+
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        await expect(page.getByLabel('Repository', { exact: true })).toBeVisible()
+        await expect(page.getByLabel('Source', { exact: true })).toHaveCount(0)
+        await expect(page.getByRole('main')).toContainText(
+            "That GitHub connection isn't available. Pick another one, or connect GitHub again in Git settings."
+        )
+    })
+
+    test('picking with the mouse keeps the keyboard on the search', async ({ page }) => {
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        const search = repositorySearch(page)
+
+        await search.focus()
+        await repository(page, 'ledger').click()
+
+        await expect(search).toBeFocused()
+        await page.keyboard.press('ArrowDown')
+
+        await expect(search).toHaveAttribute(
+            'aria-activedescendant',
+            (await repository(page, 'relay').getAttribute('id')) ?? ''
+        )
+    })
+
+    test('tapping a repository puts the on-screen keyboard away', async ({ page, hasTouch }) => {
+        test.skip(!hasTouch, 'Only the phone projects have a touch screen to tap')
+
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        const search = repositorySearch(page)
+
+        await search.focus()
+        await repository(page, 'ledger').tap()
+
+        await expect(repository(page, 'ledger')).toHaveAttribute('aria-selected', 'true')
+        await expect(search).not.toBeFocused()
+    })
+
+    test('a branch list GitHub will not send is explained in plain words', async ({ page }) => {
+        const answers = [
+            {
+                status: 404,
+                json: {
+                    message:
+                        'GitHub does not give Coresmith access to that repository. Pick another, or add it under Manage repositories on GitHub.'
+                }
+            },
+            {
+                status: 404,
+                json: { message: 'No query results for model [App\\Models\\SourceProvider] 01jzzzzzzzzzzzzzzzzzzzzzzz' }
+            },
+            { status: 502, json: { message: 'GitHub did not send the branch list. GitHub did not answer.' } }
+        ]
+        let next = 0
+
+        await page.route('**/repositories/*/branches', (route) => route.fulfill(answers[next++] ?? answers[0]))
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        const main = page.getByRole('main')
+
+        await repository(page, 'atlas').click()
+        await expect(main).toContainText(
+            'GitHub does not give Coresmith access to that repository. Pick another, or add it under Manage repositories on GitHub.'
+        )
+
+        await repository(page, 'ledger').click()
+        await expect(main).toContainText('Coresmith could not load the branch list. Type the branch name instead.')
+        await expect(main).not.toContainText('No query results')
+
+        await repository(page, 'relay').click()
+        await expect(main).toContainText('Coresmith could not load the branch list. Type the branch name instead.')
+        await expect(main).not.toContainText('GitHub did not send the branch list')
     })
 
     for (const theme of ['light', 'dark'] as const) {

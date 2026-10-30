@@ -30,6 +30,8 @@
 
     const GIT_URL = 'url'
 
+    const DEFAULT_BRANCH = 'main'
+
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = {
         php: [
             { value: 'laravel', label: 'Laravel' },
@@ -66,15 +68,24 @@
     let pickedSize = $state<string | null>(null)
     const size = $derived(pickedSize ?? (type === 'ruby' ? 'medium' : 'small'))
     let chosenSource = $state<string | null>(null)
-    const source = $derived(chosenSource ?? github.connections[0]?.id ?? GIT_URL)
+    const source = $derived(
+        chosenSource !== null &&
+            (chosenSource === GIT_URL || github.connections.some((candidate) => candidate.id === chosenSource))
+            ? chosenSource
+            : (github.connections[0]?.id ?? GIT_URL)
+    )
     const connection = $derived(github.connections.find((candidate) => candidate.id === source) ?? null)
-    let branch = $state('main')
+    let branch = $state(DEFAULT_BRANCH)
     let branchEdited = $state(false)
     let branches = $state<string[]>([])
 
     function chooseSource(value: string) {
         chosenSource = value
         branches = []
+
+        if (!branchEdited) {
+            branch = DEFAULT_BRANCH
+        }
     }
 
     function picked(pick: GitHubPick) {
@@ -193,6 +204,9 @@
                                 aria-invalid={errors.repository_url ? true : undefined}
                             />
                             <FieldError message={errors.repository_url} />
+                            {#if github.connections.length === 0}
+                                <FieldError message={errors.source_provider_id} />
+                            {/if}
                             {#if github.connections.length === 0 && !errors.repository_url}
                                 <p class="mt-1.5 text-[12px] text-muted-foreground">
                                     Connect GitHub in <TextLink href={github.settings_href}>Settings, Git</TextLink> to pick
