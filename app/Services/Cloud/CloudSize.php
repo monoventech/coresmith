@@ -13,7 +13,7 @@ use App\Services\Panel\Formats;
 final readonly class CloudSize
 {
     /**
-     * @param  array<string, CloudPrice>  $prices
+     * @param  array<string, ?CloudPrice>  $prices
      * @param  list<string>|null  $regions
      */
     public function __construct(
@@ -34,7 +34,7 @@ final readonly class CloudSize
 
     public function priceIn(string $region): ?CloudPrice
     {
-        return $this->prices[$region] ?? $this->price;
+        return array_key_exists($region, $this->prices) ? $this->prices[$region] : $this->price;
     }
 
     public function label(): string

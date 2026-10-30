@@ -403,7 +403,7 @@ test('linode reads a plan with no price without inventing one', function () {
         ->and($sizes['g6-standard-2']->price)->toBeNull();
 });
 
-test('linode reads only the regional prices of a plan that it can use', function (mixed $prices, array $expected) {
+test('linode reads the regional price of every region a plan names and an unreadable one as unknown', function (mixed $prices, array $expected) {
     Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', ['data.1.region_prices' => $prices]))]);
 
     expect(cloudLinode()->sizes()->keyBy('id')['g6-standard-1']->prices)->toEqual($expected);
@@ -414,11 +414,25 @@ test('linode reads only the regional prices of a plan that it can use', function
     ],
     'a price given as digits' => [[['id' => 'id-cgk', 'monthly' => '14.4']], ['id-cgk' => new CloudPrice('14.40', 'USD')]],
     'entries without a region' => [[['monthly' => 14.4], ['id' => '', 'monthly' => 14.4], ['id' => 42, 'monthly' => 14.4]], []],
-    'entries without a price' => [[['id' => 'id-cgk'], ['id' => 'br-gru', 'monthly' => 'free'], ['id' => 'us-sea', 'monthly' => null]], []],
+    'entries without a price' => [[['id' => 'id-cgk'], ['id' => 'br-gru', 'monthly' => 'free'], ['id' => 'us-sea', 'monthly' => null]], ['id-cgk' => null, 'br-gru' => null, 'us-sea' => null]],
     'entries that are not objects' => [['id-cgk', null, 42], []],
     'prices given as text' => ['id-cgk', []],
     'no prices' => [null, []],
 ]);
+
+test('linode does not charge the default price in a region whose own price it cannot read', function () {
+    Http::fake(['api.linode.com/v4/linode/types*' => Http::response(CloudFixtures::with('linode/types', [
+        'data.1.region_prices' => [['id' => 'id-cgk', 'hourly' => null, 'monthly' => null], ['id' => 'br-gru', 'hourly' => 0.0198, 'monthly' => 13.2]],
+    ]))]);
+
+    $size = cloudLinode()->sizes()->keyBy('id')['g6-standard-1'];
+
+    expect($size->price)->toEqual(new CloudPrice('12.00', 'USD'))
+        ->and($size->priceIn('id-cgk'))->toBeNull()
+        ->and($size->priceIn('br-gru'))->toEqual(new CloudPrice('13.20', 'USD'))
+        ->and($size->priceIn('eu-central'))->toEqual(new CloudPrice('12.00', 'USD'))
+        ->and($size->availableIn('id-cgk'))->toBeTrue();
+});
 
 test('linode reads every page of plans', function () {
     $types = CloudFixtures::json('linode/types')['data'];

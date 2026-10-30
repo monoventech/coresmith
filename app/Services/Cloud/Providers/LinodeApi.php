@@ -269,8 +269,8 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
         foreach (is_array($regional) ? $regional : [] as $price) {
             $region = is_array($price) ? self::text($price['id'] ?? null) : null;
 
-            if ($region !== null && is_numeric($price['monthly'] ?? null)) {
-                $prices[$region] = CloudPrice::fromNumber($price['monthly'], 'USD');
+            if ($region !== null) {
+                $prices[$region] = is_numeric($price['monthly'] ?? null) ? CloudPrice::fromNumber($price['monthly'], 'USD') : null;
             }
         }
 

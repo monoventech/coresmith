@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\ApiToken;
+use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\HttpCloudApiFactory;
 use App\Services\Dns\DnsResolver;
 use App\Services\Dns\NativeDnsResolver;
 use App\Services\SSH\SSHConnectionManager;
@@ -32,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(TeamContext::class);
 
         $this->app->bind(DnsResolver::class, NativeDnsResolver::class);
+
+        $this->app->bind(CloudApiFactory::class, HttpCloudApiFactory::class);
     }
 
     /**
