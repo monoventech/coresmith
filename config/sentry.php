@@ -1,5 +1,7 @@
 <?php
 
+use App\Support\Sentry\SentryScrubber;
+
 /**
  * Sentry Laravel SDK configuration file.
  *
@@ -18,7 +20,7 @@ return [
 
     // The release version of your application
     // Example with dynamic git hash: trim(exec('git --git-dir ' . base_path('.git') . ' log --pretty="%h" -n1 HEAD'))
-    'release' => env('SENTRY_RELEASE'),
+    'release' => env('SENTRY_RELEASE') ?: (string) config('coresmith.version'),
 
     // When left empty or `null` the Laravel environment will be used (usually discovered from `APP_ENV` in your `.env`)
     'environment' => env('SENTRY_ENVIRONMENT'),
@@ -48,7 +50,9 @@ return [
     'logs_channel_level' => env('SENTRY_LOG_LEVEL', env('SENTRY_LOGS_LEVEL', env('LOG_LEVEL', 'debug'))),
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#send_default_pii
-    'send_default_pii' => env('SENTRY_SEND_DEFAULT_PII', false),
+    'send_default_pii' => false,
+
+    'max_request_body_size' => 'never',
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#ignore_exceptions
     // 'ignore_exceptions' => [],
@@ -58,6 +62,12 @@ return [
         // Ignore Laravel's default health URL
         '/up',
     ],
+
+    'before_send' => [SentryScrubber::class, 'beforeSend'],
+
+    'before_send_transaction' => [SentryScrubber::class, 'beforeSendTransaction'],
+
+    'before_breadcrumb' => [SentryScrubber::class, 'beforeBreadcrumb'],
 
     // Breadcrumb specific configuration
     'breadcrumbs' => [
