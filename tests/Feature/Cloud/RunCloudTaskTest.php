@@ -16,6 +16,7 @@ use App\Services\Cloud\HttpCloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Cloud\Tasks\CloudTaskHandler;
 use App\Services\Cloud\Tasks\CloudTaskHandlers;
+use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Cloud\Tasks\StepResult;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\VaultEncryptor;
@@ -796,6 +797,6 @@ test('handlers are found by the type of task', function () {
     expect($handlers->for('probe'))->toBe($handler)
         ->and($handlers->for('built'))->toBeInstanceOf($handler::class)
         ->and($handlers->for('built'))->not->toBe($handler)
-        ->and(CloudTaskHandlers::DEFAULTS)->toBe([])
+        ->and(CloudTaskHandlers::DEFAULTS)->toBe([CloudTask::CREATE => CreateServerTask::class])
         ->and(fn() => $handlers->for('unknown'))->toThrow(InvalidArgumentException::class);
 });

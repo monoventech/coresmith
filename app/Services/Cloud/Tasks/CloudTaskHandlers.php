@@ -13,7 +13,9 @@ use InvalidArgumentException;
 final class CloudTaskHandlers
 {
     /** @var array<string, class-string<CloudTaskHandler>> */
-    public const DEFAULTS = [];
+    public const DEFAULTS = [
+        CloudTask::CREATE => CreateServerTask::class,
+    ];
 
     /** @var array<string, CloudTaskHandler|class-string<CloudTaskHandler>> */
     private readonly array $handlers;

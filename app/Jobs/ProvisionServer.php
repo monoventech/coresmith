@@ -21,6 +21,7 @@ use App\Services\Server\DirectoryStructure;
 use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\OsDetector;
 use App\Services\Server\PackageManagerFactory;
+use App\Services\Server\ProvisioningLog;
 use App\Services\Server\ProvisioningVerifier;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -44,6 +45,13 @@ final class ProvisionServer implements ShouldQueue
         private readonly bool $fromScratch = false,
     ) {
         $this->onQueue('provisioning');
+    }
+
+    public static function begin(Server $server): void
+    {
+        $server->forceFill(['status' => ServerStatus::Provisioning])->save();
+
+        self::dispatch($server);
     }
 
     public function handle(SSHConnectionManager $connections, OsDetector $detector): void
@@ -164,9 +172,7 @@ final class ProvisionServer implements ShouldQueue
 
     private function log(string $line, bool $stamped = true): void
     {
-        $this->server->forceFill([
-            'provisioning_log' => trim((string) $this->server->provisioning_log . "\n" . ($stamped ? '[' . now()->format('H:i:s') . '] ' : '') . $line),
-        ])->save();
+        ProvisioningLog::append($this->server, $line, $stamped);
     }
 
     private function tail(string $output): string

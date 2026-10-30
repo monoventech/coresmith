@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\AuditSeverity;
+use App\Enums\ServerStatus;
 use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandFailedException;
@@ -32,16 +33,18 @@ final class AuditServer implements ShouldQueue
 
     public int $timeout = 60;
 
-    public function __construct(private readonly Server $server)
-    {
+    public function __construct(
+        private readonly Server $server,
+        private readonly bool $provisionAfter = false,
+    ) {
         $this->onQueue('default');
     }
 
-    public static function begin(Server $server): void
+    public static function begin(Server $server, bool $provisionAfter = false): void
     {
         ServerAudit::start($server);
 
-        self::dispatch($server);
+        self::dispatch($server, $provisionAfter);
     }
 
     public function handle(SSHConnectionManager $connections, PreProvisioningAudit $audit): void
@@ -64,6 +67,16 @@ final class AuditServer implements ShouldQueue
             throw $e;
         } finally {
             $connections->disconnect($this->server);
+        }
+
+        if (!$this->provisionAfter || $report->hasBlockers()) {
+            return;
+        }
+
+        $server = Server::query()->find($this->server->getKey());
+
+        if ($server?->status === ServerStatus::Pending) {
+            ProvisionServer::begin($server);
         }
     }
 

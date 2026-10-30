@@ -6,10 +6,12 @@ use App\Enums\ServerStatus;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\AuditServer;
+use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Support\Facades\Queue;
 use phpseclib3\Exception\NoSupportedAlgorithmsException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
@@ -23,6 +25,31 @@ function auditJobRun(Server $server, FakeSSHTransport $transport): void
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }
+}
+
+function cloudAuditBegin(Server $server, string $probe, bool $provisionAfter = false): FakeSSHTransport
+{
+    $transport = (new FakeSSHTransport)->respondTo('base64 -d', $probe);
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        AuditServer::begin($server, provisionAfter: $provisionAfter);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    return $transport;
+}
+
+function cloudAuditCleanProbe(): string
+{
+    return "== ports\nLISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=701,fd=3))\n== services\ncron.service\n== disk\n41943040\n== memory\n4028000\n";
+}
+
+function cloudAuditNginxProbe(): string
+{
+    return "== ports\nLISTEN 0 511 0.0.0.0:80 0.0.0.0:* users:((\"nginx\",pid=1,fd=6))\n== services\nnginx.service\n== disk\n41943040\n== memory\n4028000\n";
 }
 
 test('a finished check is stored with its findings and logged', function () {
@@ -112,3 +139,59 @@ test('a server that only offers outdated ssh algorithms is told what to update',
 
     expect(AuditServer::explain($server, $e))->toBe('web-1 offers no SSH algorithms Coresmith trusts. Update OpenSSH on the server so it allows curve25519 key exchange and AES-GCM or ChaCha20 ciphers, then check again.');
 });
+
+test('an audit asked to provision afterwards starts provisioning when nothing blocks', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
+
+    $transport = cloudAuditBegin($server, cloudAuditCleanProbe(), provisionAfter: true);
+
+    expect($server->fresh())
+        ->status->toBe(ServerStatus::Provisioning)
+        ->and($server->fresh()->audit['state'])->toBe('done')
+        ->and(ServerAudit::blocks($server->fresh()))->toBeFalse()
+        ->and($transport->connected())->toBeFalse();
+    Queue::assertPushed(ProvisionServer::class, 1);
+    Queue::assertPushed(ProvisionServer::class, fn(ProvisionServer $job): bool => (fn() => $this->server)->call($job)->is($server)
+        && (fn() => $this->fromScratch)->call($job) === false);
+});
+
+test('an audit asked to provision afterwards stops at a blocker', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
+
+    cloudAuditBegin($server, cloudAuditNginxProbe(), provisionAfter: true);
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Pending)
+        ->and($server->fresh()->audit['state'])->toBe('done')
+        ->and(ServerAudit::blocks($server->fresh()))->toBeTrue();
+    Queue::assertNotPushed(ProvisionServer::class);
+});
+
+test('an ordinary audit never provisions by itself', function () {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
+
+    cloudAuditBegin($server, cloudAuditCleanProbe());
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Pending)
+        ->and($server->fresh()->audit['state'])->toBe('done')
+        ->and(ServerAudit::blocks($server->fresh()))->toBeFalse();
+    Queue::assertNotPushed(ProvisionServer::class);
+});
+
+test('an audit asked to provision afterwards leaves a server that moved on alone', function (Closure $moveOn, ServerStatus $status) {
+    Queue::fake([ProvisionServer::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Pending, 'host_key_fingerprint' => null]);
+    $moveOn($server);
+
+    cloudAuditBegin($server, cloudAuditCleanProbe(), provisionAfter: true);
+
+    expect(Server::withTrashed()->findOrFail($server->getKey()))
+        ->status->toBe($status)
+        ->audit->toMatchArray(['state' => 'done']);
+    Queue::assertNotPushed(ProvisionServer::class);
+})->with([
+    'someone already started provisioning it' => [fn(Server $server) => $server->forceFill(['status' => ServerStatus::Provisioning])->save(), ServerStatus::Provisioning],
+    'it was detached while the audit ran' => [fn(Server $server) => $server->delete(), ServerStatus::Pending],
+]);

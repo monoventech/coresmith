@@ -180,9 +180,7 @@ final class ServerController extends Controller
 
         abort_unless($server->status->isBeforeProvisioning(), 404);
 
-        $server->forceFill(['status' => ServerStatus::Provisioning])->save();
-
-        ProvisionServer::dispatch($server);
+        ProvisionServer::begin($server);
 
         return back()->with('success', 'Provisioning started. Every phase is logged, close this page and it keeps going.');
     }

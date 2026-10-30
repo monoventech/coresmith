@@ -9,6 +9,7 @@ use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Exception\ConnectionClosedException;
+use phpseclib3\Exception\UnableToConnectException;
 
 final class FakeSSHTransport implements SSHTransport
 {
@@ -16,7 +17,11 @@ final class FakeSSHTransport implements SSHTransport
 
     private string $hostKey = 'fake-host-key';
 
-    private bool $loginSucceeds = true;
+    private int $loginFailures = 0;
+
+    private int $refusals = 0;
+
+    private string $refusal = '';
 
     private bool $loginAttempted = false;
 
@@ -60,9 +65,17 @@ final class FakeSSHTransport implements SSHTransport
         return $this;
     }
 
-    public function failLogin(): self
+    public function failLogin(int $times = PHP_INT_MAX): self
     {
-        $this->loginSucceeds = false;
+        $this->loginFailures = $times;
+
+        return $this;
+    }
+
+    public function refuseConnections(int $times = PHP_INT_MAX, string $message = 'Cannot connect to 192.0.2.10:22. Error 111. Connection refused'): self
+    {
+        $this->refusals = $times;
+        $this->refusal = $message;
 
         return $this;
     }
@@ -160,6 +173,13 @@ final class FakeSSHTransport implements SSHTransport
 
     public function hostKey(): string
     {
+        if ($this->refusals > 0) {
+            $this->refusals--;
+            $this->connected = false;
+
+            throw new UnableToConnectException($this->refusal);
+        }
+
         return $this->hostKey;
     }
 
@@ -167,7 +187,13 @@ final class FakeSSHTransport implements SSHTransport
     {
         $this->loginAttempted = true;
 
-        return $this->loginSucceeds;
+        if ($this->loginFailures > 0) {
+            $this->loginFailures--;
+
+            return false;
+        }
+
+        return true;
     }
 
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
