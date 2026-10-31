@@ -52,6 +52,11 @@ final class UnsafeNameException extends InvalidArgumentException
         return new self("[{$value}] is not a valid system user name.");
     }
 
+    public static function unit(string $value): self
+    {
+        return new self('[' . addcslashes($value, "\0..\37") . '] is not a valid deploy unit name. Unit names are coresmith-build-, coresmith-migrate- or coresmith-blueprint-, then the app slug and a release.');
+    }
+
     public static function workerCommand(): self
     {
         return new self('A worker command cannot be blank: it would run /usr/bin/env with nothing to execute and print the unit\'s environment to the log.');

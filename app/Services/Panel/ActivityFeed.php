@@ -165,6 +165,7 @@ final class ActivityFeed
             'application_created' => [$this->mono($application?->name), $this->text(' created on ' . $application?->server?->name)],
             'application_renamed' => [$this->text('Application renamed to '), $this->mono($application?->name)],
             'application_removed' => [$this->mono($application?->name), $this->text(' stopped and detached from ' . $application?->server?->name)],
+            'deployment_cancelled' => [$this->text('Deploy cancelled, '), $this->mono($application?->name), $this->text($this->cancelledBy($properties['by'] ?? null) . ', nothing changed')],
             'application_rolled_back' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', no rebuild')],
             RollbackHistory::WORKER_DID_NOT_START => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but ' . ($properties['worker'] ?? 'a worker') . ' did not start. Open the app to see why.')],
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
@@ -209,6 +210,11 @@ final class ActivityFeed
     private function after(mixed $seconds): string
     {
         return is_numeric($seconds) ? ' after ' . Formats::downFor((int) $seconds) : '';
+    }
+
+    private function cancelledBy(mixed $name): string
+    {
+        return is_string($name) && $name !== '' ? ', by ' . $name : '';
     }
 
     /**

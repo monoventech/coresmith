@@ -8,11 +8,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\CancelOutcome;
 use App\Jobs\DeployApplication;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
@@ -66,6 +68,9 @@ final class DeploymentController extends Controller
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
                 'current_release' => Formats::release($application->current_release),
             ],
+            'deployment_links' => [
+                'cancel' => route('servers.applications.deployments.cancel', [$server, $application, $deployment]),
+            ],
             'deployment' => self::present($deployment, $phases),
             'back' => $this->back((string) $request->query('from'), $server, $application),
             'streaming' => Realtime::available(),
@@ -90,6 +95,22 @@ final class DeploymentController extends Controller
         return back()->with('success', "Rolling back. The symlink re-points{$target}, nothing is rebuilt.");
     }
 
+    public function cancel(Request $request, Server $server, Application $application, Deployment $deployment, DeploymentCancellation $cancellation): RedirectResponse
+    {
+        $this->authorize('deploy', $application);
+
+        abort_unless($application->server_id === $server->id, 404);
+        abort_unless($deployment->application_id === $application->id, 404);
+
+        return match ($cancellation->request($deployment, $request->user())) {
+            CancelOutcome::Cancelled => back()->with('success', 'Cancelled before it started. Nothing changed.'),
+            CancelOutcome::Requested, CancelOutcome::AlreadyRequested => back()->with('success', 'Cancelling. The current release keeps serving.'),
+            CancelOutcome::TooLate => back()->with('error', 'Migrations have started, so this deploy finishes on its own. Roll back afterwards if you need to.'),
+            CancelOutcome::Blueprint => back()->with('error', "This app deploys with a custom blueprint, which can run migrations, so it can't be stopped partway."),
+            CancelOutcome::Finished => back()->with('error', 'This deploy has already finished.'),
+        };
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -110,6 +131,9 @@ final class DeploymentController extends Controller
             'failed_worker' => $deployment->failed_worker,
             'failed_step' => $deployment->failed_step,
             'reached_users' => DeploymentPresenter::reachedUsers($deployment),
+            'cancel_requested' => $deployment->cancel_requested_at !== null,
+            'cancelled_by' => $deployment->cancelledBy?->name,
+            'cancellable' => DeploymentCancellation::cancellable($deployment),
             'release' => Formats::release($deployment->release),
             'branch' => $deployment->branch,
             'commit' => $deployment->commit_hash === null ? null : substr($deployment->commit_hash, 0, 7),

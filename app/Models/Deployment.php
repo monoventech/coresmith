@@ -32,6 +32,11 @@ class Deployment extends Model
         return $this->belongsTo(User::class, 'triggered_by');
     }
 
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
+    }
+
     /**
      * @return array<string, string>
      */
@@ -41,6 +46,7 @@ class Deployment extends Model
             'status' => DeploymentStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'cancel_requested_at' => 'datetime',
             'tag_signed' => 'boolean',
             'stack' => 'array',
             'seeded_shared_storage' => 'boolean',

@@ -84,7 +84,11 @@ final class AutoDeploy
         }
 
         $created = Cache::lock('auto-deploy:' . $application->getKey(), 10)->get(function () use ($application): ?Deployment {
-            $deployments = $application->deployments()->where('status', '!=', DeploymentStatus::Cancelled->value)->latest('created_at');
+            $deployments = $application->deployments()
+                ->where(fn(Builder $attempt): Builder => $attempt
+                    ->where('status', '!=', DeploymentStatus::Cancelled->value)
+                    ->orWhereNotNull('cancelled_by'))
+                ->latest('created_at');
             $latest = $deployments->clone()->first();
 
             if ($latest !== null && in_array($latest->status, [DeploymentStatus::Pending, DeploymentStatus::Running], true)) {

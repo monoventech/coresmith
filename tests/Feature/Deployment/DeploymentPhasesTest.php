@@ -240,13 +240,13 @@ test('a log with no markers follows the deployment status', function (Deployment
     'cancelled' => [DeploymentStatus::Cancelled, array_fill(0, 6, 'skipped'), array_fill(0, 6, '—')],
 ]);
 
-test('a cancelled deployment that had started fails the phase it stopped in', function () {
+test('a cancelled deployment that had started marks the phase it stopped in cancelled', function () {
     $deployment = phasesDeployment(DeploymentStatus::Cancelled, [
         '[08:00:00] clone: fetching over https',
         '[08:00:05] deps: installing dependencies',
     ]);
 
-    expect(phasesStates($deployment))->toMatchArray(['clone' => 'done', 'deps' => 'failed', 'build' => 'skipped']);
+    expect(phasesStates($deployment))->toMatchArray(['clone' => 'done', 'deps' => 'cancelled', 'build' => 'skipped']);
 });
 
 test('progress names the phase that is running', function () {

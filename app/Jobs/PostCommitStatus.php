@@ -79,6 +79,7 @@ final class PostCommitStatus implements ShouldQueue
             DeploymentStatus::Running => 'pending',
             DeploymentStatus::Succeeded => 'success',
             DeploymentStatus::Failed => 'failure',
+            DeploymentStatus::Cancelled => $deployment->cancelled_by === null ? null : 'error',
             default => null,
         };
 
@@ -132,6 +133,7 @@ final class PostCommitStatus implements ShouldQueue
         return match (true) {
             $state === 'pending' => $this->fitServer('Deploying to ', $server),
             $state === 'success' => $this->fitServer('Live on ', $server, ' as ' . Formats::release($deployment->release)),
+            $state === 'error' => $application->current_release === null ? 'Deploy cancelled, the app has no live release yet' : 'Deploy cancelled, the previous release is still live',
             DeploymentPresenter::reachedUsers($deployment) => 'Deploy failed after going live, read the log',
             $application->current_release === null => 'Deploy failed, the app has no live release yet',
             default => 'Deploy failed, the previous release is still live',

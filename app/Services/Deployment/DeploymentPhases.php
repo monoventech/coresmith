@@ -52,7 +52,7 @@ final class DeploymentPhases
 
     private const MARKER = '/^\[(\d{2}):(\d{2}):(\d{2})\] ([a-z]+):/';
 
-    private const END = '/^\[(\d{2}):(\d{2}):(\d{2})\] (deployed\.|deploy failed\b)/';
+    private const END = '/^\[(\d{2}):(\d{2}):(\d{2})\] (deployed\.|deploy failed\b|deploy cancelled\.)/';
 
     /**
      * @return list<array{key: string, label: string, state: string, duration: string}>
@@ -140,6 +140,7 @@ final class DeploymentPhases
         if ($started) {
             return match (true) {
                 $index < $lastIndex, $status === DeploymentStatus::Succeeded, $outlived => 'done',
+                $status === DeploymentStatus::Cancelled => 'cancelled',
                 $finished => 'failed',
                 default => 'running',
             };
@@ -165,7 +166,7 @@ final class DeploymentPhases
             return '…';
         }
 
-        if (!in_array($state, ['done', 'failed'], true) || !isset($starts[$key])) {
+        if (!in_array($state, ['done', 'failed', 'cancelled'], true) || !isset($starts[$key])) {
             return '';
         }
 

@@ -7,6 +7,7 @@ namespace Tests\Support;
 use App\Services\Runtime\Catalog;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
+use Closure;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Exception\ConnectionClosedException;
 use phpseclib3\Exception\UnableToConnectException;
@@ -57,6 +58,9 @@ final class FakeSSHTransport implements SSHTransport
 
     /** @var list<string> */
     private array $calls = [];
+
+    /** @var array<string, Closure> */
+    private array $hooks = [];
 
     public function setHostKey(string $hostKey): self
     {
@@ -196,6 +200,8 @@ final class FakeSSHTransport implements SSHTransport
         $this->budgets[] = $timeout;
         $this->timedOut = false;
 
+        $this->runHooks($command);
+
         foreach ($this->drops as $needle => $remaining) {
             if ($remaining > 0 && str_contains($command, $needle)) {
                 $this->drops[$needle] = $remaining - 1;
@@ -285,5 +291,22 @@ final class FakeSSHTransport implements SSHTransport
     {
         $this->calls[] = 'disconnect';
         $this->connected = false;
+    }
+
+    public function onCommand(string $needle, Closure $callback): self
+    {
+        $this->hooks[$needle] = $callback;
+
+        return $this;
+    }
+
+    private function runHooks(string $command): void
+    {
+        foreach ($this->hooks as $needle => $callback) {
+            if (str_contains($command, $needle)) {
+                unset($this->hooks[$needle]);
+                $callback();
+            }
+        }
     }
 }

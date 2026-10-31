@@ -15,6 +15,7 @@ use App\Events\DeploymentSucceeded;
 use App\Events\DeploymentUpdated;
 use App\Events\FleetChanged;
 use App\Exceptions\DeploymentAborted;
+use App\Exceptions\DeploymentCancelled;
 use App\Exceptions\ExplainsFailure;
 use App\Exceptions\GitProviderException;
 use App\Exceptions\ProcessDidNotStart;
@@ -27,6 +28,7 @@ use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\DeploymentPhases;
@@ -95,6 +97,8 @@ final class DeployApplication implements ShouldQueue
 
     private bool $lockLost = false;
 
+    private bool $pastCancelPoint = false;
+
     private ?string $failureReason = null;
 
     private bool $keepFailed = false;
@@ -111,6 +115,10 @@ final class DeployApplication implements ShouldQueue
 
     public function handle(SSHConnectionManager $connections, DeploymentCommands $commands): void
     {
+        if ($this->deployment->status === DeploymentStatus::Cancelled) {
+            return;
+        }
+
         $application = $this->deployment->application;
 
         if ($application === null) {
@@ -150,6 +158,14 @@ final class DeployApplication implements ShouldQueue
         } catch (Throwable $e) {
             if (!$this->swapped) {
                 $this->cleanUpFailedRelease($connection, $release);
+            }
+
+            if ($this->stoppedByRequest($e)) {
+                $cancellation = app(DeploymentCancellation::class);
+                $cancellation->note($this->deployment);
+                $cancellation->finish($this->deployment);
+
+                return;
             }
 
             if ($e instanceof SSHCommandFailedException) {
@@ -194,13 +210,35 @@ final class DeployApplication implements ShouldQueue
 
         $swapped = $deployment->application?->current_release === $this->timestamp;
 
-        if (!app(DeploymentLog::class)->failIfRunning($deployment, $this->killedReason($e), $swapped)) {
+        $ended = $deployment->cancel_requested_at !== null && DeploymentCancellation::beforeMigrations($deployment)
+            ? $this->cancelKilled($deployment)
+            : app(DeploymentLog::class)->failIfRunning($deployment, $this->killedReason($e), $swapped);
+
+        if (!$ended) {
             return false;
         }
 
         if (!$swapped) {
             $this->removeKilledRelease($deployment);
         }
+
+        return true;
+    }
+
+    private function cancelKilled(Deployment $deployment): bool
+    {
+        $cancelled = Deployment::query()
+            ->whereKey($deployment->getKey())
+            ->where('status', DeploymentStatus::Running->value)
+            ->update(['status' => DeploymentStatus::Cancelled->value, 'finished_at' => now()]);
+
+        if ($cancelled === 0) {
+            return false;
+        }
+
+        $cancellation = app(DeploymentCancellation::class);
+        $cancellation->note($deployment);
+        $cancellation->finish($deployment);
 
         return true;
     }
@@ -306,7 +344,16 @@ final class DeployApplication implements ShouldQueue
         }
 
         try {
-            DB::transaction(function () use ($application): void {
+            $started = DB::transaction(function () use ($application): bool {
+                $claimed = Deployment::query()
+                    ->whereKey($this->deployment->getKey())
+                    ->where('status', DeploymentStatus::Pending->value)
+                    ->update(['status' => DeploymentStatus::Running->value]);
+
+                if ($claimed === 0) {
+                    return false;
+                }
+
                 $this->deployment->forceFill([
                     'status' => DeploymentStatus::Running,
                     'started_at' => now(),
@@ -316,11 +363,19 @@ final class DeployApplication implements ShouldQueue
                 ])->save();
 
                 $application->forceFill(['status' => ApplicationStatus::Deploying])->save();
+
+                return true;
             });
         } catch (Throwable $e) {
             $lock->release();
 
             throw $e;
+        }
+
+        if (!$started) {
+            $lock->release();
+
+            return null;
         }
 
         FleetChanged::forDeployment($this->deployment);
@@ -331,14 +386,19 @@ final class DeployApplication implements ShouldQueue
     private function begin(SSHConnection $connection, ReleasePaths $paths, string $release, Application $application): Stack
     {
         $this->guardDiskSpace($connection);
+        $this->checkpoint();
 
         $this->appendLog($this->stamp() . ' release ' . $this->timestamp . ' · branch ' . $application->repository_branch . ' · triggered by ' . $this->trigger());
 
         $this->claimPorts($connection, $application);
 
         $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => $this->prepare($connection, $paths, $release));
+        $this->checkpoint();
 
-        return $this->resolveStack($connection, $paths, $release, $application);
+        $stack = $this->resolveStack($connection, $paths, $release, $application);
+        $this->checkpoint();
+
+        return $stack;
     }
 
     private function resolveStack(SSHConnection $connection, ReleasePaths $paths, string $release, Application $application): Stack
@@ -422,6 +482,8 @@ final class DeployApplication implements ShouldQueue
             throw new DeploymentAborted('The deploy lock expired while the runtimes installed, so another deploy may have started. Deploy again.');
         }
 
+        $this->checkpoint();
+
         $stack = Stack::fromArray($this->deployment->stack);
         $asdf = app(AsdfManager::class);
 
@@ -441,11 +503,17 @@ final class DeployApplication implements ShouldQueue
     private function finish(SSHConnection $connection, DeploymentCommands $commands, ReleasePaths $paths, string $release, Application $application, Stack $stack): void
     {
         if ($this->hasCustomBlueprint($application)) {
+            $this->checkpoint();
+            $this->pastCancelPoint = true;
             $this->mark(DeploymentPhases::BUILD, 'running the custom blueprint');
             $this->runBlueprint($connection, $release, $application, $stack);
         } else {
+            $this->checkpoint();
             $this->reconnecting($connection, DeploymentPhases::DEPENDENCIES, fn() => $this->installDependencies($connection, $commands, $release, $stack));
+            $this->checkpoint();
             $this->reconnecting($connection, DeploymentPhases::BUILD, fn() => $this->build($connection, $commands, $release, $stack));
+            $this->checkpoint();
+            $this->pastCancelPoint = true;
             $this->migrate($connection, $commands, $release, $stack);
         }
 
@@ -458,6 +526,11 @@ final class DeployApplication implements ShouldQueue
         app(CrontabBuilder::class)->write($connection, $application);
         $this->pruneOldReleases($connection, $application);
         $this->watchProcesses($connection, $processes, $application);
+
+        if (DeploymentCancellation::requested($this->deployment)) {
+            app(DeploymentCancellation::class)->note($this->deployment);
+            $this->appendLog('cancel: asked after migrations started, so the deploy carried on');
+        }
 
         $this->appendLog($this->stamp() . ' deployed. previous release kept for instant rollback.');
 
@@ -877,7 +950,7 @@ final class DeployApplication implements ShouldQueue
 
         try {
             $result = $connection->execute(
-                app(AppShell::class)->runScript($application, $script, $paths->appDirectory($release), $stack->versions()),
+                app(AppShell::class)->runScript($application, $script, $paths->appDirectory($release), $stack->versions(), unit: AppShell::blueprintUnit($application, $this->timestamp)),
                 sudo: true,
             );
 
@@ -915,12 +988,15 @@ final class DeployApplication implements ShouldQueue
         $application = $this->deployment->application;
         $directory = (new ReleasePaths($application))->appDirectory($release);
         $shell = app(AppShell::class);
+        $unit = $phase === DeploymentPhases::MIGRATIONS
+            ? AppShell::migrateUnit($application, $this->timestamp)
+            : AppShell::buildUnit($application, $this->timestamp);
 
         foreach ($steps as $step) {
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
 
-                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions()), sudo: true);
+                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), unit: $unit), sudo: true);
 
                 $this->appendLog($result->output);
 
@@ -928,7 +1004,7 @@ final class DeployApplication implements ShouldQueue
                     break;
                 }
 
-                if ($attempt > $retries || !$this->looksLikeNetwork($result->output)) {
+                if ($attempt > $retries || !$this->looksLikeNetwork($result->output) || DeploymentCancellation::requested($this->deployment)) {
                     $result->throw();
                 }
 
@@ -995,5 +1071,25 @@ final class DeployApplication implements ShouldQueue
         }
 
         $log->fail($this->deployment, $message, $this->failureReason, $this->swapped, $this->keepFailed);
+    }
+
+    private function checkpoint(): void
+    {
+        if ($this->pastCancelPoint || !DeploymentCancellation::requested($this->deployment)) {
+            return;
+        }
+
+        app(DeploymentCancellation::class)->note($this->deployment);
+
+        throw new DeploymentCancelled('The deploy was cancelled before its next phase.');
+    }
+
+    private function stoppedByRequest(Throwable $e): bool
+    {
+        if ($e instanceof DeploymentCancelled) {
+            return true;
+        }
+
+        return !$this->pastCancelPoint && !$this->lockLost && DeploymentCancellation::requested($this->deployment);
     }
 }
