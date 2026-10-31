@@ -15,6 +15,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\Runtime\Catalog;
+use App\Services\Server\ServerReachability;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -152,6 +153,8 @@ final class ActivityFeed
             'releases_pruned' => [$this->text('Old releases pruned on '), $this->mono($server?->name), $this->text(', ' . (int) ($properties['removed'] ?? 0) . ' removed')],
             'disk_pressure' => [$this->text('Disk warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%, consider pruning old releases')],
             'firewall_rule_changed' => [$this->text('Firewall ' . ($properties['action'] ?? 'changed') . ' port ' . ($properties['port'] ?? '') . ' on '), $this->mono($server?->name)],
+            'server_unreachable' => [$this->mono($server?->name), $this->text(' stopped answering over SSH')],
+            'server_reachable' => [$this->mono($server?->name), $this->text(' answering again' . $this->after($properties['seconds'] ?? null))],
             'ssh_host_key_changed' => [$this->mono($server?->name), $this->text(' presented a different host key, operations paused')],
             'ssh_host_key_accepted' => [$this->text('New host key trusted on '), $this->mono($server?->name)],
             'ssh_host_key_rejected' => [$this->text('Host key change dismissed on '), $this->mono($server?->name)],
@@ -198,6 +201,11 @@ final class ActivityFeed
         $seconds = (int) $seconds;
 
         return ' in ' . intdiv($seconds, 60) . 'm ' . ($seconds % 60) . 's';
+    }
+
+    private function after(mixed $seconds): string
+    {
+        return is_numeric($seconds) ? ' after ' . ServerReachability::downFor((int) $seconds) : '';
     }
 
     /**

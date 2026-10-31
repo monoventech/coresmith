@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::call(function (): void {
     Server::query()
         ->where('status', ServerStatus::Active->value)
+        ->whereNull('pending_host_key_fingerprint')
         ->each(fn(Server $server) => CollectServerMetrics::dispatch($server));
 })->everyMinute()->name('coresmith:collect-metrics')->withoutOverlapping();
 

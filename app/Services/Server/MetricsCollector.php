@@ -29,9 +29,11 @@ final class MetricsCollector
 
     public const DISK_PRESSURE_PERCENT = 80;
 
+    public const PROBE_SECONDS = 20;
+
     public function collect(SSHConnection $connection): ServerMetric
     {
-        $output = $connection->execute($this->probe())->throw()->output;
+        $output = $connection->execute($this->probe(), timeout: self::PROBE_SECONDS)->throw()->output;
         $values = $this->parse($output);
         $server = $connection->server();
 
@@ -106,6 +108,7 @@ final class MetricsCollector
         $log = escapeshellarg(self::ACCESS_LOG);
         $result = $connection->execute(
             "test -f {$log} && tail -n 500 {$log} | grep -o '\"host\":\"[^\"]*\"' | cut -d'\"' -f4 | sort -u || true",
+            timeout: self::PROBE_SECONDS,
         );
 
         return array_values(array_filter(array_map(trim(...), preg_split('/\R/', $result->output) ?: [])));
@@ -131,7 +134,7 @@ final class MetricsCollector
         $key = 'oom-since:' . $server->getKey();
         $lookback = now()->subSeconds(OomKillReader::LOOKBACK_SECONDS)->getTimestamp();
         $since = CarbonImmutable::createFromTimestamp(min((int) Cache::get($key, $lookback) ?: $lookback, $lookback));
-        $kills = app(OomKillReader::class)->read($connection, $since);
+        $kills = app(OomKillReader::class)->read($connection, $since, self::PROBE_SECONDS);
 
         Cache::put($key, now()->getTimestamp(), now()->addDay());
 

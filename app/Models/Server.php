@@ -60,6 +60,8 @@ class Server extends Model
             'audit' => 'array',
             'audit_logging_enabled' => 'boolean',
             'last_connected_at' => 'datetime',
+            'unreachable_since' => 'datetime',
+            'connection_failures' => 'integer',
             'host_key_changed_at' => 'datetime',
             'booted_at' => 'datetime',
         ];
