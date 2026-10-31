@@ -37,6 +37,16 @@ function scrubberSecretObject(): object
     };
 }
 
+function scrubberQueryFailure(string $driver, array $bindings, string $connection = 'pgsql'): QueryException
+{
+    return new QueryException(
+        $connection,
+        'insert into "users" ("email", "password") values (?, ?)',
+        $bindings,
+        new PDOException($driver),
+    );
+}
+
 function scrubberFailedInsert(): QueryException
 {
     $insert = fn(string $id): bool => DB::table('users')->insert([
@@ -197,6 +207,21 @@ test('tokens and codes in the address are filtered', function (array $request, s
         'query_string',
         'X-Amz-Signature=%5BFiltered%5D&X-Amz-Date=20261030&oauth_signature=%5BFiltered%5D',
     ],
+    'html-escaped separators' => [
+        ['query_string' => 'code=abc123&amp;state=xyz789&amp;page=2'],
+        'query_string',
+        'code=%5BFiltered%5D&amp;state=%5BFiltered%5D&amp;page=2',
+    ],
+    'an email address under any query name' => [
+        ['query_string' => 'user=maya%40monoven.io&q=maya@monoven.io&page=2'],
+        'query_string',
+        'user=%5BFiltered%5D&q=%5BFiltered%5D&page=2',
+    ],
+    'an email address in a path' => [
+        ['url' => 'https://panel.example.com/invitations/maya@monoven.io/accept'],
+        'url',
+        'https://panel.example.com/invitations/%5BFiltered%5D/accept',
+    ],
 ]);
 
 test('query values and reset links inside text are filtered', function (string $text, string $expected) {
@@ -246,6 +271,42 @@ test('query values and reset links inside text are filtered', function (string $
     'a url with nothing to filter' => [
         'GET https://git.example.com/repos?page=2&per_page=50 returned 200',
         'GET https://git.example.com/repos?page=2&per_page=50 returned 200',
+    ],
+    'html-escaped separators' => [
+        'GET /callback?code=abc123&amp;state=xyz789&amp;page=2 failed',
+        'GET /callback?code=%5BFiltered%5D&amp;state=%5BFiltered%5D&amp;page=2 failed',
+    ],
+    'an email address' => [
+        'sent the invitation to maya@monoven.io now',
+        'sent the invitation to [Filtered] now',
+    ],
+    'an email address with a tag' => [
+        'maya+billing@monoven.io bounced',
+        '[Filtered] bounced',
+    ],
+    'a mail transport error' => [
+        'Expected response code "250" but got code "550", with message "550 5.1.1 <maya@monoven.io>: Recipient address rejected"',
+        'Expected response code "250" but got code "550", with message "550 5.1.1 <[Filtered]>: Recipient address rejected"',
+    ],
+    'a percent-encoded email address' => [
+        'GET /callback?user=maya%40monoven.io failed',
+        'GET /callback?user=[Filtered] failed',
+    ],
+    'a git remote address' => [
+        'Permission denied (publickey) for git@github.com:acme/app.git',
+        'Permission denied (publickey) for git@github.com:acme/app.git',
+    ],
+    'a git host next to an email address' => [
+        'git@gitlab.example.com refused maya@monoven.io',
+        'git@gitlab.example.com refused [Filtered]',
+    ],
+    'an ssh login to an ip address' => [
+        'deploy@203.0.113.9: connection refused',
+        'deploy@203.0.113.9: connection refused',
+    ],
+    'a package version and a scope' => [
+        'installed node@24.21.0 and @types/node',
+        'installed node@24.21.0 and @types/node',
     ],
 ]);
 
@@ -556,6 +617,16 @@ test('extra values under secret-looking names are filtered', function () {
         'stripe_credentials' => ['id' => 'abc'],
         'webhook_signature' => 'abc',
         'passwd' => 'abc',
+        'email' => 'maya@monoven.io',
+        'owner_email' => 'maya@monoven.io',
+        'otp' => '123456',
+        'recovery_codes' => ['abc', 'def'],
+        'two_factor_recovery_code' => 'abc',
+        'private key' => 'abc',
+        'Private-Key' => 'abc',
+        'code' => 'abc123',
+        'state' => 'running',
+        'status_code' => 502,
         'attempts' => 3,
         'output' => 'build finished',
         'cache_key' => 'servers:7:status',
@@ -573,6 +644,16 @@ test('extra values under secret-looking names are filtered', function () {
         'stripe_credentials' => '[Filtered]',
         'webhook_signature' => '[Filtered]',
         'passwd' => '[Filtered]',
+        'email' => '[Filtered]',
+        'owner_email' => '[Filtered]',
+        'otp' => '[Filtered]',
+        'recovery_codes' => '[Filtered]',
+        'two_factor_recovery_code' => '[Filtered]',
+        'private key' => '[Filtered]',
+        'Private-Key' => '[Filtered]',
+        'code' => 'abc123',
+        'state' => 'running',
+        'status_code' => 502,
         'attempts' => 3,
         'output' => 'build finished',
         'cache_key' => 'servers:7:status',
@@ -707,4 +788,158 @@ test('a hint for a different exception leaves the value to the text rules', func
 
     expect(SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => new LogicException('other')]))->getExceptions()[0]->getValue())
         ->toBe('DB_PASSWORD=[REDACTED] was rejected');
+});
+
+test('the driver exception behind a failed query loses the bound values too', function (string $driver, string $expected) {
+    $failure = scrubberQueryFailure($driver, ['maya@monoven.io', 'Maya Okafor', 'acme-eu-west']);
+    $event = Event::createEvent()->setExceptions([new ExceptionDataBag($failure), new ExceptionDataBag($failure->getPrevious())]);
+
+    [$query, $chained] = SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => $failure]))->getExceptions();
+
+    expect($chained->getValue())->toBe($expected)
+        ->and($query->getValue())->toBe($expected . ' (Connection: pgsql, SQL: insert into "users" ("email", "password") values (?, ?))');
+})->with([
+    'a postgres detail line with an email address' => [
+        "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=(maya@monoven.io) already exists.",
+        "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=(?) already exists.",
+    ],
+    'a postgres detail line with a name' => [
+        "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_name_unique\"\nDETAIL:  Key (name)=(Maya Okafor) already exists.",
+        "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_name_unique\"\nDETAIL:  Key (name)=(?) already exists.",
+    ],
+    'a mysql duplicate entry with an email address' => [
+        "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'maya@monoven.io' for key 'users.users_email_unique'",
+        "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '?' for key 'users.users_email_unique'",
+    ],
+    'a mysql duplicate entry with a slug' => [
+        "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'acme-eu-west' for key 'teams.teams_slug_unique'",
+        "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '?' for key 'teams.teams_slug_unique'",
+    ],
+]);
+
+test('bound values replace whole occurrences only and leave codes and identifiers alone', function () {
+    $driver = "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=(maya@monoven.io) already exists.";
+    $failure = scrubberQueryFailure($driver, ['maya', 'maya@monoven.io', 'users', '23505', '7000']);
+    $event = Event::createEvent()->setExceptions([new ExceptionDataBag($failure), new ExceptionDataBag($failure->getPrevious())]);
+
+    $chained = SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => $failure]))->getExceptions()[1];
+
+    expect($chained->getValue())->toBe("SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=(?) already exists.");
+});
+
+test('an exception that wraps a failed query loses the bound values too', function () {
+    $failure = scrubberQueryFailure('SQLSTATE[23505]: Unique violation', ['maya@monoven.io', 'Maya Okafor']);
+    $outer = new RuntimeException('Could not save: ' . $failure->getMessage(), 0, $failure);
+    $event = Event::createEvent()->setExceptions([
+        new ExceptionDataBag($outer),
+        new ExceptionDataBag($failure),
+        new ExceptionDataBag($failure->getPrevious()),
+    ]);
+
+    $first = SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => $outer]))->getExceptions()[0];
+
+    expect($outer->getMessage())->toContain('maya@monoven.io')
+        ->and($first->getValue())->toBe('Could not save: SQLSTATE[23505]: Unique violation (Connection: pgsql, SQL: insert into "users" ("email", "password") values (?, ?))');
+});
+
+test('a logged exception keeps only its type and message in breadcrumb data', function () {
+    $failure = new PDOException('SQLSTATE[HY000]: General error: 1 no such table: servers');
+    $failure->errorInfo = ['HY000', 1, 'no such table: servers, Key (slug)=(acme-eu-west)'];
+
+    $breadcrumb = SentryScrubber::beforeBreadcrumb(scrubberBreadcrumb('Query failed', ['exception' => $failure, 'attempt' => 2]));
+
+    expect($breadcrumb->getMetadata())->toBe([
+        'exception' => ['type' => PDOException::class, 'message' => 'SQLSTATE[HY000]: General error: 1 no such table: servers'],
+        'attempt' => 2,
+    ]);
+});
+
+test('a logged failed query is replaced by its placeholder form', function () {
+    $driver = "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=(maya@monoven.io) already exists.";
+    $hash = '$2y$04$abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa';
+    $failure = scrubberQueryFailure($driver, ['maya@monoven.io', $hash]);
+    $failure->getPrevious()->errorInfo = ['23505', 7, 'DETAIL:  Key (email)=(maya@monoven.io) already exists.'];
+
+    $breadcrumb = SentryScrubber::beforeBreadcrumb(new Breadcrumb(
+        Breadcrumb::LEVEL_ERROR,
+        Breadcrumb::TYPE_DEFAULT,
+        'log.error',
+        $failure->getMessage(),
+        ['exception' => $failure],
+    ));
+
+    $placeholder = "SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=(?) already exists. (Connection: pgsql, SQL: insert into \"users\" (\"email\", \"password\") values (?, ?))";
+
+    expect($failure->getMessage())->toContain('maya@monoven.io')->toContain($hash)
+        ->and($breadcrumb->getMessage())->toBe($placeholder)
+        ->and($breadcrumb->getMetadata())->toBe(['exception' => ['type' => QueryException::class, 'message' => $placeholder]])
+        ->and(json_encode($breadcrumb->getMetadata()))->not->toContain('errorInfo');
+});
+
+test('a breadcrumb message that quotes a failed query loses the bound values too', function () {
+    $failure = scrubberQueryFailure('SQLSTATE[23505]: Unique violation', ['maya@monoven.io', 'Maya Okafor']);
+
+    $breadcrumb = SentryScrubber::beforeBreadcrumb(scrubberBreadcrumb('Could not save: ' . $failure->getMessage(), ['exception' => $failure]));
+
+    expect($breadcrumb->getMessage())->toBe('Could not save: SQLSTATE[23505]: Unique violation (Connection: pgsql, SQL: insert into "users" ("email", "password") values (?, ?))');
+});
+
+test('exceptions in extra and message params are summarised the same way', function () {
+    $failure = scrubberQueryFailure('SQLSTATE[23505]: Unique violation', ['maya@monoven.io', 'Maya Okafor']);
+    $summary = ['type' => QueryException::class, 'message' => 'SQLSTATE[23505]: Unique violation (Connection: pgsql, SQL: insert into "users" ("email", "password") values (?, ?))'];
+
+    $event = Event::createEvent()
+        ->setMessage('Failed %s', [$failure], 'Failed a query')
+        ->setExtra(['previous' => $failure]);
+
+    $scrubbed = SentryScrubber::beforeSend($event);
+
+    expect($scrubbed->getMessageParams())->toBe([$summary])
+        ->and($scrubbed->getExtra())->toBe(['previous' => $summary]);
+});
+
+test('a context whose own name looks secret is filtered whole', function () {
+    $event = Event::createEvent()
+        ->setContext('session', ['id' => 'abc123def456', 'driver' => 'database'])
+        ->setContext('credentials', ['user' => 'maya'])
+        ->setContext('runtime', ['name' => 'php', 'version' => '8.5.12']);
+
+    expect(SentryScrubber::beforeSend($event)->getContexts())->toBe([
+        'session' => ['value' => '[Filtered]'],
+        'credentials' => ['value' => '[Filtered]'],
+        'runtime' => ['name' => 'php', 'version' => '8.5.12'],
+    ]);
+});
+
+test('transaction names are filtered like addresses', function (string $name, string $expected) {
+    $error = Event::createEvent()->setTransaction($name);
+    $trace = Event::createTransaction()->setTransaction($name);
+
+    expect(SentryScrubber::beforeSend($error)->getTransaction())->toBe($expected)
+        ->and(SentryScrubber::beforeSendTransaction($trace)->getTransaction())->toBe($expected);
+})->with([
+    'a raw reset path' => [
+        'GET /acme/reset-password/9f8e7d6c5b4a39281706f5e4d3c2b1a0',
+        'GET /acme/reset-password/%5BFiltered%5D',
+    ],
+    'a raw verification path' => [
+        '/email/verify/01K8ABCDEF/1f2e3d4c5b6a79881706f5e4d3c2b1a0aabbccdd',
+        '/email/verify/01K8ABCDEF/%5BFiltered%5D',
+    ],
+    'a raw path with a query' => [
+        '/callback?code=abc123&state=xyz789',
+        '/callback?code=%5BFiltered%5D&state=%5BFiltered%5D',
+    ],
+    'a route pattern' => [
+        '/servers/{server}/apps',
+        '/servers/{server}/apps',
+    ],
+    'a command name' => [
+        'coresmith:prune-metrics',
+        'coresmith:prune-metrics',
+    ],
+]);
+
+test('an event without a transaction name keeps none', function () {
+    expect(SentryScrubber::beforeSend(Event::createEvent())->getTransaction())->toBeNull();
 });

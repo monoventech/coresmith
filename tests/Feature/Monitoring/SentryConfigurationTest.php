@@ -10,6 +10,7 @@ use Sentry\ClientBuilder;
 use Sentry\Event;
 use Sentry\Options;
 use Sentry\SentrySdk;
+use Sentry\Serializer\PayloadSerializer;
 use Sentry\State\Hub;
 use Sentry\State\HubInterface;
 use Sentry\State\Scope;
@@ -83,17 +84,25 @@ test("events are tied to the panel's version", function () {
     expect(config('sentry.release'))->toBe(config('coresmith.version'));
 });
 
-test('the environment cannot switch on logs, bound values or personal data', function () {
+test('the environment cannot switch on logs, bound values, cache keys, redis commands or raw paths', function () {
     $config = sentryConfigWith([
         'SENTRY_ENABLE_LOGS' => 'true',
         'SENTRY_BREADCRUMBS_SQL_BINDINGS_ENABLED' => 'true',
         'SENTRY_TRACE_SQL_BINDINGS_ENABLED' => 'true',
+        'SENTRY_BREADCRUMBS_CACHE_ENABLED' => 'true',
+        'SENTRY_TRACE_CACHE_ENABLED' => 'true',
+        'SENTRY_TRACE_REDIS_COMMANDS' => 'true',
+        'SENTRY_TRACE_MISSING_ROUTES_ENABLED' => 'true',
         'SENTRY_SEND_DEFAULT_PII' => 'true',
     ]);
 
     expect($config['enable_logs'])->toBeFalse()
         ->and($config['breadcrumbs']['sql_bindings'])->toBeFalse()
         ->and($config['tracing']['sql_bindings'])->toBeFalse()
+        ->and($config['breadcrumbs']['cache'])->toBeFalse()
+        ->and($config['tracing']['cache'])->toBeFalse()
+        ->and($config['tracing']['redis_commands'])->toBeFalse()
+        ->and($config['tracing']['missing_routes'])->toBeFalse()
         ->and($config['send_default_pii'])->toBeFalse();
 });
 
@@ -150,7 +159,7 @@ test('the sdk runs every scrubber hook before anything reaches its transport', f
 
     $hub->captureException(new RuntimeException('DB_PASSWORD=hunter2hunter2 was rejected'));
 
-    $transaction = $hub->startTransaction(TransactionContext::make()->setName('POST /callback'));
+    $transaction = $hub->startTransaction(TransactionContext::make()->setName('POST /acme/reset-password/9f8e7d6c5b4a39281706f5e4d3c2b1a0'));
     $transaction->startChild(
         SpanContext::make()
             ->setOp('http.client')
@@ -177,12 +186,55 @@ test('the sdk runs every scrubber hook before anything reaches its transport', f
         ->and($error->getRequest())->toBe($request)
         ->and($error->getRelease())->toBe(config('coresmith.version'))
         ->and((string) $trace->getType())->toBe('transaction')
+        ->and($trace->getTransaction())->toBe('POST /acme/reset-password/%5BFiltered%5D')
         ->and($trace->getRequest())->not->toHaveKey('data')
         ->and($trace->getRequest())->toBe($request)
         ->and($trace->getSpans())->toHaveCount(1)
         ->and($trace->getSpans()[0]->getDescription())->toBe('GET https://api.example.com/cb?code=%5BFiltered%5D failed')
         ->and($trace->getSpans()[0]->getData()['http.query'])->toBe('state=%5BFiltered%5D')
         ->and($trace->getRelease())->toBe(config('coresmith.version'));
+});
+
+test('a failed query leaves no bound value in its event, its log breadcrumb or a later transaction', function () {
+    $transport = sentryTransport();
+    $hub = sentryHub($transport);
+    $email = implode('@', ['maya', 'monoven.io']);
+    $hash = implode('$', ['', '2y', '04', 'abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa']);
+    $detail = "ERROR:  duplicate key value violates unique constraint \"users_email_unique\"\nDETAIL:  Key (email)=({$email}) already exists.";
+    $driver = new PDOException('SQLSTATE[23505]: Unique violation: 7 ' . $detail);
+    $driver->errorInfo = ['23505', 7, $detail];
+    $failure = new QueryException('pgsql', 'insert into "users" ("email", "password") values (?, ?)', [$email, $hash], $driver);
+    $safe = 'SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint "users_email_unique"' . "\nDETAIL:  Key (email)=(?) already exists.";
+    $placeholder = $safe . ' (Connection: pgsql, SQL: insert into "users" ("email", "password") values (?, ?))';
+
+    $transaction = $hub->startTransaction(TransactionContext::make()->setName('POST /register'));
+
+    $hub->captureException($failure);
+    $hub->addBreadcrumb(new Breadcrumb(Breadcrumb::LEVEL_ERROR, Breadcrumb::TYPE_DEFAULT, 'log.error', $failure->getMessage(), ['exception' => $failure]));
+
+    $transaction->finish();
+
+    expect($failure->getMessage())->toContain($email)->toContain($hash)
+        ->and($transport->sent)->toHaveCount(2);
+
+    [$error, $trace] = $transport->sent;
+
+    expect($error->getExceptions())->toHaveCount(2)
+        ->and($error->getExceptions()[0]->getValue())->toBe($placeholder)
+        ->and($error->getExceptions()[1]->getValue())->toBe($safe)
+        ->and($trace->getBreadcrumbs())->toHaveCount(1)
+        ->and($trace->getBreadcrumbs()[0]->getMessage())->toBe($placeholder)
+        ->and($trace->getBreadcrumbs()[0]->getMetadata())->toBe(['exception' => ['type' => QueryException::class, 'message' => $placeholder]]);
+
+    $serializer = new PayloadSerializer($hub->getClient()->getOptions());
+
+    foreach ($transport->sent as $event) {
+        $wire = $serializer->serialize($event);
+
+        expect($wire)->not->toContain($email)
+            ->not->toContain(rawurlencode($email))
+            ->not->toContain($hash);
+    }
 });
 
 test('a failed query reaches the transport with its placeholders and without its values', function () {

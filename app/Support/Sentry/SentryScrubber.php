@@ -28,9 +28,17 @@ final class SentryScrubber
 
     private const ADDRESS_KEYS = ['url', 'http.url', 'http.query', 'to', 'from'];
 
-    private const SECRET_KEYS = '/password|passwd|secret|token|api[_-]?key|authorization|cookie|session|private[_-]?key|credential|signature/i';
+    private const SECRET_KEYS = '/password|passwd|secret|token|api[_-]?key|authorization|cookie|session|private[_ -]?key|credential|signature|email|otp|recovery_codes?/i';
+
+    private const EMAIL = '~(?<![A-Za-z0-9._%+\-])([A-Za-z0-9._%+\-]{1,128})(?:@|%40)((?:[A-Za-z0-9\-]{1,63}\.){1,8}[A-Za-z]{2,24})~';
+
+    private const KEPT_MAILBOXES = ['git'];
 
     private const MIN_ECHOED_VALUE_LENGTH = 4;
+
+    private const MIN_ECHOED_NUMBER_LENGTH = 8;
+
+    private const MAX_PATTERN_LENGTH = 256;
 
     private const MAX_DEPTH = 10;
 
@@ -49,7 +57,7 @@ final class SentryScrubber
         $message = $breadcrumb->getMessage();
 
         if ($message !== null) {
-            $breadcrumb = $breadcrumb->withMessage(self::filterText($message));
+            $breadcrumb = $breadcrumb->withMessage(self::filterText(self::loggedMessage($message, $breadcrumb->getMetadata())));
         }
 
         foreach (self::scrubValues($breadcrumb->getMetadata()) as $name => $value) {
@@ -64,6 +72,12 @@ final class SentryScrubber
         $event->setRequest(self::scrubRequest($event->getRequest()));
 
         self::scrubExceptions($event, $hint?->exception);
+
+        $transaction = $event->getTransaction();
+
+        if ($transaction !== null) {
+            $event->setTransaction(self::filterAddress($transaction));
+        }
 
         $message = $event->getMessage();
 
@@ -81,7 +95,7 @@ final class SentryScrubber
         $event->setTags(self::scrubValues($event->getTags()));
 
         foreach ($event->getContexts() as $name => $data) {
-            $event->setContext((string) $name, self::scrubValues($data));
+            $event->setContext((string) $name, self::secretKey($name) ? ['value' => self::FILTERED] : self::scrubValues($data));
         }
 
         foreach ($event->getSpans() as $span) {
@@ -95,9 +109,14 @@ final class SentryScrubber
 
     private static function scrubExceptions(Event $event, ?Throwable $original): void
     {
+        $bindings = self::bindings($original);
+
         foreach ($event->getExceptions() as $exception) {
             $matched = $original !== null && $original::class === $exception->getType() ? $original : null;
-            $value = $matched instanceof QueryException ? self::queryValue($matched) : $exception->getValue();
+
+            $value = $matched instanceof QueryException
+                ? self::queryValue($matched, $bindings)
+                : self::withoutBindings($exception->getValue(), $bindings);
 
             $exception->setValue(self::filterText($value));
 
@@ -105,17 +124,86 @@ final class SentryScrubber
         }
     }
 
-    private static function queryValue(QueryException $failure): string
+    /**
+     * @param  array<array-key, mixed>  $metadata
+     */
+    private static function loggedMessage(string $message, array $metadata): string
     {
-        $driver = $failure->getPrevious()?->getMessage() ?? '';
+        $bindings = [];
 
-        foreach ($failure->getBindings() as $binding) {
-            if (is_string($binding) && strlen($binding) >= self::MIN_ECHOED_VALUE_LENGTH) {
-                $driver = str_replace($binding, '?', $driver);
+        foreach ($metadata as $value) {
+            if (!$value instanceof Throwable) {
+                continue;
             }
+
+            if ($value->getMessage() === $message) {
+                return self::describe($value);
+            }
+
+            $bindings = [...$bindings, ...self::bindings($value)];
         }
 
+        return self::withoutBindings($message, $bindings);
+    }
+
+    private static function describe(Throwable $failure): string
+    {
+        $bindings = self::bindings($failure);
+
+        return $failure instanceof QueryException
+            ? self::queryValue($failure, $bindings)
+            : self::withoutBindings($failure->getMessage(), $bindings);
+    }
+
+    /**
+     * @param  list<string>  $bindings
+     */
+    private static function queryValue(QueryException $failure, array $bindings): string
+    {
+        $driver = self::withoutBindings($failure->getPrevious()?->getMessage() ?? '', $bindings);
+
         return $driver . ' (Connection: ' . $failure->getConnectionName() . ', SQL: ' . $failure->getSql() . ')';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function bindings(?Throwable $failure): array
+    {
+        $found = [];
+
+        while ($failure !== null) {
+            if ($failure instanceof QueryException) {
+                $found = [...$found, ...array_values(array_filter($failure->getBindings(), self::echoed(...)))];
+            }
+
+            $failure = $failure->getPrevious();
+        }
+
+        return array_values(array_unique($found));
+    }
+
+    private static function echoed(mixed $binding): bool
+    {
+        return is_string($binding)
+            && strlen($binding) >= self::MIN_ECHOED_VALUE_LENGTH
+            && (!ctype_digit($binding) || strlen($binding) >= self::MIN_ECHOED_NUMBER_LENGTH);
+    }
+
+    /**
+     * @param  list<string>  $bindings
+     */
+    private static function withoutBindings(string $text, array $bindings): string
+    {
+        usort($bindings, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        foreach ($bindings as $binding) {
+            $text = strlen($binding) > self::MAX_PATTERN_LENGTH
+                ? str_replace($binding, '?', $text)
+                : (string) preg_replace('~(?<!\w)' . preg_quote($binding, '~') . '(?!\w)~', '?', $text);
+        }
+
+        return $text;
     }
 
     private static function scrubSpan(Span $span): void
@@ -179,14 +267,20 @@ final class SentryScrubber
     private static function scrubValue(int|string $key, mixed $value, int $depth): mixed
     {
         return match (true) {
-            preg_match(self::SECRET_KEYS, (string) $key) === 1 => self::FILTERED,
+            self::secretKey($key) => self::FILTERED,
             $depth >= self::MAX_DEPTH && (is_array($value) || is_object($value)) => self::FILTERED,
+            $value instanceof Throwable => self::scrubValue($key, ['type' => $value::class, 'message' => self::describe($value)], $depth + 1),
             is_object($value) => self::scrubValue($key, self::plain($value), $depth + 1),
             is_array($value) => self::scrubValues($value, $depth + 1),
             !is_string($value) => $value,
             in_array(strtolower((string) $key), self::ADDRESS_KEYS, true) => self::filterAddress($value),
             default => self::filterText($value),
         };
+    }
+
+    private static function secretKey(int|string $key): bool
+    {
+        return preg_match(self::SECRET_KEYS, (string) $key) === 1;
     }
 
     private static function plain(object $value): mixed
@@ -216,7 +310,14 @@ final class SentryScrubber
         $names = implode('|', array_map(static fn(string $name): string => preg_quote($name, '~'), [...self::QUERY_KEYS, ...self::PRIVATE_QUERY_KEYS]));
         $stop = $text ? '&#\s"\'<>)' : '&#';
         $segment = $text ? '[^/?#\s"\'<>)]+' : '[^/?#]+';
-        $start = $text ? '([?&])' : '(^|[?&])';
+        $start = $text ? '([?&]|&amp;)' : '(^|[?&]|&amp;)';
+        $replacement = $text ? self::FILTERED : $filtered;
+
+        $subject = (string) preg_replace_callback(
+            self::EMAIL,
+            static fn(array $match): string => in_array(strtolower($match[1]), self::KEPT_MAILBOXES, true) ? $match[0] : $replacement,
+            $subject,
+        );
 
         $subject = (string) preg_replace(
             [
