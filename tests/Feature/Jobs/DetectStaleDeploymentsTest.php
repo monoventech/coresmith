@@ -6,10 +6,29 @@ use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Jobs\DetectStaleDeployments;
+use App\Jobs\DiscardRelease;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Server;
+use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Queue;
+use phpseclib3\Exception\UnableToConnectException;
+use Tests\Support\FakeSSHTransport;
+
+function staleReleaseDeployment(string $slug = 'shop'): Deployment
+{
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $application = Application::factory()->for($server)->create(['slug' => $slug, 'status' => ApplicationStatus::Deploying, 'current_release' => '20261019-090000']);
+
+    return Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Running,
+        'started_at' => now()->subMinutes(20),
+        'release' => '20261020-120000',
+    ]);
+}
 
 test('a deployment stuck running past the cutoff is failed', function () {
     Event::fake([DeploymentFailed::class]);
@@ -137,12 +156,14 @@ test('a stale deployment of a soft-deleted app is failed, and a second unrelated
     Event::assertDispatched(DeploymentFailed::class, 2);
 });
 
-test('a deployment whose deadline moves out after it was picked is neither failed nor unlocked', function (?int $minutesPast) {
+test('a deployment whose deadline moves out after it was picked is neither failed, unlocked nor cleaned up', function (?int $minutesPast) {
     Event::fake([DeploymentFailed::class]);
+    Queue::fake();
     $deployment = Deployment::factory()->create([
         'status' => DeploymentStatus::Running,
         'started_at' => now()->subMinutes(40),
         'stale_after' => $minutesPast === null ? null : now()->subMinutes($minutesPast),
+        'release' => '20261020-120000',
     ]);
     $applicationStatus = $deployment->application->status;
     Cache::lock('deploy:' . $deployment->application_id, 600)->get();
@@ -160,7 +181,74 @@ test('a deployment whose deadline moves out after it was picked is neither faile
         ->and(Cache::lock('deploy:' . $deployment->application_id, 600)->get())->toBeFalse();
 
     Event::assertNotDispatched(DeploymentFailed::class);
+    Queue::assertNotPushed(DiscardRelease::class);
 })->with([
     'past its deadline' => [1],
     'an older row with no deadline' => [null],
 ]);
+
+test("a reclaimed deploy's half-built release is removed", function () {
+    Queue::fake();
+    $deployment = staleReleaseDeployment();
+
+    (new DetectStaleDeployments)->handle();
+
+    Queue::assertPushed(DiscardRelease::class, 1);
+    Queue::assertPushedOn('server-tasks', DiscardRelease::class, fn(DiscardRelease $job): bool => (fn(): Deployment => $this->deployment)->call($job)->is($deployment));
+});
+
+test('the sweep removes the half-built release from the server the deploy ran on', function () {
+    $deployment = staleReleaseDeployment();
+    $transport = (new FakeSSHTransport)->respondTo("readlink '/var/coresmith/apps/shop/current'", "/var/coresmith/apps/shop/releases/20261019-090000\n");
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        (new DetectStaleDeployments)->handle();
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($transport->commands())->toBe([
+            "readlink '/var/coresmith/apps/shop/current'",
+            "rm -rf '/var/coresmith/apps/shop/releases/20261020-120000'",
+        ]);
+});
+
+test('the removal is queued before the failure is announced', function () {
+    Queue::fake();
+    $queuedWhenAnnounced = null;
+
+    Event::listen(DeploymentFailed::class, function () use (&$queuedWhenAnnounced): void {
+        $queuedWhenAnnounced ??= Queue::pushed(DiscardRelease::class)->count();
+    });
+
+    staleReleaseDeployment();
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($queuedWhenAnnounced)->toBe(1);
+});
+
+test('a removal that fails does not stop the sweep or the failure notice', function () {
+    Exceptions::fake();
+    Event::fake([DeploymentFailed::class]);
+    $first = staleReleaseDeployment();
+    $second = staleReleaseDeployment('blog');
+    $transport = (new FakeSSHTransport)->refuseConnections();
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        (new DetectStaleDeployments)->handle();
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($first->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($second->fresh()->status)->toBe(DeploymentStatus::Failed);
+
+    Event::assertDispatchedTimes(DeploymentFailed::class, 2);
+    Exceptions::assertReported(UnableToConnectException::class);
+});

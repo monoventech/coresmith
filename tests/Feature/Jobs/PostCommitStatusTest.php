@@ -11,6 +11,7 @@ use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\DeployApplication;
 use App\Jobs\DetectStaleDeployments;
+use App\Jobs\DiscardRelease;
 use App\Jobs\InstallRuntimes;
 use App\Jobs\PostCommitStatus;
 use App\Models\Application;
@@ -266,6 +267,7 @@ test('a status job posts the state its deployment is in when it runs, so a late 
 
 test('a deploy the stale sweep stops posts failure', function () {
     commitStatusFake();
+    Queue::fake([DiscardRelease::class]);
     $deployment = commitStatusDeployment(commitStatusApp(application: ['current_release' => '20261018090000']), DeploymentStatus::Running, [
         'started_at' => now()->subMinutes(30),
         'stale_after' => now()->subMinute(),

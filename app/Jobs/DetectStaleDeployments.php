@@ -67,6 +67,10 @@ final class DetectStaleDeployments implements ShouldQueue
 
                 Cache::lock('deploy:' . $deployment->application_id)->forceRelease();
 
+                rescue(function () use ($deployment): void {
+                    DiscardRelease::dispatch($deployment);
+                }, report: true);
+
                 DeploymentFailed::dispatch($deployment->refresh());
             });
     }
