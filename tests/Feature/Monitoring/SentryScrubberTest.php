@@ -47,6 +47,16 @@ function scrubberQueryFailure(string $driver, array $bindings, string $connectio
     );
 }
 
+function scrubberFailedUpdate(string $driver): QueryException
+{
+    return new QueryException(
+        'pgsql',
+        'update "users" set "name" = ?, "updated_at" = ? where "id" = ?',
+        [null, '2026-10-31 00:00:00', '01K8ABCDEFGHJKMNPQRSTVWXYZ'],
+        new PDOException($driver),
+    );
+}
+
 function scrubberFailedInsert(): QueryException
 {
     $insert = fn(string $id): bool => DB::table('users')->insert([
@@ -107,6 +117,25 @@ test('header names are matched whatever their case and keep their own spelling',
 
     expect(SentryScrubber::beforeSend($event)->getRequest()['headers'])
         ->toBe(['user-agent' => ['Firefox/140'], 'ACCEPT' => ['text/html']]);
+});
+
+test('kept header values go through the text rules', function () {
+    $event = scrubberEvent(['headers' => [
+        'User-Agent' => [
+            'Mozilla/5.0 (compatible; ReportBot/1.0; +mailto:maya@monoven.io)',
+            'curl/8.7.1 api_key=AKIAABCDEFGHIJKLMNOP',
+        ],
+        'Accept' => ['text/html'],
+        'Referer' => ['https://panel.example.com/forgot?email=maya%40monoven.io'],
+    ]]);
+
+    expect(SentryScrubber::beforeSend($event)->getRequest()['headers'])->toBe([
+        'User-Agent' => [
+            'Mozilla/5.0 (compatible; ReportBot/1.0; +mailto:[Filtered])',
+            'curl/8.7.1 api_key=[REDACTED]',
+        ],
+        'Accept' => ['text/html'],
+    ]);
 });
 
 test('tokens and codes in the address are filtered', function (array $request, string $field, string $expected) {
@@ -308,6 +337,62 @@ test('query values and reset links inside text are filtered', function (string $
         'installed node@24.21.0 and @types/node',
         'installed node@24.21.0 and @types/node',
     ],
+    'an email address at an accented domain' => [
+        'maya@münchen.de bounced',
+        '[Filtered] bounced',
+    ],
+    'an email address in another script' => [
+        'maya@пример.рф bounced',
+        '[Filtered] bounced',
+    ],
+    'an accented mailbox' => [
+        'josé@example.com bounced',
+        '[Filtered] bounced',
+    ],
+    'a mailbox with an accent inside' => [
+        'müller@example.com bounced',
+        '[Filtered] bounced',
+    ],
+    'a mailbox with an apostrophe' => [
+        "o'brien@company.ie bounced",
+        '[Filtered] bounced',
+    ],
+    'a quoted email address keeps its quotes' => [
+        "Duplicate entry 'maya@monoven.io' for key 'users.users_email_unique'",
+        "Duplicate entry '[Filtered]' for key 'users.users_email_unique'",
+    ],
+    'a git host next to an accented email address' => [
+        "'git@github.com:acme/app.git' refused josé@example.com",
+        "'git@github.com:acme/app.git' refused [Filtered]",
+    ],
+    'an email address after a byte that is not utf-8' => [
+        "upload failed at \xFF for maya@münchen.de",
+        "upload failed at \xFF for [Filtered]",
+    ],
+]);
+
+test('an email address with text straight after it leaves whole characters', function () {
+    $text = 'maya@例え.jp、送信に失敗しました';
+
+    $scrubbed = SentryScrubber::beforeSend(Event::createEvent()->setMessage($text))->getMessage();
+
+    expect($scrubbed)->toStartWith('[Filtered]')
+        ->not->toContain('maya')
+        ->and(mb_check_encoding($scrubbed, 'UTF-8'))->toBeTrue();
+});
+
+test('long runs of apostrophes and accented letters are scrubbed without stalling', function (string $text) {
+    $started = hrtime(true);
+
+    $scrubbed = SentryScrubber::beforeSend(Event::createEvent()->setMessage($text))->getMessage();
+
+    expect((hrtime(true) - $started) / 1_000_000_000)->toBeLessThan(0.5)
+        ->and(strlen($text))->toBeGreaterThan(500_000)
+        ->and($scrubbed)->not->toBe('');
+})->with([
+    'apostrophes between letters' => [str_repeat("a'", 270_000) . '@monoven.io'],
+    'accented letters' => [str_repeat('ü', 270_000) . '@monoven.io'],
+    'accented addresses' => [str_repeat('ü@ü.', 135_000)],
 ]);
 
 test('credentials in the address are redacted', function () {
@@ -840,6 +925,47 @@ test('an exception that wraps a failed query loses the bound values too', functi
 
     expect($outer->getMessage())->toContain('maya@monoven.io')
         ->and($first->getValue())->toBe('Could not save: SQLSTATE[23505]: Unique violation (Connection: pgsql, SQL: insert into "users" ("email", "password") values (?, ?))');
+});
+
+test('the row postgres echoes back from a refused update is filtered whole', function (string $driver, string $expected) {
+    $failure = scrubberFailedUpdate($driver);
+    $event = Event::createEvent()->setExceptions([new ExceptionDataBag($failure), new ExceptionDataBag($failure->getPrevious())]);
+
+    [$query, $chained] = SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => $failure]))->getExceptions();
+
+    expect($failure->getMessage())->toContain('$2y$12$')
+        ->and($chained->getValue())->toBe($expected)
+        ->and($query->getValue())->toBe($expected . ' (Connection: pgsql, SQL: update "users" set "name" = ?, "updated_at" = ? where "id" = ?)');
+})->with([
+    'a not-null violation' => [
+        "SQLSTATE[23502]: Not null violation: 7 ERROR:  null value in column \"name\" of relation \"users\" violates not-null constraint\nDETAIL:  Failing row contains (01K8ABCDEFGHJKMNPQRSTVWXYZ, null, maya@monoven.io, \$2y\$12\$abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa, 2026-10-31 00:00:00, remembertokenremembertoken12345678901234567890123456789012345).",
+        "SQLSTATE[23502]: Not null violation: 7 ERROR:  null value in column \"name\" of relation \"users\" violates not-null constraint\nDETAIL:  Failing row contains ([Filtered]).",
+    ],
+    'a check violation' => [
+        "SQLSTATE[23514]: Check violation: 7 ERROR:  new row for relation \"users\" violates check constraint \"users_name_check\"\nDETAIL:  Failing row contains (01K8ABCDEFGHJKMNPQRSTVWXYZ, , maya@monoven.io, \$2y\$12\$abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa, 2026-10-31 00:00:00, remembertokenremembertoken12345678901234567890123456789012345).",
+        "SQLSTATE[23514]: Check violation: 7 ERROR:  new row for relation \"users\" violates check constraint \"users_name_check\"\nDETAIL:  Failing row contains ([Filtered]).",
+    ],
+    'values holding brackets, full stops and line breaks' => [
+        "SQLSTATE[23514]: Check violation: 7 ERROR:  new row for relation \"users\" violates check constraint \"users_name_check\"\nDETAIL:  Failing row contains (01K8ABCDEFGHJKMNPQRSTVWXYZ, Maya (ops). Okafor, first note).\nsecond note, \$2y\$12\$abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa, remembertokenremembertoken12345678901234567890123456789012345).",
+        "SQLSTATE[23514]: Check violation: 7 ERROR:  new row for relation \"users\" violates check constraint \"users_name_check\"\nDETAIL:  Failing row contains ([Filtered]).",
+    ],
+    'a context line after the row' => [
+        "SQLSTATE[23502]: Not null violation: 7 ERROR:  null value in column \"name\" of relation \"users\" violates not-null constraint\nDETAIL:  Failing row contains (01K8ABCDEFGHJKMNPQRSTVWXYZ, null, \$2y\$12\$abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa).\nCONTEXT:  PL/pgSQL function touch_user() line 3 at SQL statement",
+        "SQLSTATE[23502]: Not null violation: 7 ERROR:  null value in column \"name\" of relation \"users\" violates not-null constraint\nDETAIL:  Failing row contains ([Filtered]).\nCONTEXT:  PL/pgSQL function touch_user() line 3 at SQL statement",
+    ],
+]);
+
+test('a failing row is filtered wherever its text is quoted, to the end when nothing closes it', function () {
+    $failure = scrubberFailedUpdate("SQLSTATE[23502]: Not null violation: 7 ERROR:  null value in column \"name\" of relation \"users\" violates not-null constraint\nDETAIL:  Failing row contains (01K8ABCDEFGHJKMNPQRSTVWXYZ, null, \$2y\$12\$abcdefghijklmnopqrstuuMq0b3f1xkD1e8Gz5Yw9bW6n7y4c2eHa, remembertokenremembertoken12345678901234567890123456789012345).");
+
+    $quoted = SentryScrubber::beforeBreadcrumb(scrubberBreadcrumb('Could not save: ' . $failure->getMessage()))->getMessage();
+    $rendered = SentryScrubber::beforeBreadcrumb(scrubberBreadcrumb((string) $failure->getPrevious()))->getMessage();
+
+    expect($quoted)->toContain('DETAIL:  Failing row contains ([Filtered]). (Connection: pgsql, SQL: update "users" set "name" = ')
+        ->not->toContain('$2y$12$')
+        ->not->toContain('remembertoken')
+        ->and($rendered)->toStartWith('PDOException: SQLSTATE[23502]: Not null violation')
+        ->toEndWith('DETAIL:  Failing row contains ([Filtered])');
 });
 
 test('a logged exception keeps only its type and message in breadcrumb data', function () {

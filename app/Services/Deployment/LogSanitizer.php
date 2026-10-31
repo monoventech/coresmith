@@ -25,7 +25,7 @@ final class LogSanitizer
         '/AKIA[A-Z0-9]{16}/' => '[REDACTED_AWS_KEY]',
         '/gh[pousr]_[A-Za-z0-9][A-Za-z0-9_.\-]{19,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/github_pat_[A-Za-z0-9_]{22,}/' => '[REDACTED_GITHUB_TOKEN]',
-        '/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/' => '[REDACTED_PRIVATE_KEY]',
+        '/-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]{0,16384}?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]{0,16384})/' => '[REDACTED_PRIVATE_KEY]',
     ];
 
     public function sanitize(string $output, ?Application $application = null): string

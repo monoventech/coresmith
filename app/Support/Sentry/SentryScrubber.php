@@ -30,7 +30,9 @@ final class SentryScrubber
 
     private const SECRET_KEYS = '/password|passwd|secret|token|api[_-]?key|authorization|cookie|session|private[_ -]?key|credential|signature|email|otp|recovery_codes?/i';
 
-    private const EMAIL = '~(?<![A-Za-z0-9._%+\-])([A-Za-z0-9._%+\-]{1,128})(?:@|%40)((?:[A-Za-z0-9\-]{1,63}\.){1,8}[A-Za-z]{2,24})~';
+    private const EMAIL = '~(?<![A-Za-z0-9._%+\-\x80-\xFF]|[A-Za-z0-9._%+\-\x80-\xFF]\')([A-Za-z0-9._%+\-\x80-\xFF][A-Za-z0-9._%+\-\'\x80-\xFF]{0,127})(?:@|%40)((?:[A-Za-z0-9\-\x80-\xFF]{1,63}\.){1,8}[A-Za-z\x80-\xFF]{2,24})(?![\x80-\xBF])~';
+
+    private const FAILING_ROW = '~(Failing row contains )\((?:[\s\S]{0,16384}?\)(?=\.(?:\z|\n[A-Z][A-Z ]{0,15}:| \(Connection: ))|[\s\S]*)~';
 
     private const KEPT_MAILBOXES = ['git'];
 
@@ -239,11 +241,11 @@ final class SentryScrubber
         }
 
         if (is_array($request['headers'] ?? null)) {
-            $scrubbed['headers'] = array_filter(
+            $scrubbed['headers'] = self::scrubValues(array_filter(
                 $request['headers'],
                 static fn(int|string $name): bool => in_array(strtolower((string) $name), self::KEPT_HEADERS, true),
                 ARRAY_FILTER_USE_KEY,
-            );
+            ));
         }
 
         return $scrubbed;
@@ -301,7 +303,12 @@ final class SentryScrubber
 
     private static function filterText(string $text): string
     {
-        return self::mask(self::sanitize($text), true);
+        return self::mask(self::sanitize(self::withoutFailingRows($text)), true);
+    }
+
+    private static function withoutFailingRows(string $text): string
+    {
+        return (string) preg_replace(self::FAILING_ROW, '$1(' . self::FILTERED . ')', $text);
     }
 
     private static function mask(string $subject, bool $text): string
