@@ -29,7 +29,7 @@
         current: number
         step: number
         complete: boolean
-        github: GitHubSetup
+        github: GitHubSetup | null
         team: { id: string }
         server: (ServerHeader & { href: string; test_href: string; provision_href: string }) | null
         application: {
@@ -47,7 +47,7 @@
     let deploying = $state(false)
 
     const provisioning = $derived(server?.provisioning ?? null)
-    const elsewhere = $derived(github.elsewhere === null ? null : new URL(github.elsewhere).host)
+    const elsewhere = $derived(github?.elsewhere ? new URL(github.elsewhere).host : null)
 
     function go(index: number) {
         router.visit(route('setup.show', { step: index }), { preserveScroll: true })
@@ -64,6 +64,12 @@
 </script>
 
 <AppHead title="Set up Coresmith" />
+
+{#snippet onward()}
+    {#if current > 0}
+        <Button variant="outline" onclick={() => go(1)}>Continue</Button>
+    {/if}
+{/snippet}
 
 <h1 class="type-h1 m-0 mb-1.5">Set up <MarkerUnderline>Coresmith</MarkerUnderline></h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
@@ -115,7 +121,7 @@
             <div class="mb-1.5 flex items-center gap-2.5">
                 <GitBranch class="size-5" />
                 <h3 class="type-h3 m-0">Connect GitHub</h3>
-                {#if github.connected}<Badge variant="success">Connected</Badge>{/if}
+                {#if github?.connected}<Badge variant="success">Connected</Badge>{/if}
             </div>
             <p class="type-body-sm mb-4 text-muted-foreground">
                 Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only,
@@ -133,25 +139,41 @@
                     repository
                 </li>
             </ul>
-            {#if github.connected}
+            {#if github?.connected}
                 <div class="flex flex-wrap items-center gap-3">
                     <Button onclick={() => go(1)}>Continue</Button>
                     <span class="text-[12.5px] text-muted-foreground"
                         >Connected as <span class="font-mono text-[12px]">{github.name}</span></span
                     >
                 </div>
-            {:else if github.connect_href}
-                <Button href={github.connect_href} target="_self">Connect GitHub</Button>
-            {:else if github.registration}
-                <GitHubRegistration registration={github.registration} compact submitLabel="Connect GitHub" />
-            {:else if github.elsewhere}
+            {:else if github?.connect_href}
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button href={github.connect_href} target="_self">Connect GitHub</Button>
+                    {@render onward()}
+                </div>
+            {:else if github?.registration}
+                <GitHubRegistration
+                    registration={github.registration}
+                    compact
+                    submitLabel="Connect GitHub"
+                    actions={onward}
+                />
+            {:else if github?.elsewhere}
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
                     Create the app from <span class="font-mono text-[12px]">{elsewhere}</span>, GitHub sends you back
                     there.
                 </p>
-                <Button href={github.elsewhere}>Open {elsewhere}</Button>
-            {:else if !github.can_manage}
-                <p class="m-0 text-[12.5px] text-muted-foreground">An owner or admin connects GitHub.</p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button href={github.elsewhere}>Open {elsewhere}</Button>
+                    {@render onward()}
+                </div>
+            {:else if github && !github.can_manage}
+                <p class={cn('text-[12.5px] text-muted-foreground', current > 0 ? 'mb-3' : 'm-0')}>
+                    An owner or admin connects GitHub.
+                </p>
+                {#if current > 0}
+                    <Button onclick={() => go(1)}>Continue</Button>
+                {/if}
             {/if}
         </div>
     {:else if step === 1}

@@ -133,6 +133,27 @@ export async function backToMonoven(page: Page) {
     await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
 }
 
+export async function openSetupWith(page: Page, slug: string, github: Record<string, unknown>) {
+    await page.route(`**/${slug}/setup**`, async (route) => {
+        if (route.request().headers()['x-inertia'] === undefined) {
+            await route.continue()
+
+            return
+        }
+
+        const response = await route.fetch()
+        const body = await response.json()
+
+        body.props.github = { ...body.props.github, ...github }
+        await route.fulfill({ response, json: body })
+    })
+    await page.goto(`/${slug}/setup`)
+    await page
+        .getByRole('navigation', { name: 'Setup steps' })
+        .getByRole('button', { name: /Connect GitHub/ })
+        .click()
+}
+
 export async function openSecurity(page: Page) {
     await page.goto('/settings/security')
 

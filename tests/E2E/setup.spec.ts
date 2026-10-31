@@ -1,32 +1,11 @@
 import type { Page } from '@playwright/test'
-import { backToMonoven, blockingViolations, expect, test, useTheme } from './support/fixtures'
-
-async function openAcmeSetupWith(page: Page, github: Record<string, unknown>) {
-    await page.route('**/acme/setup**', async (route) => {
-        if (route.request().headers()['x-inertia'] === undefined) {
-            await route.continue()
-
-            return
-        }
-
-        const response = await route.fetch()
-        const body = await response.json()
-
-        body.props.github = { ...body.props.github, ...github }
-        await route.fulfill({ response, json: body })
-    })
-    await page.goto('/acme/setup')
-    await page
-        .getByRole('navigation', { name: 'Setup steps' })
-        .getByRole('button', { name: /Connect GitHub/ })
-        .click()
-}
+import { backToMonoven, blockingViolations, expect, openSetupWith, test, useTheme } from './support/fixtures'
 
 async function openWithEnvironmentApp(page: Page): Promise<string> {
     const baseURL = test.info().project.use.baseURL ?? 'http://127.0.0.1:8123'
     const connect = `${baseURL}/acme/settings/source-providers/github_app/connect?app=env`
 
-    await openAcmeSetupWith(page, { connect_href: connect, registration: null })
+    await openSetupWith(page, 'acme', { connect_href: connect, registration: null })
     await page.getByTestId('setup-step').getByRole('link', { name: 'Connect GitHub' }).waitFor()
 
     return connect
@@ -188,8 +167,28 @@ test.describe('setup before GitHub is connected', () => {
         })
     }
 
+    test('a team on GitLab alone moves on from the first step', async ({ page }) => {
+        await page.goto('/tidewater/setup?step=0')
+
+        const step = page.getByTestId('setup-step')
+
+        await expect(step.getByRole('button', { name: 'Connect GitHub' })).toBeVisible()
+
+        await step.getByRole('button', { name: 'Continue' }).click()
+
+        await expect(page.getByTestId('setup-step')).toContainText('Add your first server')
+        await expect(
+            page.getByRole('navigation', { name: 'Setup steps' }).getByRole('button', { name: /Add a server/ })
+        ).toHaveAttribute('aria-current', 'step')
+    })
+
     test('a member is told who connects GitHub', async ({ page }) => {
-        await openAcmeSetupWith(page, { can_manage: false, connect_href: null, registration: null, elsewhere: null })
+        await openSetupWith(page, 'acme', {
+            can_manage: false,
+            connect_href: null,
+            registration: null,
+            elsewhere: null
+        })
 
         const step = page.getByTestId('setup-step')
 

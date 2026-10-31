@@ -6,6 +6,7 @@ use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
@@ -17,6 +18,7 @@ use App\Models\User;
 use App\Services\Git\GitHub\GitHubAppRegistrar;
 use App\Services\Git\GitHub\ManifestBuilder;
 use App\Services\Network\AddressResolver;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 function setupOwner(Team $team, TeamRole $role = TeamRole::Owner): User
@@ -39,6 +41,16 @@ function setupEnvironmentApp(): string
     ]]);
 
     return 'env';
+}
+
+function setupPartialHeaders(string $only): array
+{
+    return [
+        'X-Inertia' => 'true',
+        'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)->version(Request::create('/')),
+        'X-Inertia-Partial-Component' => 'setup/Show',
+        'X-Inertia-Partial-Data' => $only,
+    ];
 }
 
 beforeEach(function () {
@@ -107,7 +119,7 @@ test('a connected github installation is described', function () {
     SourceProvider::factory()->for($team)->create(['name' => 'monoventech', 'type' => 'github_app']);
 
     $this->actingAs(setupOwner($team))
-        ->get(route('setup.show'))
+        ->get(route('setup.show', ['step' => 0]))
         ->assertInertia(fn($page) => $page
             ->where('github.connected', true)
             ->where('github.name', 'monoventech')
@@ -189,14 +201,47 @@ test('only a github installation connects github, though any git provider finish
     $this->actingAs(setupOwner($team))
         ->get(route('setup.show', ['step' => 0]))
         ->assertInertia(fn($page) => $page
+            ->where('step', 0)
             ->where('github.connected', false)
             ->where('github.name', null)
             ->where('github.label', null)
-            ->where('steps.0.done', true));
+            ->where('steps.0.done', true)
+            ->where('current', 1));
 })->with([
     'gitlab' => [['type' => 'gitlab', 'name' => 'gitlab-maya', 'installation_id' => null]],
     'bitbucket' => [['type' => 'bitbucket', 'name' => 'bitbucket-maya', 'installation_id' => null]],
 ]);
+
+test('the first step starts exactly one app registration', function () {
+    $team = Team::factory()->create();
+
+    $this->actingAs(setupOwner($team))->get(route('setup.show'))->assertOk();
+
+    expect(session(GitHubAppRegistrar::SESSION_KEY, []))->toHaveCount(1);
+});
+
+test('a later step leaves github out and starts no app registration', function () {
+    $team = Team::factory()->create();
+    SourceProvider::factory()->for($team)->create(['type' => 'gitlab', 'name' => 'gitlab-maya', 'installation_id' => null]);
+
+    $this->actingAs(setupOwner($team))
+        ->get(route('setup.show', ['step' => 1]))
+        ->assertInertia(fn($page) => $page->where('step', 1)->where('github', null));
+
+    expect(session(GitHubAppRegistrar::SESSION_KEY, []))->toBe([]);
+});
+
+test('a palette reload on the first step starts no app registration', function () {
+    $team = Team::factory()->create();
+
+    $response = $this->actingAs(setupOwner($team))
+        ->withHeaders(setupPartialHeaders('palette'))
+        ->get(route('setup.show'))
+        ->assertOk();
+
+    expect($response->json('props'))->toHaveKey('palette')->not->toHaveKey('github')
+        ->and(session(GitHubAppRegistrar::SESSION_KEY, []))->toBe([]);
+});
 
 test('a disconnected github installation no longer counts', function () {
     $team = Team::factory()->create();

@@ -50,7 +50,7 @@ final class SetupController extends Controller
             'current' => $current,
             'step' => $step,
             'complete' => $progress->complete(),
-            'github' => $this->github($github, $team, $user),
+            'github' => fn(): ?array => $step === 0 ? $this->github($github, $team, $user) : null,
             'team' => ['id' => $team->id],
             'server' => $server instanceof Server ? [
                 ...$servers->header($server, $user),

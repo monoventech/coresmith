@@ -11,12 +11,14 @@
     import type { GitHubRegistration } from '@/lib/github'
     import { APP_NAME_PATTERN, manifestFor, ORGANIZATION_PATTERN, organizationAction } from '@/lib/github'
     import { GitBranch } from '@lucide/svelte'
+    import type { Snippet } from 'svelte'
 
     let {
         registration,
         compact = false,
-        submitLabel = 'Create on GitHub'
-    }: { registration: GitHubRegistration; compact?: boolean; submitLabel?: string } = $props()
+        submitLabel = 'Create on GitHub',
+        actions
+    }: { registration: GitHubRegistration; compact?: boolean; submitLabel?: string; actions?: Snippet } = $props()
 
     let owner = $state('personal')
     let organization = $state('')
@@ -136,8 +138,9 @@
             {/if}
         {/if}
 
-        <div>
+        <div class={actions ? 'flex flex-wrap items-center gap-3' : undefined}>
             <Button type="submit" size={compact ? 'default' : 'sm'} disabled={!ready}>{submitLabel}</Button>
+            {@render actions?.()}
         </div>
     </form>
 </div>
