@@ -79,4 +79,12 @@ test.describe('rendering across browsers', () => {
         expect(colours.background).not.toBe(colours.foreground)
         expect(colours.background).not.toBe('rgb(255, 255, 255)')
     })
+
+    test('the panel loads no error tracking without a dsn', async ({ page }) => {
+        await page.goto('/dashboard')
+        await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+
+        await expect(page.locator('meta[name="coresmith-sentry"]')).toHaveCount(0)
+        expect(await page.evaluate(() => '__SENTRY__' in globalThis)).toBe(false)
+    })
 })

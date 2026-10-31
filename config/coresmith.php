@@ -23,6 +23,11 @@ return [
         )
         : null,
 
+    'sentry' => [
+        'browser_dsn' => env('SENTRY_BROWSER_DSN') ?: null,
+        'browser_traces_sample_rate' => (float) env('SENTRY_BROWSER_TRACES_SAMPLE_RATE', 0.0),
+    ],
+
     'activity' => [
         'ssh_command_days' => (int) env('CORESMITH_SSH_ACTIVITY_DAYS', 90),
     ],
