@@ -136,7 +136,8 @@ final class ApplicationController extends Controller
         $running = $latest?->status === DeploymentStatus::Running ? $latest : null;
         $failedLive = $latest !== null && $latest->status === DeploymentStatus::Failed && DeploymentPresenter::reachedUsers($latest);
         $rollback = $rollbacks->sinceLastLive($application);
-        $usesKey = $keys->usesDeployKey($application);
+        $github = $this->github($application);
+        $usesKey = !($github['usable'] ?? false) && $keys->usesDeployKey($application);
         $publicKey = $usesKey ? $keys->ensure($application)->deploy_key_public : null;
 
         return Inertia::render('applications/Show', [
@@ -165,6 +166,7 @@ final class ApplicationController extends Controller
                     'public_key' => $publicKey,
                     'repository' => Repository::slug((string) $application->repository_url),
                 ],
+                'github' => $github,
                 'environment' => $this->environmentPreview((string) $application->env_variables, $canManageEnvironment),
                 'env' => $canManageEnvironment ? (string) $application->env_variables : null,
                 'latest_deployment' => $latest === null ? null : [
@@ -231,6 +233,32 @@ final class ApplicationController extends Controller
     private function assertBelongsTo(Server $server, Application $application): void
     {
         abort_unless($application->server_id === $server->id, 404);
+    }
+
+    /**
+     * @return array{repository: string, branch: string, usable: bool, problem: 'removed'|'suspended'|null, settings_href: string}|null
+     */
+    private function github(Application $application): ?array
+    {
+        $connection = $application->githubConnection();
+
+        if ($connection === null) {
+            return null;
+        }
+
+        $usable = $application->usesGitHubToken();
+
+        return [
+            'repository' => $application->repositoryFullName() ?? (string) $application->repository_url,
+            'branch' => (string) $application->repository_branch,
+            'usable' => $usable,
+            'problem' => match (true) {
+                $usable => null,
+                !$connection->trashed() && $connection->suspended_at !== null => 'suspended',
+                default => 'removed',
+            },
+            'settings_href' => route('source-providers.index'),
+        ];
     }
 
     /**

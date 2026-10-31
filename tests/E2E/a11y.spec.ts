@@ -51,6 +51,8 @@ const PAGES: [string, Visit][] = [
     ['Rails application offered Solid Queue', (page) => gotoApplication(page, 'bench-01', 'solid-jobs')],
     ['Application killed for memory', (page) => gotoApplication(page, 'bench-01', 'hungry')],
     ['Application on an end-of-life runtime', (page) => gotoApplication(page, 'bench-01', 'legacy-api')],
+    ['Application linked to GitHub', (page) => gotoApplication(page, 'bench-01', 'linked-app')],
+    ['Application whose GitHub connection was removed', (page) => gotoApplication(page, 'bench-01', 'orphaned-app')],
     [
         'Add an app',
         async (page) => {

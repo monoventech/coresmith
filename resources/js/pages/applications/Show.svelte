@@ -51,7 +51,19 @@
             current_release: string | null
             stopped: boolean
             maintenance: boolean
-            deploy_key: { fingerprint: string | null; short: string | null; public_key: string; repository: string | null } | null
+            deploy_key: {
+                fingerprint: string | null
+                short: string | null
+                public_key: string
+                repository: string | null
+            } | null
+            github: {
+                repository: string
+                branch: string
+                usable: boolean
+                problem: 'removed' | 'suspended' | null
+                settings_href: string
+            } | null
             environment: { key: string; value: string; secret: boolean }[]
             env: string | null
             latest_deployment: { state: EntityState; href: string | null; when: string | null } | null
@@ -80,20 +92,27 @@
     let domainError = $state<string | null>(null)
     let working = $state(false)
     let copied = $state(false)
-    let log = $state<{ lines: LogLine[]; error: string | null; loading: boolean }>({ lines: [], error: null, loading: true })
+    let log = $state<{ lines: LogLine[]; error: string | null; loading: boolean }>({
+        lines: [],
+        error: null,
+        loading: true
+    })
     let poll: ReturnType<typeof setInterval> | null = null
     let checking: { cancel: () => void } | null = null
 
     const domains = $derived([...(application.domain ? [application.domain] : []), ...application.additional_domains])
     const failedDeploy = $derived(
         application.last_failed_live
-            ? (application.last_failed_reason ?? `releases/${application.current_release} is serving, read the log before pushing again.`)
+            ? (application.last_failed_reason ??
+                  `releases/${application.current_release} is serving, read the log before pushing again.`)
             : application.current_release
               ? `releases/${application.current_release} is still live.`
               : 'Nothing was live yet.'
     )
     const rollbackTitle = $derived(
-        application.rollback_failed?.worker ? `${application.rollback_failed.worker} did not start after the rollback.` : 'The rollback did not start the app.'
+        application.rollback_failed?.worker
+            ? `${application.rollback_failed.worker} did not start after the rollback.`
+            : 'The rollback did not start the app.'
     )
     const starting = $derived(toggles.some((toggle) => toggle.starting))
     const failedToggles = $derived(toggles.filter((toggle) => toggle.failure))
@@ -119,7 +138,11 @@
 
         checking?.cancel()
         busy = { ...busy, [toggle.key]: true }
-        router.put(toggle.href, { on }, { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) })
+        router.put(
+            toggle.href,
+            { on },
+            { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) }
+        )
     }
 
     function deploy() {
@@ -128,7 +151,14 @@
     }
 
     function power() {
-        router.post(route(application.stopped ? 'servers.applications.start' : 'servers.applications.stop', [server.id, application.id]), {}, { preserveScroll: true })
+        router.post(
+            route(application.stopped ? 'servers.applications.start' : 'servers.applications.stop', [
+                server.id,
+                application.id
+            ]),
+            {},
+            { preserveScroll: true }
+        )
     }
 
     function openEnv() {
@@ -169,19 +199,24 @@
         }
 
         working = true
-        const payload = application.domain ? { additional_domains: [...application.additional_domains, value] } : { domain: value }
+        const payload = application.domain
+            ? { additional_domains: [...application.additional_domains, value] }
+            : { domain: value }
 
         router.put(route('servers.applications.update', [server.id, application.id]), payload, {
             preserveScroll: true,
             onSuccess: () => (dialog = null),
-            onError: (errors) => (domainError = errors.domain ?? errors.additional_domains ?? Object.values(errors)[0] ?? null),
+            onError: (errors) =>
+                (domainError = errors.domain ?? errors.additional_domains ?? Object.values(errors)[0] ?? null),
             onFinish: () => (working = false)
         })
     }
 
     function remove() {
         working = true
-        router.delete(route('servers.applications.destroy', [server.id, application.id]), { onFinish: () => ((working = false), (dialog = null)) })
+        router.delete(route('servers.applications.destroy', [server.id, application.id]), {
+            onFinish: () => ((working = false), (dialog = null))
+        })
     }
 
     async function copyKey() {
@@ -196,7 +231,9 @@
 
     async function loadLog() {
         try {
-            const response = await fetch(application.logs_href, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            const response = await fetch(application.logs_href, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
             const body = (await response.json()) as { lines?: LogLine[]; error?: string | null; pending?: boolean }
 
             log = {
@@ -233,12 +270,19 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3 max-sm:gap-2.5">
             <h1 class="type-h1 m-0 font-mono font-medium max-sm:text-[24px]">{application.name}</h1>
-            <Badge variant={application.state.tone} dot pulse={application.state.key === 'deploying'}>{application.state.label}</Badge>
+            <Badge variant={application.state.tone} dot pulse={application.state.key === 'deploying'}
+                >{application.state.label}</Badge
+            >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:text-[12.5px]">
             <span>{application.kind} · {application.runtime}</span>
-            {#if application.domain}<span>· <span class="font-mono text-[13px] max-sm:text-[12px]">{application.domain}</span> <span class="max-sm:hidden">via Caddy</span></span>{/if}
-            {#if application.current_release}<span class="max-sm:hidden">· current release <span class="font-mono text-[13px]">{application.current_release}</span></span>{/if}
+            {#if application.domain}<span
+                    >· <span class="font-mono text-[13px] max-sm:text-[12px]">{application.domain}</span>
+                    <span class="max-sm:hidden">via Caddy</span></span
+                >{/if}
+            {#if application.current_release}<span class="max-sm:hidden"
+                    >· current release <span class="font-mono text-[13px]">{application.current_release}</span></span
+                >{/if}
         </p>
     </div>
     {#if application.running_href}
@@ -249,23 +293,32 @@
 </div>
 
 {#if application.stopped || application.maintenance}
-    <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="offline-banner">
+    <div
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="offline-banner"
+    >
         <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             {#if application.stopped}
                 This application is stopped. Visitors see a maintenance page until you start it again.
             {:else}
-                Maintenance mode is on. Visitors see a maintenance page, the processes keep running so you can still debug.
+                Maintenance mode is on. Visitors see a maintenance page, the processes keep running so you can still
+                debug.
             {/if}
         </span>
         {#if application.stopped && can.update}
-            <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={power}>Start it</button>
+            <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={power}
+                >Start it</button
+            >
         {/if}
     </div>
 {/if}
 
 {#if application.rollback_failed}
-    <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="rollback-failed-banner">
+    <div
+        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="rollback-failed-banner"
+    >
         <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             <span class="font-semibold">{rollbackTitle}</span>
@@ -273,18 +326,30 @@
         </span>
     </div>
 {:else if application.last_failed && application.latest_deployment?.href}
-    <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="failed-banner">
+    <div
+        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="failed-banner"
+    >
         <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
-            <span class="font-semibold">{application.last_failed_live ? 'The last deploy went live but did not finish.' : 'The last deploy failed, so nothing changed.'}</span>
+            <span class="font-semibold"
+                >{application.last_failed_live
+                    ? 'The last deploy went live but did not finish.'
+                    : 'The last deploy failed, so nothing changed.'}</span
+            >
             {` ${failedDeploy}`}
         </span>
-        <Link href={application.latest_deployment.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]!">Read the log</Link>
+        <Link href={application.latest_deployment.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]!"
+            >Read the log</Link
+        >
     </div>
 {/if}
 
 {#each failedToggles as toggle (toggle.key)}
-    <div class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="toggle-failed-banner">
+    <div
+        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="toggle-failed-banner"
+    >
         <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
             <span class="font-semibold">{`${toggle.label} did not start.`}</span>
@@ -294,22 +359,55 @@
 {/each}
 
 {#if application.oom}
-    <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="oom-banner">
+    <div
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="oom-banner"
+    >
         <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
-            <span class="font-semibold">{`The ${application.oom.process} process was killed ${application.oom.when} for going over its ${application.oom.limit_mb} MB memory limit.`}</span>
+            <span class="font-semibold"
+                >{`The ${application.oom.process} process was killed ${application.oom.when} for going over its ${application.oom.limit_mb} MB memory limit.`}</span
+            >
             {` systemd started it again. If it keeps happening, the app needs more memory than the ${application.oom.size} size gives it.`}
         </span>
     </div>
 {/if}
 
 {#if application.runtime_eol}
-    <div class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5" data-testid="eol-banner">
+    <div
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="eol-banner"
+    >
         <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
         <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
-            <span class="font-semibold">{`This app runs ${application.runtime_eol.runtime}, which stopped getting security fixes on ${application.runtime_eol.ended}.`}</span>
+            <span class="font-semibold"
+                >{`This app runs ${application.runtime_eol.runtime}, which stopped getting security fixes on ${application.runtime_eol.ended}.`}</span
+            >
             {` ${application.runtime_eol.fix}`}
         </span>
+    </div>
+{/if}
+
+{#if application.github?.problem}
+    <div
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="github-banner"
+    >
+        <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:basis-[calc(100%-1.75rem)] max-sm:text-[12.5px]">
+            <span class="font-semibold"
+                >This app clones <span class="font-mono text-[12.5px] max-sm:text-[12px]"
+                    >{application.github.repository}</span
+                >
+                through GitHub, and that connection
+                {application.github.problem === 'suspended' ? 'is suspended' : 'was removed'}.</span
+            >
+            Public repositories still deploy, private ones need GitHub connected again.
+        </span>
+        <Link
+            href={application.github.settings_href}
+            class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7">Open Git settings</Link
+        >
     </div>
 {/if}
 
@@ -318,7 +416,9 @@
         <h3 class="type-h3 m-0 mb-1 max-sm:mb-0.5 max-sm:text-[15px]">Smart toggles</h3>
         <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
             Based on what {application.kind} apps run.
-            <span class="max-sm:hidden">Flipping a switch changes what runs on {server.name}, no deployment needed.</span><span class="sm:hidden">No deployment needed.</span>
+            <span class="max-sm:hidden"
+                >Flipping a switch changes what runs on {server.name}, no deployment needed.</span
+            ><span class="sm:hidden">No deployment needed.</span>
         </p>
         <div class="flex flex-col">
             {#each toggles as toggle (toggle.key)}
@@ -339,7 +439,9 @@
     <div class="flex flex-col gap-4 max-sm:gap-3">
         <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
             <h3 class="type-h3 m-0 mb-1">Environment</h3>
-            <p class="mb-3 text-[12.5px] text-muted-foreground">Root-owned, injected via systemd at start. The app cannot read its own env file.</p>
+            <p class="mb-3 text-[12.5px] text-muted-foreground">
+                Root-owned, injected via systemd at start. The app cannot read its own env file.
+            </p>
             {#if application.environment.length > 0}
                 <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
                     {#each application.environment as line (line.key)}
@@ -354,14 +456,34 @@
             {/if}
         </div>
 
-        {#if application.deploy_key}
+        {#if application.github?.usable}
+            <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
+                <h3 class="type-h3 m-0 mb-1">Repository access</h3>
+                <p class="mb-2.5 text-[12.5px] text-muted-foreground">
+                    Cloned through the GitHub App with a one-hour, read-only token for this repository. Nothing
+                    long-lived is stored on the server.
+                </p>
+                <div class="font-mono text-[12px] break-all text-muted-foreground">
+                    {application.github.repository} · {application.github.branch}
+                </div>
+            </div>
+        {:else if application.deploy_key}
             <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
                 <h3 class="type-h3 m-0 mb-1">Deploy key</h3>
-                <p class="mb-2.5 text-[12.5px] text-muted-foreground">Per-app Ed25519, read-only. Provider tokens are never used for git operations.</p>
-                <div class="font-mono text-[12px] break-all text-muted-foreground" title={application.deploy_key.fingerprint ?? undefined}>
-                    {application.deploy_key.short}{application.deploy_key.repository ? ` · ${application.deploy_key.repository}` : ''}
+                <p class="mb-2.5 text-[12.5px] text-muted-foreground">
+                    Per-app Ed25519, read-only. Provider tokens are never used for git operations.
+                </p>
+                <div
+                    class="font-mono text-[12px] break-all text-muted-foreground"
+                    title={application.deploy_key.fingerprint ?? undefined}
+                >
+                    {application.deploy_key.short}{application.deploy_key.repository
+                        ? ` · ${application.deploy_key.repository}`
+                        : ''}
                 </div>
-                <Button variant="ghost" size="sm" class="mt-2 -ml-3" onclick={copyKey}>{copied ? 'Copied' : 'Copy public key'}</Button>
+                <Button variant="ghost" size="sm" class="mt-2 -ml-3" onclick={copyKey}
+                    >{copied ? 'Copied' : 'Copy public key'}</Button
+                >
             </div>
         {/if}
 
@@ -379,7 +501,9 @@
                     <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
                 </div>
             {:else}
-                <p class="border-t border-border pt-3 text-[12.5px] text-muted-foreground">No domain yet. Add one and Caddy requests the certificate.</p>
+                <p class="border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+                    No domain yet. Add one and Caddy requests the certificate.
+                </p>
             {/each}
             <p class="mt-2 text-[12px] text-muted-foreground">Routed by Caddy. Certificates renew themselves.</p>
         </div>
@@ -387,16 +511,27 @@
         <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4">
             <div class="mb-1.5 flex items-center justify-between">
                 <h3 class="type-h3 m-0 max-sm:text-[15px]">Current release</h3>
-                <Link href={application.releases_href} class="focus-ring rounded-sm text-[13px] font-medium text-primary no-underline max-sm:hidden">All releases →</Link>
+                <Link
+                    href={application.releases_href}
+                    class="focus-ring rounded-sm text-[13px] font-medium text-primary no-underline max-sm:hidden"
+                    >All releases →</Link
+                >
             </div>
             <div class="font-mono text-[12px] text-muted-foreground">
-                {application.current_release ? `current → releases/${application.current_release}` : 'Nothing is live yet. Deploy to create the first release.'}
+                {application.current_release
+                    ? `current → releases/${application.current_release}`
+                    : 'Nothing is live yet. Deploy to create the first release.'}
             </div>
         </div>
 
         <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
             <h3 class="type-h3 m-0 mb-2.5">Live log</h3>
-            <div class="terminal h-30 px-3.5 py-2.5 text-[11.5px] leading-[1.7]" data-testid="live-log" role="log" aria-live="polite">
+            <div
+                class="terminal h-30 px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
+                data-testid="live-log"
+                role="log"
+                aria-live="polite"
+            >
                 {#if log.loading}
                     <div class="opacity-60">reading the access log…</div>
                 {:else if log.error}
@@ -415,14 +550,17 @@
             <div class="border-danger rounded-xl border bg-card px-5.5 py-5 max-sm:hidden">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Stopping puts up the maintenance page until you start it again. Removing stops the app and detaches it from this server, its releases stay on disk until you prune them.
+                    Stopping puts up the maintenance page until you start it again. Removing stops the app and detaches
+                    it from this server, its releases stay on disk until you prune them.
                 </p>
                 <div class="flex flex-wrap gap-2">
                     {#if can.update && !application.stopped}
                         <Button variant="outline" size="sm" onclick={power}>Stop the app</Button>
                     {/if}
                     {#if can.delete}
-                        <Button variant="outline" size="sm" class="text-destructive" onclick={() => (dialog = 'remove')}>Remove this app</Button>
+                        <Button variant="outline" size="sm" class="text-destructive" onclick={() => (dialog = 'remove')}
+                            >Remove this app</Button
+                        >
                     {/if}
                 </div>
             </div>
@@ -435,7 +573,10 @@
         <form onsubmit={saveEnv}>
             <Dialog.Header>
                 <Dialog.Title>Edit environment</Dialog.Title>
-                <Dialog.Description>Values are root-owned and injected via systemd, the app never reads the file itself. They apply at the next deploy.</Dialog.Description>
+                <Dialog.Description
+                    >Values are root-owned and injected via systemd, the app never reads the file itself. They apply at
+                    the next deploy.</Dialog.Description
+                >
             </Dialog.Header>
             <div class="mt-4">
                 <Textarea
@@ -462,7 +603,9 @@
         <form onsubmit={addDomain} novalidate>
             <Dialog.Header>
                 <Dialog.Title>Add a domain</Dialog.Title>
-                <Dialog.Description>Point an A record at the server first, Caddy handles the certificate.</Dialog.Description>
+                <Dialog.Description
+                    >Point an A record at the server first, Caddy handles the certificate.</Dialog.Description
+                >
             </Dialog.Header>
             <div class="mt-4">
                 <Input
@@ -487,7 +630,9 @@
     <Dialog.Content>
         <Dialog.Header>
             <Dialog.Title>Remove {application.name}?</Dialog.Title>
-            <Dialog.Description>The app is stopped and detached from {server.name}. Its releases stay on disk until you prune them.</Dialog.Description>
+            <Dialog.Description
+                >The app is stopped and detached from {server.name}. Its releases stay on disk until you prune them.</Dialog.Description
+            >
         </Dialog.Header>
         <Dialog.Footer>
             <Button variant="ghost" onclick={() => (dialog = null)}>Keep it</Button>
