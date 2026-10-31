@@ -10,6 +10,7 @@ namespace Database\Factories;
 
 use App\Models\Server;
 use App\Models\ServerMetric;
+use App\Services\Panel\FleetSnapshot;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -25,8 +26,8 @@ class ServerMetricFactory extends Factory
         return [
             'server_id' => Server::factory(),
             'cpu_percent' => fake()->randomFloat(2, 0, 100),
-            'memory_percent' => fake()->randomFloat(2, 0, 100),
-            'disk_percent' => fake()->randomFloat(2, 0, 100),
+            'memory_percent' => fake()->randomFloat(2, 0, FleetSnapshot::MEMORY_WARNING - 0.01),
+            'disk_percent' => fake()->randomFloat(2, 0, FleetSnapshot::DISK_WARNING - 0.01),
             'load_1m' => fake()->randomFloat(2, 0, 8),
             'load_5m' => fake()->randomFloat(2, 0, 8),
             'load_15m' => fake()->randomFloat(2, 0, 8),

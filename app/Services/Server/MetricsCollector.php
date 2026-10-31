@@ -22,9 +22,11 @@ use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\SSH\SSHConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
+use Throwable;
 
 final class MetricsCollector
 {
@@ -90,12 +92,14 @@ final class MetricsCollector
             return;
         }
 
+        if (!$this->alert($server, Preferences::DISK_PRESSURE, new DiskPressureNotification($server, (int) round($percent), critical: $level === 'critical'))) {
+            return;
+        }
+
         activity()
             ->performedOn($server)
             ->withProperties(['percent' => (int) round($percent), 'level' => $level])
             ->log('disk_pressure');
-
-        app(TeamNotifier::class)->send($server->team, Preferences::DISK_PRESSURE, new DiskPressureNotification($server, (int) round($percent), critical: $level === 'critical'));
     }
 
     private function recordMemoryPressure(Server $server, float $latest): void
@@ -111,7 +115,9 @@ final class MetricsCollector
             ->limit(self::MEMORY_PRESSURE_READINGS)
             ->pluck('memory_percent');
 
-        if ($readings->count() < self::MEMORY_PRESSURE_READINGS || $readings->contains(fn(mixed $reading): bool => (float) $reading < self::MEMORY_PRESSURE_PERCENT)) {
+        $lowest = (float) $readings->min();
+
+        if ($readings->count() < self::MEMORY_PRESSURE_READINGS || $lowest < self::MEMORY_PRESSURE_PERCENT) {
             return;
         }
 
@@ -126,14 +132,29 @@ final class MetricsCollector
             return;
         }
 
-        $percent = (int) round($latest);
+        $percent = (int) floor($lowest);
+
+        if (!$this->alert($server, Preferences::SERVER_ALERTS, new MemoryPressureNotification($server, $percent))) {
+            return;
+        }
 
         activity()
             ->performedOn($server)
             ->withProperties(['percent' => $percent])
             ->log('memory_pressure');
+    }
 
-        app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new MemoryPressureNotification($server, $percent));
+    private function alert(Server $server, string $preference, Notification $notification): bool
+    {
+        try {
+            app(TeamNotifier::class)->send($server->team, $preference, $notification);
+        } catch (Throwable $e) {
+            report($e);
+
+            return false;
+        }
+
+        return true;
     }
 
     public function recordTraffic(SSHConnection $connection): void
@@ -230,14 +251,14 @@ final class MetricsCollector
             $process = Str::after($kill['unit'], 'coresmith-app-' . $application->slug . '-');
             $limitMb = (AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small)->memoryMaxMb();
 
+            if ($firstToday && !$this->alert($server, Preferences::SERVER_ALERTS, new ApplicationOomKilledNotification($application, $process, $limitMb, $kill['at']))) {
+                continue;
+            }
+
             activity()
                 ->performedOn($application)
                 ->withProperties(['process' => $process, 'at' => $at, 'limit_mb' => $limitMb])
                 ->log('app_oom_killed');
-
-            if ($firstToday) {
-                app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new ApplicationOomKilledNotification($application, $process, $limitMb, $kill['at']));
-            }
         }
     }
 

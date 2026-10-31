@@ -222,6 +222,24 @@ test('a server that is deploying onto a full disk is still a disk warning', func
     ]);
 });
 
+test('a server that is deploying with memory at the line is still a memory warning', function (float $memory, float $disk, array $listed) {
+    $team = Team::factory()->create();
+    $server = fleetServer($team, ['name' => 'web-1']);
+    fleetMetric($server, $disk, attributes: ['memory_percent' => $memory]);
+    fleetRunning($server);
+
+    expect((new FleetSnapshot($team))->attention())->toBe(array_map(
+        fn(string $summary): array => ['severity' => 'warning', 'subject' => 'web-1', 'summary' => $summary, 'href' => route('servers.show', $server)],
+        $listed,
+    ));
+})->with([
+    'at the line' => [95.0, 40.0, ['memory 95%']],
+    'rounded in the summary' => [96.6, 40.0, ['memory 97%']],
+    'over a full disk' => [97.0, 88.0, ['memory 97%']],
+    'just under the line' => [94.9, 40.0, []],
+    'a full disk alone' => [60.0, 88.0, ['disk 88%']],
+]);
+
 test('an application whose last finished deploy failed needs attention until one succeeds', function () {
     $team = Team::factory()->create();
     $server = fleetServer($team);

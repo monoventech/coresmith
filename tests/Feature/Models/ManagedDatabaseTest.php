@@ -6,6 +6,7 @@ use App\Enums\DatabaseType;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\ServerMetric;
+use App\Services\Panel\FleetSnapshot;
 use Illuminate\Support\Facades\DB;
 
 test('a managed database uses the databases table', function () {
@@ -33,4 +34,11 @@ test('a server has many metrics', function () {
 
 test('server metrics use an auto-increment id', function () {
     expect(ServerMetric::factory()->create()->id)->toBeInt();
+});
+
+test('the metric factory never draws a memory or disk reading on an alert line', function () {
+    $readings = ServerMetric::factory()->count(400)->make(['server_id' => 'none']);
+
+    expect($readings->max('memory_percent'))->toBeLessThan(FleetSnapshot::MEMORY_WARNING)
+        ->and($readings->max('disk_percent'))->toBeLessThan(FleetSnapshot::DISK_WARNING);
 });

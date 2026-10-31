@@ -173,7 +173,7 @@ final class FleetSnapshot
 
             if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'unreachable'], true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
-            } elseif ($state['key'] === 'memory') {
+            } elseif ($state['key'] === 'memory' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->memory_percent ?? 0) >= self::MEMORY_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'memory ' . (int) round((float) $this->latestMetric($server)?->memory_percent) . '%', 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'warning' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->disk_percent ?? 0) >= self::DISK_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'disk ' . (int) round((float) $this->latestMetric($server)?->disk_percent) . '%', 'href' => route('servers.show', $server)];

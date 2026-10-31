@@ -21,12 +21,12 @@ final class NotifyProvisioning
 
     public function handle(ServerProvisioned|ServerProvisioningFailed $event): void
     {
-        $this->notifier->send(
+        rescue(fn() => $this->notifier->send(
             $event->server->team,
             Preferences::PROVISIONING,
             $event instanceof ServerProvisioned
                 ? new ServerProvisionedNotification($event->server, $event->durationSeconds)
                 : new ProvisioningFailedNotification($event->server, $event->phase, $event->phaseName),
-        );
+        ), report: true);
     }
 }

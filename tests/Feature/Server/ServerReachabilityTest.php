@@ -466,7 +466,7 @@ test('people who turned server problems off are not emailed', function () {
 test('the fleet puts an unreachable server first and a changed key still wins', function () {
     $team = Team::factory()->create();
     $full = Server::factory()->for($team)->create(['name' => 'full-disk', 'status' => ServerStatus::Active, 'created_at' => now()->subWeek()]);
-    ServerMetric::factory()->for($full)->create(['disk_percent' => 91.4, 'recorded_at' => now()->subMinute()]);
+    ServerMetric::factory()->for($full)->create(['memory_percent' => 40.0, 'disk_percent' => 91.4, 'recorded_at' => now()->subMinute()]);
     $down = Server::factory()->for($team)->create(['name' => 'down-1', 'status' => ServerStatus::Active, 'unreachable_since' => now()->subMinutes(5), 'created_at' => now()->subDay()]);
     $moved = Server::factory()->for($team)->create(['name' => 'moved', 'status' => ServerStatus::Active, 'unreachable_since' => now()->subMinutes(5), 'pending_host_key_fingerprint' => 'SHA256:new', 'created_at' => now()]);
 

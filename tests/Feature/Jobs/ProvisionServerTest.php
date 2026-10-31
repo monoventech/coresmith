@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ServerStatus;
+use App\Enums\TeamRole;
 use App\Events\ServerProvisioned;
 use App\Events\ServerProvisioningFailed;
 use App\Exceptions\ProvisioningVerificationException;
@@ -10,12 +11,15 @@ use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsupportedOperatingSystemException;
 use App\Jobs\ProvisionServer;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Caddy\CaddyInstaller;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -285,6 +289,39 @@ test('a fully provisioned server becomes active and announces itself', function 
         ->and($server->fresh()->last_connected_at)->not->toBeNull();
 
     Event::assertDispatched(ServerProvisioned::class);
+});
+
+test('a mail that cannot be queued does not undo a finished provision', function () {
+    Exceptions::fake();
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $server->team->members()->attach(User::factory()->create(), ['role' => TeamRole::Member->value]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    provision($server, provisioningTransport());
+
+    $fresh = $server->fresh();
+
+    expect($fresh->status)->toBe(ServerStatus::Active)
+        ->and($fresh->provisioning_phase)->toBe(8)
+        ->and($fresh->provisioning_error)->toBeNull()
+        ->and(Activity::query()->where('description', 'provisioning_failed')->exists())->toBeFalse();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+});
+
+test('a mail that cannot be queued does not hide why provisioning stopped', function () {
+    Exceptions::fake();
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $server->team->members()->attach(User::factory()->create(), ['role' => TeamRole::Member->value]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+    $transport = provisioningTransport()->respondTo('apt-get install', 'E: Unable to locate package', 100);
+
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Failed)
+        ->and(Activity::query()->where('description', 'provisioning_failed')->count())->toBe(1);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
 });
 
 test('phase 6 opens only ssh, http and https', function () {

@@ -7,6 +7,7 @@ use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Events\ServerProvisioned;
 use App\Events\ServerProvisioningFailed;
+use App\Jobs\CollectServerMetrics;
 use App\Listeners\NotifyProvisioning;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -24,12 +25,15 @@ use App\Notifications\TeamNotifier;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Server\MetricsCollector;
+use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnection;
+use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
@@ -62,7 +66,7 @@ function alertsCollect(Server $server, int $memory = 40, int $disk = 40): Server
     return (new MetricsCollector)->collect(alertsConnection($server, alertsProbe($memory, $disk)));
 }
 
-function alertsReading(Server $server, int $memory, int $minutesAgo): ServerMetric
+function alertsReading(Server $server, int|float $memory, int $minutesAgo): ServerMetric
 {
     return ServerMetric::factory()->for($server)->create(['memory_percent' => $memory, 'disk_percent' => 40, 'recorded_at' => now()->subMinutes($minutesAgo)]);
 }
@@ -93,6 +97,17 @@ function alertsRead(Server $server, string ...$lines): void
 function alertsApplication(Server $server, string $slug, array $attributes = []): Application
 {
     return Application::factory()->for($server->team)->for($server)->create(array_merge(['name' => ucfirst($slug), 'slug' => $slug], $attributes));
+}
+
+function alertsRun(Server $server, FakeSSHTransport $transport): void
+{
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), app(MetricsCollector::class), app(ServerReachability::class));
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
 }
 
 function alertsSent(User $user, string $class): array
@@ -168,6 +183,21 @@ test('a provision on a server whose team is gone emails nobody', function () {
     Notification::assertNothingSent();
 });
 
+test('a mail that cannot be queued is reported and never thrown at the provision', function (string $stage) {
+    Exceptions::fake();
+    $server = alertsServer();
+    alertsMember($server->team);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    app(NotifyProvisioning::class)->handle($stage === 'finished' ? new ServerProvisioned($server, 372) : new ServerProvisioningFailed($server, 2, 'Base system'));
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+})->with([
+    'a finished provision' => ['finished'],
+    'a provision that stopped' => ['stopped'],
+]);
+
 test('disk at 95% sends the critical mail even after today\'s warning', function () {
     Notification::fake();
     $server = alertsServer();
@@ -234,17 +264,38 @@ test('both disk mails follow Disk above 80%, not Server problems', function () {
     Notification::assertNotSentTo($noDisk, DiskPressureNotification::class);
 });
 
+test('a disk alert that cannot be sent is reported, leaves no row and is retried the next minute', function () {
+    Exceptions::fake();
+    $server = alertsServer();
+    $member = alertsMember($server->team);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    $metric = alertsCollect($server, disk: 96);
+
+    expect($metric->exists)->toBeTrue()
+        ->and(Activity::query()->where('description', 'disk_pressure')->exists())->toBeFalse();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+
+    Notification::fake();
+    $this->travel(1)->minutes();
+    alertsCollect($server, disk: 96);
+
+    Notification::assertSentTo($member, DiskPressureNotification::class, fn(DiskPressureNotification $notification): bool => $notification->critical && $notification->percent === 96);
+    expect(Activity::query()->where('description', 'disk_pressure')->count())->toBe(1);
+});
+
 test('memory at 95% for three readings emails once a day', function () {
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
-    alertsReading($server, 96, minutesAgo: 2);
-    alertsReading($server, 97, minutesAgo: 1);
+    alertsReading($server, 95, minutesAgo: 2);
+    alertsReading($server, 96, minutesAgo: 1);
 
     alertsCollect($server, memory: 98);
 
-    Notification::assertSentTo($member, MemoryPressureNotification::class, fn(MemoryPressureNotification $notification): bool => $notification->server->is($server) && $notification->percent === 98);
-    expect(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBe(['percent' => 98]);
+    Notification::assertSentTo($member, MemoryPressureNotification::class, fn(MemoryPressureNotification $notification): bool => $notification->server->is($server) && $notification->percent === 95);
+    expect(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBe(['percent' => 95]);
 
     $this->travel(1)->minutes();
     alertsCollect($server, memory: 99);
@@ -261,6 +312,54 @@ test('memory at 95% for three readings emails once a day', function () {
 
     Notification::assertSentTimes(MemoryPressureNotification::class, 2);
     expect(Activity::query()->where('description', 'memory_pressure')->count())->toBe(2);
+});
+
+test('the memory mail names the lowest of the three readings, rounded down', function (array $earlier, int $latest, int $named) {
+    Notification::fake();
+    $server = alertsServer();
+    $member = alertsMember($server->team);
+
+    foreach ($earlier as [$memory, $minutesAgo]) {
+        alertsReading($server, $memory, $minutesAgo);
+    }
+
+    alertsCollect($server, memory: $latest);
+
+    $notification = alertsSent($member, MemoryPressureNotification::class)[0];
+    $mail = $notification->toMail($member);
+
+    expect($notification->percent)->toBe($named)
+        ->and($mail->subject)->toBe("web-1 memory is at {$named}%")
+        ->and($mail->introLines[0])->toBe("Memory has stayed at {$named}% or more for three minutes. An app that asks for more is killed and started again.")
+        ->and(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBe(['percent' => $named]);
+})->with([
+    'the first is the lowest' => [[[95, 2], [96, 1]], 98, 95],
+    'the middle is the lowest' => [[[98, 2], [96, 1]], 97, 96],
+    'the latest is the lowest' => [[[98, 2], [97, 1]], 96, 96],
+    'a fraction is rounded down, never up' => [[[95.6, 2], [97, 1]], 98, 95],
+]);
+
+test('a memory alert that cannot be sent is reported, leaves no row and is retried the next minute', function () {
+    Exceptions::fake();
+    $server = alertsServer();
+    $member = alertsMember($server->team);
+    alertsReading($server, 96, minutesAgo: 2);
+    alertsReading($server, 97, minutesAgo: 1);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    $metric = alertsCollect($server, memory: 98);
+
+    expect($metric->exists)->toBeTrue()
+        ->and(Activity::query()->where('description', 'memory_pressure')->exists())->toBeFalse();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+
+    Notification::fake();
+    $this->travel(1)->minutes();
+    alertsCollect($server, memory: 99);
+
+    Notification::assertSentTo($member, MemoryPressureNotification::class, fn(MemoryPressureNotification $notification): bool => $notification->percent === 97);
+    expect(Activity::query()->where('description', 'memory_pressure')->count())->toBe(1);
 });
 
 test('a memory spike does not email', function (array $readings) {
@@ -392,6 +491,67 @@ test('a kill that was already logged sends nothing again', function () {
 
     Notification::assertSentTimes(ApplicationOomKilledNotification::class, 1);
     expect(Activity::query()->where('description', 'app_oom_killed')->count())->toBe(1);
+});
+
+test('a memory kill alert that cannot be sent is reported, leaves no row and is retried the next minute', function () {
+    Exceptions::fake();
+    $server = alertsServer();
+    $member = alertsMember($server->team);
+    $shop = alertsApplication($server, 'shop');
+    $line = alertsKill('coresmith-app-shop-web', 20);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    alertsRead($server, $line);
+
+    expect(Activity::query()->where('description', 'app_oom_killed')->exists())->toBeFalse();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+
+    Notification::fake();
+    $this->travel(1)->minutes();
+    alertsRead($server, $line);
+
+    Notification::assertSentTo($member, ApplicationOomKilledNotification::class, fn(ApplicationOomKilledNotification $notification): bool => $notification->application->is($shop));
+    expect(Activity::query()->where('description', 'app_oom_killed')->count())->toBe(1);
+});
+
+test('one app\'s failed kill alert does not drop another app\'s kill', function () {
+    Exceptions::fake();
+    $server = alertsServer();
+    alertsMember($server->team);
+    alertsApplication($server, 'shop');
+    $blog = alertsApplication($server, 'blog');
+    $sends = 0;
+    Notification::shouldReceive('send')->twice()->andReturnUsing(function () use (&$sends): void {
+        if (++$sends === 1) {
+            throw new RuntimeException('Queue is down');
+        }
+    });
+
+    alertsRead($server, alertsKill('coresmith-app-shop-web', 30), alertsKill('coresmith-app-blog-web', 20));
+
+    expect(Activity::query()->where('description', 'app_oom_killed')->pluck('subject_id')->all())->toBe([$blog->id]);
+    Exceptions::assertReportedCount(1);
+});
+
+test('a failed alert never stops the rest of the collection', function () {
+    Exceptions::fake();
+    $server = alertsServer();
+    alertsMember($server->team);
+    $shop = alertsApplication($server, 'shop');
+    alertsRow($shop, 'app_oom_killed', ['process' => 'web', 'at' => '2026-09-14T11:59:00+00:00', 'limit_mb' => 256], now()->subHours(2));
+    $server->forceFill(['connection_failures' => 2, 'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.'])->save();
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    alertsRun($server, (new FakeSSHTransport)
+        ->respondTo('top -bn1', alertsProbe(disk: 96))
+        ->respondTo('journalctl --since', alertsKill('coresmith-app-shop-web', 20)));
+
+    expect(ServerMetric::query()->where('server_id', $server->id)->count())->toBe(1)
+        ->and($server->fresh()->connection_failures)->toBe(0)
+        ->and(Activity::query()->where('description', 'disk_pressure')->exists())->toBeFalse()
+        ->and(Activity::query()->where('description', 'app_oom_killed')->count())->toBe(2);
+    Exceptions::assertReportedCount(1);
 });
 
 test('a server whose team is gone still logs its memory alerts without emailing anyone', function () {
