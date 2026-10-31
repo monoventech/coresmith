@@ -62,6 +62,23 @@ test('a single token userinfo with no colon is redacted too', function () {
         ->and($clean)->toContain('[REDACTED]@github.com');
 });
 
+test('a long run of dotted words is sanitised without stalling', function () {
+    $line = str_repeat('a.', 100_000) . '@x.io';
+    $started = hrtime(true);
+
+    $clean = (new LogSanitizer)->sanitize($line);
+
+    expect((hrtime(true) - $started) / 1_000_000_000)->toBeLessThan(0.5)
+        ->and($clean)->toBe($line);
+});
+
+test('credentials after a word joined to the scheme are redacted too', function () {
+    $clean = (new LogSanitizer)->sanitize('remote_https://deploy:s3cr3t-pass@git.example.com/x.git');
+
+    expect($clean)->not->toContain('s3cr3t-pass')
+        ->and($clean)->toContain('[REDACTED]@git.example.com');
+});
+
 test('common secret shapes are redacted even when not in the environment', function (string $secret, string $line) {
     expect((new LogSanitizer)->sanitize($line))->not->toContain($secret);
 })->with([

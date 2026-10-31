@@ -64,7 +64,7 @@ final class LogSanitizer
     private function redactCredentialsInUrls(string $output): string
     {
         return (string) preg_replace(
-            '/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s@\/]+@/i',
+            '/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s@\/]+@/i',
             '$1[REDACTED]@',
             $output,
         );
