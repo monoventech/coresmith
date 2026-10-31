@@ -10,10 +10,12 @@ namespace App\Jobs;
 
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 final class DiscardRelease implements ShouldQueue
 {
@@ -56,5 +58,17 @@ final class DiscardRelease implements ShouldQueue
         } finally {
             $connections->disconnect($server);
         }
+    }
+
+    public function failed(Throwable $e): void
+    {
+        $deployment = $this->deployment->fresh();
+        $release = $deployment?->release;
+
+        if ($deployment === null || $release === null || preg_match(RollbackApplication::RELEASE_PATTERN, $release) !== 1) {
+            return;
+        }
+
+        rescue(fn() => app(DeploymentLog::class)->append($deployment, "Could not remove the half-built release. Remove releases/{$release} by hand if it is still there."), report: true);
     }
 }

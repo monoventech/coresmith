@@ -12,6 +12,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Models\Deployment;
+use App\Services\Deployment\DeploymentCancellation;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
@@ -39,6 +40,12 @@ final class DetectStaleDeployments implements ShouldQueue
         $this->stale(Deployment::query())
             ->get()
             ->each(function (Deployment $deployment): void {
+                if ($deployment->cancel_requested_at !== null && DeploymentCancellation::beforeMigrations($deployment)) {
+                    $this->cancel($deployment);
+
+                    return;
+                }
+
                 $minutes = max(1, (int) $deployment->started_at?->diffInMinutes(now()));
                 $reason = "No progress was reported for {$minutes} " . Str::plural('minute', $minutes) . ', so Coresmith stopped waiting for this deploy. Deploy again.';
 
@@ -65,14 +72,39 @@ final class DetectStaleDeployments implements ShouldQueue
                     return;
                 }
 
-                Cache::lock('deploy:' . $deployment->application_id)->forceRelease();
-
-                rescue(function () use ($deployment): void {
-                    DiscardRelease::dispatch($deployment);
-                }, report: true);
+                $this->cleanUp($deployment);
 
                 DeploymentFailed::dispatch($deployment->refresh());
             });
+    }
+
+    private function cancel(Deployment $deployment): void
+    {
+        $cancelled = $this->stale(Deployment::query()->whereKey($deployment->getKey()))->update([
+            'status' => DeploymentStatus::Cancelled->value,
+            'finished_at' => now(),
+        ]);
+
+        if ($cancelled === 0) {
+            return;
+        }
+
+        $deployment->refresh();
+
+        $cancellation = app(DeploymentCancellation::class);
+        $cancellation->note($deployment);
+        $cancellation->finish($deployment);
+
+        $this->cleanUp($deployment);
+    }
+
+    private function cleanUp(Deployment $deployment): void
+    {
+        Cache::lock('deploy:' . $deployment->application_id)->forceRelease();
+
+        rescue(function () use ($deployment): void {
+            DiscardRelease::dispatch($deployment);
+        }, report: true);
     }
 
     private function stale(Builder $query): Builder

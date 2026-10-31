@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Exceptions;
 use Tests\Support\FakeSSHTransport;
 
 const CLEANUP_RELEASE = '20261020-120000';
@@ -17,6 +18,8 @@ const CLEANUP_RELEASE = '20261020-120000';
 const CLEANUP_READLINK = "readlink '/var/coresmith/apps/shop/current'";
 
 const CLEANUP_REMOVAL = "rm -rf '/var/coresmith/apps/shop/releases/" . CLEANUP_RELEASE . "'";
+
+const CLEANUP_LEFTOVER = 'Could not remove the half-built release. Remove releases/' . CLEANUP_RELEASE . ' by hand if it is still there.';
 
 function cleanupDeployment(array $deployment = [], array $application = []): Deployment
 {
@@ -147,4 +150,90 @@ test('the removal is a short server task that is tried twice', function () {
     expect($job->queue)->toBe('server-tasks')
         ->and($job->tries)->toBe(2)
         ->and($job->timeout)->toBe(120);
+});
+
+test('a release that could not be removed on either try is named in the deploy log, once', function () {
+    $deployment = cleanupDeployment(['log' => '[12:00:00] release ' . CLEANUP_RELEASE]);
+
+    (new DiscardRelease($deployment))->failed(new RuntimeException('boom'));
+
+    $log = (string) $deployment->fresh()->log;
+
+    expect(substr_count($log, CLEANUP_LEFTOVER))->toBe(1)
+        ->and($log)->toBe('[12:00:00] release ' . CLEANUP_RELEASE . "\n" . CLEANUP_LEFTOVER);
+});
+
+test('a removal that keeps failing leaves the note when the queue gives the job up', function () {
+    $deployment = cleanupDeployment();
+    $transport = cleanupTransport()->respondTo('rm -rf', "rm: cannot remove: Device or resource busy\n", 1);
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        expect(fn() => DiscardRelease::dispatchSync($deployment->fresh()))->toThrow(SSHCommandFailedException::class);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect(substr_count((string) $deployment->fresh()->log, CLEANUP_LEFTOVER))->toBe(1);
+});
+
+test('a removal that works leaves the deploy log alone', function () {
+    $deployment = cleanupDeployment(['log' => 'first']);
+
+    cleanupDiscard($deployment, cleanupTransport());
+
+    expect($deployment->fresh()->log)->toBe('first');
+});
+
+test('the note joins the log as it stands now, not as the job was queued with it', function () {
+    $deployment = cleanupDeployment(['log' => 'first']);
+    $job = new DiscardRelease($deployment);
+
+    Deployment::query()->whereKey($deployment->getKey())->update(['log' => "first\nsecond"]);
+
+    $job->failed(new RuntimeException('boom'));
+
+    expect($deployment->fresh()->log)->toBe("first\nsecond\n" . CLEANUP_LEFTOVER);
+});
+
+test('nothing is said about a release the job never tried to remove', function (?string $release) {
+    $deployment = cleanupDeployment(['release' => $release, 'log' => 'first']);
+
+    (new DiscardRelease($deployment))->failed(new RuntimeException('boom'));
+
+    expect($deployment->fresh()->log)->toBe('first');
+})->with([
+    'none' => [null],
+    'empty' => [''],
+    'a traversal' => ['../../shared'],
+    'a trailing newline' => [CLEANUP_RELEASE . "\n"],
+]);
+
+test('a deployment that is gone has nothing to note', function () {
+    $deployment = cleanupDeployment();
+    $job = new DiscardRelease($deployment);
+
+    Deployment::query()->whereKey($deployment->getKey())->delete();
+
+    $job->failed(new RuntimeException('boom'));
+
+    expect(Deployment::query()->whereKey($deployment->getKey())->exists())->toBeFalse();
+});
+
+test('a note that cannot be saved is reported, never thrown', function () {
+    Exceptions::fake();
+    $deployment = cleanupDeployment(['log' => 'first']);
+
+    Deployment::saving(function (Deployment $saving): void {
+        if (str_contains((string) $saving->log, 'Could not remove')) {
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    (new DiscardRelease($deployment))->failed(new RuntimeException('boom'));
+
+    expect($deployment->fresh()->log)->toBe('first');
+
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'The database went away.');
 });
