@@ -13,6 +13,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Events\DeploymentSucceeded;
 use App\Events\DeploymentUpdated;
+use App\Events\FleetChanged;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\ExplainsFailure;
 use App\Exceptions\GitProviderException;
@@ -321,6 +322,8 @@ final class DeployApplication implements ShouldQueue
 
             throw $e;
         }
+
+        FleetChanged::forDeployment($this->deployment);
 
         return $lock;
     }

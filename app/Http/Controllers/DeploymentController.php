@@ -16,6 +16,7 @@ use App\Models\Server;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
+use App\Services\Panel\Realtime;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -67,7 +68,7 @@ final class DeploymentController extends Controller
             ],
             'deployment' => self::present($deployment, $phases),
             'back' => $this->back((string) $request->query('from'), $server, $application),
-            'streaming' => $this->streamingAvailable(),
+            'streaming' => Realtime::available(),
             'can' => ['deploy' => $request->user()->can('deploy', $application)],
         ]);
     }
@@ -131,10 +132,5 @@ final class DeploymentController extends Controller
             'releases' => ['label' => 'Releases', 'href' => route('servers.applications.releases.index', [$server, $application])],
             default => ['label' => 'Fleet', 'href' => route('dashboard')],
         };
-    }
-
-    private function streamingAvailable(): bool
-    {
-        return !in_array((string) config('broadcasting.default'), ['null', 'log', ''], true);
     }
 }

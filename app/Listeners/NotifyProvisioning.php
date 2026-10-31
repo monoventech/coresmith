@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\Events\FleetChanged;
 use App\Events\ServerProvisioned;
 use App\Events\ServerProvisioningFailed;
 use App\Notifications\Preferences;
@@ -21,6 +22,8 @@ final class NotifyProvisioning
 
     public function handle(ServerProvisioned|ServerProvisioningFailed $event): void
     {
+        FleetChanged::forServer($event->server);
+
         rescue(fn() => $this->notifier->send(
             $event->server->team,
             Preferences::PROVISIONING,

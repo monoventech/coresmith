@@ -33,6 +33,10 @@ return [
         'server_poll_minutes' => (int) env('CORESMITH_SERVER_POLL_MINUTES', 5),
     ],
 
+    'live' => [
+        'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
+    ],
+
     'runtimes' => [
         'php' => [
             'label' => 'PHP',

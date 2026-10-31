@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Server;
 
+use App\Events\FleetChanged;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Server;
@@ -79,6 +80,8 @@ final class ServerReachability
             ->withProperties(['error' => $reason])
             ->log('server_unreachable');
 
+        FleetChanged::forServer($server);
+
         $this->alert($server, new ServerUnreachableNotification($server, $reason));
     }
 
@@ -107,6 +110,8 @@ final class ServerReachability
             ->performedOn($server)
             ->withProperties(['seconds' => $seconds])
             ->log('server_reachable');
+
+        FleetChanged::forServer($server);
 
         $this->alert($server, new ServerReachableNotification($server, Formats::downFor($seconds)));
     }

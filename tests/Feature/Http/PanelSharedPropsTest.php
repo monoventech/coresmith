@@ -109,6 +109,7 @@ test('a user without a team gets an empty panel', function () {
             'setup' => null,
             'attention' => 0,
             'can' => ['createServer' => false],
+            'live' => ['streaming' => false, 'refresh_seconds' => 60],
         ]));
 });
 

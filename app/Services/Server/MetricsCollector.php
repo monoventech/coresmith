@@ -10,6 +10,7 @@ namespace App\Services\Server;
 
 use App\Enums\AppSize;
 use App\Enums\PowerState;
+use App\Events\FleetChanged;
 use App\Jobs\DeployApplication;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
@@ -100,6 +101,8 @@ final class MetricsCollector
             ->performedOn($server)
             ->withProperties(['percent' => (int) round($percent), 'level' => $level])
             ->log('disk_pressure');
+
+        FleetChanged::forServer($server);
     }
 
     private function recordMemoryPressure(Server $server, float $latest): void
@@ -142,6 +145,8 @@ final class MetricsCollector
             ->performedOn($server)
             ->withProperties(['percent' => $percent])
             ->log('memory_pressure');
+
+        FleetChanged::forServer($server);
     }
 
     private function alert(Server $server, string $preference, Notification $notification): bool
@@ -259,6 +264,8 @@ final class MetricsCollector
                 ->performedOn($application)
                 ->withProperties(['process' => $process, 'at' => $at, 'limit_mb' => $limitMb])
                 ->log('app_oom_killed');
+
+            FleetChanged::forApplication($application);
         }
     }
 
