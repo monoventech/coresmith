@@ -17,6 +17,7 @@ use App\Notifications\ServerUnreachableNotification;
 use App\Notifications\TeamNotifier;
 use App\Services\Panel\Formats;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use phpseclib3\Exception\ConnectionClosedException;
 use phpseclib3\Exception\UnableToConnectException;
@@ -78,7 +79,7 @@ final class ServerReachability
             ->withProperties(['error' => $reason])
             ->log('server_unreachable');
 
-        app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new ServerUnreachableNotification($server, $reason));
+        $this->alert($server, new ServerUnreachableNotification($server, $reason));
     }
 
     public function answered(Server $server): void
@@ -107,7 +108,16 @@ final class ServerReachability
             ->withProperties(['seconds' => $seconds])
             ->log('server_reachable');
 
-        app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new ServerReachableNotification($server, Formats::downFor($seconds)));
+        $this->alert($server, new ServerReachableNotification($server, Formats::downFor($seconds)));
+    }
+
+    private function alert(Server $server, Notification $notification): void
+    {
+        try {
+            app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, $notification);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     private static function isPreBannerFailure(Throwable $e): bool

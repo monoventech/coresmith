@@ -31,6 +31,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use phpseclib3\Crypt\Common\PrivateKey;
@@ -273,6 +274,34 @@ test('the first answer after an outage clears it and says so', function (?int $a
     'never answered before' => [null, 47, 2820, '47m 00s'],
     'last answered two hours five minutes ago' => [125, 122, 7500, '2 hours 5 minutes'],
 ]);
+
+test('an outage mail that cannot be sent is reported and the outage still stands', function () {
+    Exceptions::fake();
+    $server = reachabilityServer(['connection_failures' => 2]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    reachabilityCollect($server, (new FakeSSHTransport)->refuseConnections());
+
+    expect($server->fresh()->unreachable_since)->not->toBeNull()
+        ->and(Activity::query()->where('description', 'server_unreachable')->count())->toBe(1);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+});
+
+test('a recovery mail that cannot be sent is reported and the collection carries on', function () {
+    Exceptions::fake();
+    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(10), 'connection_failures' => 10]);
+    $transport = reachabilityHealthy();
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    reachabilityCollect($server, $transport);
+
+    expect($server->fresh()->unreachable_since)->toBeNull()
+        ->and(Activity::query()->where('description', 'server_reachable')->count())->toBe(1)
+        ->and(collect($transport->commands())->contains(fn(string $command): bool => str_starts_with($command, 'journalctl')))->toBeTrue();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+});
 
 test('a healthy collection records its answer in one statement', function () {
     $server = reachabilityServer(['host_key_fingerprint' => HostKeyFingerprint::fromHostKey('fake-host-key')]);
