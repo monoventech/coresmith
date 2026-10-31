@@ -23,6 +23,8 @@ final class FleetSnapshot
 {
     public const DISK_WARNING = 80;
 
+    public const MEMORY_WARNING = 95;
+
     public const FRESH_METRIC_MINUTES = 15;
 
     public const UPTIME_DAYS = 30;
@@ -86,7 +88,9 @@ final class FleetSnapshot
      */
     public function state(Server $server): array
     {
-        $disk = $this->latestMetric($server)?->disk_percent;
+        $metric = $this->latestMetric($server);
+        $disk = $metric?->disk_percent;
+        $memory = $metric?->memory_percent;
 
         return match (true) {
             $server->pending_host_key_fingerprint !== null => ['key' => 'host_key', 'label' => 'Host key changed', 'tone' => 'destructive'],
@@ -96,6 +100,7 @@ final class FleetSnapshot
             $server->status === ServerStatus::Provisioning => ['key' => 'provisioning', 'label' => 'Provisioning', 'tone' => 'accent'],
             $server->status === ServerStatus::Pending => ['key' => 'pending', 'label' => 'Not connected', 'tone' => 'default'],
             $this->runningOn($server) !== null => ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
+            $memory !== null && $memory >= self::MEMORY_WARNING => ['key' => 'memory', 'label' => 'Memory ' . (int) round($memory) . '%', 'tone' => 'warning'],
             $disk !== null && $disk >= self::DISK_WARNING => ['key' => 'warning', 'label' => 'Disk ' . (int) round($disk) . '%', 'tone' => 'warning'],
             default => ['key' => 'healthy', 'label' => 'Healthy', 'tone' => 'success'],
         };
@@ -168,6 +173,8 @@ final class FleetSnapshot
 
             if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'unreachable'], true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
+            } elseif ($state['key'] === 'memory') {
+                $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'memory ' . (int) round((float) $this->latestMetric($server)?->memory_percent) . '%', 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'warning' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->disk_percent ?? 0) >= self::DISK_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'disk ' . (int) round((float) $this->latestMetric($server)?->disk_percent) . '%', 'href' => route('servers.show', $server)];
             }

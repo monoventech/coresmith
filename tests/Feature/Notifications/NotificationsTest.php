@@ -213,10 +213,10 @@ test('the weekly digest counts in words that match the numbers', function (array
 })->with([
     'singular' => [
         ['deployed' => 1, 'failed' => 1, 'rollbacks' => 1, 'warnings' => 1],
-        ['1 deploy went live and 1 failed without reaching anyone.', '1 rollback and 1 disk warning.'],
+        ['1 deploy went live and 1 failed without reaching anyone.', '1 rollback and 1 warning.'],
     ],
     'plural' => [
         ['deployed' => 12, 'failed' => 2, 'rollbacks' => 3, 'warnings' => 0],
-        ['12 deploys went live and 2 failed without reaching anyone.', '3 rollbacks and 0 disk warnings.'],
+        ['12 deploys went live and 2 failed without reaching anyone.', '3 rollbacks and 0 warnings.'],
     ],
 ]);

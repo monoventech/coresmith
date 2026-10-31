@@ -37,7 +37,7 @@ final class WeeklyDigestNotification extends Notification implements ShouldQueue
         return (new MailMessage)
             ->subject('Your week on Coresmith')
             ->line("{$summary['deployed']} " . ($summary['deployed'] === 1 ? 'deploy' : 'deploys') . ' went live and ' . $summary['failed'] . ' failed without reaching anyone.')
-            ->line("{$summary['rollbacks']} " . ($summary['rollbacks'] === 1 ? 'rollback' : 'rollbacks') . ' and ' . $summary['warnings'] . ' disk ' . ($summary['warnings'] === 1 ? 'warning' : 'warnings') . '.')
+            ->line("{$summary['rollbacks']} " . ($summary['rollbacks'] === 1 ? 'rollback' : 'rollbacks') . ' and ' . $summary['warnings'] . ' ' . ($summary['warnings'] === 1 ? 'warning' : 'warnings') . '.')
             ->action('Open the fleet', route('dashboard'));
     }
 }

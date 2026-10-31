@@ -78,7 +78,7 @@ test('a probe without uptime leaves the recorded boot time alone', function () {
     expect($server->fresh()->booted_at?->toDateTimeString())->toBe('2026-09-01 08:00:00');
 });
 
-test('a disk at or above eighty percent is logged as disk pressure with a whole percent', function (float|int $disk, int $logged) {
+test('a disk at or above eighty percent is logged as disk pressure with a whole percent and its level', function (float|int $disk, int $logged, string $level) {
     $connection = pressureConnection(pressureProbe($disk));
 
     (new MetricsCollector)->collect($connection);
@@ -86,11 +86,13 @@ test('a disk at or above eighty percent is logged as disk pressure with a whole 
     $activity = Activity::query()->where('description', 'disk_pressure')->sole();
 
     expect($activity->subject_id)->toBe($connection->server()->id)
-        ->and($activity->properties->toArray())->toBe(['percent' => $logged]);
+        ->and($activity->properties->toArray())->toBe(['percent' => $logged, 'level' => $level]);
 })->with([
-    'exactly eighty' => [80, 80],
-    'rounded up' => [87.6, 88],
-    'full' => [100, 100],
+    'exactly eighty' => [80, 80, 'warning'],
+    'rounded up' => [87.6, 88, 'warning'],
+    'just under the abort line' => [94, 94, 'warning'],
+    'exactly the abort line' => [95, 95, 'critical'],
+    'full' => [100, 100, 'critical'],
 ]);
 
 test('a disk below eighty percent raises nothing', function () {

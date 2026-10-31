@@ -20,6 +20,8 @@ use Spatie\Activitylog\Models\Activity;
 
 final class WeeklyDigestCommand extends Command
 {
+    public const WARNINGS = ['disk_pressure', 'memory_pressure', 'server_unreachable', 'app_oom_killed', 'certificate_expiring'];
+
     protected $signature = 'coresmith:weekly-digest';
 
     protected $description = 'Email the weekly digest to everyone who asked for it';
@@ -44,7 +46,7 @@ final class WeeklyDigestCommand extends Command
                 'deployed' => (clone $deployments)->where('status', DeploymentStatus::Succeeded->value)->count(),
                 'failed' => (clone $deployments)->where('status', DeploymentStatus::Failed->value)->count(),
                 'rollbacks' => Activity::query()->where('description', 'application_rolled_back')->whereIn('subject_id', $applications)->where('created_at', '>=', $since)->count(),
-                'warnings' => Activity::query()->where('description', 'disk_pressure')->whereIn('subject_id', $servers)->where('created_at', '>=', $since)->count(),
+                'warnings' => Activity::query()->whereIn('description', self::WARNINGS)->whereIn('subject_id', $servers->concat($applications))->where('created_at', '>=', $since)->count(),
             ]));
 
             $sent++;

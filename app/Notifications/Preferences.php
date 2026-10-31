@@ -18,6 +18,8 @@ final class Preferences
 
     public const SERVER_ALERTS = 'server_alerts';
 
+    public const PROVISIONING = 'provisioning';
+
     public const TOGGLE_CHANGES = 'toggle_changes';
 
     public const WEEKLY_DIGEST = 'weekly_digest';
@@ -26,6 +28,7 @@ final class Preferences
         self::DEPLOY_FAILED => true,
         self::DISK_PRESSURE => true,
         self::SERVER_ALERTS => true,
+        self::PROVISIONING => true,
         self::TOGGLE_CHANGES => true,
         self::WEEKLY_DIGEST => false,
     ];
@@ -36,6 +39,7 @@ final class Preferences
         self::DEPLOY_FAILED => 'Deploy failed',
         self::DISK_PRESSURE => 'Disk above 80%',
         self::SERVER_ALERTS => 'Server problems',
+        self::PROVISIONING => 'Provisioning',
         self::TOGGLE_CHANGES => 'Toggle changes',
         self::WEEKLY_DIGEST => 'Weekly digest',
     ];
@@ -44,6 +48,7 @@ final class Preferences
         self::DEPLOY_FAILED => 'Email immediately when any phase fails',
         self::DISK_PRESSURE => 'Server disk warnings, at most once a day',
         self::SERVER_ALERTS => 'A server stops answering, runs out of memory, or a certificate is about to expire',
+        self::PROVISIONING => 'When a server is ready, or provisioning stops partway',
         self::TOGGLE_CHANGES => 'When someone stops, starts or puts an app into maintenance',
         self::WEEKLY_DIGEST => 'Deploys, rollbacks and warnings, every Monday',
     ];

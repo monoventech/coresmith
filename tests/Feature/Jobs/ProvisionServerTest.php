@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ServerStatus;
 use App\Events\ServerProvisioned;
+use App\Events\ServerProvisioningFailed;
 use App\Exceptions\ProvisioningVerificationException;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsupportedOperatingSystemException;
@@ -15,6 +16,7 @@ use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Event;
+use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
 function provisioningTransport(): FakeSSHTransport
@@ -334,6 +336,36 @@ test('a failure inside handle is recorded once, not twice when the queue also ca
     }
 
     expect(substr_count((string) $server->fresh()->provisioning_log, 'phase 2 of 8, Base system: failed'))->toBe(1);
+});
+
+test('a provision that stops says which phase, once', function () {
+    Event::fake([ServerProvisioningFailed::class]);
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport()->respondTo('apt-get install', 'E: Unable to locate package', 100);
+
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+
+    (new ProvisionServer($server))->failed(new MaxAttemptsExceededException('Job has timed out.'));
+
+    Event::assertDispatchedTimes(ServerProvisioningFailed::class, 1);
+    Event::assertDispatched(ServerProvisioningFailed::class, fn(ServerProvisioningFailed $event): bool => $event->server->is($server) && $event->phase === 2 && $event->phaseName === 'Base system');
+
+    $rows = Activity::query()->where('description', 'provisioning_failed')->get();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->subject_id)->toBe($server->id)
+        ->and($rows[0]->properties->toArray())->toBe(['phase' => 2, 'name' => 'Base system']);
+});
+
+test('a job that dies outside handle says which phase it stopped in', function () {
+    Event::fake([ServerProvisioningFailed::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Provisioning, 'provisioning_phase' => 3, 'host_key_fingerprint' => null]);
+
+    (new ProvisionServer($server))->failed(new MaxAttemptsExceededException('Job has timed out.'));
+
+    Event::assertDispatchedTimes(ServerProvisioningFailed::class, 1);
+    Event::assertDispatched(ServerProvisioningFailed::class, fn(ServerProvisioningFailed $event): bool => $event->phase === 4 && $event->phaseName === 'Directories');
+    expect(Activity::query()->where('description', 'provisioning_failed')->sole()->properties->toArray())->toBe(['phase' => 4, 'name' => 'Directories']);
 });
 
 test('installing the base packages gets twenty minutes, not the ten every other command gets', function () {

@@ -5,11 +5,12 @@ declare(strict_types=1);
 use App\Models\User;
 use App\Notifications\Preferences;
 
-test('a new user has failures, disk warnings, server problems and toggle changes on and the digest off', function () {
+test('a new user has failures, disk warnings, server problems, provisioning and toggle changes on and the digest off', function () {
     expect(Preferences::for(new User))->toBe([
         'deploy_failed' => true,
         'disk_pressure' => true,
         'server_alerts' => true,
+        'provisioning' => true,
         'toggle_changes' => true,
         'weekly_digest' => false,
     ]);
@@ -28,6 +29,7 @@ test('stored preferences override the defaults except for deploy failures', func
         'deploy_failed' => true,
         'disk_pressure' => false,
         'server_alerts' => true,
+        'provisioning' => true,
         'toggle_changes' => true,
         'weekly_digest' => true,
     ])->and(Preferences::wants($user, Preferences::DEPLOY_FAILED))->toBeTrue()
@@ -48,6 +50,7 @@ test('the notifications page lists every preference with its state and whether i
                 ['key' => 'deploy_failed', 'label' => 'Deploy failed', 'description' => 'Email immediately when any phase fails', 'on' => true, 'locked' => true],
                 ['key' => 'disk_pressure', 'label' => 'Disk above 80%', 'description' => 'Server disk warnings, at most once a day', 'on' => false, 'locked' => false],
                 ['key' => 'server_alerts', 'label' => 'Server problems', 'description' => 'A server stops answering, runs out of memory, or a certificate is about to expire', 'on' => true, 'locked' => false],
+                ['key' => 'provisioning', 'label' => 'Provisioning', 'description' => 'When a server is ready, or provisioning stops partway', 'on' => true, 'locked' => false],
                 ['key' => 'toggle_changes', 'label' => 'Toggle changes', 'description' => 'When someone stops, starts or puts an app into maintenance', 'on' => true, 'locked' => false],
                 ['key' => 'weekly_digest', 'label' => 'Weekly digest', 'description' => 'Deploys, rollbacks and warnings, every Monday', 'on' => false, 'locked' => false],
             ]));
@@ -70,6 +73,7 @@ test('a preference can be turned on and off and is stored with the rest', functi
         'deploy_failed' => true,
         'disk_pressure' => false,
         'server_alerts' => true,
+        'provisioning' => true,
         'toggle_changes' => true,
         'weekly_digest' => true,
     ]);

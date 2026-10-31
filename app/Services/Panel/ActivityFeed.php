@@ -150,7 +150,11 @@ final class ActivityFeed
             'audit_fix_applied' => [$this->mono((string) ($properties['service'] ?? '')), $this->text(' stopped and disabled on '), $this->mono($server?->name), $this->text(' so Caddy can take ports 80 and 443')],
             'server_detached' => [$this->mono($server?->name), $this->text(' detached, the VM itself is untouched')],
             'releases_pruned' => [$this->text('Old releases pruned on '), $this->mono($server?->name), $this->text(', ' . (int) ($properties['removed'] ?? 0) . ' removed')],
-            'disk_pressure' => [$this->text('Disk warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%, consider pruning old releases')],
+            'disk_pressure' => ($properties['level'] ?? 'warning') === 'critical'
+                ? [$this->text('Disk at ' . (int) ($properties['percent'] ?? 0) . '% on '), $this->mono($server?->name), $this->text(', deploys are paused until space is freed')]
+                : [$this->text('Disk warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%, consider pruning old releases')],
+            'memory_pressure' => [$this->text('Memory warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '% for three minutes')],
+            'provisioning_failed' => [$this->text('Provisioning stopped on '), $this->mono($server?->name), $this->text(' at phase ' . (int) ($properties['phase'] ?? 1) . ', ' . ($properties['name'] ?? 'Provisioning'))],
             'firewall_rule_changed' => [$this->text('Firewall ' . ($properties['action'] ?? 'changed') . ' port ' . ($properties['port'] ?? '') . ' on '), $this->mono($server?->name)],
             'server_unreachable' => [$this->mono($server?->name), $this->text(' stopped answering over SSH')],
             'server_reachable' => [$this->mono($server?->name), $this->text(' answering again' . $this->after($properties['seconds'] ?? null))],

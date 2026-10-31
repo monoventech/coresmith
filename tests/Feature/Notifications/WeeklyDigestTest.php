@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\WeeklyDigestCommand;
 use App\Enums\DeploymentStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -96,6 +97,60 @@ test('the digest summarises the last week of the readers teams only', function (
         'rollbacks' => 1,
         'warnings' => 2,
     ]);
+});
+
+test('every kind of alert counts as a warning and the mail says so in words', function () {
+    Notification::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+    $reader = digestReader($team);
+
+    digestEvent($application, 'application_rolled_back', daysAgo: 1);
+    digestEvent($server, 'disk_pressure', daysAgo: 1);
+    digestEvent($server, 'memory_pressure', daysAgo: 2);
+    digestEvent($server, 'server_unreachable', daysAgo: 3);
+    digestEvent($server, 'server_reachable', daysAgo: 3);
+    digestEvent($server, 'server_provisioned', daysAgo: 3);
+    digestEvent($server, 'memory_pressure', daysAgo: 9);
+
+    $theirs = Team::factory()->create();
+    $theirServer = Server::factory()->for($theirs)->create();
+    digestEvent($theirServer, 'memory_pressure', daysAgo: 1);
+    digestEvent($theirServer, 'server_unreachable', daysAgo: 1);
+
+    $this->artisan('coresmith:weekly-digest')->assertSuccessful();
+
+    Notification::assertSentTo($reader, WeeklyDigestNotification::class, fn(WeeklyDigestNotification $notification): bool => $notification->summary['rollbacks'] === 1
+        && $notification->summary['warnings'] === 3
+        && $notification->toMail($reader)->introLines[1] === '1 rollback and 3 warnings.');
+});
+
+test('alerts about the readers applications count as warnings, other teams do not', function () {
+    Notification::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+    $removed = Application::factory()->for($team)->for($server)->create();
+    $reader = digestReader($team);
+
+    digestEvent($application, 'app_oom_killed', daysAgo: 1);
+    digestEvent($application, 'certificate_expiring', daysAgo: 2);
+    digestEvent($removed, 'app_oom_killed', daysAgo: 3);
+    $removed->delete();
+    digestEvent($application, 'app_oom_killed', daysAgo: 8);
+    digestEvent($application, 'application_started', daysAgo: 1);
+
+    $theirs = Team::factory()->create();
+    digestEvent(Application::factory()->for($theirs)->for(Server::factory()->for($theirs))->create(), 'app_oom_killed', daysAgo: 1);
+
+    $this->artisan('coresmith:weekly-digest')->assertSuccessful();
+
+    Notification::assertSentTo($reader, WeeklyDigestNotification::class, fn(WeeklyDigestNotification $notification): bool => $notification->summary['warnings'] === 3);
+});
+
+test('the digest counts exactly the alerts the panel raises', function () {
+    expect(WeeklyDigestCommand::WARNINGS)->toBe(['disk_pressure', 'memory_pressure', 'server_unreachable', 'app_oom_killed', 'certificate_expiring']);
 });
 
 test('someone in several teams gets one digest covering all of them', function () {

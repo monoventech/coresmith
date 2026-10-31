@@ -10,11 +10,14 @@ namespace App\Services\Server;
 
 use App\Enums\AppSize;
 use App\Enums\PowerState;
+use App\Jobs\DeployApplication;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
+use App\Notifications\ApplicationOomKilledNotification;
 use App\Notifications\DiskPressureNotification;
+use App\Notifications\MemoryPressureNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\SSH\SSHConnection;
@@ -29,7 +32,13 @@ final class MetricsCollector
 
     public const DISK_PRESSURE_PERCENT = 80;
 
+    public const MEMORY_PRESSURE_PERCENT = 95;
+
+    public const MEMORY_PRESSURE_READINGS = 3;
+
     public const PROBE_SECONDS = 20;
+
+    private const MEMORY_PRESSURE_WINDOW_MINUTES = 4;
 
     public function collect(SSHConnection $connection): ServerMetric
     {
@@ -45,7 +54,7 @@ final class MetricsCollector
             $this->recordDiskPressure($server, $values['disk']);
         }
 
-        return ServerMetric::create([
+        $metric = ServerMetric::create([
             'server_id' => $connection->server()->getKey(),
             'cpu_percent' => $values['cpu'],
             'memory_percent' => $values['memory'],
@@ -57,15 +66,24 @@ final class MetricsCollector
             'network_tx_bytes' => $values['tx'],
             'recorded_at' => now(),
         ]);
+
+        $this->recordMemoryPressure($server, $values['memory']);
+
+        return $metric;
     }
 
     private function recordDiskPressure(Server $server, float $percent): void
     {
+        $level = $percent >= DeployApplication::DISK_ABORT_PERCENT ? 'critical' : 'warning';
+
         $recent = Activity::query()
             ->where('subject_type', $server->getMorphClass())
             ->where('subject_id', $server->getKey())
             ->where('description', 'disk_pressure')
             ->where('created_at', '>=', now()->subDay())
+            ->where(fn($query) => $level === 'critical'
+                ? $query->where('properties->level', 'critical')
+                : $query->where('properties->level', 'warning')->orWhereNull('properties->level'))
             ->exists();
 
         if ($recent) {
@@ -74,10 +92,48 @@ final class MetricsCollector
 
         activity()
             ->performedOn($server)
-            ->withProperties(['percent' => (int) round($percent)])
+            ->withProperties(['percent' => (int) round($percent), 'level' => $level])
             ->log('disk_pressure');
 
-        app(TeamNotifier::class)->send($server->team, Preferences::DISK_PRESSURE, new DiskPressureNotification($server, (int) round($percent)));
+        app(TeamNotifier::class)->send($server->team, Preferences::DISK_PRESSURE, new DiskPressureNotification($server, (int) round($percent), critical: $level === 'critical'));
+    }
+
+    private function recordMemoryPressure(Server $server, float $latest): void
+    {
+        if ($latest < self::MEMORY_PRESSURE_PERCENT) {
+            return;
+        }
+
+        $readings = ServerMetric::query()
+            ->where('server_id', $server->getKey())
+            ->where('recorded_at', '>=', now()->subMinutes(self::MEMORY_PRESSURE_WINDOW_MINUTES))
+            ->latest('recorded_at')
+            ->limit(self::MEMORY_PRESSURE_READINGS)
+            ->pluck('memory_percent');
+
+        if ($readings->count() < self::MEMORY_PRESSURE_READINGS || $readings->contains(fn(mixed $reading): bool => (float) $reading < self::MEMORY_PRESSURE_PERCENT)) {
+            return;
+        }
+
+        $recent = Activity::query()
+            ->where('subject_type', $server->getMorphClass())
+            ->where('subject_id', $server->getKey())
+            ->where('description', 'memory_pressure')
+            ->where('created_at', '>=', now()->subDay())
+            ->exists();
+
+        if ($recent) {
+            return;
+        }
+
+        $percent = (int) round($latest);
+
+        activity()
+            ->performedOn($server)
+            ->withProperties(['percent' => $percent])
+            ->log('memory_pressure');
+
+        app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new MemoryPressureNotification($server, $percent));
     }
 
     public function recordTraffic(SSHConnection $connection): void
@@ -164,14 +220,24 @@ final class MetricsCollector
                 continue;
             }
 
+            $firstToday = !Activity::query()
+                ->where('subject_type', $application->getMorphClass())
+                ->where('subject_id', $application->getKey())
+                ->where('description', 'app_oom_killed')
+                ->where('created_at', '>=', now()->subDay())
+                ->exists();
+
+            $process = Str::after($kill['unit'], 'coresmith-app-' . $application->slug . '-');
+            $limitMb = (AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small)->memoryMaxMb();
+
             activity()
                 ->performedOn($application)
-                ->withProperties([
-                    'process' => Str::after($kill['unit'], 'coresmith-app-' . $application->slug . '-'),
-                    'at' => $at,
-                    'limit_mb' => (AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small)->memoryMaxMb(),
-                ])
+                ->withProperties(['process' => $process, 'at' => $at, 'limit_mb' => $limitMb])
                 ->log('app_oom_killed');
+
+            if ($firstToday) {
+                app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new ApplicationOomKilledNotification($application, $process, $limitMb, $kill['at']));
+            }
         }
     }
 
