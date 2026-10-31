@@ -12,7 +12,9 @@ use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Models\Application;
 use App\Models\Server;
-use App\Models\SourceProvider;
+use App\Models\Team;
+use App\Models\User;
+use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\ServerPresenter;
@@ -24,7 +26,7 @@ use Inertia\Response;
 
 final class SetupController extends Controller
 {
-    public function show(Request $request, ServerPresenter $servers): RedirectResponse|Response
+    public function show(Request $request, ServerPresenter $servers, GitHubSettingsPresenter $github): RedirectResponse|Response
     {
         $user = $request->user();
         $team = $this->currentTeam();
@@ -39,7 +41,6 @@ final class SetupController extends Controller
         $requested = (int) $request->query('step', (string) $current);
         $step = max(0, min($requested, $current));
 
-        $provider = $team->sourceProviders()->latest()->first();
         $server = $team->servers()->whereNot('status', ServerStatus::Active->value)->latest()->first()
             ?? $team->servers()->latest()->first();
         $application = $team->applications()->with('server')->latest()->first();
@@ -49,14 +50,7 @@ final class SetupController extends Controller
             'current' => $current,
             'step' => $step,
             'complete' => $progress->complete(),
-            'github' => [
-                'connected' => $provider instanceof SourceProvider,
-                'name' => $provider?->name,
-                'label' => $provider?->type->label(),
-                'configured' => (string) config('services.github.app_id') !== '',
-                'connect_href' => route('source-providers.connect', SourceProviderType::GitHubApp->value),
-                'settings_href' => route('source-providers.index'),
-            ],
+            'github' => $this->github($github, $team, $user),
             'team' => ['id' => $team->id],
             'server' => $server instanceof Server ? [
                 ...$servers->header($server, $user),
@@ -77,5 +71,25 @@ final class SetupController extends Controller
                 ? route('servers.applications.create', $server)
                 : null,
         ]);
+    }
+
+    /**
+     * @return array{connected: bool, name: ?string, label: ?string, connect_href: ?string, registration: ?array<string, mixed>, elsewhere: ?string, can_manage: bool, settings_href: string}
+     */
+    private function github(GitHubSettingsPresenter $presenter, Team $team, User $user): array
+    {
+        $github = $presenter->present($team, $user);
+        $connection = $github['connections'][0] ?? null;
+
+        return [
+            'connected' => $connection !== null,
+            'name' => $connection['account'] ?? null,
+            'label' => $connection === null ? null : SourceProviderType::GitHubApp->label(),
+            'connect_href' => $github['connect']['install_href'] ?? null,
+            'registration' => $github['registration'],
+            'elsewhere' => $github['elsewhere'],
+            'can_manage' => $github['can']['manage'],
+            'settings_href' => route('source-providers.index'),
+        ];
     }
 }

@@ -172,7 +172,8 @@ const OTHER_TEAM_PAGES: [string, string][] = [
     ['Team settings with a domain waiting for DNS', '/acme/settings/team'],
     ['Team settings with a verified domain', '/northwind/settings/team'],
     ['Git settings before GitHub is connected', '/acme/settings/git'],
-    ['Git settings with a suspended GitHub installation', '/paused/settings/git']
+    ['Git settings with a suspended GitHub installation', '/paused/settings/git'],
+    ['Setup before GitHub is connected', '/acme/setup']
 ]
 
 const GUEST_PAGES: [string, string][] = [

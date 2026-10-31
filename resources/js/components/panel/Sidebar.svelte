@@ -127,7 +127,9 @@
                 {#if !collapsed}
                     <span class="flex-1">{item.label}</span>
                     {#if item.badge}
-                        <span class="font-mono text-[11px] text-primary">{item.badge}</span>
+                        <span class={cn('font-mono text-[11px]', active ? 'text-primary-strong' : 'text-primary')}
+                            >{item.badge}</span
+                        >
                     {/if}
                 {/if}
             </Link>

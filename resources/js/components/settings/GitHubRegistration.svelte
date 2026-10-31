@@ -12,7 +12,11 @@
     import { APP_NAME_PATTERN, manifestFor, ORGANIZATION_PATTERN, organizationAction } from '@/lib/github'
     import { GitBranch } from '@lucide/svelte'
 
-    let { registration }: { registration: GitHubRegistration } = $props()
+    let {
+        registration,
+        compact = false,
+        submitLabel = 'Create on GitHub'
+    }: { registration: GitHubRegistration; compact?: boolean; submitLabel?: string } = $props()
 
     let owner = $state('personal')
     let organization = $state('')
@@ -45,15 +49,21 @@
     )
 </script>
 
-<div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="github-registration">
-    <div class="mb-1 flex flex-wrap items-center gap-2.5">
-        <GitBranch class="size-4.5 text-muted-foreground" />
-        <h3 class="type-h3 m-0">Create the GitHub App</h3>
-    </div>
-    <p class="mb-4 text-[12.5px] text-muted-foreground">
-        This panel has no GitHub App yet. GitHub creates one that belongs to you, with this panel's addresses filled in,
-        and Coresmith keeps its key encrypted here. It asks only for contents read-only, commit statuses and webhooks.
-    </p>
+<div
+    class={compact ? undefined : 'rounded-xl border border-border bg-card px-5.5 py-5'}
+    data-testid="github-registration"
+>
+    {#if !compact}
+        <div class="mb-1 flex flex-wrap items-center gap-2.5">
+            <GitBranch class="size-4.5 text-muted-foreground" />
+            <h3 class="type-h3 m-0">Create the GitHub App</h3>
+        </div>
+        <p class="mb-4 text-[12.5px] text-muted-foreground">
+            This panel has no GitHub App yet. GitHub creates one that belongs to you, with this panel's addresses filled
+            in, and Coresmith keeps its key encrypted here. It asks only for contents read-only, commit statuses and
+            webhooks.
+        </p>
+    {/if}
 
     <form method="post" {action} class="flex flex-col gap-4">
         <input type="hidden" name="manifest" value={manifest} />
@@ -96,36 +106,38 @@
             </div>
         {/if}
 
-        <div>
-            <Label for="github-app-name" class="mb-1.5">Name on GitHub</Label>
-            <Input
-                id="github-app-name"
-                value={name}
-                oninput={(event) => (edited = event.currentTarget.value)}
-                autocomplete="off"
-                spellcheck="false"
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby="github-app-name-hint"
-            />
-            <FieldError message={nameError} />
-            <p id="github-app-name-hint" class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
-                App names are unique across GitHub. If this one is taken, GitHub asks for another.
-            </p>
-        </div>
-
-        <p class="m-0 text-[12.5px] text-muted-foreground">{delivery}</p>
-
-        {#if !reachability.reachable}
-            <div class="flex items-center gap-2.5">
-                <Checkbox id="github-webhook-anyway" bind:checked={anyway} />
-                <Label for="github-webhook-anyway" class="font-normal"
-                    >Register a webhook anyway, {host} is reachable from the internet</Label
-                >
+        {#if !compact}
+            <div>
+                <Label for="github-app-name" class="mb-1.5">Name on GitHub</Label>
+                <Input
+                    id="github-app-name"
+                    value={name}
+                    oninput={(event) => (edited = event.currentTarget.value)}
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-invalid={nameError ? true : undefined}
+                    aria-describedby="github-app-name-hint"
+                />
+                <FieldError message={nameError} />
+                <p id="github-app-name-hint" class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                    App names are unique across GitHub. If this one is taken, GitHub asks for another.
+                </p>
             </div>
+
+            <p class="m-0 text-[12.5px] text-muted-foreground">{delivery}</p>
+
+            {#if !reachability.reachable}
+                <div class="flex items-center gap-2.5">
+                    <Checkbox id="github-webhook-anyway" bind:checked={anyway} />
+                    <Label for="github-webhook-anyway" class="font-normal"
+                        >Register a webhook anyway, {host} is reachable from the internet</Label
+                    >
+                </div>
+            {/if}
         {/if}
 
         <div>
-            <Button type="submit" size="sm" disabled={!ready}>Create on GitHub</Button>
+            <Button type="submit" size={compact ? 'default' : 'sm'} disabled={!ready}>{submitLabel}</Button>
         </div>
     </form>
 </div>
