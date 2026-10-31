@@ -22,14 +22,18 @@ use App\Services\Panel\FleetSnapshot;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\MetricsCollector;
 use App\Services\Server\ServerReachability;
+use App\Services\SSH\Contracts\SSHTransport;
+use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Exception\ConnectionClosedException;
 use phpseclib3\Exception\UnableToConnectException;
 use Spatie\Activitylog\Models\Activity;
@@ -60,14 +64,71 @@ function reachabilityHealthy(): FakeSSHTransport
     return (new FakeSSHTransport)->respondTo('top -bn1', "cpu=10\nmemory=40\ndisk=40\nload=0.1,0.1,0.1\n");
 }
 
-function reachabilityCollect(Server $server, FakeSSHTransport $transport): void
+function reachabilityStalled(string $message): SSHTransport
 {
-    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+    return new class($message) implements SSHTransport
+    {
+        public function __construct(private readonly string $message) {}
+
+        public function connect(string $host, int $port, int $timeout): void {}
+
+        public function hostKey(): string
+        {
+            throw new RuntimeException($this->message);
+        }
+
+        public function login(string $user, PrivateKey $key): bool
+        {
+            return true;
+        }
+
+        public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
+        {
+            return '';
+        }
+
+        public function timedOut(): bool
+        {
+            return false;
+        }
+
+        public function exitStatus(): int
+        {
+            return 0;
+        }
+
+        public function uploadContent(string $content, string $remotePath): void {}
+
+        public function disconnect(): void {}
+    };
+}
+
+function reachabilityCollect(Server $server, SSHTransport $transport): void
+{
+    SSHConnectionManager::createTransportUsing(fn(): SSHTransport => $transport);
 
     try {
         (new CollectServerMetrics($server))->handle(app(SSHConnectionManager::class), app(MetricsCollector::class), app(ServerReachability::class));
     } finally {
         SSHConnectionManager::createTransportUsing(null);
+    }
+}
+
+function reachabilityUpdates(Server $server, SSHTransport $transport): array
+{
+    DB::enableQueryLog();
+
+    try {
+        reachabilityCollect($server, $transport);
+
+        return collect(DB::getQueryLog())
+            ->pluck('query')
+            ->filter(fn(string $query): bool => str_starts_with($query, 'update "servers"'))
+            ->values()
+            ->all();
+    } finally {
+        DB::disableQueryLog();
+        DB::flushQueryLog();
     }
 }
 
@@ -152,6 +213,33 @@ test('two misses and an answer are not an outage', function () {
     Notification::assertNothingSent();
 });
 
+test('a read that fails after the server answered is not a miss', function (SSHTransport $transport, string $failure) {
+    Notification::fake();
+    $server = reachabilityServer();
+
+    expect(fn() => reachabilityCollect($server, $transport))->toThrow($failure);
+
+    $fresh = $server->fresh();
+
+    expect($fresh->connection_failures)->toBe(0)
+        ->and($fresh->last_connection_error)->toBeNull()
+        ->and($fresh->last_connected_at?->toDateTimeString())->toBe('2026-10-20 14:00:00');
+
+    reachabilityCollect($server, (new FakeSSHTransport)->refuseConnections());
+    reachabilityCollect($server, (new FakeSSHTransport)->refuseConnections());
+
+    expect($server->fresh()->connection_failures)->toBe(2)
+        ->and($server->fresh()->unreachable_since)->toBeNull()
+        ->and(Activity::query()->where('description', 'server_unreachable')->exists())->toBeFalse();
+
+    Notification::assertNothingSent();
+})->with([
+    'the access log read drops' => [fn() => reachabilityHealthy()->dropConnectionOn('access.log'), ConnectionClosedException::class],
+    'the access log read times out' => [fn() => reachabilityHealthy()->timeOutOn('access.log'), SSHCommandTimedOut::class],
+    'the journal read drops' => [fn() => reachabilityHealthy()->dropConnectionOn('journalctl'), ConnectionClosedException::class],
+    'the journal read times out' => [fn() => reachabilityHealthy()->timeOutOn('journalctl'), SSHCommandTimedOut::class],
+]);
+
 test('the first answer after an outage clears it and says so', function (?int $answeredMinutesAgo, int $unreachableMinutesAgo, int $seconds, string $downFor) {
     Notification::fake();
     $server = reachabilityServer([
@@ -185,6 +273,44 @@ test('the first answer after an outage clears it and says so', function (?int $a
     'never answered before' => [null, 47, 2820, '47m 00s'],
     'last answered two hours five minutes ago' => [125, 122, 7500, '2 hours 5 minutes'],
 ]);
+
+test('a healthy collection records its answer in one statement', function () {
+    $server = reachabilityServer(['host_key_fingerprint' => HostKeyFingerprint::fromHostKey('fake-host-key')]);
+
+    $updates = reachabilityUpdates($server, reachabilityHealthy());
+
+    expect($updates)->toHaveCount(1)
+        ->and($updates[0])->not->toContain('unreachable_since');
+});
+
+test('the answer that ends an outage clears it in one statement', function () {
+    Notification::fake();
+    $server = reachabilityServer([
+        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('fake-host-key'),
+        'unreachable_since' => now()->subMinutes(5),
+        'connection_failures' => 5,
+    ]);
+
+    $updates = reachabilityUpdates($server, reachabilityHealthy());
+
+    expect($updates)->toHaveCount(1)
+        ->and($updates[0])->toContain('"unreachable_since" is not null');
+});
+
+test('a stale view of an outage cannot announce the recovery twice', function () {
+    Notification::fake();
+    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(5), 'connection_failures' => 5]);
+    $member = $server->team->members()->first();
+    $stale = $server->fresh();
+
+    reachabilityCollect($server, reachabilityHealthy());
+    reachabilityCollect($stale, reachabilityHealthy());
+
+    Notification::assertSentToTimes($member, ServerReachableNotification::class, 1);
+
+    expect(Activity::query()->where('description', 'server_reachable')->count())->toBe(1)
+        ->and($server->fresh()->unreachable_since)->toBeNull();
+});
 
 test('a changed host key is neither collected nor counted', function () {
     Queue::fake();
@@ -231,6 +357,35 @@ test('each kind of failure says what to check', function (FakeSSHTransport $tran
     ],
 ]);
 
+test('a timeout before the server sends its banner is a miss like any other', function (string $message) {
+    Notification::fake();
+    $server = reachabilityServer();
+    $member = $server->team->members()->first();
+    $transport = reachabilityStalled($message);
+
+    reachabilityCollect($server, $transport);
+    reachabilityCollect($server, $transport);
+
+    expect($server->fresh()->connection_failures)->toBe(2)
+        ->and($server->fresh()->unreachable_since)->toBeNull();
+
+    Notification::assertNothingSent();
+
+    reachabilityCollect($server, $transport);
+
+    $fresh = $server->fresh();
+
+    expect($fresh->connection_failures)->toBe(3)
+        ->and($fresh->unreachable_since?->toDateTimeString())->toBe('2026-10-20 14:00:00')
+        ->and($fresh->last_connection_error)->toBe('The server took the connection but stopped answering. It may be overloaded or rebooting.');
+
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 1);
+})->with([
+    'while receiving the identification string' => ['Connection timed out whilst receiving server identification string'],
+    'while opening the socket' => ['Connection timed out whilst attempting to open socket connection'],
+    'when the server drops the connection before its banner' => ["Error reading SSH identification string; are you sure you're connecting to an SSH server?"],
+]);
+
 test('only failures to reach the server count against it', function (Throwable $failure, bool $counts) {
     expect(ServerReachability::isConnectionFailure($failure))->toBe($counts);
 })->with([
@@ -238,8 +393,12 @@ test('only failures to reach the server count against it', function (Throwable $
     'a closed connection' => [new ConnectionClosedException('Connection closed by server'), true],
     'a refused key' => [new SSHAuthenticationException('SSH authentication failed'), true],
     'a command that timed out' => [new SSHCommandTimedOut('uptime', 20, ''), true],
+    'no banner before the timeout' => [new RuntimeException('Connection timed out whilst receiving server identification string'), true],
+    'a socket that opened too slowly' => [new RuntimeException('Connection timed out whilst attempting to open socket connection'), true],
+    'a connection dropped before the banner' => [new RuntimeException("Error reading SSH identification string; are you sure you're connecting to an SSH server?"), true],
     'a command that failed' => [new SSHCommandFailedException('', 1), false],
     'a changed host key' => [HostKeyChangedException::forServer('192.0.2.10', 'SHA256:old', 'SHA256:new'), false],
+    'the same words from another kind of failure' => [new LogicException('Connection timed out whilst receiving server identification string'), false],
     'anything else' => [new RuntimeException('Something broke'), false],
 ]);
 
@@ -357,6 +516,24 @@ test('the server header carries no outage for a reachable server', function () {
     $server = reachabilityServer();
 
     expect(app(ServerPresenter::class)->header($server->fresh(), $server->team->members()->first())['unreachable'])->toBeNull();
+});
+
+test('a server whose host key changed carries the key prompt and no outage in its header', function () {
+    $server = reachabilityServer([
+        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('the old host key'),
+        'unreachable_since' => now()->subMinutes(30),
+        'last_connected_at' => now()->subMinutes(33),
+        'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
+    ]);
+
+    expect(fn() => reachabilityCollect($server, reachabilityHealthy()->setHostKey('a new host key after a rebuild')))->toThrow(HostKeyChangedException::class);
+
+    $header = app(ServerPresenter::class)->header($server->fresh(), $server->team->members()->first());
+
+    expect($header['state']['key'])->toBe('host_key')
+        ->and($header['host_key'])->not->toBeNull()
+        ->and($header['unreachable'])->toBeNull()
+        ->and($server->fresh()->unreachable_since)->not->toBeNull();
 });
 
 test('the feed says it stopped and came back', function (?int $seconds, string $came) {

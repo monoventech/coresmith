@@ -16,12 +16,11 @@ use App\Notifications\ServerReachableNotification;
 use App\Notifications\ServerUnreachableNotification;
 use App\Notifications\TeamNotifier;
 use App\Services\Panel\Formats;
-use Carbon\CarbonImmutable;
-use Carbon\CarbonInterval;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use phpseclib3\Exception\ConnectionClosedException;
 use phpseclib3\Exception\UnableToConnectException;
+use RuntimeException;
 use Throwable;
 
 final class ServerReachability
@@ -30,32 +29,24 @@ final class ServerReachability
 
     private const FAILURES_CEILING = 255;
 
+    private const PRE_BANNER_FAILURES = ['Connection timed out whilst', 'Error reading SSH identification string'];
+
     public static function isConnectionFailure(Throwable $e): bool
     {
         return $e instanceof UnableToConnectException
             || $e instanceof ConnectionClosedException
             || $e instanceof SSHAuthenticationException
-            || $e instanceof SSHCommandTimedOut;
+            || $e instanceof SSHCommandTimedOut
+            || self::isPreBannerFailure($e);
     }
 
     public static function reason(Server $server, Throwable $e): string
     {
         return match (true) {
             $e instanceof SSHAuthenticationException => "The server refused Coresmith's key for {$server->ssh_user}. Check the key is still in ~/.ssh/authorized_keys.",
-            $e instanceof SSHCommandTimedOut, $e instanceof ConnectionClosedException => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
+            $e instanceof SSHCommandTimedOut, $e instanceof ConnectionClosedException, self::isPreBannerFailure($e) => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
             default => "The connection to port {$server->ssh_port} was refused or timed out. Check the server is running and its firewall allows SSH from this panel.",
         };
-    }
-
-    public static function downFor(int $seconds): string
-    {
-        if ($seconds >= 3600) {
-            return CarbonInterval::seconds($seconds)->cascade()->forHumans(['parts' => 2]);
-        }
-
-        $moment = CarbonImmutable::now();
-
-        return (string) Formats::duration($moment, $moment->addSeconds($seconds));
     }
 
     public function failed(Server $server, Throwable $e): void
@@ -96,7 +87,8 @@ final class ServerReachability
         $now = now();
         $answer = ['last_connected_at' => $now, 'connection_failures' => 0, 'last_connection_error' => null];
 
-        $recovered = $this->query($server)->whereNotNull('unreachable_since')->update([...$answer, 'unreachable_since' => null]) === 1;
+        $recovered = $server->unreachable_since !== null
+            && $this->query($server)->whereNotNull('unreachable_since')->update([...$answer, 'unreachable_since' => null]) === 1;
 
         if (!$recovered) {
             $this->query($server)->update($answer);
@@ -115,7 +107,22 @@ final class ServerReachability
             ->withProperties(['seconds' => $seconds])
             ->log('server_reachable');
 
-        app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new ServerReachableNotification($server, self::downFor($seconds)));
+        app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, new ServerReachableNotification($server, Formats::downFor($seconds)));
+    }
+
+    private static function isPreBannerFailure(Throwable $e): bool
+    {
+        if (!$e instanceof RuntimeException) {
+            return false;
+        }
+
+        foreach (self::PRE_BANNER_FAILURES as $prefix) {
+            if (str_starts_with($e->getMessage(), $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function query(Server $server): Builder

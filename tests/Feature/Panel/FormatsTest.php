@@ -69,6 +69,20 @@ test('a duration is shown in seconds under a minute and minutes with padded seco
     'backwards' => ['2026-09-13 14:02:00', '2026-09-13 14:00:00', '0s'],
 ]);
 
+test('an outage is shown as a duration under an hour and as its two largest units after', function (int $seconds, string $expected) {
+    expect(Formats::downFor($seconds))->toBe($expected);
+})->with([
+    'a few seconds' => [38, '38s'],
+    'a minute' => [60, '1m 00s'],
+    'under an hour' => [2820, '47m 00s'],
+    'a second short of an hour' => [3599, '59m 59s'],
+    'an hour' => [3600, '1 hour'],
+    'an hour and a minute' => [3661, '1 hour 1 minute'],
+    'two hours five minutes' => [7500, '2 hours 5 minutes'],
+    'a day and two hours' => [93600, '1 day 2 hours'],
+    'two days' => [172800, '2 days'],
+]);
+
 test('a long fingerprint is shortened to its head and tail', function (?string $fingerprint, ?string $expected) {
     expect(Formats::fingerprint($fingerprint))->toBe($expected);
 })->with([

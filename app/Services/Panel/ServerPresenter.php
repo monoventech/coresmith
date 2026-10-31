@@ -39,6 +39,7 @@ final class ServerPresenter
         $fleet = new FleetSnapshot($server->team);
         $state = $fleet->state($server);
         $metrics = $this->metrics($server);
+        $unreachable = $server->unreachable_since !== null && $server->pending_host_key_fingerprint === null;
 
         return [
             'id' => $server->getKey(),
@@ -49,10 +50,10 @@ final class ServerPresenter
             'meta' => $fleet->meta($server, long: true),
             'active' => $server->status === ServerStatus::Active,
             'metrics' => $metrics,
-            'unreachable' => $server->unreachable_since === null ? null : [
+            'unreachable' => $unreachable ? [
                 'last_answer' => Formats::when($server->last_connected_at),
                 'reason' => (string) $server->last_connection_error,
-            ],
+            ] : null,
             'disk_warning' => $metrics['disk']['now'] !== null && $metrics['disk']['now'] >= FleetSnapshot::DISK_WARNING
                 ? ['percent' => $metrics['disk']['now'], 'apps' => $server->applications->count()]
                 : null,

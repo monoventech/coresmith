@@ -15,7 +15,6 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\Runtime\Catalog;
-use App\Services\Server\ServerReachability;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -205,7 +204,7 @@ final class ActivityFeed
 
     private function after(mixed $seconds): string
     {
-        return is_numeric($seconds) ? ' after ' . ServerReachability::downFor((int) $seconds) : '';
+        return is_numeric($seconds) ? ' after ' . Formats::downFor((int) $seconds) : '';
     }
 
     /**
