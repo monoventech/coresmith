@@ -528,3 +528,7 @@ test('without a domain the panel answers on the address the server owns, not one
         ->and($body)->not->toContain('default_sni')
         ->and($body)->toContain('through NAT. Without --domain the panel answers on');
 });
+
+test('the installer announces the version in the VERSION file', function () {
+    expect(installScriptBody())->toContain('readonly CORESMITH_VERSION="' . trim((string) file_get_contents(base_path('VERSION'))) . '"');
+});

@@ -28,7 +28,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="1.0.0"
+readonly CORESMITH_VERSION="0.1.0"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoven/coresmith.git}"
 readonly INSTALL_DIR="/opt/coresmith/app"
 readonly DATA_DIR="/var/lib/coresmith"
