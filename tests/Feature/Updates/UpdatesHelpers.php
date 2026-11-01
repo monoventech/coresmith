@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Services\Updates\Release;
+use App\Services\Updates\ReleaseHealth;
 use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\UpdateRun;
 use App\Services\Updates\UpdateState;
@@ -260,6 +261,8 @@ function updatesMachineEffect(?string $key, array $command, PendingProcess $proc
             break;
         case 'rev-parse':
             return Process::result(output: "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0\n");
+        case 'artisan:coresmith:health':
+            return Process::result(output: json_encode(['ok' => true, 'release' => basename((string) $process->path), 'version' => '0.1.1', 'checks' => []]) . "\n");
         case 'composer':
             @mkdir("{$process->path}/vendor", 0755, true);
             file_put_contents("{$process->path}/vendor/autoload.php", "<?php\n");
@@ -305,4 +308,14 @@ function updatesBusyMaster(): SymfonyProcess
     $registry->busy = [...($registry->busy ?? []), $process];
 
     return $process;
+}
+
+function updatesProbeUrl(): string
+{
+    return ReleaseHealth::probeUrl((string) config('app.url'));
+}
+
+function updatesProbe(string $release): void
+{
+    updatesAnswer(updatesProbeUrl(), ['release' => $release, 'version' => '0.1.1']);
 }
