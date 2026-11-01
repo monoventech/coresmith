@@ -159,6 +159,7 @@ final class E2ESeeder extends Seeder
         }
 
         $this->githubFixtures();
+        $this->cronFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
         $this->unreachable('down-01', '198.51.100.70');
@@ -533,6 +534,30 @@ final class E2ESeeder extends Seeder
             'pending_host_key_fingerprint' => self::PRESENTED_HOST_KEY,
             'host_key_changed_at' => now()->subMinutes(9),
         ])->save();
+    }
+
+    private function cronFixtures(): void
+    {
+        $scheduler = ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'];
+        $unreachable = "Couldn't reach bench-01 over SSH. Check it's online, then try again.";
+
+        $this->succeeded($this->application('cron-jobs', 8500, ['cron_jobs' => [
+            $scheduler,
+            ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Nightly backup'],
+            ['schedule' => '30 8 * * 1', 'command' => 'php artisan report:weekly'],
+            ['schedule' => '15 9-17 * * 1-5', 'command' => "php artisan prices:sync\nphp artisan cache:clear --tags=prices", 'description' => 'Price sync'],
+        ]]), 4 * 60, 'v1.2.0');
+
+        $this->succeeded($this->application('cron-failed', 8510, ['cron_jobs' => [$scheduler], 'cron_error' => $unreachable]), 4 * 60, 'v1.0.0');
+        $this->succeeded($this->application('cron-paused', 8520, ['cron_jobs' => [$scheduler], 'power_state' => PowerState::Stopped]), 26 * 60, 'v1.0.0');
+        $this->application('cron-new', 8530, ['cron_jobs' => [$scheduler]]);
+        $this->succeeded($this->application('cron-waiting', 8540, ['cron_jobs' => [$scheduler], 'cron_pending_since' => now()->subMinutes(10)]), 4 * 60, 'v1.0.0');
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->succeeded($this->application("cron-{$code}", 8600 + $index * 30), 3 * 60, 'v1.0.0');
+            $this->succeeded($this->application("cron-toggle-{$code}", 8610 + $index * 30, ['cron_jobs' => [$scheduler]]), 3 * 60, 'v1.0.0');
+            $this->succeeded($this->application("cron-failed-{$code}", 8620 + $index * 30, ['cron_jobs' => [$scheduler], 'cron_error' => $unreachable]), 3 * 60, 'v1.0.0');
+        }
     }
 
     /**
