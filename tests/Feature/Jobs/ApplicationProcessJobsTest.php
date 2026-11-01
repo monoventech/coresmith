@@ -99,7 +99,7 @@ test('a stopped or sleeping application gets its units installed but not started
 })->with([PowerState::Stopped, PowerState::Sleeping]);
 
 test('the cron file is rewritten from the application cron jobs', function () {
-    $application = processJobsApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
+    $application = processJobsApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']], 'current_release' => '20261019-120000']);
     $transport = new FakeSSHTransport;
 
     processJobsRun(new SyncApplicationProcesses($application), $transport);

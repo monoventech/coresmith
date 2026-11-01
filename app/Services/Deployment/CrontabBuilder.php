@@ -8,10 +8,13 @@ declare(strict_types=1);
 
 namespace App\Services\Deployment;
 
+use App\Enums\PowerState;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 
 final class CrontabBuilder
 {
@@ -20,6 +23,10 @@ final class CrontabBuilder
     public const DIRECTORY = '/etc/cron.d';
 
     public const SCRIPTS = '/etc/coresmith/cron';
+
+    public const LOCK_SECONDS = 120;
+
+    public const LOCK_WAIT_SECONDS = 60;
 
     public function __construct(private readonly AppShell $shell) {}
 
@@ -74,15 +81,53 @@ final class CrontabBuilder
         return $scripts;
     }
 
+    public function lockKey(Application $application): string
+    {
+        return 'crontab:' . SafeName::assertSlug($application->slug);
+    }
+
+    public function runs(Application $application): bool
+    {
+        return !$application->trashed()
+            && $application->power_state !== PowerState::Stopped
+            && $application->current_release !== null
+            && $this->scripts($application) !== [];
+    }
+
+    public function settle(Application $application, CarbonInterface $readAt): void
+    {
+        Application::query()
+            ->whereKey($application->getKey())
+            ->where(fn($query) => $query->whereNull('cron_pending_since')->orWhere('cron_pending_since', '<=', $readAt))
+            ->update(['cron_pending_since' => null, 'cron_error' => null]);
+    }
+
     public function write(SSHConnection $connection, Application $application): void
     {
+        Cache::lock($this->lockKey($application), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, function () use ($connection, $application): void {
+            $readAt = now();
+            $stored = $application->exists ? Application::query()->find($application->getKey()) : null;
+
+            if ($stored !== null && $this->runs($stored)) {
+                $this->install($connection, $stored);
+            } else {
+                $this->clear($connection, $stored ?? $application);
+            }
+
+            if ($stored !== null) {
+                $this->settle($stored, $readAt);
+            }
+        });
+    }
+
+    public function remove(SSHConnection $connection, Application $application): void
+    {
+        Cache::lock($this->lockKey($application), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, fn() => $this->clear($connection, $application));
+    }
+
+    private function install(SSHConnection $connection, Application $application): void
+    {
         $scripts = $this->scripts($application);
-
-        if ($scripts === []) {
-            $this->remove($connection, $application);
-
-            return;
-        }
 
         $directory = $this->scriptDirectory($application);
         $stagedDirectory = $this->staged($directory);
@@ -120,7 +165,7 @@ final class CrontabBuilder
         ]), sudo: true)->throw();
     }
 
-    public function remove(SSHConnection $connection, Application $application): void
+    private function clear(SSHConnection $connection, Application $application): void
     {
         $file = $this->path($application);
         $directory = $this->scriptDirectory($application);

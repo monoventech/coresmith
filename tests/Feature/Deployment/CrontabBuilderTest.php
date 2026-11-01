@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
+use App\Enums\PowerState;
+use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Process\Process;
 use Tests\Support\FakeSSHTransport;
 
@@ -22,6 +25,7 @@ function scheduledApp(array $attributes = []): Application
         'type' => ApplicationType::Php,
         'php_version' => '8.5.5',
         'cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']],
+        'current_release' => '20261019-120000',
     ], $attributes));
 }
 
@@ -344,4 +348,66 @@ test('a description never reaches the cron file or the scripts', function () {
 
     expect($builder->build($application))->not->toContain('Nightly')->not->toContain('evil.test')
         ->and(implode("\n", $builder->scripts($application)))->not->toContain('Nightly');
+});
+
+test('the cron file is written from the jobs as saved now, not the copy the caller holds', function () {
+    $application = scheduledApp();
+    $held = $application->replicate();
+    $held->id = $application->id;
+    $held->exists = true;
+
+    $application->forceFill(['cron_jobs' => [['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']]])->save();
+
+    $transport = new FakeSSHTransport;
+
+    app(CrontabBuilder::class)->write(cronConnection($transport), $held);
+
+    expect($transport->uploads())->toBe([
+        '/etc/coresmith/cron/.shop.new/0.sh' => cronScript('php artisan backup:run'),
+        '/etc/cron.d/.coresmith-app-shop.new' => "# Coresmith managed crons for shop - do not edit manually\n" . cronLine('0 3 * * *', 0) . "\n",
+    ]);
+});
+
+test('a stopped app has its cron file and scripts removed, so its jobs pause until it starts', function () {
+    $application = scheduledApp(['power_state' => PowerState::Stopped, 'cron_pending_since' => now()->subSeconds(5)]);
+    $transport = new FakeSSHTransport;
+
+    app(CrontabBuilder::class)->write(cronConnection($transport), $application);
+
+    expect($transport->uploads())->toBe([])
+        ->and($transport->commands())->toBe([cronRemoval()])
+        ->and($application->fresh()->cron_pending_since)->toBeNull();
+});
+
+test('a sleeping app keeps its jobs, since nothing would wake it for them', function () {
+    $transport = new FakeSSHTransport;
+
+    app(CrontabBuilder::class)->write(cronConnection($transport), scheduledApp(['power_state' => PowerState::Sleeping]));
+
+    expect($transport->commands())->toBe([cronStage(), cronInstall()]);
+});
+
+test('an app with nothing live gets no cron file, since its jobs point at a release that does not exist', function () {
+    $transport = new FakeSSHTransport;
+
+    app(CrontabBuilder::class)->write(cronConnection($transport), scheduledApp(['current_release' => null]));
+
+    expect($transport->uploads())->toBe([])->and($transport->commands())->toBe([cronRemoval()]);
+});
+
+test('a write clears what the page was waiting on unless a newer change came after it read the list', function (int $secondsFromNow, bool $cleared) {
+    $application = scheduledApp(['cron_pending_since' => now()->addSeconds($secondsFromNow), 'cron_error' => 'web-1 refused the change.']);
+
+    app(CrontabBuilder::class)->write(cronConnection(new FakeSSHTransport), $application);
+
+    expect($application->fresh()->cron_pending_since === null)->toBe($cleared)
+        ->and($application->fresh()->cron_error === null)->toBe($cleared);
+})->with(['a change before the read' => [-30, true], 'a change after the read' => [60, false]]);
+
+test('the lock is free again after a write the server refused', function () {
+    $application = scheduledApp();
+    $transport = (new FakeSSHTransport)->respondTo("mv -f '/etc/cron.d/.coresmith-app-shop.new'", 'mv: cannot move', 1);
+
+    expect(fn() => app(CrontabBuilder::class)->write(cronConnection($transport), $application))->toThrow(SSHCommandFailedException::class)
+        ->and(Cache::lock(app(CrontabBuilder::class)->lockKey($application), 5)->get())->toBeTrue();
 });

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Models\Application;
+use App\Services\Deployment\CrontabBuilder;
 use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,19 +21,20 @@ final class StopApplication implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 60;
+    public int $timeout = 120;
 
     public function __construct(private readonly Application $application)
     {
         $this->onQueue('server-tasks');
     }
 
-    public function handle(SSHConnectionManager $connections, ProcessManager $processes): void
+    public function handle(SSHConnectionManager $connections, ProcessManager $processes, CrontabBuilder $crontab): void
     {
         $connection = $connections->for($this->application->server);
 
         try {
             $processes->stop($connection, $this->application);
+            $crontab->write($connection, $this->application);
         } finally {
             $connections->disconnect($this->application->server);
         }

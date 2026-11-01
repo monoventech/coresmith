@@ -181,6 +181,7 @@ class Application extends Model
             'toggles' => 'array',
             'processes' => 'array',
             'cron_jobs' => 'array',
+            'cron_pending_since' => 'datetime',
             'run_migrations' => 'boolean',
             'quick_deploy' => 'boolean',
             'last_request_at' => 'datetime',
