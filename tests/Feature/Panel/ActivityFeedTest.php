@@ -86,6 +86,10 @@ test('application events are described in plain words and link to the applicatio
     'killed for memory' => ['app_oom_killed', ['process' => 'queue', 'at' => '2026-09-13T14:03:00+00:00', 'limit_mb' => 256], 'shop queue process killed for going over its 256 MB memory limit, systemd started it again'],
     'end of life chosen' => ['runtime_eol_chosen', ['runtime' => 'php', 'line' => '8.1'], 'shop was added on PHP 8.1, which no longer gets security fixes'],
     'cron sync failed' => ['cron_sync_failed', ['error' => "Couldn't reach web-1 over SSH. Check it's online, then try again."], "Couldn't write the cron jobs for shop. Couldn't reach web-1 over SSH. Check it's online, then try again."],
+    'cron job added' => ['cron_job_added', ['schedule' => '0 3 * * *', 'description' => null, 'command' => 'php artisan backup:run'], 'Cron job added to shop, daily at 3:00 AM UTC'],
+    'cron job changed' => ['cron_job_updated', ['schedule' => '*/5 * * * *', 'from' => '* * * * *', 'description' => null, 'command' => 'php artisan schedule:run'], 'Cron job changed on shop, runs every 5 minutes'],
+    'cron job on a custom schedule' => ['cron_job_added', ['schedule' => '15 9-17 * * 1-5', 'description' => null, 'command' => 'php artisan prices:sync'], 'Cron job added to shop, on a custom schedule'],
+    'cron job removed' => ['cron_job_removed', ['schedule' => '0 3 * * *', 'description' => null, 'command' => 'php artisan backup:run'], 'Cron job removed from shop'],
 ]);
 
 test('names are marked as monospace and empty fragments are dropped', function () {

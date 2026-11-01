@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\ApplicationCronJobController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
@@ -89,6 +90,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('servers/{server}/applications/{application}/toggles/{toggle}', [ApplicationToggleController::class, 'update'])
         ->where('toggle', '[a-z_]+')
         ->name('servers.applications.toggles.update');
+    Route::post('servers/{server}/applications/{application}/cron-jobs', [ApplicationCronJobController::class, 'store'])
+        ->name('servers.applications.cron-jobs.store');
+    Route::post('servers/{server}/applications/{application}/cron-jobs/sync', [ApplicationCronJobController::class, 'sync'])
+        ->name('servers.applications.cron-jobs.sync');
+    Route::put('servers/{server}/applications/{application}/cron-jobs/{cronJob}', [ApplicationCronJobController::class, 'update'])
+        ->where('cronJob', '[0-9a-f]{16}')
+        ->name('servers.applications.cron-jobs.update');
+    Route::delete('servers/{server}/applications/{application}/cron-jobs/{cronJob}', [ApplicationCronJobController::class, 'destroy'])
+        ->where('cronJob', '[0-9a-f]{16}')
+        ->name('servers.applications.cron-jobs.destroy');
     Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogController::class, 'index'])
         ->middleware('throttle:30,1,app-logs')
         ->name('servers.applications.logs');

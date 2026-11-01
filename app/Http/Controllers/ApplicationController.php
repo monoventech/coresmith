@@ -26,6 +26,7 @@ use App\Services\Deployment\EnvironmentFile;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\CronJobs;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Panel\RollbackHistory;
@@ -127,7 +128,7 @@ final class ApplicationController extends Controller
             ->with('success', 'Application created. Deploy it when you are ready.');
     }
 
-    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks, CertificateCheck $certificates): Response
+    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks, CertificateCheck $certificates, CronJobs $cron): Response
     {
         $this->authorize('view', $application);
         $this->assertBelongsTo($server, $application);
@@ -168,7 +169,6 @@ final class ApplicationController extends Controller
                 'user' => $application->system_user,
                 'ports' => ApplicationPresenter::portBlock($application),
                 'processes' => array_values(array_filter((array) $application->processes, 'is_array')),
-                'cron_jobs' => array_values(array_filter((array) $application->cron_jobs, 'is_array')),
                 'deploy_key' => $publicKey === null ? null : [
                     'fingerprint' => HostKeyFingerprint::fromPublicKey($publicKey),
                     'short' => Formats::fingerprint(HostKeyFingerprint::fromPublicKey($publicKey)),
@@ -201,11 +201,13 @@ final class ApplicationController extends Controller
                 ...$toggle,
                 'href' => route('servers.applications.toggles.update', [$server, $application, $toggle['key']]),
             ], $toggles->describe($application)),
+            'cron' => $this->cron($server, $application, $cron),
             'can' => [
                 'update' => $user->can('update', $application),
                 'delete' => $user->can('delete', $application),
                 'deploy' => $user->can('deploy', $application),
                 'manageEnvironment' => $canManageEnvironment,
+                'viewLogs' => $user->can('viewLogs', $application),
             ],
         ]);
     }
@@ -242,6 +244,25 @@ final class ApplicationController extends Controller
     private function assertBelongsTo(Server $server, Application $application): void
     {
         abort_unless($application->server_id === $server->id, 404);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cron(Server $server, Application $application, CronJobs $cron): array
+    {
+        $card = $cron->describe($application);
+
+        return [
+            ...$card,
+            'jobs' => array_map(fn(array $job): array => [
+                ...$job,
+                'href' => route('servers.applications.cron-jobs.update', [$server, $application, $job['id']]),
+            ], $card['jobs']),
+            'store_href' => route('servers.applications.cron-jobs.store', [$server, $application]),
+            'sync_href' => route('servers.applications.cron-jobs.sync', [$server, $application]),
+            'log_href' => route('servers.applications.cron-jobs.log', [$server, $application]),
+        ];
     }
 
     /**
