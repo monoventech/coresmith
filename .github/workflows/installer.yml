@@ -57,10 +57,17 @@ jobs:
 
       - name: Secrets are not world readable
         run: |
-          test "$(sudo stat -c '%a' /opt/coresmith/app/.env)" = "600"
+          test "$(sudo stat -c '%a' /opt/coresmith/shared/.env)" = "600"
           test "$(sudo stat -c '%a' /var/lib/coresmith/database.sqlite)" = "600"
           test "$(sudo stat -c '%a' /etc/coresmith/env)" = "700"
           test "$(sudo stat -c '%a' /etc/coresmith/deploy-keys)" = "700"
+
+      - name: The panel runs from a sealed release directory
+        run: |
+          test -L /opt/coresmith/app
+          case "$(readlink /opt/coresmith/app)" in /opt/coresmith/releases/*) ;; *) exit 1 ;; esac
+          sudo test -f "$(readlink /opt/coresmith/app)/.coresmith-release.json"
+          sudo grep -q '^CORESMITH_UPDATES_ENABLED=true' /opt/coresmith/shared/.env
 
       - name: The environment says what the panel needs it to say
         run: |

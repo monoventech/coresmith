@@ -19,7 +19,8 @@
 #   --db-name <name>           Database name (pgsql/mysql)
 #   --db-user <user>           Database user (pgsql/mysql)
 #   --db-password <pass>       Database password (pgsql/mysql)
-#   --branch <branch>          Branch to install (default: main)
+#   --version <x.y.z>          Install this release (default: v$CORESMITH_VERSION, the release this installer belongs to)
+#   --branch <branch>          Install a branch instead of a release (development and CI)
 #   --unattended               Never prompt; use defaults
 #   --verbose                  Show command output
 #   --help                     Show this message
@@ -30,8 +31,12 @@ LAST_STEP=""
 
 readonly CORESMITH_VERSION="0.1.0"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoven/coresmith.git}"
-readonly INSTALL_DIR="/opt/coresmith/app"
+readonly CORESMITH_ROOT="/opt/coresmith"
+readonly RELEASES_DIR="$CORESMITH_ROOT/releases"
+readonly SHARED_DIR="$CORESMITH_ROOT/shared"
+readonly INSTALL_DIR="$CORESMITH_ROOT/app"
 readonly DATA_DIR="/var/lib/coresmith"
+readonly UPDATES_DIR="$DATA_DIR/updates"
 readonly APPS_DIR="/var/coresmith"
 readonly CONFIG_DIR="/etc/coresmith"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
@@ -45,7 +50,9 @@ else
     readonly RED='' GREEN='' YELLOW='' BLUE='' CYAN='' NC='' BOLD=''
 fi
 
-CORESMITH_BRANCH="main"
+CORESMITH_BRANCH=""
+INSTALL_VERSION=""
+RELEASE_DIR=""
 DOMAIN=""
 ACME_EMAIL=""
 DB_DRIVER="sqlite"
@@ -97,7 +104,7 @@ on_failure() {
 }
 
 usage() {
-    sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//' | sed "s/\\\$CORESMITH_VERSION/${CORESMITH_VERSION}/"
     exit 0
 }
 
@@ -139,6 +146,10 @@ parse_args() {
             DB_PASSWORD="${2:-}"
             shift 2
             ;;
+        --version)
+            INSTALL_VERSION="${2:-}"
+            shift 2
+            ;;
         --branch)
             CORESMITH_BRANCH="${2:-}"
             shift 2
@@ -157,6 +168,14 @@ parse_args() {
             ;;
         esac
     done
+
+    if [ -n "$INSTALL_VERSION" ] && [ -n "$CORESMITH_BRANCH" ]; then
+        fatal "Pass --version or --branch, not both."
+    fi
+
+    if [ -n "$INSTALL_VERSION" ] && ! [[ "$INSTALL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+        fatal "\"$INSTALL_VERSION\" is not a version like 1.2.3."
+    fi
 
     case "$DB_DRIVER" in
     sqlite | pgsql | mysql) ;;
@@ -292,8 +311,77 @@ interactive_prompts() {
     fi
 }
 
+write_release_sentinel() {
+    local dir="$1" tag="${2:-}" version commit tag_json="null"
+
+    version="$(tr -d '[:space:]' <"$dir/VERSION" 2>/dev/null || true)"
+    commit="$(sudo -u coresmith git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
+    [ -z "$tag" ] || tag_json="\"${tag}\""
+
+    sudo -u coresmith tee "$dir/.coresmith-release.json" >/dev/null <<JSON
+{"schema":1,"version":"${version:-0.0.0}","commit":"${commit}","tag":${tag_json},"signature":"unchecked","fingerprint":null,"built_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","built_by":"installer"}
+JSON
+}
+
+switch_release() {
+    local tmp="$CORESMITH_ROOT/.app-$$"
+
+    ln -sfn "$RELEASE_DIR" "$tmp"
+    mv -Tf "$tmp" "$INSTALL_DIR"
+    chown -h coresmith:coresmith "$INSTALL_DIR"
+}
+
+seal_and_switch_release() {
+    local tag=""
+
+    [ -n "$CORESMITH_BRANCH" ] || tag="v${INSTALL_VERSION:-$CORESMITH_VERSION}"
+    write_release_sentinel "$RELEASE_DIR" "$tag"
+    switch_release
+}
+
+adopt_legacy_layout() {
+    if [ ! -d "$INSTALL_DIR" ] || [ -L "$INSTALL_DIR" ]; then
+        return 0
+    fi
+
+    local version commit item
+
+    mkdir -p "$RELEASES_DIR" "$SHARED_DIR"
+    chown coresmith:coresmith "$RELEASES_DIR" "$SHARED_DIR"
+
+    version="$(tr -d '[:space:]' <"$INSTALL_DIR/VERSION" 2>/dev/null || true)"
+    commit="$(sudo -u coresmith git -C "$INSTALL_DIR" rev-parse --short=7 HEAD 2>/dev/null || true)"
+    RELEASE_DIR="$RELEASES_DIR/${version:-0.0.0}-${commit:-0000000}"
+
+    if [ ! -f "$SHARED_DIR/.env" ] && [ -f "$INSTALL_DIR/.env" ]; then
+        mv "$INSTALL_DIR/.env" "$SHARED_DIR/.env"
+    fi
+
+    if [ ! -d "$SHARED_DIR/storage" ] && [ -d "$INSTALL_DIR/storage" ]; then
+        mv "$INSTALL_DIR/storage" "$SHARED_DIR/storage"
+    fi
+
+    rm -rf "$RELEASE_DIR"
+    mv "$INSTALL_DIR" "$RELEASE_DIR"
+
+    for item in storage .env; do
+        if [ -e "$RELEASE_DIR/$item" ] && [ ! -L "$RELEASE_DIR/$item" ]; then
+            mv "$RELEASE_DIR/$item" "$RELEASE_DIR/$item.legacy-$$"
+        fi
+    done
+
+    ln -sfn "$SHARED_DIR/storage" "$RELEASE_DIR/storage"
+    ln -sfn "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
+    chown -h coresmith:coresmith "$RELEASE_DIR/storage" "$RELEASE_DIR/.env"
+
+    write_release_sentinel "$RELEASE_DIR" ""
+    switch_release
+
+    log "Moved the existing install into ${RELEASE_DIR}; its settings and data are kept."
+}
+
 adopt_existing_install() {
-    [ -f "$INSTALL_DIR/.env" ] || return 0
+    [ -f "$SHARED_DIR/.env" ] || return 0
 
     log "Existing installation found; keeping its settings unless this run overrides them."
 
@@ -493,11 +581,13 @@ create_user_and_dirs() {
     id coresmith >/dev/null 2>&1 ||
         useradd --system --shell /bin/bash --home-dir /opt/coresmith --create-home coresmith
 
-    mkdir -p "$DATA_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
+    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
         "$CONFIG_DIR"/env "$CONFIG_DIR"/deploy-keys /etc/caddy /var/log/caddy
 
     chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"
+    chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"
     chmod 700 "$DATA_DIR"
+    chmod 700 "$UPDATES_DIR"
     chmod 755 "$APPS_DIR"
 
     # Application environment files and deploy keys are root-only.
@@ -518,19 +608,36 @@ install_coresmith_app() {
     if [ -d "$CORESMITH_REPO/.git" ]; then
         git config --system --add safe.directory "$CORESMITH_REPO/.git" 2>/dev/null || true
     fi
-    git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
 
-    if [ -d "$INSTALL_DIR/.git" ]; then
-        log "Existing installation found; updating to the latest ${CORESMITH_BRANCH}..."
-        sudo -u coresmith git -C "$INSTALL_DIR" fetch --depth 1 origin "$CORESMITH_BRANCH"
-        sudo -u coresmith git -C "$INSTALL_DIR" reset --hard "origin/${CORESMITH_BRANCH}"
+    local ref="${CORESMITH_BRANCH:-v${INSTALL_VERSION:-$CORESMITH_VERSION}}" incoming name
+
+    incoming="$RELEASES_DIR/.incoming-$$"
+    rm -rf "$incoming"
+    sudo -u coresmith git clone --quiet --depth 1 --branch "$ref" "$CORESMITH_REPO" "$incoming" ||
+        fatal "Could not fetch ${ref} from ${CORESMITH_REPO}. Check the repository is reachable and has that release; to install a branch, pass --branch <name>."
+
+    name="$(tr -d '[:space:]' <"$incoming/VERSION" 2>/dev/null || printf '0.0.0')-$(sudo -u coresmith git -C "$incoming" rev-parse --short=7 HEAD)"
+    RELEASE_DIR="$RELEASES_DIR/$name"
+
+    if [ -f "$RELEASE_DIR/.coresmith-release.json" ]; then
+        rm -rf "$incoming"
     else
-        mkdir -p "$(dirname "$INSTALL_DIR")"
-        chown coresmith:coresmith "$(dirname "$INSTALL_DIR")"
-        sudo -u coresmith git clone --depth 1 --branch "$CORESMITH_BRANCH" "$CORESMITH_REPO" "$INSTALL_DIR"
+        rm -rf "$RELEASE_DIR"
+        mv "$incoming" "$RELEASE_DIR"
     fi
 
-    cd "$INSTALL_DIR"
+    if [ ! -d "$SHARED_DIR/storage" ]; then
+        mv "$RELEASE_DIR/storage" "$SHARED_DIR/storage"
+    else
+        rm -rf "$RELEASE_DIR/storage"
+    fi
+
+    ln -sfn "$SHARED_DIR/storage" "$RELEASE_DIR/storage"
+    ln -sfn "$SHARED_DIR/.env" "$RELEASE_DIR/.env"
+    chown -h coresmith:coresmith "$RELEASE_DIR/storage" "$RELEASE_DIR/.env"
+    chown -R coresmith:coresmith "$SHARED_DIR/storage"
+
+    cd "$RELEASE_DIR"
     run sudo -u coresmith composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
     run sudo -u coresmith php artisan package:discover --ansi
     run sudo -u coresmith php artisan vendor:publish --tag=laravel-assets --ansi --force
@@ -542,7 +649,7 @@ install_coresmith_app() {
 # ── Phase 5: environment ─────────────────────────────────────────────────────
 
 env_value() {
-    local file="$INSTALL_DIR/.env"
+    local file="$SHARED_DIR/.env"
 
     [ -f "$file" ] || return 0
 
@@ -564,7 +671,7 @@ ensure_env_secret() {
 }
 
 update_env() {
-    local key="$1" value="$2" file="$INSTALL_DIR/.env" tmp
+    local key="$1" value="$2" file="$SHARED_DIR/.env" tmp
 
     tmp="$(mktemp)"
 
@@ -583,8 +690,8 @@ update_env() {
 configure_environment() {
     log "Phase 5/8: configuring the environment..."
 
-    cd "$INSTALL_DIR"
-    [ -f .env ] || sudo -u coresmith cp .env.example .env
+    cd "$RELEASE_DIR"
+    [ -f "$SHARED_DIR/.env" ] || sudo -u coresmith cp "$RELEASE_DIR/.env.example" "$SHARED_DIR/.env"
 
     PANEL_HOST="${DOMAIN:-$SERVER_IP}"
     PANEL_URL="https://${PANEL_HOST}"
@@ -622,6 +729,8 @@ configure_environment() {
 
     vault_key_is_valid || update_env CORESMITH_VAULT_KEY "$(openssl rand -base64 32)"
     update_env CORESMITH_SETUP_TOKEN_PATH "$SETUP_TOKEN_FILE"
+    update_env CORESMITH_UPDATES_ENABLED "true"
+    update_env CORESMITH_REPOSITORY "$CORESMITH_REPO"
 
     # A self-hosted panel is not a signup page. The owner account comes from the
     # setup token; everyone else is invited into a team.
@@ -641,8 +750,8 @@ configure_environment() {
 
     [ -n "$ACME_EMAIL" ] && update_env ACME_EMAIL "$ACME_EMAIL"
 
-    chown coresmith:coresmith .env
-    chmod 600 .env
+    chown coresmith:coresmith "$SHARED_DIR/.env"
+    chmod 600 "$SHARED_DIR/.env"
 
     [ -n "$(env_value APP_KEY)" ] || sudo -u coresmith php artisan key:generate --force --no-interaction >/dev/null
 
@@ -653,6 +762,9 @@ configure_environment() {
     run sudo -u coresmith php artisan config:cache
     run sudo -u coresmith php artisan route:cache
     run sudo -u coresmith php artisan view:cache
+
+    rm -rf "$RELEASE_DIR/node_modules"
+    seal_and_switch_release
 
     success "Environment configured"
 }
@@ -710,7 +822,7 @@ php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv
-php_admin_value[open_basedir] = ${INSTALL_DIR}:${DATA_DIR}:/tmp
+php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp
 FPMCONF
 
     cat >/etc/caddy/panel.caddy <<SITECONF
@@ -795,9 +907,8 @@ https:// {
 }
 SITECONF
 
-    setfacl -m u:caddy:x "$(dirname "$INSTALL_DIR")" "$INSTALL_DIR"
-    setfacl -R -m u:caddy:rX "$INSTALL_DIR/public"
-    setfacl -R -d -m u:caddy:rX "$INSTALL_DIR/public"
+    setfacl -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"
+    setfacl -R -m u:caddy:rX "$RELEASE_DIR/public"
 
     mkdir -p /var/log/caddy
     chown -R caddy:caddy /var/log/caddy
@@ -838,7 +949,7 @@ StandardError=append:/var/log/coresmith-horizon.log
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${INSTALL_DIR}/storage ${DATA_DIR} ${APPS_DIR} ${CONFIG_DIR}
+ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR} ${APPS_DIR} ${CONFIG_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -866,7 +977,7 @@ StandardError=append:/var/log/coresmith-reverb.log
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${INSTALL_DIR}/storage ${DATA_DIR}
+ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -897,6 +1008,37 @@ Persistent=true
 
 [Install]
 WantedBy=timers.target
+UNIT
+
+    cat >/etc/systemd/system/coresmith-update.service <<UNIT
+[Unit]
+Description=Coresmith update, started from the panel
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=coresmith
+Group=coresmith
+WorkingDirectory=${INSTALL_DIR}
+ExecStartPre=-/bin/mv -f ${UPDATES_DIR}/request.json ${UPDATES_DIR}/request.taken.json
+ExecStart=/usr/bin/php artisan coresmith:update --requested --no-interaction
+TimeoutStartSec=2h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+UNIT
+
+    cat >/etc/systemd/system/coresmith-update.path <<UNIT
+[Unit]
+Description=Start a Coresmith update when the panel asks for one
+
+[Path]
+PathExists=${UPDATES_DIR}/request.json
+Unit=coresmith-update.service
+
+[Install]
+WantedBy=multi-user.target
 UNIT
 
     systemctl daemon-reload
@@ -990,6 +1132,7 @@ finalize() {
 
     run systemctl restart coresmith-reverb
     run systemctl enable --now coresmith-scheduler.timer
+    run systemctl enable --now coresmith-update.path
 
     configure_firewall
     configure_fail2ban
@@ -1027,7 +1170,7 @@ print_summary() {
 
     printf '  %sPanel:%s        %s\n' "$BOLD" "$NC" "$PANEL_URL"
     printf '  %sDatabase:%s     %s\n' "$BOLD" "$NC" "$DB_DRIVER"
-    printf '  %sInstalled in:%s %s\n' "$BOLD" "$NC" "$INSTALL_DIR"
+    printf '  %sInstalled in:%s %s\n' "$BOLD" "$NC" "$RELEASE_DIR"
     printf '  %sData in:%s      %s\n\n' "$BOLD" "$NC" "$DATA_DIR"
 
     if [ -n "$setup_token" ]; then
@@ -1042,7 +1185,8 @@ print_summary() {
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"
     printf '    Status:  systemctl status caddy coresmith-horizon coresmith-reverb\n'
     printf '    Logs:    tail -f /var/log/coresmith-horizon.log\n'
-    printf '    Health:  cd %s && sudo -u coresmith php artisan coresmith:health\n\n' "$INSTALL_DIR"
+    printf '    Health:  cd %s && sudo -u coresmith php artisan coresmith:health\n' "$INSTALL_DIR"
+    printf '    Update:  cd %s && sudo -u coresmith php artisan coresmith:update\n\n' "$INSTALL_DIR"
 
     if [ "$healthy" != "true" ]; then
         warn "Some services did not start. The panel may be unreachable until they do."
@@ -1054,6 +1198,7 @@ print_summary() {
 main() {
     parse_args "$@"
     preflight
+    adopt_legacy_layout
     adopt_existing_install
     interactive_prompts
     ensure_database_password

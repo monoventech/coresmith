@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Install\SetupToken;
+use App\Services\Updates\PanelServices;
+use App\Services\Updates\Release;
 use App\Services\VaultEncryptor;
 use Symfony\Component\Process\Process;
 
@@ -112,7 +114,7 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
     expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
         ->and($body)->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
         ->and($body)->toContain('chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"')
-        ->and($body)->toContain('php_admin_value[open_basedir] = ${INSTALL_DIR}:${DATA_DIR}:/tmp')
+        ->and($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
         ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
 
@@ -127,7 +129,7 @@ test('the installer issues the token through artisan rather than minting its own
 test('secrets are written with restrictive permissions', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('chmod 600 .env')
+    expect($body)->toContain('chmod 600 "$SHARED_DIR/.env"')
         ->and($body)->toContain('chmod 600 "$DATA_DIR/database.sqlite"')
         ->and($body)->toContain('chmod 700 "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"');
 });
@@ -204,7 +206,7 @@ test('writing the environment survives a password full of shell metacharacters',
     expect($function)->not->toBeEmpty();
 
     $password = 'p|ss&w"rd$with\\slashes/and|pipes';
-    $script = 'INSTALL_DIR=' . escapeshellarg($directory) . "\n{$function}\n"
+    $script = 'SHARED_DIR=' . escapeshellarg($directory) . "\n{$function}\n"
         . "update_env APP_ENV 'production'\n"
         . 'update_env DB_PASSWORD ' . escapeshellarg($password) . "\n"
         . "update_env NEW_KEY 'added'\n";
@@ -301,9 +303,9 @@ test('caddy is validated as itself and restarted so the panel config is actually
 test('caddy can read what it serves without being able to read or change the rest of the panel', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('setfacl -m u:caddy:x "$(dirname "$INSTALL_DIR")" "$INSTALL_DIR"')
-        ->and($body)->toContain('setfacl -R -m u:caddy:rX "$INSTALL_DIR/public"')
-        ->and($body)->toContain('setfacl -R -d -m u:caddy:rX "$INSTALL_DIR/public"')
+    expect($body)->toContain('setfacl -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"')
+        ->and($body)->toContain('setfacl -R -m u:caddy:rX "$RELEASE_DIR/public"')
+        ->and($body)->not->toContain('setfacl -R -d')
         ->and($body)->not->toMatch('/usermod\s+-aG\s+coresmith\s+caddy/');
 });
 
@@ -347,7 +349,7 @@ function installScriptFunctions(string ...$names): string
 
 function runInstallScriptFunctions(string $directory, string $body): Process
 {
-    $script = 'set -euo pipefail' . "\n" . 'INSTALL_DIR=' . escapeshellarg($directory) . "\nlog() { :; }\n"
+    $script = 'set -euo pipefail' . "\n" . 'SHARED_DIR=' . escapeshellarg($directory) . "\nlog() { :; }\n"
         . installScriptFunctions('env_value', 'vault_key_is_valid', 'ensure_env_secret', 'update_env', 'adopt_existing_install', 'ensure_database_password')
         . "\n" . $body;
 
@@ -411,7 +413,7 @@ test('re-running the installer keeps the keys that existing data was encrypted w
         ->and($body)->toContain('ensure_env_secret REVERB_APP_KEY')
         ->and($body)->toContain('ensure_env_secret REVERB_APP_SECRET')
         ->and($body)->not->toContain('    update_env CORESMITH_VAULT_KEY "$(openssl rand')
-        ->and($body)->toContain("preflight\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
+        ->and($body)->toContain("preflight\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
 });
 
 test('the browser is given the reverb key so live updates use the socket', function () {
@@ -531,4 +533,148 @@ test('without a domain the panel answers on the address the server owns, not one
 
 test('the installer announces the version in the VERSION file', function () {
     expect(installScriptBody())->toContain('readonly CORESMITH_VERSION="' . trim((string) file_get_contents(base_path('VERSION'))) . '"');
+});
+
+function installScriptUnits(): string
+{
+    preg_match('/^create_systemd_services\(\) \{.*?^\}$/ms', installScriptBody(), $matches);
+
+    return $matches[0] ?? '';
+}
+
+test('php-fpm never reaches the release through the symlink', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
+        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', $body))->toBe(0);
+});
+
+test('the installer lays out the paths the updater reads', function () {
+    $body = installScriptBody();
+    $config = (string) file_get_contents(config_path('coresmith.php'));
+
+    expect($body)->toContain('readonly CORESMITH_ROOT="/opt/coresmith"')
+        ->and($body)->toContain('readonly RELEASES_DIR="$CORESMITH_ROOT/releases"')
+        ->and($body)->toContain('readonly SHARED_DIR="$CORESMITH_ROOT/shared"')
+        ->and($body)->toContain('readonly INSTALL_DIR="$CORESMITH_ROOT/app"')
+        ->and($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
+        ->and($body)->toContain('readonly UPDATES_DIR="$DATA_DIR/updates"')
+        ->and($body)->toContain('update_env CORESMITH_UPDATES_ENABLED "true"')
+        ->and($body)->toContain('update_env CORESMITH_REPOSITORY "$CORESMITH_REPO"')
+        ->and($body)->toContain(Release::SENTINEL)
+        ->and($body)->toContain('rev-parse --short=7 HEAD')
+        ->and($body)->toContain('chmod 700 "$UPDATES_DIR"')
+        ->and($config)->toContain("env('CORESMITH_ROOT', '/opt/coresmith')")
+        ->and($config)->toContain("env('CORESMITH_UPDATE_STATE_PATH', '/var/lib/coresmith/updates')");
+});
+
+test('the services the updater restarts are the ones the installer creates', function () {
+    $units = installScriptUnits();
+
+    expect($units)->toContain('/etc/systemd/system/' . PanelServices::HORIZON . '.service')
+        ->and($units)->toContain('/etc/systemd/system/' . PanelServices::REVERB . '.service');
+});
+
+test('the update unit runs as the panel user and takes its request before it starts', function () {
+    $units = installScriptUnits();
+    preg_match('/coresmith-update\.service <<UNIT\n(.*?)\nUNIT/s', $units, $service);
+    preg_match('/coresmith-update\.path <<UNIT\n(.*?)\nUNIT/s', $units, $path);
+    $service = $service[1] ?? '';
+
+    expect($service)->toContain('User=coresmith')
+        ->and($service)->toContain('Type=oneshot')
+        ->and($service)->toContain('WorkingDirectory=${INSTALL_DIR}')
+        ->and($service)->toContain('ExecStartPre=-/bin/mv -f ${UPDATES_DIR}/request.json ${UPDATES_DIR}/request.taken.json')
+        ->and($service)->toContain('ExecStart=/usr/bin/php artisan coresmith:update --requested --no-interaction')
+        ->and($service)->toContain('TimeoutStartSec=2h')
+        ->and($service)->toContain('NoNewPrivileges=true')
+        ->and($service)->toContain('ProtectSystem=full')
+        ->and($service)->not->toContain('ProtectSystem=strict')
+        ->and($path[1] ?? '')->toContain('PathExists=${UPDATES_DIR}/request.json')
+        ->and($path[1] ?? '')->toContain('Unit=coresmith-update.service')
+        ->and(installScriptBody())->toContain('run systemctl enable --now coresmith-update.path');
+});
+
+test('horizon and reverb write to the shared storage every release links to', function () {
+    $units = installScriptUnits();
+
+    expect(substr_count($units, 'ReadWritePaths=${SHARED_DIR}/storage'))->toBe(2)
+        ->and($units)->not->toContain('ReadWritePaths=${INSTALL_DIR}/storage');
+});
+
+test('--version and --branch choose what is installed, and not both', function () {
+    $both = runInstaller(['--version', '1.0.0', '--branch', 'main']);
+    $junk = runInstaller(['--version', 'latest']);
+    $help = runInstaller(['--help']);
+
+    expect($both->getExitCode())->toBe(1)
+        ->and($both->getErrorOutput() . $both->getOutput())->toContain('Pass --version or --branch, not both.')
+        ->and($junk->getExitCode())->toBe(1)
+        ->and($junk->getErrorOutput() . $junk->getOutput())->toContain('"latest" is not a version like 1.2.3.')
+        ->and($help->getOutput())->toContain('--version <x.y.z>')
+        ->and($help->getOutput())->toContain('v' . trim((string) file_get_contents(base_path('VERSION'))))
+        ->and($help->getOutput())->not->toContain('$CORESMITH_VERSION');
+});
+
+test('by default the installer installs the release it belongs to', function () {
+    expect(installScriptBody())->toContain('"${CORESMITH_BRANCH:-v${INSTALL_VERSION:-$CORESMITH_VERSION}}"')
+        ->and(installScriptBody())->toContain('CORESMITH_BRANCH=""');
+});
+
+test('an install from before release directories is moved into them with its settings', function () {
+    $base = realpath(sys_get_temp_dir()) . '/csl-' . bin2hex(random_bytes(4));
+    $app = "{$base}/root/app";
+    mkdir("{$app}/storage/app", 0755, true);
+    file_put_contents("{$base}/gitconfig", '');
+    file_put_contents("{$app}/VERSION", "0.1.0\n");
+    file_put_contents("{$app}/.env", "APP_KEY=base64:keep\n");
+    file_put_contents("{$app}/storage/app/kept.txt", 'kept');
+    $env = ['GIT_CONFIG_GLOBAL' => "{$base}/gitconfig", 'GIT_CONFIG_NOSYSTEM' => '1', 'GIT_AUTHOR_NAME' => 'Coresmith', 'GIT_AUTHOR_EMAIL' => 'test@coresmith.test', 'GIT_COMMITTER_NAME' => 'Coresmith', 'GIT_COMMITTER_EMAIL' => 'test@coresmith.test'];
+
+    foreach ([['git', 'init', '--quiet'], ['git', 'add', 'VERSION'], ['git', 'commit', '--quiet', '-m', 'Release']] as $command) {
+        (new Process($command, $app, $env))->mustRun();
+    }
+
+    $sha = trim((new Process(['git', 'rev-parse', '--short=7', 'HEAD'], $app, $env))->mustRun()->getOutput());
+    $functions = installScriptFunctions('write_release_sentinel', 'switch_release', 'adopt_legacy_layout');
+    $script = 'set -euo pipefail' . "\n"
+        . 'CORESMITH_ROOT=' . escapeshellarg("{$base}/root") . "\n"
+        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; INSTALL_DIR="$CORESMITH_ROOT/app"; RELEASE_DIR=""' . "\n"
+        . "log() { printf '%s\\n' \"\$1\"; }\nsuccess() { :; }\nchown() { :; }\n"
+        . 'sudo() { if [ "$1" = "-u" ]; then shift 2; fi; "$@"; }' . "\n"
+        . 'mv() { if [ "$1" = "-Tf" ]; then shift; command mv -f "$@"; else command mv "$@"; fi; }' . "\n"
+        . "{$functions}\nadopt_legacy_layout\n";
+
+    $process = new Process(['bash', '-c', $script], null, $env);
+    $process->run();
+
+    $release = "{$base}/root/releases/0.1.0-{$sha}";
+    $sentinel = json_decode((string) @file_get_contents("{$release}/.coresmith-release.json"), true);
+    $link = @readlink("{$base}/root/app");
+
+    try {
+        expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+            ->and($link)->toBe($release)
+            ->and(file_get_contents("{$base}/root/shared/.env"))->toBe("APP_KEY=base64:keep\n")
+            ->and(file_get_contents("{$base}/root/shared/storage/app/kept.txt"))->toBe('kept')
+            ->and(readlink("{$release}/storage"))->toBe("{$base}/root/shared/storage")
+            ->and(readlink("{$release}/.env"))->toBe("{$base}/root/shared/.env")
+            ->and($sentinel['built_by'] ?? null)->toBe('installer')
+            ->and($sentinel['version'] ?? null)->toBe('0.1.0')
+            ->and(is_array($sentinel) && array_key_exists('tag', $sentinel) && $sentinel['tag'] === null)->toBeTrue()
+            ->and(Release::fromDirectory($release)?->name)->toBe("0.1.0-{$sha}")
+            ->and($process->getOutput())->toContain("Moved the existing install into {$base}/root/releases/0.1.0-{$sha}; its settings and data are kept.");
+    } finally {
+        (new Process(['rm', '-rf', $base]))->run();
+    }
+});
+
+test('an install that already uses release directories is left as it is', function () {
+    $functions = installScriptFunctions('adopt_legacy_layout');
+    $script = 'set -euo pipefail' . "\n" . 'INSTALL_DIR=/nonexistent/coresmith/app' . "\n{$functions}\nadopt_legacy_layout && echo untouched\n";
+    $process = new Process(['bash', '-c', $script]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("untouched\n");
 });
