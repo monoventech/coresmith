@@ -50,8 +50,8 @@ test('a release that is healthy and serving passes', function () {
     app(ReleaseHealth::class)->check($this->release, 60);
 
     Http::assertSentCount(4);
-    Http::assertSent(fn(Request $request): bool => $request->url() === 'https://panel.example.com/api/up/release');
-    Http::assertNotSent(fn(Request $request): bool => $request->url() !== 'https://panel.example.com/api/up/release');
+    Http::assertSent(fn(Request $request): bool => $request->url() === 'http://127.0.0.1:8484/api/up/release');
+    Http::assertNotSent(fn(Request $request): bool => $request->url() !== 'http://127.0.0.1:8484/api/up/release');
     Sleep::assertSleptTimes(3);
 
     expect(collect(updatesProcesses())->firstWhere('command', PHP_BINARY . ' artisan coresmith:health --json'))
@@ -65,7 +65,7 @@ test('the probe asks for json', function () {
 
     app(ReleaseHealth::class)->check($this->release, 60);
 
-    Http::assertSent(fn(Request $request): bool => $request->url() === 'https://panel.example.com/api/up/release' && $request->hasHeader('Accept', 'application/json'));
+    Http::assertSent(fn(Request $request): bool => $request->url() === 'http://127.0.0.1:8484/api/up/release' && $request->hasHeader('Accept', 'application/json'));
 });
 
 test('a failing health check names the checks that failed', function () {
@@ -116,36 +116,32 @@ test('a panel that never answers fails the check', function (Closure $answer, st
 
     expect(updatesHealthFailure($this->release, 4)->getMessage())->toBe($message);
 })->with([
-    'no connection' => [fn() => Http::failedConnection(), "The panel didn't answer on https://panel.example.com/api/up/release."],
-    'a constant 503' => [fn() => Http::response('Service Unavailable', 503), 'The panel answered 503 on https://panel.example.com/api/up/release.'],
-    'an answer that names no release' => [fn() => Http::response('<html>ok</html>'), 'The panel answered on https://panel.example.com/api/up/release without saying which release it serves.'],
+    'no connection' => [fn() => Http::failedConnection(), "The panel didn't answer on http://127.0.0.1:8484/api/up/release."],
+    'a constant 503' => [fn() => Http::response('Service Unavailable', 503), 'The panel answered 503 on http://127.0.0.1:8484/api/up/release.'],
+    'an answer that names no release' => [fn() => Http::response('<html>ok</html>'), 'The panel answered on http://127.0.0.1:8484/api/up/release without saying which release it serves.'],
 ]);
 
-test('an install on an ip address is probed on that address', function () {
-    config(['app.url' => 'https://203.0.113.9']);
+test('the probe goes to the loopback site whatever address the panel has', function (string $url) {
+    config(['app.url' => $url]);
     updatesMachine();
     updatesProbe($this->release->name);
 
     app(ReleaseHealth::class)->check($this->release, 60);
 
-    Http::assertSent(fn(Request $request): bool => $request->url() === 'https://203.0.113.9/api/up/release');
-});
-
-test('a panel on its own port is probed on that port', function () {
-    config(['app.url' => 'http://panel.lan:8080']);
-    updatesMachine();
-    updatesProbe($this->release->name);
-
-    app(ReleaseHealth::class)->check($this->release, 60);
-
-    Http::assertSent(fn(Request $request): bool => $request->url() === 'http://panel.lan:8080/api/up/release');
-});
-
-test('the loopback pin names the port the scheme implies', function (string $url, string $resolve) {
-    expect(ReleaseHealth::resolve($url))->toBe($resolve);
+    Http::assertSent(fn(Request $request): bool => $request->url() === 'http://127.0.0.1:8484/api/up/release');
+    Http::assertSentCount(1);
 })->with([
-    ['https://panel.example.com', 'panel.example.com:443:127.0.0.1'],
-    ['http://panel.example.com', 'panel.example.com:80:127.0.0.1'],
-    ['http://panel.lan:8080', 'panel.lan:8080:127.0.0.1'],
-    ['https://203.0.113.9', '203.0.113.9:443:127.0.0.1'],
+    'a domain' => 'https://panel.example.com',
+    'an ip address' => 'https://203.0.113.9',
+    'its own port' => 'http://panel.lan:8080',
 ]);
+
+test('a configured probe address is used', function () {
+    config(['coresmith.updates.probe_url' => 'http://127.0.0.1:9484/api/up/release']);
+    updatesMachine();
+    updatesProbe($this->release->name);
+
+    app(ReleaseHealth::class)->check($this->release, 60);
+
+    Http::assertSent(fn(Request $request): bool => $request->url() === 'http://127.0.0.1:9484/api/up/release');
+});

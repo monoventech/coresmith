@@ -12,6 +12,7 @@ return [
     'updates' => [
         'enabled' => (bool) env('CORESMITH_UPDATES_ENABLED', false),
         'check_url' => env('CORESMITH_UPDATE_CHECK_URL', 'https://get.coresmith.io/v1/version'),
+        'probe_url' => env('CORESMITH_UPDATE_PROBE_URL', 'http://127.0.0.1:8484/api/up/release'),
         'check_disabled' => (bool) env('CORESMITH_DISABLE_UPDATE_CHECK', false),
         'repository' => env('CORESMITH_REPOSITORY', 'https://github.com/monoven/coresmith.git'),
         'issues_url' => env('CORESMITH_ISSUES_URL', 'https://github.com/monoven/coresmith/issues'),

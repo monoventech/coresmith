@@ -330,7 +330,7 @@ function updatesBusyMaster(): SymfonyProcess
 
 function updatesProbeUrl(): string
 {
-    return ReleaseHealth::probeUrl((string) config('app.url'));
+    return ReleaseHealth::probeUrl();
 }
 
 function updatesProbe(string $release): void

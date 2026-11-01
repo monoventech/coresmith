@@ -868,6 +868,13 @@ http://127.0.0.1:8484 {
         }
     }
 
+    @release path /api/up/release
+    handle @release {
+        php_fastcgi unix/${fpm_sock} {
+            resolve_root_symlink
+        }
+    }
+
     respond 404
 }
 

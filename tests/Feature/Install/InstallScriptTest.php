@@ -258,6 +258,13 @@ test('caddy only issues certificates for hosts the panel approves, asked over lo
         ->and($body)->toContain("https:// {\n    tls {\n        on_demand\n    }");
 });
 
+test('the updater checks the new release over the loopback site, never through tls', function () {
+    $site = str(installScriptBody())->after("http://127.0.0.1:8484 {\n")->before("\n}\n")->toString();
+
+    expect($site)->toContain("@release path /api/up/release\n    handle @release {\n        php_fastcgi unix/\${fpm_sock} {\n            resolve_root_symlink\n        }\n    }")
+        ->and(config('coresmith.updates.probe_url'))->toBe('http://127.0.0.1:8484/api/up/release');
+});
+
 test('team domains get hsts for themselves only, never for the customer subdomains', function () {
     $site = str(installScriptBody())->after("https:// {\n")->before("\n}\nSITECONF")->toString();
 

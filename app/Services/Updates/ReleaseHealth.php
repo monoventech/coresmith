@@ -18,19 +18,9 @@ final class ReleaseHealth
 {
     public function __construct(private readonly LogSanitizer $sanitizer) {}
 
-    public static function resolve(string $url): string
+    public static function probeUrl(): string
     {
-        $parts = parse_url($url) ?: [];
-        $scheme = $parts['scheme'] ?? 'https';
-
-        return ($parts['host'] ?? 'localhost') . ':' . ($parts['port'] ?? ($scheme === 'http' ? 80 : 443)) . ':127.0.0.1';
-    }
-
-    public static function probeUrl(string $url): string
-    {
-        $parts = parse_url($url) ?: [];
-
-        return ($parts['scheme'] ?? 'https') . '://' . ($parts['host'] ?? 'localhost') . (isset($parts['port']) ? ":{$parts['port']}" : '') . '/api/up/release';
+        return (string) config('coresmith.updates.probe_url');
     }
 
     public function check(Release $release, int $timeout): void
@@ -65,15 +55,13 @@ final class ReleaseHealth
 
     private function serving(Release $release, int $timeout): void
     {
-        $url = (string) config('app.url');
-        $probe = self::probeUrl($url);
+        $probe = self::probeUrl();
         $attempts = max(1, intdiv($timeout, 2));
         $problem = "The panel didn't answer on {$probe}.";
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
             try {
-                $response = Http::withOptions(['verify' => false, 'curl' => [CURLOPT_RESOLVE => [self::resolve($url)]]])
-                    ->timeout(5)
+                $response = Http::timeout(5)
                     ->acceptJson()
                     ->get($probe);
 
