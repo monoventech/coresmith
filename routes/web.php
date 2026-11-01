@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
+use App\Http\Controllers\ApplicationSchedulerLogController;
 use App\Http\Controllers\ApplicationToggleController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
@@ -91,6 +92,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('servers/{server}/applications/{application}/logs', [ApplicationLogController::class, 'index'])
         ->middleware('throttle:30,1,app-logs')
         ->name('servers.applications.logs');
+    Route::get('servers/{server}/applications/{application}/cron-jobs/log', [ApplicationSchedulerLogController::class, 'index'])
+        ->middleware('throttle:30,1,scheduler-log')
+        ->name('servers.applications.cron-jobs.log');
 
     Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update']);
     Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
