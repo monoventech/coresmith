@@ -54,11 +54,10 @@ final readonly class GitFailure
             return "Coresmith could not read the repository on {$host}. If it is private, connect your Git provider in Settings, Git, or add the app's deploy key to the repository.";
         }
 
-        $connection = $application->githubConnection();
         $repository = self::repository($application);
 
         return match (true) {
-            $connection !== null && !$connection->trashed() && $connection->suspended_at !== null => self::suspended((string) $connection->name),
+            $application->githubProblem() === 'suspended' => self::suspended((string) $application->githubConnection()?->name),
             !$application->usesGitHubToken() => "This app's GitHub connection was removed, so the private repository {$repository} could not be read. Connect GitHub again from Settings, Git, then deploy.",
             default => "GitHub did not let Coresmith read {$repository}. Check the repository is still selected for the Coresmith app on GitHub, then deploy again.",
         };

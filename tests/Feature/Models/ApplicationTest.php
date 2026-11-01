@@ -155,6 +155,35 @@ test('an application clones with a github token only while its connection is liv
     'environment app' => ['environment app', true],
 ]);
 
+test('an application names one problem with its github connection, the same way everywhere', function (string $state, ?string $expected) {
+    applicationWithoutEnvironmentApp();
+    $connection = SourceProvider::factory()->githubApp()->create();
+    $application = applicationLinked($connection);
+
+    match ($state) {
+        'live' => null,
+        'not linked' => $application->forceFill(['source_provider_id' => null])->save(),
+        'disconnected' => $connection->delete(),
+        'suspended' => $connection->markSuspended(now()),
+        'suspended then disconnected' => (function () use ($connection): void {
+            $connection->markSuspended(now());
+            $connection->delete();
+        })(),
+        'no installation' => $connection->forceFill(['installation_id' => null])->save(),
+        'app removed' => GitHubApp::query()->delete(),
+    };
+
+    expect($application->fresh()->githubProblem())->toBe($expected);
+})->with([
+    'live' => ['live', null],
+    'not linked' => ['not linked', null],
+    'disconnected' => ['disconnected', 'removed'],
+    'suspended' => ['suspended', 'suspended'],
+    'suspended then disconnected' => ['suspended then disconnected', 'removed'],
+    'no installation' => ['no installation', 'removed'],
+    'app removed' => ['app removed', 'removed'],
+]);
+
 test('the repository name comes from the stored address', function (?string $url, ?string $expected) {
     expect(Application::factory()->make(['repository_url' => $url])->repositoryFullName())->toBe($expected);
 })->with([

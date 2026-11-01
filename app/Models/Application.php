@@ -150,6 +150,17 @@ class Application extends Model
             && app(GitHubApps::class)->for($connection) !== null;
     }
 
+    public function githubProblem(): ?string
+    {
+        $connection = $this->githubConnection();
+
+        if ($connection === null || $this->usesGitHubToken()) {
+            return null;
+        }
+
+        return !$connection->trashed() && $connection->suspended_at !== null ? 'suspended' : 'removed';
+    }
+
     public function repositoryFullName(): ?string
     {
         return Repository::slug((string) $this->repository_url);

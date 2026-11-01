@@ -246,17 +246,11 @@ final class ApplicationController extends Controller
             return null;
         }
 
-        $usable = $application->usesGitHubToken();
-
         return [
             'repository' => $application->repositoryFullName() ?? (string) $application->repository_url,
             'branch' => (string) $application->repository_branch,
-            'usable' => $usable,
-            'problem' => match (true) {
-                $usable => null,
-                !$connection->trashed() && $connection->suspended_at !== null => 'suspended',
-                default => 'removed',
-            },
+            'usable' => $application->usesGitHubToken(),
+            'problem' => $application->githubProblem(),
             'settings_href' => route('source-providers.index'),
         ];
     }
