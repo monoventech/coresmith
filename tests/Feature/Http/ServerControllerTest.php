@@ -8,9 +8,11 @@ use App\Jobs\AuditServer;
 use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
 use App\Jobs\TestSSHConnection;
+use App\Models\CloudProvider;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Panel\ServerPresenter;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
@@ -192,10 +194,72 @@ test('an admin can delete a server', function () {
 
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->delete(route('servers.destroy', $server))
-        ->assertRedirect(route('dashboard'));
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('success', "Detached. {$server->name} was removed from the panel. The VM is untouched.");
 
     expect(Server::find($server->id))->toBeNull()
         ->and(Server::withTrashed()->find($server->id))->not->toBeNull();
+});
+
+test('a server still being created cannot be detached', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $server = Server::factory()->fromProvider($account)->creating()->create(['name' => 'outpost-02']);
+    CloudTask::start($server, CloudTask::CREATE, 'boot');
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->from(route('servers.show', $server))
+        ->delete(route('servers.destroy', $server))
+        ->assertRedirect(route('servers.show', $server))
+        ->assertSessionHas('error', 'Coresmith is still working on outpost-02 at Hetzner Cloud. Wait for it to finish or fail, then detach it.');
+
+    expect(Server::find($server->id))->not->toBeNull();
+});
+
+test('detaching a provider server says it keeps running and billing', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $server = Server::factory()->fromProvider($account)->create(['name' => 'outpost-02', 'status' => ServerStatus::Active]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->delete(route('servers.destroy', $server))
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('success', 'Detached. outpost-02 keeps running at Hetzner Cloud, and Hetzner Cloud keeps billing for it.');
+
+    expect(Server::find($server->id))->toBeNull();
+});
+
+test('removing a creation that never reached the provider says nothing was created', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $server = Server::factory()->fromProvider($account)->creating()->create(['name' => 'outpost-02', 'provider_server_id' => null]);
+    CloudTask::start($server, CloudTask::CREATE, 'create');
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->delete(route('servers.destroy', $server))
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('success', 'Removed. Nothing was created at Hetzner Cloud.');
+
+    expect(Server::find($server->id))->toBeNull();
+});
+
+test('the server page carries what the provider knows, and nothing for a server added by hand', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+    $cloud = Server::factory()->fromProvider($account)->create(['status' => ServerStatus::Active]);
+    $manual = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
+    $admin = teamMember($team, TeamRole::Admin);
+
+    $this->actingAs($admin)->get(route('servers.show', $cloud))
+        ->assertInertia(fn($page) => $page
+            ->where('server.cloud.provider', 'Hetzner Cloud')
+            ->where('server.cloud.account', 'Hetzner production')
+            ->where('server.cloud.instance', '4711')
+            ->where('server.cloud.can.detach', true));
+
+    $this->actingAs($admin)->get(route('servers.show', $manual))
+        ->assertInertia(fn($page) => $page->where('server.cloud', null));
 });
 
 test('a member cannot update a server', function () {
@@ -394,6 +458,19 @@ test('a member cannot trigger a connection test', function () {
     $this->actingAs(teamMember($team, TeamRole::Member))
         ->post(route('servers.test-connection', $server))
         ->assertForbidden();
+
+    Queue::assertNotPushed(TestSSHConnection::class);
+});
+
+test('a server being created has no connection to test', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $server = Server::factory()->fromProvider($account)->creating()->create();
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.test-connection', $server))
+        ->assertNotFound();
 
     Queue::assertNotPushed(TestSSHConnection::class);
 });

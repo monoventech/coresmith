@@ -47,6 +47,11 @@ return [
         'client_secret' => env('BITBUCKET_CLIENT_SECRET'),
     ],
 
+    'hetzner' => ['api_url' => env('HETZNER_API_URL', 'https://api.hetzner.cloud/v1')],
+    'digitalocean' => ['api_url' => env('DIGITALOCEAN_API_URL', 'https://api.digitalocean.com/v2')],
+    'vultr' => ['api_url' => env('VULTR_API_URL', 'https://api.vultr.com/v2')],
+    'linode' => ['api_url' => env('LINODE_API_URL', 'https://api.linode.com/v4')],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

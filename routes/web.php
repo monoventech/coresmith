@@ -6,6 +6,7 @@ use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
 use App\Http\Controllers\ApplicationToggleController;
+use App\Http\Controllers\CloudServerController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
@@ -36,6 +37,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
 
     Route::get('servers', fn() => to_route('dashboard'))->name('servers.index');
+    Route::post('servers/cloud', [CloudServerController::class, 'store'])
+        ->middleware('throttle:10,1,cloud-server-create')
+        ->name('servers.cloud.store');
+    Route::post('servers/{server}/cloud/retry', [CloudServerController::class, 'retry'])
+        ->name('servers.cloud.retry');
+    Route::delete('servers/{server}/cloud', [CloudServerController::class, 'destroy'])
+        ->middleware('throttle:10,1,cloud-server-destroy')
+        ->name('servers.cloud.destroy');
+    Route::get('servers/{server}/cloud/sizes', [CloudServerController::class, 'sizes'])
+        ->middleware('throttle:30,1,cloud-server-sizes')
+        ->name('servers.cloud.sizes');
+    Route::post('servers/{server}/cloud/resize', [CloudServerController::class, 'resize'])
+        ->middleware('throttle:10,1,cloud-server-resize')
+        ->name('servers.cloud.resize');
+    Route::delete('servers/{server}/cloud/task', [CloudServerController::class, 'dismiss'])
+        ->name('servers.cloud.dismiss');
     Route::resource('servers', ServerController::class)->except(['index', 'edit']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');

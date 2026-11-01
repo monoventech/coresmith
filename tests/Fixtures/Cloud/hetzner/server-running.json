@@ -1,0 +1,61 @@
+{
+    "server": {
+        "id": 4711,
+        "name": "outpost-02",
+        "status": "running",
+        "created": "2026-10-18T12:00:00+00:00",
+        "public_net": {
+            "ipv4": {
+                "id": 9101,
+                "ip": "203.0.113.40",
+                "blocked": false,
+                "dns_ptr": "static.40.113.0.203.clients.your-server.de"
+            },
+            "ipv6": { "id": 9102, "ip": "2001:db8:1c1e:abcd::/64", "blocked": false, "dns_ptr": [] },
+            "floating_ips": [],
+            "firewalls": []
+        },
+        "private_net": [],
+        "server_type": {
+            "id": 104,
+            "name": "cx22",
+            "description": "CX22",
+            "cores": 2,
+            "memory": 4.0,
+            "disk": 40,
+            "architecture": "x86"
+        },
+        "location": {
+            "id": 1,
+            "name": "fsn1",
+            "description": "Falkenstein DC Park 1",
+            "country": "DE",
+            "city": "Falkenstein",
+            "latitude": 50.47612,
+            "longitude": 12.370071,
+            "network_zone": "eu-central"
+        },
+        "image": {
+            "id": 161547269,
+            "type": "system",
+            "status": "available",
+            "name": "ubuntu-24.04",
+            "os_flavor": "ubuntu",
+            "os_version": "24.04",
+            "architecture": "x86"
+        },
+        "labels": { "coresmith": "coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d", "managed-by": "coresmith" },
+        "locked": false,
+        "rescue_enabled": false,
+        "primary_disk_size": 40,
+        "protection": { "delete": false, "rebuild": false },
+        "volumes": [],
+        "load_balancers": [],
+        "placement_group": null,
+        "included_traffic": 21990232555520,
+        "outgoing_traffic": 0,
+        "ingoing_traffic": 0,
+        "backup_window": null,
+        "iso": null
+    }
+}

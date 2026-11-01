@@ -15,6 +15,8 @@ use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Deployment\DeployGuard;
 use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\DeploymentPresenter;
@@ -30,13 +32,18 @@ final class DeploymentController extends Controller
 {
     public const ORIGINS = ['fleet', 'deployments', 'app', 'releases', 'setup'];
 
-    public function deploy(Request $request, Server $server, Application $application): RedirectResponse
+    public function deploy(Request $request, Server $server, Application $application, DeployGuard $guard): RedirectResponse
     {
         $this->authorize('deploy', $application);
 
         abort_unless($application->server_id === $server->id, 404);
 
         $from = in_array($request->input('from'), self::ORIGINS, true) ? $request->input('from') : 'fleet';
+        $refusal = $guard->refusal($application);
+
+        if ($refusal !== null) {
+            return back()->with('error', $refusal);
+        }
 
         $deployment = Deployment::create([
             'application_id' => $application->id,
@@ -91,6 +98,12 @@ final class DeploymentController extends Controller
 
         if ($application->deployments()->whereIn('status', [DeploymentStatus::Pending->value, DeploymentStatus::Running->value])->exists()) {
             return back()->with('error', "A deploy is running for {$application->name}. Cancel it or let it finish, then roll back.");
+        }
+
+        $refusal = CloudTask::refusal($server, 'Roll back');
+
+        if ($refusal !== null) {
+            return back()->with('error', $refusal);
         }
 
         RollbackApplication::dispatch($application, $validated['release'] ?? null);

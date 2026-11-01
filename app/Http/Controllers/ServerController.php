@@ -21,12 +21,15 @@ use App\Jobs\TestSSHConnection;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\Teams\TeamContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -37,15 +40,25 @@ final class ServerController extends Controller
 {
     public const ENVIRONMENTS = ['Production', 'Staging', 'Development'];
 
-    public function create(Request $request): Response
+    public function create(Request $request, CloudPresenter $cloud, TeamContext $context): Response
     {
         $this->authorize('create', Server::class);
+
+        $team = $context->teamOrFail();
+        $requested = $request->query('account');
+        $requested = is_string($requested) ? $requested : null;
 
         return Inertia::render('servers/Create', [
             'teams' => $request->user()->teams()->get(['teams.id', 'teams.name'])
                 ->map(fn($team): array => ['id' => $team->id, 'name' => $team->name])->values(),
             'environments' => self::ENVIRONMENTS,
             'phases' => ServerPresenter::PROVISIONING_PHASES,
+            'cloud' => fn(): array => $cloud->choices($team, $request->user(), $requested),
+            'catalog' => Inertia::defer(function () use ($cloud, $team, $requested): ?array {
+                $account = $cloud->selectedAccount($team, $requested);
+
+                return $account === null ? null : $cloud->catalog($account);
+            }),
         ]);
     }
 
@@ -110,16 +123,28 @@ final class ServerController extends Controller
     {
         $this->authorize('delete', $server);
 
+        $label = $server->cloudProvider?->type->label();
+
+        if ($label !== null && CloudTask::running($server)) {
+            return back()->with('error', "Coresmith is still working on {$server->name} at {$label}. Wait for it to finish or fail, then detach it.");
+        }
+
         activity()->performedOn($server)->log('server_detached');
 
         $server->delete();
 
-        return to_route('dashboard')->with('success', "Detached. {$server->name} was removed from the panel. The VM is untouched.");
+        return to_route('dashboard')->with('success', match (true) {
+            $label === null => "Detached. {$server->name} was removed from the panel. The VM is untouched.",
+            $server->provider_server_id === null => "Removed. Nothing was created at {$label}.",
+            default => "Detached. {$server->name} keeps running at {$label}, and {$label} keeps billing for it.",
+        });
     }
 
     public function testConnection(Server $server): RedirectResponse
     {
         $this->authorize('update', $server);
+
+        abort_if($server->status === ServerStatus::Creating, 404);
 
         TestSSHConnection::dispatch($server);
 
@@ -180,9 +205,7 @@ final class ServerController extends Controller
 
         abort_unless($server->status->isBeforeProvisioning(), 404);
 
-        $server->forceFill(['status' => ServerStatus::Provisioning])->save();
-
-        ProvisionServer::dispatch($server);
+        ProvisionServer::begin($server);
 
         return back()->with('success', 'Provisioning started. Every phase is logged, close this page and it keeps going.');
     }
@@ -223,6 +246,12 @@ final class ServerController extends Controller
     public function reboot(Server $server): RedirectResponse
     {
         $this->authorize('update', $server);
+
+        $refusal = CloudTask::refusal($server, 'Reboot');
+
+        if ($refusal !== null) {
+            return back()->with('error', $refusal);
+        }
 
         $busy = Deployment::query()
             ->whereIn('application_id', $server->applications()->select('id'))

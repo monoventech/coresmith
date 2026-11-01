@@ -17,6 +17,7 @@ use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Jobs\InstallRuntimes;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
@@ -27,13 +28,17 @@ use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
+use App\Services\Cloud\CloudCatalog;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use App\Services\Server\CertificateCheck;
+use App\Services\Server\ProvisioningLog;
 use App\Services\Server\ServerReachability;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Support\CloudCatalogs;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
@@ -91,6 +96,11 @@ final class E2ESeeder extends Seeder
         $this->team->members()->attach(User::factory()->create(['name' => 'Rowan Hale', 'email' => self::ROLE_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
 
         $this->bench = $this->server('bench-01', '198.51.100.40', ServerStatus::Active);
+
+        $hetzner = CloudProvider::factory()->for($this->team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'hetzner-e2e-never-sent']);
+        CloudCatalog::put($hetzner, CloudCatalogs::hetzner(), 30 * 24 * 3600);
+        $this->cloudServers($hetzner);
+        CloudProvider::factory()->linode()->for($this->team)->create(['name' => 'Linode', 'api_token' => 'linode-e2e-never-sent', 'token_failed_at' => now()->subDay()]);
 
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
@@ -157,6 +167,99 @@ final class E2ESeeder extends Seeder
         $this->auditFixtures();
 
         $this->otherTeams($tenant->owner, $password);
+    }
+
+    private function cloudServers(CloudProvider $hetzner): void
+    {
+        $creating = $this->cloudServer($hetzner, 'creating-server', '4720');
+        CloudTask::start($creating, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::advance($creating, 'boot');
+        ProvisioningLog::append($creating, 'creating creating-server at Hetzner Cloud, cx22 in fsn1 with Ubuntu 24.04');
+        ProvisioningLog::append($creating->fresh(), 'Hetzner Cloud accepted it as server 4720, waiting for it to boot');
+
+        $failed = $this->cloudServer($hetzner, 'failed-create', '4721', '203.0.113.121');
+        CloudTask::start($failed, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::advance($failed, 'ssh');
+        CloudTask::fail($failed, "failed-create is running at 203.0.113.121, but Coresmith couldn't sign in over SSH within 10 minutes. The last error was: SSH authentication failed for root@203.0.113.121. Try again to keep waiting, or destroy it and provision another.");
+
+        $refused = $this->cloudServer($hetzner, 'refused-create', null);
+        CloudTask::start($refused, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::fail($refused, 'Hetzner Cloud refused the request. Hetzner Cloud said: server type cx22 is not available in hel1. Remove this server and provision it again with another size or region.');
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            Server::factory()->fromProvider($hetzner)->create([
+                'name' => "destroy-{$code}",
+                'environment' => 'Production',
+                'ip_address' => '203.0.113.' . (140 + $index),
+                'status' => ServerStatus::Active,
+                'provider_server_id' => "48{$index}0",
+                'provider_monthly_cost' => '3.79',
+                'provider_currency' => 'EUR',
+                'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+                'host_key_fingerprint' => null,
+            ]);
+        }
+
+        $protected = Server::factory()->fromProvider($hetzner)->create([
+            'name' => 'destroy-failed',
+            'environment' => 'Production',
+            'ip_address' => '203.0.113.139',
+            'status' => ServerStatus::Active,
+            'provider_server_id' => '4799',
+            'provider_monthly_cost' => '3.79',
+            'provider_currency' => 'EUR',
+            'host_key_fingerprint' => null,
+        ]);
+        CloudTask::start($protected, CloudTask::DESTROY, 'delete');
+        CloudTask::fail($protected, "Hetzner Cloud refused the request. Hetzner Cloud said: server is protected. Try again once that's fixed, or delete it in the Hetzner Cloud console and then detach it here.");
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            Server::factory()->fromProvider($hetzner)->create([
+                'name' => "resize-{$code}",
+                'environment' => 'Production',
+                'ip_address' => '203.0.113.' . (150 + $index),
+                'status' => ServerStatus::Active,
+                'provider_server_id' => "49{$index}0",
+                'provider_monthly_cost' => '3.79',
+                'provider_currency' => 'EUR',
+                'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+                'host_key_fingerprint' => null,
+            ]);
+        }
+
+        $stuck = Server::factory()->fromProvider($hetzner)->create([
+            'name' => 'resize-failed',
+            'environment' => 'Production',
+            'ip_address' => '203.0.113.159',
+            'status' => ServerStatus::Active,
+            'provider_server_id' => '4998',
+            'provider_monthly_cost' => '3.79',
+            'provider_currency' => 'EUR',
+            'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+            'host_key_fingerprint' => null,
+        ]);
+        CloudTask::start($stuck, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+        CloudTask::fail($stuck, 'Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. resize-failed was started again on cx22.');
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $retry = $this->cloudServer($hetzner, "retry-{$code}", '47' . (30 + $index));
+            CloudTask::start($retry, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+            CloudTask::advance($retry, 'boot');
+            CloudTask::fail($retry, "Hetzner Cloud didn't finish starting retry-{$code} within 10 minutes. It may still be starting: try again to keep waiting, or destroy it.");
+        }
+    }
+
+    private function cloudServer(CloudProvider $account, string $name, ?string $instance, ?string $ip = null): Server
+    {
+        return Server::factory()->fromProvider($account)->creating()->create([
+            'name' => $name,
+            'environment' => 'Production',
+            'ip_address' => $ip,
+            'provider_server_id' => $instance,
+            'provider_monthly_cost' => '3.79',
+            'provider_currency' => 'EUR',
+            'host_key_fingerprint' => null,
+        ]);
     }
 
     private function auditFixtures(): void
@@ -330,6 +433,7 @@ final class E2ESeeder extends Seeder
             $lab = Team::factory()->create(['name' => 'Lab ' . $code, 'slug' => 'lab-' . $code, 'owner_id' => $owner->id]);
             $lab->members()->attach($owner, ['role' => TeamRole::Owner->value]);
             $this->registeredApp($lab, $owner, "lab-{$code}", (string) (1041300 + $index));
+            CloudProvider::factory()->vultr()->for($lab)->create(['name' => 'Spare', 'api_token' => "vultr-{$code}-never-sent"]);
         }
 
         $paused = Team::factory()->create(['name' => 'Paused Works', 'slug' => 'paused', 'owner_id' => $owner->id]);
@@ -352,6 +456,18 @@ final class E2ESeeder extends Seeder
             'installation_id' => null,
             'scopes' => SourceProviderType::GitLab->scopes(),
         ]);
+
+        $foundry = Team::factory()->create(['name' => 'Foundry', 'slug' => 'foundry', 'owner_id' => $owner->id]);
+        $foundry->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($foundry)->create(['name' => 'foundry-works', 'access_token' => 'ghs_foundry_never_sent']);
+
+        $kiln = Team::factory()->create(['name' => 'Kiln', 'slug' => 'kiln', 'owner_id' => $owner->id]);
+        $kiln->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($kiln)->create(['name' => 'kiln-works', 'access_token' => 'ghs_kiln_never_sent']);
+        $kilnCloud = CloudProvider::factory()->for($kiln)->create(['name' => 'Hetzner Cloud', 'api_token' => 'kiln-e2e-never-sent']);
+        $kiln01 = Server::factory()->fromProvider($kilnCloud)->creating()->create(['name' => 'kiln-01', 'environment' => 'Production', 'host_key_fingerprint' => null]);
+        CloudTask::start($kiln01, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::advance($kiln01, 'ssh');
     }
 
     private function registeredApp(Team $team, User $owner, string $login, string $appId): GitHubApp

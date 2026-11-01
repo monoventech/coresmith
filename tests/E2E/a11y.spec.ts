@@ -3,6 +3,7 @@ import {
     asGuest,
     backToMonoven,
     blockingViolations,
+    dialog,
     expect,
     gotoApplication,
     gotoDatabase,
@@ -161,10 +162,51 @@ const PAGES: [string, Visit][] = [
     ],
     ['Database', (page) => gotoDatabase(page, 'forge-01', 'atlas_production')],
     ['Database on an existing server', (page) => gotoDatabase(page, 'forge-01', 'legacy_reports')],
-    ['Provision a server', direct('/servers/create')],
+    [
+        'Provision a server',
+        async (page) => {
+            await page.goto('/servers/create')
+            await page.getByLabel('Region').waitFor()
+        }
+    ],
+    [
+        'Provision with a provider to connect',
+        async (page) => {
+            await page.goto('/servers/create')
+            await page.getByLabel('Provider').selectOption('connect:vultr')
+            await page.getByLabel('API token').waitFor()
+        }
+    ],
+    ['Server being created', (page) => gotoServer(page, 'creating-server')],
+    ['Server whose creation failed', (page) => gotoServer(page, 'failed-create')],
+    [
+        'Destroy dialog',
+        async (page) => {
+            await gotoServer(page, 'outpost-01')
+            await page.getByRole('button', { name: 'Destroy', exact: true }).click()
+            await dialog(page).waitFor()
+        }
+    ],
+    [
+        'Resize dialog',
+        async (page) => {
+            await gotoServer(page, 'outpost-01')
+            await page.getByRole('button', { name: 'Resize', exact: true }).click()
+            await dialog(page).getByLabel('New size').waitFor()
+        }
+    ],
+    ['Server whose resize failed', (page) => gotoServer(page, 'resize-failed')],
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],
+    [
+        'Add a provider dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Add a provider' }).click()
+            await dialog(page).waitFor()
+        }
+    ],
     ['Git settings', direct('/settings/git')],
     ['Notification settings', direct('/settings/notifications')],
     ['API tokens', direct('/settings/api-tokens')],
@@ -187,6 +229,7 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Git settings before GitHub is connected', direct('/acme/settings/git')],
     ['Git settings with a suspended GitHub installation', direct('/paused/settings/git')],
     ['Setup before GitHub is connected', direct('/acme/setup')],
+    ['Setup with a provider to connect', direct('/foundry/setup?step=1')],
     [
         'Setup for a member before GitHub is connected',
         async (page) => {

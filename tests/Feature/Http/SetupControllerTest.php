@@ -6,8 +6,10 @@ use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Http\Controllers\ServerController;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\Server;
@@ -15,11 +17,15 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\User;
+use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Git\GitHub\GitHubAppRegistrar;
 use App\Services\Git\GitHub\ManifestBuilder;
 use App\Services\Network\AddressResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Tests\Support\CloudFixtures;
+use Tests\Support\FakeCloudApiFactory;
 
 function setupOwner(Team $team, TeamRole $role = TeamRole::Owner): User
 {
@@ -337,6 +343,66 @@ test('a repository that cannot be shortened is shown as given', function () {
     $this->actingAs(setupOwner($team))
         ->get(route('setup.show'))
         ->assertInertia(fn($page) => $page->where('application.repository', 'https://git.example.com/solo'));
+});
+
+test("the first server step offers the team's provider accounts and loads the catalog after it renders", function () {
+    $team = Team::factory()->create();
+    SourceProvider::factory()->for($team)->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $fake = new FakeCloudApiFactory;
+    CloudFixtures::catalogue($fake->api);
+    app()->instance(CloudApiFactory::class, $fake);
+
+    $owner = setupOwner($team);
+    $second = CloudProvider::factory()->digitalocean()->for($team)->create(['created_at' => now()->addMinute()]);
+
+    $this->actingAs($owner)
+        ->get(route('setup.show', ['step' => 1]))
+        ->assertInertia(fn($page) => $page
+            ->where('step', 1)
+            ->where('cloud.selected', 'account:' . $account->id)
+            ->where('environments', ServerController::ENVIRONMENTS)
+            ->missing('catalog')
+            ->loadDeferredProps(fn($reload) => $reload->has('catalog.sizes', 2)));
+
+    $this->actingAs($owner)
+        ->get(route('setup.show', ['step' => 1, 'account' => $second->id]))
+        ->assertInertia(fn($page) => $page
+            ->where('cloud.selected', 'account:' . $second->id)
+            ->loadDeferredProps(fn($reload) => $reload->where('catalog.provider', 'DigitalOcean')));
+});
+
+test('only the first server step asks a provider for its catalog', function () {
+    $team = Team::factory()->create();
+    SourceProvider::factory()->for($team)->create();
+    CloudProvider::factory()->for($team)->create();
+    $fake = new FakeCloudApiFactory;
+    CloudFixtures::catalogue($fake->api);
+    app()->instance(CloudApiFactory::class, $fake);
+
+    $response = $this->actingAs(setupOwner($team))
+        ->get(route('setup.show', ['step' => 0]))
+        ->assertInertia(fn($page) => $page->where('cloud', null)->missing('catalog'));
+
+    expect(collect($response->viewData('page')['deferredProps'] ?? [])->flatten()->all())->not->toContain('catalog')
+        ->and($fake->api->calls())->toBe([]);
+});
+
+test('a server being created is shown on the provisioning step with its creation steps', function () {
+    $team = Team::factory()->create();
+    SourceProvider::factory()->for($team)->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $server = Server::factory()->fromProvider($account)->creating()->create();
+    CloudTask::start($server, CloudTask::CREATE, 'create');
+    CloudTask::advance($server, 'ssh');
+
+    $this->actingAs(setupOwner($team))
+        ->get(route('setup.show', ['step' => 2]))
+        ->assertInertia(fn($page) => $page
+            ->where('step', 2)
+            ->where('server.cloud.provider', 'Hetzner Cloud')
+            ->where('server.cloud.task.position', 3)
+            ->where('server.cloud.task.step', 'ssh'));
 });
 
 test('a finished setup says so and stays on the last step', function () {

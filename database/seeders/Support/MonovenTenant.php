@@ -15,6 +15,7 @@ use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
@@ -24,6 +25,7 @@ use App\Models\SourceProvider;
 use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\CloudCatalog;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\ResolvedRuntime;
@@ -49,6 +51,8 @@ final class MonovenTenant
     public User $member;
 
     public SourceProvider $github;
+
+    public CloudProvider $cloud;
 
     public function __construct(
         private readonly int $metricsAhead = 0,
@@ -77,6 +81,7 @@ final class MonovenTenant
 
         $this->sshKeys();
         $this->sourceProvider();
+        $this->cloudProvider();
         $this->servers();
         $this->applications();
         $this->databases();
@@ -140,6 +145,18 @@ final class MonovenTenant
         ]);
     }
 
+    private function cloudProvider(): void
+    {
+        $this->cloud = CloudProvider::factory()->digitalocean()->for($this->team)->create([
+            'name' => 'DigitalOcean',
+            'account_label' => 'ops@monoven.io',
+            'api_token' => 'do-demo-never-sent',
+            'verified_at' => now(),
+        ]);
+
+        CloudCatalog::put($this->cloud, CloudCatalogs::digitalocean(), 30 * 24 * 3600);
+    }
+
     private function servers(): void
     {
         $specs = [
@@ -166,6 +183,14 @@ final class MonovenTenant
                 'last_connected_at' => now(),
                 'booted_at' => now()->subDays($uptime)->subHours(3),
                 'created_at' => now()->subDays(400 - $order++),
+                ...($name === 'outpost-01' ? [
+                    'cloud_provider_id' => $this->cloud->id,
+                    'provider_server_id' => '512190',
+                    'provider_size' => 's-1vcpu-2gb',
+                    'provider_image' => 'ubuntu-24-04-x64',
+                    'provider_monthly_cost' => '12.00',
+                    'provider_currency' => 'USD',
+                ] : []),
             ]);
 
             $this->metrics($server, $cpu, $mem, $disk);

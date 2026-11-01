@@ -1,0 +1,8 @@
+{
+    "ssh_key": {
+        "id": "d8a4c1f3-52b6-4e7d-9a30-6c1b8e2f4d57",
+        "date_created": "2026-10-18T12:00:00+00:00",
+        "name": "coresmith-outpost-02-b1n0d",
+        "ssh_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBoM6eEh29z9GyfaiV/OH8xLRwdtOyw0trj85BenDW4 coresmith-test"
+    }
+}

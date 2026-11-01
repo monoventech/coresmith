@@ -12,7 +12,7 @@ use App\Enums\TeamRole;
 
 test('server status covers every spec value', function () {
     expect(array_column(ServerStatus::cases(), 'value'))
-        ->toBe(['pending', 'provisioning', 'active', 'failed', 'disconnected']);
+        ->toBe(['pending', 'provisioning', 'active', 'failed', 'disconnected', 'creating']);
 });
 
 test('application status covers every spec value', function () {

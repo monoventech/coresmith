@@ -59,11 +59,43 @@ test.describe('setup', () => {
         }
     })
 
-    test('provider provisioning is shown as not available yet, with the reason', async ({ page }) => {
-        await page.goto('/setup?step=1')
+})
 
-        await expect(page.getByTestId('setup-step')).toContainText('Arrives with provider integrations.')
-        await expect(page.getByTestId('setup-step')).toContainText('Use an existing VM')
+test.describe('the first server in setup', () => {
+    test.afterEach(async ({ page }) => {
+        await backToMonoven(page)
+    })
+
+    test('the first server can come from a provider or an existing vm', async ({ page }) => {
+        await page.goto('/foundry/setup?step=1')
+
+        await expect(page.getByRole('button', { name: /^Provision through a provider/ })).toHaveAttribute('aria-pressed', 'true')
+        await expect(page.getByLabel('Provider')).toBeVisible()
+        await expect(page.getByLabel('API token')).toBeVisible()
+
+        await page.getByRole('button', { name: /^Use an existing VM/ }).click()
+
+        await expect(page.getByLabel('IP address')).toBeVisible()
+        await expect(page.getByLabel('API token')).toHaveCount(0)
+    })
+
+    test('connecting a provider from setup checks the token first', async ({ page }) => {
+        await page.goto('/foundry/setup?step=1')
+        await page.getByLabel('Provider').selectOption('connect:hetzner')
+        await page.getByLabel('API token').fill('not-a-real-token')
+        await page.getByRole('button', { name: 'Continue' }).click()
+
+        await expect(page.getByTestId('setup-step')).toContainText("Coresmith couldn't reach Hetzner Cloud")
+    })
+
+    test('a server being created is followed on the provisioning step', async ({ page }) => {
+        await page.goto('/kiln/setup?step=2')
+
+        const step = page.getByTestId('setup-step')
+
+        await expect(step).toContainText('Creating kiln-01 at Hetzner Cloud')
+        await expect(step).toContainText('Step 3 of 4')
+        await expect(step).toContainText('Provisioning starts by itself once Coresmith can sign in.')
     })
 })
 

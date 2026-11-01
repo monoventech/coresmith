@@ -94,6 +94,12 @@ test('stateless installation tokens and fine-grained tokens are redacted', funct
     'a fine-grained personal token' => ['using github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyzAB now', 'using [REDACTED_GITHUB_TOKEN] now'],
 ]);
 
+test('a digitalocean personal access token is redacted', function () {
+    $token = 'dop_v1_' . str_repeat('0a1b2c3d', 8);
+
+    expect((new LogSanitizer)->sanitize("token {$token} rejected"))->toBe('token [REDACTED_DIGITALOCEAN_TOKEN] rejected');
+});
+
 test('a bearer token is redacted', function () {
     expect((new LogSanitizer)->sanitize('Authorization: Bearer abc.def.ghi'))
         ->toContain('Bearer [REDACTED]')

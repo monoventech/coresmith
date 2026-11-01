@@ -262,6 +262,7 @@ test.describe('provisioning a server', () => {
         const name = `e2e-${Date.now().toString(36)}`
 
         await page.goto('/servers/create')
+        await page.getByLabel('Provider').selectOption('manual')
         await page.getByLabel('Server name').fill(name)
         await page.getByLabel('IP address').fill('198.51.100.7')
         await page.getByLabel('Region').fill('lon1')
@@ -272,8 +273,15 @@ test.describe('provisioning a server', () => {
         await expect(page.getByTestId('public-key')).toContainText(/^ssh-ed25519 /)
     })
 
+    test("the form starts on the team's first provider account", async ({ page }) => {
+        await page.goto('/servers/create')
+
+        await expect(page.getByLabel('Provider')).toHaveValue(/^account:/)
+    })
+
     test('an address that is not an ip is refused next to the field', async ({ page }) => {
         await page.goto('/servers/create')
+        await page.getByLabel('Provider').selectOption('manual')
         await page.getByLabel('Server name').fill('bad-address')
         await page.getByLabel('IP address').fill('not-an-ip')
         await page.getByRole('button', { name: 'Add server' }).click()

@@ -94,4 +94,20 @@ return [
             ],
         ],
     ],
+
+    'cloud' => [
+        'catalog_seconds' => 600,
+        'min_memory_mb' => 1024,
+        'min_disk_gb' => 10,
+        'images' => [
+            ['family' => 'ubuntu', 'version' => '24.04', 'label' => 'Ubuntu 24.04'],
+            ['family' => 'ubuntu', 'version' => '22.04', 'label' => 'Ubuntu 22.04'],
+            ['family' => 'debian', 'version' => '12', 'label' => 'Debian 12'],
+        ],
+        'step_seconds' => [
+            'create' => 900, 'boot' => 600, 'ssh' => 600, 'settle' => 900, 'delete' => 600,
+            'power_off' => 300, 'wait_off' => 300, 'change' => 300, 'wait_change' => 1200,
+            'power_on' => 300, 'wait_on' => 300, 'reconnect' => 600, 'recover' => 300,
+        ],
+    ],
 ];

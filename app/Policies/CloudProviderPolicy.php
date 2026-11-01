@@ -26,7 +26,7 @@ final class CloudProviderPolicy
 
     public function create(User $user): bool
     {
-        return $user->teams()->exists();
+        return $user->hasAbilityInAnyTeam(Ability::ManageProviders);
     }
 
     public function update(User $user, CloudProvider $cloudProvider): bool

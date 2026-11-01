@@ -1,0 +1,12 @@
+{
+    "action": {
+        "id": 15,
+        "command": "reboot_server",
+        "status": "running",
+        "progress": 0,
+        "started": "2026-10-18T12:05:00+00:00",
+        "finished": null,
+        "resources": [{ "id": 4711, "type": "server" }],
+        "error": null
+    }
+}

@@ -29,6 +29,8 @@ final class ServerPresenter
         ['name' => 'Verification', 'desc' => 'admin API reachable from localhost only'],
     ];
 
+    public function __construct(private readonly CloudPresenter $cloud) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -63,6 +65,7 @@ final class ServerPresenter
                 'changed_at' => $server->host_key_changed_at?->toIso8601String(),
             ],
             'provisioning' => $server->status === ServerStatus::Active ? null : $this->provisioning($server),
+            'cloud' => $this->cloud->server($server, $user),
             'tabs' => [
                 'apps' => route('servers.show', $server),
                 'databases' => route('servers.databases.index', $server),
@@ -139,7 +142,7 @@ final class ServerPresenter
             'failed_phase' => $failed ? $completed + 1 : null,
             'log' => $server->provisioning_log,
             'public_key' => $server->ssh_public_key,
-            'ssh' => $server->ssh_user . '@' . $server->ip_address . ':' . $server->ssh_port,
+            'ssh' => $server->sshAddress(),
             'ssh_user' => $server->ssh_user,
             'audit' => $this->audit($server),
         ];

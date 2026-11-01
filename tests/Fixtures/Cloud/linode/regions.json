@@ -1,0 +1,77 @@
+{
+    "data": [
+        {
+            "id": "eu-central",
+            "label": "Frankfurt, DE",
+            "country": "de",
+            "capabilities": [
+                "Linodes",
+                "Backups",
+                "NodeBalancers",
+                "Block Storage",
+                "Object Storage",
+                "Kubernetes",
+                "Cloud Firewall",
+                "Vlans",
+                "VPCs",
+                "Metadata",
+                "Premium Plans"
+            ],
+            "status": "ok",
+            "resolvers": { "ipv4": "198.51.100.5, 198.51.100.6", "ipv6": "2001:db8::5, 2001:db8::6" },
+            "site_type": "core"
+        },
+        {
+            "id": "us-east",
+            "label": "Newark, NJ",
+            "country": "us",
+            "capabilities": [
+                "Linodes",
+                "Backups",
+                "NodeBalancers",
+                "Block Storage",
+                "Object Storage",
+                "Kubernetes",
+                "Cloud Firewall",
+                "Vlans",
+                "VPCs",
+                "Metadata",
+                "Premium Plans"
+            ],
+            "status": "ok",
+            "resolvers": { "ipv4": "198.51.100.7, 198.51.100.8", "ipv6": "2001:db8::7, 2001:db8::8" },
+            "site_type": "core"
+        },
+        {
+            "id": "id-cgk",
+            "label": "Jakarta, ID",
+            "country": "id",
+            "capabilities": [
+                "Linodes",
+                "Backups",
+                "NodeBalancers",
+                "Block Storage",
+                "Kubernetes",
+                "Cloud Firewall",
+                "Vlans",
+                "VPCs",
+                "Metadata"
+            ],
+            "status": "ok",
+            "resolvers": { "ipv4": "198.51.100.9, 198.51.100.10", "ipv6": "2001:db8::9, 2001:db8::a" },
+            "site_type": "core"
+        },
+        {
+            "id": "us-den-edge-1",
+            "label": "Denver, CO",
+            "country": "us",
+            "capabilities": ["Linodes", "Cloud Firewall", "Metadata"],
+            "status": "ok",
+            "resolvers": { "ipv4": "198.51.100.11, 198.51.100.12", "ipv6": "2001:db8::b, 2001:db8::c" },
+            "site_type": "distributed"
+        }
+    ],
+    "page": 1,
+    "pages": 1,
+    "results": 4
+}

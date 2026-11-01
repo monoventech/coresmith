@@ -1,6 +1,7 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import CloudProvidersCard from '@/components/settings/CloudProvidersCard.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
     import type { SingleSignOn } from '@/components/settings/SingleSignOnCard.svelte'
     import SingleSignOnCard from '@/components/settings/SingleSignOnCard.svelte'
@@ -11,6 +12,7 @@
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
+    import type { CloudAccounts } from '@/lib/cloud'
     import { getInitials } from '@/lib/initials'
     import { Form, router } from '@inertiajs/svelte'
     import { X } from '@lucide/svelte'
@@ -44,7 +46,8 @@
         members = [],
         roles = [],
         can,
-        sso
+        sso,
+        cloud
     }: {
         team: { id: string; name: string; slug: string }
         address: Address
@@ -52,6 +55,7 @@
         roles: { value: string; label: string }[]
         can: { update: boolean; manageMembers: boolean; grantOwner: boolean }
         sso: SingleSignOn
+        cloud: CloudAccounts
     } = $props()
 
     let inviting = $state(false)
@@ -155,6 +159,10 @@
 
 <div class="mt-4">
     <SingleSignOnCard {sso} />
+</div>
+
+<div class="mt-4">
+    <CloudProvidersCard {cloud} />
 </div>
 
 <Dialog.Root bind:open={inviting}>

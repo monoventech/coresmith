@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\DeploymentStatus;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
@@ -57,6 +58,14 @@ test('server events are described in plain words', function (string $description
     'host key changed' => ['ssh_host_key_changed', [], 'web-1 presented a different host key, operations paused'],
     'apparmor' => ['apparmor_profiles_in_complain_mode', ['profiles_in_complain_mode' => 3], 'AppArmor has 3 profiles in complain mode on web-1'],
     'audited' => ['server_audited', ['blockers' => 1, 'warnings' => 2], 'Pre-provisioning check on web-1, 1 blocking, 2 to review'],
+    'creation started' => ['server_creation_started', ['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1'], 'web-1 is being created at Hetzner Cloud, cx22 in fsn1'],
+    'created at the provider' => ['server_created_at_provider', ['provider' => 'Hetzner Cloud', 'seconds' => 48], 'web-1 created at Hetzner Cloud in 0m 48s, checking it before provisioning'],
+    'created without a duration' => ['server_created_at_provider', ['provider' => 'Hetzner Cloud', 'seconds' => null], 'web-1 created at Hetzner Cloud, checking it before provisioning'],
+    'creation failed' => ['server_creation_failed', ['provider' => 'Hetzner Cloud', 'step' => 'ssh', 'reason' => 'SSH authentication failed.'], 'Creating web-1 at Hetzner Cloud failed'],
+    'destroy failed' => ['server_destroy_failed', ['provider' => 'Hetzner Cloud', 'reason' => 'Hetzner Cloud refused the request.'], 'Destroying web-1 at Hetzner Cloud failed'],
+    'resized' => ['server_resized', ['from' => 'cx22', 'to' => 'cx32', 'provider' => 'Hetzner Cloud'], 'web-1 resized from cx22 to cx32'],
+    'resize failed' => ['server_resize_failed', ['from' => 'cx22', 'to' => 'cx32', 'reason' => 'Hetzner Cloud refused the request.'], 'Resizing web-1 failed'],
+    'reboot failed' => ['server_reboot_failed', ['reason' => 'Hetzner Cloud refused the request.'], 'web-1 did not reboot. Hetzner Cloud refused the request.'],
 ]);
 
 test('application events are described in plain words and link to the application', function (string $description, array $properties, string $sentence) {
@@ -266,4 +275,53 @@ test('a server feed shows up to twenty five entries by default', function () {
     Collection::times(30, fn() => feedLog($server, 'server_rebooted'));
 
     expect((new ActivityFeed)->forServer($server))->toHaveCount(25);
+});
+
+test('cloud account events are described and link to the team page', function (string $description, string $sentence) {
+    [$team] = feedFixture();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+
+    feedLog($account, $description, ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
+
+    $row = (new ActivityFeed)->forTeam($team)[0];
+
+    expect(feedSentence($row))->toBe($sentence)
+        ->and($row['href'])->toBe(route('teams.index'))
+        ->and(array_column(array_values(array_filter($row['parts'], fn(array $part): bool => $part['mono'])), 'text'))->toBe(['Hetzner production']);
+})->with([
+    'connected' => ['cloud_provider_connected', 'Hetzner Cloud connected as Hetzner production'],
+    'token replaced' => ['cloud_provider_token_replaced', 'Token replaced for Hetzner production'],
+    'removed' => ['cloud_provider_removed', 'Hetzner Cloud account Hetzner production removed'],
+]);
+
+test("a removed account keeps its history, and another team's accounts never show", function () {
+    [$team] = feedFixture();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+    $theirs = CloudProvider::factory()->create(['name' => 'Their Hetzner']);
+
+    feedLog($account, 'cloud_provider_removed', ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
+    feedLog($theirs, 'cloud_provider_connected', ['provider' => 'Hetzner Cloud', 'name' => 'Their Hetzner']);
+    $account->delete();
+
+    expect(array_map(feedSentence(...), (new ActivityFeed)->forTeam($team)))->toBe(['Hetzner Cloud account Hetzner production removed']);
+});
+
+test('account events stay off a server feed', function () {
+    [$team, $server] = feedFixture();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+
+    feedLog($account, 'cloud_provider_connected', ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
+
+    expect((new ActivityFeed)->forServer($server))->toBe([]);
+});
+
+test('a destroyed server says its billing stopped and links nowhere', function () {
+    [$team, $server] = feedFixture();
+    feedLog($server, 'server_destroyed', ['provider' => 'Hetzner Cloud', 'size' => 'cx22']);
+    $server->delete();
+
+    $row = (new ActivityFeed)->forTeam($team)[0];
+
+    expect(feedSentence($row))->toBe('web-1 destroyed at Hetzner Cloud, billing for it stopped')
+        ->and($row['href'])->toBeNull();
 });

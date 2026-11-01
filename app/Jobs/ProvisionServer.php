@@ -22,6 +22,7 @@ use App\Services\Server\DirectoryStructure;
 use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\OsDetector;
 use App\Services\Server\PackageManagerFactory;
+use App\Services\Server\ProvisioningLog;
 use App\Services\Server\ProvisioningVerifier;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -45,6 +46,23 @@ final class ProvisionServer implements ShouldQueue
         private readonly bool $fromScratch = false,
     ) {
         $this->onQueue('provisioning');
+    }
+
+    public static function begin(Server $server): void
+    {
+        $waiting = $server->status;
+
+        if (!$waiting->isBeforeProvisioning() || !self::move($server, $waiting, ServerStatus::Provisioning)) {
+            return;
+        }
+
+        try {
+            self::dispatch($server);
+        } catch (Throwable $e) {
+            self::move($server, ServerStatus::Provisioning, $waiting);
+
+            throw $e;
+        }
     }
 
     public function handle(SSHConnectionManager $connections, OsDetector $detector): void
@@ -172,9 +190,18 @@ final class ProvisionServer implements ShouldQueue
 
     private function log(string $line, bool $stamped = true): void
     {
-        $this->server->forceFill([
-            'provisioning_log' => trim((string) $this->server->provisioning_log . "\n" . ($stamped ? '[' . now()->format('H:i:s') . '] ' : '') . $line),
-        ])->save();
+        ProvisioningLog::append($this->server, $line, $stamped);
+    }
+
+    private static function move(Server $server, ServerStatus $from, ServerStatus $to): bool
+    {
+        $moved = Server::query()->whereKey($server->getKey())->where('status', $from->value)->update(['status' => $to->value]) === 1;
+
+        if ($moved) {
+            $server->forceFill(['status' => $to])->syncOriginalAttribute('status');
+        }
+
+        return $moved;
     }
 
     private function tail(string $output): string

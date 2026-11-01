@@ -1,0 +1,30 @@
+{
+    "id": 123456,
+    "label": "outpost-02",
+    "group": "",
+    "status": "provisioning",
+    "created": "2026-10-18T12:00:00",
+    "updated": "2026-10-18T12:00:00",
+    "type": "g6-standard-1",
+    "ipv4": ["192.168.128.10", "203.0.113.43"],
+    "ipv6": "2001:db8::f03c:93ff:fe24:3a2f/128",
+    "image": "linode/ubuntu24.04",
+    "region": "eu-central",
+    "specs": { "disk": 51200, "memory": 2048, "vcpus": 1, "gpus": 0, "transfer": 2000 },
+    "alerts": { "cpu": 90, "io": 10000, "network_in": 10, "network_out": 10, "transfer_quota": 80 },
+    "backups": {
+        "enabled": false,
+        "available": false,
+        "schedule": { "day": null, "window": null },
+        "last_successful": null
+    },
+    "hypervisor": "kvm",
+    "watchdog_enabled": true,
+    "tags": ["coresmith", "coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d"],
+    "host_uuid": "3a3ddd59d9a78bb8de041391075df44de62bfec8",
+    "has_user_data": false,
+    "placement_group": null,
+    "disk_encryption": "disabled",
+    "lke_cluster_id": null,
+    "capabilities": []
+}

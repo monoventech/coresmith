@@ -11,6 +11,7 @@ namespace App\Services\Panel;
 use App\Enums\DeploymentStatus;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
@@ -33,8 +34,9 @@ final class ActivityFeed
         $servers = Server::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
         $applications = Application::withTrashed()->where('team_id', $team->getKey())->with(['server' => fn($query) => $query->withTrashed()])->get()->keyBy('id');
         $databases = ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
+        $accounts = CloudProvider::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
 
-        return $this->merge($servers, $applications, $databases, $limit);
+        return $this->merge($servers, $applications, $databases, $accounts, $limit);
     }
 
     /**
@@ -45,25 +47,27 @@ final class ActivityFeed
         $applications = Application::withTrashed()->where('server_id', $server->getKey())->with('server')->get()->keyBy('id');
         $databases = ManagedDatabase::withTrashed()->where('server_id', $server->getKey())->get()->keyBy('id');
 
-        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, $limit);
+        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit);
     }
 
     /**
      * @param  Collection<string, Server>  $servers
      * @param  Collection<string, Application>  $applications
      * @param  Collection<string, ManagedDatabase>  $databases
+     * @param  Collection<string, CloudProvider>  $accounts
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    private function merge(Collection $servers, Collection $applications, Collection $databases, int $limit): array
+    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit): array
     {
         $rows = [];
 
         $activities = Activity::query()
             ->whereNotIn('description', self::QUIET)
-            ->where(function ($query) use ($servers, $applications, $databases): void {
+            ->where(function ($query) use ($servers, $applications, $databases, $accounts): void {
                 $query->where(fn($inner) => $inner->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', $servers->keys()))
                     ->orWhere(fn($inner) => $inner->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications->keys()))
-                    ->orWhere(fn($inner) => $inner->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', $databases->keys()));
+                    ->orWhere(fn($inner) => $inner->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', $databases->keys()))
+                    ->orWhere(fn($inner) => $inner->where('subject_type', (new CloudProvider)->getMorphClass())->whereIn('subject_id', $accounts->keys()));
             })
             ->latest('created_at')
             ->latest('id')
@@ -71,7 +75,9 @@ final class ActivityFeed
             ->get();
 
         foreach ($activities as $activity) {
-            $row = $this->describe($activity, $servers, $applications, $databases);
+            $row = $activity->subject_type === (new CloudProvider)->getMorphClass()
+                ? $this->describeAccount($activity, $accounts->get($activity->subject_id))
+                : $this->describe($activity, $servers, $applications, $databases);
 
             if ($row !== null) {
                 $rows[] = $row;
@@ -97,6 +103,25 @@ final class ActivityFeed
         usort($rows, static fn(array $a, array $b): int => strcmp($b['at'], $a['at']));
 
         return array_slice($rows, 0, $limit);
+    }
+
+    /**
+     * @return array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}|null
+     */
+    private function describeAccount(Activity $activity, ?CloudProvider $account): ?array
+    {
+        $properties = $activity->properties?->toArray() ?? [];
+        $provider = (string) ($properties['provider'] ?? $account?->type->label());
+        $name = (string) ($properties['name'] ?? $account?->name);
+
+        $parts = match ($activity->description) {
+            'cloud_provider_connected' => [$this->text($provider . ' connected as '), $this->mono($name)],
+            'cloud_provider_token_replaced' => [$this->text('Token replaced for '), $this->mono($name)],
+            'cloud_provider_removed' => [$this->text($provider . ' account '), $this->mono($name), $this->text(' removed')],
+            default => null,
+        };
+
+        return $parts === null ? null : $this->row($activity->created_at, $parts, route('teams.index'));
     }
 
     /**
@@ -143,9 +168,17 @@ final class ActivityFeed
 
         $parts = match ($activity->description) {
             'server_added' => [$this->mono($server?->name), $this->text(' added to the panel, waiting for its key')],
+            'server_creation_started' => [$this->mono($server?->name), $this->text(' is being created at ' . ($properties['provider'] ?? 'its provider') . ', ' . ($properties['size'] ?? '') . ' in ' . ($properties['region'] ?? ''))],
+            'server_created_at_provider' => [$this->mono($server?->name), $this->text(' created at ' . ($properties['provider'] ?? 'its provider') . $this->took($properties['seconds'] ?? null) . ', checking it before provisioning')],
+            'server_creation_failed' => [$this->text('Creating '), $this->mono($server?->name), $this->text(' at ' . ($properties['provider'] ?? 'its provider') . ' failed')],
+            'server_destroyed' => [$this->mono($server?->name), $this->text(' destroyed at ' . ($properties['provider'] ?? 'its provider') . ', billing for it stopped')],
+            'server_destroy_failed' => [$this->text('Destroying '), $this->mono($server?->name), $this->text(' at ' . ($properties['provider'] ?? 'its provider') . ' failed')],
             'server_provisioned' => [$this->mono($server?->name), $this->text(' provisioned and hardened' . $this->took($properties['duration_seconds'] ?? null))],
             'server_renamed' => [$this->text('Server renamed to '), $this->mono($server?->name)],
             'server_rebooted' => [$this->mono($server?->name), $this->text(' rebooted, apps came back via systemd')],
+            'server_reboot_failed' => [$this->mono($server?->name), $this->text(' did not reboot. ' . ($properties['reason'] ?? 'The provider did not answer.'))],
+            'server_resized' => [$this->mono($server?->name), $this->text(' resized from ' . ($properties['from'] ?? 'its old size') . ' to ' . ($properties['to'] ?? 'a new size'))],
+            'server_resize_failed' => [$this->text('Resizing '), $this->mono($server?->name), $this->text(' failed')],
             'server_audited' => [$this->text('Pre-provisioning check on '), $this->mono($server?->name), $this->text(', ' . (int) ($properties['blockers'] ?? 0) . ' blocking, ' . (int) ($properties['warnings'] ?? 0) . ' to review')],
             'provisioning_retried' => [$this->text('Provisioning resumed on '), $this->mono($server?->name), $this->text(' from phase ' . (int) ($properties['phase'] ?? 1))],
             'provisioning_restarted' => [$this->text('Provisioning started over on '), $this->mono($server?->name)],

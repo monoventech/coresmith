@@ -1,0 +1,7 @@
+{
+    "error": {
+        "code": "resource_unavailable",
+        "message": "server type cx22 is not available in hel1",
+        "details": {}
+    }
+}

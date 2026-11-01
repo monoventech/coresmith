@@ -7,6 +7,7 @@ use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\IdleAppSleeper;
 use App\Jobs\PollRepositories;
+use App\Jobs\ResumeCloudTasks;
 use App\Models\Server;
 use Illuminate\Support\Facades\Schedule;
 
@@ -31,6 +32,8 @@ Schedule::job(new DetectStaleDeployments)->everyFiveMinutes()->name('coresmith:d
 Schedule::job(new CheckGitHubWebhooks)->everyFifteenMinutes()->name('coresmith:check-github-webhooks')->withoutOverlapping();
 
 Schedule::job(new PollRepositories)->everyMinute()->name('coresmith:poll-repositories')->withoutOverlapping();
+
+Schedule::job(new ResumeCloudTasks)->everyMinute()->name('coresmith:resume-cloud-tasks')->withoutOverlapping();
 
 Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresmith:prune-metrics')->withoutOverlapping();
 Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith:prune-activity')->withoutOverlapping();

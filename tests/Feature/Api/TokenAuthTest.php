@@ -8,10 +8,12 @@ use App\Jobs\DeployApplication;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\ApiToken;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
 use Illuminate\Support\Facades\Queue;
 
 function apiUser(Team $team, TeamRole $role): User
@@ -58,6 +60,19 @@ test('a token with the right ability lists only its own teams servers', function
 
     expect($response->json('data'))->toHaveCount(1)
         ->and($response->json('data.0.name'))->toBe('ours');
+});
+
+test('a server still being created is listed without an address', function () {
+    $team = Team::factory()->create();
+    $user = apiUser($team, TeamRole::Owner);
+    Server::factory()->for($team)->creating()->create();
+
+    $this->withHeaders(asToken(tokenFor($user, $team, [Ability::ViewServer])))
+        ->getJson('/api/v1/servers')
+        ->assertOk()
+        ->assertJsonStructure(['data' => ['*' => ['id', 'name', 'ip_address', 'status']]])
+        ->assertJsonPath('data.0.ip_address', null)
+        ->assertJsonPath('data.0.status', 'creating');
 });
 
 test('a token bound to one team cannot reach another teams server even when the user belongs to both', function () {
@@ -291,4 +306,27 @@ test('the page size cannot be inflated past the cap', function () {
         ->getJson('/api/v1/servers?per_page=5000')
         ->assertOk()
         ->assertJsonPath('meta.per_page', 100);
+});
+
+function apiBusy(Server $server, string $type = CloudTask::RESIZE): void
+{
+    $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
+    CloudTask::start($server, $type, $type === CloudTask::RESIZE ? 'power_off' : 'delete', $type === CloudTask::RESIZE ? ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true] : []);
+}
+
+test('an API deploy waits while the server is being resized', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $admin = apiUser($team, TeamRole::Admin);
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team)->create(['name' => 'outpost-02']))->create();
+    apiBusy($application->server);
+
+    $this->withHeaders(asToken(tokenFor($admin, $team, [Ability::DeployApplication])))
+        ->postJson('/api/v1/applications/' . $application->getKey() . '/deploy')
+        ->assertStatus(409)
+        ->assertExactJson(['message' => "Coresmith is resizing outpost-02 at Hetzner Cloud. Deploy once it's back."]);
+
+    expect(Deployment::query()->count())->toBe(0);
+
+    Queue::assertNothingPushed();
 });

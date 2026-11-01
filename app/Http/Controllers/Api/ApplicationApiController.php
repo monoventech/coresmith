@@ -12,6 +12,7 @@ use App\Jobs\DeployApplication;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Deployment\DeployGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -43,6 +44,12 @@ final class ApplicationApiController extends ApiController
     public function deploy(Request $request, Application $application): JsonResponse
     {
         abort_unless($application->team_id === $this->team($request)->getKey(), 404);
+
+        $refusal = app(DeployGuard::class)->refusal($application);
+
+        if ($refusal !== null) {
+            return response()->json(['message' => $refusal], 409);
+        }
 
         $deployment = Deployment::create([
             'application_id' => $application->id,

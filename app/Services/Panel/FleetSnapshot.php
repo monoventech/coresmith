@@ -16,6 +16,7 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Server\CertificateCheck;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -47,7 +48,7 @@ final class FleetSnapshot
     public function servers(): Collection
     {
         return $this->servers ??= $this->team->servers()
-            ->with(['applications' => fn($query) => $query->orderBy('name')])
+            ->with(['applications' => fn($query) => $query->orderBy('name'), 'cloudProvider'])
             ->oldest()
             ->orderBy('name')
             ->get();
@@ -95,11 +96,17 @@ final class FleetSnapshot
 
         return match (true) {
             $server->pending_host_key_fingerprint !== null => ['key' => 'host_key', 'label' => 'Host key changed', 'tone' => 'destructive'],
+            $server->status === ServerStatus::Creating && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'creation_failed', 'label' => 'Creation failed', 'tone' => 'destructive'],
+            $server->status === ServerStatus::Creating => ['key' => 'creating', 'label' => 'Creating', 'tone' => 'accent'],
+            CloudTask::running($server, CloudTask::DESTROY) => ['key' => 'destroying', 'label' => 'Destroying', 'tone' => 'default'],
+            CloudTask::of($server)?->type === CloudTask::DESTROY && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'destroy_failed', 'label' => 'Destroy failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Failed => ['key' => 'failed', 'label' => 'Provisioning failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Disconnected => ['key' => 'disconnected', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->unreachable_since !== null => ['key' => 'unreachable', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->status === ServerStatus::Provisioning => ['key' => 'provisioning', 'label' => 'Provisioning', 'tone' => 'accent'],
             $server->status === ServerStatus::Pending => ['key' => 'pending', 'label' => 'Not connected', 'tone' => 'default'],
+            CloudTask::running($server, CloudTask::RESIZE) => ['key' => 'resizing', 'label' => 'Resizing', 'tone' => 'accent'],
+            CloudTask::of($server)?->type === CloudTask::RESIZE && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'resize_failed', 'label' => 'Resize failed', 'tone' => 'warning'],
             $this->runningOn($server) !== null => ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
             $memory !== null && $memory >= self::MEMORY_WARNING => ['key' => 'memory', 'label' => 'Memory ' . (int) round($memory) . '%', 'tone' => 'warning'],
             $disk !== null && $disk >= self::DISK_WARNING => ['key' => 'warning', 'label' => 'Disk ' . (int) round($disk) . '%', 'tone' => 'warning'],
@@ -159,6 +166,8 @@ final class FleetSnapshot
                 'kind' => ApplicationPresenter::kind($application),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
             ])->values()->all(),
+            'cost' => Formats::monthly($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
+            'provider' => $server->cloudProvider?->type->label(),
         ];
     }
 
@@ -172,8 +181,10 @@ final class FleetSnapshot
         foreach ($this->servers() as $server) {
             $state = $this->state($server);
 
-            if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'unreachable'], true)) {
+            if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'unreachable', 'creation_failed', 'destroy_failed'], true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
+            } elseif ($state['key'] === 'resize_failed') {
+                $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'resize failed', 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'memory' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->memory_percent ?? 0) >= self::MEMORY_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'memory ' . (int) round((float) $this->latestMetric($server)?->memory_percent) . '%', 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'warning' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->disk_percent ?? 0) >= self::DISK_WARNING)) {

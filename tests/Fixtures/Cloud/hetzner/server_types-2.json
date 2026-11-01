@@ -1,0 +1,86 @@
+{
+    "server_types": [
+        {
+            "id": 23,
+            "name": "cpx21",
+            "description": "CPX 21",
+            "category": "regular_performance",
+            "cores": 3,
+            "memory": 4.0,
+            "disk": 80,
+            "storage_type": "local",
+            "cpu_type": "shared",
+            "architecture": "x86",
+            "deprecated": false,
+            "deprecation": null,
+            "prices": [
+                {
+                    "location": "fsn1",
+                    "price_hourly": { "net": "0.0121000000", "gross": "0.0143990000" },
+                    "price_monthly": { "net": "7.5500000000", "gross": "8.9845000000" },
+                    "included_traffic": 3298534883328,
+                    "price_per_tb_traffic": { "net": "1.0000000000", "gross": "1.1900000000" }
+                },
+                {
+                    "location": "ash",
+                    "price_hourly": { "net": "0.0136000000", "gross": "0.0161840000" },
+                    "price_monthly": { "net": "8.4900000000", "gross": "10.1031000000" },
+                    "included_traffic": 3298534883328,
+                    "price_per_tb_traffic": { "net": "1.0000000000", "gross": "1.1900000000" }
+                }
+            ],
+            "locations": [
+                { "id": 1, "name": "fsn1", "deprecation": null, "available": true, "recommended": true },
+                { "id": 4, "name": "ash", "deprecation": null, "available": true, "recommended": false }
+            ]
+        },
+        {
+            "id": 1,
+            "name": "cx11",
+            "description": "CX11",
+            "category": "cost_optimized",
+            "cores": 1,
+            "memory": 2.0,
+            "disk": 20,
+            "storage_type": "local",
+            "cpu_type": "shared",
+            "architecture": "x86",
+            "deprecated": true,
+            "deprecation": {
+                "announced": "2024-06-06T00:00:00+00:00",
+                "unavailable_after": "2024-09-06T00:00:00+00:00"
+            },
+            "prices": [
+                {
+                    "location": "fsn1",
+                    "price_hourly": { "net": "0.0050000000", "gross": "0.0059500000" },
+                    "price_monthly": { "net": "3.2900000000", "gross": "3.9151000000" },
+                    "included_traffic": 21990232555520,
+                    "price_per_tb_traffic": { "net": "1.0000000000", "gross": "1.1900000000" }
+                }
+            ],
+            "locations": [
+                {
+                    "id": 1,
+                    "name": "fsn1",
+                    "deprecation": {
+                        "announced": "2024-06-06T00:00:00+00:00",
+                        "unavailable_after": "2024-09-06T00:00:00+00:00"
+                    },
+                    "available": false,
+                    "recommended": false
+                }
+            ]
+        }
+    ],
+    "meta": {
+        "pagination": {
+            "page": 2,
+            "per_page": 2,
+            "previous_page": 1,
+            "next_page": null,
+            "last_page": 2,
+            "total_entries": 4
+        }
+    }
+}

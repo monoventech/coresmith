@@ -1,5 +1,8 @@
 <script lang="ts">
     import BackLink from '@/components/BackLink.svelte'
+    import CloudTaskBanner from '@/components/cloud/CloudTaskBanner.svelte'
+    import DestroyServerDialog from '@/components/cloud/DestroyServerDialog.svelte'
+    import ResizeServerDialog from '@/components/cloud/ResizeServerDialog.svelte'
     import HostKeyAlert from '@/components/HostKeyAlert.svelte'
     import PageTabs from '@/components/PageTabs.svelte'
     import Sparkline from '@/components/Sparkline.svelte'
@@ -17,6 +20,8 @@
 
     let renaming = $state(false)
     let detaching = $state(false)
+    let destroying = $state(false)
+    let resizing = $state(false)
     let name = $state('')
     let working = $state(false)
 
@@ -79,17 +84,31 @@
             >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">{server.meta}</p>
+        {#if server.cloud}
+            <p class="type-body-sm mt-0.5 text-muted-foreground" data-testid="provider-line">
+                {server.cloud.provider} · <span class="font-mono">{server.cloud.size}</span>{server.cloud.monthly
+                    ? ` · ${server.cloud.monthly} a month before tax`
+                    : ''}
+            </p>
+        {/if}
     </div>
     {#if server.can.update || server.can.delete}
         <div class="flex flex-wrap gap-2">
             {#if server.can.update}
-                <Button variant="ghost" onclick={openRename}>Rename</Button>
-                {#if server.active}
-                    <Button variant="outline" onclick={reboot}>Reboot server</Button>
+                <Button variant="ghost" class="max-sm:h-11" onclick={openRename}>Rename</Button>
+                {#if server.active && server.cloud?.task?.state !== 'running'}
+                    <Button variant="outline" class="max-sm:h-11" onclick={reboot}>Reboot server</Button>
+                {/if}
+                {#if server.cloud?.can.resize}
+                    <Button variant="outline" class="max-sm:h-11" onclick={() => (resizing = true)}>Resize</Button>
                 {/if}
             {/if}
-            {#if server.can.delete}
-                <Button variant="ghost" class="text-destructive-strong" onclick={() => (detaching = true)}
+            {#if server.cloud?.can.destroy}
+                <Button variant="ghost" class="text-destructive-strong max-sm:h-11" onclick={() => (destroying = true)}
+                    >Destroy</Button
+                >
+            {:else if server.cloud ? server.cloud.can.detach : server.can.delete}
+                <Button variant="ghost" class="text-destructive-strong max-sm:h-11" onclick={() => (detaching = true)}
                     >Detach</Button
                 >
             {/if}
@@ -107,6 +126,8 @@
         canManage={server.can.update}
     />
 {/if}
+
+<CloudTaskBanner {server} ondetach={() => (detaching = true)} />
 
 {#if server.active && server.unreachable}
     <div
@@ -175,12 +196,31 @@
     </Dialog.Content>
 </Dialog.Root>
 
+{#if server.cloud}
+    <DestroyServerDialog
+        server={{ id: server.id, name: server.name }}
+        provider={server.cloud.provider}
+        bind:open={destroying}
+        ondetach={() => (detaching = true)}
+    />
+    {#if server.cloud.can.resize}
+        <ResizeServerDialog
+            server={{ id: server.id, name: server.name }}
+            provider={server.cloud.provider}
+            type={server.cloud.type}
+            bind:open={resizing}
+        />
+    {/if}
+{/if}
+
 <Dialog.Root bind:open={detaching}>
     <Dialog.Content>
         <Dialog.Header>
             <Dialog.Title>Detach {server.name}?</Dialog.Title>
             <Dialog.Description
-                >Coresmith stops managing this server. The VM itself, and everything on it, is untouched.</Dialog.Description
+                >{server.cloud?.instance
+                    ? `Coresmith stops managing ${server.name}. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
+                    : 'Coresmith stops managing this server. The VM itself, and everything on it, is untouched.'}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>

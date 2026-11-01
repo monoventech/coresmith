@@ -18,7 +18,7 @@ final class FakeSSHTransport implements SSHTransport
 
     private string $hostKey = 'fake-host-key';
 
-    private bool $loginSucceeds = true;
+    private int $loginFailures = 0;
 
     private int $refusals = 0;
 
@@ -69,9 +69,9 @@ final class FakeSSHTransport implements SSHTransport
         return $this;
     }
 
-    public function failLogin(): self
+    public function failLogin(int $times = PHP_INT_MAX): self
     {
-        $this->loginSucceeds = false;
+        $this->loginFailures = $times;
 
         return $this;
     }
@@ -191,7 +191,13 @@ final class FakeSSHTransport implements SSHTransport
     {
         $this->loginAttempted = true;
 
-        return $this->loginSucceeds;
+        if ($this->loginFailures > 0) {
+            $this->loginFailures--;
+
+            return false;
+        }
+
+        return true;
     }
 
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string

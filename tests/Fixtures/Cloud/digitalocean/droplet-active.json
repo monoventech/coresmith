@@ -1,0 +1,37 @@
+{
+    "droplet": {
+        "id": 3164444,
+        "name": "outpost-02",
+        "memory": 2048,
+        "vcpus": 1,
+        "disk": 50,
+        "locked": false,
+        "status": "active",
+        "kernel": null,
+        "created_at": "2026-10-18T12:00:00Z",
+        "features": ["ipv6"],
+        "backup_ids": [],
+        "next_backup_window": null,
+        "snapshot_ids": [],
+        "image": { "id": 167229488, "name": "24.04 (LTS) x64", "distribution": "Ubuntu", "slug": "ubuntu-24-04-x64" },
+        "volume_ids": [],
+        "size": { "slug": "s-1vcpu-2gb" },
+        "size_slug": "s-1vcpu-2gb",
+        "networks": {
+            "v4": [
+                { "ip_address": "10.128.192.124", "netmask": "255.255.0.0", "gateway": "nil", "type": "private" },
+                { "ip_address": "203.0.113.41", "netmask": "255.255.240.0", "gateway": "203.0.113.1", "type": "public" }
+            ],
+            "v6": [{ "ip_address": "2001:db8:0:1::1", "netmask": 64, "gateway": "2001:db8:0:1::", "type": "public" }]
+        },
+        "region": {
+            "name": "Frankfurt 1",
+            "slug": "fra1",
+            "features": ["backups", "ipv6"],
+            "available": true,
+            "sizes": ["s-1vcpu-2gb"]
+        },
+        "tags": ["coresmith", "coresmith-01jcp7m3zq9x4v6t8w2y5b1n0d"],
+        "vpc_uuid": "760e09ef-dc84-11e8-981e-3cfdfeaae000"
+    }
+}

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace Database\Factories;
 
 use App\Enums\ServerStatus;
+use App\Models\CloudProvider;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\SSH\KeyPair;
@@ -47,6 +48,28 @@ class ServerFactory extends Factory
             'os_name' => 'ubuntu',
             'os_version' => '24.04',
             'last_connected_at' => now(),
+        ]);
+    }
+
+    public function fromProvider(CloudProvider $account): static
+    {
+        return $this->state([
+            'team_id' => $account->team_id,
+            'cloud_provider_id' => $account->getKey(),
+            'region' => 'fsn1',
+            'provider_server_id' => '4711',
+            'provider_size' => 'cx22',
+            'provider_image' => 'ubuntu-24.04',
+            'provider_monthly_cost' => '4.35',
+            'provider_currency' => 'EUR',
+        ]);
+    }
+
+    public function creating(): static
+    {
+        return $this->state([
+            'status' => ServerStatus::Creating,
+            'ip_address' => null,
         ]);
     }
 }

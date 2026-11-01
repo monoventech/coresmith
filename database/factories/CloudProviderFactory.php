@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\CloudProviderType;
 use App\Models\CloudProvider;
 use App\Models\Team;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -28,6 +29,27 @@ class CloudProviderFactory extends Factory
             'type' => 'hetzner',
             'name' => fake()->company() . ' Hetzner',
             'api_token' => Str::random(48),
+            'verified_at' => now(),
         ];
+    }
+
+    public function digitalocean(): static
+    {
+        return $this->state(['type' => CloudProviderType::DigitalOcean->value]);
+    }
+
+    public function vultr(): static
+    {
+        return $this->state(['type' => CloudProviderType::Vultr->value]);
+    }
+
+    public function linode(): static
+    {
+        return $this->state(['type' => CloudProviderType::Linode->value]);
+    }
+
+    public function refused(): static
+    {
+        return $this->state(['token_failed_at' => now()]);
     }
 }

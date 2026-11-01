@@ -1,0 +1,14 @@
+{
+    "uid": 1234,
+    "username": "monoven-ops",
+    "email": "ops@monoven.io",
+    "timezone": "UTC",
+    "email_notifications": true,
+    "ip_whitelist_enabled": false,
+    "lish_auth_method": "keys_only",
+    "authorized_keys": null,
+    "two_factor_auth": true,
+    "restricted": false,
+    "verified_phone_number": null,
+    "authentication_type": "password"
+}

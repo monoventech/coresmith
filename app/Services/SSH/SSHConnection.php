@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\SSH;
 
 use App\Exceptions\HostKeyChangedException;
+use App\Exceptions\ServerHasNoAddress;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Server;
@@ -49,6 +50,10 @@ final class SSHConnection
     {
         if ($this->authenticated) {
             return $this;
+        }
+
+        if ($this->server->ip_address === null) {
+            throw ServerHasNoAddress::forServer($this->server);
         }
 
         $this->transport->connect($this->server->ip_address, $this->server->ssh_port, self::TIMEOUT_SECONDS);

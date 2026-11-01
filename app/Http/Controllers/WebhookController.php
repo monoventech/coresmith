@@ -12,6 +12,7 @@ use App\Jobs\DeployApplication;
 use App\Models\Deployment;
 use App\Models\WebhookEndpoint;
 use App\Services\AutoDeploy\AutoDeploy;
+use App\Services\Deployment\DeployGuard;
 use App\Services\Webhook\SignatureVerifier;
 use App\Services\Webhook\WebhookDeliveries;
 use Illuminate\Http\JsonResponse;
@@ -64,6 +65,16 @@ final class WebhookController extends Controller
 
         if ($branch !== null && $branch !== $application->repository_branch) {
             return $this->respond($webhook, $request, 202, 'Branch ignored.');
+        }
+
+        $refusal = app(DeployGuard::class)->refusal($application);
+
+        if ($refusal !== null) {
+            if ($delivery !== null) {
+                $this->deliveries->release('webhook-delivery:' . $webhook->getKey(), $delivery);
+            }
+
+            return $this->respond($webhook, $request, 409, $refusal);
         }
 
         $deployment = Deployment::create([

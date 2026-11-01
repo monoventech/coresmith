@@ -12,6 +12,7 @@ use App\Enums\DeploymentStatus;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Deployment\DeployGuard;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
@@ -80,6 +81,10 @@ final class AutoDeploy
     public function reconcile(Application $application): ?Deployment
     {
         if (!$application->quick_deploy || $application->repository_head === null || $application->trashed()) {
+            return null;
+        }
+
+        if (app(DeployGuard::class)->refusal($application) !== null) {
             return null;
         }
 

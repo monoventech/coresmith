@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\PowerState;
 use App\Models\Application;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,7 +38,7 @@ final class IdleAppSleeper implements ShouldQueue
             ->get()
             ->filter(fn(Application $application): bool => $application->last_request_at
                 ->addMinutes((int) $application->idle_timeout_minutes)
-                ->isPast())
+                ->isPast() && ($application->server === null || !CloudTask::running($application->server)))
             ->each(function (Application $application) use ($connections, $processes): void {
                 $connection = $connections->for($application->server);
 
