@@ -68,7 +68,7 @@
                 <span class="text-[12.5px] text-muted-foreground max-sm:hidden">{ENGINES[database.type] ?? database.type}{database.is_external ? ' · existing server' : ''}</span>
                 <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{database.db_user ?? '—'}</span>
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{database.port}</span>
-                <span class={cn('inline-flex items-center gap-1.5 text-[12.5px] font-medium', database.status === 'active' ? 'text-success' : 'text-muted-foreground')}>
+                <span class={cn('inline-flex items-center gap-1.5 text-[12.5px] font-medium', database.status === 'active' ? 'text-success-strong' : 'text-muted-foreground')}>
                     <StateDot tone={database.status === 'active' ? 'success' : 'default'} size="sm" />{database.status === 'active' ? 'Ready' : database.status}
                 </span>
             </Link>

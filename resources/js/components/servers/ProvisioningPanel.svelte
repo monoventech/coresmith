@@ -94,10 +94,13 @@
         <div class="flex flex-col gap-0.5">
             {#each provisioning.phases as phase, index (phase.name)}
                 <div
-                    class={cn('flex items-center gap-3 py-1.5', !pending && phase.state === 'pending' && 'opacity-55')}
+                    class={cn(
+                        'flex items-center gap-3 py-1.5',
+                        !pending && phase.state === 'pending' && 'text-muted-foreground'
+                    )}
                 >
                     {#if pending}
-                        <span class="w-4 flex-none font-mono text-[12px] text-primary">{index + 1}</span>
+                        <span class="w-4 flex-none font-mono text-[12px] text-primary-strong">{index + 1}</span>
                     {:else}
                         <PhaseIcon state={phase.state} />
                     {/if}
@@ -109,7 +112,7 @@
                 </div>
                 {#if phase.state === 'failed' && provisioning.error}
                     <div class="mb-1 ml-7" data-testid="phase-error">
-                        <p class="m-0 text-[12.5px] text-destructive">{errorSummary}</p>
+                        <p class="m-0 text-[12.5px] text-destructive-strong">{errorSummary}</p>
                         {#if errorOutput}
                             <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
                             <pre

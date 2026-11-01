@@ -124,7 +124,7 @@ final class AsdfManager
 
         $versions = array_values(array_filter(
             array_map(trim(...), preg_split('/\R/', $result->output) ?: []),
-            fn(string $version): bool => preg_match('/^\d[0-9A-Za-z.+-]*$/', $version) === 1 && self::isValid($runtime, $version),
+            fn(string $version): bool => preg_match('/^\d[0-9A-Za-z.+-]*$/D', $version) === 1 && self::isValid($runtime, $version),
         ));
 
         sort($versions);

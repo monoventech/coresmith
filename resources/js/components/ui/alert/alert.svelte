@@ -6,7 +6,7 @@
 		variants: {
 			variant: {
 				default: "bg-card text-card-foreground",
-				destructive: "text-destructive bg-card *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+				destructive: "text-destructive-strong bg-card *:data-[slot=alert-description]:text-destructive-strong/90 *:[svg]:text-current",
 			},
 		},
 		defaultVariants: {

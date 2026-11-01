@@ -9,8 +9,8 @@ declare(strict_types=1);
 namespace App\Services\Git;
 
 use App\Exceptions\GitProviderException;
+use App\Services\Network\AddressResolver;
 use App\Services\SafeName;
-use App\Services\Sso\AddressResolver;
 
 final class ProviderHost
 {

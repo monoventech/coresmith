@@ -5,7 +5,7 @@
 </script>
 
 {#if message}
-    <p class="mt-2 flex items-center gap-2 text-[12.5px] text-destructive" role="alert">
+    <p class="mt-2 flex items-center gap-2 text-[12.5px] text-destructive-strong" role="alert">
         <CircleAlert class="size-3.75 shrink-0" />
         {message}
     </p>

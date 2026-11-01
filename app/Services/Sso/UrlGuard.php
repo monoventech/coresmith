@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Sso;
 
+use App\Services\Network\AddressResolver;
 use App\Services\SafeName;
 
 final class UrlGuard

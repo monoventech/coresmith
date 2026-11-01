@@ -147,7 +147,7 @@ final class BitbucketClient extends OAuthGitClient
 
     private function path(string $repository): string
     {
-        if (!preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/', $repository)) {
+        if (!preg_match('/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/D', $repository) || array_intersect(explode('/', $repository), ['.', '..']) !== []) {
             throw new GitProviderException("\"{$repository}\" is not a valid workspace/repo name.");
         }
 

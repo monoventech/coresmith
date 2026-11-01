@@ -151,14 +151,14 @@
                 <span class="inline-flex items-center gap-2 max-[900px]:hidden">
                     <span class="font-mono text-[12.5px]">{release.tag ?? '—'}</span>
                     {#if release.tag}
-                        <span class={cn('text-[11px]', release.signed ? 'text-success' : 'text-muted-foreground')}>{release.signed ? 'signed' : 'unsigned'}</span>
+                        <span class={cn('text-[11px]', release.signed ? 'text-success-strong' : 'text-muted-foreground')}>{release.signed ? 'signed' : 'unsigned'}</span>
                     {/if}
                 </span>
                 <span class="font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{release.branch ?? '—'}</span>
                 <span class="text-muted-foreground max-[900px]:hidden" title={release.full ?? undefined}>{release.when ?? '—'}</span>
                 <span class="flex justify-end">
                     {#if release.current}
-                        <span class="font-mono text-[12px] font-medium text-primary">current →</span>
+                        <span class="font-mono text-[12px] font-medium text-primary-strong">current →</span>
                     {:else if !release.on_disk}
                         <span class="text-[12px] text-muted-foreground">pruned</span>
                     {:else if can.deploy}

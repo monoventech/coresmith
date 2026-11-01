@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 use App\Services\Git\GitHub\PanelReachability;
 use App\Services\Git\GitHub\Reachability;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+
+beforeEach(function () {
+    Http::preventStrayRequests();
+});
 
 function reachabilityResolving(array $map): void
 {

@@ -342,6 +342,61 @@ test('a resumed deploy whose lock another deploy now holds stops without touchin
         ->and(Cache::lock('deploy:' . $application->id, 60, 'someone-else')->isOwnedByCurrentProcess())->toBeTrue();
 });
 
+test('a resumed deploy whose app was removed while its runtimes installed is cancelled and gives back its lock', function () {
+    Event::fake([DeploymentFailed::class]);
+    $application = stackApp(['status' => ApplicationStatus::Deploying]);
+    $deployment = stackPausedDeployment($application);
+    $deployment->forceFill(['log' => '[10:00:00] deps: installing PHP 8.5.10'])->save();
+    $lock = Cache::lock('deploy:' . $application->id, DeployApplication::LOCK_SECONDS);
+    $lock->get();
+    $application->delete();
+    $transport = stackTransport();
+
+    stackDeploy($deployment->fresh(), $transport, $lock->owner());
+
+    $fresh = $deployment->fresh();
+
+    expect($fresh->status)->toBe(DeploymentStatus::Cancelled)
+        ->and($fresh->log)->toBe("[10:00:00] deps: installing PHP 8.5.10\nThe app was removed while it deployed.")
+        ->and($fresh->finished_at)->not->toBeNull()
+        ->and($fresh->failure_reason)->toBeNull()
+        ->and($transport->commands())->toBe([])
+        ->and(Cache::lock('deploy:' . $application->id, 10)->get())->toBeTrue();
+
+    Event::assertNotDispatched(DeploymentFailed::class);
+});
+
+test('a queued deploy whose app was removed before it ran is cancelled without touching the server or the lock', function () {
+    $application = stackApp();
+    $deployment = Deployment::factory()->for($application)->create();
+    Cache::lock('deploy:' . $application->id, 600, 'someone-else')->get();
+    $application->delete();
+    $transport = stackTransport();
+
+    stackDeploy($deployment->fresh(), $transport);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Cancelled)
+        ->and($deployment->fresh()->log)->toBe('The app was removed while it deployed.')
+        ->and($transport->commands())->toBe([])
+        ->and(Cache::lock('deploy:' . $application->id, 600, 'someone-else')->isOwnedByCurrentProcess())->toBeTrue();
+});
+
+test('a resumed deploy of a removed app that was already reclaimed keeps its failure and gives back its lock', function () {
+    $application = stackApp();
+    $deployment = stackPausedDeployment($application);
+    $lock = Cache::lock('deploy:' . $application->id, DeployApplication::LOCK_SECONDS);
+    $lock->get();
+    $running = $deployment->fresh();
+    Deployment::query()->whereKey($deployment->id)->update(['status' => DeploymentStatus::Failed->value, 'failure_reason' => 'reclaimed']);
+    $reclaimed = $deployment->fresh()->getAttributes();
+    $application->delete();
+
+    stackDeploy($running, stackTransport(), $lock->owner());
+
+    expect($deployment->fresh()->getAttributes())->toBe($reclaimed)
+        ->and(Cache::lock('deploy:' . $application->id, 10)->get())->toBeTrue();
+});
+
 test('a resumed deploy whose runtime is still missing stops before changing anything', function () {
     $application = stackApp();
     $deployment = stackPausedDeployment($application);

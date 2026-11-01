@@ -301,7 +301,7 @@ test('waking starts every unit and records the request time', function () {
         ->and($app->fresh()->last_request_at)->not->toBeNull();
 });
 
-test('uninstalling disables and deletes each unit by its name, deletes the php-fpm pool, then reloads systemd', function () {
+test('uninstalling disables and deletes each unit by its name, deletes the php-fpm pool, reloads systemd, then stops rotating the logs', function () {
     $transport = new FakeSSHTransport;
     $app = managedApp(['power_state' => PowerState::Active, 'processes' => [['name' => 'queue', 'command' => 'php artisan queue:work']]]);
 
@@ -314,6 +314,7 @@ test('uninstalling disables and deletes each unit by its name, deletes the php-f
         "rm -f '/etc/systemd/system/coresmith-app-my-app-queue.service'",
         "rm -f '/etc/php-fpm.d/coresmith-app-my-app.conf'",
         'systemctl daemon-reload',
+        "rm -f '/etc/logrotate.d/coresmith-app-my-app'",
     ])
         ->and($app->fresh()->power_state)->toBe(PowerState::Stopped);
 });

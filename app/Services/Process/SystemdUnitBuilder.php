@@ -43,7 +43,7 @@ final class SystemdUnitBuilder
         $paths = new ReleasePaths($application);
         $workingDirectory = $paths->appDirectory($paths->current());
         $envFile = '/etc/coresmith/env/' . $slug . '.env';
-        $logFile = '/var/coresmith/logs/' . $slug . '/' . $process . '.log';
+        $logFile = $paths->processLog($process);
         $path = $this->pathFor($application);
         $memoryMax = $size->memoryMaxMb();
         $appRoot = ReleasePaths::ROOT . '/' . $slug;

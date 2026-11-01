@@ -9,7 +9,7 @@ use App\Models\Team;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Services\Dns\DnsResolver;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;

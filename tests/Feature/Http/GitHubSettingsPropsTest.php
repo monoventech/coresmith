@@ -7,7 +7,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Git\GitHub\RepositoryCatalog;
-use App\Services\Sso\AddressResolver;
+use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -236,6 +236,8 @@ test('a registered app with no installation is offered for install', function ()
                 'settings_url' => 'https://github.com/organizations/monoventech/settings/apps/coresmith-monoven',
                 'installed' => false,
                 'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->id]),
+                'link_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->id, 'mode' => 'link']),
+                'remove_href' => route('github-apps.destroy', $app),
             ]));
 });
 

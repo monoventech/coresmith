@@ -12,6 +12,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\ServerPresenter;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
 
 function checkedServer(Team $team, array $findings = [], int $minutesAgo = 5): Server
@@ -156,6 +157,23 @@ test('server input is validated', function (array $payload, string $field) {
     [['ssh_user' => 'Root'], 'ssh_user'],
     [['name' => ''], 'name'],
 ]);
+
+test('an ssh user ending in a newline is refused by its format, even when the request is not trimmed', function () {
+    $team = Team::factory()->create();
+
+    $this->withoutMiddleware(TrimStrings::class)
+        ->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.store'), [
+            'team_id' => $team->id,
+            'name' => 'web-1',
+            'ip_address' => '203.0.113.10',
+            'ssh_port' => 22,
+            'ssh_user' => "deploy\n",
+        ])
+        ->assertSessionHasErrors('ssh_user');
+
+    expect(Server::count())->toBe(0);
+});
 
 test('a member cannot delete a server', function () {
     $team = Team::factory()->create();

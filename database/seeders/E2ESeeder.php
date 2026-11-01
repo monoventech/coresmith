@@ -13,10 +13,12 @@ use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
+use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Jobs\InstallRuntimes;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -305,10 +307,45 @@ final class E2ESeeder extends Seeder
             'last_connected_at' => now(),
         ]);
 
-        foreach (array_values(self::PROJECTS) as $code) {
+        foreach (array_values(self::PROJECTS) as $index => $code) {
             $lab = Team::factory()->create(['name' => 'Lab ' . $code, 'slug' => 'lab-' . $code, 'owner_id' => $owner->id]);
             $lab->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+            $this->registeredApp($lab, $owner, "lab-{$code}", (string) (1041300 + $index));
         }
+
+        $paused = Team::factory()->create(['name' => 'Paused Works', 'slug' => 'paused', 'owner_id' => $owner->id]);
+        $paused->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($paused)->githubApp($this->registeredApp($paused, $owner, 'paused-works', '1041310'))->create([
+            'name' => 'paused-works',
+            'account_type' => 'Organization',
+            'repository_selection' => 'all',
+            'installation_id' => '51844',
+            'suspended_at' => now()->subDay(),
+            'access_token' => null,
+            'token_expires_at' => null,
+        ]);
+
+        $tidewater = Team::factory()->create(['name' => 'Tidewater Ops', 'slug' => 'tidewater', 'owner_id' => $owner->id]);
+        $tidewater->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($tidewater)->create([
+            'type' => SourceProviderType::GitLab->value,
+            'name' => 'tidewater-ops',
+            'installation_id' => null,
+            'scopes' => SourceProviderType::GitLab->scopes(),
+        ]);
+    }
+
+    private function registeredApp(Team $team, User $owner, string $login, string $appId): GitHubApp
+    {
+        return GitHubApp::factory()->withoutWebhook()->for($team)->create([
+            'app_id' => $appId,
+            'slug' => "coresmith-{$login}",
+            'name' => "Coresmith {$login}",
+            'owner_login' => $login,
+            'owner_type' => 'Organization',
+            'html_url' => "https://github.com/apps/coresmith-{$login}",
+            'created_by' => $owner->id,
+        ]);
     }
 
     private function server(string $name, string $ip, ServerStatus $status): Server

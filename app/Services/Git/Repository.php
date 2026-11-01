@@ -19,7 +19,7 @@ final readonly class Repository
 
     public static function slug(string $url): ?string
     {
-        if (preg_match('~^(?:https://[^/\s]+/|git@[^:\s]+:)([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+)/?$~', trim($url), $matches) !== 1) {
+        if (preg_match('~^(?:https://[^/\s]+/|git@[^:\s]+:)([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+)/?$~D', trim($url), $matches) !== 1) {
             return null;
         }
 

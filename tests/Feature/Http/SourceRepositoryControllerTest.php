@@ -340,3 +340,11 @@ test('the rate limit stops a person who hammers an endpoint and leaves the other
     $this->actingAs($user)->getJson(repositoryPickerPath($provider))->assertStatus(429);
     $this->actingAs($user)->getJson(repositoryPickerPath($provider, '70000001'))->assertOk();
 });
+
+test('the picker knows the not visible sentence by the catalog\'s own words', function () {
+    $source = (string) file_get_contents(resource_path('js/lib/github.ts'));
+
+    preg_match("~export const REPOSITORY_NOT_VISIBLE =\s+'([^']+)'~", $source, $sentence);
+
+    expect($sentence[1] ?? null)->toBe(RepositoryCatalog::NOT_VISIBLE);
+});

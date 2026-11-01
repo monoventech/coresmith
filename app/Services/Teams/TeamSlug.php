@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
 
 final class TeamSlug
 {
-    public const PATTERN = '/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/';
+    public const PATTERN = '/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/D';
 
     public const MAX_LENGTH = 40;
 

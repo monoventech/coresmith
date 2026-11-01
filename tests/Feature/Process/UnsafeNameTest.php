@@ -41,7 +41,25 @@ test('a slug carrying shell metacharacters cannot be persisted', function (strin
     'MyApp',
     '../evil',
     'my-app$(id)',
+    "my-app\n",
 ])->throws(UnsafeNameException::class);
+
+test('a name ending in a newline is refused by every safe name check', function (string $check, string $name) {
+    expect(fn() => SafeName::{$check}($name))->toThrow(UnsafeNameException::class)
+        ->and(fn() => SafeName::{$check}(rtrim($name, "\n")))->not->toThrow(UnsafeNameException::class);
+})->with([
+    'a slug' => ['assertSlug', "shop\n"],
+    'a system user' => ['assertSystemUser', "coresmith-app-shop\n"],
+    'a database identifier' => ['assertDatabaseIdentifier', "shop_production\n"],
+    'a domain' => ['assertDomain', "shop.example.com\n"],
+    'a process' => ['assertProcess', "queue\n"],
+    'a branch' => ['assertBranch', "main\n"],
+    'a relative path' => ['assertRelativePath', "public\n"],
+]);
+
+test('an unsafe system user with a trailing newline cannot be persisted', function () {
+    Application::factory()->create(['system_user' => "coresmith-app-shop\n"]);
+})->throws(UnsafeNameException::class);
 
 test('an unsafe process name cannot be persisted in the processes column', function () {
     Application::factory()->create(['processes' => [['name' => 'worker; rm -rf /', 'command' => '/bin/true']]]);

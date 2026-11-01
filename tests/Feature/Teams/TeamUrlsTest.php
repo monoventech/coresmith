@@ -58,6 +58,7 @@ test('an address must be lowercase letters, numbers and single hyphens', functio
     ['Monoven', false],
     ['-monoven', false],
     ['monoven-', false],
+    ["monoven\n", false],
     ['mono--ven', false],
     ['mono_ven', false],
     ['mono.ven', false],

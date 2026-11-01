@@ -130,6 +130,26 @@ test.describe('the command palette', () => {
         await expect(options.first()).toHaveAttribute('aria-selected', 'false')
     })
 
+    test('a pointer resting where the list opens does not move the selection', async ({ page }) => {
+        await page.goto('/dashboard')
+        await openPalette(page)
+
+        const options = palette(page).getByRole('option')
+        const third = await options.nth(2).boundingBox()
+
+        await page.keyboard.press('Escape')
+        await expect(palette(page)).toHaveCount(0)
+        await page.mouse.move((third?.x ?? 0) + 40, (third?.y ?? 0) + (third?.height ?? 0) / 2)
+        await openPalette(page)
+        await expect(options.nth(8)).toBeAttached()
+        await palette(page)
+            .getByRole('listbox')
+            .evaluate((list) => list.scrollBy(0, 88))
+        await page.keyboard.press('ArrowDown')
+
+        await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true')
+    })
+
     test('a search with no match says so', async ({ page }) => {
         await page.goto('/dashboard')
         await openPalette(page)
