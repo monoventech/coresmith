@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
+use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
@@ -176,6 +177,7 @@ final class ActivityFeed
             'certificate_expiring' => [$this->text('Certificate for '), $this->mono((string) ($properties['domain'] ?? '')), $this->text(' on '), $this->mono($application?->name), $this->text(' ' . CertificateCheck::expiry((int) ($properties['days'] ?? 0)))],
             'app_oom_killed' => [$this->mono($application?->name), $this->text(' ' . ($properties['process'] ?? 'a') . ' process killed for going over its ' . (int) ($properties['limit_mb'] ?? 0) . ' MB memory limit, systemd started it again')],
             'runtime_eol_chosen' => [$this->mono($application?->name), $this->text(' was added on ' . app(Catalog::class)->label((string) ($properties['runtime'] ?? '')) . ' ' . ($properties['line'] ?? '') . ', which no longer gets security fixes')],
+            SyncApplicationCron::FAILED => [$this->text("Couldn't write the cron jobs for "), $this->mono($application?->name), $this->text('. ' . ($properties['error'] ?? 'The server did not respond.'))],
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],

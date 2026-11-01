@@ -85,6 +85,7 @@ test('application events are described in plain words and link to the applicatio
     'port block moved' => ['port_block_moved', ['from' => 8000, 'to' => 8010, 'port' => 8005, 'process' => 'java'], 'shop moved to ports 8010–8019, java already listens on 8005'],
     'killed for memory' => ['app_oom_killed', ['process' => 'queue', 'at' => '2026-09-13T14:03:00+00:00', 'limit_mb' => 256], 'shop queue process killed for going over its 256 MB memory limit, systemd started it again'],
     'end of life chosen' => ['runtime_eol_chosen', ['runtime' => 'php', 'line' => '8.1'], 'shop was added on PHP 8.1, which no longer gets security fixes'],
+    'cron sync failed' => ['cron_sync_failed', ['error' => "Couldn't reach web-1 over SSH. Check it's online, then try again."], "Couldn't write the cron jobs for shop. Couldn't reach web-1 over SSH. Check it's online, then try again."],
 ]);
 
 test('names are marked as monospace and empty fragments are dropped', function () {
