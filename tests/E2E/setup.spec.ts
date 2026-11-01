@@ -182,6 +182,48 @@ test.describe('setup before GitHub is connected', () => {
         ).toHaveAttribute('aria-current', 'step')
     })
 
+    const finishedElsewhere = [
+        {
+            state: 'an App ready to install',
+            github: {
+                connect_href: 'https://github.com/apps/coresmith/installations/new',
+                registration: null,
+                elsewhere: null
+            },
+            action: { role: 'link', name: 'Connect GitHub' }
+        },
+        {
+            state: 'an App made on the panel address',
+            github: {
+                connect_href: null,
+                registration: null,
+                elsewhere: 'https://panel.example.com/settings/source-providers'
+            },
+            action: { role: 'link', name: 'Open panel.example.com' }
+        },
+        {
+            state: 'a member who cannot connect GitHub',
+            github: { can_manage: false, connect_href: null, registration: null, elsewhere: null },
+            action: null
+        }
+    ] as const
+
+    for (const { state, github, action } of finishedElsewhere) {
+        test(`a team on GitLab alone moves on beside ${state}`, async ({ page }) => {
+            await openSetupWith(page, 'tidewater', { connected: false, ...github })
+
+            const step = page.getByTestId('setup-step')
+
+            if (action !== null) {
+                await expect(step.getByRole(action.role, { name: action.name })).toBeVisible()
+            }
+
+            await step.getByRole('button', { name: 'Continue' }).click()
+
+            await expect(page.getByTestId('setup-step')).toContainText('Add your first server')
+        })
+    }
+
     test('a member is told who connects GitHub', async ({ page }) => {
         await openSetupWith(page, 'acme', {
             can_manage: false,

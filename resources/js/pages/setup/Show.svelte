@@ -65,9 +65,9 @@
 
 <AppHead title="Set up Coresmith" />
 
-{#snippet onward()}
+{#snippet onward(variant: 'default' | 'outline' = 'outline')}
     {#if current > 0}
-        <Button variant="outline" onclick={() => go(1)}>Continue</Button>
+        <Button {variant} onclick={() => go(1)}>Continue</Button>
     {/if}
 {/snippet}
 
@@ -141,7 +141,7 @@
             </ul>
             {#if github?.connected}
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button onclick={() => go(1)}>Continue</Button>
+                    {@render onward('default')}
                     <span class="text-[12.5px] text-muted-foreground"
                         >Connected as <span class="font-mono text-[12px]">{github.name}</span></span
                     >
@@ -171,9 +171,7 @@
                 <p class={cn('text-[12.5px] text-muted-foreground', current > 0 ? 'mb-3' : 'm-0')}>
                     An owner or admin connects GitHub.
                 </p>
-                {#if current > 0}
-                    <Button onclick={() => go(1)}>Continue</Button>
-                {/if}
+                {@render onward('default')}
             {/if}
         </div>
     {:else if step === 1}

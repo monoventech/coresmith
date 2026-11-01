@@ -294,11 +294,11 @@
 
 {#if application.stopped || application.maintenance}
     <div
-        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:items-start max-sm:px-3.5"
         data-testid="offline-banner"
     >
         <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
-        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:basis-[calc(100%-1.75rem)] max-sm:text-[12.5px]">
             {#if application.stopped}
                 This application is stopped. Visitors see a maintenance page until you start it again.
             {:else}
@@ -307,8 +307,10 @@
             {/if}
         </span>
         {#if application.stopped && can.update}
-            <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={power}
-                >Start it</button
+            <button
+                type="button"
+                class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7 max-sm:h-11!"
+                onclick={power}>Start it</button
             >
         {/if}
     </div>
@@ -327,11 +329,11 @@
     </div>
 {:else if application.last_failed && application.latest_deployment?.href}
     <div
-        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:items-start max-sm:px-3.5"
         data-testid="failed-banner"
     >
         <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
-        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:basis-[calc(100%-1.75rem)] max-sm:text-[12.5px]">
             <span class="font-semibold"
                 >{application.last_failed_live
                     ? 'The last deploy went live but did not finish.'
@@ -339,8 +341,9 @@
             >
             {` ${failedDeploy}`}
         </span>
-        <Link href={application.latest_deployment.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]!"
-            >Read the log</Link
+        <Link
+            href={application.latest_deployment.href}
+            class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7 max-sm:h-11!">Read the log</Link
         >
     </div>
 {/if}
@@ -390,7 +393,7 @@
 
 {#if application.github?.problem}
     <div
-        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:items-start max-sm:px-3.5"
         data-testid="github-banner"
     >
         <TriangleAlert class="size-4.5 shrink-0 text-warning max-sm:size-4" />
@@ -406,7 +409,7 @@
         </span>
         <Link
             href={application.github.settings_href}
-            class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7">Open Git settings</Link
+            class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7 max-sm:h-11!">Open Git settings</Link
         >
     </div>
 {/if}

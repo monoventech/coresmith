@@ -1233,6 +1233,38 @@ test.describe('an app whose GitHub connection is gone', () => {
     })
 })
 
+test.describe('action banners on a phone', () => {
+    test.skip(({ isMobile }) => !isMobile, 'The phone layout and tap sizes apply only below 640px')
+
+    const banners = [
+        { server: 'forge-01', app: 'storefront', id: 'failed-banner', role: 'link', action: 'Read the log' },
+        { server: 'bench-01', app: 'retired-blog', id: 'offline-banner', role: 'button', action: 'Start it' },
+        { server: 'bench-01', app: 'orphaned-app', id: 'github-banner', role: 'link', action: 'Open Git settings' }
+    ] as const
+
+    for (const { server, app, id, role, action } of banners) {
+        test(`the ${id} gives its text the full width and puts an easy-to-tap action under it`, async ({ page }) => {
+            await gotoApplication(page, server, app)
+
+            const banner = page.getByTestId(id)
+            const text = await banner.locator('span.flex-1').first().boundingBox()
+            const control = await banner.getByRole(role, { name: action }).boundingBox()
+
+            expect(text).not.toBeNull()
+            expect(control).not.toBeNull()
+            expect(control?.y ?? 0).toBeGreaterThanOrEqual((text?.y ?? 0) + (text?.height ?? 0))
+            expect(Math.abs((control?.x ?? 0) - (text?.x ?? 0))).toBeLessThanOrEqual(1)
+            expect(control?.height ?? 0).toBeGreaterThanOrEqual(44)
+        })
+    }
+
+    test('the repository access card stays off a phone', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'linked-app')
+
+        await expect(page.getByRole('heading', { name: 'Repository access' })).toBeHidden()
+    })
+})
+
 test.describe('an app killed for memory', () => {
     test('the app page says which process, its limit and what to do if it repeats', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'hungry')
