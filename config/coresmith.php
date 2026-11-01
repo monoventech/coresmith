@@ -9,6 +9,22 @@ declare(strict_types=1);
 return [
     'version' => is_file(base_path('VERSION')) ? trim((string) file_get_contents(base_path('VERSION'))) : '0.0.0',
 
+    'updates' => [
+        'enabled' => (bool) env('CORESMITH_UPDATES_ENABLED', false),
+        'check_url' => env('CORESMITH_UPDATE_CHECK_URL', 'https://get.coresmith.io/v1/version'),
+        'check_disabled' => (bool) env('CORESMITH_DISABLE_UPDATE_CHECK', false),
+        'repository' => env('CORESMITH_REPOSITORY', 'https://github.com/monoven/coresmith.git'),
+        'issues_url' => env('CORESMITH_ISSUES_URL', 'https://github.com/monoven/coresmith/issues'),
+        'root' => env('CORESMITH_ROOT', '/opt/coresmith'),
+        'state_path' => env('CORESMITH_UPDATE_STATE_PATH', '/var/lib/coresmith/updates'),
+        'keys_path' => env('CORESMITH_RELEASE_KEYS_PATH', 'resources/release-keys'),
+        'web_user' => 'caddy',
+        'min_free_bytes' => 2 * 1024 ** 3,
+        'drain_timeout' => 300,
+        'restart_timeout' => 90,
+        'health_timeout' => 60,
+    ],
+
     'release_feed' => [
         'enabled' => (bool) env('CORESMITH_RELEASE_FEED', false),
         'channel' => env('CORESMITH_RELEASE_FEED_CHANNEL', 'stable'),

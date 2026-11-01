@@ -9,6 +9,7 @@ use App\Jobs\IdleAppSleeper;
 use App\Jobs\PollRepositories;
 use App\Jobs\ResumeCloudTasks;
 use App\Models\Server;
+use App\Services\Updates\UpdateChecker;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::call(function (): void {
@@ -41,3 +42,9 @@ Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith
 Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup')->withoutOverlapping();
 
 Schedule::command('coresmith:weekly-digest')->weeklyOn(1, '08:00')->name('coresmith:weekly-digest')->withoutOverlapping();
+
+Schedule::command('coresmith:check-update')
+    ->dailyAt(UpdateChecker::dailyAt())
+    ->name('coresmith:check-update')
+    ->withoutOverlapping()
+    ->when(fn(): bool => app(UpdateChecker::class)->enabled());

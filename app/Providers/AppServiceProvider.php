@@ -9,6 +9,7 @@ use App\Services\Dns\DnsResolver;
 use App\Services\Dns\NativeDnsResolver;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Teams\TeamContext;
+use App\Services\Updates\UpdatePaths;
 use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -34,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(TeamContext::class);
 
         $this->app->bind(DnsResolver::class, NativeDnsResolver::class);
+
+        $this->app->bind(UpdatePaths::class, fn(): UpdatePaths => UpdatePaths::fromConfig());
 
         $this->app->bind(CloudApiFactory::class, HttpCloudApiFactory::class);
     }
