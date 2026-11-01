@@ -6,12 +6,15 @@ use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Panel\FleetSnapshot;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 function fleetServer(Team $team, array $attributes = []): Server
 {
@@ -154,6 +157,8 @@ test('a server card carries its state, rounded readings, links and applications'
             'kind' => 'Laravel',
             'deploy_href' => route('servers.applications.deploy', [$server, $application]),
         ]],
+        'cost' => null,
+        'provider' => null,
     ]);
 });
 
@@ -331,4 +336,66 @@ test('an application killed for memory in the last day needs attention', functio
     $this->travel(25)->hours();
 
     expect((new FleetSnapshot($team))->attention())->toBe([]);
+});
+
+function fleetCreating(Team $team, bool $failed, array $attributes = []): Server
+{
+    $server = Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->creating()->create(['name' => 'outpost-02', ...$attributes]);
+    CloudTask::start($server, CloudTask::CREATE, 'create');
+
+    if ($failed) {
+        CloudTask::fail($server, 'Hetzner Cloud refused the size.');
+    }
+
+    return $server->fresh();
+}
+
+test('a server at its provider reads as being created, or as failed once its creation fails', function (bool $failed, array $attributes, string $key, string $label, string $tone) {
+    $team = Team::factory()->create();
+    $server = fleetCreating($team, $failed, $attributes);
+
+    expect((new FleetSnapshot($team))->state($server))->toBe(['key' => $key, 'label' => $label, 'tone' => $tone]);
+})->with([
+    'being created' => [false, [], 'creating', 'Creating', 'accent'],
+    'creation failed' => [true, [], 'creation_failed', 'Creation failed', 'destructive'],
+    'a changed host key still comes first' => [true, ['pending_host_key_fingerprint' => 'SHA256:new'], 'host_key', 'Host key changed', 'destructive'],
+]);
+
+test('a provider server card carries its monthly cost and provider', function () {
+    $team = Team::factory()->create();
+    Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->create(['status' => ServerStatus::Active, 'provider_monthly_cost' => '4.35', 'provider_currency' => 'EUR']);
+
+    $fleet = new FleetSnapshot($team);
+    $card = $fleet->card($fleet->servers()->first());
+
+    expect($card['cost'])->toBe('€4.35/mo')
+        ->and($card['provider'])->toBe('Hetzner Cloud');
+});
+
+test('the fleet loads providers once, however many servers it shows', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    Server::factory()->fromProvider($account)->count(3)->create(['status' => ServerStatus::Active]);
+    $fleet = new FleetSnapshot($team);
+    $servers = $fleet->servers();
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $servers->each(fn(Server $server) => $fleet->card($server));
+
+    expect(collect(DB::getQueryLog())->filter(fn(array $query): bool => str_contains($query['query'], 'cloud_providers'))->count())->toBe(0);
+});
+
+test('a failed creation needs attention first', function () {
+    $team = Team::factory()->create();
+    $full = fleetServer($team, ['name' => 'full-disk', 'created_at' => now()->subWeek()]);
+    fleetMetric($full, 91.4);
+    $failed = fleetCreating($team, true);
+    fleetCreating($team, false, ['name' => 'outpost-03']);
+
+    expect((new FleetSnapshot($team))->attention())->toBe([
+        ['severity' => 'critical', 'subject' => 'outpost-02', 'summary' => 'creation failed', 'href' => route('servers.show', $failed)],
+        ['severity' => 'warning', 'subject' => 'full-disk', 'summary' => 'disk 91%', 'href' => route('servers.show', $full)],
+    ]);
 });

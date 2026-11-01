@@ -166,6 +166,9 @@ final class ActivityFeed
 
         $parts = match ($activity->description) {
             'server_added' => [$this->mono($server?->name), $this->text(' added to the panel, waiting for its key')],
+            'server_creation_started' => [$this->mono($server?->name), $this->text(' is being created at ' . ($properties['provider'] ?? 'its provider') . ', ' . ($properties['size'] ?? '') . ' in ' . ($properties['region'] ?? ''))],
+            'server_created_at_provider' => [$this->mono($server?->name), $this->text(' created at ' . ($properties['provider'] ?? 'its provider') . $this->took($properties['seconds'] ?? null) . ', checking it before provisioning')],
+            'server_creation_failed' => [$this->text('Creating '), $this->mono($server?->name), $this->text(' at ' . ($properties['provider'] ?? 'its provider') . ' failed')],
             'server_provisioned' => [$this->mono($server?->name), $this->text(' provisioned and hardened' . $this->took($properties['duration_seconds'] ?? null))],
             'server_renamed' => [$this->text('Server renamed to '), $this->mono($server?->name)],
             'server_rebooted' => [$this->mono($server?->name), $this->text(' rebooted, apps came back via systemd')],

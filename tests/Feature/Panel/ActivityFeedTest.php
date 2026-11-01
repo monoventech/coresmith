@@ -58,6 +58,10 @@ test('server events are described in plain words', function (string $description
     'host key changed' => ['ssh_host_key_changed', [], 'web-1 presented a different host key, operations paused'],
     'apparmor' => ['apparmor_profiles_in_complain_mode', ['profiles_in_complain_mode' => 3], 'AppArmor has 3 profiles in complain mode on web-1'],
     'audited' => ['server_audited', ['blockers' => 1, 'warnings' => 2], 'Pre-provisioning check on web-1, 1 blocking, 2 to review'],
+    'creation started' => ['server_creation_started', ['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1'], 'web-1 is being created at Hetzner Cloud, cx22 in fsn1'],
+    'created at the provider' => ['server_created_at_provider', ['provider' => 'Hetzner Cloud', 'seconds' => 48], 'web-1 created at Hetzner Cloud in 0m 48s, checking it before provisioning'],
+    'created without a duration' => ['server_created_at_provider', ['provider' => 'Hetzner Cloud', 'seconds' => null], 'web-1 created at Hetzner Cloud, checking it before provisioning'],
+    'creation failed' => ['server_creation_failed', ['provider' => 'Hetzner Cloud', 'step' => 'ssh', 'reason' => 'SSH authentication failed.'], 'Creating web-1 at Hetzner Cloud failed'],
 ]);
 
 test('application events are described in plain words and link to the application', function (string $description, array $properties, string $sentence) {

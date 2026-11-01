@@ -16,6 +16,7 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
+use App\Services\Cloud\Tasks\CloudTask;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
 
@@ -44,7 +45,7 @@ final class FleetSnapshot
     public function servers(): Collection
     {
         return $this->servers ??= $this->team->servers()
-            ->with(['applications' => fn($query) => $query->orderBy('name')])
+            ->with(['applications' => fn($query) => $query->orderBy('name'), 'cloudProvider'])
             ->oldest()
             ->orderBy('name')
             ->get();
@@ -90,6 +91,8 @@ final class FleetSnapshot
 
         return match (true) {
             $server->pending_host_key_fingerprint !== null => ['key' => 'host_key', 'label' => 'Host key changed', 'tone' => 'destructive'],
+            $server->status === ServerStatus::Creating && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'creation_failed', 'label' => 'Creation failed', 'tone' => 'destructive'],
+            $server->status === ServerStatus::Creating => ['key' => 'creating', 'label' => 'Creating', 'tone' => 'accent'],
             $server->status === ServerStatus::Failed => ['key' => 'failed', 'label' => 'Provisioning failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Disconnected => ['key' => 'disconnected', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->status === ServerStatus::Provisioning => ['key' => 'provisioning', 'label' => 'Provisioning', 'tone' => 'accent'],
@@ -152,6 +155,8 @@ final class FleetSnapshot
                 'kind' => ApplicationPresenter::kind($application),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
             ])->values()->all(),
+            'cost' => Formats::monthly($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
+            'provider' => $server->cloudProvider?->type->label(),
         ];
     }
 
@@ -165,7 +170,7 @@ final class FleetSnapshot
         foreach ($this->servers() as $server) {
             $state = $this->state($server);
 
-            if (in_array($state['key'], ['host_key', 'failed', 'disconnected'], true)) {
+            if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'creation_failed'], true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'warning' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->disk_percent ?? 0) >= self::DISK_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'disk ' . (int) round((float) $this->latestMetric($server)?->disk_percent) . '%', 'href' => route('servers.show', $server)];

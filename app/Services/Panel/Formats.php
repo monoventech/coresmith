@@ -12,6 +12,32 @@ use Carbon\CarbonInterface;
 
 final class Formats
 {
+    private const CURRENCY_SYMBOLS = ['EUR' => '€', 'USD' => '$', 'GBP' => '£'];
+
+    public static function money(?string $amount, ?string $currency): ?string
+    {
+        if ($amount === null || $currency === null || !is_numeric($amount)) {
+            return null;
+        }
+
+        $code = strtoupper($currency);
+        $symbol = self::CURRENCY_SYMBOLS[$code] ?? null;
+        $value = number_format((float) $amount, 2, '.', '');
+
+        if ($symbol === null) {
+            return "{$value} {$code}";
+        }
+
+        return $symbol . (str_ends_with($value, '.00') ? substr($value, 0, -3) : $value);
+    }
+
+    public static function monthly(?string $amount, ?string $currency): ?string
+    {
+        $money = self::money($amount, $currency);
+
+        return $money === null ? null : $money . '/mo';
+    }
+
     public static function memory(?int $megabytes): ?string
     {
         if ($megabytes === null || $megabytes <= 0) {

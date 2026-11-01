@@ -85,3 +85,17 @@ test('a compact release timestamp is split into date and time', function (?strin
     'already split' => ['20260913-140509', '20260913-140509'],
     'not a timestamp' => ['v2.4.0', 'v2.4.0'],
 ]);
+
+test('a price is shown with its currency symbol, dropping whole cents', function (?string $amount, ?string $currency, ?string $money, ?string $monthly) {
+    expect(Formats::money($amount, $currency))->toBe($money)
+        ->and(Formats::monthly($amount, $currency))->toBe($monthly);
+})->with([
+    'euros with cents' => ['4.35', 'EUR', '€4.35', '€4.35/mo'],
+    'whole dollars' => ['12.00', 'USD', '$12', '$12/mo'],
+    'pounds with cents' => ['9.50', 'GBP', '£9.50', '£9.50/mo'],
+    'a currency with no symbol keeps its code and cents' => ['12.00', 'CHF', '12.00 CHF', '12.00 CHF/mo'],
+    'a lower-case code' => ['5', 'eur', '€5', '€5/mo'],
+    'no amount' => [null, 'EUR', null, null],
+    'no currency' => ['4.35', null, null, null],
+    'an amount that is not a number' => ['n/a', 'EUR', null, null],
+]);

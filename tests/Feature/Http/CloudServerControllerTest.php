@@ -1,0 +1,343 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\CloudFailure;
+use App\Enums\CloudProviderType;
+use App\Enums\ServerStatus;
+use App\Enums\TeamRole;
+use App\Exceptions\CloudProviderException;
+use App\Jobs\RunCloudTask;
+use App\Models\CloudProvider;
+use App\Models\Server;
+use App\Models\Team;
+use App\Models\User;
+use App\Services\Cloud\CloudImage;
+use App\Services\Cloud\CloudPrice;
+use App\Services\Cloud\CloudRegion;
+use App\Services\Cloud\CloudSize;
+use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\Tasks\CloudTask;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Spatie\Activitylog\Models\Activity;
+use Tests\Support\CloudFixtures;
+use Tests\Support\FakeCloudApiFactory;
+
+beforeEach(function () {
+    Http::preventStrayRequests();
+    Queue::fake();
+});
+
+function cloudServerFake(): FakeCloudApiFactory
+{
+    $fake = new FakeCloudApiFactory;
+    CloudFixtures::catalogue($fake->api);
+    app()->instance(CloudApiFactory::class, $fake);
+
+    return $fake;
+}
+
+function cloudServerAdmin(TeamRole $role = TeamRole::Admin): array
+{
+    $team = Team::factory()->create();
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => $role->value]);
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'tok-1']);
+
+    return [$team, $user->fresh(), $account];
+}
+
+function cloudServerPayload(CloudProvider $account, array $overrides = []): array
+{
+    return [
+        'cloud_provider_id' => $account->id,
+        'name' => 'outpost-02',
+        'region' => 'fsn1',
+        'size' => 'cx22',
+        'image' => 'ubuntu-24.04',
+        'environment' => 'Production',
+        ...$overrides,
+    ];
+}
+
+test('an admin provisions a server through a connected account', function () {
+    [$team, $user, $account] = cloudServerAdmin();
+    cloudServerFake();
+
+    $response = $this->actingAs($user)->post(route('servers.cloud.store'), cloudServerPayload($account));
+
+    $server = Server::query()->sole();
+    $task = CloudTask::of($server);
+
+    $response->assertRedirect(route('servers.show', $server))
+        ->assertSessionHas('success', 'Creating outpost-02 at Hetzner Cloud. This page follows along, close it and it keeps going.');
+
+    expect($server->team_id)->toBe($team->id)
+        ->and($server->status)->toBe(ServerStatus::Creating)
+        ->and($server->ip_address)->toBeNull()
+        ->and($server->ssh_user)->toBe('root')
+        ->and($server->ssh_port)->toBe(22)
+        ->and($server->ssh_public_key)->toStartWith('ssh-ed25519 ')
+        ->and($server->cloud_provider_id)->toBe($account->id)
+        ->and($server->region)->toBe('fsn1')
+        ->and($server->provider_size)->toBe('cx22')
+        ->and($server->provider_image)->toBe('ubuntu-24.04')
+        ->and((string) $server->provider_monthly_cost)->toBe('3.79')
+        ->and($server->provider_currency)->toBe('EUR')
+        ->and($server->environment)->toBe('Production')
+        ->and($task->type)->toBe(CloudTask::CREATE)
+        ->and($task->step)->toBe('create')
+        ->and($task->by)->toBe($user->id)
+        ->and($task->data)->toMatchArray(['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)'])
+        ->and($server->provisioning_log)->toContain('creating outpost-02 at Hetzner Cloud, cx22 in fsn1 with Ubuntu 24.04')
+        ->and(Activity::query()->where('description', 'server_creation_started')->sole()->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1']);
+
+    Queue::assertPushed(RunCloudTask::class, 1);
+});
+
+test('a server is created with the account that was picked', function () {
+    [$team, $user] = cloudServerAdmin();
+    cloudServerFake();
+    $second = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner staging']);
+
+    $this->actingAs($user)->post(route('servers.cloud.store'), cloudServerPayload($second))->assertSessionHasNoErrors();
+
+    expect(Server::query()->sole()->cloud_provider_id)->toBe($second->id);
+});
+
+test("provisioning from setup returns to the setup's provisioning step", function () {
+    [, $user, $account] = cloudServerAdmin();
+    cloudServerFake();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account, ['return_to' => 'setup']))
+        ->assertRedirect(route('setup.show', ['step' => 2]));
+});
+
+test('a deployer cannot provision', function () {
+    [, $user, $account] = cloudServerAdmin(TeamRole::Member);
+    $fake = cloudServerFake();
+
+    $this->actingAs($user)->post(route('servers.cloud.store'), cloudServerPayload($account))->assertForbidden();
+
+    expect(Server::query()->count())->toBe(0)
+        ->and($fake->api->calls())->toBe([]);
+
+    Queue::assertNothingPushed();
+});
+
+test("another team's account cannot be used", function () {
+    [, $user] = cloudServerAdmin();
+    cloudServerFake();
+    $theirs = CloudProvider::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($theirs))
+        ->assertSessionHasErrors(['cloud_provider_id' => 'Pick a connected provider account.']);
+
+    expect(Server::query()->count())->toBe(0);
+});
+
+test('a removed account cannot be used', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $fake = cloudServerFake();
+    $account->delete();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account))
+        ->assertSessionHasErrors(['cloud_provider_id' => 'Pick a connected provider account.']);
+
+    expect($fake->api->calls())->toBe([])
+        ->and(Server::query()->count())->toBe(0);
+});
+
+test('an account whose token was refused cannot be used', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $fake = cloudServerFake();
+    $account->forceFill(['token_failed_at' => now()])->save();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account))
+        ->assertSessionHasErrors('cloud_provider_id');
+
+    expect(session('errors')->first('cloud_provider_id'))->toContain("refused this account's token")
+        ->and($fake->api->calls())->toBe([])
+        ->and(Server::query()->count())->toBe(0);
+});
+
+test('a size the provider no longer offers in that region is refused', function () {
+    [, $user, $account] = cloudServerAdmin();
+    cloudServerFake();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account, ['size' => 'cx52']))
+        ->assertSessionHasErrors(['size' => "That size isn't offered in fsn1 any more. Pick another."]);
+
+    expect(Server::query()->count())->toBe(0);
+});
+
+test('a size offered only in another region is refused', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $fake = new FakeCloudApiFactory;
+    $fake->api->catalog(
+        [new CloudRegion('fsn1', 'Falkenstein (fsn1)', 'DE'), new CloudRegion('ash', 'Ashburn (ash)', 'US')],
+        [
+            new CloudSize('cx22', 2, 4096, 40, 'x86', null, ['fsn1' => new CloudPrice('3.79', 'EUR')], ['fsn1']),
+            new CloudSize('cpx21', 3, 4096, 80, 'x86', null, ['ash' => new CloudPrice('8.49', 'EUR')], ['ash']),
+        ],
+        [new CloudImage('ubuntu-24.04', 'ubuntu', '24.04', ['x86', 'arm'], 'Ubuntu 24.04')],
+    );
+    app()->instance(CloudApiFactory::class, $fake);
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account, ['size' => 'cpx21']))
+        ->assertSessionHasErrors(['size' => "That size isn't offered in fsn1 any more. Pick another."]);
+
+    expect(Server::query()->count())->toBe(0);
+});
+
+test('a region the provider no longer offers is refused', function () {
+    [, $user, $account] = cloudServerAdmin();
+    cloudServerFake();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account, ['region' => 'ash']))
+        ->assertSessionHasErrors(['region' => "That region isn't offered any more. Pick another."]);
+});
+
+test('an image that does not run on the size is refused', function () {
+    [, $user, $account] = cloudServerAdmin();
+    cloudServerFake();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account, ['size' => 'cax11', 'image' => 'debian-12']))
+        ->assertSessionHasErrors(['image' => "That image doesn't run on cax11. Pick another."]);
+});
+
+test('a name the providers would refuse is refused before anything is sent', function (string $name) {
+    [, $user, $account] = cloudServerAdmin();
+    $fake = cloudServerFake();
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account, ['name' => $name]))
+        ->assertSessionHasErrors(['name' => 'Use 3 to 63 lowercase letters, digits and single hyphens, like outpost-02.']);
+
+    expect($fake->api->calls())->toBe([]);
+})->with([
+    'too short' => ['ab'],
+    'upper case' => ['Outpost'],
+    'a double hyphen' => ['out--post'],
+    'a leading hyphen' => ['-outpost'],
+    'a trailing hyphen' => ['outpost-'],
+    'an underscore' => ['outpost_02'],
+    'too long' => [str_repeat('a', 64)],
+]);
+
+test('a provider that cannot be reached is reported on the form', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $fake = cloudServerFake();
+    $fake->api->failing('regions', new CloudProviderException(CloudFailure::Unreachable, CloudProviderType::Hetzner));
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account))
+        ->assertSessionHasErrors('cloud_provider_id');
+
+    expect(session('errors')->first('cloud_provider_id'))->toStartWith("Coresmith couldn't check that with Hetzner Cloud.")
+        ->and(Server::query()->count())->toBe(0);
+});
+
+test('a token the provider refuses while checking marks the account refused', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $fake = cloudServerFake();
+    $fake->api->failing('regions', new CloudProviderException(CloudFailure::TokenRejected, CloudProviderType::Hetzner));
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.store'), cloudServerPayload($account))
+        ->assertSessionHasErrors('cloud_provider_id');
+
+    expect($account->fresh()->isRefused())->toBeTrue()
+        ->and(Server::query()->count())->toBe(0);
+});
+
+test('a failed creation can be tried again', function () {
+    [$team, $user, $account] = cloudServerAdmin();
+    $server = Server::factory()->fromProvider($account)->creating()->create();
+    CloudTask::start($server, CloudTask::CREATE, 'create');
+    CloudTask::fail($server, 'Hetzner Cloud refused the size.');
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.retry', $server))
+        ->assertSessionHas('success', 'Trying again. This page follows along.');
+
+    $task = CloudTask::of($server->fresh());
+
+    expect($task->state)->toBe(CloudTask::RUNNING)
+        ->and($task->error)->toBeNull();
+
+    Queue::assertPushed(RunCloudTask::class, 1);
+});
+
+test('only a failed creation can be tried again', function () {
+    [$team, $user, $account] = cloudServerAdmin();
+    $running = Server::factory()->fromProvider($account)->creating()->create();
+    CloudTask::start($running, CloudTask::CREATE, 'boot');
+    $manual = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
+    $failed = Server::factory()->fromProvider($account)->creating()->create();
+    CloudTask::start($failed, CloudTask::CREATE, 'create');
+    CloudTask::fail($failed, 'Hetzner Cloud refused the size.');
+    $resize = Server::factory()->fromProvider($account)->create(['status' => ServerStatus::Active]);
+    CloudTask::start($resize, CloudTask::RESIZE, 'resize');
+    CloudTask::fail($resize, 'Hetzner Cloud refused the size.');
+    $deployer = User::factory()->create();
+    $team->members()->attach($deployer, ['role' => TeamRole::Member->value]);
+
+    $this->actingAs($user)->post(route('servers.cloud.retry', $running))->assertNotFound();
+    $this->actingAs($user)->post(route('servers.cloud.retry', $manual))->assertNotFound();
+    $this->actingAs($user)->post(route('servers.cloud.retry', $resize))->assertNotFound();
+    $this->actingAs($deployer->fresh())->post(route('servers.cloud.retry', $failed))->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
+test('the provision page offers the team accounts and loads the catalog after it renders', function () {
+    [$team, $user, $first] = cloudServerAdmin();
+    cloudServerFake();
+    $second = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner staging', 'api_token' => 'tok-secret-2', 'created_at' => now()->addMinute()]);
+
+    $this->actingAs($user)->get(route('servers.create'))
+        ->assertOk()
+        ->assertDontSee('tok-1')
+        ->assertDontSee('tok-secret-2')
+        ->assertInertia(fn($page) => $page
+            ->where('cloud.selected', 'account:' . $first->id)
+            ->missing('catalog')
+            ->loadDeferredProps(fn($reload) => $reload
+                ->where('catalog.error', null)
+                ->has('catalog.sizes', 2)
+                ->where('catalog.sizes.0.prices.fsn1', '€3.79')));
+
+    $this->actingAs($user)->get(route('servers.create', ['account' => $second->id]))
+        ->assertInertia(fn($page) => $page->where('cloud.selected', 'account:' . $second->id));
+
+    $this->actingAs($user)->get(route('servers.create', ['account' => 'nope']))
+        ->assertInertia(fn($page) => $page->where('cloud.selected', 'account:' . $first->id));
+
+    $ocean = CloudProvider::factory()->digitalocean()->for($team)->create(['created_at' => now()->addMinutes(2)]);
+
+    $this->actingAs($user)->get(route('servers.create', ['account' => $ocean->id]))
+        ->assertInertia(fn($page) => $page
+            ->where('cloud.selected', 'account:' . $ocean->id)
+            ->loadDeferredProps(fn($reload) => $reload->where('catalog.provider', 'DigitalOcean')));
+});
+
+test('the provision page with no account offers a manual server and loads no catalog', function () {
+    $team = Team::factory()->create();
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($user->fresh())->get(route('servers.create'))
+        ->assertInertia(fn($page) => $page
+            ->where('cloud.selected', 'manual')
+            ->loadDeferredProps(fn($reload) => $reload->where('catalog', null)));
+});

@@ -4,6 +4,7 @@ use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationToggleController;
+use App\Http\Controllers\CloudServerController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
@@ -34,6 +35,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
 
     Route::get('servers', fn() => to_route('dashboard'))->name('servers.index');
+    Route::post('servers/cloud', [CloudServerController::class, 'store'])
+        ->middleware('throttle:10,1,cloud-server-create')
+        ->name('servers.cloud.store');
+    Route::post('servers/{server}/cloud/retry', [CloudServerController::class, 'retry'])
+        ->name('servers.cloud.retry');
     Route::resource('servers', ServerController::class)->except(['index', 'edit']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');
