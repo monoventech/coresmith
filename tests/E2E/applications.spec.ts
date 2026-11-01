@@ -1157,6 +1157,21 @@ test.describe('what the repository installs', () => {
         await expect(toggle(page, 'Reverb websockets')).toBeChecked()
     })
 
+    test('inertia ssr turns on with the next deploy', async ({ page }, testInfo) => {
+        const row = toggleRow(page, 'inertia_ssr')
+
+        await gotoApplication(page, 'bench-01', own(testInfo, 'realtime'))
+
+        await expect(page.getByTestId('smart-toggles').locator('[data-testid^="toggle-"]').first()).toHaveAttribute('data-testid', 'toggle-inertia_ssr')
+        await expect(row).toContainText('Detected from composer.json and package.json · turning it on gives it a port from the next deploy')
+
+        await toggle(page, 'Inertia SSR').click()
+
+        await expect(toast(page)).toContainText('Saved. Inertia SSR starts with the next deploy.')
+        await expect(row).toContainText(/Starts with the next deploy, which builds the SSR bundle · port 137\d\d/)
+        await expect(toggle(page, 'Inertia SSR')).toBeChecked()
+    })
+
     test('reverb needs its settings first', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'reverb-unset')
 

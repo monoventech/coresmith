@@ -62,15 +62,19 @@ test('a full server refuses to allocate', function () {
     (new PortAllocator)->allocate($server->fresh());
 })->throws(PortExhaustedException::class);
 
-test('ssr ports come from their own range', function () {
-    expect((new PortAllocator)->allocateSsrPort(Server::factory()->create()))->toBe(13700);
-});
-
-test('an allocated ssr port is not handed out twice', function () {
+test("the first ssr app on a server gets inertia's default port", function () {
     $server = Server::factory()->create();
-    Application::factory()->for($server)->create(['ssr_port' => 13700]);
+    $allocator = new PortAllocator;
 
-    expect((new PortAllocator)->allocateSsrPort($server->fresh()))->toBe(13701);
+    expect($allocator->allocateSsrPort($server))->toBe(13714);
+
+    Application::factory()->for($server)->create(['ssr_port' => 13714]);
+
+    expect($allocator->allocateSsrPort($server->fresh()))->toBe(13700);
+
+    Application::factory()->for($server)->create(['ssr_port' => 13700])->delete();
+
+    expect($allocator->allocateSsrPort($server->fresh()))->toBe(13701);
 });
 
 test('only ports inside the allocatable range are considered valid', function () {

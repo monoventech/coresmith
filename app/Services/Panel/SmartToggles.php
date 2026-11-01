@@ -19,6 +19,7 @@ use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\AutoDeploy\AutoDeployStatus;
 use App\Services\Process\ProcessManager;
+use App\Services\Server\PortAllocator;
 use InvalidArgumentException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -37,6 +38,10 @@ final class SmartToggles
     public const AUTO_DEPLOY = 'auto_deploy';
 
     public const REVERB = 'reverb';
+
+    public const INERTIA_SSR = 'inertia_ssr';
+
+    public const SSR_COMMAND = 'php artisan inertia:start-ssr';
 
     public const START_WINDOW_SECONDS = 180;
 
@@ -76,6 +81,7 @@ final class SmartToggles
         $rails = $application->type === ApplicationType::Ruby && $framework === 'rails';
 
         return array_values(array_filter([
+            $framework === 'laravel' && ($this->ssrDetected($application) || $this->ssrOn($application)) ? self::INERTIA_SSR : null,
             $framework === 'laravel' ? self::QUEUE : null,
             $framework === 'laravel' ? self::SCHEDULER : null,
             $framework === 'laravel' && (($this->packages($application)['reverb'] ?? false) === true || app(Reverb::class)->on($application)) ? self::REVERB : null,
@@ -88,7 +94,11 @@ final class SmartToggles
 
     public function process(string $key): ?string
     {
-        return self::WORKERS[$key][0] ?? null;
+        return match ($key) {
+            self::INERTIA_SSR => 'ssr',
+            self::REVERB => 'reverb',
+            default => self::WORKERS[$key][0] ?? null,
+        };
     }
 
     public function failedWorker(Application $application, string $unit): ?string
@@ -155,6 +165,15 @@ final class SmartToggles
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
+            self::INERTIA_SSR => [
+                'key' => $key,
+                'label' => 'Inertia SSR',
+                'description' => $this->ssrDescription($application),
+                'busy_on' => 'Saving, it starts with the next deploy…',
+                'busy_off' => 'Stopping the unit and freeing the port…',
+                'on' => $this->isOn($application, $key),
+                'disabled' => false,
+            ],
             self::REVERB => [
                 'key' => $key,
                 'label' => 'Reverb websockets',
@@ -193,6 +212,7 @@ final class SmartToggles
             self::SCHEDULER => collect((array) $application->cron_jobs)->contains(fn(mixed $job): bool => is_array($job) && ($job['command'] ?? null) === self::SCHEDULE_COMMAND),
             self::AUTO_DEPLOY => (bool) $application->quick_deploy,
             self::REVERB => app(Reverb::class)->on($application),
+            self::INERTIA_SSR => $this->ssrOn($application),
             default => false,
         };
     }
@@ -206,6 +226,7 @@ final class SmartToggles
             self::SOLID_QUEUE => 'Solid Queue',
             self::AUTO_DEPLOY => 'Auto deploy',
             self::REVERB => 'Reverb websockets',
+            self::INERTIA_SSR => 'Inertia SSR',
             default => 'Maintenance page',
         };
     }
@@ -238,6 +259,18 @@ final class SmartToggles
         if (($current['command'] ?? null) !== $wanted) {
             $this->replaceProcess($application, 'reverb', $wanted === null ? null : ['name' => 'reverb', 'command' => $wanted]);
         }
+
+        $ssr = $this->ssrOn($application) && $application->ssr_port !== null ? $this->ssrCommand($application) : null;
+        $running = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
+
+        if (($running['command'] ?? null) !== $ssr) {
+            $this->replaceProcess($application, 'ssr', $ssr === null ? null : ['name' => 'ssr', 'command' => $ssr]);
+        }
+    }
+
+    public function ssrOn(Application $application): bool
+    {
+        return (((array) $application->toggles)[self::INERTIA_SSR] ?? false) === true;
     }
 
     public function apply(Application $application, string $key, bool $on): void
@@ -257,6 +290,7 @@ final class SmartToggles
             self::SCHEDULER => $this->scheduler($application, $on),
             self::AUTO_DEPLOY => $this->autoDeploy($application, $on),
             self::REVERB => $this->reverb($application, $on),
+            self::INERTIA_SSR => $this->ssr($application, $on),
         };
 
         $actor = auth()->user();
@@ -321,6 +355,45 @@ final class SmartToggles
         $application->forceFill(['processes' => $processes === [] ? null : $processes])->save();
     }
 
+    private function ssr(Application $application, bool $on): void
+    {
+        $port = $on ? ($application->ssr_port ?? app(PortAllocator::class)->allocateSsrPort($application->server)) : null;
+
+        $application->forceFill(['toggles' => [...(array) $application->toggles, self::INERTIA_SSR => $on], 'ssr_port' => $port])->save();
+
+        if ($on) {
+            return;
+        }
+
+        $this->replaceProcess($application, 'ssr');
+
+        SyncApplicationProcesses::dispatch($application, ['ssr']);
+    }
+
+    private function ssrDetected(Application $application): bool
+    {
+        return ($this->packages($application)['inertia'] ?? false) === true && (((array) $application->stack)['tooling']['ssr'] ?? false) === true;
+    }
+
+    private function ssrCommand(Application $application): string
+    {
+        $manager = ((array) $application->stack)['tooling']['manager'] ?? null;
+
+        return 'INERTIA_SSR_PORT=' . $application->ssr_port . ' ' . self::SSR_COMMAND . ' --runtime=' . ($manager === 'bun' ? 'bun' : 'node');
+    }
+
+    private function ssrDescription(Application $application): string
+    {
+        $port = $application->ssr_port;
+        $live = collect((array) $application->processes)->contains(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
+
+        return match (true) {
+            $this->ssrOn($application) && $live => self::SSR_COMMAND . " · port {$port} auto-allocated" . ($port === PortAllocator::SSR_DEFAULT_PORT ? '' : ' · your SSR entry must read INERTIA_SSR_PORT'),
+            $this->ssrOn($application) => "Starts with the next deploy, which builds the SSR bundle · port {$port}",
+            default => 'Detected from composer.json and package.json · turning it on gives it a port from the next deploy',
+        };
+    }
+
     private function reverb(Application $application, bool $on): void
     {
         $application->forceFill(['toggles' => [...(array) $application->toggles, self::REVERB => $on]])->save();
@@ -381,7 +454,8 @@ final class SmartToggles
         $running = !in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true);
 
         return [
-            'starting' => $latest?->description === self::CHANGED
+            'starting' => !in_array($key, [self::INERTIA_SSR, self::REVERB], true)
+                && $latest?->description === self::CHANGED
                 && ($latest->properties['on'] ?? false) === true
                 && $latest->created_at?->greaterThanOrEqualTo(now()->subSeconds(self::START_WINDOW_SECONDS)) === true
                 && $running

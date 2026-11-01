@@ -46,6 +46,7 @@ use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
+use App\Services\Process\SystemdUnitBuilder;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RepositoryProbe;
@@ -811,6 +812,11 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::BUILD, 'building the release');
+
+        if ($stack->tooling !== null && $stack->tooling->build && $stack->tooling->ssr && app(SmartToggles::class)->ssrOn($this->deployment->application)) {
+            $this->appendLog('ssr: building with build:ssr');
+        }
+
         $this->runInRelease($connection, $release, $stack, $steps, DeploymentPhases::BUILD, 0);
     }
 
@@ -876,8 +882,10 @@ final class DeployApplication implements ShouldQueue
 
         $processes->refresh($connection, $application, $restart);
 
+        $ssr = $this->ssrUnit($application);
+
         try {
-            $processes->verifyStarted($connection, $application);
+            $processes->verifyStarted($connection, $application, $ssr === null ? null : array_values(array_diff($units, [$ssr])));
         } catch (ProcessDidNotStart $e) {
             $worker = app(SmartToggles::class)->failedWorker($application, $e->unit);
 
@@ -888,6 +896,34 @@ final class DeployApplication implements ShouldQueue
 
             throw $e;
         }
+
+        if ($ssr === null) {
+            return;
+        }
+
+        try {
+            $processes->verifyStarted($connection, $application, [$ssr]);
+        } catch (ProcessDidNotStart) {
+            $this->ssrDidNotStart($connection, $application, $ssr);
+        }
+    }
+
+    private function ssrUnit(Application $application): ?string
+    {
+        $runs = collect((array) $application->processes)->contains(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
+
+        return $runs ? app(SystemdUnitBuilder::class)->unitName($application, 'ssr') : null;
+    }
+
+    private function ssrDidNotStart(SSHConnection $connection, Application $application, string $unit): void
+    {
+        $connection->execute('systemctl disable --now ' . escapeshellarg($unit) . ' || true', sudo: true);
+        $connection->execute('rm -f ' . escapeshellarg(app(SystemdUnitBuilder::class)->unitPath($application, 'ssr')), sudo: true);
+        $connection->execute('systemctl daemon-reload', sudo: true);
+
+        app(SmartToggles::class)->failedToStart($application, SmartToggles::INERTIA_SSR, 'ssr', "The SSR server did not start on port {$application->ssr_port}. Pass Number(process.env.INERTIA_SSR_PORT) as the port in your SSR entry, then deploy again.");
+
+        $this->appendLog('ssr: inertia:start-ssr did not start, pages render in the browser until it does');
     }
 
     private function watchProcesses(SSHConnection $connection, ProcessManager $processes, Application $application): void
@@ -904,7 +940,13 @@ final class DeployApplication implements ShouldQueue
 
         $this->appendLog($this->stamp() . " watch: keeping an eye on the processes for {$seconds} seconds");
 
+        $ssr = $this->ssrUnit($application);
         $loop = app(CrashLoopWatch::class)->watch($connection, $application);
+
+        if ($loop !== null && $ssr !== null && $loop->unit === $ssr) {
+            $this->ssrDidNotStart($connection, $application, $ssr);
+            $loop = app(CrashLoopWatch::class)->watch($connection, $application);
+        }
 
         if ($loop === null) {
             $this->appendLog('watch: every process stayed up');

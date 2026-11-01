@@ -10,6 +10,7 @@ namespace App\Services\Deployment;
 
 use App\Models\Application;
 use App\Services\Panel\Reverb;
+use App\Services\Panel\SmartToggles;
 
 final class ManagedEnvironment
 {
@@ -23,7 +24,22 @@ final class ManagedEnvironment
      */
     public function values(Application $application): array
     {
-        return array_diff_key($this->reverbValues($application), $this->environment->parse((string) $application->env_variables));
+        return array_diff_key([...$this->reverbValues($application), ...$this->ssrValues($application)], $this->environment->parse((string) $application->env_variables));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function ssrValues(Application $application): array
+    {
+        if (!app(SmartToggles::class)->ssrOn($application) || $application->ssr_port === null) {
+            return [];
+        }
+
+        return [
+            'INERTIA_SSR_ENABLED' => 'true',
+            'INERTIA_SSR_URL' => 'http://127.0.0.1:' . $application->ssr_port,
+        ];
     }
 
     /**
