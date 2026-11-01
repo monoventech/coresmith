@@ -38,7 +38,7 @@ Route::get('up/release', ReleaseProbeController::class)
     ->middleware('throttle:60,1,release-probe')
     ->name('release.probe');
 
-Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1,api-v1'])->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1,api-v1', 'plan'])->group(function () {
     Route::get('servers', [ServerApiController::class, 'index'])
         ->middleware('token.can:server.view')->name('api.servers.index');
     Route::get('servers/{server}', [ServerApiController::class, 'show'])

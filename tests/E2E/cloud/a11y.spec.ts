@@ -16,7 +16,11 @@ const PAGES: [string, Visit][] = [
     ['Fleet', direct('/monoven/dashboard')]
 ]
 
-const OTHER_TEAM_PAGES: [string, Visit][] = [['Fleet on a trial', direct('/trial/dashboard')]]
+const OTHER_TEAM_PAGES: [string, Visit][] = [
+    ['Fleet on a trial', direct('/trial/dashboard')],
+    ['Lapsed team', direct('/expired/dashboard')],
+    ['Failed payment', direct('/overdue/dashboard')]
+]
 
 const GUEST_PAGES: [string, string][] = [
     ['Sign in', '/login'],

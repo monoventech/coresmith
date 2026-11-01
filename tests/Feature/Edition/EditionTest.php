@@ -16,7 +16,7 @@ use Symfony\Component\Process\Process;
 
 function editionOwner(): User
 {
-    $team = Team::factory()->create();
+    $team = Team::factory()->onTrial()->create();
     $team->members()->attach($team->owner_id, ['role' => TeamRole::Owner->value]);
 
     return User::query()->findOrFail($team->owner_id)->fresh();

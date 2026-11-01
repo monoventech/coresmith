@@ -1,3 +1,4 @@
+import type { BillingSummary } from '@/lib/billing'
 import type { Auth } from '@/types/auth'
 import type { route as routeFn } from 'ziggy-js'
 
@@ -24,6 +25,7 @@ declare module '@inertiajs/core' {
             name: string
             auth: Auth
             edition: 'self-hosted' | 'cloud'
+            billing: BillingSummary | null
             [key: string]: unknown
         }
         flashDataType: {

@@ -7,6 +7,7 @@ use App\Enums\Edition;
 use App\Models\InstanceSetting;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Billing\BillingPresenter;
 use App\Services\Panel\CommandPalette;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Panel\Realtime;
@@ -57,6 +58,7 @@ class HandleInertiaRequests extends Middleware
             'edition' => Edition::current()->value,
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
             'panel' => fn(): ?array => $this->panel($request),
+            'billing' => fn(): ?array => $this->billing($request),
             'palette' => Inertia::optional(fn(): array => $request->user() === null
                 ? []
                 : (new CommandPalette($request->user(), app(TeamContext::class)->team()))->commands()),
@@ -78,6 +80,21 @@ class HandleInertiaRequests extends Middleware
         if ($flash !== []) {
             Inertia::flash($flash);
         }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function billing(Request $request): ?array
+    {
+        $user = $request->user();
+        $team = $user instanceof User ? app(TeamContext::class)->team() : null;
+
+        if (Edition::current()->isSelfHosted() || !$user instanceof User || $team === null) {
+            return null;
+        }
+
+        return app(BillingPresenter::class)->summary($team, $user);
     }
 
     /**

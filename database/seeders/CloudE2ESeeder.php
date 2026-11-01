@@ -11,9 +11,11 @@ namespace Database\Seeders;
 use App\Enums\Plan;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Models\Application;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\Team;
+use App\Models\TeamInvoice;
 use App\Models\User;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
@@ -43,6 +45,9 @@ final class CloudE2ESeeder extends Seeder
         Subscription::factory()->for($tenant->team, 'owner')->plan(Plan::Pro)->create(['renews_at' => now()->addDays(13)]);
 
         $this->trialTeam($tenant->owner);
+        $this->lapsedTeam($tenant->owner, $tenant->member);
+        $this->endingTeam($tenant->owner);
+        $this->overdueTeam($tenant->owner);
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
     }
@@ -54,5 +59,37 @@ final class CloudE2ESeeder extends Seeder
         $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
 
         Server::factory()->for($team)->create(['name' => 'forge-trial-01', 'status' => ServerStatus::Active]);
+    }
+
+    private function lapsedTeam(User $owner, User $member): void
+    {
+        $team = $this->ownedTeam($owner, 'Lapsed Labs', 'expired');
+        $team->forceFill(['trial_ends_at' => now()->subDays(3)])->save();
+        $team->members()->attach($member, ['role' => TeamRole::Member->value]);
+
+        $server = Server::factory()->for($team)->create(['name' => 'lapsed-01', 'status' => ServerStatus::Active]);
+        Application::factory()->for($team)->for($server)->create(['name' => 'lapsed-app']);
+    }
+
+    private function endingTeam(User $owner): void
+    {
+        $this->ownedTeam($owner, 'Last Days', 'ending')->forceFill(['trial_ends_at' => now()->addDays(2)])->save();
+    }
+
+    private function overdueTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Overdue Co', 'overdue');
+        $team->forceFill(['stripe_id' => 'cus_e2e_overdue', 'pm_type' => 'visa', 'pm_last_four' => '0341', 'pm_expires' => '02/27'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->status('past_due')->create();
+        TeamInvoice::factory()->for($team)->failed(now()->addDays(3))->create();
+    }
+
+    private function ownedTeam(User $owner, string $name, string $slug): Team
+    {
+        $team = Team::factory()->create(['name' => $name, 'slug' => $slug, 'owner_id' => $owner->getKey()]);
+        $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+        return $team;
     }
 }

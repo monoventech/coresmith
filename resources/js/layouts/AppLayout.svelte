@@ -1,11 +1,14 @@
 <script lang="ts">
     import AccountDialog from '@/components/panel/AccountDialog.svelte'
+    import BillingBanner from '@/components/panel/BillingBanner.svelte'
     import CommandPalette from '@/components/panel/CommandPalette.svelte'
     import MobileNav from '@/components/panel/MobileNav.svelte'
     import Sidebar from '@/components/panel/Sidebar.svelte'
     import Toast from '@/components/panel/Toast.svelte'
     import Wordmark from '@/components/panel/Wordmark.svelte'
     import { getInitials } from '@/lib/initials'
+    import type { PanelProps } from '@/lib/panel'
+    import { appPath } from '@/lib/panel'
     import { initializeSidebar } from '@/lib/sidebar.svelte'
     import { page } from '@inertiajs/svelte'
     import type { Snippet } from 'svelte'
@@ -23,6 +26,10 @@
     let account = $state(false)
 
     const user = $derived(page.props.auth.user)
+    const billing = $derived(page.props.billing)
+    const onBilling = $derived(
+        appPath(page.url, (page.props.panel as PanelProps | null)?.base).startsWith('/settings/billing')
+    )
 
     onMount(() => {
         initializeSidebar()
@@ -43,7 +50,12 @@
 <div class="panel flex h-dvh overflow-hidden bg-background font-sans text-foreground">
     <Sidebar onSearch={() => (palette = true)} onAccount={() => (account = true)} />
 
-    <main id="main" {...{ 'scroll-region': '' }} class="grain relative min-w-0 flex-1 overflow-y-auto" data-testid="panel-main">
+    <main
+        id="main"
+        {...{ 'scroll-region': '' }}
+        class="grain relative min-w-0 flex-1 overflow-y-auto"
+        data-testid="panel-main"
+    >
         <div class="mx-auto max-w-302 px-4.5 pt-3 pb-24 sm:px-11 sm:pt-9 sm:pb-16">
             {#if !detail}
                 <div class="mt-2 mb-0.5 flex items-center justify-between gap-3 sm:hidden">
@@ -61,6 +73,10 @@
                         </span>
                     </button>
                 </div>
+            {/if}
+
+            {#if billing?.banner && !onBilling}
+                <BillingBanner banner={billing.banner} href={billing.href} />
             {/if}
 
             {@render children?.()}

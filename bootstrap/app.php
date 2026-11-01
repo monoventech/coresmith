@@ -1,6 +1,8 @@
 <?php
 
+use App\Exceptions\PlanRefusal;
 use App\Http\Middleware\ContentSecurityPolicy;
+use App\Http\Middleware\EnforcePlan;
 use App\Http\Middleware\EnforceTokenAbility;
 use App\Http\Middleware\EnsureCloudEdition;
 use App\Http\Middleware\EnsureEmailIsVerified;
@@ -37,6 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'setup.token' => RequireSetupToken::class,
             'cloud' => EnsureCloudEdition::class,
             'verified' => EnsureEmailIsVerified::class,
+            'plan' => EnforcePlan::class,
         ]);
 
         $middleware->web(prepend: [ContentSecurityPolicy::class, EnsureInstalled::class]);
@@ -48,9 +51,11 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             ThrottleSignups::class,
+            EnforcePlan::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->dontFlash(['api_token']);
+        $exceptions->dontReport([PlanRefusal::class]);
         Integration::handles($exceptions);
     })->create();
