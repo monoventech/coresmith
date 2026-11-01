@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use App\Jobs\DeployApplication;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
+use App\Models\Server;
 use App\Models\WebhookEndpoint;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Webhook\SignatureVerifier;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
@@ -236,4 +239,33 @@ test('the endpoint is rate limited', function () {
 
     expect(collect(Route::getRoutes()->getByName('webhooks.deploy')->gatherMiddleware()))
         ->toContain('throttle:30,1,webhook-deploy');
+});
+
+function webhookBusy(Server $server, string $type = CloudTask::RESIZE): void
+{
+    $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
+    CloudTask::start($server, $type, $type === CloudTask::RESIZE ? 'power_off' : 'delete', $type === CloudTask::RESIZE ? ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true] : []);
+}
+
+test('a push while the server is being resized is refused and can be delivered again', function () {
+    Queue::fake();
+    $endpoint = endpointFor();
+    $server = $endpoint->application->server;
+    webhookBusy($server);
+    $payload = ['ref' => 'refs/heads/main', 'after' => str_repeat('a', 40)];
+    $headers = ['X-GitHub-Event' => 'push', 'X-GitHub-Delivery' => 'push-during-resize'];
+
+    signedPost($endpoint, $payload, headers: $headers)
+        ->assertStatus(409)
+        ->assertExactJson(['message' => "Coresmith is resizing {$server->name} at Hetzner Cloud. Deploy once it's back."]);
+
+    expect(Deployment::query()->count())->toBe(0);
+
+    CloudTask::finish($server);
+
+    signedPost($endpoint, $payload, headers: $headers)
+        ->assertStatus(202)
+        ->assertExactJson(['message' => 'Deployment queued.']);
+
+    expect(Deployment::query()->count())->toBe(1);
 });

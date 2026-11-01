@@ -247,6 +247,12 @@ final class ServerController extends Controller
     {
         $this->authorize('update', $server);
 
+        $refusal = CloudTask::refusal($server, 'Reboot');
+
+        if ($refusal !== null) {
+            return back()->with('error', $refusal);
+        }
+
         $busy = Deployment::query()
             ->whereIn('application_id', $server->applications()->select('id'))
             ->where('status', DeploymentStatus::Running->value)

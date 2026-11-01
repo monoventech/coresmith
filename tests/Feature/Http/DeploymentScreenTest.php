@@ -7,10 +7,12 @@ use App\Enums\TeamRole;
 use App\Jobs\DeployApplication;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
@@ -385,4 +387,41 @@ test('another team cannot roll back, and a rollback through another server is a 
         ->assertNotFound();
 
     Queue::assertNothingPushed();
+});
+
+function screenBusy(Server $server, string $type = CloudTask::RESIZE): void
+{
+    $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
+    CloudTask::start($server, $type, $type === CloudTask::RESIZE ? 'power_off' : 'delete', $type === CloudTask::RESIZE ? ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true] : []);
+}
+
+test('a deploy waits while the server is being resized', function (string $type, string $message) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $application = screenApp($team);
+    screenBusy($application->server, $type);
+
+    $this->actingAs(screenMember($team))
+        ->post(route('servers.applications.deploy', [$application->server_id, $application]))
+        ->assertSessionHas('error', $message);
+
+    expect(Deployment::query()->count())->toBe(0);
+
+    Queue::assertNothingPushed();
+})->with([
+    'a resize' => [CloudTask::RESIZE, "Coresmith is resizing web-1 at Hetzner Cloud. Deploy once it's back."],
+    'a destroy' => [CloudTask::DESTROY, 'Coresmith is destroying web-1 at Hetzner Cloud.'],
+]);
+
+test('a rollback waits while the server is being resized', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $application = screenApp($team);
+    screenBusy($application->server);
+
+    $this->actingAs(screenMember($team))
+        ->post(route('servers.applications.rollback', [$application->server_id, $application]))
+        ->assertSessionHas('error', "Coresmith is resizing web-1 at Hetzner Cloud. Roll back once it's back.");
+
+    Queue::assertNotPushed(RollbackApplication::class);
 });

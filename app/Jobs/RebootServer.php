@@ -8,7 +8,9 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Exceptions\CloudProviderException;
 use App\Models\Server;
+use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -28,8 +30,16 @@ final class RebootServer implements ShouldQueue
         $this->onQueue('default');
     }
 
-    public function handle(SSHConnectionManager $connections): void
+    public function handle(SSHConnectionManager $connections, CloudApiFactory $apis): void
     {
+        $account = $this->server->cloudProvider;
+
+        if ($account !== null && filled($this->server->provider_server_id)) {
+            $this->throughProvider($apis, $account->type->label());
+
+            return;
+        }
+
         $connection = $connections->for($this->server);
 
         try {
@@ -39,5 +49,18 @@ final class RebootServer implements ShouldQueue
         }
 
         activity()->performedOn($this->server)->log('server_rebooted');
+    }
+
+    private function throughProvider(CloudApiFactory $apis, string $label): void
+    {
+        try {
+            $apis->for($this->server->cloudProvider)->reboot((string) $this->server->provider_server_id);
+        } catch (CloudProviderException $e) {
+            activity()->performedOn($this->server)->withProperties(['reason' => $e->getMessage()])->log('server_reboot_failed');
+
+            throw $e;
+        }
+
+        activity()->performedOn($this->server)->withProperties(['via' => $label])->log('server_rebooted');
     }
 }

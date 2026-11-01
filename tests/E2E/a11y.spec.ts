@@ -187,6 +187,15 @@ const PAGES: [string, Visit][] = [
             await dialog(page).waitFor()
         }
     ],
+    [
+        'Resize dialog',
+        async (page) => {
+            await gotoServer(page, 'outpost-01')
+            await page.getByRole('button', { name: 'Resize', exact: true }).click()
+            await dialog(page).getByLabel('New size').waitFor()
+        }
+    ],
+    ['Server whose resize failed', (page) => gotoServer(page, 'resize-failed')],
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],

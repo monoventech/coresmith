@@ -166,7 +166,7 @@ test('a reboot is scheduled a few seconds out so the command can return', functi
     $server = Server::factory()->create(['ssh_user' => 'root']);
     $transport = new FakeSSHTransport;
 
-    housekeepingWith($transport, fn() => (new RebootServer($server))->handle(app(SSHConnectionManager::class)));
+    housekeepingWith($transport, fn() => app()->call([new RebootServer($server), 'handle']));
 
     expect($transport->commands())->toBe(['systemd-run --on-active=5 --timer-property=AccuracySec=1s systemctl reboot'])
         ->and(Activity::query()->where('description', 'server_rebooted')->sole()->subject_id)->toBe($server->id)
@@ -177,7 +177,7 @@ test('a reboot as a non root user goes through sudo', function () {
     $server = Server::factory()->create(['ssh_user' => 'coresmith']);
     $transport = new FakeSSHTransport;
 
-    housekeepingWith($transport, fn() => (new RebootServer($server))->handle(app(SSHConnectionManager::class)));
+    housekeepingWith($transport, fn() => app()->call([new RebootServer($server), 'handle']));
 
     expect($transport->commands())->toBe(['sudo ' . RebootServer::COMMAND]);
 });
@@ -186,7 +186,7 @@ test('a reboot the server refused is not logged', function () {
     $server = Server::factory()->create();
     $transport = (new FakeSSHTransport)->respondTo('systemd-run', 'Failed to start transient timer unit', 1);
 
-    expect(fn() => housekeepingWith($transport, fn() => (new RebootServer($server))->handle(app(SSHConnectionManager::class))))
+    expect(fn() => housekeepingWith($transport, fn() => app()->call([new RebootServer($server), 'handle'])))
         ->toThrow(SSHCommandFailedException::class);
 
     expect(Activity::query()->where('description', 'server_rebooted')->exists())->toBeFalse();

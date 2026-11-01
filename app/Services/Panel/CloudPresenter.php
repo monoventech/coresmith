@@ -11,6 +11,7 @@ namespace App\Services\Panel;
 use App\Enums\Ability;
 use App\Enums\CloudFailure;
 use App\Enums\CloudProviderType;
+use App\Enums\ServerStatus;
 use App\Exceptions\CloudProviderException;
 use App\Models\CloudProvider;
 use App\Models\Server;
@@ -25,6 +26,17 @@ use App\Services\Cloud\Tasks\CreateServerTask;
 
 final class CloudPresenter
 {
+    private const RESIZE_STEPS = [
+        'power_off' => 'shutting it down',
+        'wait_off' => 'shutting it down',
+        'change' => 'changing the size',
+        'wait_change' => 'changing the size',
+        'power_on' => 'starting it again',
+        'wait_on' => 'starting it again',
+        'recover' => 'starting it again',
+        'reconnect' => 'signing back in',
+    ];
+
     private const CREATE_STEPS = [
         'create' => ['Create the server', "with Coresmith's SSH key on it", 'creating it'],
         'boot' => ['Boot', 'and get a public IP address', 'waiting for it to boot'],
@@ -188,6 +200,8 @@ final class CloudPresenter
                 'remove' => $failedCreate && $server->provider_server_id === null && $user->can('delete', $server),
                 'detach' => $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
                 'destroy' => filled($server->provider_server_id) && $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
+                'resize' => $server->status === ServerStatus::Active && filled($server->provider_server_id) && $task?->state !== CloudTask::RUNNING && $user->can('update', $server),
+                'dismiss' => $task !== null && $task->type === CloudTask::RESIZE && $task->state === CloudTask::FAILED && $user->can('update', $server),
             ],
         ];
     }
@@ -220,7 +234,11 @@ final class CloudPresenter
             'type' => $task->type,
             'state' => $task->state,
             'step' => $task->step,
-            'step_label' => $task->type === CloudTask::DESTROY ? "deleting it at {$label}" : (self::CREATE_STEPS[$task->step][2] ?? $task->step),
+            'step_label' => match ($task->type) {
+                CloudTask::DESTROY => "deleting it at {$label}",
+                CloudTask::RESIZE => self::RESIZE_STEPS[$task->step] ?? $task->step,
+                default => self::CREATE_STEPS[$task->step][2] ?? $task->step,
+            },
             'position' => $position + 1,
             'total' => count($steps),
             'steps' => array_map(fn(string $step, int $index): array => [

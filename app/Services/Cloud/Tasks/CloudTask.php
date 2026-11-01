@@ -141,6 +141,24 @@ final readonly class CloudTask
         return $task !== null && $task->state === self::RUNNING && ($type === null || $task->type === $type);
     }
 
+    public static function refusal(Server $server, string $action): ?string
+    {
+        $task = self::of($server);
+
+        if ($task === null || $task->state !== self::RUNNING) {
+            return null;
+        }
+
+        $label = $server->cloudProvider?->type->label() ?? 'its provider';
+
+        return match ($task->type) {
+            self::RESIZE => "Coresmith is resizing {$server->name} at {$label}. {$action} once it's back.",
+            self::DESTROY => "Coresmith is destroying {$server->name} at {$label}.",
+            self::CREATE => "Coresmith is still creating {$server->name} at {$label}.",
+            default => null,
+        };
+    }
+
     public function stepSeconds(): int
     {
         return $this->stepStartedAt === null ? 0 : max(0, (int) $this->stepStartedAt->diffInSeconds(now()));

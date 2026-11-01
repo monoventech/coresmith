@@ -11,9 +11,11 @@ use App\Jobs\DetectStaleDeployments;
 use App\Jobs\InstallRuntimes;
 use App\Listeners\FollowUpAutoDeploy;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\User;
 use App\Services\AutoDeploy\AutoDeploy;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\RepositoryProbe;
@@ -586,4 +588,18 @@ test('a check whose app is gone concludes nothing', function () {
 
     expect(app(AutoDeploy::class)->checked($application, autoDeploySha('a'), null))->toBeNull()
         ->and(Deployment::count())->toBe(0);
+});
+
+test('a new head waits while the server is busy at its provider, and is deployed once it is back', function () {
+    $application = autoDeployApp();
+    $server = $application->server;
+    $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
+    CloudTask::start($server, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => false]);
+
+    expect(app(AutoDeploy::class)->observe($application, autoDeploySha('b'), 'push'))->toBeNull()
+        ->and(Deployment::count())->toBe(0);
+
+    CloudTask::finish($server);
+
+    expect(app(AutoDeploy::class)->reconcile($application->fresh())?->requested_commit)->toBe(autoDeploySha('b'));
 });

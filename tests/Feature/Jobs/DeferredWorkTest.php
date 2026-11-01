@@ -12,8 +12,10 @@ use App\Jobs\ManageFirewallRule;
 use App\Jobs\RollbackApplication;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Process\FpmPoolBuilder;
@@ -228,3 +230,20 @@ test('the cron files and the scripts they run are audited alongside the crontabs
 test('the audit rules watch every sensitive path from the spec', function (string $path) {
     expect((new SecurityHardening)->auditRules())->toContain($path);
 })->with(['/etc/sudoers', '/etc/ssh/sshd_config', '/etc/shadow', '/etc/coresmith/', '/etc/crontab']);
+
+test('idle apps on a server being resized are left alone', function () {
+    $app = cronApp(['idle_timeout_minutes' => 15, 'last_request_at' => now()->subMinutes(20), 'power_state' => PowerState::Active]);
+    $other = cronApp(['slug' => 'other-app', 'system_user' => 'coresmith-app-efgh', 'idle_timeout_minutes' => 15, 'last_request_at' => now()->subMinutes(20), 'power_state' => PowerState::Active]);
+    $server = $app->server;
+    $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
+    CloudTask::start($server, CloudTask::RESIZE, 'wait_off', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+    $transport = new FakeSSHTransport;
+
+    withTransport($transport, function (): void {
+        (new IdleAppSleeper)->handle(app(SSHConnectionManager::class), processes());
+    });
+
+    expect($app->fresh()->power_state)->toBe(PowerState::Active)
+        ->and($other->fresh()->power_state)->toBe(PowerState::Sleeping)
+        ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, 'coresmith-app-my-app'))->all())->toBe([]);
+});

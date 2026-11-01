@@ -440,3 +440,28 @@ test('a server being destroyed reads so, and a failed destroy needs attention', 
         ->and($fleet->state($failed))->toBe(['key' => 'destroy_failed', 'label' => 'Destroy failed', 'tone' => 'destructive'])
         ->and($fleet->attention())->toContain(['severity' => 'critical', 'subject' => 'outpost-05', 'summary' => 'destroy failed', 'href' => route('servers.show', $failed)]);
 });
+
+function fleetResizing(Team $team, bool $failed, array $attributes = []): Server
+{
+    $server = Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->create(['name' => 'outpost-06', 'status' => ServerStatus::Active, ...$attributes]);
+    CloudTask::start($server, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+
+    if ($failed) {
+        CloudTask::fail($server, 'Hetzner Cloud refused the request. outpost-07 was started again on cx22.');
+    }
+
+    return $server->fresh();
+}
+
+test('a server being resized reads so, and a failed resize is a warning', function () {
+    $team = Team::factory()->create();
+    $running = fleetResizing($team, false);
+    $failed = fleetResizing($team, true, ['name' => 'outpost-07']);
+    fleetRunning($running);
+    $fleet = new FleetSnapshot($team);
+
+    expect($fleet->state($running))->toBe(['key' => 'resizing', 'label' => 'Resizing', 'tone' => 'accent'])
+        ->and($fleet->state($failed))->toBe(['key' => 'resize_failed', 'label' => 'Resize failed', 'tone' => 'warning'])
+        ->and($fleet->attention())->toContain(['severity' => 'warning', 'subject' => 'outpost-07', 'summary' => 'resize failed', 'href' => route('servers.show', $failed)])
+        ->and(collect($fleet->attention())->pluck('subject')->all())->not->toContain('outpost-06');
+});

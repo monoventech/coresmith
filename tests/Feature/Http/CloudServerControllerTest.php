@@ -15,12 +15,15 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\CatalogData;
+use App\Services\Cloud\CloudCatalog;
 use App\Services\Cloud\CloudImage;
 use App\Services\Cloud\CloudPrice;
 use App\Services\Cloud\CloudRegion;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
+use Database\Seeders\Support\CloudCatalogs;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
@@ -449,3 +452,187 @@ test('a failed destroy can be tried again', function () {
 
     Queue::assertPushed(RunCloudTask::class, 1);
 });
+
+function cloudResizable(CloudProvider $account, array $attributes = []): Server
+{
+    CloudCatalog::put($account, CloudCatalogs::hetzner(), 600);
+
+    return cloudDestroyable($account, $attributes);
+}
+
+test('the resize choices keep the disk and the architecture', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account);
+
+    $this->actingAs($user)
+        ->getJson(route('servers.cloud.sizes', $server))
+        ->assertOk()
+        ->assertExactJson([
+            'current' => ['id' => 'cx22', 'label' => '4 GB · 2 vCPU', 'disk_gb' => 40, 'monthly' => '€3.79'],
+            'sizes' => [
+                ['id' => 'cx32', 'label' => '8 GB · 4 vCPU', 'monthly' => '€6.80'],
+                ['id' => 'cpx21', 'label' => '4 GB · 3 vCPU', 'monthly' => '€7.55'],
+                ['id' => 'cx42', 'label' => '16 GB · 8 vCPU', 'monthly' => '€16.40'],
+            ],
+            'note' => 'The disk stays 40 GB, so you can size back down later.',
+            'error' => null,
+        ]);
+});
+
+test('vultr only offers bigger plans', function () {
+    [$team, $user] = cloudServerAdmin();
+    $account = CloudProvider::factory()->for($team)->create(['type' => CloudProviderType::Vultr, 'name' => 'Vultr']);
+    $usd = fn(string $monthly): CloudPrice => new CloudPrice($monthly, 'USD');
+
+    CloudCatalog::put($account, new CatalogData(collect([new CloudRegion('fra', 'Frankfurt', 'DE')]), collect([
+        new CloudSize('vc2-1c-2gb', 1, 2048, 55, 'x86', $usd('10.00')),
+        new CloudSize('vhp-1c-2gb', 1, 2048, 64, 'x86', $usd('10.00')),
+        new CloudSize('vc2-2c-4gb', 2, 4096, 80, 'x86', $usd('20.00')),
+    ]), collect()), 600);
+
+    $server = cloudDestroyable($account, ['region' => 'fra', 'provider_size' => 'vc2-1c-2gb']);
+
+    $this->actingAs($user)
+        ->getJson(route('servers.cloud.sizes', $server))
+        ->assertJsonPath('sizes.*.id', ['vc2-2c-4gb'])
+        ->assertJsonPath('note', 'Vultr only resizes up, and the disk grows with the new size.');
+});
+
+test('a size the provider no longer lists cannot be resized from', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account, ['provider_size' => 'cx11']);
+
+    $this->actingAs($user)
+        ->getJson(route('servers.cloud.sizes', $server))
+        ->assertOk()
+        ->assertExactJson(['error' => "Coresmith can't find cx11 in Hetzner Cloud's current sizes, so it can't offer a resize."]);
+});
+
+test('an account whose token was refused says so instead of offering sizes', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account);
+    $account->forceFill(['token_failed_at' => now()->setDate(2026, 10, 30)])->save();
+
+    $this->actingAs($user)
+        ->getJson(route('servers.cloud.sizes', $server))
+        ->assertOk()
+        ->assertExactJson(['error' => "Hetzner Cloud refused this account's token on Oct 30. Replace it in Settings → Team, then try again."]);
+});
+
+test('a catalog that cannot be read says why', function () {
+    $fake = cloudServerFake();
+    $fake->api->failing('regions', new CloudProviderException(CloudFailure::Unavailable, CloudProviderType::Hetzner, status: 503));
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+
+    $this->actingAs($user)
+        ->getJson(route('servers.cloud.sizes', $server))
+        ->assertOk()
+        ->assertExactJson(['error' => "Coresmith couldn't load Hetzner Cloud's regions and sizes. Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute."]);
+});
+
+test('an admin starts a resize', function () {
+    cloudServerFake();
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account);
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.resize', $server), ['size' => 'cx32'])
+        ->assertSessionHas('success', 'Resizing outpost-02 to cx32. Apps are offline until it starts again.');
+
+    $task = CloudTask::of($server->fresh());
+
+    expect($task->type)->toBe(CloudTask::RESIZE)
+        ->and($task->step)->toBe('power_off')
+        ->and($task->data)->toBe(['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true])
+        ->and($task->by)->toBe((string) $user->id)
+        ->and((string) $server->fresh()->provisioning_log)->toContain('resizing outpost-02 from cx22 to cx32 at Hetzner Cloud');
+
+    Queue::assertPushed(RunCloudTask::class, 1);
+});
+
+test('a size that is not offered is refused', function (string $size) {
+    cloudServerFake();
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account);
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.resize', $server), ['size' => $size])
+        ->assertSessionHasErrors(['size' => "That size can't be used for outpost-02. Pick one from the list."]);
+
+    expect(CloudTask::of($server->fresh()))->toBeNull();
+
+    Queue::assertNothingPushed();
+})->with(['an arm size' => 'cax11', 'the current size' => 'cx22', 'a size nobody sells' => 'cx99', 'nothing' => '']);
+
+test('a deployer cannot resize', function () {
+    cloudServerFake();
+    [, $user, $account] = cloudServerAdmin(TeamRole::Member);
+    $server = cloudResizable($account);
+
+    $this->actingAs($user)->getJson(route('servers.cloud.sizes', $server))->assertForbidden();
+    $this->actingAs($user)->post(route('servers.cloud.resize', $server), ['size' => 'cx32'])->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
+test('a server that is not running at its provider cannot be resized', function (array $attributes) {
+    cloudServerFake();
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account, $attributes);
+
+    $this->actingAs($user)->getJson(route('servers.cloud.sizes', $server))->assertNotFound();
+    $this->actingAs($user)->post(route('servers.cloud.resize', $server), ['size' => 'cx32'])->assertNotFound();
+})->with([
+    'still provisioning' => [['status' => ServerStatus::Provisioning]],
+    'with no instance' => [['provider_server_id' => null]],
+]);
+
+test('a resize waits for other work', function () {
+    cloudServerFake();
+    [, $user, $account] = cloudServerAdmin();
+    $busy = cloudResizable($account);
+    CloudTask::start($busy, CloudTask::DESTROY, 'delete');
+    $deploying = cloudResizable($account, ['name' => 'outpost-03']);
+    Deployment::factory()->for(Application::factory()->for($deploying->team)->for($deploying)->create())->create(['status' => DeploymentStatus::Running]);
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.resize', $busy), ['size' => 'cx32'])
+        ->assertSessionHas('error', 'Coresmith is destroying outpost-02 at Hetzner Cloud.');
+    $this->actingAs($user)
+        ->post(route('servers.cloud.resize', $deploying), ['size' => 'cx32'])
+        ->assertSessionHas('error', 'A deploy is running on outpost-03. Resize it once the deploy finishes.');
+
+    Queue::assertNothingPushed();
+});
+
+test('a failed resize can be dismissed', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    CloudTask::start($server, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+
+    $this->actingAs($user)
+        ->delete(route('servers.cloud.dismiss', $server))
+        ->assertSessionHas('success', 'Dismissed.');
+
+    expect(CloudTask::of($server->fresh()))->toBeNull();
+});
+
+test('only a failed resize can be dismissed', function (string $type, string $state, TeamRole $role, int $status) {
+    [, $user, $account] = cloudServerAdmin($role);
+    $server = cloudDestroyable($account);
+    CloudTask::start($server, $type, $type === CloudTask::RESIZE ? 'change' : 'delete');
+
+    if ($state === CloudTask::FAILED) {
+        CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+    }
+
+    $this->actingAs($user)->delete(route('servers.cloud.dismiss', $server))->assertStatus($status);
+
+    expect(CloudTask::of($server->fresh()))->not->toBeNull();
+})->with([
+    'a running resize' => [CloudTask::RESIZE, CloudTask::RUNNING, TeamRole::Owner, 404],
+    'a failed destroy' => [CloudTask::DESTROY, CloudTask::FAILED, TeamRole::Owner, 404],
+    'a failed resize, for a deployer' => [CloudTask::RESIZE, CloudTask::FAILED, TeamRole::Member, 403],
+]);

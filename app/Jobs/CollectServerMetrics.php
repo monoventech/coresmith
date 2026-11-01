@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\ServerStatus;
 use App\Models\Server;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Server\MetricsCollector;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnectionManager;
@@ -40,7 +41,7 @@ final class CollectServerMetrics implements ShouldBeUnique, ShouldQueue
 
     public function handle(SSHConnectionManager $connections, MetricsCollector $metrics, ServerReachability $reachability): void
     {
-        if ($this->server->status !== ServerStatus::Active || $this->server->pending_host_key_fingerprint !== null) {
+        if ($this->server->status !== ServerStatus::Active || $this->server->pending_host_key_fingerprint !== null || CloudTask::running($this->server)) {
             return;
         }
 

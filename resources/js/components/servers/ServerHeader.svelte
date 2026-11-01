@@ -2,6 +2,7 @@
     import BackLink from '@/components/BackLink.svelte'
     import CloudTaskBanner from '@/components/cloud/CloudTaskBanner.svelte'
     import DestroyServerDialog from '@/components/cloud/DestroyServerDialog.svelte'
+    import ResizeServerDialog from '@/components/cloud/ResizeServerDialog.svelte'
     import HostKeyAlert from '@/components/HostKeyAlert.svelte'
     import PageTabs from '@/components/PageTabs.svelte'
     import Sparkline from '@/components/Sparkline.svelte'
@@ -20,6 +21,7 @@
     let renaming = $state(false)
     let detaching = $state(false)
     let destroying = $state(false)
+    let resizing = $state(false)
     let name = $state('')
     let working = $state(false)
 
@@ -96,6 +98,9 @@
                 <Button variant="ghost" onclick={openRename}>Rename</Button>
                 {#if server.active && server.cloud?.task?.state !== 'running'}
                     <Button variant="outline" onclick={reboot}>Reboot server</Button>
+                {/if}
+                {#if server.cloud?.can.resize}
+                    <Button variant="outline" onclick={() => (resizing = true)}>Resize</Button>
                 {/if}
             {/if}
             {#if server.cloud?.can.destroy}
@@ -198,6 +203,14 @@
         bind:open={destroying}
         ondetach={() => (detaching = true)}
     />
+    {#if server.cloud.can.resize}
+        <ResizeServerDialog
+            server={{ id: server.id, name: server.name }}
+            provider={server.cloud.provider}
+            type={server.cloud.type}
+            bind:open={resizing}
+        />
+    {/if}
 {/if}
 
 <Dialog.Root bind:open={detaching}>

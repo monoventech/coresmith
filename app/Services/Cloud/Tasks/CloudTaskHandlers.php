@@ -16,6 +16,7 @@ final class CloudTaskHandlers
     public const DEFAULTS = [
         CloudTask::CREATE => CreateServerTask::class,
         CloudTask::DESTROY => DestroyServerTask::class,
+        CloudTask::RESIZE => ResizeServerTask::class,
     ];
 
     /** @var array<string, CloudTaskHandler|class-string<CloudTaskHandler>> */

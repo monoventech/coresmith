@@ -10,15 +10,23 @@ namespace App\Http\Controllers;
 
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
+use App\Exceptions\CloudProviderException;
 use App\Http\Requests\Server\DestroyCloudServerRequest;
+use App\Http\Requests\Server\ResizeCloudServerRequest;
 use App\Http\Requests\Server\StoreCloudServerRequest;
 use App\Jobs\RunCloudTask;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Cloud\CloudSize;
+use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\ResizeOptions;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Panel\CloudPresenter;
+use App\Services\Panel\Formats;
 use App\Services\Server\ProvisioningLog;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamContext;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 
 final class CloudServerController extends Controller
@@ -96,12 +104,7 @@ final class CloudServerController extends Controller
             return back()->with('error', "Coresmith is already working on {$server->name}. Wait for that to finish first.");
         }
 
-        $deploying = Deployment::query()
-            ->whereIn('application_id', $server->applications()->select('id'))
-            ->where('status', DeploymentStatus::Running->value)
-            ->exists();
-
-        if ($deploying) {
+        if ($this->deploying($server)) {
             return back()->with('error', "A deploy is running on {$server->name}. Destroy it once the deploy finishes.");
         }
 
@@ -112,5 +115,86 @@ final class CloudServerController extends Controller
         RunCloudTask::dispatch($server);
 
         return back()->with('success', "Destroying {$server->name} at {$label}. It leaves the fleet once {$label} confirms.");
+    }
+
+    public function sizes(Server $server, ResizeOptions $options): JsonResponse
+    {
+        $this->authorize('update', $server);
+
+        abort_unless(ResizeOptions::resizable($server), 404);
+
+        $account = $server->cloudProvider;
+        $label = $account->type->label();
+
+        if ($account->token_failed_at !== null) {
+            return response()->json(['error' => CloudPresenter::refusal($account)]);
+        }
+
+        try {
+            [$current, $sizes] = $options->for($server);
+        } catch (CloudProviderException $e) {
+            return response()->json(['error' => "Coresmith couldn't load {$label}'s regions and sizes. {$e->getMessage()}"]);
+        }
+
+        if ($current === null) {
+            return response()->json(['error' => "Coresmith can't find {$server->provider_size} in {$label}'s current sizes, so it can't offer a resize."]);
+        }
+
+        $region = (string) $server->region;
+        $monthly = fn(CloudSize $size): ?string => ($price = $size->priceIn($region)) === null ? null : Formats::money($price->monthly, $price->currency);
+
+        return response()->json([
+            'current' => ['id' => $current->id, 'label' => $current->label(), 'disk_gb' => $current->diskGb, 'monthly' => $monthly($current)],
+            'sizes' => $sizes->map(fn(CloudSize $size): array => ['id' => $size->id, 'label' => $size->label(), 'monthly' => $monthly($size)])->values()->all(),
+            'note' => ResizeOptions::upOnly($server)
+                ? "{$label} only resizes up, and the disk grows with the new size."
+                : "The disk stays {$current->diskGb} GB, so you can size back down later.",
+            'error' => null,
+        ]);
+    }
+
+    public function resize(ResizeCloudServerRequest $request, Server $server, CloudApiFactory $apis): RedirectResponse
+    {
+        $refusal = CloudTask::refusal($server, 'Resize');
+
+        if ($refusal !== null) {
+            return back()->with('error', $refusal);
+        }
+
+        if ($this->deploying($server)) {
+            return back()->with('error', "A deploy is running on {$server->name}. Resize it once the deploy finishes.");
+        }
+
+        $account = $server->cloudProvider;
+        $from = (string) $server->provider_size;
+        $to = $request->size();
+        $cycle = $apis->for($account)->resizeNeedsPowerOff();
+
+        CloudTask::start($server, CloudTask::RESIZE, $cycle ? 'power_off' : 'change', ['from' => $from, 'to' => $to, 'power_cycle' => $cycle], $request->user());
+        ProvisioningLog::append($server, "resizing {$server->name} from {$from} to {$to} at {$account->type->label()}");
+        RunCloudTask::dispatch($server);
+
+        return back()->with('success', "Resizing {$server->name} to {$to}. Apps are offline until it starts again.");
+    }
+
+    public function dismiss(Server $server): RedirectResponse
+    {
+        $task = CloudTask::of($server);
+
+        abort_unless($task !== null && $task->type === CloudTask::RESIZE && $task->state === CloudTask::FAILED, 404);
+
+        $this->authorize('update', $server);
+
+        CloudTask::clear($server);
+
+        return back()->with('success', 'Dismissed.');
+    }
+
+    private function deploying(Server $server): bool
+    {
+        return Deployment::query()
+            ->whereIn('application_id', $server->applications()->select('id'))
+            ->where('status', DeploymentStatus::Running->value)
+            ->exists();
     }
 }

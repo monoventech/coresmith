@@ -167,12 +167,12 @@ test('the server block offers retry, remove and destroy only when they apply', f
 
     expect(app(CloudPresenter::class)->server($server, cloudPresenterMember($team, $role))['can'])->toBe($can);
 })->with([
-    'a failed creation that never reached the provider, for an owner' => [CloudTask::FAILED, TeamRole::Owner, null, ['retry' => true, 'remove' => true, 'detach' => true, 'destroy' => false]],
-    'a failed creation with an instance' => [CloudTask::FAILED, TeamRole::Owner, '4711', ['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true]],
-    'a running creation' => [CloudTask::RUNNING, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false]],
-    'a finished creation' => [CloudTask::DONE, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true, 'destroy' => true]],
-    'no task' => [null, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true, 'destroy' => true]],
-    'a failed creation, for a deployer' => [CloudTask::FAILED, TeamRole::Member, null, ['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false]],
+    'a failed creation that never reached the provider, for an owner' => [CloudTask::FAILED, TeamRole::Owner, null, ['retry' => true, 'remove' => true, 'detach' => true, 'destroy' => false, 'resize' => false, 'dismiss' => false]],
+    'a failed creation with an instance' => [CloudTask::FAILED, TeamRole::Owner, '4711', ['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true, 'resize' => false, 'dismiss' => false]],
+    'a running creation' => [CloudTask::RUNNING, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false, 'resize' => false, 'dismiss' => false]],
+    'a finished creation' => [CloudTask::DONE, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true, 'destroy' => true, 'resize' => false, 'dismiss' => false]],
+    'no task' => [null, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true, 'destroy' => true, 'resize' => false, 'dismiss' => false]],
+    'a failed creation, for a deployer' => [CloudTask::FAILED, TeamRole::Member, null, ['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false, 'resize' => false, 'dismiss' => false]],
 ]);
 
 test('a running destroy offers nothing, and a failed one can be tried again by someone who can delete', function () {
@@ -187,11 +187,57 @@ test('a running destroy offers nothing, and a failed one can be tried again by s
     $failed = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Owner));
     $deployer = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Member));
 
-    expect($running['can'])->toBe(['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false])
+    expect($running['can'])->toBe(['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false, 'resize' => false, 'dismiss' => false])
         ->and($running['task']['step_label'])->toBe('deleting it at Hetzner Cloud')
-        ->and($failed['can'])->toBe(['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true])
+        ->and($failed['can'])->toBe(['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true, 'resize' => true, 'dismiss' => false])
         ->and($deployer['can']['retry'])->toBeFalse();
 });
+
+test('an active provider server can be resized, and a failed resize dismissed, by someone who can change it', function () {
+    $team = Team::factory()->create();
+    $server = cloudPresenterServer(attributes: ['team_id' => $team->id, 'status' => ServerStatus::Active]);
+
+    $idle = app(CloudPresenter::class)->server($server, cloudPresenterMember($team, TeamRole::Admin));
+    $deployer = app(CloudPresenter::class)->server($server, cloudPresenterMember($team, TeamRole::Member));
+
+    CloudTask::start($server, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+
+    $failed = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Admin));
+    $failedForDeployer = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Member));
+
+    $unknown = app(CloudPresenter::class)->server(cloudPresenterServer(attributes: ['team_id' => $team->id, 'status' => ServerStatus::Active, 'provider_server_id' => null]), cloudPresenterMember($team, TeamRole::Owner));
+
+    expect($unknown['can']['resize'])->toBeFalse()
+        ->and($idle['can']['resize'])->toBeTrue()
+        ->and($idle['can']['dismiss'])->toBeFalse()
+        ->and($deployer['can']['resize'])->toBeFalse()
+        ->and($failed['can']['dismiss'])->toBeTrue()
+        ->and($failed['can']['resize'])->toBeTrue()
+        ->and($failed['task']['to'])->toBe('cx32')
+        ->and($failedForDeployer['can']['dismiss'])->toBeFalse();
+});
+
+test('a running resize says what it is doing at each step', function (string $step, string $label) {
+    $team = Team::factory()->create();
+    $server = cloudPresenterServer(attributes: ['team_id' => $team->id, 'status' => ServerStatus::Active]);
+    CloudTask::start($server, CloudTask::RESIZE, $step, ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+
+    $block = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Owner));
+
+    expect($block['task']['step_label'])->toBe($label)
+        ->and($block['can']['resize'])->toBeFalse()
+        ->and($block['can']['dismiss'])->toBeFalse();
+})->with([
+    ['power_off', 'shutting it down'],
+    ['wait_off', 'shutting it down'],
+    ['change', 'changing the size'],
+    ['wait_change', 'changing the size'],
+    ['power_on', 'starting it again'],
+    ['wait_on', 'starting it again'],
+    ['recover', 'starting it again'],
+    ['reconnect', 'signing back in'],
+]);
 
 test('a server not from a provider has no cloud block', function () {
     $team = Team::factory()->create();

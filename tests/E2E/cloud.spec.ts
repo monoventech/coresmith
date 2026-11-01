@@ -16,9 +16,16 @@ test.describe('provider accounts', () => {
         const card = page.getByTestId('cloud-providers-card')
 
         await expect(card).toContainText('3 accounts')
-        await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'DigitalOcean' })).toContainText('1 server')
+        await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'DigitalOcean' })).toContainText(
+            '1 server'
+        )
         await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'Linode' })).toContainText('Token refused')
-        await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'Hetzner Cloud' }).getByText('Hetzner Cloud', { exact: true })).toHaveCount(1)
+        await expect(
+            card
+                .getByTestId('cloud-account-row')
+                .filter({ hasText: 'Hetzner Cloud' })
+                .getByText('Hetzner Cloud', { exact: true })
+        ).toHaveCount(1)
         await expect(card).not.toContainText('never-sent')
     })
 
@@ -85,10 +92,18 @@ asMember('a deployer sees the accounts but cannot change them', async ({ page })
 })
 
 test.describe('provisioning through a provider', () => {
-    test("the provision form lists the team's accounts, the providers still to connect and your own vm", async ({ page }) => {
+    test("the provision form lists the team's accounts, the providers still to connect and your own vm", async ({
+        page
+    }) => {
         await page.goto('/servers/create')
 
-        await expect(provider(page).locator('option')).toContainText(['DigitalOcean', 'Hetzner Cloud', 'Linode, token refused', 'Vultr, not connected yet', 'Bring your own VM'])
+        await expect(provider(page).locator('option')).toContainText([
+            'DigitalOcean',
+            'Hetzner Cloud',
+            'Linode, token refused',
+            'Vultr, not connected yet',
+            'Bring your own VM'
+        ])
     })
 
     test('a connected account offers its regions, sizes and images with prices', async ({ page }) => {
@@ -98,9 +113,16 @@ test.describe('provisioning through a provider', () => {
         await expect(page.getByLabel('Region')).toHaveValue('fsn1')
         await expect(page.getByLabel('Region').locator('option', { hasText: 'Ashburn (ash)' })).toHaveCount(1)
         await expect(page.getByLabel('Size')).toHaveValue('cx22')
-        await expect(page.getByLabel('Size').locator('option', { hasText: /4 GB · 2 vCPU · €3\.79\/mo/ }).first()).toBeAttached()
+        await expect(
+            page
+                .getByLabel('Size')
+                .locator('option', { hasText: /4 GB · 2 vCPU · €3\.79\/mo/ })
+                .first()
+        ).toBeAttached()
         await expect(page.getByLabel('Image')).toHaveValue('ubuntu-24.04')
-        await expect(page.getByRole('main')).toContainText('cx22 · 40 GB disk · €3.79 a month before tax, billed by Hetzner Cloud.')
+        await expect(page.getByRole('main')).toContainText(
+            'cx22 · 40 GB disk · €3.79 a month before tax, billed by Hetzner Cloud.'
+        )
 
         await page.getByLabel('Region').selectOption('ash')
 
@@ -167,7 +189,9 @@ test.describe('provisioning through a provider', () => {
         await gotoServer(page, 'refused-create')
         await page.getByRole('button', { name: 'Remove', exact: true }).click()
 
-        await expect(dialog(page)).toContainText('Nothing was created at Hetzner Cloud, so there is nothing to destroy.')
+        await expect(dialog(page)).toContainText(
+            'Nothing was created at Hetzner Cloud, so there is nothing to destroy.'
+        )
 
         await dialog(page).getByRole('button', { name: 'Keep it' }).click()
 
@@ -226,5 +250,56 @@ test.describe('destroying a provider server', () => {
         await expect(banner).toContainText('server is protected')
         await expect(banner.getByRole('button', { name: 'Try again' })).toBeVisible()
         await expect(banner.getByRole('button', { name: 'Detach' })).toBeVisible()
+    })
+})
+
+test.describe('resizing and rebooting through the provider', () => {
+    test('resizing offers bigger sizes with their prices and then marks the server resizing', async ({
+        page
+    }, testInfo) => {
+        await gotoServer(page, own(testInfo, 'resize'))
+        await page.getByRole('button', { name: 'Resize', exact: true }).click()
+
+        const size = dialog(page).getByLabel('New size')
+
+        await expect(size).toContainText('cx32')
+        await expect(size).toContainText('€6.80/mo')
+
+        await size.selectOption('cx32')
+        await dialog(page).getByRole('button', { name: 'Resize to cx32' }).click()
+
+        await expect(toast(page)).toContainText('Resizing ')
+        await expect(toast(page)).toContainText('Apps are offline until it starts again.')
+        await expect(page.getByTestId('cloud-task-banner')).toContainText('Resizing')
+        await expect(page.getByRole('button', { name: 'Resize', exact: true })).toHaveCount(0)
+    })
+
+    test('the resize dialog says the disk is kept', async ({ page }) => {
+        await gotoServer(page, 'outpost-01')
+        await page.getByRole('button', { name: 'Resize', exact: true }).click()
+
+        await expect(dialog(page)).toContainText('The disk stays 50 GB, so you can size back down later.')
+
+        await dialog(page).getByRole('button', { name: 'Keep s-1vcpu-2gb' }).click()
+
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('a provider server is rebooted from the header', async ({ page }) => {
+        await gotoServer(page, 'outpost-01')
+        await page.getByRole('button', { name: 'Reboot server' }).click()
+
+        await expect(toast(page)).toContainText('Reboot scheduled.')
+    })
+
+    test('a resize that failed says why and can be dismissed', async ({ page }) => {
+        await gotoServer(page, 'resize-failed')
+
+        const banner = page.getByTestId('cloud-task-banner')
+
+        await expect(banner).toContainText(
+            'Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. resize-failed was started again on cx22.'
+        )
+        await expect(banner.getByRole('button', { name: 'Dismiss' })).toBeVisible()
     })
 })

@@ -193,7 +193,7 @@ final class E2ESeeder extends Seeder
                 'ip_address' => '203.0.113.' . (140 + $index),
                 'status' => ServerStatus::Active,
                 'provider_server_id' => "48{$index}0",
-                'provider_monthly_cost' => '4.35',
+                'provider_monthly_cost' => '3.79',
                 'provider_currency' => 'EUR',
                 'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
                 'host_key_fingerprint' => null,
@@ -206,12 +206,40 @@ final class E2ESeeder extends Seeder
             'ip_address' => '203.0.113.139',
             'status' => ServerStatus::Active,
             'provider_server_id' => '4799',
-            'provider_monthly_cost' => '4.35',
+            'provider_monthly_cost' => '3.79',
             'provider_currency' => 'EUR',
             'host_key_fingerprint' => null,
         ]);
         CloudTask::start($protected, CloudTask::DESTROY, 'delete');
         CloudTask::fail($protected, "Hetzner Cloud refused the request. Hetzner Cloud said: server is protected. Try again once that's fixed, or delete it in the Hetzner Cloud console and then detach it here.");
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            Server::factory()->fromProvider($hetzner)->create([
+                'name' => "resize-{$code}",
+                'environment' => 'Production',
+                'ip_address' => '203.0.113.' . (150 + $index),
+                'status' => ServerStatus::Active,
+                'provider_server_id' => "49{$index}0",
+                'provider_monthly_cost' => '3.79',
+                'provider_currency' => 'EUR',
+                'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+                'host_key_fingerprint' => null,
+            ]);
+        }
+
+        $stuck = Server::factory()->fromProvider($hetzner)->create([
+            'name' => 'resize-failed',
+            'environment' => 'Production',
+            'ip_address' => '203.0.113.159',
+            'status' => ServerStatus::Active,
+            'provider_server_id' => '4998',
+            'provider_monthly_cost' => '3.79',
+            'provider_currency' => 'EUR',
+            'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+            'host_key_fingerprint' => null,
+        ]);
+        CloudTask::start($stuck, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+        CloudTask::fail($stuck, 'Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. resize-failed was started again on cx22.');
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $retry = $this->cloudServer($hetzner, "retry-{$code}", '47' . (30 + $index));
@@ -228,7 +256,7 @@ final class E2ESeeder extends Seeder
             'environment' => 'Production',
             'ip_address' => $ip,
             'provider_server_id' => $instance,
-            'provider_monthly_cost' => '4.35',
+            'provider_monthly_cost' => '3.79',
             'provider_currency' => 'EUR',
             'host_key_fingerprint' => null,
         ]);

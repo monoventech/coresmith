@@ -105,6 +105,8 @@ final class FleetSnapshot
             $server->unreachable_since !== null => ['key' => 'unreachable', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->status === ServerStatus::Provisioning => ['key' => 'provisioning', 'label' => 'Provisioning', 'tone' => 'accent'],
             $server->status === ServerStatus::Pending => ['key' => 'pending', 'label' => 'Not connected', 'tone' => 'default'],
+            CloudTask::running($server, CloudTask::RESIZE) => ['key' => 'resizing', 'label' => 'Resizing', 'tone' => 'accent'],
+            CloudTask::of($server)?->type === CloudTask::RESIZE && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'resize_failed', 'label' => 'Resize failed', 'tone' => 'warning'],
             $this->runningOn($server) !== null => ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
             $memory !== null && $memory >= self::MEMORY_WARNING => ['key' => 'memory', 'label' => 'Memory ' . (int) round($memory) . '%', 'tone' => 'warning'],
             $disk !== null && $disk >= self::DISK_WARNING => ['key' => 'warning', 'label' => 'Disk ' . (int) round($disk) . '%', 'tone' => 'warning'],
@@ -181,6 +183,8 @@ final class FleetSnapshot
 
             if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'unreachable', 'creation_failed', 'destroy_failed'], true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
+            } elseif ($state['key'] === 'resize_failed') {
+                $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'resize failed', 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'memory' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->memory_percent ?? 0) >= self::MEMORY_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'memory ' . (int) round((float) $this->latestMetric($server)?->memory_percent) . '%', 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'warning' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->disk_percent ?? 0) >= self::DISK_WARNING)) {

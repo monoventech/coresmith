@@ -43,6 +43,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('servers/{server}/cloud', [CloudServerController::class, 'destroy'])
         ->middleware('throttle:10,1,cloud-server-destroy')
         ->name('servers.cloud.destroy');
+    Route::get('servers/{server}/cloud/sizes', [CloudServerController::class, 'sizes'])
+        ->middleware('throttle:30,1,cloud-server-sizes')
+        ->name('servers.cloud.sizes');
+    Route::post('servers/{server}/cloud/resize', [CloudServerController::class, 'resize'])
+        ->middleware('throttle:10,1,cloud-server-resize')
+        ->name('servers.cloud.resize');
+    Route::delete('servers/{server}/cloud/task', [CloudServerController::class, 'dismiss'])
+        ->name('servers.cloud.dismiss');
     Route::resource('servers', ServerController::class)->except(['index', 'edit']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');
