@@ -464,7 +464,11 @@ test('a disconnected server can be provisioned', function () {
 });
 
 test('a provisioning job that cannot be queued puts the server back', function () {
-    config(['queue.connections.unqueueable' => ['driver' => 'database', 'table' => 'no_such_jobs', 'queue' => 'provisioning'], 'queue.default' => 'unqueueable']);
+    config([
+        'database.connections.unqueueable' => ['driver' => 'sqlite', 'database' => ':memory:'],
+        'queue.connections.unqueueable' => ['driver' => 'database', 'connection' => 'unqueueable', 'table' => 'no_such_jobs', 'queue' => 'provisioning'],
+        'queue.default' => 'unqueueable',
+    ]);
     $server = Server::factory()->create(['status' => ServerStatus::Pending]);
 
     expect(fn() => ProvisionServer::begin($server))->toThrow(QueryException::class);

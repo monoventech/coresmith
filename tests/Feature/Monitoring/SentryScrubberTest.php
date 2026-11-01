@@ -836,7 +836,7 @@ test('a failed query keeps its sql placeholders and loses its bound values', fun
     $value = SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => $failure]))->getExceptions()[0]->getValue();
 
     expect($failure->getMessage())->toContain('maya@monoven.io')
-        ->and($value)->toContain('UNIQUE constraint failed: users.email')
+        ->and($value)->toContain(DB::getDriverName() === 'pgsql' ? 'duplicate key value violates unique constraint "users_email_unique"' : 'UNIQUE constraint failed: users.email')
         ->toContain('insert into "users" ("id", "name", "email", "password") values (?, ?, ?, ?)')
         ->not->toContain('maya@monoven.io')
         ->not->toContain('Maya Okafor')

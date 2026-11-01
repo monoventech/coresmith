@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\TestResponse;
 use Spatie\Activitylog\Models\Activity;
 
@@ -171,8 +172,8 @@ function githubConnectRevoked(string $clientId = 'Iv1.client'): Closure
 
 function githubConnectStoredAnywhere(string $needle): bool
 {
-    foreach (DB::select("SELECT name FROM sqlite_master WHERE type = 'table'") as $table) {
-        foreach (DB::table($table->name)->get() as $row) {
+    foreach (array_column(Schema::getTables(), 'name') as $table) {
+        foreach (DB::table($table)->get() as $row) {
             if (str_contains((string) json_encode($row, JSON_INVALID_UTF8_SUBSTITUTE), $needle)) {
                 return true;
             }
