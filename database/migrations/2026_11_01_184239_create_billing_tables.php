@@ -61,7 +61,7 @@ return new class extends Migration
             $table->string('stripe_id')->unique();
             $table->string('number')->nullable();
             $table->string('status');
-            $table->unsignedBigInteger('total');
+            $table->bigInteger('total');
             $table->string('currency', 3);
             $table->timestamp('period_start')->nullable();
             $table->timestamp('paid_at')->nullable();

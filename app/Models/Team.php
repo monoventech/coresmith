@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\TeamRole;
 use App\Services\Teams\TeamSlug;
 use Database\Factories\TeamFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -55,6 +56,11 @@ class Team extends Model
     public function members(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withPivot('role')->withTimestamps();
+    }
+
+    public function owners(): BelongsToMany
+    {
+        return $this->members()->wherePivot('role', TeamRole::Owner->value);
     }
 
     public function servers(): HasMany

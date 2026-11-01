@@ -10,6 +10,7 @@ use App\Jobs\PollRepositories;
 use App\Jobs\ResumeCloudTasks;
 use App\Models\InstanceSetting;
 use App\Models\Server;
+use App\Models\StripeEvent;
 use App\Services\Updates\UpdateChecker;
 use App\Services\Updates\UpdateState;
 use Illuminate\Support\Facades\Schedule;
@@ -40,6 +41,8 @@ Schedule::job(new ResumeCloudTasks)->everyMinute()->name('coresmith:resume-cloud
 
 Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresmith:prune-metrics')->withoutOverlapping();
 Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith:prune-activity')->withoutOverlapping();
+
+Schedule::command('model:prune', ['--model' => [StripeEvent::class]])->dailyAt('05:00')->name('coresmith:prune-stripe-events');
 
 Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup')->withoutOverlapping();
 

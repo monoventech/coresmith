@@ -7,8 +7,10 @@ use App\Http\Controllers\CaddyAskController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ReleaseFeedController;
 use App\Http\Controllers\ReleaseProbeController;
+use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Middleware\EnsureInstalled;
+use App\Http\Middleware\VerifyStripeSignature;
 use Illuminate\Support\Facades\Route;
 
 Route::get('caddy/ask', CaddyAskController::class)
@@ -22,6 +24,10 @@ Route::post('webhooks/{webhook}/deploy', [WebhookController::class, 'deploy'])
 Route::post('webhooks/github', [GitHubWebhookController::class, 'environment'])
     ->middleware('throttle:1200,1,github-webhook')
     ->name('webhooks.github');
+
+Route::post('stripe/webhook', [StripeWebhookController::class, 'handleWebhook'])
+    ->middleware(['cloud', 'throttle:240,1,stripe-webhook', VerifyStripeSignature::class])
+    ->name('cashier.webhook');
 
 Route::post('webhooks/github/{githubApp}', [GitHubWebhookController::class, 'registered'])
     ->whereUlid('githubApp')

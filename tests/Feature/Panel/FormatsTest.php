@@ -120,4 +120,5 @@ test('an amount in cents reads as money', function (int $minor, string $currency
     'whole dollars' => [1900, 'usd', '$19'],
     'dollars and cents' => [1950, 'usd', '$19.50'],
     'euros' => [1900, 'eur', '€19'],
+    'a credit' => [-150, 'usd', '-$1.50'],
 ]);

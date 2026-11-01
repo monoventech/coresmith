@@ -94,6 +94,11 @@ final class TeamUrls
         return $this->pathUrl($team, $request) . '/dashboard';
     }
 
+    public function billing(Team $team): string
+    {
+        return $this->pathUrl($team) . '/settings/billing';
+    }
+
     private function root(?Request $request): string
     {
         $context = app(TeamContext::class);

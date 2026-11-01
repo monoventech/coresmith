@@ -35,6 +35,10 @@ final class Formats
 
     public static function cents(int $minor, string $currency): string
     {
+        if ($minor < 0) {
+            return '-' . self::cents(-$minor, $currency);
+        }
+
         return self::money(number_format($minor / 100, 2, '.', ''), strtoupper($currency)) ?? '';
     }
 
