@@ -9,7 +9,6 @@ use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Cloud\Tasks\CloudTask;
-use App\Services\Panel\PanelBackup;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\PanelUpdater;
 use App\Services\Updates\ReleaseLayout;
@@ -20,9 +19,7 @@ use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Process\PendingProcess;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Spatie\Activitylog\Models\Activity;
@@ -64,24 +61,6 @@ function updatesReleaseNames(): array
 function updatesArchives(): array
 {
     return glob(storage_path('app/private/backups') . '/*.tar.gz') ?: [];
-}
-
-function updatesInterrupted(Closure $markers, string $step): UpdateStatus
-{
-    Carbon::setTestNow(now()->subMinutes(5));
-    $archive = app(PanelBackup::class)->run()['path'];
-    Carbon::setTestNow();
-
-    DB::connection('csu_panel')->table('probe')->insert(['note' => 'migrated']);
-    $status = UpdateStatus::start(app(ReleaseLayout::class)->current(), Version::parse('0.1.1'), 'panel', null)->withStep($step);
-
-    foreach ($markers($archive) as $key => $value) {
-        $status = $status->withMarker($key, $value);
-    }
-
-    app(UpdateState::class)->save($status);
-
-    return $status;
 }
 
 test('an update builds the new release beside the old one and switches to it', function () {

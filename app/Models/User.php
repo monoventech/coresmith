@@ -8,6 +8,7 @@ use App\Enums\TeamRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -59,6 +60,16 @@ class User extends Authenticatable
     public function teams(): BelongsToMany
     {
         return $this->belongsToMany(Team::class)->withPivot('role')->withTimestamps();
+    }
+
+    public function managesInstance(): bool
+    {
+        return $this->teams()->wherePivot('role', TeamRole::Owner->value)->exists();
+    }
+
+    public function scopeInstanceOwners(Builder $query): void
+    {
+        $query->whereHas('teams', fn(Builder $teams) => $teams->where('team_user.role', TeamRole::Owner->value));
     }
 
     public function ownedTeams(): HasMany

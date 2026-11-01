@@ -18,6 +18,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\CertificateCheck;
+use App\Services\Updates\UpdateStatus;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -25,6 +26,8 @@ use Spatie\Activitylog\Models\Activity;
 final class ActivityFeed
 {
     private const QUIET = ['ssh_command_executed', 'authorized_keys_synced', SmartToggles::STARTED];
+
+    private const PANEL_UPDATES = ['panel_updated', 'panel_update_rolled_back', 'panel_update_failed'];
 
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
@@ -36,7 +39,7 @@ final class ActivityFeed
         $databases = ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
         $accounts = CloudProvider::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
 
-        return $this->merge($servers, $applications, $databases, $accounts, $limit);
+        return $this->merge($servers, $applications, $databases, $accounts, $limit, panel: true);
     }
 
     /**
@@ -57,17 +60,21 @@ final class ActivityFeed
      * @param  Collection<string, CloudProvider>  $accounts
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit): array
+    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit, bool $panel = false): array
     {
         $rows = [];
 
         $activities = Activity::query()
             ->whereNotIn('description', self::QUIET)
-            ->where(function ($query) use ($servers, $applications, $databases, $accounts): void {
+            ->where(function ($query) use ($servers, $applications, $databases, $accounts, $panel): void {
                 $query->where(fn($inner) => $inner->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', $servers->keys()))
                     ->orWhere(fn($inner) => $inner->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications->keys()))
                     ->orWhere(fn($inner) => $inner->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', $databases->keys()))
                     ->orWhere(fn($inner) => $inner->where('subject_type', (new CloudProvider)->getMorphClass())->whereIn('subject_id', $accounts->keys()));
+
+                if ($panel) {
+                    $query->orWhere(fn($inner) => $inner->whereNull('subject_type')->whereIn('description', self::PANEL_UPDATES));
+                }
             })
             ->latest('created_at')
             ->latest('id')
@@ -75,9 +82,11 @@ final class ActivityFeed
             ->get();
 
         foreach ($activities as $activity) {
-            $row = $activity->subject_type === (new CloudProvider)->getMorphClass()
-                ? $this->describeAccount($activity, $accounts->get($activity->subject_id))
-                : $this->describe($activity, $servers, $applications, $databases);
+            $row = match (true) {
+                $activity->subject_type === null => $this->describePanel($activity),
+                $activity->subject_type === (new CloudProvider)->getMorphClass() => $this->describeAccount($activity, $accounts->get($activity->subject_id)),
+                default => $this->describe($activity, $servers, $applications, $databases),
+            };
 
             if ($row !== null) {
                 $rows[] = $row;
@@ -103,6 +112,28 @@ final class ActivityFeed
         usort($rows, static fn(array $a, array $b): int => strcmp($b['at'], $a['at']));
 
         return array_slice($rows, 0, $limit);
+    }
+
+    /**
+     * @return array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}|null
+     */
+    private function describePanel(Activity $activity): ?array
+    {
+        $properties = $activity->properties?->toArray() ?? [];
+        $to = (string) ($properties['to'] ?? '');
+        $from = (string) ($properties['from'] ?? '');
+        $step = lcfirst(UpdateStatus::STEPS[(string) ($properties['step'] ?? '')] ?? 'updating');
+
+        $text = match ($activity->description) {
+            'panel_updated' => ($properties['trigger'] ?? null) === 'auto'
+                ? "Auto-update applied, panel v{$to}, backup taken, health check passed"
+                : "Panel updated to v{$to}, backup taken, health check passed",
+            'panel_update_rolled_back' => "Panel update to v{$to} failed while {$step}, rolled back to v{$from}",
+            'panel_update_failed' => "Panel update to v{$to} failed and needs attention",
+            default => null,
+        };
+
+        return $text === null ? null : $this->row($activity->created_at, [$this->text($text)], route('settings.general'));
     }
 
     /**

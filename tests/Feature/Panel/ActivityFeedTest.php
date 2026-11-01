@@ -325,3 +325,40 @@ test('a destroyed server says its billing stopped and links nowhere', function (
     expect(feedSentence($row))->toBe('web-1 destroyed at Hetzner Cloud, billing for it stopped')
         ->and($row['href'])->toBeNull();
 });
+
+test('panel updates appear in every team\'s activity and lead to settings', function () {
+    [$team, $server] = feedFixture();
+    $other = Team::factory()->create();
+
+    activity()->withProperties(['from' => '0.1.0', 'to' => '0.1.1', 'trigger' => 'auto'])->log('panel_updated');
+    $this->travel(1)->minutes();
+    activity()->withProperties(['from' => '0.1.1', 'to' => '0.1.2', 'trigger' => 'panel'])->log('panel_updated');
+    $this->travel(1)->minutes();
+    activity()->withProperties(['from' => '0.1.2', 'to' => '0.1.3', 'trigger' => 'panel', 'step' => 'migrate'])->log('panel_update_rolled_back');
+    $this->travel(1)->minutes();
+    activity()->withProperties(['from' => '0.1.2', 'to' => '0.1.4', 'trigger' => 'cli', 'step' => 'migrate'])->log('panel_update_failed');
+
+    $rows = app(ActivityFeed::class)->forTeam($team);
+
+    expect(array_map(feedSentence(...), $rows))->toBe([
+        'Panel update to v0.1.4 failed and needs attention',
+        'Panel update to v0.1.3 failed while running migrations, rolled back to v0.1.2',
+        'Panel updated to v0.1.2, backup taken, health check passed',
+        'Auto-update applied, panel v0.1.1, backup taken, health check passed',
+    ])
+        ->and(array_unique(array_column($rows, 'href')))->toBe([route('settings.general')])
+        ->and(app(ActivityFeed::class)->forTeam($other))->toHaveCount(4)
+        ->and(app(ActivityFeed::class)->forServer($server))->toBe([]);
+});
+
+test('other events without a subject stay out of the feed and take no place in it', function () {
+    [$team, $server] = feedFixture();
+    feedLog($server, 'server_provisioned');
+    $this->travel(1)->minutes();
+
+    foreach (range(1, 5) as $ignored) {
+        activity()->log('something_else');
+    }
+
+    expect(array_map(feedSentence(...), app(ActivityFeed::class)->forTeam($team)))->toHaveCount(1);
+});

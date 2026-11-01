@@ -56,7 +56,7 @@ final class UpdateStatus
         public readonly string $id,
         public readonly string $state,
         public readonly string $trigger,
-        public readonly ?int $requestedBy,
+        public readonly ?string $requestedBy,
         public readonly ?string $fromVersion,
         public readonly ?string $fromRelease,
         public readonly ?string $toVersion,
@@ -71,7 +71,7 @@ final class UpdateStatus
         public readonly ?CarbonImmutable $finishedAt,
     ) {}
 
-    public static function start(?Release $current, ?Version $target, string $trigger, ?int $requestedBy): self
+    public static function start(?Release $current, ?Version $target, string $trigger, ?string $requestedBy): self
     {
         $now = CarbonImmutable::now();
 
@@ -193,7 +193,7 @@ final class UpdateStatus
             $id,
             $state,
             is_string($data['trigger'] ?? null) ? $data['trigger'] : 'cli',
-            is_int($data['requested_by'] ?? null) ? $data['requested_by'] : null,
+            is_string($data['requested_by'] ?? null) || is_int($data['requested_by'] ?? null) ? (string) $data['requested_by'] : null,
             self::text($from['version'] ?? null),
             self::text($from['release'] ?? null),
             self::text($to['version'] ?? null),

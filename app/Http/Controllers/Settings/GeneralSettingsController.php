@@ -90,7 +90,7 @@ final class GeneralSettingsController extends Controller
 
     private function managesInstance(Request $request): bool
     {
-        return $request->user()->teams->contains(fn($team): bool => $team->pivot->role === TeamRole::Owner->value);
+        return $request->user()->managesInstance();
     }
 
     private function type(string $publicKey): string

@@ -35,6 +35,7 @@ final class PanelUpdater
         private readonly ReleaseHealth $health,
         private readonly PanelBackup $backups,
         private readonly LogSanitizer $sanitizer,
+        private readonly PanelUpdateNotifier $notifier,
     ) {}
 
     public function assertCanUpdate(): void
@@ -70,7 +71,7 @@ final class PanelUpdater
         return $check->available($current);
     }
 
-    public function run(Version $target, string $trigger = 'cli', ?int $requestedBy = null, ?Closure $listener = null): UpdateStatus
+    public function run(Version $target, string $trigger = 'cli', ?string $requestedBy = null, ?Closure $listener = null): UpdateStatus
     {
         $this->assertCanUpdate();
         $lock = $this->state->acquireLock() ?? throw new UpdateRefused($this->busy());
@@ -91,7 +92,7 @@ final class PanelUpdater
                 $run->step('preflight');
                 $this->preflight($target);
             } catch (UpdateRefused $e) {
-                return $run->finish(UpdateStatus::ABORTED, $e->getMessage(), 'preflight');
+                return $this->abort($run, new UpdateFailed('preflight', $e->getMessage()));
             }
 
             $path = null;
@@ -344,6 +345,7 @@ final class PanelUpdater
         if ($problems === []) {
             $final = $run->finish(UpdateStatus::ROLLED_BACK, "{$reason}. Coresmith rolled back to v{$run->status()->fromVersion}, and the panel is running as before.", $failedStep);
             $this->record($run, 'panel_update_rolled_back', $final, ['step' => $failedStep, 'message' => $final->message]);
+            $this->notify($run, $final);
 
             return $final;
         }
@@ -358,6 +360,7 @@ final class PanelUpdater
 
         $final = $run->finish(UpdateStatus::FAILED, $message, $failedStep);
         $this->record($run, 'panel_update_failed', $final, ['step' => $failedStep, 'message' => $final->message]);
+        $this->notify($run, $final);
 
         return $final;
     }
@@ -369,7 +372,13 @@ final class PanelUpdater
             ? $e->getMessage()
             : $this->sanitizer->sanitize($this->withoutPeriod($e->getMessage()) . '. Nothing changed.');
 
-        return $run->finish(UpdateStatus::ABORTED, $message, $step);
+        $final = $run->finish(UpdateStatus::ABORTED, $message, $step);
+
+        if ($final->trigger === 'auto') {
+            $this->notify($run, $final);
+        }
+
+        return $final;
     }
 
     private function succeed(UpdateRun $run, Release $release, ?Release $previous): UpdateStatus
@@ -403,6 +412,20 @@ final class PanelUpdater
         } catch (Throwable) {
             $run->warn("Coresmith couldn't record this run in the activity log.");
         }
+    }
+
+    private function notify(UpdateRun $run, UpdateStatus $status): void
+    {
+        try {
+            if ($this->notifier->failed($status)) {
+                return;
+            }
+        } catch (Throwable) {
+        }
+
+        $run->warn($this->notifier->mailable()
+            ? "Coresmith couldn't email the owners about this."
+            : "Coresmith couldn't email the owners about this. No mail server is set up; add MAIL_MAILER and its settings to {$this->paths->shared()}/.env.");
     }
 
     private function duration(UpdateStatus $status): int

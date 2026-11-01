@@ -18,12 +18,12 @@ final class UpdateRequest
     public function __construct(
         public readonly ?Version $to,
         public readonly string $trigger,
-        public readonly ?int $requestedBy,
+        public readonly ?string $requestedBy,
         public readonly CarbonImmutable $requestedAt,
     ) {}
 
     /**
-     * @return array{schema: int, to: ?string, trigger: string, requested_by: ?int, requested_at: string}
+     * @return array{schema: int, to: ?string, trigger: string, requested_by: ?string, requested_at: string}
      */
     public function toArray(): array
     {
@@ -45,7 +45,7 @@ final class UpdateRequest
         $to = Version::tryParse($data['to'] ?? null);
         $requestedBy = $data['requested_by'] ?? null;
 
-        if (!in_array($trigger, self::TRIGGERS, true) || ($to === null) !== ($trigger === 'recover') || ($requestedBy !== null && !is_int($requestedBy))) {
+        if (!in_array($trigger, self::TRIGGERS, true) || ($to === null) !== ($trigger === 'recover') || ($requestedBy !== null && !is_string($requestedBy))) {
             return null;
         }
 

@@ -168,6 +168,11 @@ final class E2ESeeder extends Seeder
         $this->auditFixtures();
 
         $this->otherTeams($tenant->owner, $password);
+
+        activity()
+            ->withProperties(['from' => '0.1.0', 'to' => '0.1.1', 'trigger' => 'auto', 'duration_seconds' => 94, 'signature' => 'unchecked'])
+            ->createdAt(now()->subMinute())
+            ->log('panel_updated');
     }
 
     private function cloudServers(CloudProvider $hetzner): void

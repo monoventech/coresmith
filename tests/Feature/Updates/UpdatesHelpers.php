@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Services\Panel\PanelBackup;
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseHealth;
 use App\Services\Updates\ReleaseLayout;
@@ -10,6 +11,7 @@ use App\Services\Updates\UpdateState;
 use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
 use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -380,4 +382,22 @@ function updatesPanel(): array
     app()->useStoragePath($paths['root'] . '/shared/storage');
 
     return $paths;
+}
+
+function updatesInterrupted(Closure $markers, string $step): UpdateStatus
+{
+    Carbon::setTestNow(now()->subMinutes(5));
+    $archive = app(PanelBackup::class)->run()['path'];
+    Carbon::setTestNow();
+
+    DB::connection('csu_panel')->table('probe')->insert(['note' => 'migrated']);
+    $status = UpdateStatus::start(app(ReleaseLayout::class)->current(), Version::parse('0.1.1'), 'panel', null)->withStep($step);
+
+    foreach ($markers($archive) as $key => $value) {
+        $status = $status->withMarker($key, $value);
+    }
+
+    app(UpdateState::class)->save($status);
+
+    return $status;
 }

@@ -25,7 +25,7 @@ function updatesState(): UpdateState
     return app(UpdateState::class);
 }
 
-function updatesStatus(string $to = '1.0.2', string $trigger = 'cli', ?int $requestedBy = null): UpdateStatus
+function updatesStatus(string $to = '1.0.2', string $trigger = 'cli', ?string $requestedBy = null): UpdateStatus
 {
     return UpdateStatus::start(app(ReleaseLayout::class)->current(), Version::parse($to), $trigger, $requestedBy);
 }
@@ -67,7 +67,7 @@ test('only one process holds the update lock', function () {
 
 test('a status survives a round trip and is written atomically and privately', function () {
     $this->travelTo('2026-11-01 04:00:00');
-    $status = updatesStatus(requestedBy: 7)->withStep('fetch')->withRelease('1.0.2-b1b2c3d')->withMarker('built', '1.0.2-b1b2c3d')->withSignature('unchecked');
+    $status = updatesStatus(requestedBy: '01jbz7aaaaaaaaaaaaaaaaaaaa')->withStep('fetch')->withRelease('1.0.2-b1b2c3d')->withMarker('built', '1.0.2-b1b2c3d')->withSignature('unchecked');
 
     updatesState()->save($status);
 
@@ -79,7 +79,7 @@ test('a status survives a round trip and is written atomically and privately', f
         ->and($written['to'])->toBe(['version' => '1.0.2', 'release' => '1.0.2-b1b2c3d'])
         ->and($written['markers'])->toBe(['built' => '1.0.2-b1b2c3d', 'maintenance' => false, 'backup' => null, 'migrating' => false, 'switched' => false, 'healthy' => false])
         ->and($written['started_at'])->toBe('2026-11-01T04:00:00+00:00')
-        ->and($written['requested_by'])->toBe(7)
+        ->and($written['requested_by'])->toBe('01jbz7aaaaaaaaaaaaaaaaaaaa')
         ->and(glob("{$this->paths['state']}/.*.json.*"))->toBe([])
         ->and(fileperms(app(UpdatePaths::class)->statusFile()) & 0777)->toBe(0600)
         ->and(fileperms($this->paths['state']) & 0777)->toBe(0700)
@@ -136,12 +136,12 @@ test('history keeps the last twenty runs and the last success is found among the
 
 test('a request is written, cancelled, or taken exactly once', function () {
     $this->travelTo('2026-11-01 04:00:00');
-    $request = new UpdateRequest(Version::parse('1.0.2'), 'panel', 3, now()->toImmutable());
+    $request = new UpdateRequest(Version::parse('1.0.2'), 'panel', '01jbz3aaaaaaaaaaaaaaaaaaaa', now()->toImmutable());
 
     updatesState()->request($request);
 
     expect(updatesState()->pendingRequest()->toArray())->toBe($request->toArray())
-        ->and($request->toArray())->toBe(['schema' => 1, 'to' => '1.0.2', 'trigger' => 'panel', 'requested_by' => 3, 'requested_at' => '2026-11-01T04:00:00+00:00'])
+        ->and($request->toArray())->toBe(['schema' => 1, 'to' => '1.0.2', 'trigger' => 'panel', 'requested_by' => '01jbz3aaaaaaaaaaaaaaaaaaaa', 'requested_at' => '2026-11-01T04:00:00+00:00'])
         ->and(fileperms(app(UpdatePaths::class)->requestFile()) & 0777)->toBe(0600)
         ->and(updatesState()->requestTaken())->toBeFalse()
         ->and(updatesState()->cancelRequest())->toBeTrue()
@@ -162,9 +162,9 @@ test('a request names a recovery without a version, and nothing else without one
     $recover = new UpdateRequest(null, 'recover', null, now()->toImmutable());
 
     expect(UpdateRequest::fromArray($recover->toArray())->trigger)->toBe('recover')
-        ->and(UpdateRequest::fromArray(['schema' => 1, 'to' => null, 'trigger' => 'panel', 'requested_by' => 1, 'requested_at' => now()->toIso8601String()]))->toBeNull()
-        ->and(UpdateRequest::fromArray(['schema' => 1, 'to' => '1.0.2', 'trigger' => 'shell', 'requested_by' => 1, 'requested_at' => now()->toIso8601String()]))->toBeNull()
-        ->and(UpdateRequest::fromArray(['schema' => 1, 'to' => '1.0.2', 'trigger' => 'auto', 'requested_by' => 'admin', 'requested_at' => now()->toIso8601String()]))->toBeNull();
+        ->and(UpdateRequest::fromArray(['schema' => 1, 'to' => null, 'trigger' => 'panel', 'requested_by' => '01jbz1aaaaaaaaaaaaaaaaaaaa', 'requested_at' => now()->toIso8601String()]))->toBeNull()
+        ->and(UpdateRequest::fromArray(['schema' => 1, 'to' => '1.0.2', 'trigger' => 'shell', 'requested_by' => '01jbz1aaaaaaaaaaaaaaaaaaaa', 'requested_at' => now()->toIso8601String()]))->toBeNull()
+        ->and(UpdateRequest::fromArray(['schema' => 1, 'to' => '1.0.2', 'trigger' => 'auto', 'requested_by' => ['admin'], 'requested_at' => now()->toIso8601String()]))->toBeNull();
 });
 
 test('the run log is plain, private and redacted', function () {
@@ -241,13 +241,13 @@ test('steps are numbered out of twelve and the rollback is not counted', functio
 });
 
 test('a new status starts at the pre-flight check with nothing done', function () {
-    $status = updatesStatus(trigger: 'panel', requestedBy: 2);
+    $status = updatesStatus(trigger: 'panel', requestedBy: '01jbz2aaaaaaaaaaaaaaaaaaaa');
 
     expect($status)
         ->state->toBe(UpdateStatus::RUNNING)
         ->step->toBe('preflight')
         ->trigger->toBe('panel')
-        ->requestedBy->toBe(2)
+        ->requestedBy->toBe('01jbz2aaaaaaaaaaaaaaaaaaaa')
         ->fromVersion->toBe('1.0.1')
         ->toVersion->toBe('1.0.2')
         ->toRelease->toBeNull()

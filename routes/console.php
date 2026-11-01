@@ -8,8 +8,10 @@ use App\Jobs\DetectStaleDeployments;
 use App\Jobs\IdleAppSleeper;
 use App\Jobs\PollRepositories;
 use App\Jobs\ResumeCloudTasks;
+use App\Models\InstanceSetting;
 use App\Models\Server;
 use App\Services\Updates\UpdateChecker;
+use App\Services\Updates\UpdateState;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::call(function (): void {
@@ -48,3 +50,16 @@ Schedule::command('coresmith:check-update')
     ->name('coresmith:check-update')
     ->withoutOverlapping()
     ->when(fn(): bool => app(UpdateChecker::class)->enabled());
+
+Schedule::command('coresmith:update --auto')
+    ->dailyAt('04:00')
+    ->name('coresmith:auto-update')
+    ->withoutOverlapping()
+    ->when(fn(): bool => (bool) config('coresmith.updates.enabled') && InstanceSetting::get('auto_update') === '1');
+
+Schedule::command('coresmith:update --recover')
+    ->everyMinute()
+    ->evenInMaintenanceMode()
+    ->name('coresmith:recover-update')
+    ->withoutOverlapping()
+    ->when(fn(): bool => (bool) config('coresmith.updates.enabled') && app(UpdateState::class)->interrupted());

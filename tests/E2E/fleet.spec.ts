@@ -89,6 +89,20 @@ test.describe('the fleet', () => {
         await expect(activity.getByRole('link').first()).toBeVisible()
     })
 
+    test('a panel update in the activity leads to Settings', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'The activity feed is hidden below 640px; the phone Fleet keeps only the cards')
+
+        await page.goto('/dashboard')
+
+        const update = page
+            .getByRole('region', { name: 'Recent activity' })
+            .getByRole('link', { name: /Auto-update applied, panel v0\.1\.1, backup taken, health check passed/ })
+
+        await expect(update).toBeVisible()
+        await update.click()
+        await page.waitForURL(/\/settings$/)
+    })
+
     test('on a phone the fleet keeps the cards and drops the tiles and feed', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'The compact Fleet only renders below 640px')
 
@@ -158,7 +172,11 @@ test.describe('quick actions on a server card', () => {
 
         await expect(dialog(page)).toContainText('Deploy on bench-01')
 
-        await dialog(page).getByTestId('deploy-option').filter({ hasText: application }).getByRole('button', { name: 'Deploy' }).click()
+        await dialog(page)
+            .getByTestId('deploy-option')
+            .filter({ hasText: application })
+            .getByRole('button', { name: 'Deploy' })
+            .click()
 
         await expect(page.getByRole('heading', { level: 1, name: `Deploying ${application}` })).toBeVisible()
         await expect(page.getByTestId('back-link')).toHaveText('← Fleet')
