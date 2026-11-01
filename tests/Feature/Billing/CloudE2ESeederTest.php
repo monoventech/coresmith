@@ -64,3 +64,14 @@ test('the cloud browser seed has a full starter team', function () {
         ->and($solo->servers()->count())->toBe(3)
         ->and($solo->members()->count())->toBe(1);
 });
+
+test('the cloud browser seed gives monoven four paid invoices', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $monoven = Team::query()->where('slug', 'monoven')->firstOrFail();
+
+    expect($monoven->billingInvoices()->pluck('number')->all())->toBe(['MNV-0004', 'MNV-0003', 'MNV-0002', 'MNV-0001'])
+        ->and($monoven->billingInvoices()->where('status', 'paid')->count())->toBe(4);
+});

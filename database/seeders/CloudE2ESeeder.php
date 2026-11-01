@@ -43,6 +43,7 @@ final class CloudE2ESeeder extends Seeder
 
         $tenant->team->forceFill(['stripe_id' => 'cus_e2e_monoven', 'pm_type' => 'visa', 'pm_last_four' => '4242', 'pm_expires' => '08/28'])->save();
         Subscription::factory()->for($tenant->team, 'owner')->plan(Plan::Pro)->create(['renews_at' => now()->addDays(13)]);
+        $this->invoices($tenant->team);
 
         $this->trialTeam($tenant->owner);
         $this->lapsedTeam($tenant->owner, $tenant->member);
@@ -95,6 +96,19 @@ final class CloudE2ESeeder extends Seeder
 
         foreach (['solo-01', 'solo-02', 'solo-03'] as $name) {
             Server::factory()->for($team)->create(['name' => $name, 'status' => ServerStatus::Active]);
+        }
+    }
+
+    private function invoices(Team $team): void
+    {
+        foreach ([1, 2, 3, 4] as $index) {
+            $number = sprintf('MNV-%04d', $index);
+
+            TeamInvoice::factory()->for($team)->create([
+                'number' => $number,
+                'period_start' => now()->startOfMonth()->subMonths(4 - $index),
+                'pdf_url' => "http://127.0.0.1:8126/invoices/{$number}.pdf",
+            ]);
         }
     }
 

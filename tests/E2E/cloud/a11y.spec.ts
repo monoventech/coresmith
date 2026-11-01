@@ -13,14 +13,17 @@ const direct =
 
 const PAGES: [string, Visit][] = [
     ['General settings', direct('/monoven/settings')],
-    ['Fleet', direct('/monoven/dashboard')]
+    ['Fleet', direct('/monoven/dashboard')],
+    ['Billing on Pro', direct('/monoven/settings/billing')]
 ]
 
 const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Fleet on a trial', direct('/trial/dashboard')],
     ['Lapsed team', direct('/expired/dashboard')],
     ['Failed payment', direct('/overdue/dashboard')],
-    ['Starter team settings', direct('/solo/settings/team')]
+    ['Starter team settings', direct('/solo/settings/team')],
+    ['Billing on a trial', direct('/trial/settings/billing')],
+    ['Billing on a lapsed team', direct('/expired/settings/billing')]
 ]
 
 const GUEST_PAGES: [string, string][] = [

@@ -8,22 +8,20 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
-use App\Enums\Edition;
 use App\Http\Controllers\Controller;
+use App\Services\Billing\BillingPresenter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class BillingController extends Controller
 {
-    public function show(Request $request): Response
+    public function show(Request $request, BillingPresenter $billing): Response
     {
         $team = $this->currentTeam();
 
-        return Inertia::render('settings/Billing', [
-            'cloud' => Edition::current()->isCloud(),
-            'servers' => $team?->servers()->count() ?? 0,
-            'team' => $team?->name,
-        ]);
+        abort_if($team === null, 404);
+
+        return Inertia::render('settings/Billing', $billing->page($team, $request->user()));
     }
 }

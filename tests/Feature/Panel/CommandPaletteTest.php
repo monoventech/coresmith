@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\DeploymentStatus;
+use App\Enums\Plan;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -44,6 +45,16 @@ test('billing is described as the cloud plan on coresmith cloud', function () {
     $billing = collect(paletteCommands(User::factory()->create(), null))->firstWhere('label', 'Billing');
 
     expect($billing['hint'])->toBe('Coresmith Cloud');
+});
+
+test('billing on cloud says what the team is on', function () {
+    config(['coresmith.edition' => 'cloud']);
+    $pro = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $trial = Team::factory()->onTrial(9)->owned()->create();
+    $hint = fn(Team $team): string => collect(paletteCommands(User::query()->findOrFail($team->owner_id), $team))->firstWhere('label', 'Billing')['hint'];
+
+    expect($hint($pro))->toBe('Pro · $19 / month')
+        ->and($hint($trial))->toBe('trial · 9 days left');
 });
 
 test('a healthy server is opened with its environment and app count', function () {

@@ -33,6 +33,11 @@ final class Formats
         return $symbol . (str_ends_with($value, '.00') ? substr($value, 0, -3) : $value);
     }
 
+    public static function cents(int $minor, string $currency): string
+    {
+        return self::money(number_format($minor / 100, 2, '.', ''), strtoupper($currency)) ?? '';
+    }
+
     public static function monthly(?string $amount, ?string $currency): ?string
     {
         $money = self::money($amount, $currency);

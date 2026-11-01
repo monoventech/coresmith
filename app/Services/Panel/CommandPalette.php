@@ -16,6 +16,7 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Billing\BillingPresenter;
 
 final class CommandPalette
 {
@@ -58,7 +59,7 @@ final class CommandPalette
         $commands[] = ['label' => 'Deployments', 'icon' => 'rocket', 'hint' => 'fleet-wide history', 'href' => route('deployments.index')];
         $commands[] = ['label' => 'API tokens', 'icon' => 'key-round', 'hint' => 'settings', 'href' => route('api-tokens.index')];
         if (Edition::current()->isCloud()) {
-            $commands[] = ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => Edition::Cloud->label(), 'href' => route('settings.billing')];
+            $commands[] = ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => $this->team === null ? Edition::Cloud->label() : app(BillingPresenter::class)->paletteHint($this->team), 'href' => route('settings.billing')];
         }
 
         foreach ($this->team?->applications()->with('server')->orderBy('name')->get() ?? [] as $application) {

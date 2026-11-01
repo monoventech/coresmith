@@ -113,3 +113,11 @@ test('a price is shown with its currency symbol, dropping whole cents', function
     'no currency' => ['4.35', null, null, null],
     'an amount that is not a number' => ['n/a', 'EUR', null, null],
 ]);
+
+test('an amount in cents reads as money', function (int $minor, string $currency, string $expected) {
+    expect(Formats::cents($minor, $currency))->toBe($expected);
+})->with([
+    'whole dollars' => [1900, 'usd', '$19'],
+    'dollars and cents' => [1950, 'usd', '$19.50'],
+    'euros' => [1900, 'eur', '€19'],
+]);

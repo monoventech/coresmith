@@ -13,12 +13,18 @@ use App\Enums\Plan;
 use App\Enums\PlanFeature;
 use App\Enums\ReadOnlyReason;
 use App\Models\Team;
+use App\Models\TeamInvoice;
 use App\Models\User;
+use App\Services\Panel\Formats;
 use Carbon\CarbonImmutable;
 
 final class BillingPresenter
 {
     private const WARN_DAYS = 3;
+
+    private const INVOICES = 24;
+
+    private const BRANDS = ['visa' => 'Visa', 'mastercard' => 'Mastercard', 'amex' => 'American Express', 'discover' => 'Discover'];
 
     public function __construct(private readonly TeamBilling $billing) {}
 
@@ -47,6 +53,158 @@ final class BillingPresenter
                 'audit_log_export' => $this->note($status, PlanFeature::AuditLogExport),
             ],
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function page(Team $team, User $user): array
+    {
+        $status = $this->billing->status($team);
+        $canManage = $user->can('manageBilling', $team);
+        $trial = $status->state === BillingState::Trialing && $status->plan === Plan::Trial;
+        $invoices = $team->billingInvoices()->where('status', '!=', 'draft');
+        $count = $canManage ? $invoices->clone()->count() : 0;
+        $card = $canManage && is_string($team->pm_last_four) && $team->pm_last_four !== '';
+
+        return [
+            'can_manage' => $canManage,
+            'plan' => [
+                ...$this->planCard($team, $status),
+                'primary' => $canManage ? $this->primary($status) : null,
+                'self_host' => $canManage && $status->state !== BillingState::Ending,
+            ],
+            'payment' => $card ? ['label' => $this->brand((string) $team->pm_type) . ' •••• ' . $team->pm_last_four, 'expires' => $team->pm_expires] : null,
+            'payment_note' => match (true) {
+                !$canManage => 'Only an owner can see and change the payment method.',
+                $card => '',
+                default => 'No card yet. You add one when you choose a plan.',
+            },
+            'invoices' => $canManage ? $invoices->limit(self::INVOICES)->get()->map(fn(TeamInvoice $invoice): array => [
+                'id' => $invoice->id,
+                'period' => $invoice->period_start?->format('M Y') ?? '',
+                'number' => (string) $invoice->number,
+                'amount' => Formats::cents((int) $invoice->total, (string) $invoice->currency),
+                'status' => $this->invoiceStatus($invoice),
+                'pdf' => $invoice->pdf_url,
+            ])->values()->all() : [],
+            'invoice_count' => $count,
+            'invoices_note' => match (true) {
+                !$canManage => 'Only an owner can see invoices.',
+                $count > 0 => null,
+                $trial => 'No invoices yet. The first one arrives when the trial ends and a plan starts.',
+                default => 'No invoices yet. The first one arrives when you choose a plan.',
+            },
+            'receipts_to' => $canManage && $team->stripe_id !== null ? $team->stripeEmail() : null,
+        ];
+    }
+
+    public function paletteHint(Team $team): string
+    {
+        $status = $this->billing->status($team);
+        $label = $status->plan?->label() ?? '';
+
+        return match (true) {
+            $status->readOnly() => 'read-only, choose a plan',
+            $status->state === BillingState::Ending => "{$label} · ends {$this->day($status->endsAt)}",
+            $status->state === BillingState::Trialing && $status->plan === Plan::Trial => match ($days = (int) $status->trialDaysLeft()) {
+                0 => 'trial · ends today',
+                1 => 'trial · ends tomorrow',
+                default => "trial · {$days} days left",
+            },
+            $status->state === BillingState::Trialing => "{$label} · first charge {$this->day($status->trialEndsAt)}",
+            default => "{$label} · {$this->price($status->plan)} / month",
+        };
+    }
+
+    /**
+     * @return array{key: ?string, label: string, badge: array{label: string, tone: string}, line: string, amount: string, usage: string, note: ?string}
+     */
+    private function planCard(Team $team, BillingStatus $status): array
+    {
+        $plan = $status->plan;
+        $price = $this->price($plan);
+        $read = ['label' => 'Read-only', 'tone' => 'destructive'];
+
+        [$label, $badge, $line] = match (true) {
+            $status->state === BillingState::Active => [$plan?->label(), ['label' => 'Active', 'tone' => 'accent'], "{$price} per month · renews {$this->day($status->renewsAt)}"],
+            $status->state === BillingState::Trialing && $plan === Plan::Trial => ['Trial', ['label' => 'Trial', 'tone' => 'accent'], 'Pro features on 1 server · trial ends ' . $this->day($status->trialEndsAt)],
+            $status->state === BillingState::Trialing => [$plan?->label(), ['label' => 'Trial', 'tone' => 'accent'], "{$price} per month · first charge {$this->day($status->trialEndsAt)}"],
+            $status->state === BillingState::PastDue => [$plan?->label(), ['label' => 'Payment failed', 'tone' => 'destructive'], "{$price} per month · payment failed"],
+            $status->state === BillingState::Ending => [$plan?->label(), ['label' => 'Ending', 'tone' => 'warning'], "{$price} per month · ends {$this->day($status->endsAt)}"],
+            $status->reason === ReadOnlyReason::TrialEnded => ['Trial', $read, "Trial ended {$this->day($status->trialEndsAt)} · this team is read-only"],
+            $status->reason === ReadOnlyReason::PlanEnded => ['No plan', $read, "Ended {$this->day($status->endsAt)} · this team is read-only"],
+            $status->reason === ReadOnlyReason::PaymentFailed => ['No plan', $read, 'Payments failed · this team is read-only'],
+            default => ['No plan', $read, 'No plan yet · this team is read-only'],
+        };
+
+        return [
+            'key' => $plan?->value,
+            'label' => (string) $label,
+            'badge' => $badge,
+            'line' => $line,
+            'amount' => $plan === null || $plan === Plan::Trial ? '$0' : $price,
+            'usage' => $this->usage($team, $status),
+            'note' => $status->state === BillingState::Ending
+                ? "The plan stays active until {$this->day($status->endsAt)}. After that this team is read-only, and its servers and apps keep running."
+                : null,
+        ];
+    }
+
+    private function primary(BillingStatus $status): string
+    {
+        return match (true) {
+            $status->state === BillingState::Ending => 'keep',
+            $status->readOnly(), $status->plan === Plan::Trial => 'choose',
+            default => 'change',
+        };
+    }
+
+    private function usage(Team $team, BillingStatus $status): string
+    {
+        $count = $team->servers()->count();
+        $limit = $status->readOnly() ? null : $status->plan?->serverLimit();
+
+        if ($limit === null) {
+            return $count . ($count === 1 ? ' server' : ' servers');
+        }
+
+        return "{$count} of {$limit}" . ($limit === 1 ? ' server' : ' servers');
+    }
+
+    /**
+     * @return array{label: string, tone: string}
+     */
+    private function invoiceStatus(TeamInvoice $invoice): array
+    {
+        return match (true) {
+            $invoice->status === 'paid' => ['label' => 'Paid', 'tone' => 'success'],
+            $invoice->status === 'open' && (int) $invoice->attempt_count === 0 => ['label' => 'Due', 'tone' => 'warning'],
+            $invoice->status === 'open' => ['label' => 'Failed', 'tone' => 'destructive'],
+            $invoice->status === 'void' => ['label' => 'Void', 'tone' => 'outline'],
+            default => ['label' => 'Unpaid', 'tone' => 'destructive'],
+        };
+    }
+
+    private function brand(string $type): string
+    {
+        return self::BRANDS[$type] ?? ucfirst(str_replace('_', ' ', $type));
+    }
+
+    private function price(?Plan $plan): string
+    {
+        return Formats::cents(($plan?->amount() ?? 0) * 100, 'usd');
+    }
+
+    private function day(?CarbonImmutable $moment): string
+    {
+        if ($moment === null) {
+            return '';
+        }
+
+        $local = $moment->setTimezone((string) config('app.timezone', 'UTC'));
+
+        return $local->format($local->year === CarbonImmutable::now()->year ? 'M j' : 'M j, Y');
     }
 
     /**

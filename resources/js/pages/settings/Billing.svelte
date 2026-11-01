@@ -1,10 +1,24 @@
 <script lang="ts">
-    import { CreditCard } from '@lucide/svelte'
+    import { CreditCard, Download } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
+    import type { BillingPage } from '@/lib/billing'
 
-    let { cloud, servers, team }: { cloud: boolean; servers: number; team: string | null } = $props()
+    let {
+        can_manage,
+        plan,
+        payment,
+        payment_note,
+        invoices = [],
+        invoice_count = 0,
+        invoices_note = null,
+        receipts_to = null
+    }: BillingPage = $props()
+
+    const primaryLabel = $derived(
+        plan.primary === 'change' ? 'Change plan' : plan.primary === 'choose' ? 'Choose a plan' : 'Keep my plan'
+    )
 </script>
 
 <AppHead title="Billing" />
@@ -13,37 +27,100 @@
     <div class="flex h-full flex-col gap-4">
         <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="plan-card">
             <div class="mb-0.5 flex items-baseline gap-2.5">
-                <h3 class="type-h3 m-0">Self-hosted</h3>
-                <Badge variant="accent">Active</Badge>
+                <h3 class="type-h3 m-0">{plan.label}</h3>
+                <Badge variant={plan.badge.tone}>{plan.badge.label}</Badge>
             </div>
-            <p class="mb-4 text-[12.5px] text-muted-foreground">Free under ELv2 · every feature included{#if team}{` · ${team}`}{/if}</p>
+            <p class="mb-4 text-[12.5px] text-muted-foreground">{plan.line}</p>
             <div class="flex items-baseline gap-2">
-                <span class="font-mono text-[32px] font-medium">$0</span>
-                <span class="text-[13px] text-muted-foreground">/ month · {servers} {servers === 1 ? 'server' : 'servers'}</span>
+                <span class="font-mono text-[32px] font-medium">{plan.amount}</span>
+                <span class="text-[13px] text-muted-foreground">/ month · {plan.usage}</span>
             </div>
-            <div class="mt-4 flex flex-wrap gap-2.5">
-                <Button variant="outline" size="sm" href="https://github.com/monoven/coresmith/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Read the licence</Button>
-            </div>
+            {#if plan.note}
+                <p class="mt-3 mb-0 text-[12.5px] text-muted-foreground">{plan.note}</p>
+            {/if}
+            {#if can_manage}
+                <div class="mt-4 flex flex-wrap gap-2.5">
+                    {#if plan.primary}
+                        <Button variant="outline" size="sm">{primaryLabel}</Button>
+                    {/if}
+                    {#if plan.self_host}
+                        <Button variant="ghost" size="sm">Move to self-host</Button>
+                    {/if}
+                </div>
+            {:else}
+                <p class="mt-4 mb-0 text-[12.5px] text-muted-foreground">Only an owner can change the plan.</p>
+            {/if}
         </div>
-        <div class="flex-1 rounded-xl border border-border bg-card px-5.5 py-5">
+        <div class="flex-1 rounded-xl border border-border bg-card px-5.5 py-5" data-testid="payment-card">
             <h3 class="type-h3 m-0 mb-2.5">Payment method</h3>
-            <div class="flex items-center gap-3 text-[13.5px]">
+            <div class="flex flex-wrap items-center gap-3 text-[13.5px]">
                 <CreditCard class="size-4.5 shrink-0 text-muted-foreground" />
-                <span class="text-muted-foreground">No card needed while you self-host.</span>
+                {#if payment}
+                    <span class="font-mono text-[13px] whitespace-nowrap">{payment.label}</span>
+                    {#if payment.expires}
+                        <span class="text-[12.5px] whitespace-nowrap text-muted-foreground"
+                            >expires {payment.expires}</span
+                        >
+                    {/if}
+                    {#if can_manage}
+                        <span class="ml-auto"><Button variant="ghost" size="sm">Update</Button></span>
+                    {/if}
+                {:else}
+                    <span class="text-muted-foreground">{payment_note}</span>
+                {/if}
             </div>
         </div>
     </div>
 
-    <div class="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card" data-testid="invoices-card">
-        <div class="border-b border-border px-5.5 py-4"><h3 class="type-h3 m-0">Invoices</h3></div>
-        <div class="flex-1 px-5.5 py-4">
-            <p class="m-0 text-[13.5px]">No invoices.</p>
-            <p class="mt-1 text-[12.5px] text-muted-foreground">
-                {cloud
-                    ? 'Billing is switched on for this instance, but invoicing waits on the Coresmith Cloud payment integration.'
-                    : "Self-hosting is free, so there's nothing to bill. Invoices only exist on Coresmith Cloud."}
-            </p>
+    <div
+        class="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card"
+        data-testid="invoices-card"
+    >
+        <div class="flex items-baseline gap-2.5 border-b border-border px-5.5 py-4">
+            <h3 class="type-h3 m-0">Invoices</h3>
+            {#if invoice_count > 0}
+                <span class="font-mono text-[12px] text-muted-foreground"
+                    >{invoice_count} {invoice_count === 1 ? 'invoice' : 'invoices'}</span
+                >
+            {/if}
         </div>
-        <p class="m-0 border-t border-border px-5.5 py-3 text-[12.5px] text-muted-foreground">The self-hosted panel and Coresmith Cloud run the same code, feature for feature.</p>
+        {#if invoices.length > 0}
+            <div class="max-h-72 overflow-y-auto">
+                {#each invoices as invoice (invoice.id)}
+                    <div
+                        class="flex min-h-14.5 items-center gap-3.5 border-b border-border px-5.5 py-1 text-[13.5px] max-sm:gap-2.5"
+                        data-testid="invoice-row"
+                    >
+                        <span class="w-27.5 shrink-0 max-sm:w-auto">{invoice.period}</span>
+                        <span class="min-w-0 flex-1 truncate font-mono text-[12.5px] text-muted-foreground"
+                            >{invoice.number}</span
+                        >
+                        <span class="w-14 shrink-0 text-right font-mono text-[13px] max-sm:w-auto"
+                            >{invoice.amount}</span
+                        >
+                        <Badge variant={invoice.status.tone}>{invoice.status.label}</Badge>
+                        {#if invoice.pdf}
+                            <a
+                                href={invoice.pdf}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="focus-ring inline-flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted max-sm:size-11"
+                                aria-label="Download invoice {invoice.number}"
+                                title="Download invoice {invoice.number}"
+                            >
+                                <Download class="size-4" />
+                            </a>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        {:else if invoices_note}
+            <p class="m-0 flex-1 px-5.5 py-4 text-[13.5px] text-muted-foreground">{invoices_note}</p>
+        {/if}
+        {#if receipts_to}
+            <p class="m-0 mt-auto px-5.5 py-3 text-[12.5px] text-muted-foreground">
+                Stripe emails each receipt to {receipts_to}.
+            </p>
+        {/if}
     </div>
 </div>

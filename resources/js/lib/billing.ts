@@ -27,3 +27,31 @@ export type BillingSummary = {
     banner: BillingBannerProps | null
     notes: BillingNotes
 }
+
+export type BillingPage = {
+    can_manage: boolean
+    plan: {
+        key: string | null
+        label: string
+        badge: { label: string; tone: 'accent' | 'warning' | 'destructive' }
+        line: string
+        amount: string
+        usage: string
+        note: string | null
+        primary: 'change' | 'choose' | 'keep' | null
+        self_host: boolean
+    }
+    payment: { label: string; expires: string | null } | null
+    payment_note: string
+    invoices: {
+        id: string
+        period: string
+        number: string
+        amount: string
+        status: { label: string; tone: 'success' | 'warning' | 'destructive' | 'outline' }
+        pdf: string | null
+    }[]
+    invoice_count: number
+    invoices_note: string | null
+    receipts_to: string | null
+}
