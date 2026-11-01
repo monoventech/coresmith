@@ -250,6 +250,45 @@ test('the installer workflow proves the instance it built actually works', funct
         ->and($workflow)->toContain('expected 503');
 });
 
+test('the installer workflow updates, rolls back and uninstalls the instance it built', function () {
+    $workflow = (string) file_get_contents(base_path('.github/workflows/installer.yml'));
+
+    expect($workflow)->toContain('sudo bash tests/Machine/updates.sh /srv/coresmith-under-test.git')
+        ->and($workflow)->toContain('timeout-minutes: 90')
+        ->and($workflow)->toContain("'app/Services/Updates/**'")
+        ->and($workflow)->toContain("'tests/Machine/**'")
+        ->and($workflow)->toContain("'scripts/**'")
+        ->and($workflow)->toContain('journalctl -u coresmith-update -n 100')
+        ->and($workflow)->toContain('/var/lib/coresmith/updates/status.json');
+});
+
+test('the machine test checks each scenario it promises', function () {
+    $script = (string) @file_get_contents(base_path('tests/Machine/updates.sh'));
+
+    foreach ([
+        'the machine test is set up',
+        'a signed update is installed',
+        'a broken release is rolled back',
+        'an unsigned release is refused before anything changes',
+        "the panel's request starts the update service",
+        'an interrupted update recovers on its own',
+        'the uninstaller leaves the machine clean',
+    ] as $scenario) {
+        expect($script)->toContain("ok \"{$scenario}\"");
+    }
+
+    expect($script)->toContain("printf 'ok %s\\n'");
+});
+
+test('the machine test is valid bash that the shell lint covers', function () {
+    $process = new Process(['bash', '-n', base_path('tests/Machine/updates.sh')]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(is_executable(base_path('tests/Machine/updates.sh')))->toBeTrue()
+        ->and((string) file_get_contents(base_path('package.json')))->toContain('"lint:sh": "shellcheck -S style scripts/*.sh tests/Machine/*.sh"');
+});
+
 test('caddy only issues certificates for hosts the panel approves, asked over loopback', function () {
     $body = installScriptBody();
 

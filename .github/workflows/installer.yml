@@ -6,12 +6,32 @@ on:
   push:
     branches: [main]
     paths:
-      - 'scripts/install.sh'
+      - 'VERSION'
+      - 'scripts/**'
       - '.github/workflows/installer.yml'
+      - 'app/Services/Updates/**'
+      - 'app/Console/Commands/UpdateCommand.php'
+      - 'app/Console/Commands/CheckUpdateCommand.php'
+      - 'app/Console/Commands/HealthCommand.php'
+      - 'app/Console/Commands/UninstallCommand.php'
+      - 'app/Services/Install/**'
+      - 'app/Services/Panel/PanelBackup.php'
+      - 'resources/release-keys/**'
+      - 'tests/Machine/**'
   pull_request:
     paths:
-      - 'scripts/install.sh'
+      - 'VERSION'
+      - 'scripts/**'
       - '.github/workflows/installer.yml'
+      - 'app/Services/Updates/**'
+      - 'app/Console/Commands/UpdateCommand.php'
+      - 'app/Console/Commands/CheckUpdateCommand.php'
+      - 'app/Console/Commands/HealthCommand.php'
+      - 'app/Console/Commands/UninstallCommand.php'
+      - 'app/Services/Install/**'
+      - 'app/Services/Panel/PanelBackup.php'
+      - 'resources/release-keys/**'
+      - 'tests/Machine/**'
   schedule:
     - cron: '0 4 * * 1'
   workflow_dispatch:
@@ -24,7 +44,7 @@ jobs:
   install:
     name: Install on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -126,9 +146,14 @@ jobs:
           systemctl is-active --quiet caddy
           systemctl is-active --quiet coresmith-horizon
 
+      - name: Updates, rollback, the panel's request, recovery and uninstall
+        run: sudo bash tests/Machine/updates.sh /srv/coresmith-under-test.git
+
       - name: Collect logs on failure
         if: failure()
         run: |
+          sudo journalctl -u coresmith-update -n 100 --no-pager || true
+          sudo cat /var/lib/coresmith/updates/status.json || true
           sudo journalctl -u caddy -n 100 --no-pager || true
           sudo journalctl -u coresmith-horizon -n 100 --no-pager || true
           sudo tail -n 200 /var/log/coresmith-install.log || true
