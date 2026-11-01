@@ -10,6 +10,8 @@ use App\Services\Updates\UpdateState;
 use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
 use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
@@ -59,10 +61,17 @@ function updatesCleanUp(): void
         }
     }
 
+    if (isset($registry->previousDefault)) {
+        config(['database.default' => $registry->previousDefault]);
+        DB::purge('csu_panel');
+        $registry->previousDefault = null;
+    }
+
     $registry->base = null;
     $registry->answers = [];
     $registry->faked = [];
     $registry->busy = [];
+    $registry->database = null;
 }
 
 function updatesAnswer(string $url, array|string|Closure $answer, int $status = 200): void
@@ -214,6 +223,10 @@ function updatesMachine(array $failures = []): void
         $key = updatesMachineKey($command);
         $failure = $key === null ? null : ($failures[$key] ?? (str_starts_with($key, 'tool:') ? ($failures['tools'] ?? null) : null));
 
+        if ($key === 'artisan:migrate' && is_string($registry->database ?? null)) {
+            (new PDO('sqlite:' . $registry->database))->exec("insert into probe (note) values ('migrated')");
+        }
+
         if ($failure instanceof Closure) {
             return $failure($process);
         }
@@ -318,4 +331,53 @@ function updatesProbeUrl(): string
 function updatesProbe(string $release): void
 {
     updatesAnswer(updatesProbeUrl(), ['release' => $release, 'version' => '0.1.1']);
+}
+
+function updatesUseFileDatabase(string $base): void
+{
+    $registry = updatesRegistry();
+
+    if (!is_string($registry->template ?? null) || !is_file($registry->template)) {
+        $template = realpath(sys_get_temp_dir()) . '/csu-template-' . getmypid() . '-' . Str::lower(Str::random(6)) . '.sqlite';
+        touch($template);
+        config(['database.connections.csu_template' => ['driver' => 'sqlite', 'database' => $template, 'prefix' => '', 'foreign_key_constraints' => true]]);
+        Artisan::call('migrate', ['--database' => 'csu_template', '--force' => true]);
+        DB::purge('csu_template');
+        register_shutdown_function(fn() => @unlink($template));
+        $registry->template = $template;
+    }
+
+    copy($registry->template, "{$base}/panel.sqlite");
+    config(['database.connections.csu_panel' => ['driver' => 'sqlite', 'database' => "{$base}/panel.sqlite", 'prefix' => '', 'foreign_key_constraints' => true]]);
+    $registry->previousDefault ??= config('database.default');
+    $registry->database = "{$base}/panel.sqlite";
+    config(['database.default' => 'csu_panel']);
+
+    DB::connection('csu_panel')->statement('create table probe (note text)');
+    DB::connection('csu_panel')->table('probe')->insert(['note' => 'before']);
+}
+
+function updatesProbeNotes(): array
+{
+    return (new PDO('sqlite:' . updatesRegistry()->database))->query('select note from probe order by rowid')->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function updatesPanel(): array
+{
+    $paths = updatesUseTemporaryPaths();
+    updatesInstall($paths['root'], '0.1.0');
+    updatesUseFileDatabase($paths['base']);
+    updatesFakeHorizon([999999]);
+    updatesMachine();
+    config([
+        'app.url' => 'https://panel.example.com',
+        'coresmith.updates.enabled' => true,
+        'coresmith.version' => '0.1.0',
+        'coresmith.updates.check_url' => 'https://get.coresmith.io/v1/version',
+    ]);
+    updatesProbe('0.1.1-a1b2c3d');
+    updatesFeed(['latest' => '0.1.1']);
+    app()->useStoragePath($paths['root'] . '/shared/storage');
+
+    return $paths;
 }

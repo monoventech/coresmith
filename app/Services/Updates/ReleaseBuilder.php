@@ -132,6 +132,15 @@ final class ReleaseBuilder
         $this->must(['setfacl', '-R', '-m', "u:{$user}:rX", "{$path}/public"], $path, 120, $run, 'cache', "Coresmith couldn't let the web server read the new release");
     }
 
+    public function migrate(string $path, UpdateRun $run): void
+    {
+        $result = $this->exec([PHP_BINARY, 'artisan', 'migrate', '--force', '--no-interaction'], $path, 1800, $run);
+
+        if (!$result->successful()) {
+            throw new UpdateFailed('migrate', $this->sanitizer->sanitize("Running migrations failed: {$this->excerpt($result)}."));
+        }
+    }
+
     private function link(string $path): void
     {
         foreach (['storage', '.env'] as $shared) {
