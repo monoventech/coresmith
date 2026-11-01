@@ -64,6 +64,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('settings.notifications.update');
 
     Route::get('settings/billing', [BillingController::class, 'show'])->middleware('cloud')->name('settings.billing');
+    Route::put('settings/billing/plan', [BillingController::class, 'update'])
+        ->middleware(['cloud', 'throttle:10,1,billing-plan'])
+        ->name('settings.billing.plan.update');
+    Route::delete('settings/billing/plan', [BillingController::class, 'destroy'])
+        ->middleware(['cloud', 'throttle:10,1,billing-plan-end'])
+        ->name('settings.billing.plan.destroy');
+    Route::post('settings/billing/plan/resume', [BillingController::class, 'resume'])
+        ->middleware(['cloud', 'throttle:10,1,billing-plan-resume'])
+        ->name('settings.billing.plan.resume');
+    Route::post('settings/billing/portal', [BillingController::class, 'portal'])
+        ->middleware(['cloud', 'throttle:10,1,billing-portal'])
+        ->name('settings.billing.portal');
 
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 

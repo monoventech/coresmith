@@ -23,7 +23,16 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Failed payment', direct('/overdue/dashboard')],
     ['Starter team settings', direct('/solo/settings/team')],
     ['Billing on a trial', direct('/trial/settings/billing')],
-    ['Billing on a lapsed team', direct('/expired/settings/billing')]
+    ['Billing on a lapsed team', direct('/expired/settings/billing')],
+    [
+        'Change plan dialog',
+        async (page) => {
+            await page.goto('/fleet/settings/billing')
+            await page.getByRole('button', { name: 'Change plan' }).click()
+            await page.getByRole('dialog').getByRole('radio', { name: 'Starter', exact: true }).click()
+            await expect(page.getByRole('dialog').getByTestId('plan-blocker').first()).toBeVisible()
+        }
+    ]
 ]
 
 const GUEST_PAGES: [string, string][] = [

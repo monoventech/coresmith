@@ -6,10 +6,9 @@
     import MonovenMark from '@/components/MonovenMark.svelte'
     import Wordmark from '@/components/panel/Wordmark.svelte'
     import { Button } from '@/components/ui/button'
+    import { SELF_HOSTING_URL, SOURCE_URL } from '@/lib/links'
 
     let { canRegister = true }: { canRegister: boolean } = $props()
-
-    const SOURCE = 'https://github.com/monoven/coresmith'
 
     const signedIn = $derived(Boolean(page.props.auth?.user))
     const panelHref = $derived(signedIn ? route('dashboard') : route('login'))
@@ -49,7 +48,7 @@
                     >Security</a
                 >
                 <a
-                    href={SOURCE}
+                    href={SOURCE_URL}
                     class="focus-ring rounded-sm text-muted-foreground no-underline underline-offset-4 hover:underline max-sm:hidden"
                     rel="noopener noreferrer">Source</a
                 >
@@ -67,7 +66,7 @@
             </p>
             <div class="mt-8 flex flex-wrap items-center gap-3">
                 <Button size="lg" href={panelHref}>See it deploy</Button>
-                <Button size="lg" variant="outline" href="{SOURCE}#self-hosting" rel="noopener noreferrer"
+                <Button size="lg" variant="outline" href={SELF_HOSTING_URL} rel="noopener noreferrer"
                     >Self-host it</Button
                 >
             </div>
@@ -181,7 +180,9 @@
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
                     <Button size="lg" href={startHref}>Get started</Button>
-                    <Button size="lg" variant="ghost" href={SOURCE} rel="noopener noreferrer">Browse on GitHub</Button>
+                    <Button size="lg" variant="ghost" href={SOURCE_URL} rel="noopener noreferrer"
+                        >Browse on GitHub</Button
+                    >
                 </div>
             </div>
         </section>

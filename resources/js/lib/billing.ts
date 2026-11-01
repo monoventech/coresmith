@@ -28,6 +28,35 @@ export type BillingSummary = {
     notes: BillingNotes
 }
 
+export type PlanBlocker = {
+    message: string
+    links: { label: string; href: string }[]
+}
+
+export type PlanOption = {
+    key: 'starter' | 'pro' | 'business'
+    label: string
+    summary: string
+    current: boolean
+    available: boolean
+    blockers: PlanBlocker[]
+    notes: string[]
+}
+
+export type SelfHosting = {
+    has_subscription: boolean
+    ends_on: string | null
+    trial_ends_on: string | null
+    guide: string
+}
+
+export type CheckoutStatus = {
+    status: 'success' | 'cancelled'
+    awaiting: boolean
+    message: string
+    timeout_message: string
+}
+
 export type BillingPage = {
     can_manage: boolean
     plan: {
@@ -54,4 +83,7 @@ export type BillingPage = {
     invoice_count: number
     invoices_note: string | null
     receipts_to: string | null
+    plans: PlanOption[]
+    self_hosting: SelfHosting
+    checkout: CheckoutStatus | null
 }

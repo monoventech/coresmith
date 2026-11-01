@@ -43,6 +43,10 @@ final class EnforcePlan
         'settings.team-domain.destroy',
         'servers.destroy',
         'servers.cloud.destroy',
+        'settings.billing.plan.update',
+        'settings.billing.plan.destroy',
+        'settings.billing.plan.resume',
+        'settings.billing.portal',
     ];
 
     public const BLOCKED_READS = ['source-providers.connect', 'source-providers.callback', 'github-apps.registered'];

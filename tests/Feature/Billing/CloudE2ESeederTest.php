@@ -29,7 +29,8 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->plan)->toBe(Plan::Trial)
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
-        ->and($owner->teams()->pluck('slug')->sort()->values()->all())->toBe(['ending', 'expired', 'monoven', 'overdue', 'solo', 'trial'])
+        ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
+        ->and($owner->teams()->count())->toBe(7 + 4 * count(CloudE2ESeeder::PROJECTS))
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 
@@ -74,4 +75,39 @@ test('the cloud browser seed gives monoven four paid invoices', function () {
 
     expect($monoven->billingInvoices()->pluck('number')->all())->toBe(['MNV-0004', 'MNV-0003', 'MNV-0002', 'MNV-0001'])
         ->and($monoven->billingInvoices()->where('status', 'paid')->count())->toBe(4);
+});
+
+test('the cloud browser seed gives every browser its own plan change teams', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $status = fn(string $slug) => app(TeamBilling::class)->status(Team::query()->where('slug', $slug)->firstOrFail());
+
+    foreach (CloudE2ESeeder::PROJECTS as $code) {
+        $swap = Team::query()->where('slug', "swap-{$code}")->firstOrFail();
+
+        expect($status("pay-{$code}")->state)->toBe(BillingState::Trialing)
+            ->and($status("pay-{$code}")->plan)->toBe(Plan::Trial)
+            ->and($status("swap-{$code}")->state)->toBe(BillingState::Active)
+            ->and($status("end-{$code}")->plan)->toBe(Plan::Pro)
+            ->and($status("keep-{$code}")->state)->toBe(BillingState::Ending)
+            ->and($swap->stripe_id)->toBe("cus_e2e_swap_{$code}")
+            ->and($swap->subscription('default')->stripe_id)->toBe("sub_e2e_swap_{$code}")
+            ->and($swap->subscription('default')->items()->pluck('stripe_id')->all())->toBe(["si_e2e_swap_{$code}"]);
+    }
+});
+
+test('the cloud browser seed has a fleet too big for starter', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $fleet = Team::query()->where('slug', 'fleet')->firstOrFail();
+
+    expect(app(TeamBilling::class)->status($fleet)->plan)->toBe(Plan::Pro)
+        ->and($fleet->servers()->count())->toBe(5)
+        ->and($fleet->members()->count())->toBe(3)
+        ->and($fleet->domain?->hostname)->toBe('deploy.bigfleet.test')
+        ->and($fleet->domain?->isVerified())->toBeTrue();
 });

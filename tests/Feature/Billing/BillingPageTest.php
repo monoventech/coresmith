@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Enums\Plan;
+use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvoice;
@@ -195,4 +197,59 @@ test('without invoices the page says when the first arrives', function () {
 
 test('a user without a team has no billing page', function () {
     $this->actingAs(User::factory()->create())->get(route('settings.billing'))->assertNotFound();
+});
+
+test('the plan dialog lists each plan with what blocks it', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    Server::factory()->for($team)->count(4)->create(['status' => ServerStatus::Active]);
+
+    $plans = billingPagePlan($team)['plans'];
+
+    expect(array_column($plans, 'key'))->toBe(['starter', 'pro', 'business'])
+        ->and(array_column($plans, 'label'))->toBe(['Starter', 'Pro', 'Business'])
+        ->and(array_column($plans, 'current'))->toBe([false, true, false])
+        ->and(array_column($plans, 'available'))->toBe([true, true, true])
+        ->and($plans[0]['summary'])->toBe('$9 per month · 3 servers · one person')
+        ->and(array_column($plans[0]['blockers'], 'message'))->toBe(['Starter includes 3 servers and this team has 4. Detach 1 first.'])
+        ->and($plans[2]['blockers'])->toBe([])
+        ->and(array_column($plans, 'notes'))->toBe([[], [], []]);
+});
+
+test('leaving business is noted on the cheaper plans', function () {
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+
+    expect(array_column(billingPagePlan($team)['plans'], 'notes'))->toBe([
+        ['Database backups to S3 stop.', 'Audit log export goes away.'],
+        ['Database backups to S3 stop.', 'Audit log export goes away.'],
+        [],
+    ]);
+});
+
+test('a plan without a price is shown as not available', function () {
+    config(['coresmith.billing.plans.business.prices' => '']);
+    $team = Team::factory()->onTrial()->owned()->create();
+
+    expect(array_column(billingPagePlan($team)['plans'], 'available'))->toBe([true, true, false])
+        ->and(array_column(billingPagePlan($team)['plans'], 'current'))->toBe([false, false, false]);
+});
+
+test('a deployer is not shown what blocks a plan change', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    Server::factory()->for($team)->count(4)->create(['status' => ServerStatus::Active]);
+    $deployer = CloudBilling::member($team, TeamRole::Member);
+    $deployer->forceFill(['current_team_id' => $team->id])->save();
+
+    expect(array_column(billingPagePlan($team, $deployer->fresh())['plans'], 'blockers'))->toBe([[], [], []]);
+});
+
+test('moving to self-host knows when cloud stops', function () {
+    $paying = Team::factory()->owned()->create(['stripe_id' => 'cus_paying']);
+    billingPageSubscribed(Plan::Pro)->for($paying, 'owner')->create(['renews_at' => CarbonImmutable::parse('2026-11-01')]);
+    $trying = Team::factory()->owned()->create(['trial_ends_at' => CarbonImmutable::parse('2026-10-25')]);
+    $lapsed = Team::factory()->trialEnded()->owned()->create();
+    $guide = 'https://github.com/monoven/coresmith#self-hosting';
+
+    expect(billingPagePlan($paying)['self_hosting'])->toBe(['has_subscription' => true, 'ends_on' => 'Nov 1', 'trial_ends_on' => null, 'guide' => $guide])
+        ->and(billingPagePlan($trying)['self_hosting'])->toBe(['has_subscription' => false, 'ends_on' => null, 'trial_ends_on' => 'Oct 25', 'guide' => $guide])
+        ->and(billingPagePlan($lapsed)['self_hosting'])->toBe(['has_subscription' => false, 'ends_on' => null, 'trial_ends_on' => null, 'guide' => $guide]);
 });

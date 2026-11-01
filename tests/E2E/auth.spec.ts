@@ -100,6 +100,19 @@ asGuest.describe('signing in', () => {
         )
         await expect(card).not.toContainText('deploy key per app')
     })
+
+    asGuest('the landing page links to the source and the self-hosting guide', async ({ page }) => {
+        await page.goto('/')
+
+        await expect(page.getByRole('link', { name: 'Self-host it' })).toHaveAttribute(
+            'href',
+            'https://github.com/monoven/coresmith#self-hosting'
+        )
+        await expect(page.getByRole('link', { name: 'Browse on GitHub' })).toHaveAttribute(
+            'href',
+            'https://github.com/monoven/coresmith'
+        )
+    })
 })
 
 asGuest.describe('signing out', () => {

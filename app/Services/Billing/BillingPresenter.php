@@ -26,7 +26,9 @@ final class BillingPresenter
 
     private const BRANDS = ['visa' => 'Visa', 'mastercard' => 'Mastercard', 'amex' => 'American Express', 'discover' => 'Discover'];
 
-    public function __construct(private readonly TeamBilling $billing) {}
+    private const SELF_HOSTING_URL = 'https://github.com/monoven/coresmith#self-hosting';
+
+    public function __construct(private readonly TeamBilling $billing, private readonly PlanChangeGuard $guard) {}
 
     /**
      * @return array<string, mixed>
@@ -58,11 +60,12 @@ final class BillingPresenter
     /**
      * @return array<string, mixed>
      */
-    public function page(Team $team, User $user): array
+    public function page(Team $team, User $user, ?string $checkout = null): array
     {
         $status = $this->billing->status($team);
         $canManage = $user->can('manageBilling', $team);
         $trial = $status->state === BillingState::Trialing && $status->plan === Plan::Trial;
+        $subscribed = $team->subscription('default')?->valid() === true;
         $invoices = $team->billingInvoices()->where('status', '!=', 'draft');
         $count = $canManage ? $invoices->clone()->count() : 0;
         $card = $canManage && is_string($team->pm_last_four) && $team->pm_last_four !== '';
@@ -96,6 +99,22 @@ final class BillingPresenter
                 default => 'No invoices yet. The first one arrives when you choose a plan.',
             },
             'receipts_to' => $canManage && $team->stripe_id !== null ? $team->stripeEmail() : null,
+            'plans' => array_map(fn(Plan $option): array => [
+                'key' => $option->value,
+                'label' => $option->label(),
+                'summary' => $option->summary(),
+                'current' => $status->plan === $option,
+                'available' => $option->checkoutPrice() !== null,
+                'blockers' => $canManage ? $this->guard->blockers($team, $option) : [],
+                'notes' => $canManage ? $this->guard->notes($team, $option) : [],
+            ], Plan::purchasable()),
+            'self_hosting' => [
+                'has_subscription' => $subscribed,
+                'ends_on' => $subscribed ? $this->dayOrNull($status->renewsAt ?? $status->trialEndsAt) : null,
+                'trial_ends_on' => $trial ? $this->dayOrNull($status->trialEndsAt) : null,
+                'guide' => self::SELF_HOSTING_URL,
+            ],
+            'checkout' => $this->checkout($status, $subscribed, $checkout),
         ];
     }
 
@@ -151,6 +170,29 @@ final class BillingPresenter
         ];
     }
 
+    /**
+     * @return array{status: string, awaiting: bool, message: string, timeout_message: string}|null
+     */
+    private function checkout(BillingStatus $status, bool $subscribed, ?string $checkout): ?array
+    {
+        if (!in_array($checkout, ['success', 'cancelled'], true)) {
+            return null;
+        }
+
+        $awaiting = $checkout === 'success' && !$subscribed;
+
+        return [
+            'status' => $checkout,
+            'awaiting' => $awaiting,
+            'message' => match (true) {
+                $checkout === 'cancelled' => 'Checkout was cancelled, so nothing was charged.',
+                $awaiting => 'Payment received. The plan appears here as soon as Stripe confirms it.',
+                default => "You're on {$status->plan?->label()}.",
+            },
+            'timeout_message' => 'Stripe has not confirmed the payment yet. Refresh in a minute; the receipt is in your email.',
+        ];
+    }
+
     private function primary(BillingStatus $status): string
     {
         return match (true) {
@@ -194,6 +236,11 @@ final class BillingPresenter
     private function price(?Plan $plan): string
     {
         return Formats::cents(($plan?->amount() ?? 0) * 100, 'usd');
+    }
+
+    private function dayOrNull(?CarbonImmutable $moment): ?string
+    {
+        return $moment === null ? null : $this->day($moment);
     }
 
     private function day(?CarbonImmutable $moment): string

@@ -1,9 +1,27 @@
 <script lang="ts">
+    import { router } from '@inertiajs/svelte'
     import { CreditCard, Download } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
+    import ChangePlanDialog from '@/components/settings/ChangePlanDialog.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import type { BillingPage } from '@/lib/billing'
+    import { cn } from '@/lib/utils'
+
+    const POLLS = 20
+
+    const POLLED = [
+        'plan',
+        'payment',
+        'payment_note',
+        'invoices',
+        'invoice_count',
+        'invoices_note',
+        'receipts_to',
+        'checkout',
+        'plans',
+        'self_hosting'
+    ]
 
     let {
         can_manage,
@@ -13,15 +31,79 @@
         invoices = [],
         invoice_count = 0,
         invoices_note = null,
-        receipts_to = null
+        receipts_to = null,
+        plans = [],
+        self_hosting,
+        checkout = null
     }: BillingPage = $props()
+
+    let dialogOpen = $state(false)
+    let selection = $state('')
+    let working = $state(false)
+    let timedOut = $state(false)
 
     const primaryLabel = $derived(
         plan.primary === 'change' ? 'Change plan' : plan.primary === 'choose' ? 'Choose a plan' : 'Keep my plan'
     )
+    const awaiting = $derived(checkout?.awaiting === true)
+
+    $effect(() => {
+        if (!awaiting) {
+            return
+        }
+
+        let polls = 0
+        const timer = setInterval(() => {
+            polls += 1
+            router.reload({ only: POLLED })
+
+            if (polls >= POLLS) {
+                clearInterval(timer)
+                timedOut = true
+            }
+        }, 3000)
+
+        return () => clearInterval(timer)
+    })
+
+    function openDialog(choice: string) {
+        selection = choice
+        dialogOpen = true
+    }
+
+    function primary() {
+        if (plan.primary === 'keep') {
+            post(route('settings.billing.plan.resume'))
+
+            return
+        }
+
+        openDialog(plans.find((option) => option.current)?.key ?? '')
+    }
+
+    function post(url: string) {
+        router.post(
+            url,
+            {},
+            { preserveScroll: true, onStart: () => (working = true), onFinish: () => (working = false) }
+        )
+    }
 </script>
 
 <AppHead title="Billing" />
+
+{#if checkout}
+    <p
+        class={cn(
+            'mb-4 rounded-xl border px-4.5 py-3 text-[13.5px]',
+            checkout.status === 'success' ? 'tint-success' : 'border-border bg-muted'
+        )}
+        role="status"
+        data-testid="checkout-status"
+    >
+        {awaiting && timedOut ? checkout.timeout_message : checkout.message}
+    </p>
+{/if}
 
 <div class="grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
     <div class="flex h-full flex-col gap-4">
@@ -41,10 +123,12 @@
             {#if can_manage}
                 <div class="mt-4 flex flex-wrap gap-2.5">
                     {#if plan.primary}
-                        <Button variant="outline" size="sm">{primaryLabel}</Button>
+                        <Button variant="outline" size="sm" disabled={working} onclick={primary}>{primaryLabel}</Button>
                     {/if}
                     {#if plan.self_host}
-                        <Button variant="ghost" size="sm">Move to self-host</Button>
+                        <Button variant="ghost" size="sm" onclick={() => openDialog('self-hosted')}
+                            >Move to self-host</Button
+                        >
                     {/if}
                 </div>
             {:else}
@@ -63,7 +147,14 @@
                         >
                     {/if}
                     {#if can_manage}
-                        <span class="ml-auto"><Button variant="ghost" size="sm">Update</Button></span>
+                        <span class="ml-auto"
+                            ><Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={working}
+                                onclick={() => post(route('settings.billing.portal'))}>Update</Button
+                            ></span
+                        >
                     {/if}
                 {:else}
                     <span class="text-muted-foreground">{payment_note}</span>
@@ -124,3 +215,13 @@
         {/if}
     </div>
 </div>
+
+{#if can_manage}
+    <ChangePlanDialog
+        bind:open={dialogOpen}
+        bind:selected={selection}
+        {plans}
+        selfHosting={self_hosting}
+        choosing={plan.primary === 'choose'}
+    />
+{/if}

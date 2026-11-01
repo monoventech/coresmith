@@ -15,6 +15,7 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\Team;
+use App\Models\TeamDomain;
 use App\Models\TeamInvoice;
 use App\Models\User;
 use Database\Seeders\Support\MonovenTenant;
@@ -50,6 +51,11 @@ final class CloudE2ESeeder extends Seeder
         $this->endingTeam($tenant->owner);
         $this->overdueTeam($tenant->owner);
         $this->soloTeam($tenant->owner);
+        $this->fleetTeam($tenant->owner);
+
+        foreach (self::PROJECTS as $code) {
+            $this->planChangeTeams($tenant->owner, $code);
+        }
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
     }
@@ -96,6 +102,41 @@ final class CloudE2ESeeder extends Seeder
 
         foreach (['solo-01', 'solo-02', 'solo-03'] as $name) {
             Server::factory()->for($team)->create(['name' => $name, 'status' => ServerStatus::Active]);
+        }
+    }
+
+    private function fleetTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Big Fleet', 'fleet');
+        $team->forceFill(['stripe_id' => 'cus_e2e_fleet'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create();
+        TeamDomain::factory()->for($team)->verified()->create(['hostname' => 'deploy.bigfleet.test']);
+
+        foreach (['Ines Okafor' => 'fleet-ops@cloud.test', 'Tomas Reyes' => 'fleet-dev@cloud.test'] as $name => $email) {
+            $team->members()->attach(User::factory()->create(['name' => $name, 'email' => $email]), ['role' => TeamRole::Member->value]);
+        }
+
+        foreach (['fleet-01', 'fleet-02', 'fleet-03', 'fleet-04', 'fleet-05'] as $name) {
+            Server::factory()->for($team)->create(['name' => $name, 'status' => ServerStatus::Active]);
+        }
+    }
+
+    private function planChangeTeams(User $owner, string $code): void
+    {
+        $pay = $this->ownedTeam($owner, "Pay {$code}", "pay-{$code}");
+        $pay->forceFill(['stripe_id' => "cus_e2e_pay_{$code}", 'trial_ends_at' => now()->addDays(9)])->save();
+
+        foreach (['swap' => null, 'end' => null, 'keep' => now()->addDays(10)] as $prefix => $endsAt) {
+            $team = $this->ownedTeam($owner, ucfirst($prefix) . " {$code}", "{$prefix}-{$code}");
+            $team->forceFill(['stripe_id' => "cus_e2e_{$prefix}_{$code}"])->save();
+
+            $subscription = Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create([
+                'stripe_id' => "sub_e2e_{$prefix}_{$code}",
+                'ends_at' => $endsAt,
+                'renews_at' => now()->addDays(10),
+            ]);
+            $subscription->items()->update(['stripe_id' => "si_e2e_{$prefix}_{$code}"]);
         }
     }
 
