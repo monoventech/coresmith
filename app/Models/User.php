@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\Ability;
+use App\Enums\Edition;
 use App\Enums\TeamRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -64,11 +65,21 @@ class User extends Authenticatable
 
     public function managesInstance(): bool
     {
+        if (Edition::current()->isCloud()) {
+            return false;
+        }
+
         return $this->teams()->wherePivot('role', TeamRole::Owner->value)->exists();
     }
 
     public function scopeInstanceOwners(Builder $query): void
     {
+        if (Edition::current()->isCloud()) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
         $query->whereHas('teams', fn(Builder $teams) => $teams->where('team_user.role', TeamRole::Owner->value));
     }
 

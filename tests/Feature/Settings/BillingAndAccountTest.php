@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
-use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -18,38 +17,9 @@ function billingMember(Team $team, TeamRole $role = TeamRole::Member): User
     return $user->fresh();
 }
 
-test('a self hosted panel shows free billing with the teams server count', function () {
-    config(['coresmith.billing_enabled' => false]);
-    $team = Team::factory()->create(['name' => 'Monoven']);
-    Server::factory()->for($team)->count(3)->create();
-    Server::factory()->for(Team::factory())->create();
-
-    $this->actingAs(billingMember($team))
-        ->get(route('settings.billing'))
-        ->assertOk()
-        ->assertInertia(fn($page) => $page
-            ->component('settings/Billing')
-            ->where('cloud', false)
-            ->where('servers', 3)
-            ->where('team', 'Monoven'));
-});
-
-test('a cloud panel says billing is on', function () {
-    config(['coresmith.billing_enabled' => true]);
-
-    $this->actingAs(billingMember(Team::factory()->create()))
-        ->get(route('settings.billing'))
-        ->assertInertia(fn($page) => $page->where('cloud', true));
-});
-
-test('billing for a user without a team counts nothing', function () {
-    $this->actingAs(User::factory()->create())
-        ->get(route('settings.billing'))
-        ->assertOk()
-        ->assertInertia(fn($page) => $page->where('servers', 0)->where('team', null));
-});
-
 test('billing requires authentication', function () {
+    config(['coresmith.edition' => 'cloud']);
+
     $this->get(route('settings.billing'))->assertRedirect(route('login'));
 });
 

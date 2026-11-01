@@ -1,7 +1,7 @@
 import { asMember, dialog, expect, gotoSettings, own, tabs, test, toast } from './support/fixtures'
 
 test.describe('settings', () => {
-    test('the tabs cover the panel, the team, git, notifications, tokens and billing', async ({ page }) => {
+    test('the tabs cover the panel, the team, git, notifications and tokens', async ({ page }) => {
         await gotoSettings(page, 'General')
 
         const sections = tabs(page, 'Settings')
@@ -16,7 +16,6 @@ test.describe('settings', () => {
             ['Git', /\/settings\/git$/],
             ['Notifications', /\/settings\/notifications$/],
             ['API tokens', /\/settings\/api-tokens$/],
-            ['Billing', /\/settings\/billing$/],
             ['General', /\/settings$/]
         ] as const) {
             await tabs(page, 'Settings').getByRole('link', { name: label, exact: true }).click()
@@ -27,6 +26,8 @@ test.describe('settings', () => {
             )
             await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
         }
+
+        await expect(tabs(page, 'Settings').getByRole('link', { name: 'Billing' })).toHaveCount(0)
     })
 })
 
@@ -170,13 +171,10 @@ test.describe('notification settings', () => {
     })
 })
 
-test.describe('billing', () => {
-    test('a self-hosted panel is free and has nothing to invoice', async ({ page }) => {
-        await gotoSettings(page, 'Billing')
+test.describe('a self-hosted panel has no billing', () => {
+    test('the billing page is not there', async ({ page }) => {
+        const response = await page.goto('/settings/billing')
 
-        await expect(page.getByTestId('plan-card')).toContainText('Self-hosted')
-        await expect(page.getByTestId('plan-card')).toContainText('$0')
-        await expect(page.getByTestId('invoices-card')).toContainText('No invoices.')
-        await expect(page.getByRole('main')).toContainText('Coresmith Cloud is billed per connected server.')
+        expect(response?.status()).toBe(404)
     })
 })

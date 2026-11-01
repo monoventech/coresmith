@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\Edition;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,7 +21,7 @@ final class BillingController extends Controller
         $team = $this->currentTeam();
 
         return Inertia::render('settings/Billing', [
-            'cloud' => (bool) config('coresmith.billing_enabled'),
+            'cloud' => Edition::current()->isCloud(),
             'servers' => $team?->servers()->count() ?? 0,
             'team' => $team?->name,
         ]);

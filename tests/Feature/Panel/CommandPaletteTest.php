@@ -31,18 +31,15 @@ function paletteLabels(User $user, ?Team $team): array
 }
 
 test('a user without a team still gets the global commands', function () {
-    config(['coresmith.billing_enabled' => false]);
-
     expect(paletteCommands(User::factory()->create(), null))->toBe([
         ['label' => 'Switch theme', 'icon' => 'sun-moon', 'hint' => 'light / dark', 'action' => 'theme'],
         ['label' => 'Deployments', 'icon' => 'rocket', 'hint' => 'fleet-wide history', 'href' => route('deployments.index')],
         ['label' => 'API tokens', 'icon' => 'key-round', 'hint' => 'settings', 'href' => route('api-tokens.index')],
-        ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => 'self-hosted, free', 'href' => route('settings.billing')],
     ]);
 });
 
-test('billing is described as the cloud plan when billing is on', function () {
-    config(['coresmith.billing_enabled' => true]);
+test('billing is described as the cloud plan on coresmith cloud', function () {
+    config(['coresmith.edition' => 'cloud']);
 
     $billing = collect(paletteCommands(User::factory()->create(), null))->firstWhere('label', 'Billing');
 

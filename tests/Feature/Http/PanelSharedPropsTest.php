@@ -164,5 +164,5 @@ test('a user without a team still gets the global palette commands', function ()
         ->get(route('dashboard'), panelPropsPartialHeaders('palette'))
         ->assertOk();
 
-    expect(array_column($response->json('props.palette'), 'label'))->toBe(['Switch theme', 'Deployments', 'API tokens', 'Billing']);
+    expect(array_column($response->json('props.palette'), 'label'))->toBe(['Switch theme', 'Deployments', 'API tokens']);
 });

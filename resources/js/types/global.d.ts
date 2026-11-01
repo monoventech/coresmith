@@ -23,6 +23,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string
             auth: Auth
+            edition: 'self-hosted' | 'cloud'
             [key: string]: unknown
         }
         flashDataType: {

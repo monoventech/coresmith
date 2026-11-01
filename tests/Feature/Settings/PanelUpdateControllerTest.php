@@ -100,17 +100,17 @@ test('the badge says what matters most', function (Closure $setUp, ?array $badge
 ]);
 
 test('cloud and copies the installer did not make say so', function () {
-    config(['coresmith.billing_enabled' => true]);
+    config(['coresmith.edition' => 'cloud']);
 
     $this->actingAs($this->owner)
         ->get(route('settings.general'))
         ->assertInertia(fn($page) => $page
             ->where('updates.mode', 'cloud')
-            ->where('updates.line', 'Coresmith v0.1.0 · Cloud')
+            ->where('updates.line', 'Coresmith v0.1.0 · Coresmith Cloud · updates are managed for you')
             ->where('updates.badge', null)
-            ->where('updates.notices', [['tone' => 'muted', 'text' => 'Coresmith Cloud is kept up to date for you.']]));
+            ->where('updates.notices', []));
 
-    config(['coresmith.billing_enabled' => false, 'coresmith.updates.enabled' => false]);
+    config(['coresmith.edition' => 'self-hosted', 'coresmith.updates.enabled' => false]);
 
     $this->actingAs($this->owner)
         ->get(route('settings.general'))

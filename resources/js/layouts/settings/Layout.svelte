@@ -23,7 +23,9 @@
             current: path.startsWith('/settings/notifications')
         },
         { label: 'API tokens', href: route('api-tokens.index'), current: path.startsWith('/settings/api-tokens') },
-        { label: 'Billing', href: route('settings.billing'), current: path.startsWith('/settings/billing') }
+        ...(page.props.edition === 'cloud'
+            ? [{ label: 'Billing', href: route('settings.billing'), current: path.startsWith('/settings/billing') }]
+            : [])
     ])
 
     const description = $derived.by(() => {
@@ -32,7 +34,7 @@
         }
 
         if (path.startsWith('/settings/billing')) {
-            return 'Coresmith Cloud is billed per connected server. Self-hosting is free under ELv2, every feature included.'
+            return 'Coresmith Cloud plans are billed monthly, per team. Self-hosting is free under ELv2, every feature included.'
         }
 
         return 'Panel, team and notification preferences for this Coresmith installation.'

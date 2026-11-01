@@ -63,7 +63,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/notifications', [NotificationSettingsController::class, 'edit'])->name('settings.notifications');
     Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('settings.notifications.update');
 
-    Route::get('settings/billing', [BillingController::class, 'show'])->name('settings.billing');
+    Route::get('settings/billing', [BillingController::class, 'show'])->middleware('cloud')->name('settings.billing');
 
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 

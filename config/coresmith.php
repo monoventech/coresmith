@@ -34,7 +34,7 @@ return [
         'changelog_url' => env('CORESMITH_RELEASE_FEED_CHANGELOG_URL', 'https://github.com/monoven/coresmith/releases/tag/v{version}'),
     ],
 
-    'billing_enabled' => (bool) env('CORESMITH_BILLING_ENABLED', false),
+    'edition' => env('CORESMITH_EDITION', 'self-hosted'),
     'vault_key' => env('CORESMITH_VAULT_KEY'),
     'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/var/lib/coresmith/setup-token'),
     'tenant_domain' => env('CORESMITH_TENANT_DOMAIN'),

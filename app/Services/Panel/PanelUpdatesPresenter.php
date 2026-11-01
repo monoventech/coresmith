@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Panel;
 
+use App\Enums\Edition;
 use App\Models\InstanceSetting;
 use App\Models\User;
 use App\Services\Updates\ReleaseLayout;
@@ -40,7 +41,7 @@ final class PanelUpdatesPresenter
     public function mode(): string
     {
         return match (true) {
-            (bool) config('coresmith.billing_enabled') => 'cloud',
+            Edition::current()->isCloud() => 'cloud',
             !(bool) config('coresmith.updates.enabled') => 'unmanaged',
             default => 'self-hosted',
         };
@@ -69,7 +70,7 @@ final class PanelUpdatesPresenter
         ];
 
         if ($mode === 'cloud') {
-            return [...$shape, 'line' => "Coresmith v{$current} · Cloud", 'notices' => [$this->muted('Coresmith Cloud is kept up to date for you.')]];
+            return [...$shape, 'line' => "Coresmith v{$current} · Coresmith Cloud · updates are managed for you"];
         }
 
         if ($mode === 'unmanaged') {

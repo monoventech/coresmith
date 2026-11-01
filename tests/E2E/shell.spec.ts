@@ -110,6 +110,16 @@ test.describe('the command palette', () => {
         await expect(palette(page)).toHaveCount(0)
     })
 
+    test('the palette offers no billing on a self-hosted panel', async ({ page }) => {
+        await page.goto('/dashboard')
+        await openPalette(page)
+
+        await page.keyboard.type('Billing')
+
+        await expect(palette(page)).toContainText('Nothing matches “Billing”.')
+        await expect(palette(page).getByRole('option')).toHaveCount(0)
+    })
+
     test('it offers the running deploy and every server', async ({ page }) => {
         await page.goto('/dashboard')
         await openPalette(page)

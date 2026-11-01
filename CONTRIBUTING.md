@@ -72,7 +72,7 @@ CI runs the same list.
 - `DesignSystemParityTest` fails if the app's tokens, type scale, radius family or display face drift from the Monoven design system.
 - Use the shadcn primitives in `resources/js/components/ui/` rather than raw form controls; a native checkbox gets the browser's focus outline, not the Monoven focus ring. Keep to one accent, and give every full-bleed view one hand tell and the Monoven footer mark.
 - Screen layouts follow Coresmith's design handoff, so propose a change to a screen's structure in an issue before building it.
-- The information architecture is settled. The sidebar has Fleet, Deployments, Releases and Settings, plus "Finish setup" until setup is done. A server has Apps, Databases, Hardening and Activity tabs. An app is one page with no tabs. Settings has General, Team, Git, Notifications, API tokens and Billing tabs. Profile and security live under "Your account", reached from the account dialog. Below 640px the sidebar becomes bottom tabs, and below 900px it collapses to a rail.
+- The information architecture is settled. The sidebar has Fleet, Deployments, Releases and Settings, plus "Finish setup" until setup is done. A server has Apps, Databases, Hardening and Activity tabs. An app is one page with no tabs. Settings has General, Team, Git, Notifications and API tokens tabs, and Billing on Coresmith Cloud. Profile and security live under "Your account", reached from the account dialog. Below 640px the sidebar becomes bottom tabs, and below 900px it collapses to a rail.
 - Show real state. A feature that can't work yet says so and names what blocks it.
 
 ### Copy

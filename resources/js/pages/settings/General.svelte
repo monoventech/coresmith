@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Form, router } from '@inertiajs/svelte'
+    import { Form, page, router } from '@inertiajs/svelte'
     import { X } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import FieldError from '@/components/FieldError.svelte'
@@ -39,6 +39,8 @@
         can: { manageInstance: boolean; reachServers: boolean }
     } = $props()
 
+    const cloud = $derived(page.props.edition === 'cloud')
+
     let dialog = $state<'key' | 'delete' | null>(null)
     let backingUp = $state(false)
 
@@ -60,30 +62,36 @@
     <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="backups-card">
         <div class="mb-1 flex items-center gap-2.5">
             <h3 class="type-h3 m-0">Backups</h3>
-            {#if backups.last?.verified}
+            {#if !cloud && backups.last?.verified}
                 <Badge variant="success">Verified</Badge>
             {/if}
         </div>
-        <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Taken nightly at 04:00 and before every update. The panel database and its environment are archived
-            together, secrets included.
-        </p>
-        <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-            {#if backups.last}
-                <div>
-                    last backup, {backups.last.when} · {backups.last.size}{backups.last.verified
-                        ? ' · verified'
-                        : ' · unreadable'}
-                </div>
-            {:else}
-                <div>no backups yet</div>
-            {/if}
-            <div>retention, the last {backups.keep}</div>
-        </div>
-        {#if can.manageInstance}
-            <div class="mt-auto self-start pt-3">
-                <Button variant="outline" size="sm" disabled={backingUp} onclick={backUp}>Back up now</Button>
+        {#if cloud}
+            <p class="mb-3 text-[12.5px] text-muted-foreground">
+                The panel is backed up every night by Coresmith Cloud. Databases on your servers are not included.
+            </p>
+        {:else}
+            <p class="mb-3 text-[12.5px] text-muted-foreground">
+                Taken nightly at 04:00 and before every update. The panel database and its environment are archived
+                together, secrets included.
+            </p>
+            <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
+                {#if backups.last}
+                    <div>
+                        last backup, {backups.last.when} · {backups.last.size}{backups.last.verified
+                            ? ' · verified'
+                            : ' · unreadable'}
+                    </div>
+                {:else}
+                    <div>no backups yet</div>
+                {/if}
+                <div>retention, the last {backups.keep}</div>
             </div>
+            {#if can.manageInstance}
+                <div class="mt-auto self-start pt-3">
+                    <Button variant="outline" size="sm" disabled={backingUp} onclick={backUp}>Back up now</Button>
+                </div>
+            {/if}
         {/if}
     </div>
 
@@ -122,66 +130,70 @@
         </div>
     </div>
 
-    <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="panel-card">
-        <h3 class="type-h3 m-0 mb-1">Panel</h3>
-        <p class="mb-3.5 text-[12.5px] text-muted-foreground">Name, timezone and alert email for this installation.</p>
-        {#if can.manageInstance}
-            <Form
-                method="put"
-                action={route('settings.instance.update')}
-                options={{ preserveScroll: true }}
-                class="flex flex-1 flex-col"
-            >
-                {#snippet children({ errors, processing })}
-                    <div class="flex flex-col gap-3.5">
-                        <div>
-                            <Label for="instance_name" class="mb-1.5">Panel name</Label>
-                            <Input
-                                id="instance_name"
-                                name="instance_name"
-                                value={instance.name}
-                                maxlength={60}
-                                required
-                                aria-invalid={errors.instance_name ? true : undefined}
-                            />
-                            <FieldError message={errors.instance_name} />
-                        </div>
-                        <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+    {#if !cloud}
+        <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="panel-card">
+            <h3 class="type-h3 m-0 mb-1">Panel</h3>
+            <p class="mb-3.5 text-[12.5px] text-muted-foreground">
+                Name, timezone and alert email for this installation.
+            </p>
+            {#if can.manageInstance}
+                <Form
+                    method="put"
+                    action={route('settings.instance.update')}
+                    options={{ preserveScroll: true }}
+                    class="flex flex-1 flex-col"
+                >
+                    {#snippet children({ errors, processing })}
+                        <div class="flex flex-col gap-3.5">
                             <div>
-                                <Label for="timezone" class="mb-1.5">Timezone</Label>
-                                <NativeSelect
-                                    id="timezone"
-                                    name="timezone"
-                                    value={instance.timezone}
-                                    options={timezones}
-                                />
-                            </div>
-                            <div>
-                                <Label for="notification_email" class="mb-1.5">Alert email</Label>
+                                <Label for="instance_name" class="mb-1.5">Panel name</Label>
                                 <Input
-                                    id="notification_email"
-                                    name="notification_email"
-                                    type="email"
-                                    value={instance.notification_email ?? ''}
-                                    placeholder="ops@example.com"
-                                    aria-invalid={errors.notification_email ? true : undefined}
+                                    id="instance_name"
+                                    name="instance_name"
+                                    value={instance.name}
+                                    maxlength={60}
+                                    required
+                                    aria-invalid={errors.instance_name ? true : undefined}
                                 />
-                                <FieldError message={errors.notification_email} />
+                                <FieldError message={errors.instance_name} />
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+                                <div>
+                                    <Label for="timezone" class="mb-1.5">Timezone</Label>
+                                    <NativeSelect
+                                        id="timezone"
+                                        name="timezone"
+                                        value={instance.timezone}
+                                        options={timezones}
+                                    />
+                                </div>
+                                <div>
+                                    <Label for="notification_email" class="mb-1.5">Alert email</Label>
+                                    <Input
+                                        id="notification_email"
+                                        name="notification_email"
+                                        type="email"
+                                        value={instance.notification_email ?? ''}
+                                        placeholder="ops@example.com"
+                                        aria-invalid={errors.notification_email ? true : undefined}
+                                    />
+                                    <FieldError message={errors.notification_email} />
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="mt-auto self-start pt-3">
-                        <Button type="submit" variant="outline" size="sm" disabled={processing}>Save</Button>
-                    </div>
-                {/snippet}
-            </Form>
-        {:else}
-            <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-                <div>{instance.name}</div>
-                <div>{instance.timezone}</div>
-            </div>
-        {/if}
-    </div>
+                        <div class="mt-auto self-start pt-3">
+                            <Button type="submit" variant="outline" size="sm" disabled={processing}>Save</Button>
+                        </div>
+                    {/snippet}
+                </Form>
+            {:else}
+                <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
+                    <div>{instance.name}</div>
+                    <div>{instance.timezone}</div>
+                </div>
+            {/if}
+        </div>
+    {/if}
 
     <div
         class="border-danger col-span-2 flex h-full flex-col rounded-xl border bg-card px-5.5 py-5 max-[900px]:col-span-1"

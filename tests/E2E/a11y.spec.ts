@@ -250,7 +250,6 @@ const PAGES: [string, Visit][] = [
     ['Git settings', direct('/settings/git')],
     ['Notification settings', direct('/settings/notifications')],
     ['API tokens', direct('/settings/api-tokens')],
-    ['Billing', direct('/settings/billing')],
     ['Profile', direct('/settings/profile')],
     ['Security', openSecurity],
     [

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Ability;
+use App\Enums\Edition;
 use App\Models\InstanceSetting;
 use App\Models\Team;
 use App\Models\User;
@@ -52,8 +53,8 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
-            'appName' => InstanceSetting::get('instance_name', config('app.name')),
-            'billingEnabled' => (bool) config('coresmith.billing_enabled'),
+            'appName' => Edition::current()->isCloud() ? config('app.name') : InstanceSetting::get('instance_name', config('app.name')),
+            'edition' => Edition::current()->value,
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
             'panel' => fn(): ?array => $this->panel($request),
             'palette' => Inertia::optional(fn(): array => $request->user() === null

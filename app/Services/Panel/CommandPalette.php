@@ -10,6 +10,7 @@ namespace App\Services\Panel;
 
 use App\Enums\Ability;
 use App\Enums\DeploymentStatus;
+use App\Enums\Edition;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
@@ -56,7 +57,9 @@ final class CommandPalette
         $commands[] = ['label' => 'Switch theme', 'icon' => 'sun-moon', 'hint' => 'light / dark', 'action' => 'theme'];
         $commands[] = ['label' => 'Deployments', 'icon' => 'rocket', 'hint' => 'fleet-wide history', 'href' => route('deployments.index')];
         $commands[] = ['label' => 'API tokens', 'icon' => 'key-round', 'hint' => 'settings', 'href' => route('api-tokens.index')];
-        $commands[] = ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => config('coresmith.billing_enabled') ? 'Coresmith Cloud' : 'self-hosted, free', 'href' => route('settings.billing')];
+        if (Edition::current()->isCloud()) {
+            $commands[] = ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => Edition::Cloud->label(), 'href' => route('settings.billing')];
+        }
 
         foreach ($this->team?->applications()->with('server')->orderBy('name')->get() ?? [] as $application) {
             $commands[] = [

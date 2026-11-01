@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Enums\Edition;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ final class EnsureInstalled
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (Features::enabled(Features::registration()) || $request->is('install*') || User::query()->exists()) {
+        if (Edition::current()->isCloud() || Features::enabled(Features::registration()) || $request->is('install*') || User::query()->exists()) {
             return $next($request);
         }
 

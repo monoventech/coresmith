@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnforceTokenAbility;
+use App\Http\Middleware\EnsureCloudEdition;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureTeamContext;
 use App\Http\Middleware\HandleAppearance;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'token.can' => EnforceTokenAbility::class,
             'setup.token' => RequireSetupToken::class,
+            'cloud' => EnsureCloudEdition::class,
         ]);
 
         $middleware->web(prepend: [ContentSecurityPolicy::class, EnsureInstalled::class]);

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Enums\Edition;
 use App\Models\ApiToken;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\HttpCloudApiFactory;
@@ -50,6 +51,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Edition::current();
+
         Sanctum::usePersonalAccessTokenModel(ApiToken::class);
 
         $this->configureDefaults();

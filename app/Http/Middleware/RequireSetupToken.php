@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Enums\Edition;
 use App\Models\User;
 use App\Services\Install\SetupToken;
 use Closure;
@@ -20,6 +21,8 @@ final class RequireSetupToken
 
     public function handle(Request $request, Closure $next): Response
     {
+        abort_if(Edition::current()->isCloud(), 404);
+
         if (User::query()->exists()) {
             return redirect()->route('dashboard');
         }
