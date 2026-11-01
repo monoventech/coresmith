@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Database\Factories\SubscriptionFactory;
 use Laravel\Cashier\Subscription as CashierSubscription;
 
 class Subscription extends CashierSubscription
@@ -19,4 +20,9 @@ class Subscription extends CashierSubscription
         'renews_at' => 'datetime',
         'synced_at' => 'datetime',
     ];
+
+    protected static function newFactory(): SubscriptionFactory
+    {
+        return SubscriptionFactory::new();
+    }
 }
