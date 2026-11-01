@@ -90,6 +90,7 @@ final class RollbackApplication implements ShouldQueue
             $before = $this->application->runtimeVersions();
 
             $this->application->forceFill(['current_release' => $name, ...($stack?->applicationAttributes() ?? [])])->save();
+            app(SmartToggles::class)->syncDeployTimeProcesses($this->application);
 
             $processes = app(ProcessManager::class);
 

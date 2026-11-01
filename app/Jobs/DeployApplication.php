@@ -459,7 +459,7 @@ final class DeployApplication implements ShouldQueue
                 : new ResolvedRuntime($resolved->runtime, $resolved->version, $resolved->source, $resolved->detail, $installed, $resolved->note);
         }
 
-        return new Stack($runtimes, $stack->framework, $stack->tooling, $stack->notes, $stack->gems);
+        return new Stack($runtimes, $stack->framework, $stack->tooling, $stack->notes, $stack->gems, $stack->packages);
     }
 
     private function describe(ResolvedRuntime $runtime): string
@@ -537,6 +537,7 @@ final class DeployApplication implements ShouldQueue
 
         $this->checkHealth($connection, $commands, $paths, $release);
         $phpChanged = $this->swapSymlink($connection, $paths, $release, $stack);
+        app(SmartToggles::class)->syncDeployTimeProcesses($application);
         $processes = app(ProcessManager::class);
         $processes->install($connection, $application);
         $this->startProcesses($connection, $processes, $application, $phpChanged);

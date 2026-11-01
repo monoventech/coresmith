@@ -14,6 +14,8 @@ use Closure;
 
 final class StackResolver
 {
+    private const INERTIA_ADAPTERS = ['@inertiajs/svelte', '@inertiajs/vue3', '@inertiajs/react'];
+
     public function __construct(
         private readonly RuntimeDetector $detector,
         private readonly RuntimeResolver $resolver,
@@ -40,7 +42,27 @@ final class StackResolver
             $runtimes[$runtime] = $resolved;
         }
 
-        return new Stack($runtimes, $this->frameworks->detect($application, $facts), $detection->tooling, $notes, $this->gems($application, $facts));
+        return new Stack($runtimes, $this->frameworks->detect($application, $facts), $detection->tooling, $notes, $this->gems($application, $facts), $this->packages($application, $facts));
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function packages(Application $application, RepositoryFacts $facts): array
+    {
+        if ($application->type !== ApplicationType::Php || strtolower((string) $application->framework) !== 'laravel') {
+            return [];
+        }
+
+        $require = (array) ($facts->json('composer.json')['require'] ?? []);
+        $package = $facts->json('package.json');
+        $frontend = array_keys([...(array) ($package['dependencies'] ?? []), ...(array) ($package['devDependencies'] ?? [])]);
+
+        return [
+            'horizon' => array_key_exists('laravel/horizon', $require),
+            'reverb' => array_key_exists('laravel/reverb', $require),
+            'inertia' => array_key_exists('inertiajs/inertia-laravel', $require) && array_intersect(self::INERTIA_ADAPTERS, $frontend) !== [],
+        ];
     }
 
     /**

@@ -12,11 +12,14 @@ final readonly class Stack
 {
     public const GEMS = ['sidekiq', 'solid_queue'];
 
+    public const PACKAGES = ['horizon', 'reverb', 'inertia'];
+
     /**
      * @param  array<string, ResolvedRuntime>  $runtimes
      * @param  array{name: string, major: int}|null  $framework
      * @param  list<string>  $notes
      * @param  array<string, bool>  $gems
+     * @param  array<string, bool>  $packages
      */
     public function __construct(
         public array $runtimes = [],
@@ -24,6 +27,7 @@ final readonly class Stack
         public ?JsTooling $tooling = null,
         public array $notes = [],
         public array $gems = [],
+        public array $packages = [],
     ) {}
 
     /**
@@ -43,7 +47,7 @@ final readonly class Stack
     }
 
     /**
-     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>}
+     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>, packages: array<string, bool>}
      */
     public function toArray(): array
     {
@@ -52,6 +56,7 @@ final readonly class Stack
             'framework' => $this->framework,
             'tooling' => $this->tooling?->toArray(),
             'gems' => $this->gems,
+            'packages' => $this->packages,
         ];
     }
 
@@ -71,12 +76,14 @@ final readonly class Stack
         $framework = $data['framework'] ?? null;
         $tooling = $data['tooling'] ?? null;
         $gems = array_filter((array) ($data['gems'] ?? []), fn(mixed $locked, int|string $gem): bool => is_string($gem) && is_bool($locked), ARRAY_FILTER_USE_BOTH);
+        $packages = array_filter((array) ($data['packages'] ?? []), fn(mixed $installed, int|string $package): bool => in_array($package, self::PACKAGES, true) && is_bool($installed), ARRAY_FILTER_USE_BOTH);
 
         return new self(
             $runtimes,
             is_array($framework) && isset($framework['name'], $framework['major']) ? ['name' => (string) $framework['name'], 'major' => (int) $framework['major']] : null,
             JsTooling::fromArray(is_array($tooling) ? $tooling : null),
             gems: $gems,
+            packages: $packages,
         );
     }
 

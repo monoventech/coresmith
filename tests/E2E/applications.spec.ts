@@ -17,6 +17,10 @@ function toggle(page: Page, name: string) {
     return page.getByTestId('smart-toggles').getByRole('switch', { name })
 }
 
+function toggleRow(page: Page, key: string) {
+    return page.getByTestId(`toggle-${key}`)
+}
+
 async function openAddApp(page: Page) {
     await gotoServer(page, 'bench-01')
     await page.getByRole('link', { name: 'Add an app' }).click()
@@ -1125,3 +1129,15 @@ test.describe('an app on an end-of-life runtime', () => {
         await expect(banner).toContainText('Set .nvmrc to 24, then deploy.')
     })
 })
+
+test.describe('what the repository installs', () => {
+    test('a laravel app with horizon says so on its worker row', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'realtime')
+
+        await gotoApplication(page, 'bench-01', name)
+
+        await expect(toggleRow(page, 'queue_worker')).toContainText(`Detected: laravel/horizon · systemd unit coresmith-app-${name}-queue`)
+        await expect(toggle(page, 'Queue worker')).toBeChecked()
+    })
+})
+

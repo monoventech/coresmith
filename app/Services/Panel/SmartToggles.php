@@ -48,6 +48,8 @@ final class SmartToggles
 
     public const QUEUE_COMMAND = 'php artisan queue:work --sleep=3 --tries=3 --max-time=3600';
 
+    public const HORIZON_COMMAND = 'php artisan horizon';
+
     public const SIDEKIQ_COMMAND = 'bundle exec sidekiq';
 
     public const SOLID_QUEUE_COMMAND = 'bin/jobs';
@@ -117,8 +119,8 @@ final class SmartToggles
             self::QUEUE => [
                 'key' => $key,
                 'label' => 'Queue worker',
-                'description' => 'php artisan queue:work · systemd unit coresmith-app-' . $slug . '-queue',
-                'busy_on' => 'Creating the systemd unit and starting the worker…',
+                'description' => ($this->horizon($application) ? 'Detected: laravel/horizon' : 'php artisan queue:work') . ' · systemd unit coresmith-app-' . $slug . '-queue',
+                'busy_on' => $this->horizon($application) ? 'Creating the systemd unit and starting Horizon…' : 'Creating the systemd unit and starting the worker…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
@@ -194,6 +196,28 @@ final class SmartToggles
         };
     }
 
+    /**
+     * @return array<string, bool>
+     */
+    public function packages(Application $application): array
+    {
+        return array_filter((array) (((array) $application->stack)['packages'] ?? []), 'is_bool');
+    }
+
+    public function queueCommand(Application $application): string
+    {
+        return $this->horizon($application) ? self::HORIZON_COMMAND : self::QUEUE_COMMAND;
+    }
+
+    public function syncDeployTimeProcesses(Application $application): void
+    {
+        $queue = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'queue');
+
+        if ($queue !== null && ($queue['command'] ?? null) !== $this->queueCommand($application)) {
+            $this->replaceProcess($application, 'queue', ['name' => 'queue', 'command' => $this->queueCommand($application)]);
+        }
+    }
+
     public function apply(Application $application, string $key, bool $on): void
     {
         if (!in_array($key, $this->available($application), true)) {
@@ -253,6 +277,7 @@ final class SmartToggles
     private function worker(Application $application, string $key, bool $on): void
     {
         [$name, $command] = self::WORKERS[$key];
+        $command = $key === self::QUEUE ? $this->queueCommand($application) : $command;
 
         $this->replaceProcess($application, $name, $on ? ['name' => $name, 'command' => $command] : null);
 
@@ -271,6 +296,11 @@ final class SmartToggles
         }
 
         $application->forceFill(['processes' => $processes === [] ? null : $processes])->save();
+    }
+
+    private function horizon(Application $application): bool
+    {
+        return ($this->packages($application)['horizon'] ?? false) === true;
     }
 
     private function offers(Application $application, string $key): bool

@@ -94,6 +94,7 @@ final class E2ESeeder extends Seeder
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
         $this->heldByAQueuedDeploy($this->application('held-app', 9190));
+        $this->realtime('reverb-unset', 9170);
         $this->cancelFixtures($tenant->owner);
         $this->certificatesChecked($this->application('certs-app', 9180, [
             'domain' => 'certs.monoven.io',
@@ -140,6 +141,10 @@ final class E2ESeeder extends Seeder
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
             $this->application("busy-{$code}", 9200 + $index * 10);
             $this->server("live-{$code}", '198.51.100.' . (80 + $index), ServerStatus::Active);
+            $this->realtime("realtime-{$code}", 9120 + $index * 10, [
+                'env_variables' => "APP_ENV=staging\nREVERB_APP_ID=realtime-{$code}\nREVERB_APP_KEY=key-{$code}\nREVERB_APP_SECRET=" . bin2hex(random_bytes(16)),
+                'processes' => [['name' => 'queue', 'command' => SmartToggles::HORIZON_COMMAND]],
+            ]);
         }
 
         $this->githubFixtures();
@@ -464,6 +469,27 @@ final class E2ESeeder extends Seeder
             'gone.monoven.io' => ['expires_at' => $now->subDays(2)->toIso8601String(), 'checked_at' => $checked],
             'dark.monoven.io' => ['expires_at' => null, 'checked_at' => $checked],
         ]], $now->addYear());
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function realtime(string $name, int $port, array $attributes = []): Application
+    {
+        $application = $this->application($name, $port, [
+            ...MonovenTenant::stack(
+                ['php' => ['8.5.10', 'composer.json', '^8.4']],
+                ['name' => 'laravel', 'major' => 13],
+                new JsTooling('bun', true, true, false, ssr: true),
+                packages: ['horizon' => true, 'reverb' => true, 'inertia' => true],
+            ),
+            'domain' => $name . '.monoven.io',
+            ...$attributes,
+        ]);
+
+        $this->succeeded($application, 6 * 60, 'v1.0.0');
+
+        return $application;
     }
 
     private function heldByAQueuedDeploy(Application $application): void
