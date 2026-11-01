@@ -71,7 +71,7 @@
         <ol class="m-0 flex list-none flex-col gap-0.5 p-0">
             {#each [['Localhost only', 'never bound to a public interface'], ['Its own user', 'no shared credentials between apps'], ['Least privilege', 'standard grants unless you choose more'], ['Encrypted at rest', 'the password is vaulted after it is shown once']] as [name, desc], index (name)}
                 <li class="flex items-baseline gap-3 py-1.75">
-                    <span class="w-4 flex-none font-mono text-[12px] text-primary">{index + 1}</span>
+                    <span class="w-4 flex-none font-mono text-[12px] text-primary-strong">{index + 1}</span>
                     <span class="text-[13.5px]"><span class="font-medium">{name}</span><span class="text-muted-foreground">{`, ${desc}`}</span></span>
                 </li>
             {/each}

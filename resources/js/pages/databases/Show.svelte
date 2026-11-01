@@ -86,7 +86,7 @@
             <div class="border-danger flex-1 rounded-xl border bg-card px-5.5 py-5">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">Removes the database from the panel. Take a backup first if anything still needs the data.</p>
-                <Button variant="outline" size="sm" class="text-destructive" onclick={() => (deleting = true)}>Delete this database</Button>
+                <Button variant="outline" size="sm" class="text-destructive-strong" onclick={() => (deleting = true)}>Delete this database</Button>
             </div>
         {/if}
     </div>

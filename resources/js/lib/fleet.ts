@@ -33,10 +33,10 @@ export type ActivityItem = {
 const text: Record<StateTone, string> = {
     default: 'text-muted-foreground',
     outline: 'text-muted-foreground',
-    accent: 'text-primary',
-    success: 'text-success',
+    accent: 'text-primary-strong',
+    success: 'text-success-strong',
     warning: 'text-warning-strong',
-    destructive: 'text-destructive'
+    destructive: 'text-destructive-strong'
 }
 
 const fill: Record<StateTone, string> = {

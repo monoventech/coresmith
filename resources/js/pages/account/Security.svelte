@@ -94,7 +94,7 @@
                 <div class="flex flex-col items-start gap-4">
                     <Form method="delete" action={route('two-factor.disable')}>
                         {#snippet children({ processing })}
-                            <Button variant="outline" class="text-destructive" type="submit" disabled={processing}>Disable 2FA</Button>
+                            <Button variant="outline" class="text-destructive-strong" type="submit" disabled={processing}>Disable 2FA</Button>
                         {/snippet}
                     </Form>
                     <TwoFactorRecoveryCodes />

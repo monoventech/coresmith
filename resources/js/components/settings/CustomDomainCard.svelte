@@ -99,7 +99,7 @@
         </div>
         {#if canUpdate}
             <div class="mt-auto flex flex-wrap gap-2 pt-3">
-                <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}
+                <Button variant="ghost" size="sm" class="text-destructive-strong" onclick={() => (removing = true)}
                     >Remove</Button
                 >
             </div>
@@ -136,7 +136,7 @@
         {#if canUpdate}
             <div class="mt-auto flex flex-wrap gap-2 pt-3">
                 <Button size="sm" disabled={checking} onclick={check}>{checking ? 'Checking…' : 'Check DNS'}</Button>
-                <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}
+                <Button variant="ghost" size="sm" class="text-destructive-strong" onclick={() => (removing = true)}
                     >Remove</Button
                 >
             </div>

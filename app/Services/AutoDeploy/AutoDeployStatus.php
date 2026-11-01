@@ -88,11 +88,9 @@ final class AutoDeployStatus
 
     private function reason(Application $application): string
     {
-        $connection = $application->githubConnection();
-
         return match (true) {
             $application->source_provider_id === null => self::NOT_LINKED,
-            $connection !== null && !$connection->trashed() && $connection->suspended_at !== null => self::SUSPENDED,
+            $application->githubProblem() === 'suspended' => self::SUSPENDED,
             default => self::REMOVED,
         };
     }

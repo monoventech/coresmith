@@ -13,6 +13,7 @@ use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
+use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Jobs\InstallRuntimes;
 use App\Models\Application;
@@ -341,6 +342,15 @@ final class E2ESeeder extends Seeder
             'suspended_at' => now()->subDay(),
             'access_token' => null,
             'token_expires_at' => null,
+        ]);
+
+        $tidewater = Team::factory()->create(['name' => 'Tidewater Ops', 'slug' => 'tidewater', 'owner_id' => $owner->id]);
+        $tidewater->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($tidewater)->create([
+            'type' => SourceProviderType::GitLab->value,
+            'name' => 'tidewater-ops',
+            'installation_id' => null,
+            'scopes' => SourceProviderType::GitLab->scopes(),
         ]);
     }
 

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
 import {
     asGuest,
+    backToMonoven,
     blockingViolations,
     expect,
     gotoApplication,
@@ -8,6 +9,7 @@ import {
     gotoServer,
     gotoServerTab,
     openSecurity,
+    openSetupWith,
     test,
     useTheme
 } from './support/fixtures'
@@ -54,6 +56,8 @@ const PAGES: [string, Visit][] = [
     ['Rails application offered Solid Queue', (page) => gotoApplication(page, 'bench-01', 'solid-jobs')],
     ['Application killed for memory', (page) => gotoApplication(page, 'bench-01', 'hungry')],
     ['Application on an end-of-life runtime', (page) => gotoApplication(page, 'bench-01', 'legacy-api')],
+    ['Application linked to GitHub', (page) => gotoApplication(page, 'bench-01', 'linked-app')],
+    ['Application whose GitHub connection was removed', (page) => gotoApplication(page, 'bench-01', 'orphaned-app')],
     [
         'Add an app',
         async (page) => {
@@ -177,11 +181,24 @@ const PAGES: [string, Visit][] = [
     ]
 ]
 
-const OTHER_TEAM_PAGES: [string, string][] = [
-    ['Team settings with a domain waiting for DNS', '/acme/settings/team'],
-    ['Team settings with a verified domain', '/northwind/settings/team'],
-    ['Git settings before GitHub is connected', '/acme/settings/git'],
-    ['Git settings with a suspended GitHub installation', '/paused/settings/git']
+const OTHER_TEAM_PAGES: [string, Visit][] = [
+    ['Team settings with a domain waiting for DNS', direct('/acme/settings/team')],
+    ['Team settings with a verified domain', direct('/northwind/settings/team')],
+    ['Git settings before GitHub is connected', direct('/acme/settings/git')],
+    ['Git settings with a suspended GitHub installation', direct('/paused/settings/git')],
+    ['Setup before GitHub is connected', direct('/acme/setup')],
+    [
+        'Setup for a member before GitHub is connected',
+        async (page) => {
+            await openSetupWith(page, 'acme', {
+                can_manage: false,
+                connect_href: null,
+                registration: null,
+                elsewhere: null
+            })
+            await page.getByTestId('setup-step').getByText('An owner or admin connects GitHub.').waitFor()
+        }
+    ]
 ]
 
 const GUEST_PAGES: [string, string][] = [
@@ -203,10 +220,10 @@ for (const theme of ['light', 'dark'] as const) {
             })
         }
 
-        for (const [label, path] of OTHER_TEAM_PAGES) {
+        for (const [label, visit] of OTHER_TEAM_PAGES) {
             test(`${label} has no serious or critical violations`, async ({ page }) => {
                 await useTheme(page, theme)
-                await page.goto(path)
+                await visit(page)
 
                 const violations = await blockingViolations(page)
 
@@ -215,6 +232,33 @@ for (const theme of ['light', 'dark'] as const) {
                 expect(violations, `${label} in ${theme}`).toEqual([])
             })
         }
+    })
+
+    test.describe(`accessibility on a team's own domain in ${theme}`, () => {
+        const origin = process.env.APP_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? 8123}`
+
+        test.use({ proxy: { server: origin } })
+
+        test.afterEach(async ({ page }) => {
+            await backToMonoven(page)
+        })
+
+        test("Setup on a team's own domain before GitHub is connected has no serious or critical violations", async ({
+            page,
+            context
+        }) => {
+            await useTheme(page, theme)
+
+            const cookies = await context.cookies(origin)
+
+            await context.addCookies(
+                cookies.map(({ name, value }) => ({ name, value, domain: 'panel.northwind.test', path: '/' }))
+            )
+            await page.goto('http://panel.northwind.test/setup')
+            await page.getByTestId('setup-step').getByText('GitHub sends you back there.').waitFor()
+
+            expect(await blockingViolations(page), `Setup on a team's own domain in ${theme}`).toEqual([])
+        })
     })
 
     asGuest.describe(`guest accessibility in ${theme}`, () => {

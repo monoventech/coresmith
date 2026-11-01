@@ -92,7 +92,7 @@
                 <span class="flex items-center justify-end gap-2.5">
                     <Badge variant={row.state.tone} dot={row.state.live || row.state.key === 'cancelling'} pulse={row.state.live}>{row.state.label}</Badge>
                     {#if row.state.live || row.state.key === 'cancelling'}
-                        <span class="text-[12.5px] font-medium text-primary">Watch</span>
+                        <span class="text-[12.5px] font-medium text-primary-strong">Watch</span>
                     {/if}
                 </span>
             </Link>

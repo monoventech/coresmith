@@ -46,7 +46,7 @@
                     <InputError message={errors.code} />
                 </div>
                 <Button type="submit" class="w-full" disabled={processing}>Continue</Button>
-                <button type="button" class="focus-ring cursor-pointer self-start rounded-sm bg-transparent p-0 text-[13px] font-medium text-primary" onclick={() => toggleRecoveryMode(clearErrors)}>
+                <button type="button" class="focus-ring cursor-pointer self-start rounded-sm bg-transparent p-0 text-[13px] font-medium text-primary-strong" onclick={() => toggleRecoveryMode(clearErrors)}>
                     {content.toggle}
                 </button>
             </div>
@@ -61,7 +61,7 @@
                     <InputError message={errors.recovery_code} />
                 </div>
                 <Button type="submit" class="w-full" disabled={processing}>Continue</Button>
-                <button type="button" class="focus-ring cursor-pointer self-start rounded-sm bg-transparent p-0 text-[13px] font-medium text-primary" onclick={() => toggleRecoveryMode(clearErrors)}>
+                <button type="button" class="focus-ring cursor-pointer self-start rounded-sm bg-transparent p-0 text-[13px] font-medium text-primary-strong" onclick={() => toggleRecoveryMode(clearErrors)}>
                     {content.toggle}
                 </button>
             </div>

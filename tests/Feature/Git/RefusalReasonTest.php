@@ -8,6 +8,11 @@ use App\Services\Git\Providers\OAuthGitClient;
 use App\Services\Git\RefusalReason;
 use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
+
+beforeEach(function () {
+    Http::preventStrayRequests();
+});
 
 test('a refusal says what the provider said, then its description, then its code, then the status', function (array|string $body, int $status, string $expected) {
     $response = new Response(new PsrResponse($status, [], is_array($body) ? json_encode($body, JSON_THROW_ON_ERROR) : $body));

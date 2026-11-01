@@ -89,7 +89,9 @@
                 {/if}
             {/if}
             {#if server.can.delete}
-                <Button variant="ghost" class="text-destructive" onclick={() => (detaching = true)}>Detach</Button>
+                <Button variant="ghost" class="text-destructive-strong" onclick={() => (detaching = true)}
+                    >Detach</Button
+                >
             {/if}
         </div>
     {/if}

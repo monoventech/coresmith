@@ -77,7 +77,7 @@ final class GitHubAppController extends Controller
 
         $githubApp->forceFill(['hook_url' => $url, 'webhook_secret' => $secret])->save();
 
-        Cache::forget($this->health->key($app));
+        $this->health->repointed($app);
 
         return back()->with('success', 'Saved. On GitHub, check the app\'s webhook is active and sends push events.');
     }

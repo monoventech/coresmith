@@ -7,8 +7,13 @@ use App\Models\Application;
 use App\Services\Git\CloneToken;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+
+beforeEach(function () {
+    Http::preventStrayRequests();
+});
 
 function cloneTokenFill(string $host): ProcessResult
 {

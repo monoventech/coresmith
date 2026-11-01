@@ -39,12 +39,12 @@
                     {#if mustVerifyEmail && !user.email_verified_at}
                         <p class="mt-2 text-[12px] text-muted-foreground">
                             This address isn't verified yet.
-                            <Link href={route('verification.send')} method="post" as="button" class="focus-ring cursor-pointer rounded-sm bg-transparent p-0 text-[12px] font-medium text-primary">
+                            <Link href={route('verification.send')} method="post" as="button" class="focus-ring cursor-pointer rounded-sm bg-transparent p-0 text-[12px] font-medium text-primary-strong">
                                 Send the link again
                             </Link>
                         </p>
                         {#if status === 'verification-link-sent'}
-                            <p class="mt-1 text-[12px] font-medium text-success">A new verification link is on its way.</p>
+                            <p class="mt-1 text-[12px] font-medium text-success-strong">A new verification link is on its way.</p>
                         {/if}
                     {/if}
                 </div>

@@ -27,7 +27,7 @@
             aria-current={active ? 'page' : undefined}
             class={cn(
                 'focus-ring flex min-h-11 min-w-14 flex-col items-center justify-center gap-1 rounded-md py-1.5 text-[10.5px] font-medium no-underline',
-                active ? 'text-primary' : 'text-muted-foreground'
+                active ? 'text-primary-strong' : 'text-muted-foreground'
             )}
         >
             <item.icon class="size-5" />

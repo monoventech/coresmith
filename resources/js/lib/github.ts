@@ -75,6 +75,17 @@ export type GitHubSettings = {
     can: { manage: boolean }
 }
 
+export type GitHubSetup = {
+    connected: boolean
+    name: string | null
+    label: string | null
+    connect_href: string | null
+    registration: GitHubRegistration | null
+    elsewhere: string | null
+    can_manage: boolean
+    settings_href: string
+}
+
 export const REPOSITORY_NOT_VISIBLE =
     'GitHub does not give Coresmith access to that repository. Pick another, or add it under Manage repositories on GitHub.'
 

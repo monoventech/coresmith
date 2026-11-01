@@ -5,10 +5,12 @@
     import FieldError from '@/components/FieldError.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
+    import GitHubRegistration from '@/components/settings/GitHubRegistration.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import type { GitHubSetup } from '@/lib/github'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
 
@@ -27,16 +29,25 @@
         current: number
         step: number
         complete: boolean
-        github: { connected: boolean; name: string | null; label: string | null; configured: boolean; connect_href: string; settings_href: string }
+        github: GitHubSetup | null
         team: { id: string }
         server: (ServerHeader & { href: string; test_href: string; provision_href: string }) | null
-        application: { id: string; name: string; repository: string | null; kind: string; runtime: string; server: string | null; deploy_href: string } | null
+        application: {
+            id: string
+            name: string
+            repository: string | null
+            kind: string
+            runtime: string
+            server: string | null
+            deploy_href: string
+        } | null
         create_application_href: string | null
     } = $props()
 
     let deploying = $state(false)
 
     const provisioning = $derived(server?.provisioning ?? null)
+    const elsewhere = $derived(github?.elsewhere ? new URL(github.elsewhere).host : null)
 
     function go(index: number) {
         router.visit(route('setup.show', { step: index }), { preserveScroll: true })
@@ -54,9 +65,17 @@
 
 <AppHead title="Set up Coresmith" />
 
+{#snippet onward(variant: 'default' | 'outline' = 'outline')}
+    {#if current > 0}
+        <Button {variant} onclick={() => go(1)}>Continue</Button>
+    {/if}
+{/snippet}
+
 <h1 class="type-h1 m-0 mb-1.5">Set up <MarkerUnderline>Coresmith</MarkerUnderline></h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
-    {complete ? 'Every step is done. This page stays here for reference, the sidebar item is gone.' : 'Four steps from a fresh install to your first deploy. You can leave and pick this up anytime.'}
+    {complete
+        ? 'Every step is done. This page stays here for reference, the sidebar item is gone.'
+        : 'Four steps from a fresh install to your first deploy. You can leave and pick this up anytime.'}
 </p>
 
 <nav class="mb-6 flex flex-wrap items-center gap-1" aria-label="Setup steps">
@@ -65,7 +84,10 @@
         {@const isCurrent = index === step}
         <button
             type="button"
-            class={cn('focus-ring inline-flex items-center gap-2 rounded-md bg-transparent px-1.5 py-1', clickable ? 'cursor-pointer' : 'cursor-default opacity-55')}
+            class={cn(
+                'focus-ring inline-flex items-center gap-2 rounded-md bg-transparent px-1.5 py-1',
+                clickable ? 'cursor-pointer' : 'cursor-default opacity-55'
+            )}
             disabled={!clickable}
             aria-current={isCurrent ? 'step' : undefined}
             onclick={() => clickable && go(index)}
@@ -80,7 +102,12 @@
             >
                 {#if item.done && !isCurrent}<Check class="size-3.5" />{:else}{index + 1}{/if}
             </span>
-            <span class={cn('text-[13px] font-medium', item.done || isCurrent ? 'text-foreground' : 'text-muted-foreground')}>{item.label}</span>
+            <span
+                class={cn(
+                    'text-[13px] font-medium',
+                    item.done || isCurrent ? 'text-foreground' : 'text-muted-foreground'
+                )}>{item.label}</span
+            >
         </button>
         {#if index < steps.length - 1}
             <span class="h-px w-5 flex-none bg-border" aria-hidden="true"></span>
@@ -94,36 +121,71 @@
             <div class="mb-1.5 flex items-center gap-2.5">
                 <GitBranch class="size-5" />
                 <h3 class="type-h3 m-0">Connect GitHub</h3>
-                {#if github.connected}<Badge variant="success">Connected</Badge>{/if}
+                {#if github?.connected}<Badge variant="success">Connected</Badge>{/if}
             </div>
             <p class="type-body-sm mb-4 text-muted-foreground">
-                Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only and webhooks, per repository, not your whole account.
+                Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only,
+                commit statuses and webhooks, per repository, not your whole account.
             </p>
             <ul class="m-0 mb-5 flex list-none flex-col gap-2 p-0 text-[13.5px]">
-                <li class="flex items-center gap-2.5"><Check class="size-4 text-success" />Fine-grained, per-repository permissions</li>
-                <li class="flex items-center gap-2.5"><Check class="size-4 text-success" />Installation tokens expire after one hour</li>
-                <li class="flex items-center gap-2.5"><Check class="size-4 text-success" />Git clones use a separate read-only deploy key per app</li>
+                <li class="flex items-center gap-2.5">
+                    <Check class="size-4 shrink-0 text-success" />Fine-grained, per-repository permissions
+                </li>
+                <li class="flex items-center gap-2.5">
+                    <Check class="size-4 shrink-0 text-success" />Installation tokens expire after one hour
+                </li>
+                <li class="flex items-center gap-2.5">
+                    <Check class="size-4 shrink-0 text-success" />Clones use a one-hour, read-only token for one
+                    repository
+                </li>
             </ul>
-            {#if github.connected}
+            {#if github?.connected}
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button onclick={() => go(1)}>Continue</Button>
-                    <span class="text-[12.5px] text-muted-foreground">Connected as <span class="font-mono text-[12px]">{github.name}</span></span>
+                    {@render onward('default')}
+                    <span class="text-[12.5px] text-muted-foreground"
+                        >Connected as <span class="font-mono text-[12px]">{github.name}</span></span
+                    >
                 </div>
-            {:else if github.configured}
-                <Button href={github.connect_href}>Connect GitHub</Button>
-            {:else}
-                <p class="mb-3 text-[12.5px] text-muted-foreground">The GitHub App isn't configured on this instance yet. Set its ID and key in the environment, or connect GitLab or Bitbucket instead.</p>
-                <Button variant="outline" href={github.settings_href}>Open Git settings</Button>
+            {:else if github?.connect_href}
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button href={github.connect_href} target="_self">Connect GitHub</Button>
+                    {@render onward()}
+                </div>
+            {:else if github?.registration}
+                <GitHubRegistration
+                    registration={github.registration}
+                    compact
+                    submitLabel="Connect GitHub"
+                    actions={onward}
+                />
+            {:else if github?.elsewhere}
+                <p class="mb-3 text-[12.5px] text-muted-foreground">
+                    Create the app from <span class="font-mono text-[12px]">{elsewhere}</span>, GitHub sends you back
+                    there.
+                </p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button href={github.elsewhere}>Open {elsewhere}</Button>
+                    {@render onward()}
+                </div>
+            {:else if github && !github.can_manage}
+                <p class={cn('text-[12.5px] text-muted-foreground', current > 0 ? 'mb-3' : 'm-0')}>
+                    An owner or admin connects GitHub.
+                </p>
+                {@render onward('default')}
             {/if}
         </div>
     {:else if step === 1}
         <div class="rounded-xl border border-border bg-card p-6" data-testid="setup-step">
             <h3 class="type-h3 m-0 mb-1.5">Add your first server</h3>
-            <p class="type-body-sm mb-4 text-muted-foreground">Point Coresmith at a machine you already have. It hardens it while it provisions.</p>
+            <p class="type-body-sm mb-4 text-muted-foreground">
+                Point Coresmith at a machine you already have. It hardens it while it provisions.
+            </p>
             <div class="mb-4 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                 <div class="rounded-md border border-border p-4 opacity-55" aria-disabled="true">
                     <div class="mb-1 text-[14px] font-medium">Provision through a provider</div>
-                    <div class="text-[12.5px] text-muted-foreground">Hetzner, DigitalOcean or AWS via API token. Arrives with provider integrations.</div>
+                    <div class="text-[12.5px] text-muted-foreground">
+                        Hetzner, DigitalOcean or AWS via API token. Arrives with provider integrations.
+                    </div>
                 </div>
                 <div class="option-selected rounded-md border p-4">
                     <div class="mb-1 text-[14px] font-medium">Use an existing VM</div>
@@ -133,7 +195,9 @@
             {#if server}
                 <p class="mb-4 text-[13px]">
                     <span class="font-mono">{server.name}</span> is already added.
-                    <Link href={server.href} class="focus-ring rounded-sm font-medium text-primary no-underline">Open it</Link>
+                    <Link href={server.href} class="focus-ring rounded-sm font-medium text-primary-strong no-underline"
+                        >Open it</Link
+                    >
                 </p>
                 <div class="flex gap-3">
                     <Button variant="outline" onclick={() => go(0)}>Back</Button>
@@ -149,14 +213,28 @@
                         <div class="mb-5 flex flex-col gap-3.5">
                             <div>
                                 <Label for="setup-name" class="mb-1.5">Server name</Label>
-                                <Input id="setup-name" name="name" required placeholder="forge-01" aria-invalid={errors.name ? true : undefined} />
+                                <Input
+                                    id="setup-name"
+                                    name="name"
+                                    required
+                                    placeholder="forge-01"
+                                    aria-invalid={errors.name ? true : undefined}
+                                />
                                 <FieldError message={errors.name} />
                             </div>
                             <div>
                                 <Label for="setup-ip" class="mb-1.5">IP address</Label>
-                                <Input id="setup-ip" name="ip_address" required placeholder="203.0.113.40" aria-invalid={errors.ip_address ? true : undefined} />
+                                <Input
+                                    id="setup-ip"
+                                    name="ip_address"
+                                    required
+                                    placeholder="203.0.113.40"
+                                    aria-invalid={errors.ip_address ? true : undefined}
+                                />
                                 <FieldError message={errors.ip_address} />
-                                <p class="mt-1.5 text-[12px] text-muted-foreground">Needs root SSH access and Ubuntu 24.04. Coresmith hardens it during provisioning.</p>
+                                <p class="mt-1.5 text-[12px] text-muted-foreground">
+                                    Needs root SSH access and Ubuntu 24.04. Coresmith hardens it during provisioning.
+                                </p>
                             </div>
                         </div>
                         <div class="flex gap-3">
@@ -181,13 +259,23 @@
                     {/if}
                 </div>
                 <p class="type-body-sm mb-4 text-muted-foreground">
-                    About six minutes. Hardening is part of provisioning, not an afterthought, you can watch every phase on the server page.
+                    About six minutes. Hardening is part of provisioning, not an afterthought, you can watch every phase
+                    on the server page.
                 </p>
                 <div class="mb-5 flex flex-col gap-0.5">
                     {#each provisioning.phases as phase (phase.name)}
-                        <div class={cn('flex items-center gap-3 py-1.5', phase.state === 'pending' && 'opacity-55')}>
+                        <div
+                            class={cn(
+                                'flex items-center gap-3 py-1.5',
+                                phase.state === 'pending' && 'text-muted-foreground'
+                            )}
+                        >
                             <PhaseIcon state={phase.state} />
-                            <span class="text-[13.5px]"><span class="font-medium">{phase.name}</span><span class="text-muted-foreground">{`, ${phase.desc}`}</span></span>
+                            <span class="text-[13.5px]"
+                                ><span class="font-medium">{phase.name}</span><span class="text-muted-foreground"
+                                    >{`, ${phase.desc}`}</span
+                                ></span
+                            >
                         </div>
                     {/each}
                 </div>
@@ -198,7 +286,9 @@
                 </div>
             {:else if server}
                 <h3 class="type-h3 m-0 mb-1.5">{server.name} is provisioned</h3>
-                <p class="type-body-sm mb-4 text-muted-foreground">All eight phases passed. It's hardened and ready for its first app.</p>
+                <p class="type-body-sm mb-4 text-muted-foreground">
+                    All eight phases passed. It's hardened and ready for its first app.
+                </p>
                 <div class="flex gap-3">
                     <Button variant="outline" onclick={() => go(1)}>Back</Button>
                     <Button onclick={() => go(3)}>Continue</Button>
@@ -208,16 +298,21 @@
     {:else}
         <div class="rounded-xl border border-border bg-card p-6" data-testid="setup-step">
             <h3 class="type-h3 m-0 mb-1.5">Deploy your first app</h3>
-            <p class="type-body-sm mb-4 text-muted-foreground">Pick a repository. Coresmith builds it into a release and serves it through Caddy.</p>
+            <p class="type-body-sm mb-4 text-muted-foreground">
+                Pick a repository. Coresmith builds it into a release and serves it through Caddy.
+            </p>
             {#if application}
                 <div class="mb-4 rounded-md border border-border p-4">
                     <div class="mb-2.5 flex flex-wrap items-center gap-2.5">
                         <GitBranch class="size-4" />
-                        <span class="font-mono text-[14px] font-medium">{application.repository ?? application.name}</span>
+                        <span class="font-mono text-[14px] font-medium"
+                            >{application.repository ?? application.name}</span
+                        >
                         <Badge variant="accent">{application.kind}</Badge>
                     </div>
                     <div class="text-[12.5px] leading-[1.7] text-muted-foreground">
-                        {application.runtime} · deploys to {application.server}<br />Process supervised by systemd · routed by Caddy · a new release per deploy
+                        {application.runtime} · deploys to {application.server}<br />Process supervised by systemd ·
+                        routed by Caddy · a new release per deploy
                     </div>
                 </div>
                 <div class="flex gap-3">
@@ -230,7 +325,9 @@
                     {#if create_application_href}
                         <Button href={create_application_href}>Create an application</Button>
                     {:else}
-                        <p class="self-center text-[12.5px] text-muted-foreground">Apps can be added once a server finishes provisioning.</p>
+                        <p class="self-center text-[12.5px] text-muted-foreground">
+                            Apps can be added once a server finishes provisioning.
+                        </p>
                     {/if}
                 </div>
             {/if}

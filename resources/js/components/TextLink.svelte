@@ -29,7 +29,7 @@
     {method}
     {as}
     class={cn(
-        'focus-ring cursor-pointer rounded-sm bg-transparent p-0 font-medium text-primary no-underline underline-offset-4 hover:underline',
+        'focus-ring cursor-pointer rounded-sm bg-transparent p-0 font-medium text-primary-strong no-underline underline-offset-4 hover:underline',
         className
     )}
     {...rest}

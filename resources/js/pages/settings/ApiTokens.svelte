@@ -113,7 +113,7 @@
                 <span class="text-[12px] text-muted-foreground">created {relative(token.created_at, 'just now')} · last used {relative(token.last_used_at, 'never')}</span>
                 <button
                     type="button"
-                    class="focus-ring quick-action text-destructive!"
+                    class="focus-ring quick-action text-destructive-strong!"
                     onclick={() => (revoking = token)}
                 >
                     Revoke

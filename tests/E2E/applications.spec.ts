@@ -8,6 +8,7 @@ import {
     gotoServer,
     isMobile,
     own,
+    tabs,
     test,
     toast,
     useTheme
@@ -292,6 +293,20 @@ test.describe('what the full app page adds on a wider screen', () => {
 
         expect(html).not.toContain('BEGIN OPENSSH PRIVATE KEY')
         expect(html).not.toContain('deploy_key_private')
+    })
+
+    test('an app picked from GitHub shows how it clones', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'linked-app')
+
+        const access = page.getByRole('heading', { name: 'Repository access' }).locator('..')
+
+        await expect(access).toContainText(
+            'Cloned through the GitHub App with a one-hour, read-only token for this repository. Nothing long-lived is stored on the server.'
+        )
+        await expect(access).toContainText('monoventech/relay · trunk')
+        await expect(page.getByRole('heading', { name: 'Deploy key' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Copy public key' })).toHaveCount(0)
+        await expect(page.getByTestId('github-banner')).toHaveCount(0)
     })
 
     test('domains are listed with their certificates', async ({ page }) => {
@@ -1102,6 +1117,155 @@ test.describe('an app whose processes did not start', () => {
             'The entry point was not found. Check the build produced the file the process starts, then deploy again.'
         )
         await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
+    })
+})
+
+test.describe('an app that follows its branch', () => {
+    test('auto deploy says it polls and why when GitHub cannot reach the panel', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'linked'))
+
+        const row = page.getByTestId('toggle-auto_deploy')
+
+        await expect(toggle(page, 'Auto deploy')).not.toBeChecked()
+        await expect(row).toContainText('Deploy trunk whenever it changes')
+
+        await toggle(page, 'Auto deploy').click()
+
+        await expect(toast(page)).toContainText('Saved. Auto deploy is on, trunk deploys whenever it changes.')
+        await expect(toggle(page, 'Auto deploy')).toBeChecked()
+        await expect(row).toContainText('Checks trunk for new commits every minute.')
+        await expect(row).toContainText('GitHub cannot reach 127.0.0.1, it only answers on this machine.')
+
+        await toggle(page, 'Auto deploy').click()
+
+        await expect(toast(page)).toContainText('Saved. Auto deploy is off, deploy from this page when you are ready.')
+        await expect(toggle(page, 'Auto deploy')).not.toBeChecked()
+        await expect(row).toContainText('Deploy trunk whenever it changes')
+    })
+
+    test('an app without a GitHub link checks from its server', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
+
+        const row = page.getByTestId('toggle-auto_deploy')
+
+        await expect(row).toContainText('Deploy main whenever it changes')
+
+        await toggle(page, 'Auto deploy').click()
+
+        await expect(toggle(page, 'Auto deploy')).toBeChecked()
+        await expect(row).toContainText('Checks main for new commits every 5 minutes from bench-01.')
+        await expect(row).toContainText(
+            'This app is not linked to a GitHub connection, so pushes are not delivered here.'
+        )
+
+        await toggle(page, 'Auto deploy').click()
+
+        await expect(toggle(page, 'Auto deploy')).not.toBeChecked()
+        await expect(row).toContainText('Deploy main whenever it changes')
+    })
+
+    test('an app with auto deploy on shows its mode', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'pushing-app')
+
+        const row = page.getByTestId('toggle-auto_deploy')
+
+        await expect(toggle(page, 'Auto deploy')).toBeChecked()
+        await expect(row).toContainText('Checks trunk for new commits every minute.')
+        await expect(row).toContainText('GitHub cannot reach 127.0.0.1, it only answers on this machine.')
+    })
+})
+
+test.describe('an app whose GitHub connection is gone', () => {
+    test('an app whose GitHub connection was removed says what still works', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'orphaned-app')
+
+        const banner = page.getByTestId('github-banner')
+
+        await expect(banner).toContainText(
+            'This app clones monoventech/relay through GitHub, and that connection was removed.'
+        )
+        await expect(banner).toContainText(
+            'Public repositories still deploy, private ones need GitHub connected again.'
+        )
+        await expect(page.getByRole('heading', { name: 'Repository access' })).toHaveCount(0)
+
+        await banner.getByRole('link', { name: 'Open Git settings' }).click()
+
+        await page.waitForURL(/\/settings\/git$/)
+        await expect(tabs(page, 'Settings').getByRole('link', { name: 'Git', exact: true })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
+    })
+
+    test('an app whose GitHub installation is suspended says so', async ({ page }) => {
+        await page.route('**/servers/*/applications/*', async (route) => {
+            if (route.request().headers()['x-inertia'] === undefined) {
+                await route.continue()
+
+                return
+            }
+
+            const response = await route.fetch()
+            const body = await response.json()
+
+            body.props.application.github = { ...body.props.application.github, problem: 'suspended' }
+            await route.fulfill({ response, json: body })
+        })
+        await gotoApplication(page, 'bench-01', 'orphaned-app')
+
+        await expect(page.getByTestId('github-banner')).toContainText(
+            'This app clones monoventech/relay through GitHub, and that connection is suspended.'
+        )
+    })
+
+    test('on a phone the banner gives its text the full width and puts the link under it', async ({
+        page
+    }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'The link moves under the text only below 640px')
+
+        await gotoApplication(page, 'bench-01', 'orphaned-app')
+
+        const banner = page.getByTestId('github-banner')
+        const text = await banner.getByText('Public repositories still deploy').boundingBox()
+        const link = await banner.getByRole('link', { name: 'Open Git settings' }).boundingBox()
+
+        expect(text).not.toBeNull()
+        expect(link).not.toBeNull()
+        expect(link?.y ?? 0).toBeGreaterThanOrEqual((text?.y ?? 0) + (text?.height ?? 0))
+        expect(Math.abs((link?.x ?? 0) - (text?.x ?? 0))).toBeLessThanOrEqual(1)
+    })
+})
+
+test.describe('action banners on a phone', () => {
+    test.skip(({ isMobile }) => !isMobile, 'The phone layout and tap sizes apply only below 640px')
+
+    const banners = [
+        { server: 'forge-01', app: 'storefront', id: 'failed-banner', role: 'link', action: 'Read the log' },
+        { server: 'bench-01', app: 'retired-blog', id: 'offline-banner', role: 'button', action: 'Start it' },
+        { server: 'bench-01', app: 'orphaned-app', id: 'github-banner', role: 'link', action: 'Open Git settings' }
+    ] as const
+
+    for (const { server, app, id, role, action } of banners) {
+        test(`the ${id} gives its text the full width and puts an easy-to-tap action under it`, async ({ page }) => {
+            await gotoApplication(page, server, app)
+
+            const banner = page.getByTestId(id)
+            const text = await banner.locator('span.flex-1').first().boundingBox()
+            const control = await banner.getByRole(role, { name: action }).boundingBox()
+
+            expect(text).not.toBeNull()
+            expect(control).not.toBeNull()
+            expect(control?.y ?? 0).toBeGreaterThanOrEqual((text?.y ?? 0) + (text?.height ?? 0))
+            expect(Math.abs((control?.x ?? 0) - (text?.x ?? 0))).toBeLessThanOrEqual(1)
+            expect(control?.height ?? 0).toBeGreaterThanOrEqual(44)
+        })
+    }
+
+    test('the repository access card stays off a phone', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'linked-app')
+
+        await expect(page.getByRole('heading', { name: 'Repository access' })).toBeHidden()
     })
 })
 

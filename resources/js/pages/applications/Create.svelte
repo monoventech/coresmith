@@ -295,7 +295,7 @@
         <ol class="m-0 flex list-none flex-col gap-0.5 p-0">
             {#each STEPS as step, index (step.name)}
                 <li class="flex items-baseline gap-3 py-1.75">
-                    <span class="w-4 flex-none font-mono text-[12px] text-primary">{index + 1}</span>
+                    <span class="w-4 flex-none font-mono text-[12px] text-primary-strong">{index + 1}</span>
                     <span class="text-[13.5px]"
                         ><span class="font-medium">{step.name}</span><span class="text-muted-foreground"
                             >{`, ${step.desc}`}</span

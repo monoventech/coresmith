@@ -133,6 +133,27 @@ export async function backToMonoven(page: Page) {
     await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
 }
 
+export async function openSetupWith(page: Page, slug: string, github: Record<string, unknown>) {
+    await page.route(`**/${slug}/setup**`, async (route) => {
+        if (route.request().headers()['x-inertia'] === undefined) {
+            await route.continue()
+
+            return
+        }
+
+        const response = await route.fetch()
+        const body = await response.json()
+
+        body.props.github = { ...body.props.github, ...github }
+        await route.fulfill({ response, json: body })
+    })
+    await page.goto(`/${slug}/setup`)
+    await page
+        .getByRole('navigation', { name: 'Setup steps' })
+        .getByRole('button', { name: /Connect GitHub/ })
+        .click()
+}
+
 export async function openSecurity(page: Page) {
     await page.goto('/settings/security')
 
@@ -149,7 +170,9 @@ export async function blockingViolations(page: Page): Promise<string[]> {
     await page.waitForLoadState('load')
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined)
 
+    const grain = await page.addStyleTag({ content: '.grain::after { content: none !important; }' })
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
+    await grain.evaluate((style) => style.remove())
 
     return results.violations
         .filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))

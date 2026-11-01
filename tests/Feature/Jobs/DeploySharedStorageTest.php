@@ -19,12 +19,17 @@ use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Symfony\Component\Finder\SplFileInfo;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 use Tests\Support\FakeSSHTransport;
+
+beforeEach(function () {
+    Http::preventStrayRequests();
+});
 
 function sharedStorageApp(array $attributes = []): Application
 {

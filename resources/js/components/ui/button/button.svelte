@@ -12,7 +12,7 @@
 				outline: "border-border bg-transparent text-foreground hover:not-disabled:bg-muted",
 				ghost: "bg-transparent text-foreground hover:not-disabled:bg-accent",
 				destructive: "bg-destructive text-destructive-foreground hover:not-disabled:bg-destructive-hover",
-				link: "h-auto! bg-transparent p-0! text-primary underline-offset-4 hover:underline",
+				link: "h-auto! bg-transparent p-0! text-primary-strong underline-offset-4 hover:underline",
 			},
 			size: {
 				default: "h-10 px-4",

@@ -48,15 +48,22 @@ asGuest.describe('signing in', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
     })
 
-    asGuest('an account outside the team at the address is signed straight back out and told why', async ({ page }, testInfo) => {
-        await page.goto('/acme/login')
-        await page.getByLabel('Email address').fill(`${own(testInfo, 'invitee')}@coresmith.test`)
-        await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
-        await page.getByRole('button', { name: 'Sign in' }).click()
+    asGuest(
+        'an account outside the team at the address is signed straight back out and told why',
+        async ({ page }, testInfo) => {
+            await page.goto('/acme/login')
+            await page.getByLabel('Email address').fill(`${own(testInfo, 'invitee')}@coresmith.test`)
+            await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
+            await page.getByRole('button', { name: 'Sign in' }).click()
 
-        await expect(page.getByText("That account isn't a member of Acme Labs. Sign in with one that is, or ask an owner to invite you.")).toBeVisible()
-        await expect(page).toHaveURL(/\/acme\/login$/)
-    })
+            await expect(
+                page.getByText(
+                    "That account isn't a member of Acme Labs. Sign in with one that is, or ask an owner to invite you."
+                )
+            ).toBeVisible()
+            await expect(page).toHaveURL(/\/acme\/login$/)
+        }
+    )
 
     asGuest('a reset link is requested from the sign in page', async ({ page }) => {
         await page.goto('/login')
@@ -67,16 +74,31 @@ asGuest.describe('signing in', () => {
         await page.getByLabel('Email address').fill(OWNER)
         await page.getByRole('button', { name: 'Send the reset link' }).click()
 
-        await expect(page.getByText(/We have emailed your password reset link|Please wait before retrying/)).toBeVisible()
+        await expect(
+            page.getByText(/We have emailed your password reset link|Please wait before retrying/)
+        ).toBeVisible()
     })
 
     asGuest('the landing page leads to the panel', async ({ page }) => {
         await page.goto('/')
 
-        await expect(page.getByRole('heading', { level: 1, name: 'Server management without the complexity.' })).toBeVisible()
+        await expect(
+            page.getByRole('heading', { level: 1, name: 'Server management without the complexity.' })
+        ).toBeVisible()
         await page.getByRole('link', { name: 'Open the panel' }).click()
 
         await expect(page).toHaveURL(/\/login$/)
+    })
+
+    asGuest('the landing page says how each deploy reads its repository', async ({ page }) => {
+        await page.goto('/')
+
+        const card = page.getByRole('heading', { name: 'Connect a repository' }).locator('..')
+
+        await expect(card).toContainText(
+            'A GitHub App with per-repo permissions. Each deploy clones with a read-only token that lasts an hour, or a read-only Ed25519 deploy key for repositories added by URL.'
+        )
+        await expect(card).not.toContainText('deploy key per app')
     })
 })
 

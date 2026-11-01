@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import {
     backToMonoven,
     blockingViolations,
@@ -10,6 +11,36 @@ import {
     toast,
     useTheme
 } from './support/fixtures'
+
+async function openWithEnvironmentApp(page: Page): Promise<string> {
+    const baseURL = test.info().project.use.baseURL ?? 'http://127.0.0.1:8123'
+    const connect = `${baseURL}/acme/settings/source-providers/github_app/connect?app=env`
+
+    await page.route('**/acme/settings/git', async (route) => {
+        if (route.request().headers()['x-inertia'] === undefined) {
+            await route.continue()
+
+            return
+        }
+
+        const response = await route.fetch()
+        const body = await response.json()
+
+        body.props.github = {
+            ...body.props.github,
+            can_register: false,
+            registration: null,
+            apps: [],
+            connect: { install_href: connect, link_href: `${connect}&mode=link` }
+        }
+        await route.fulfill({ response, json: body })
+    })
+    await page.goto('/acme/settings')
+    await tabs(page, 'Settings').getByRole('link', { name: 'Git', exact: true }).click()
+    await page.getByTestId('github-connect').waitFor()
+
+    return connect
+}
 
 test.afterEach(async ({ page }) => {
     await backToMonoven(page)
@@ -268,38 +299,15 @@ test.describe('a team on its own domain', () => {
 
 test.describe('with the environment GitHub App', () => {
     test('a team with nothing connected is offered both ways to connect as real navigations', async ({ page }) => {
-        const baseURL = test.info().project.use.baseURL ?? 'http://127.0.0.1:8123'
-        const connect = `${baseURL}/acme/settings/source-providers/github_app/connect?app=env`
+        const connect = await openWithEnvironmentApp(page)
+        const card = page.getByTestId('github-connect')
         const captured = { url: '', navigation: false }
 
-        await page.route('**/acme/settings/git', async (route) => {
-            if (route.request().headers()['x-inertia'] === undefined) {
-                await route.continue()
-
-                return
-            }
-
-            const response = await route.fetch()
-            const body = await response.json()
-
-            body.props.github = {
-                ...body.props.github,
-                can_register: false,
-                registration: null,
-                apps: [],
-                connect: { install_href: connect, link_href: `${connect}&mode=link` }
-            }
-            await route.fulfill({ response, json: body })
-        })
         await page.route('**/settings/source-providers/github_app/connect**', async (route) => {
             captured.url = route.request().url()
             captured.navigation = route.request().isNavigationRequest()
             await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>stub</title>' })
         })
-        await page.goto('/acme/settings')
-        await tabs(page, 'Settings').getByRole('link', { name: 'Git', exact: true }).click()
-
-        const card = page.getByTestId('github-connect')
 
         await expect(card).toContainText(
             'Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only, commit statuses and webhooks, per repository, not your whole account.'
@@ -321,6 +329,15 @@ test.describe('with the environment GitHub App', () => {
         await expect.poll(() => captured.url).toBe(connect)
         expect(captured.navigation).toBe(true)
     })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`it has no serious or critical accessibility violations in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await openWithEnvironmentApp(page)
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 })
 
 test.describe('other Git providers', () => {
