@@ -99,7 +99,9 @@
                     data-testid="cloud-account-row"
                 >
                     <span class="font-medium">{account.provider}</span>
-                    <span class="min-w-0 truncate font-mono text-[12.5px]">{account.name}</span>
+                    {#if account.name !== account.provider}
+                        <span class="min-w-0 truncate font-mono text-[12.5px]">{account.name}</span>
+                    {/if}
                     {#if account.label}
                         <span class="min-w-0 truncate font-mono text-[12px] text-muted-foreground">{account.label}</span
                         >

@@ -18,6 +18,7 @@ test.describe('provider accounts', () => {
         await expect(card).toContainText('3 accounts')
         await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'DigitalOcean' })).toContainText('1 server')
         await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'Linode' })).toContainText('Token refused')
+        await expect(card.getByTestId('cloud-account-row').filter({ hasText: 'Hetzner Cloud' }).getByText('Hetzner Cloud', { exact: true })).toHaveCount(1)
         await expect(card).not.toContainText('never-sent')
     })
 
@@ -49,6 +50,7 @@ test.describe('provider accounts', () => {
 
         const card = page.getByTestId('cloud-providers-card')
 
+        await expect(card.getByTestId('cloud-account-row')).toContainText('Vultr Spare')
         await card.getByRole('button', { name: 'Remove Spare' }).click()
         await expect(dialog(page)).toContainText('It stays valid at Vultr until you revoke it there.')
         await dialog(page).getByRole('button', { name: 'Remove account' }).click()
