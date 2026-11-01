@@ -25,6 +25,15 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Billing on a trial', direct('/trial/settings/billing')],
     ['Billing on a lapsed team', direct('/expired/settings/billing')],
     [
+        'Database backups to S3 dialog on Business',
+        async (page) => {
+            await page.goto('/atelier/settings/team')
+            await page.getByTestId('offsite-backups-card').getByRole('button', { name: 'Change' }).click()
+            await expect(page.getByRole('dialog').getByLabel('Bucket')).toBeVisible()
+        }
+    ],
+    ['Team settings sending backups to S3', direct('/atelier/settings/team')],
+    [
         'Change plan dialog',
         async (page) => {
             await page.goto('/fleet/settings/billing')

@@ -4,6 +4,8 @@
     import FieldError from '@/components/FieldError.svelte'
     import CloudProvidersCard from '@/components/settings/CloudProvidersCard.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
+    import type { OffsiteDestination } from '@/components/settings/OffsiteBackupsCard.svelte'
+    import OffsiteBackupsCard from '@/components/settings/OffsiteBackupsCard.svelte'
     import PlanNote from '@/components/settings/PlanNote.svelte'
     import type { SingleSignOn } from '@/components/settings/SingleSignOnCard.svelte'
     import SingleSignOnCard from '@/components/settings/SingleSignOnCard.svelte'
@@ -49,7 +51,8 @@
         roles = [],
         can,
         sso,
-        cloud
+        cloud,
+        offsite = null
     }: {
         team: { id: string; name: string; slug: string }
         address: Address
@@ -58,6 +61,7 @@
         can: { update: boolean; manageMembers: boolean; grantOwner: boolean }
         sso: SingleSignOn
         cloud: CloudAccounts
+        offsite?: OffsiteDestination | null
     } = $props()
 
     const billing = $derived(page.props.billing)
@@ -179,6 +183,7 @@
 {#if can.update}
     <div class="mt-4 grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
         <AuditLogCard planNote={billing?.notes.audit_log_export} />
+        <OffsiteBackupsCard {offsite} planNote={billing?.notes.offsite_backups} />
     </div>
 {/if}
 

@@ -87,6 +87,16 @@ test('common secret shapes are redacted even when not in the environment', funct
     ['ghp_abcdefghijklmnopqrstuvwxyz1234', 'token ghp_abcdefghijklmnopqrstuvwxyz1234 rejected'],
 ]);
 
+test('secrets in s3 urls and stripe webhook secrets are redacted', function (string $line, string $clean) {
+    expect((new LogSanitizer)->sanitize($line))->toBe($clean);
+})->with([
+    'a presigned s3 url' => [
+        'curl https://lab-backups.s3.eu-central-1.amazonaws.com/x.sql.gz?X-Amz-Expires=3600&X-Amz-Signature=0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0 failed',
+        'curl https://lab-backups.s3.eu-central-1.amazonaws.com/x.sql.gz?X-Amz-Expires=3600&X-Amz-Signature=[REDACTED] failed',
+    ],
+    'a stripe webhook secret' => ['secret whsec_9q8P7x6W5v4U3t2S1r0Q9p8O7n6M5l4K refused', 'secret [REDACTED_STRIPE_WEBHOOK_SECRET] refused'],
+]);
+
 test('stateless installation tokens and fine-grained tokens are redacted', function (string $line, string $clean) {
     expect((new LogSanitizer)->sanitize($line))->toBe($clean);
 })->with([

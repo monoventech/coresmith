@@ -48,6 +48,8 @@ Schedule::command('coresmith:trial-reminders')->dailyAt('09:00')->name('coresmit
 
 Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup')->withoutOverlapping();
 
+Schedule::command('coresmith:backup-databases')->dailyAt('02:30')->name('coresmith:backup-databases')->withoutOverlapping();
+
 Schedule::command('coresmith:weekly-digest')->weeklyOn(1, '08:00')->name('coresmith:weekly-digest')->withoutOverlapping();
 
 Schedule::command('coresmith:check-update')

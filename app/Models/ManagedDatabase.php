@@ -48,6 +48,7 @@ class ManagedDatabase extends Model
             'type' => DatabaseType::class,
             'extensions' => 'array',
             'is_external' => 'boolean',
+            'last_offsite_at' => 'datetime',
         ];
     }
 }

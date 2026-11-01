@@ -8,10 +8,13 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Enums\DatabaseType;
 use App\Enums\Plan;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
+use App\Models\BackupDestination;
+use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\Team;
@@ -56,6 +59,7 @@ final class CloudE2ESeeder extends Seeder
 
         foreach (self::PROJECTS as $code) {
             $this->planChangeTeams($tenant->owner, $code);
+            $this->vaultTeam($tenant->owner, $code);
         }
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
@@ -135,6 +139,37 @@ final class CloudE2ESeeder extends Seeder
         activity()->performedOn($team)->causedBy($owner)->withProperties(['email' => $owner->email, 'role' => 'owner'])->log('member_added');
         activity()->performedOn($server)->causedBy($owner)->log('server_provisioned');
         activity()->performedOn($server)->withProperties(['command' => 'systemctl reload caddy'])->log('ssh_command_executed');
+
+        BackupDestination::factory()->for($team)->create([
+            'region' => 'eu-central-1',
+            'bucket' => 'atelier-backups',
+            'prefix' => 'nightly',
+            'access_key_id' => 'AKIAEXAMPLE0000000000',
+            'secret_access_key' => 'an-e2e-secret-access-key',
+            'last_run_at' => now()->subHours(2),
+        ]);
+
+        ManagedDatabase::factory()->for($team)->for($server)->postgres()->create([
+            'name' => 'atelier_main',
+            'last_offsite_at' => now()->subHours(2),
+            'last_offsite_key' => 'nightly/atelier/atelier-01/atelier_main/atelier_main-' . now()->subHours(2)->format('YmdHis') . '.sql.gz',
+        ]);
+        ManagedDatabase::factory()->for($team)->for($server)->create([
+            'type' => DatabaseType::Mysql,
+            'name' => 'atelier_legacy',
+            'last_offsite_error' => 'The bucket refused the upload: curl: (22) The requested URL returned error: 403. Check the bucket name, region and keys.',
+        ]);
+    }
+
+    private function vaultTeam(User $owner, string $code): void
+    {
+        $team = $this->ownedTeam($owner, "Vault {$code}", "vault-{$code}");
+        $team->forceFill(['stripe_id' => "cus_e2e_vault_{$code}"])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Business)->create();
+
+        $server = Server::factory()->for($team)->create(['name' => "vault-{$code}-01", 'status' => ServerStatus::Active]);
+        ManagedDatabase::factory()->for($team)->for($server)->postgres()->create(['name' => 'vault_main']);
     }
 
     private function planChangeTeams(User $owner, string $code): void

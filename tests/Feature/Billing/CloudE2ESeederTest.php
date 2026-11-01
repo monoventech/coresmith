@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\BillingState;
 use App\Enums\Plan;
+use App\Models\ManagedDatabase;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
@@ -31,7 +32,7 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
         ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['atelier', 'ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
-        ->and($owner->teams()->count())->toBe(8 + 4 * count(CloudE2ESeeder::PROJECTS))
+        ->and($owner->teams()->count())->toBe(8 + 5 * count(CloudE2ESeeder::PROJECTS))
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 
@@ -123,4 +124,26 @@ test('the cloud browser seed has a business team with a history', function () {
     expect(app(TeamBilling::class)->status($atelier)->plan)->toBe(Plan::Business)
         ->and($atelier->servers()->pluck('name')->all())->toBe(['atelier-01'])
         ->and(iterator_to_array(app(AuditLog::class)->rows($atelier, null), false))->toHaveCount(3);
+});
+
+test('the cloud browser seed has a business team sending its databases to s3', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $atelier = Team::query()->where('slug', 'atelier')->firstOrFail();
+    $databases = ManagedDatabase::query()->where('team_id', $atelier->getKey())->orderBy('name')->get()->keyBy('name');
+
+    expect($atelier->backupDestination?->bucket)->toBe('atelier-backups')
+        ->and($databases['atelier_main']->last_offsite_at)->not->toBeNull()
+        ->and($databases['atelier_main']->last_offsite_key)->toStartWith('nightly/atelier/atelier-01/atelier_main/')
+        ->and($databases['atelier_legacy']->last_offsite_error)->toContain('403');
+
+    foreach (CloudE2ESeeder::PROJECTS as $code) {
+        $vault = Team::query()->where('slug', "vault-{$code}")->firstOrFail();
+
+        expect(app(TeamBilling::class)->status($vault)->plan)->toBe(Plan::Business)
+            ->and($vault->backupDestination)->toBeNull()
+            ->and(ManagedDatabase::query()->where('team_id', $vault->getKey())->pluck('name')->all())->toBe(['vault_main']);
+    }
 });

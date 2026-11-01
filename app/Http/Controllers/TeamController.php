@@ -9,10 +9,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\TeamRole;
+use App\Models\BackupDestination;
+use App\Models\ManagedDatabase;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\User;
 use App\Services\Panel\CloudPresenter;
+use App\Services\Panel\Formats;
 use App\Services\Sso\SsoConnections;
 use App\Services\Teams\TeamDomains;
 use App\Services\Teams\TeamUrls;
@@ -48,6 +51,7 @@ final class TeamController extends Controller
             ],
             'sso' => app(SsoConnections::class)->present($team, $user),
             'cloud' => app(CloudPresenter::class)->accounts($team, $user),
+            'offsite' => $this->offsite($team),
             'teams' => $user->teams()->get(['teams.id', 'teams.name'])
                 ->map(fn(Team $each): array => ['id' => $each->id, 'name' => $each->name]),
             'members' => $team->members()->orderBy('name')->get()->map(fn(User $member): array => [
@@ -69,5 +73,27 @@ final class TeamController extends Controller
                 'grantOwner' => $user->roleIn($team) === TeamRole::Owner,
             ],
         ]);
+    }
+
+    /**
+     * @return array{endpoint: ?string, region: string, bucket: string, prefix: ?string, path_style: bool, last_run: ?string, failing: int}|null
+     */
+    private function offsite(Team $team): ?array
+    {
+        $destination = $team->backupDestination()->first();
+
+        if (!$destination instanceof BackupDestination) {
+            return null;
+        }
+
+        return [
+            'endpoint' => $destination->endpoint,
+            'region' => $destination->region,
+            'bucket' => $destination->bucket,
+            'prefix' => $destination->prefix,
+            'path_style' => $destination->path_style,
+            'last_run' => Formats::when($destination->last_run_at),
+            'failing' => ManagedDatabase::query()->where('team_id', $team->getKey())->whereNotNull('last_offsite_error')->count(),
+        ];
     }
 }

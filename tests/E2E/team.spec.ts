@@ -144,6 +144,35 @@ test.describe('the team', () => {
     })
 })
 
+test.describe('database backups to s3', () => {
+    test.afterEach(async ({ page }) => {
+        await page.goto('/monoven/dashboard')
+    })
+
+    test('a team sends its databases to s3', async ({ page }, testInfo) => {
+        await page.goto(`/${own(testInfo, 'lab')}/settings/team`)
+
+        const card = page.getByTestId('offsite-backups-card')
+
+        await card.getByRole('button', { name: 'Set up' }).click()
+        await dialog(page).getByLabel('Region').fill('eu-central-1')
+        await dialog(page).getByLabel('Bucket').fill('lab-backups')
+        await dialog(page).getByLabel('Access key ID').fill('AKIAEXAMPLE0000000000')
+        await dialog(page).getByLabel('Secret access key').fill('an-e2e-secret-access-key')
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+
+        await expect(toast(page)).toContainText('Saved.')
+        await expect(card).toContainText('s3://lab-backups/')
+        await expect(card).toContainText('not run yet')
+        expect(await page.content()).not.toContain('an-e2e-secret-access-key')
+
+        await card.getByRole('button', { name: 'Remove' }).click()
+        await dialog(page).getByRole('button', { name: 'Remove destination' }).click()
+
+        await expect(card.getByRole('button', { name: 'Set up' })).toBeVisible()
+    })
+})
+
 test.describe('an admin on a team they do not own', () => {
     const owner = { name: 'Elin Larsen', email: 'elin@coresmith.test' }
     const deployer = { name: 'Tomas Novak', email: 'tomas@coresmith.test' }

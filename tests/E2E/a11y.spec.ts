@@ -247,6 +247,14 @@ const PAGES: [string, Visit][] = [
             await dialog(page).waitFor()
         }
     ],
+    [
+        'Database backups to S3 dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page.getByTestId('offsite-backups-card').getByRole('button', { name: 'Set up' }).click()
+            await dialog(page).getByLabel('Bucket').waitFor()
+        }
+    ],
     ['Git settings', direct('/settings/git')],
     ['Notification settings', direct('/settings/notifications')],
     ['API tokens', direct('/settings/api-tokens')],

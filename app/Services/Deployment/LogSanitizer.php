@@ -26,6 +26,8 @@ final class LogSanitizer
         '/gh[pousr]_[A-Za-z0-9][A-Za-z0-9_.\-]{19,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/github_pat_[A-Za-z0-9_]{22,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/dop_v1_[a-f0-9]{64}/' => '[REDACTED_DIGITALOCEAN_TOKEN]',
+        '/(X-Amz-Signature=)[0-9a-f]+/i' => '${1}[REDACTED]',
+        '/whsec_[A-Za-z0-9]{10,}/' => '[REDACTED_STRIPE_WEBHOOK_SECRET]',
         '/-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]{0,16384}?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]{0,16384})/' => '[REDACTED_PRIVATE_KEY]',
     ];
 

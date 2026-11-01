@@ -13,11 +13,13 @@
     let {
         server,
         database,
-        can
+        can,
+        offsite = null
     }: {
         server: { id: string; name: string; href: string }
         database: { id: string; name: string; type: string; db_user: string | null; host: string; port: number; status: string; privilege_level: string; is_external: boolean }
         can: { viewCredentials: boolean; backup: boolean; delete: boolean }
+        offsite?: { sent: string | null; error: string | null } | null
     } = $props()
 
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
@@ -50,11 +52,18 @@
             <Badge variant={database.status === 'active' ? 'success' : 'default'} dot>{database.status === 'active' ? 'Ready' : database.status}</Badge>
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">{ENGINES[database.type] ?? database.type} · on {server.name} · {database.is_external ? 'existing server' : 'localhost only'}</p>
+        {#if offsite && !offsite.error}
+            <p class="type-body-sm mt-1 text-muted-foreground" data-testid="offsite-status">{offsite.sent ? `Last sent to S3 ${offsite.sent}` : 'Not sent to S3 yet. Databases go every night at 02:30.'}</p>
+        {/if}
     </div>
     {#if can.backup}
         <Button variant="outline" onclick={backup}>Back up now</Button>
     {/if}
 </div>
+
+{#if offsite?.error}
+    <p class="tint-warning mb-4 rounded-xl border px-4.5 py-3 text-[13.5px]" data-testid="offsite-status">{offsite.error}</p>
+{/if}
 
 <div class="grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
     <div class="rounded-xl border border-border bg-card px-5.5 py-5">

@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\DatabaseType;
 use App\Models\ManagedDatabase;
 use App\Services\Database\DatabaseManager;
 use App\Services\SSH\SSHConnectionManager;
@@ -23,8 +24,9 @@ final class BackupDatabase implements ShouldQueue
     public int $timeout = 600;
 
     public function __construct(
-        private readonly ManagedDatabase $database,
-        private readonly string $timestamp,
+        public readonly ManagedDatabase $database,
+        public readonly string $timestamp,
+        public readonly bool $offsite = false,
     ) {
         $this->onQueue('server-tasks');
     }
@@ -35,9 +37,15 @@ final class BackupDatabase implements ShouldQueue
         $connection = $connections->for($server);
 
         try {
-            return $databases->backup($connection, $this->database, $this->timestamp);
+            $path = $databases->backup($connection, $this->database, $this->timestamp);
         } finally {
             $connections->disconnect($server);
         }
+
+        if ($this->offsite && in_array($this->database->type, [DatabaseType::Mysql, DatabaseType::Postgresql], true)) {
+            SendBackupOffsite::dispatch($this->database, $path);
+        }
+
+        return $path;
     }
 }

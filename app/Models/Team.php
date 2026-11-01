@@ -48,6 +48,11 @@ class Team extends Model
         return $this->hasOne(TeamDomain::class);
     }
 
+    public function backupDestination(): HasOne
+    {
+        return $this->hasOne(BackupDestination::class);
+    }
+
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');

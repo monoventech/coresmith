@@ -7,6 +7,7 @@ use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
 use App\Http\Controllers\Settings\GitHubAppController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
+use App\Http\Controllers\Settings\OffsiteBackupController;
 use App\Http\Controllers\Settings\PanelUpdateController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
@@ -54,6 +55,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/team/audit-log', AuditLogController::class)
         ->middleware('throttle:6,1,audit-export')
         ->name('settings.audit-log');
+    Route::put('settings/team/offsite-backups', [OffsiteBackupController::class, 'update'])
+        ->middleware('throttle:10,1,offsite-backups')
+        ->name('settings.offsite-backups.update');
+    Route::delete('settings/team/offsite-backups', [OffsiteBackupController::class, 'destroy'])->name('settings.offsite-backups.destroy');
 
     Route::post('settings/cloud-providers', [CloudProviderController::class, 'store'])
         ->middleware('throttle:10,1,cloud-provider-connect')

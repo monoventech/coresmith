@@ -47,6 +47,7 @@ final class EnforcePlan
         'settings.billing.plan.destroy',
         'settings.billing.plan.resume',
         'settings.billing.portal',
+        'settings.offsite-backups.destroy',
     ];
 
     public const BLOCKED_READS = ['source-providers.connect', 'source-providers.callback', 'github-apps.registered'];

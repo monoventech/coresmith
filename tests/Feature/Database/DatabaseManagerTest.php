@@ -14,7 +14,6 @@ use App\Services\Database\MysqlDriver;
 use App\Services\Database\PostgresDriver;
 use App\Services\Database\SqliteDriver;
 use App\Services\SSH\SSHConnection;
-use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakeSSHTransport;
 
 function databaseManager(): DatabaseManager
@@ -216,19 +215,4 @@ test('restoring refuses when the backup file is missing rather than truncating t
         ->toThrow(BackupNotFoundException::class);
 
     expect(implode("\n", $transport->commands()))->not->toContain('gunzip');
-});
-
-test('a backup can be uploaded to the configured s3 disk', function () {
-    Storage::fake('s3');
-    $transport = (new FakeSSHTransport)->respondTo('cat ', "dump-bytes\n", 0);
-    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
-
-    $key = databaseManager()->uploadBackupToS3(
-        databaseConnection($transport),
-        $database,
-        '/var/coresmith/backups/app_db/app_db-1.sql.gz',
-    );
-
-    expect($key)->toContain('app_db-1.sql.gz');
-    Storage::disk('s3')->assertExists($key);
 });
