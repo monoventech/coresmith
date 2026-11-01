@@ -8,6 +8,15 @@ declare(strict_types=1);
 
 return [
     'version' => is_file(base_path('VERSION')) ? trim((string) file_get_contents(base_path('VERSION'))) : '0.0.0',
+
+    'release_feed' => [
+        'enabled' => (bool) env('CORESMITH_RELEASE_FEED', false),
+        'channel' => env('CORESMITH_RELEASE_FEED_CHANNEL', 'stable'),
+        'minimum' => env('CORESMITH_RELEASE_FEED_MINIMUM'),
+        'withdrawn' => (string) env('CORESMITH_RELEASE_FEED_WITHDRAWN', ''),
+        'changelog_url' => env('CORESMITH_RELEASE_FEED_CHANGELOG_URL', 'https://github.com/monoven/coresmith/releases/tag/v{version}'),
+    ],
+
     'billing_enabled' => (bool) env('CORESMITH_BILLING_ENABLED', false),
     'vault_key' => env('CORESMITH_VAULT_KEY'),
     'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/var/lib/coresmith/setup-token'),
