@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Str;
 use PharData;
 use RuntimeException;
 use Throwable;
@@ -104,6 +105,89 @@ final class PanelBackup
         }
     }
 
+    public function restore(string $archive): void
+    {
+        $connection = DB::connection();
+        $driver = $connection->getDriverName();
+        $config = $connection->getConfig();
+        $entry = $driver === 'sqlite' ? 'database.sqlite' : 'database.sql';
+
+        $unreadable = new RuntimeException("The backup at {$archive} can't be read, so it can't be restored.");
+
+        if (!is_file($archive)) {
+            throw $unreadable;
+        }
+
+        try {
+            $phar = new PharData($archive);
+            $entries = array_map(fn(\PharFileInfo $file): string => $file->getFilename(), iterator_to_array(new \RecursiveIteratorIterator($phar), false));
+        } catch (Throwable) {
+            throw $unreadable;
+        }
+
+        if (!in_array($entry, $entries, true)) {
+            throw new RuntimeException("The backup at {$archive} has no database in it.");
+        }
+
+        match ($driver) {
+            'sqlite' => $this->restoreSqlite($phar, (string) $config['database']),
+            'pgsql', 'mysql', 'mariadb' => $this->restoreExternal($phar, $driver, $config),
+            default => throw new RuntimeException('Backups support SQLite, PostgreSQL and MySQL panels.'),
+        };
+    }
+
+    private function restoreSqlite(PharData $phar, string $live): void
+    {
+        DB::disconnect();
+
+        $work = dirname($live) . '/.restore-' . Str::random(12);
+        File::ensureDirectoryExists($work, 0700);
+
+        try {
+            $phar->extractTo($work, 'database.sqlite', true);
+
+            if (!@rename($work . '/database.sqlite', $live)) {
+                throw new RuntimeException("Coresmith couldn't put the restored database at {$live}.");
+            }
+
+            foreach (['-wal', '-shm', '-journal'] as $suffix) {
+                File::delete($live . $suffix);
+            }
+
+            chmod($live, 0600);
+        } finally {
+            File::deleteDirectory($work);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function restoreExternal(PharData $phar, string $driver, array $config): void
+    {
+        $work = storage_path('app/private/restore-' . Str::random(12));
+        File::ensureDirectoryExists($work, 0700);
+
+        try {
+            $phar->extractTo($work, 'database.sql', true);
+            $file = $work . '/database.sql';
+            $database = (string) $config['database'];
+            $quoted = '`' . str_replace('`', '``', $database) . '`';
+
+            [$command, $environment] = $driver === 'pgsql'
+                ? [['psql', '--quiet', '--single-transaction', '--set=ON_ERROR_STOP=1', '--command=DROP OWNED BY CURRENT_USER', '--file=' . $file, '--host=' . $config['host'], '--port=' . $config['port'], '--username=' . $config['username'], $database], ['PGPASSWORD' => (string) $config['password']]]
+                : [['mysql', '--host=' . $config['host'], '--port=' . $config['port'], '--user=' . $config['username'], $database, "--execute=DROP DATABASE IF EXISTS {$quoted}; CREATE DATABASE {$quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; USE {$quoted}; source {$file}"], ['MYSQL_PWD' => (string) $config['password']]];
+
+            $result = Process::env($environment)->timeout(1800)->run($command);
+
+            if ($result->failed()) {
+                throw new RuntimeException('Restoring the database failed: ' . trim($result->errorOutput()));
+            }
+        } finally {
+            File::deleteDirectory($work);
+        }
+    }
+
     private function dumpDatabase(string $work): void
     {
         $connection = DB::connection();
@@ -111,7 +195,7 @@ final class PanelBackup
 
         match ($connection->getDriverName()) {
             'sqlite' => $connection->statement('VACUUM INTO ?', [$work . '/database.sqlite']),
-            'pgsql' => $this->external(['pg_dump', '--no-owner', '--file=' . $work . '/database.sql', '--host=' . $config['host'], '--port=' . $config['port'], '--username=' . $config['username'], $config['database']], ['PGPASSWORD' => (string) $config['password']]),
+            'pgsql' => $this->external(['pg_dump', '--no-owner', '--clean', '--if-exists', '--file=' . $work . '/database.sql', '--host=' . $config['host'], '--port=' . $config['port'], '--username=' . $config['username'], $config['database']], ['PGPASSWORD' => (string) $config['password']]),
             'mysql', 'mariadb' => $this->external(['mysqldump', '--single-transaction', '--result-file=' . $work . '/database.sql', '--host=' . $config['host'], '--port=' . $config['port'], '--user=' . $config['username'], $config['database']], ['MYSQL_PWD' => (string) $config['password']]),
             default => throw new RuntimeException('Backups support SQLite, PostgreSQL and MySQL panels.'),
         };

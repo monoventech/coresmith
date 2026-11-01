@@ -176,6 +176,8 @@ test('a postgres panel is dumped with pg_dump and its password never appears in 
     Process::assertRan(fn(PendingProcess $process): bool => $process->command === [
         'pg_dump',
         '--no-owner',
+        '--clean',
+        '--if-exists',
         '--file=' . $work . '/database.sql',
         '--host=db.internal',
         '--port=5432',
@@ -280,4 +282,126 @@ test('the panel is backed up every night at four', function () {
     expect($event)->not->toBeNull()
         ->and($event->expression)->toBe('0 4 * * *')
         ->and($event->withoutOverlapping)->toBeTrue();
+});
+
+function backupRestoreArgument(PendingProcess $process, string $prefix): ?string
+{
+    return collect($process->command)->first(fn(string $argument): bool => str_starts_with($argument, $prefix));
+}
+
+function backupExternalArchive(string $driver, string $flag): string
+{
+    backupUseExternalDatabase($driver);
+    backupFakeDump($flag);
+
+    return app(PanelBackup::class)->run()['path'];
+}
+
+test('a sqlite backup restores the database as it was', function () {
+    backupUseProbeDatabase($this->backupRoot);
+    $backup = app(PanelBackup::class)->run();
+    DB::connection('backup_probe')->table('probe')->insert(['note' => 'after']);
+    $live = $this->backupRoot . '/panel.sqlite';
+
+    foreach (['-wal', '-shm', '-journal'] as $suffix) {
+        file_put_contents($live . $suffix, 'stale');
+    }
+
+    app(PanelBackup::class)->restore($backup['path']);
+
+    expect(file_exists($live . '-wal'))->toBeFalse()
+        ->and(file_exists($live . '-shm'))->toBeFalse()
+        ->and(file_exists($live . '-journal'))->toBeFalse();
+
+    $notes = (new PDO('sqlite:' . $live))->query('select note from probe')->fetchAll(PDO::FETCH_COLUMN);
+
+    expect($notes)->toBe(['still here'])
+        ->and(fileperms($live) & 0777)->toBe(0600)
+        ->and(glob($this->backupRoot . '/.restore-*'))->toBe([])
+        ->and(DB::connection('backup_probe')->table('probe')->pluck('note')->all())->toBe(['still here']);
+});
+
+test('a postgres backup is restored in one transaction, over whatever the migrations made, with the password in the environment', function () {
+    $archive = backupExternalArchive('pgsql', '--file=');
+    Process::fake();
+
+    app(PanelBackup::class)->restore($archive);
+
+    Process::assertRan(function (PendingProcess $process): bool {
+        $file = (string) backupRestoreArgument($process, '--file=');
+
+        return $process->command === [
+            'psql',
+            '--quiet',
+            '--single-transaction',
+            '--set=ON_ERROR_STOP=1',
+            '--command=DROP OWNED BY CURRENT_USER',
+            $file,
+            '--host=db.internal',
+            '--port=5432',
+            '--username=coresmith',
+            'coresmith_panel',
+        ] && preg_match('#^--file=' . preg_quote(storage_path('app/private'), '#') . '/restore-[A-Za-z0-9]+/database\.sql$#', $file) === 1
+            && $process->environment === ['PGPASSWORD' => 's3cret-pass']
+            && $process->timeout === 1800
+            && !str_contains(implode(' ', $process->command), 's3cret-pass');
+    });
+
+    expect(glob(storage_path('app/private/restore-*')))->toBe([]);
+});
+
+test('a mysql backup is recreated and restored with its password in the environment', function () {
+    $archive = backupExternalArchive('mysql', '--result-file=');
+    Process::fake();
+
+    app(PanelBackup::class)->restore($archive);
+
+    Process::assertRan(function (PendingProcess $process): bool {
+        $execute = (string) backupRestoreArgument($process, '--execute=');
+
+        return $process->command === ['mysql', '--host=db.internal', '--port=3306', '--user=coresmith', 'coresmith_panel', $execute]
+            && preg_match('#^--execute=DROP DATABASE IF EXISTS `coresmith_panel`; CREATE DATABASE `coresmith_panel` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; USE `coresmith_panel`; source ' . preg_quote(storage_path('app/private'), '#') . '/restore-[A-Za-z0-9]+/database\.sql$#', $execute) === 1
+            && $process->environment === ['MYSQL_PWD' => 's3cret-pass']
+            && $process->timeout === 1800;
+    });
+
+    expect(glob(storage_path('app/private/restore-*')))->toBe([]);
+});
+
+test('a restore that fails says so and leaves nothing behind', function () {
+    $archive = backupExternalArchive('pgsql', '--file=');
+    Process::fake(fn() => Process::result(errorOutput: "ERROR: relation \"users\" does not exist\n", exitCode: 3));
+
+    expect(fn() => app(PanelBackup::class)->restore($archive))->toThrow(RuntimeException::class, 'Restoring the database failed: ERROR: relation "users" does not exist')
+        ->and(glob(storage_path('app/private/restore-*')))->toBe([]);
+});
+
+test('an unreadable archive is not restored', function () {
+    backupUseProbeDatabase($this->backupRoot);
+    File::ensureDirectoryExists(backupDirectory());
+    $truncated = backupDirectory() . '/coresmith-20260913-040000.tar.gz';
+    file_put_contents($truncated, 'truncated');
+
+    expect(fn() => app(PanelBackup::class)->restore($truncated))->toThrow(RuntimeException::class, "The backup at {$truncated} can't be read, so it can't be restored.")
+        ->and(fn() => app(PanelBackup::class)->restore(backupDirectory() . '/missing.tar.gz'))->toThrow(RuntimeException::class, "can't be read, so it can't be restored.")
+        ->and(DB::connection('backup_probe')->table('probe')->pluck('note')->all())->toBe(['still here']);
+});
+
+test('an archive without this panel\'s database in it is not restored', function () {
+    $archive = backupExternalArchive('pgsql', '--file=');
+    backupUseProbeDatabase($this->backupRoot);
+
+    expect(fn() => app(PanelBackup::class)->restore($archive))->toThrow(RuntimeException::class, "The backup at {$archive} has no database in it.")
+        ->and(DB::connection('backup_probe')->table('probe')->pluck('note')->all())->toBe(['still here']);
+});
+
+test('a database name is quoted for mysql however it is spelled', function () {
+    $archive = backupExternalArchive('mysql', '--result-file=');
+    config(['database.connections.backup_external.database' => 'odd`name']);
+    DB::purge('backup_external');
+    Process::fake();
+
+    app(PanelBackup::class)->restore($archive);
+
+    Process::assertRan(fn(PendingProcess $process): bool => str_starts_with((string) backupRestoreArgument($process, '--execute='), '--execute=DROP DATABASE IF EXISTS `odd``name`; CREATE DATABASE `odd``name`'));
 });
