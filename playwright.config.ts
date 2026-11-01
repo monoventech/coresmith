@@ -8,6 +8,14 @@ const authenticated = { storageState: 'tests/E2E/.auth/user.json' }
 const INSTALL_PORT = Number(process.env.E2E_INSTALL_PORT ?? 8124)
 const installBaseURL = `http://127.0.0.1:${INSTALL_PORT}`
 
+const CLOUD_PORT = Number(process.env.E2E_CLOUD_PORT ?? 8127)
+const cloudBaseURL = `http://127.0.0.1:${CLOUD_PORT}`
+const STRIPE_PORT = Number(process.env.E2E_STRIPE_PORT ?? 8126)
+
+const cloudOwner = { baseURL: cloudBaseURL, storageState: 'tests/E2E/.auth/cloud-owner.json' }
+const plainTests = [/installer\.spec\.ts/, /tests\/E2E\/cloud\//]
+const cloudTests = /tests\/E2E\/cloud\/.*\.spec\.ts/
+
 export default defineConfig({
     testDir: './tests/E2E',
     fullyParallel: false,
@@ -25,7 +33,8 @@ export default defineConfig({
     },
 
     projects: [
-        { name: 'setup', testMatch: /.*\.setup\.ts/ },
+        { name: 'setup', testMatch: /auth\.setup\.ts/ },
+        { name: 'cloud-setup', testMatch: /cloud\.setup\.ts/, use: { baseURL: cloudBaseURL } },
 
         {
             name: 'installer',
@@ -35,33 +44,64 @@ export default defineConfig({
 
         {
             name: 'chromium',
-            testIgnore: /installer\.spec\.ts/,
+            testIgnore: plainTests,
             use: { ...devices['Desktop Chrome'], ...authenticated },
             dependencies: ['setup'],
         },
         {
             name: 'firefox',
-            testIgnore: /installer\.spec\.ts/,
+            testIgnore: plainTests,
             use: { ...devices['Desktop Firefox'], ...authenticated },
             dependencies: ['setup'],
         },
         {
             name: 'webkit',
-            testIgnore: /installer\.spec\.ts/,
+            testIgnore: plainTests,
             use: { ...devices['Desktop Safari'], ...authenticated },
             dependencies: ['setup'],
         },
         {
             name: 'mobile-chrome',
-            testIgnore: /installer\.spec\.ts/,
+            testIgnore: plainTests,
             use: { ...devices['Pixel 5'], ...authenticated },
             dependencies: ['setup'],
         },
         {
             name: 'mobile-safari',
-            testIgnore: /installer\.spec\.ts/,
+            testIgnore: plainTests,
             use: { ...devices['iPhone 13'], ...authenticated },
             dependencies: ['setup'],
+        },
+
+        {
+            name: 'cloud-chromium',
+            testMatch: cloudTests,
+            use: { ...devices['Desktop Chrome'], ...cloudOwner },
+            dependencies: ['cloud-setup'],
+        },
+        {
+            name: 'cloud-firefox',
+            testMatch: cloudTests,
+            use: { ...devices['Desktop Firefox'], ...cloudOwner },
+            dependencies: ['cloud-setup'],
+        },
+        {
+            name: 'cloud-webkit',
+            testMatch: cloudTests,
+            use: { ...devices['Desktop Safari'], ...cloudOwner },
+            dependencies: ['cloud-setup'],
+        },
+        {
+            name: 'cloud-mobile-chrome',
+            testMatch: cloudTests,
+            use: { ...devices['Pixel 5'], ...cloudOwner },
+            dependencies: ['cloud-setup'],
+        },
+        {
+            name: 'cloud-mobile-safari',
+            testMatch: cloudTests,
+            use: { ...devices['iPhone 13'], ...cloudOwner },
+            dependencies: ['cloud-setup'],
         },
     ],
 
@@ -81,6 +121,18 @@ export default defineConfig({
         {
             command: 'bun tests/E2E/support/release-feed.ts',
             url: 'http://127.0.0.1:8125/v1/version',
+            reuseExistingServer: !process.env.CI,
+            timeout: 30_000,
+        },
+        {
+            command: `php artisan serve --port=${CLOUD_PORT} --env=e2e-cloud`,
+            url: `${cloudBaseURL}/up`,
+            reuseExistingServer: !process.env.CI,
+            timeout: 30_000,
+        },
+        {
+            command: 'bun tests/E2E/support/stripe-fake.ts',
+            url: `http://127.0.0.1:${STRIPE_PORT}/health`,
             reuseExistingServer: !process.env.CI,
             timeout: 30_000,
         },

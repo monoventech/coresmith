@@ -12,6 +12,10 @@ export const asGuest = base.extend({
     storageState: { cookies: [], origins: [] }
 })
 
+export const asCloudMember = base.extend({
+    storageState: 'tests/E2E/.auth/cloud-member.json'
+})
+
 export { expect }
 
 export const PASSWORD = 'password-for-e2e'
@@ -29,11 +33,23 @@ const CODES: Record<string, string> = {
 }
 
 export function own(testInfo: TestInfo, prefix: string, separator = '-'): string {
-    return `${prefix}${separator}${CODES[testInfo.project.name] ?? testInfo.project.name}`
+    const project = testInfo.project.name.replace(/^cloud-/, '')
+
+    return `${prefix}${separator}${CODES[project] ?? project}`
 }
 
 export function isMobile(testInfo: TestInfo): boolean {
-    return testInfo.project.name.startsWith('mobile-')
+    return /(^|-)mobile-/.test(testInfo.project.name)
+}
+
+export async function signIn(page: Page, email: string, statePath: string) {
+    await page.goto('/login')
+    await page.getByLabel('Email address').fill(email)
+    await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+
+    await page.waitForURL('**/dashboard')
+    await page.context().storageState({ path: statePath })
 }
 
 export function escape(value: string): string {

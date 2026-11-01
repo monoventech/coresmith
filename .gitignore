@@ -39,3 +39,4 @@ yarn-error.log
 /database/demo.sqlite
 /.env.demo
 /storage/app/e2e-setup-token
+/database/e2e-cloud.sqlite

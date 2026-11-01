@@ -212,9 +212,10 @@ jobs:
           cp .env.example .env
           php artisan key:generate --force
           echo "CORESMITH_VAULT_KEY=$(openssl rand -base64 32)" >> .env
-          touch database/e2e.sqlite database/e2e-install.sqlite
+          touch database/e2e.sqlite database/e2e-install.sqlite database/e2e-cloud.sqlite
           bun run e2e:refresh
           bun run e2e:install-refresh
+          bun run e2e:cloud-refresh
 
       - name: Run Playwright
         run: bun run test:e2e

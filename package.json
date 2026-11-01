@@ -21,6 +21,7 @@
         "test:e2e:ui": "playwright test --ui",
         "e2e:refresh": "php artisan migrate:fresh --seed --seeder=E2ESeeder --env=e2e --force",
         "e2e:install-refresh": "php artisan migrate:fresh --env=e2e-install --force && php artisan coresmith:setup-token --env=e2e-install --force",
+        "e2e:cloud-refresh": "php artisan migrate:fresh --seed --seeder=CloudE2ESeeder --env=e2e-cloud --force",
         "lint:sh": "shellcheck -S style scripts/*.sh tests/Machine/*.sh",
         "lint:tailwind": "node scripts/tailwind-canonical.mjs",
         "lint:tailwind:fix": "node scripts/tailwind-canonical.mjs --write"
