@@ -35,6 +35,17 @@ return [
     ],
 
     'edition' => env('CORESMITH_EDITION', 'self-hosted'),
+
+    'billing' => [
+        'trial_days' => (int) env('CORESMITH_TRIAL_DAYS', 14),
+        'signups_per_hour' => (int) env('CORESMITH_SIGNUPS_PER_HOUR', 10),
+        'stripe_api_base' => env('CORESMITH_STRIPE_API_BASE'),
+        'plans' => [
+            'starter' => ['amount' => 9, 'prices' => env('STRIPE_PRICE_STARTER')],
+            'pro' => ['amount' => 19, 'prices' => env('STRIPE_PRICE_PRO')],
+            'business' => ['amount' => 39, 'prices' => env('STRIPE_PRICE_BUSINESS')],
+        ],
+    ],
     'vault_key' => env('CORESMITH_VAULT_KEY'),
     'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/var/lib/coresmith/setup-token'),
     'tenant_domain' => env('CORESMITH_TENANT_DOMAIN'),

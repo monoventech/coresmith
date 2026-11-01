@@ -25,6 +25,12 @@
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="CORESMITH_VAULT_KEY" value="YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="/>
+        <env name="STRIPE_KEY" value="pk_test_coresmith_fake_key"/>
+        <env name="STRIPE_SECRET" value="sk_test_coresmith_fake_key"/>
+        <env name="STRIPE_WEBHOOK_SECRET" value="whsec_coresmith_fake_secret"/>
+        <env name="STRIPE_PRICE_STARTER" value="price_test_starter"/>
+        <env name="STRIPE_PRICE_PRO" value="price_test_pro"/>
+        <env name="STRIPE_PRICE_BUSINESS" value="price_test_business"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>

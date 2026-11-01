@@ -18,9 +18,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Cashier\Billable;
+use Laravel\Cashier\PaymentMethod;
+use Stripe\PaymentMethod as StripePaymentMethod;
 
 class Team extends Model
 {
+    use Billable {
+        fillPaymentMethodDetails as cashierFillPaymentMethodDetails;
+    }
+
     /** @use HasFactory<TeamFactory> */
     use HasFactory, HasUlids, SoftDeletes;
 
@@ -78,5 +85,38 @@ class Team extends Model
     public function cloudProviders(): HasMany
     {
         return $this->hasMany(CloudProvider::class);
+    }
+
+    public function billingInvoices(): HasMany
+    {
+        return $this->hasMany(TeamInvoice::class)->orderByDesc('period_start');
+    }
+
+    public function stripeName(): ?string
+    {
+        return $this->name;
+    }
+
+    public function stripeEmail(): ?string
+    {
+        return User::query()->whereKey($this->owner_id)->value('email');
+    }
+
+    protected function fillPaymentMethodDetails(PaymentMethod|StripePaymentMethod|null $paymentMethod)
+    {
+        $this->cashierFillPaymentMethodDetails($paymentMethod);
+
+        $card = $paymentMethod?->type === 'card' ? $paymentMethod->card : null;
+        $this->pm_expires = $card === null ? null : sprintf('%02d/%02d', $card->exp_month, $card->exp_year % 100);
+
+        return $this;
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'trial_ends_at' => 'datetime',
+            'trial_reminded_at' => 'datetime',
+        ];
     }
 }
