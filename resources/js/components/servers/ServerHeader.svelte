@@ -9,7 +9,7 @@
     import { Input } from '@/components/ui/input'
     import type { ServerHeader } from '@/lib/servers'
     import { router } from '@inertiajs/svelte'
-    import { TriangleAlert } from '@lucide/svelte'
+    import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
 
     let { server }: { server: ServerHeader } = $props()
 
@@ -100,6 +100,19 @@
         changedAt={server.host_key.changed_at}
         canManage={server.can.update}
     />
+{/if}
+
+{#if server.active && server.unreachable}
+    <div
+        class="tint-destructive mt-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3"
+        data-testid="unreachable-banner"
+    >
+        <OctagonAlert class="size-4.5 shrink-0 text-destructive" />
+        <span class="min-w-0 flex-1 text-[13.5px]">
+            <span class="font-semibold">Coresmith can't reach {server.name} over SSH.</span>
+            {`${server.unreachable.last_answer === null ? '' : ` The last answer was ${server.unreachable.last_answer}.`} ${server.unreachable.reason}`}
+        </span>
+    </div>
 {/if}
 
 {#if server.disk_warning}

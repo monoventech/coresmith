@@ -20,6 +20,7 @@ use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\ServerMetric;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\TeamDomain;
@@ -29,12 +30,14 @@ use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
+use App\Services\Server\ServerReachability;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use phpseclib3\Exception\UnableToConnectException;
 use Spatie\Activitylog\Models\Activity;
 
 final class E2ESeeder extends Seeder
@@ -134,6 +137,8 @@ final class E2ESeeder extends Seeder
         $this->githubFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
+        $this->unreachable('down-01', '198.51.100.70');
+        $this->shortOfMemory('hot-01', '198.51.100.71');
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->auditFixtures();
 
@@ -354,6 +359,32 @@ final class E2ESeeder extends Seeder
             'host_key_fingerprint' => $status === ServerStatus::Active ? 'SHA256:' . substr(base64_encode(hash('sha256', $name, true)), 0, 43) : null,
             'last_connected_at' => $status === ServerStatus::Active ? now() : null,
         ]);
+    }
+
+    private function unreachable(string $name, string $ip): void
+    {
+        $server = $this->server($name, $ip, ServerStatus::Active);
+
+        $server->forceFill([
+            'unreachable_since' => now()->subMinutes(25),
+            'connection_failures' => 25,
+            'last_connection_error' => ServerReachability::reason($server, new UnableToConnectException('Cannot connect to ' . $ip . ':22. Error 111. Connection refused')),
+            'last_connected_at' => now()->subMinutes(26),
+        ])->save();
+    }
+
+    private function shortOfMemory(string $name, string $ip): void
+    {
+        $server = $this->server($name, $ip, ServerStatus::Active);
+        $newest = CarbonImmutable::now()->startOfMinute()->addMinutes(self::METRICS_AHEAD_MINUTES);
+
+        foreach ([97, 97, 98] as $step => $memory) {
+            ServerMetric::factory()->for($server)->create([
+                'memory_percent' => $memory,
+                'disk_percent' => 40,
+                'recorded_at' => $newest->subMinutes(2 - $step),
+            ]);
+        }
     }
 
     private function rekeyed(string $name, string $ip): void
