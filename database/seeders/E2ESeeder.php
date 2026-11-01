@@ -174,7 +174,7 @@ final class E2ESeeder extends Seeder
 
         activity()
             ->withProperties(['from' => '0.1.0', 'to' => '0.1.1', 'trigger' => 'auto', 'duration_seconds' => 94, 'signature' => 'unchecked'])
-            ->createdAt(now()->subMinute())
+            ->createdAt(now()->addMinutes(self::METRICS_AHEAD_MINUTES))
             ->log('panel_updated');
 
         $this->managedPanel();
