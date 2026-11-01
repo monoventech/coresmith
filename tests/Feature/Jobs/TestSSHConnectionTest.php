@@ -8,7 +8,6 @@ use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\AuditServer;
 use App\Jobs\TestSSHConnection;
 use App\Models\Server;
-use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\FakeSSHTransport;
@@ -77,9 +76,9 @@ test('a failing command leaves the server untouched', function () {
 });
 
 test('a changed host key does not clear the stored fingerprint', function () {
-    $known = HostKeyFingerprint::fromHostKey('original-key');
+    $known = FakeSSHTransport::fingerprintOf('original-key');
     $server = Server::factory()->create(['host_key_fingerprint' => $known]);
-    $transport = (new FakeSSHTransport)->setHostKey('attacker-key');
+    $transport = (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('attacker-key'));
 
     expect(fn() => runConnectionTest($server, $transport))->toThrow(HostKeyChangedException::class);
 

@@ -304,7 +304,7 @@ test('a recovery mail that cannot be sent is reported and the collection carries
 });
 
 test('a healthy collection records its answer in one statement', function () {
-    $server = reachabilityServer(['host_key_fingerprint' => HostKeyFingerprint::fromHostKey('fake-host-key')]);
+    $server = reachabilityServer(['host_key_fingerprint' => HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY)]);
 
     $updates = reachabilityUpdates($server, reachabilityHealthy());
 
@@ -315,7 +315,7 @@ test('a healthy collection records its answer in one statement', function () {
 test('the answer that ends an outage clears it in one statement', function () {
     Notification::fake();
     $server = reachabilityServer([
-        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('fake-host-key'),
+        'host_key_fingerprint' => HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY),
         'unreachable_since' => now()->subMinutes(5),
         'connection_failures' => 5,
     ]);
@@ -345,7 +345,7 @@ test('a changed host key is neither collected nor counted', function () {
     Queue::fake();
     $healthy = reachabilityServer(['name' => 'healthy']);
     $rekeyed = reachabilityServer(['name' => 'rekeyed', 'host_key_fingerprint' => 'SHA256:old', 'pending_host_key_fingerprint' => 'SHA256:new']);
-    $transport = reachabilityHealthy()->setHostKey('a different host key');
+    $transport = reachabilityHealthy()->setHostKey(FakeSSHTransport::keyNamed('a different host key'));
 
     reachabilityCollect($rekeyed, $transport);
 
@@ -549,13 +549,13 @@ test('the server header carries no outage for a reachable server', function () {
 
 test('a server whose host key changed carries the key prompt and no outage in its header', function () {
     $server = reachabilityServer([
-        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('the old host key'),
+        'host_key_fingerprint' => FakeSSHTransport::fingerprintOf('the old host key'),
         'unreachable_since' => now()->subMinutes(30),
         'last_connected_at' => now()->subMinutes(33),
         'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
     ]);
 
-    expect(fn() => reachabilityCollect($server, reachabilityHealthy()->setHostKey('a new host key after a rebuild')))->toThrow(HostKeyChangedException::class);
+    expect(fn() => reachabilityCollect($server, reachabilityHealthy()->setHostKey(FakeSSHTransport::keyNamed('a new host key after a rebuild'))))->toThrow(HostKeyChangedException::class);
 
     $header = app(ServerPresenter::class)->header($server->fresh(), $server->team->members()->first());
 

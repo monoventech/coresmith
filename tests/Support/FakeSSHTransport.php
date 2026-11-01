@@ -6,6 +6,7 @@ namespace Tests\Support;
 
 use App\Services\Runtime\Catalog;
 use App\Services\SSH\Contracts\SSHTransport;
+use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnection;
 use Closure;
 use phpseclib3\Crypt\Common\PrivateKey;
@@ -16,7 +17,9 @@ final class FakeSSHTransport implements SSHTransport
 {
     public const STAGED_UPLOAD = '/tmp/coresmith-upload.Fake000001';
 
-    private string $hostKey = 'fake-host-key';
+    public const HOST_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBoM6eEh29z9GyfaiV/OH8xLRwdtOyw0trj85BenDW4';
+
+    private string $hostKey = self::HOST_KEY;
 
     private int $loginFailures = 0;
 
@@ -61,6 +64,16 @@ final class FakeSSHTransport implements SSHTransport
 
     /** @var array<string, Closure> */
     private array $hooks = [];
+
+    public static function keyNamed(string $label): string
+    {
+        return 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . hash('sha256', $label, true));
+    }
+
+    public static function fingerprintOf(string $label): string
+    {
+        return (string) HostKeyFingerprint::fromPublicKey(self::keyNamed($label));
+    }
 
     public function setHostKey(string $hostKey): self
     {

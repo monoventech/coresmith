@@ -150,16 +150,18 @@ final class SSHConnection
 
     private function verifyHostKey(): void
     {
-        $fingerprint = HostKeyFingerprint::fromHostKey($this->transport->hostKey());
+        $hostKey = $this->transport->hostKey();
+        $fingerprint = HostKeyFingerprint::fromPublicKey($hostKey)
+            ?? throw new ConnectionClosedException("{$this->server->ip_address} did not present a host key Coresmith could read.");
         $known = $this->server->host_key_fingerprint;
 
-        if ($known === null || $known === '') {
-            $this->server->forceFill(['host_key_fingerprint' => $fingerprint])->save();
-
+        if ($known !== null && hash_equals($known, $fingerprint)) {
             return;
         }
 
-        if (hash_equals($known, $fingerprint)) {
+        if ($known === null || $known === '' || hash_equals($known, HostKeyFingerprint::legacy($hostKey))) {
+            $this->server->forceFill(['host_key_fingerprint' => $fingerprint])->save();
+
             return;
         }
 

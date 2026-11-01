@@ -57,15 +57,25 @@ test('a real server negotiates only the algorithms coresmith pins', function () 
 
 test('a real server presents the same host key fingerprint on every connection', function () {
     $first = liveSshTransport();
-    $fingerprint = HostKeyFingerprint::fromHostKey($first->hostKey());
+    $fingerprint = HostKeyFingerprint::fromPublicKey($first->hostKey());
     $first->disconnect();
 
     $second = liveSshTransport();
 
     expect($fingerprint)->toStartWith('SHA256:')
-        ->and(HostKeyFingerprint::fromHostKey($second->hostKey()))->toBe($fingerprint);
+        ->and(HostKeyFingerprint::fromPublicKey($second->hostKey()))->toBe($fingerprint);
 
     $second->disconnect();
+});
+
+test('the host key fingerprint of a real server is the one ssh-keygen prints for it on that server', function () {
+    $transport = liveSshTransport();
+    $file = $transport->negotiatedAlgorithms()['hostkey'] === 'ssh-ed25519' ? 'ssh_host_ed25519_key.pub' : 'ssh_host_rsa_key.pub';
+    $printed = preg_split('/\s+/', trim($transport->exec("ssh-keygen -lf /etc/ssh/{$file}"))) ?: [];
+
+    expect($printed[1] ?? null)->toBe(HostKeyFingerprint::fromPublicKey($transport->hostKey()));
+
+    $transport->disconnect();
 });
 
 test('a command on a real server returns its output and exit status', function () {

@@ -10,16 +10,16 @@ namespace App\Services\SSH;
 
 final class HostKeyFingerprint
 {
-    public static function fromHostKey(string $hostKey): string
-    {
-        return 'SHA256:' . rtrim(base64_encode(hash('sha256', $hostKey, true)), '=');
-    }
-
     public static function fromPublicKey(string $publicKey): ?string
     {
         $blob = self::blob($publicKey);
 
-        return $blob === null ? null : self::fromHostKey($blob);
+        return $blob === null ? null : self::sha256($blob);
+    }
+
+    public static function legacy(string $hostKey): string
+    {
+        return self::sha256($hostKey);
     }
 
     public static function md5FromPublicKey(string $publicKey): ?string
@@ -27,6 +27,11 @@ final class HostKeyFingerprint
         $blob = self::blob($publicKey);
 
         return $blob === null ? null : implode(':', str_split(md5($blob), 2));
+    }
+
+    private static function sha256(string $bytes): string
+    {
+        return 'SHA256:' . rtrim(base64_encode(hash('sha256', $bytes, true)), '=');
     }
 
     private static function blob(string $publicKey): ?string

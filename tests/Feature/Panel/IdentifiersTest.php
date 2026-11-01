@@ -46,7 +46,7 @@ test('a generated key pair fingerprints its own public key', function () {
     $pair = (new KeyPairGenerator)->generate();
     $blob = base64_decode(preg_split('/\s+/', $pair->publicKey)[1], true);
 
-    expect(HostKeyFingerprint::fromPublicKey($pair->publicKey))->toBe(HostKeyFingerprint::fromHostKey($blob));
+    expect(HostKeyFingerprint::fromPublicKey($pair->publicKey))->toBe('SHA256:' . rtrim(base64_encode(hash('sha256', $blob, true)), '='));
 });
 
 test('something that is not a public key has no fingerprint', function (string $publicKey) {

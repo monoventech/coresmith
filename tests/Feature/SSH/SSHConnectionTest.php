@@ -19,27 +19,27 @@ function connectTo(Server $server, FakeSSHTransport $transport): SSHConnection
 
 test('the first connection records the host key fingerprint', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
-    $transport = (new FakeSSHTransport)->setHostKey('host-key-material');
+    $transport = (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('host-key-material'));
 
     connectTo($server, $transport);
 
     expect($server->fresh()->host_key_fingerprint)
-        ->toBe(HostKeyFingerprint::fromHostKey('host-key-material'));
+        ->toBe(FakeSSHTransport::fingerprintOf('host-key-material'));
 });
 
 test('a matching host key connects', function () {
-    $transport = (new FakeSSHTransport)->setHostKey('host-key-material');
+    $transport = (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('host-key-material'));
     $server = Server::factory()->create([
-        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('host-key-material'),
+        'host_key_fingerprint' => FakeSSHTransport::fingerprintOf('host-key-material'),
     ]);
 
     expect(connectTo($server, $transport)->execute('whoami')->successful())->toBeTrue();
 });
 
 test('a changed host key is refused before authenticating', function () {
-    $transport = (new FakeSSHTransport)->setHostKey('attacker-key');
+    $transport = (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('attacker-key'));
     $server = Server::factory()->create([
-        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('original-key'),
+        'host_key_fingerprint' => FakeSSHTransport::fingerprintOf('original-key'),
     ]);
 
     try {
@@ -47,15 +47,15 @@ test('a changed host key is refused before authenticating', function () {
         $this->fail('Expected HostKeyChangedException');
     } catch (HostKeyChangedException $e) {
         expect($transport->loginAttempted())->toBeFalse()
-            ->and($e->expected())->toBe(HostKeyFingerprint::fromHostKey('original-key'))
-            ->and($e->actual())->toBe(HostKeyFingerprint::fromHostKey('attacker-key'));
+            ->and($e->expected())->toBe(FakeSSHTransport::fingerprintOf('original-key'))
+            ->and($e->actual())->toBe(FakeSSHTransport::fingerprintOf('attacker-key'));
     }
 });
 
 test('a changed host key is logged as a security event', function () {
-    $transport = (new FakeSSHTransport)->setHostKey('attacker-key');
+    $transport = (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('attacker-key'));
     $server = Server::factory()->create([
-        'host_key_fingerprint' => HostKeyFingerprint::fromHostKey('original-key'),
+        'host_key_fingerprint' => FakeSSHTransport::fingerprintOf('original-key'),
     ]);
 
     try {
@@ -65,6 +65,73 @@ test('a changed host key is logged as a security event', function () {
     }
 
     expect(Activity::where('description', 'ssh_host_key_changed')->count())->toBe(1);
+});
+
+test('the fingerprint recorded is the one ssh-keygen prints for the host key', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+
+    connectTo($server, (new FakeSSHTransport)->setHostKey('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBoM6eEh29z9GyfaiV/OH8xLRwdtOyw0trj85BenDW4'));
+
+    expect($server->fresh()->host_key_fingerprint)->toBe('SHA256:4tuIdFPGvascdN/EivEGNJyqg/5BjbbXAHuVWTItMk0');
+});
+
+test('an RSA host key is recorded by the key, whichever signature algorithm carried it', function () {
+    $blob = 'AAAAB3NzaC1yc2EAAAADAQABAAAAgQCv18shDIVgYG9U8I6NPjovihEbadZjGC5VvpnRd9tqhs4adk1IvYIbRhIdeXDZiG0WWkgA8eB17o80GIXMpW/Qj1TFnCyHhO+rhu2NOq//aIkVUoE3XYsEzPxo0C5cgHKC5e4aoEuY3DFA+fWQWnb+bmvxquJdgQhG4RqoY7c0ww==';
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+
+    connectTo($server, (new FakeSSHTransport)->setHostKey("rsa-sha2-512 {$blob}"));
+    connectTo($server->fresh(), (new FakeSSHTransport)->setHostKey("rsa-sha2-256 {$blob}"));
+
+    expect($server->fresh())
+        ->host_key_fingerprint->toBe('SHA256:g/kGi3cfVVisrykdQLnRg+GiSfJih8/yIzKY+ODHA/0')
+        ->pending_host_key_fingerprint->toBeNull();
+});
+
+test('a fingerprint recorded in the old format is replaced by the OpenSSH one on the next connection, without a review', function () {
+    $hostKey = FakeSSHTransport::keyNamed('host-key-material');
+    $server = Server::factory()->create(['host_key_fingerprint' => HostKeyFingerprint::legacy($hostKey)]);
+
+    expect(connectTo($server, (new FakeSSHTransport)->setHostKey($hostKey))->execute('whoami')->successful())->toBeTrue();
+
+    expect($server->fresh())
+        ->host_key_fingerprint->toBe(FakeSSHTransport::fingerprintOf('host-key-material'))
+        ->pending_host_key_fingerprint->toBeNull()
+        ->host_key_changed_at->toBeNull()
+        ->and(Activity::where('description', 'ssh_host_key_changed')->count())->toBe(0);
+});
+
+test('a different key is still a change when the fingerprint on record is in the old format', function () {
+    $recorded = HostKeyFingerprint::legacy(FakeSSHTransport::keyNamed('original-key'));
+    $server = Server::factory()->create(['host_key_fingerprint' => $recorded]);
+    $transport = (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('attacker-key'));
+
+    expect(fn() => connectTo($server, $transport))->toThrow(HostKeyChangedException::class);
+
+    expect($server->fresh())
+        ->host_key_fingerprint->toBe($recorded)
+        ->pending_host_key_fingerprint->toBe(FakeSSHTransport::fingerprintOf('attacker-key'))
+        ->and($transport->loginAttempted())->toBeFalse();
+});
+
+test('a host key that cannot be read is refused before signing in, and nothing is trusted', function (string $hostKey) {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = (new FakeSSHTransport)->setHostKey($hostKey);
+
+    expect(fn() => connectTo($server, $transport))->toThrow(ConnectionClosedException::class);
+
+    expect($server->fresh()->host_key_fingerprint)->toBeNull()
+        ->and($transport->loginAttempted())->toBeFalse();
+})->with(['nothing' => '', 'a type alone' => 'ssh-ed25519', 'a bare word' => 'fake-host-key', 'a key that is not base64' => 'ssh-ed25519 not*base64']);
+
+test('a host key that cannot be read is not mistaken for a changed one', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => FakeSSHTransport::fingerprintOf('original-key')]);
+
+    expect(fn() => connectTo($server, (new FakeSSHTransport)->setHostKey('')))->toThrow(ConnectionClosedException::class);
+
+    expect($server->fresh())
+        ->host_key_fingerprint->toBe(FakeSSHTransport::fingerprintOf('original-key'))
+        ->pending_host_key_fingerprint->toBeNull()
+        ->and(Activity::where('description', 'ssh_host_key_changed')->count())->toBe(0);
 });
 
 test('a failed login throws', function () {

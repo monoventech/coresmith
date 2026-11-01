@@ -332,7 +332,7 @@ test('ssh is tried again until the key works', function () {
         ->and($server->fresh())
         ->status->toBe(ServerStatus::Pending)
         ->last_connected_at->not->toBeNull()
-        ->host_key_fingerprint->toBe(HostKeyFingerprint::fromHostKey('fake-host-key'))
+        ->host_key_fingerprint->toBe(HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY))
         ->provisioning_log->toContain('signed in over SSH, waiting for first-boot setup to finish')
         ->and($this->transport->connected())->toBeFalse();
     Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 3);
@@ -395,7 +395,7 @@ test('a changed host key while starting stops creation', function () {
         ->and($server->fresh())
         ->status->toBe(ServerStatus::Creating)
         ->host_key_fingerprint->toBe('SHA256:pinned-before-it-started')
-        ->pending_host_key_fingerprint->toBe(HostKeyFingerprint::fromHostKey('fake-host-key'))
+        ->pending_host_key_fingerprint->toBe(HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY))
         ->and($this->transport->connected())->toBeFalse();
     Sleep::assertNeverSlept();
 });
