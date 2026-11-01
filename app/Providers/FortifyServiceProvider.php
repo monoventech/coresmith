@@ -4,10 +4,13 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Enums\Edition;
 use App\Http\Responses\TeamHomeResponse;
 use App\Services\Sso\SsoConnections;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -36,6 +39,12 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+
+        VerifyEmail::toMailUsing(fn(object $notifiable, string $url): MailMessage => (new MailMessage)
+            ->subject('Confirm your email for Coresmith')
+            ->line('Confirm this address to finish setting up your Coresmith account.')
+            ->action('Confirm your email', $url)
+            ->line('If you did not create an account, you can ignore this email.'));
     }
 
     /**
@@ -72,7 +81,9 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn() => Inertia::render('auth/Register'));
+        Fortify::registerView(fn() => Inertia::render('auth/Register', [
+            'trial' => Edition::current()->isCloud() ? ['days' => (int) config('coresmith.billing.trial_days', 14)] : null,
+        ]));
 
         Fortify::twoFactorChallengeView(fn() => Inertia::render('auth/TwoFactorChallenge'));
 

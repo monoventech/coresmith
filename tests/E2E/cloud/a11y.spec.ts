@@ -18,7 +18,10 @@ const PAGES: [string, Visit][] = [
 
 const OTHER_TEAM_PAGES: [string, Visit][] = [['Fleet on a trial', direct('/trial/dashboard')]]
 
-const GUEST_PAGES: [string, string][] = [['Sign in', '/login']]
+const GUEST_PAGES: [string, string][] = [
+    ['Sign in', '/login'],
+    ['Create an account', '/register']
+]
 
 for (const theme of ['light', 'dark'] as const) {
     test.describe(`cloud accessibility in ${theme}`, () => {

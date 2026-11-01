@@ -15,6 +15,8 @@
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+
+    let { trial = null }: { trial?: { days: number } | null } = $props()
 </script>
 
 <AppHead title="Create an account" />
@@ -24,30 +26,64 @@
         <div class="flex flex-col gap-4">
             <div>
                 <Label for="name" class="mb-1.5">Name</Label>
-                <Input id="name" type="text" required autocomplete="name" name="name" aria-invalid={errors.name ? true : undefined} />
+                <Input
+                    id="name"
+                    type="text"
+                    required
+                    autocomplete="name"
+                    name="name"
+                    aria-invalid={errors.name ? true : undefined}
+                />
                 <InputError message={errors.name} />
             </div>
 
             <div>
                 <Label for="email" class="mb-1.5">Email address</Label>
-                <Input id="email" type="email" required autocomplete="email" name="email" placeholder="you@example.com" aria-invalid={errors.email ? true : undefined} />
+                <Input
+                    id="email"
+                    type="email"
+                    required
+                    autocomplete="email"
+                    name="email"
+                    placeholder="you@example.com"
+                    aria-invalid={errors.email ? true : undefined}
+                />
                 <InputError message={errors.email} />
             </div>
 
             <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                 <div>
                     <Label for="password" class="mb-1.5">Password</Label>
-                    <PasswordInput id="password" required autocomplete="new-password" name="password" aria-invalid={errors.password ? true : undefined} />
+                    <PasswordInput
+                        id="password"
+                        required
+                        autocomplete="new-password"
+                        name="password"
+                        aria-invalid={errors.password ? true : undefined}
+                    />
                     <InputError message={errors.password} />
                 </div>
                 <div>
                     <Label for="password_confirmation" class="mb-1.5">Confirm password</Label>
-                    <PasswordInput id="password_confirmation" required autocomplete="new-password" name="password_confirmation" />
+                    <PasswordInput
+                        id="password_confirmation"
+                        required
+                        autocomplete="new-password"
+                        name="password_confirmation"
+                    />
                     <InputError message={errors.password_confirmation} />
                 </div>
             </div>
 
-            <Button type="submit" class="w-full" disabled={processing} data-test="register-user-button">Create account</Button>
+            {#if trial}
+                <p class="m-0 text-[13px] text-muted-foreground">
+                    Your team starts on a {trial.days}-day trial of Pro with one server. No card needed.
+                </p>
+            {/if}
+
+            <Button type="submit" class="w-full" disabled={processing} data-test="register-user-button"
+                >Create account</Button
+            >
 
             <p class="m-0 text-[13px] text-muted-foreground">
                 Already have one? <TextLink href={route('login')}>Sign in</TextLink>
