@@ -222,3 +222,42 @@ test('toggles require authentication', function () {
 
     $this->put(toggleRouteUrl($application, 'queue_worker'), ['on' => true])->assertRedirect(route('login'));
 });
+
+test('the scheduler cannot be turned on when the app already has 20 cron jobs', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $jobs = array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, 19));
+    $application = toggleRouteApp($team, ['cron_jobs' => $jobs]);
+
+    $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
+        ->put(toggleRouteUrl($application, 'scheduler'), ['on' => true])
+        ->assertSessionHas('error', 'This app already has 20 cron jobs. Remove one, then turn the scheduler on.');
+
+    expect($application->fresh()->cron_jobs)->toHaveCount(20);
+
+    Queue::assertNothingPushed();
+});
+
+test('the scheduler can still be turned off when the app has 20 cron jobs', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $jobs = array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, 18));
+    $application = toggleRouteApp($team, ['cron_jobs' => [...$jobs, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
+
+    $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
+        ->put(toggleRouteUrl($application, 'scheduler'), ['on' => false])
+        ->assertSessionHas('success');
+
+    expect($application->fresh()->cron_jobs)->toBe($jobs);
+});
+
+test('the cron job limit only stops the scheduler', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $jobs = array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, 19));
+    $application = toggleRouteApp($team, ['cron_jobs' => $jobs]);
+
+    $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
+        ->put(toggleRouteUrl($application, 'maintenance_mode'), ['on' => true])
+        ->assertSessionHas('success');
+});

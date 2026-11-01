@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Enums\PowerState;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Panel\CronJobs;
 use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
 use Illuminate\Http\RedirectResponse;
@@ -33,6 +34,10 @@ final class ApplicationToggleController extends Controller
 
         if ($toggles->isOn($application, $toggle) === $on) {
             return back();
+        }
+
+        if ($toggle === SmartToggles::SCHEDULER && $on && count(app(CronJobs::class)->entries($application)) >= CronJobs::MAX_ENTRIES) {
+            return back()->with('error', 'This app already has ' . CronJobs::MAX_ENTRIES . ' cron jobs. Remove one, then turn the scheduler on.');
         }
 
         $problem = $toggle === SmartToggles::REVERB && $on ? app(Reverb::class)->problem($application) : null;

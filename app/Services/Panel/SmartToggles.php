@@ -141,9 +141,9 @@ final class SmartToggles
             self::SCHEDULER => [
                 'key' => $key,
                 'label' => 'Scheduler',
-                'description' => 'artisan schedule:run every minute · cron',
-                'busy_on' => 'Writing the crontab entry…',
-                'busy_off' => 'Removing the crontab entry…',
+                'description' => 'artisan schedule:run ' . $this->schedulerPhrase($application) . ' · cron',
+                'busy_on' => 'Adding the scheduler to the cron file…',
+                'busy_off' => 'Taking the scheduler out of the cron file…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
@@ -209,7 +209,7 @@ final class SmartToggles
         return match ($key) {
             self::MAINTENANCE => (bool) (((array) $application->toggles)[self::MAINTENANCE] ?? false),
             self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->hasProcess($application, self::WORKERS[$key][0]),
-            self::SCHEDULER => collect((array) $application->cron_jobs)->contains(fn(mixed $job): bool => is_array($job) && ($job['command'] ?? null) === self::SCHEDULE_COMMAND),
+            self::SCHEDULER => app(CronJobs::class)->hasScheduler($application),
             self::AUTO_DEPLOY => (bool) $application->quick_deploy,
             self::REVERB => app(Reverb::class)->on($application),
             self::INERTIA_SSR => $this->ssrOn($application),
@@ -468,15 +468,15 @@ final class SmartToggles
 
     private function scheduler(Application $application, bool $on): void
     {
-        $jobs = array_values(array_filter((array) $application->cron_jobs, fn(mixed $job): bool => is_array($job) && ($job['command'] ?? null) !== self::SCHEDULE_COMMAND));
+        $on ? app(CronJobs::class)->enableScheduler($application) : app(CronJobs::class)->disableScheduler($application);
+    }
 
-        if ($on) {
-            $jobs[] = ['schedule' => '* * * * *', 'command' => self::SCHEDULE_COMMAND];
-        }
+    private function schedulerPhrase(Application $application): string
+    {
+        $cron = app(CronJobs::class);
+        $entry = collect($cron->entries($application))->first(fn(array $entry): bool => $cron->isScheduler($entry));
 
-        $application->forceFill(['cron_jobs' => $jobs === [] ? null : $jobs])->save();
-
-        SyncApplicationProcesses::dispatch($application, []);
+        return $entry === null ? 'every minute' : CronSchedule::phrase($entry['schedule']);
     }
 
     private function autoDeploy(Application $application, bool $on): void

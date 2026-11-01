@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Enums\TeamRole;
+use App\Jobs\SyncApplicationCron;
 use App\Jobs\SyncApplicationProcesses;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
@@ -229,7 +230,8 @@ test('turning the scheduler on adds a minutely schedule run and keeps other cron
         ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
     ]);
 
-    Queue::assertPushed(SyncApplicationProcesses::class, fn(SyncApplicationProcesses $job): bool => togglesRemoved($job) === []);
+    Queue::assertPushed(SyncApplicationCron::class, 1);
+    Queue::assertNotPushed(SyncApplicationProcesses::class);
 });
 
 test('turning the scheduler off removes the schedule run and clears an empty list', function () {
@@ -240,7 +242,8 @@ test('turning the scheduler off removes the schedule run and clears an empty lis
 
     expect($application->fresh()->cron_jobs)->toBeNull();
 
-    Queue::assertPushed(SyncApplicationProcesses::class);
+    Queue::assertPushed(SyncApplicationCron::class, 1);
+    Queue::assertNotPushed(SyncApplicationProcesses::class);
 });
 
 test('turning sidekiq on runs it through bundler with no ruby version named and off tears the unit down', function () {
@@ -319,8 +322,20 @@ test('turning a worker on asks the sync to check it started, while turning it of
         return true;
     });
 
-    expect($checked)->toBe(['queue_worker', null, null]);
+    expect($checked)->toBe(['queue_worker', null]);
+
+    Queue::assertPushed(SyncApplicationCron::class, 1);
 });
+
+test('the scheduler toggle says how often the scheduler runs', function (?array $jobs, string $description) {
+    expect(togglesDescribed(togglesApp(['cron_jobs' => $jobs]), SmartToggles::SCHEDULER))
+        ->toMatchArray(['description' => $description, 'busy_on' => 'Adding the scheduler to the cron file…', 'busy_off' => 'Taking the scheduler out of the cron file…']);
+})->with([
+    'off' => [null, 'artisan schedule:run every minute · cron'],
+    'every minute' => [[['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']], 'artisan schedule:run every minute · cron'],
+    'every five minutes' => [[['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run']], 'artisan schedule:run every 5 minutes · cron'],
+    'a custom schedule' => [[['schedule' => '*/5 9-17 * * 1-5', 'command' => 'php artisan schedule:run']], 'artisan schedule:run on a custom schedule · cron'],
+]);
 
 test('a worker is starting from the moment it is turned on until the sync reports how it went', function () {
     $application = togglesApp(['power_state' => PowerState::Active, 'processes' => [['name' => 'queue', 'command' => SmartToggles::QUEUE_COMMAND]]]);
