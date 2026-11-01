@@ -3,6 +3,7 @@ import {
     asGuest,
     backToMonoven,
     blockingViolations,
+    dialog,
     expect,
     gotoApplication,
     gotoDatabase,
@@ -154,6 +155,14 @@ const PAGES: [string, Visit][] = [
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],
+    [
+        'Add a provider dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Add a provider' }).click()
+            await dialog(page).waitFor()
+        }
+    ],
     ['Git settings', direct('/settings/git')],
     ['Notification settings', direct('/settings/notifications')],
     ['API tokens', direct('/settings/api-tokens')],

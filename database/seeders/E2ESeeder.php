@@ -17,6 +17,7 @@ use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Jobs\InstallRuntimes;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
@@ -87,6 +88,9 @@ final class E2ESeeder extends Seeder
         $this->team->members()->attach(User::factory()->create(['name' => 'Rowan Hale', 'email' => self::ROLE_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
 
         $this->bench = $this->server('bench-01', '198.51.100.40', ServerStatus::Active);
+
+        CloudProvider::factory()->for($this->team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'hetzner-e2e-never-sent']);
+        CloudProvider::factory()->linode()->for($this->team)->create(['name' => 'Linode', 'api_token' => 'linode-e2e-never-sent', 'token_failed_at' => now()->subDay()]);
 
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
@@ -311,6 +315,7 @@ final class E2ESeeder extends Seeder
             $lab = Team::factory()->create(['name' => 'Lab ' . $code, 'slug' => 'lab-' . $code, 'owner_id' => $owner->id]);
             $lab->members()->attach($owner, ['role' => TeamRole::Owner->value]);
             $this->registeredApp($lab, $owner, "lab-{$code}", (string) (1041300 + $index));
+            CloudProvider::factory()->vultr()->for($lab)->create(['name' => 'Spare', 'api_token' => "vultr-{$code}-never-sent"]);
         }
 
         $paused = Team::factory()->create(['name' => 'Paused Works', 'slug' => 'paused', 'owner_id' => $owner->id]);
