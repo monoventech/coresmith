@@ -19,6 +19,8 @@ export type ServerCard = {
     logs_href: string
     watch_href: string | null
     applications: { id: string; name: string; kind: string; deploy_href: string }[]
+    cost: string | null
+    provider: string | null
 }
 
 export type ActivityPart = { text: string; mono: boolean }

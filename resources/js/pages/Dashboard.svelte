@@ -145,7 +145,7 @@
                     <div class="relative z-10 mt-4 flex gap-2 border-t border-border pt-3 max-sm:hidden">
                         {#if server.watch_href}
                             <Link href={server.watch_href} class="focus-ring quick-action">Watch deploy</Link>
-                        {:else if server.state.key === 'pending' || server.state.key === 'provisioning' || server.state.key === 'failed'}
+                        {:else if ['pending', 'provisioning', 'failed', 'creating', 'creation_failed'].includes(server.state.key)}
                             <Link href={server.href} class="focus-ring quick-action">Continue setup</Link>
                         {:else if server.applications.length === 0}
                             <Link href={route('servers.applications.create', server.id)} class="focus-ring quick-action">Add an app</Link>
@@ -153,6 +153,9 @@
                             <button type="button" class="focus-ring quick-action" onclick={(event) => quickDeploy(event, server)}>Deploy</button>
                         {/if}
                         <Link href={server.logs_href} class="focus-ring quick-action">Logs</Link>
+                        {#if server.cost}
+                            <span class="ml-auto self-center font-mono text-[12px] text-muted-foreground" title="{server.provider} list price before tax">{server.cost}</span>
+                        {/if}
                     </div>
                 </article>
             {/each}

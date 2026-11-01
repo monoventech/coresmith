@@ -25,6 +25,7 @@ use App\Models\SourceProvider;
 use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\CloudCatalog;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\ResolvedRuntime;
@@ -152,6 +153,8 @@ final class MonovenTenant
             'api_token' => 'do-demo-never-sent',
             'verified_at' => now(),
         ]);
+
+        CloudCatalog::put($this->cloud, CloudCatalogs::digitalocean(), 30 * 24 * 3600);
     }
 
     private function servers(): void

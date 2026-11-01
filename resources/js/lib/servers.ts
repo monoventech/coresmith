@@ -1,3 +1,4 @@
+import type { CloudServer } from '@/lib/cloud'
 import type { EntityState } from '@/lib/fleet'
 
 export type MetricSeries = { now: number | null; series: number[] }
@@ -46,6 +47,7 @@ export type ServerHeader = {
         ssh_user: string
         audit: ServerAudit | null
     } | null
+    cloud: CloudServer | null
     tabs: { apps: string; databases: string; hardening: string; activity: string }
     can: { update: boolean; delete: boolean; manageFirewall: boolean; createApplication: boolean }
 }

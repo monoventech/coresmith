@@ -11,7 +11,7 @@
     }: { tone: StateTone; state?: string; size?: 'sm' | 'md'; class?: string } = $props()
 
     const motion = $derived(
-        ['deploying', 'provisioning', 'running'].includes(state)
+        ['deploying', 'provisioning', 'running', 'creating'].includes(state)
             ? 'status-dot-working'
             : ['healthy', 'warning', 'live'].includes(state)
               ? 'status-dot-pulse'

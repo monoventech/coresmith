@@ -151,7 +151,23 @@ const PAGES: [string, Visit][] = [
     ],
     ['Database', (page) => gotoDatabase(page, 'forge-01', 'atlas_production')],
     ['Database on an existing server', (page) => gotoDatabase(page, 'forge-01', 'legacy_reports')],
-    ['Provision a server', direct('/servers/create')],
+    [
+        'Provision a server',
+        async (page) => {
+            await page.goto('/servers/create')
+            await page.getByLabel('Region').waitFor()
+        }
+    ],
+    [
+        'Provision with a provider to connect',
+        async (page) => {
+            await page.goto('/servers/create')
+            await page.getByLabel('Provider').selectOption('connect:vultr')
+            await page.getByLabel('API token').waitFor()
+        }
+    ],
+    ['Server being created', (page) => gotoServer(page, 'creating-server')],
+    ['Server whose creation failed', (page) => gotoServer(page, 'failed-create')],
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],

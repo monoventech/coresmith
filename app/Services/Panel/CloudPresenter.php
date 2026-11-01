@@ -175,6 +175,7 @@ final class CloudPresenter
             'type' => $account->type->value,
             'account' => $account->name,
             'instance' => $server->provider_server_id,
+            'ip' => $server->ip_address,
             'region' => $server->region,
             'size' => $server->provider_size,
             'image' => is_string($task?->data['image_label'] ?? null) ? $task->data['image_label'] : $server->provider_image,

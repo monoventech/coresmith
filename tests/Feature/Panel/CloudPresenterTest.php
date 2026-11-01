@@ -140,6 +140,7 @@ test('the server block names where it runs and what it costs', function () {
         'type' => 'hetzner',
         'account' => 'Hetzner production',
         'instance' => '4711',
+        'ip' => $server->ip_address,
         'region' => 'fsn1',
         'size' => 'cx22',
         'image' => 'Ubuntu 24.04',

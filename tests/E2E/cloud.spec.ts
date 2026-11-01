@@ -1,4 +1,9 @@
-import { asMember, backToMonoven, dialog, expect, own, test, toast } from './support/fixtures'
+import type { Page } from '@playwright/test'
+import { asMember, backToMonoven, dialog, expect, gotoServer, own, test, toast } from './support/fixtures'
+
+function provider(page: Page) {
+    return page.getByLabel('Provider')
+}
 
 test.describe('provider accounts', () => {
     test.afterEach(async ({ page }) => {
@@ -75,4 +80,104 @@ asMember('a deployer sees the accounts but cannot change them', async ({ page })
     await expect(card.getByRole('button', { name: 'Add a provider' })).toHaveCount(0)
     await expect(card.getByRole('button', { name: 'Replace token' })).toHaveCount(0)
     await expect(card.getByRole('button', { name: /^Remove / })).toHaveCount(0)
+})
+
+test.describe('provisioning through a provider', () => {
+    test("the provision form lists the team's accounts, the providers still to connect and your own vm", async ({ page }) => {
+        await page.goto('/servers/create')
+
+        await expect(provider(page).locator('option')).toContainText(['DigitalOcean', 'Hetzner Cloud', 'Linode, token refused', 'Vultr, not connected yet', 'Bring your own VM'])
+    })
+
+    test('a connected account offers its regions, sizes and images with prices', async ({ page }) => {
+        await page.goto('/servers/create')
+        await provider(page).selectOption({ label: 'Hetzner Cloud' })
+
+        await expect(page.getByLabel('Region')).toHaveValue('fsn1')
+        await expect(page.getByLabel('Region').locator('option', { hasText: 'Ashburn (ash)' })).toHaveCount(1)
+        await expect(page.getByLabel('Size')).toHaveValue('cx22')
+        await expect(page.getByLabel('Size').locator('option', { hasText: /4 GB · 2 vCPU · €3\.79\/mo/ }).first()).toBeAttached()
+        await expect(page.getByLabel('Image')).toHaveValue('ubuntu-24.04')
+        await expect(page.getByRole('main')).toContainText('cx22 · 40 GB disk · €3.79 a month before tax, billed by Hetzner Cloud.')
+
+        await page.getByLabel('Region').selectOption('ash')
+
+        await expect(page.getByLabel('Size').locator('option')).toHaveCount(1)
+        await expect(page.getByLabel('Size')).toHaveValue('cpx21')
+        await expect(page.getByLabel('Size').locator('option')).toContainText('€8.49/mo')
+    })
+
+    test('a server is created at the provider and the page follows it', async ({ page }) => {
+        const name = `e2e-${Date.now().toString(36)}`
+
+        await page.goto('/servers/create')
+        await provider(page).selectOption({ label: 'Hetzner Cloud' })
+        await page.getByLabel('Server name').fill(name)
+        await page.getByLabel('Region').selectOption({ label: 'Falkenstein (fsn1)' })
+        await page.getByRole('button', { name: 'Provision server' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+        await expect(toast(page)).toContainText('at Hetzner Cloud. This page follows along')
+        await expect(page.getByTestId('creation-card')).toContainText('Step 1 of 4')
+        await expect(page.getByTestId('creation-card')).toContainText('Create the server')
+        await expect(page.getByTestId('provisioning-phases')).toContainText('What happens next')
+        await expect(page.getByTestId('provider-line')).toContainText('Hetzner Cloud · cx')
+        await expect(page.getByTestId('provider-line')).toContainText('a month before tax')
+    })
+
+    test('a provider not connected yet asks for its token first', async ({ page }) => {
+        await page.goto('/servers/create')
+        await provider(page).selectOption({ label: 'Vultr, not connected yet' })
+
+        await expect(page.getByLabel('API token')).toBeVisible()
+        await expect(page.getByLabel('Region')).toHaveCount(0)
+
+        await page.getByLabel('API token').fill('not-a-real-key')
+        await page.getByRole('button', { name: 'Connect Vultr' }).click()
+
+        await expect(page.getByRole('alert').filter({ hasText: "Coresmith couldn't reach Vultr" })).toBeVisible()
+    })
+
+    test('an account whose token was refused says so instead of loading sizes', async ({ page }) => {
+        await page.goto('/servers/create')
+        await provider(page).selectOption({ label: 'Linode, token refused' })
+
+        await expect(page.getByRole('main')).toContainText("Linode refused this account's token on")
+        await expect(page.getByRole('link', { name: 'Open team settings' })).toBeVisible()
+        await expect(page.getByLabel('Region')).toHaveCount(0)
+    })
+
+    test('a server being created shows its steps', async ({ page }) => {
+        await gotoServer(page, 'creating-server')
+
+        await expect(page.getByTestId('creation-card')).toContainText('Step 2 of 4')
+        await expect(page.getByText('Creating', { exact: true }).first()).toBeVisible()
+    })
+
+    test('a failed creation says what happened and offers to try again', async ({ page }) => {
+        await gotoServer(page, 'failed-create')
+
+        await expect(page.getByTestId('creation-error')).toContainText("couldn't sign in over SSH within 10 minutes")
+        await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+    })
+
+    test('a creation the provider refused can be removed', async ({ page }) => {
+        await gotoServer(page, 'refused-create')
+        await page.getByRole('button', { name: 'Remove', exact: true }).click()
+
+        await expect(dialog(page)).toContainText('Nothing was created at Hetzner Cloud, so there is nothing to destroy.')
+
+        await dialog(page).getByRole('button', { name: 'Keep it' }).click()
+
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('trying again resumes the creation', async ({ page }, testInfo) => {
+        await gotoServer(page, own(testInfo, 'retry'))
+        await page.getByRole('button', { name: 'Try again' }).click()
+
+        await expect(toast(page)).toContainText('Trying again.')
+        await expect(page.getByTestId('creation-card')).toContainText('Step 2 of 4')
+        await expect(page.getByTestId('creation-error')).toHaveCount(0)
+    })
 })

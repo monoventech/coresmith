@@ -112,6 +112,18 @@ test.describe('quick actions on a server card', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
     })
 
+    test('a provider server shows what it costs a month', async ({ page }) => {
+        await page.goto('/dashboard')
+
+        await expect(card(page, 'outpost-01')).toContainText('$12/mo')
+    })
+
+    test('a server being created offers to continue setup', async ({ page }) => {
+        await page.goto('/dashboard')
+
+        await expect(card(page, 'creating-server').getByRole('link', { name: 'Continue setup' })).toBeVisible()
+    })
+
     test('a server that is not connected offers to continue setup', async ({ page }) => {
         await page.goto('/dashboard')
         await card(page, 'empty-server').getByRole('link', { name: 'Continue setup' }).click()

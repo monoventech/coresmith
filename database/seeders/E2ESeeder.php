@@ -27,11 +27,15 @@ use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
+use App\Services\Cloud\CloudCatalog;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
+use App\Services\Server\ProvisioningLog;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Support\CloudCatalogs;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
@@ -89,7 +93,9 @@ final class E2ESeeder extends Seeder
 
         $this->bench = $this->server('bench-01', '198.51.100.40', ServerStatus::Active);
 
-        CloudProvider::factory()->for($this->team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'hetzner-e2e-never-sent']);
+        $hetzner = CloudProvider::factory()->for($this->team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'hetzner-e2e-never-sent']);
+        CloudCatalog::put($hetzner, CloudCatalogs::hetzner(), 30 * 24 * 3600);
+        $this->cloudServers($hetzner);
         CloudProvider::factory()->linode()->for($this->team)->create(['name' => 'Linode', 'api_token' => 'linode-e2e-never-sent', 'token_failed_at' => now()->subDay()]);
 
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
@@ -142,6 +148,44 @@ final class E2ESeeder extends Seeder
         $this->auditFixtures();
 
         $this->otherTeams($tenant->owner, $password);
+    }
+
+    private function cloudServers(CloudProvider $hetzner): void
+    {
+        $creating = $this->cloudServer($hetzner, 'creating-server', '4720');
+        CloudTask::start($creating, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::advance($creating, 'boot');
+        ProvisioningLog::append($creating, 'creating creating-server at Hetzner Cloud, cx22 in fsn1 with Ubuntu 24.04');
+        ProvisioningLog::append($creating->fresh(), 'Hetzner Cloud accepted it as server 4720, waiting for it to boot');
+
+        $failed = $this->cloudServer($hetzner, 'failed-create', '4721', '203.0.113.121');
+        CloudTask::start($failed, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::advance($failed, 'ssh');
+        CloudTask::fail($failed, "failed-create is running at 203.0.113.121, but Coresmith couldn't sign in over SSH within 10 minutes. The last error was: SSH authentication failed for root@203.0.113.121. Try again to keep waiting, or destroy it and provision another.");
+
+        $refused = $this->cloudServer($hetzner, 'refused-create', null);
+        CloudTask::start($refused, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::fail($refused, 'Hetzner Cloud refused the request. Hetzner Cloud said: server type cx22 is not available in hel1. Remove this server and provision it again with another size or region.');
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $retry = $this->cloudServer($hetzner, "retry-{$code}", '47' . (30 + $index));
+            CloudTask::start($retry, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+            CloudTask::advance($retry, 'boot');
+            CloudTask::fail($retry, "Hetzner Cloud didn't finish starting retry-{$code} within 10 minutes. It may still be starting: try again to keep waiting, or destroy it.");
+        }
+    }
+
+    private function cloudServer(CloudProvider $account, string $name, ?string $instance, ?string $ip = null): Server
+    {
+        return Server::factory()->fromProvider($account)->creating()->create([
+            'name' => $name,
+            'environment' => 'Production',
+            'ip_address' => $ip,
+            'provider_server_id' => $instance,
+            'provider_monthly_cost' => '4.35',
+            'provider_currency' => 'EUR',
+            'host_key_fingerprint' => null,
+        ]);
     }
 
     private function auditFixtures(): void

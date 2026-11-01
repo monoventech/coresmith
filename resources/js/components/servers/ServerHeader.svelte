@@ -75,12 +75,19 @@
             >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">{server.meta}</p>
+        {#if server.cloud}
+            <p class="type-body-sm mt-0.5 text-muted-foreground" data-testid="provider-line">
+                {server.cloud.provider} · <span class="font-mono">{server.cloud.size}</span>{server.cloud.monthly
+                    ? ` · ${server.cloud.monthly} a month before tax`
+                    : ''}
+            </p>
+        {/if}
     </div>
     {#if server.can.update || server.can.delete}
         <div class="flex flex-wrap gap-2">
             {#if server.can.update}
                 <Button variant="ghost" onclick={openRename}>Rename</Button>
-                {#if server.active}
+                {#if server.active && server.cloud?.task?.state !== 'running'}
                     <Button variant="outline" onclick={reboot}>Reboot server</Button>
                 {/if}
             {/if}
@@ -163,7 +170,9 @@
         <Dialog.Header>
             <Dialog.Title>Detach {server.name}?</Dialog.Title>
             <Dialog.Description
-                >Coresmith stops managing this server. The VM itself, and everything on it, is untouched.</Dialog.Description
+                >{server.cloud?.instance
+                    ? `Coresmith stops managing ${server.name}. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
+                    : 'Coresmith stops managing this server. The VM itself, and everything on it, is untouched.'}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>
