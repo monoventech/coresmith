@@ -106,7 +106,7 @@ test('the cron file is rewritten from the application cron jobs', function () {
 
     expect($transport->uploads()['/etc/cron.d/.coresmith-app-shop.new'] ?? '')->toContain("* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop -p 'WorkingDirectory=/var/coresmith/apps/shop/current'")
         ->and($transport->uploads()['/etc/cron.d/.coresmith-app-shop.new'] ?? '')->toContain("-- /bin/bash -s < '/etc/coresmith/cron/shop/0.sh'")
-        ->and($transport->uploads()['/etc/coresmith/cron/.shop.new/0.sh'] ?? '')->toBe("{\nphp artisan schedule:run\n} >> '/var/coresmith/apps/shop/shared/logs/scheduler.log' 2>&1\n")
+        ->and($transport->uploads()['/etc/coresmith/cron/.shop.new/0.sh'] ?? '')->toBe("exec >> '/var/coresmith/apps/shop/shared/logs/scheduler.log' 2>&1\n{\nphp artisan schedule:run\n} < /dev/null\n")
         ->and(implode("\n", $transport->commands()))->toContain("mv -f '/etc/cron.d/.coresmith-app-shop.new' '/etc/cron.d/coresmith-app-shop'")
         ->and(implode("\n", $transport->commands()))->toContain("crontab -u 'coresmith-app-shop' -r");
 });

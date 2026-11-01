@@ -68,7 +68,7 @@ final class CrontabBuilder
         $scripts = [];
 
         foreach ($this->entries($application) as $index => $entry) {
-            $scripts[$directory . '/' . $index . '.sh'] = "{\n" . $entry['command'] . "\n} >> " . $log . " 2>&1\n";
+            $scripts[$directory . '/' . $index . '.sh'] = 'exec >> ' . $log . " 2>&1\n{\n" . $entry['command'] . "\n} < /dev/null\n";
         }
 
         return $scripts;

