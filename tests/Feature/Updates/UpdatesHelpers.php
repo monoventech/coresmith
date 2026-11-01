@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseLayout;
+use App\Services\Updates\UpdateRun;
+use App\Services\Updates\UpdateState;
+use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 use Laravel\Horizon\MasterSupervisor;
@@ -152,4 +157,130 @@ function updatesInstall(string $root, string $version = '0.1.0', string $commit 
     symlink($release->path, "{$root}/app");
 
     return $release;
+}
+
+function updatesRun(string $to = '0.1.1', string $trigger = 'cli'): UpdateRun
+{
+    return app(UpdateState::class)->begin(UpdateStatus::start(app(ReleaseLayout::class)->current(), Version::parse($to), $trigger, null));
+}
+
+function updatesMachineKey(array $command): ?string
+{
+    $first = $command[0] ?? '';
+    $second = $command[1] ?? '';
+
+    return match (true) {
+        $first === 'git' && $second === 'init' => 'init',
+        $first === 'git' && in_array('fetch', $command, true) => 'fetch',
+        $first === 'git' && in_array('verify-tag', $command, true) => 'verify',
+        $first === 'git' && in_array('checkout', $command, true) => 'checkout',
+        $first === 'git' && in_array('rev-parse', $command, true) => 'rev-parse',
+        in_array($first, ['git', 'composer', 'bun'], true) && $second === '--version' => "tool:{$first}",
+        $first === 'composer' && $second === 'check-platform-reqs' => 'platform',
+        $first === 'composer' && $second === 'install' => 'composer',
+        $first === PHP_BINARY && $second === 'artisan' => 'artisan:' . ($command[2] ?? ''),
+        $first === 'bun' && $second === 'install' => 'bun-install',
+        $first === 'bun' && $second === 'run' && ($command[2] ?? '') === 'build' => 'bun-build',
+        $first === 'setfacl' => 'setfacl',
+        $first === 'systemctl' && $second === 'is-active' => 'is-active',
+        $first === 'systemctl' && $second === 'show' => 'main-pid',
+        $first === 'gpg' => 'gpg',
+        $first === 'gpgconf' => 'gpgconf',
+        default => null,
+    };
+}
+
+function updatesMachine(array $failures = []): void
+{
+    $registry = updatesRegistry();
+    $registry->processes = [];
+    $registry->pidReads = [];
+
+    Process::fake(['*' => function (PendingProcess $process) use ($failures) {
+        $registry = updatesRegistry();
+        $command = is_array($process->command) ? array_values(array_map('strval', $process->command)) : [(string) $process->command];
+        $registry->processes[] = ['command' => implode(' ', $command), 'path' => $process->path, 'timeout' => $process->timeout, 'environment' => $process->environment];
+        $key = updatesMachineKey($command);
+        $failure = $key === null ? null : ($failures[$key] ?? (str_starts_with($key, 'tool:') ? ($failures['tools'] ?? null) : null));
+
+        if ($failure instanceof Closure) {
+            return $failure($process);
+        }
+
+        if (is_array($failure)) {
+            return Process::result(output: $failure[2] ?? '', errorOutput: $failure[1] ?? '', exitCode: $failure[0]);
+        }
+
+        return updatesMachineEffect($key, $command, $process, $failures);
+    }]);
+}
+
+function updatesMachineEffect(?string $key, array $command, PendingProcess $process, array $failures): mixed
+{
+    $registry = updatesRegistry();
+    $directory = ($index = array_search('-C', $command, true)) === false ? null : ($command[$index + 1] ?? null);
+
+    switch ($key) {
+        case 'init':
+            $target = end($command);
+
+            if (!is_dir($target)) {
+                mkdir($target, 0755, true);
+            }
+
+            break;
+        case 'verify':
+            return Process::result(errorOutput: "[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG 0123456789ABCDEF Coresmith Releases <releases@coresmith.io>\n[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-10-18 1792310400 0 4 0 22 10 00 2222222222222222222222222222222222222222\n[GNUPG:] TRUST_UNDEFINED 0 pgp\n");
+        case 'checkout':
+            $tag = end($command);
+
+            foreach (['storage/app', 'bootstrap/cache', 'public'] as $folder) {
+                if (!is_dir("{$directory}/{$folder}")) {
+                    mkdir("{$directory}/{$folder}", 0755, true);
+                }
+            }
+
+            file_put_contents("{$directory}/VERSION", ($failures['version'] ?? ltrim($tag, 'v')) . "\n");
+            file_put_contents("{$directory}/composer.lock", '{}');
+            file_put_contents("{$directory}/artisan", "<?php\n");
+            file_put_contents("{$directory}/storage/app/.gitignore", "*\n");
+            file_put_contents("{$directory}/bootstrap/cache/.gitignore", "*\n");
+            file_put_contents("{$directory}/public/index.php", "<?php\n");
+
+            break;
+        case 'rev-parse':
+            return Process::result(output: "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0\n");
+        case 'composer':
+            @mkdir("{$process->path}/vendor", 0755, true);
+            file_put_contents("{$process->path}/vendor/autoload.php", "<?php\n");
+
+            break;
+        case 'bun-install':
+            @mkdir("{$process->path}/node_modules/.bin", 0755, true);
+            file_put_contents("{$process->path}/node_modules/.bin/vite", '');
+
+            break;
+        case 'bun-build':
+            @mkdir("{$process->path}/public/build", 0755, true);
+            file_put_contents("{$process->path}/public/build/manifest.json", '{}');
+
+            break;
+        case 'main-pid':
+            $unit = (string) ($command[2] ?? '');
+            $registry->pidReads[$unit] = ($registry->pidReads[$unit] ?? 0) + 1;
+
+            return Process::result(output: (1000 + (($failures['main-pid'] ?? null) === 'stuck' ? 1 : $registry->pidReads[$unit])) . "\n");
+    }
+
+    return Process::result();
+}
+
+function updatesRan(): array
+{
+    return array_column(updatesRegistry()->processes ?? [], 'command');
+}
+
+function updatesProcesses(): array
+{
+    return updatesRegistry()->processes ?? [];
 }
