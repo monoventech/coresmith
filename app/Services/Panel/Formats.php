@@ -8,7 +8,9 @@ declare(strict_types=1);
 
 namespace App\Services\Panel;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Carbon\CarbonInterval;
 
 final class Formats
 {
@@ -106,6 +108,17 @@ final class Formats
         }
 
         return intdiv($seconds, 60) . 'm ' . str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT) . 's';
+    }
+
+    public static function downFor(int $seconds): string
+    {
+        if ($seconds >= 3600) {
+            return CarbonInterval::seconds($seconds)->cascade()->forHumans(['parts' => 2]);
+        }
+
+        $moment = CarbonImmutable::now();
+
+        return (string) self::duration($moment, $moment->addSeconds($seconds));
     }
 
     public static function fingerprint(?string $fingerprint): ?string

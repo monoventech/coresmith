@@ -12,6 +12,7 @@ use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
+use App\Services\Panel\Reverb;
 use App\Services\SafeName;
 
 final class CaddyRouteBuilder
@@ -166,7 +167,28 @@ final class CaddyRouteBuilder
                     ['handler' => 'encode', 'encodings' => ['gzip' => (object) [], 'zstd' => (object) []], 'prefer' => ['gzip', 'zstd']],
                 ],
             ],
+            ...$this->reverbRoutes($application),
             ...$this->applicationRoutes($application),
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function reverbRoutes(Application $application): array
+    {
+        $reverb = app(Reverb::class);
+        $credentials = $reverb->credentials($application);
+
+        if (!$reverb->live($application) || $credentials === null || preg_match(Reverb::ID_PATTERN, $credentials['id']) !== 1 || preg_match(Reverb::ID_PATTERN, $credentials['key']) !== 1) {
+            return [];
+        }
+
+        $proxy = [['handler' => 'reverse_proxy', 'upstreams' => [['dial' => '127.0.0.1:' . $reverb->port($application)]]]];
+
+        return [
+            ['match' => [['path' => ['/app/' . $credentials['key']], 'header' => ['Upgrade' => ['websocket']]]], 'handle' => $proxy],
+            ['match' => [['path' => ['/apps/' . $credentials['id'] . '/*']]], 'handle' => $proxy],
         ];
     }
 

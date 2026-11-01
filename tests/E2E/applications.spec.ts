@@ -18,6 +18,10 @@ function toggle(page: Page, name: string) {
     return page.getByTestId('smart-toggles').getByRole('switch', { name })
 }
 
+function toggleRow(page: Page, key: string) {
+    return page.getByTestId(`toggle-${key}`)
+}
+
 async function openAddApp(page: Page) {
     await gotoServer(page, 'bench-01')
     await page.getByRole('link', { name: 'Add an app' }).click()
@@ -1289,3 +1293,54 @@ test.describe('an app on an end-of-life runtime', () => {
         await expect(banner).toContainText('Set .nvmrc to 24, then deploy.')
     })
 })
+
+test.describe('what the repository installs', () => {
+    test('a laravel app with horizon says so on its worker row', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'realtime')
+
+        await gotoApplication(page, 'bench-01', name)
+
+        await expect(toggleRow(page, 'queue_worker')).toContainText(`Detected: laravel/horizon · systemd unit coresmith-app-${name}-queue`)
+        await expect(toggle(page, 'Queue worker')).toBeChecked()
+    })
+
+    test('reverb turns on with the next deploy', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'realtime')
+        const row = toggleRow(page, 'reverb')
+
+        await gotoApplication(page, 'bench-01', name)
+
+        await expect(row).toContainText('Reverb websockets')
+        await expect(row).toContainText(/Available, turning it on gives it port 91[2-6]2 from the next deploy/)
+
+        await toggle(page, 'Reverb websockets').click()
+
+        await expect(toast(page)).toContainText('Saved. Reverb websockets starts with the next deploy.')
+        await expect(row).toContainText(`Starts with the next deploy, on port`)
+        await expect(row).toContainText(`behind wss://${name}.monoven.io/app`)
+        await expect(toggle(page, 'Reverb websockets')).toBeChecked()
+    })
+
+    test('inertia ssr turns on with the next deploy', async ({ page }, testInfo) => {
+        const row = toggleRow(page, 'inertia_ssr')
+
+        await gotoApplication(page, 'bench-01', own(testInfo, 'realtime'))
+
+        await expect(page.getByTestId('smart-toggles').locator('[data-testid^="toggle-"]').first()).toHaveAttribute('data-testid', 'toggle-inertia_ssr')
+        await expect(row).toContainText('Detected from composer.json and package.json · turning it on gives it a port from the next deploy')
+
+        await toggle(page, 'Inertia SSR').click()
+
+        await expect(toast(page)).toContainText('Saved. Inertia SSR starts with the next deploy.')
+        await expect(row).toContainText(/Starts with the next deploy, which builds the SSR bundle · port 137\d\d/)
+        await expect(toggle(page, 'Inertia SSR')).toBeChecked()
+    })
+
+    test('reverb needs its settings first', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'reverb-unset')
+
+        await expect(toggleRow(page, 'reverb')).toContainText('Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on')
+        await expect(toggle(page, 'Reverb websockets')).toBeDisabled()
+    })
+})
+

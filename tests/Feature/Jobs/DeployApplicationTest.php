@@ -146,7 +146,7 @@ test('a second deployment while one is running is cancelled, not queued behind i
     deploy($deployment, healthyDeployTransport());
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Cancelled)
-        ->and($deployment->fresh()->log)->toContain('Another deployment is already in progress');
+        ->and($deployment->fresh()->log)->toBe('Another deploy or a rollback is running for this app, so this one did not start.');
 });
 
 test('the lock is released so the next deployment can run', function () {

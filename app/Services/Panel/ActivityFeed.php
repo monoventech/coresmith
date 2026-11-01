@@ -16,6 +16,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\Runtime\Catalog;
+use App\Services\Server\CertificateCheck;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -180,8 +181,14 @@ final class ActivityFeed
             'audit_fix_applied' => [$this->mono((string) ($properties['service'] ?? '')), $this->text(' stopped and disabled on '), $this->mono($server?->name), $this->text(' so Caddy can take ports 80 and 443')],
             'server_detached' => [$this->mono($server?->name), $this->text(' detached, the VM itself is untouched')],
             'releases_pruned' => [$this->text('Old releases pruned on '), $this->mono($server?->name), $this->text(', ' . (int) ($properties['removed'] ?? 0) . ' removed')],
-            'disk_pressure' => [$this->text('Disk warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%, consider pruning old releases')],
+            'disk_pressure' => ($properties['level'] ?? 'warning') === 'critical'
+                ? [$this->text('Disk at ' . (int) ($properties['percent'] ?? 0) . '% on '), $this->mono($server?->name), $this->text(', deploys are paused until space is freed')]
+                : [$this->text('Disk warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%, consider pruning old releases')],
+            'memory_pressure' => [$this->text('Memory warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '% for three minutes')],
+            'provisioning_failed' => [$this->text('Provisioning stopped on '), $this->mono($server?->name), $this->text(' at phase ' . (int) ($properties['phase'] ?? 1) . ', ' . ($properties['name'] ?? 'Provisioning'))],
             'firewall_rule_changed' => [$this->text('Firewall ' . ($properties['action'] ?? 'changed') . ' port ' . ($properties['port'] ?? '') . ' on '), $this->mono($server?->name)],
+            'server_unreachable' => [$this->mono($server?->name), $this->text(' stopped answering over SSH')],
+            'server_reachable' => [$this->mono($server?->name), $this->text(' answering again' . $this->after($properties['seconds'] ?? null))],
             'ssh_host_key_changed' => [$this->mono($server?->name), $this->text(' presented a different host key, operations paused')],
             'ssh_host_key_accepted' => [$this->text('New host key trusted on '), $this->mono($server?->name)],
             'ssh_host_key_rejected' => [$this->text('Host key change dismissed on '), $this->mono($server?->name)],
@@ -189,11 +196,14 @@ final class ActivityFeed
             'application_created' => [$this->mono($application?->name), $this->text(' created on ' . $application?->server?->name)],
             'application_renamed' => [$this->text('Application renamed to '), $this->mono($application?->name)],
             'application_removed' => [$this->mono($application?->name), $this->text(' stopped and detached from ' . $application?->server?->name)],
+            'deployment_cancelled' => [$this->text('Deploy cancelled, '), $this->mono($application?->name), $this->text($this->cancelledBy($properties['by'] ?? null) . ', nothing changed')],
             'application_rolled_back' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', no rebuild')],
             RollbackHistory::WORKER_DID_NOT_START => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but ' . ($properties['worker'] ?? 'a worker') . ' did not start. Open the app to see why.')],
+            'rollback_blocked' => [$this->mono($application?->name), $this->text(' was not rolled back, a deploy was running. Roll back again once it finishes.')],
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
             'application_stopped' => [$this->mono($application?->name), $this->text(' stopped, visitors see the maintenance page')],
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
+            'certificate_expiring' => [$this->text('Certificate for '), $this->mono((string) ($properties['domain'] ?? '')), $this->text(' on '), $this->mono($application?->name), $this->text(' ' . CertificateCheck::expiry((int) ($properties['days'] ?? 0)))],
             'app_oom_killed' => [$this->mono($application?->name), $this->text(' ' . ($properties['process'] ?? 'a') . ' process killed for going over its ' . (int) ($properties['limit_mb'] ?? 0) . ' MB memory limit, systemd started it again')],
             'runtime_eol_chosen' => [$this->mono($application?->name), $this->text(' was added on ' . app(Catalog::class)->label((string) ($properties['runtime'] ?? '')) . ' ' . ($properties['line'] ?? '') . ', which no longer gets security fixes')],
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
@@ -228,6 +238,16 @@ final class ActivityFeed
         $seconds = (int) $seconds;
 
         return ' in ' . intdiv($seconds, 60) . 'm ' . ($seconds % 60) . 's';
+    }
+
+    private function after(mixed $seconds): string
+    {
+        return is_numeric($seconds) ? ' after ' . Formats::downFor((int) $seconds) : '';
+    }
+
+    private function cancelledBy(mixed $name): string
+    {
+        return is_string($name) && $name !== '' ? ', by ' . $name : '';
     }
 
     /**

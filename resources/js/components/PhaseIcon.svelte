@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Check, Circle, CircleOff, Loader, X } from '@lucide/svelte'
+    import { Check, Circle, CircleOff, CircleSlash, Loader, X } from '@lucide/svelte'
 
     let { state }: { state: string } = $props()
 </script>
@@ -11,6 +11,8 @@
         <Loader class="size-4 text-primary" aria-label="Running" />
     {:else if state === 'failed'}
         <X class="size-4 text-destructive" aria-label="Failed" />
+    {:else if state === 'cancelled'}
+        <CircleSlash class="size-4 text-muted-foreground" aria-label="Cancelled" />
     {:else if state === 'skipped'}
         <CircleOff class="size-4 text-muted-foreground" aria-label="Skipped" />
     {:else}

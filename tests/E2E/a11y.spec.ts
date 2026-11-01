@@ -32,6 +32,9 @@ const PAGES: [string, Visit][] = [
     ['Server apps', (page) => gotoServer(page, 'forge-01')],
     ['Server with a disk warning', (page) => gotoServer(page, 'outpost-01')],
     ['Server with a changed host key', (page) => gotoServer(page, 'rekeyed-server')],
+    ['Unreachable server', (page) => gotoServer(page, 'down-01')],
+    ['Certificates', (page) => gotoApplication(page, 'bench-01', 'certs-app')],
+    ['Realtime toggles', (page) => gotoApplication(page, 'bench-01', 'realtime-chr')],
     ['Server not connected yet', (page) => gotoServer(page, 'empty-server')],
     ['Server checked before provisioning', (page) => gotoServer(page, 'audit-server')],
     ['Server being checked', (page) => gotoServer(page, 'checking-server')],
@@ -111,6 +114,14 @@ const PAGES: [string, Visit][] = [
         async (page) => {
             await page.goto('/dashboard')
             await page.getByTestId('live-deploy').click()
+            await page.getByTestId('phase-rail').waitFor()
+        }
+    ],
+    [
+        'Cancelled deploy',
+        async (page) => {
+            await page.goto('/deployments')
+            await page.getByTestId('deployment-row').filter({ hasText: 'cancelled-app' }).first().click()
             await page.getByTestId('phase-rail').waitFor()
         }
     ],

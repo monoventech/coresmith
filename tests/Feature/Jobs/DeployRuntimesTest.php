@@ -563,6 +563,48 @@ test('a connection that drops while a resumed deploy confirms its runtimes is re
         ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during deps, reconnecting and running it once more');
 });
 
+test('a step the connection dropped is stopped on the server before it runs once more', function (string $step) {
+    Queue::fake();
+    $deployment = Deployment::factory()->for(stackApp())->create();
+    $transport = stackTransport(['composer.json' => '{"require":{"php":"^8.4"}}', 'package.json' => '{"scripts":{"build":"vite build"}}'], ['bun.lock'])->dropConnectionOn($step);
+
+    stackDeploy($deployment, $transport);
+
+    $commands = $transport->commands();
+    $runs = array_keys(array_filter($commands, fn(string $command): bool => str_contains($command, $step)));
+    $stops = array_keys(array_filter($commands, fn(string $command): bool => str_contains($command, 'systemctl stop coresmith-build-shop-' . STACK_RELEASE . '.service || true')));
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($runs)->toHaveCount(2)
+        ->and($stops)->toHaveCount(1)
+        ->and($stops[0])->toBeGreaterThan($runs[0])->toBeLessThan($runs[1]);
+})->with([
+    'installing dependencies' => ['bun install --frozen-lockfile'],
+    'building' => ['bun run build'],
+]);
+
+test('a resumed deploy whose runtime check dropped stops no build', function () {
+    $application = stackApp();
+    $deployment = stackPausedDeployment($application);
+    $lock = Cache::lock('deploy:' . $application->id, DeployApplication::LOCK_SECONDS);
+    $lock->get();
+    $transport = stackTransport()
+        ->respondTo("test -d '/opt/asdf-data/installs/php/8.5.10'", "yes\n")
+        ->dropConnectionOn("test -d '/opt/asdf-data/installs/php/8.5.10'");
+
+    stackDeploy($deployment->fresh(), $transport, $lock->owner());
+
+    $runtimeChecks = array_filter($transport->commands(), fn(string $command): bool => str_contains($command, "test -d '/opt/asdf-data/installs/php/8.5.10'"));
+    $stopsBeforeDeps = array_filter(
+        array_slice($transport->commands(), 0, (int) array_key_last($runtimeChecks)),
+        fn(string $command): bool => str_contains($command, 'systemctl stop'),
+    );
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($runtimeChecks)->toHaveCount(2)
+        ->and($stopsBeforeDeps)->toBe([]);
+});
+
 test('a laravel app with a vite build installs and builds its assets in the deploy', function () {
     Queue::fake();
     $deployment = Deployment::factory()->for(stackApp())->create();

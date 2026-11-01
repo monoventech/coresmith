@@ -90,8 +90,8 @@
                 <span class="text-muted-foreground max-[900px]:hidden" title={row.full ?? undefined}>{row.when ?? '—'}</span>
                 <span class="font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{row.duration ?? '—'}</span>
                 <span class="flex items-center justify-end gap-2.5">
-                    <Badge variant={row.state.tone} dot={row.state.live} pulse={row.state.live}>{row.state.label}</Badge>
-                    {#if row.state.live}
+                    <Badge variant={row.state.tone} dot={row.state.live || row.state.key === 'cancelling'} pulse={row.state.live}>{row.state.label}</Badge>
+                    {#if row.state.live || row.state.key === 'cancelling'}
                         <span class="text-[12.5px] font-medium text-primary-strong">Watch</span>
                     {/if}
                 </span>

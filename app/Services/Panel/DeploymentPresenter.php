@@ -19,7 +19,9 @@ final class DeploymentPresenter
     public static function state(Deployment $deployment): array
     {
         return match ($deployment->status) {
-            DeploymentStatus::Running => ['key' => 'running', 'label' => 'Running', 'tone' => 'accent', 'live' => true],
+            DeploymentStatus::Running => $deployment->cancel_requested_at === null
+                ? ['key' => 'running', 'label' => 'Running', 'tone' => 'accent', 'live' => true]
+                : ['key' => 'cancelling', 'label' => 'Cancelling', 'tone' => 'default', 'live' => false],
             DeploymentStatus::Succeeded => ['key' => 'deployed', 'label' => 'Deployed', 'tone' => 'success', 'live' => false],
             DeploymentStatus::Failed => self::reachedUsers($deployment)
                 ? ['key' => 'failed', 'label' => 'Failed', 'tone' => 'destructive', 'live' => false]

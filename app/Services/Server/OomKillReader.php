@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Server;
 
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -19,11 +20,11 @@ final class OomKillReader
     /**
      * @return list<array{unit: string, at: CarbonImmutable, message: string}>
      */
-    public function read(SSHConnection $connection, CarbonInterface $since): array
+    public function read(SSHConnection $connection, CarbonInterface $since, int $timeout = SSHTransport::COMMAND_SECONDS): array
     {
         $command = "journalctl --since '@" . $since->getTimestamp() . "' --no-pager -o json -u 'coresmith-app-*' 2>/dev/null | grep -i 'oom' || true";
 
-        return $this->parse($connection->execute($command, sudo: true)->output);
+        return $this->parse($connection->execute($command, sudo: true, timeout: $timeout)->output);
     }
 
     /**

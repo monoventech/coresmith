@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-    import { Link, router } from '@inertiajs/svelte'
+    import { Link, page, router } from '@inertiajs/svelte'
     import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
@@ -16,6 +16,7 @@
     import { Input } from '@/components/ui/input'
     import { Textarea } from '@/components/ui/textarea'
     import type { EntityState } from '@/lib/fleet'
+    import { follow } from '@/lib/live.svelte'
 
     type Toggle = {
         key: string
@@ -46,6 +47,10 @@
             runtime: string
             domain: string | null
             additional_domains: string[]
+            certificates: {
+                checked_at: string
+                domains: Record<string, { state: 'valid' | 'expiring' | 'expired' | 'none'; expires_at: string | null; days: number | null; label: string; title: string }>
+            } | null
             repository: string | null
             branch: string
             current_release: string | null
@@ -83,6 +88,8 @@
     } = $props()
 
     const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i
+
+    const certificateTones = { valid: 'success', expiring: 'warning', expired: 'destructive', none: 'warning' } as const
 
     let busy = $state<Record<string, boolean>>({})
     let dialog = $state<'env' | 'domain' | 'remove' | null>(null)
@@ -254,6 +261,13 @@
             }
         }, 10_000)
     })
+
+    onMount(() =>
+        follow({
+            only: ['application', 'toggles', 'panel', ...('cron' in page.props ? ['cron'] : [])],
+            paused: () => working || Object.values(busy).some(Boolean)
+        })
+    )
 
     onDestroy(() => {
         if (poll) {
@@ -490,7 +504,7 @@
             </div>
         {/if}
 
-        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
+        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="domains-card">
             <div class="mb-1 flex items-center justify-between">
                 <h3 class="type-h3 m-0">Domains</h3>
                 {#if can.update}
@@ -498,9 +512,12 @@
                 {/if}
             </div>
             {#each domains as domain, index (domain)}
-                <div class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]">
+                {@const certificate = application.certificates?.domains[domain]}
+                <div class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]" data-testid="domain-row">
                     <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{domain}</span>
-                    <Badge variant="success">TLS</Badge>
+                    {#if certificate}
+                        <Badge variant={certificateTones[certificate.state]} title={certificate.title}>{certificate.label}</Badge>
+                    {/if}
                     <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
                 </div>
             {:else}

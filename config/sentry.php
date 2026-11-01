@@ -1,5 +1,7 @@
 <?php
 
+use App\Support\Sentry\SentryScrubber;
+
 /**
  * Sentry Laravel SDK configuration file.
  *
@@ -18,7 +20,7 @@ return [
 
     // The release version of your application
     // Example with dynamic git hash: trim(exec('git --git-dir ' . base_path('.git') . ' log --pretty="%h" -n1 HEAD'))
-    'release' => env('SENTRY_RELEASE'),
+    'release' => env('SENTRY_RELEASE') ?: (string) config('coresmith.version'),
 
     // When left empty or `null` the Laravel environment will be used (usually discovered from `APP_ENV` in your `.env`)
     'environment' => env('SENTRY_ENVIRONMENT'),
@@ -30,7 +32,7 @@ return [
     'sample_rate' => env('SENTRY_SAMPLE_RATE') === null ? 1.0 : (float) env('SENTRY_SAMPLE_RATE'),
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#traces_sample_rate
-    'traces_sample_rate' => env('SENTRY_TRACES_SAMPLE_RATE') === null ? null : (float) env('SENTRY_TRACES_SAMPLE_RATE'),
+    'traces_sample_rate' => in_array(env('SENTRY_TRACES_SAMPLE_RATE'), [null, ''], true) ? null : (float) env('SENTRY_TRACES_SAMPLE_RATE'),
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#profiles_sample_rate
     'profiles_sample_rate' => env('SENTRY_PROFILES_SAMPLE_RATE') === null ? null : (float) env('SENTRY_PROFILES_SAMPLE_RATE'),
@@ -39,7 +41,7 @@ return [
     'strict_trace_continuation' => env('SENTRY_STRICT_TRACE_CONTINUATION', false),
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#enable_logs
-    'enable_logs' => env('SENTRY_ENABLE_LOGS', false),
+    'enable_logs' => false,
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#log_flush_threshold
     'log_flush_threshold' => env('SENTRY_LOG_FLUSH_THRESHOLD') === null ? null : (int) env('SENTRY_LOG_FLUSH_THRESHOLD'),
@@ -48,7 +50,9 @@ return [
     'logs_channel_level' => env('SENTRY_LOG_LEVEL', env('SENTRY_LOGS_LEVEL', env('LOG_LEVEL', 'debug'))),
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#send_default_pii
-    'send_default_pii' => env('SENTRY_SEND_DEFAULT_PII', false),
+    'send_default_pii' => false,
+
+    'max_request_body_size' => 'never',
 
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#ignore_exceptions
     // 'ignore_exceptions' => [],
@@ -59,13 +63,19 @@ return [
         '/up',
     ],
 
+    'before_send' => [SentryScrubber::class, 'beforeSend'],
+
+    'before_send_transaction' => [SentryScrubber::class, 'beforeSendTransaction'],
+
+    'before_breadcrumb' => [SentryScrubber::class, 'beforeBreadcrumb'],
+
     // Breadcrumb specific configuration
     'breadcrumbs' => [
         // Capture Laravel logs as breadcrumbs
         'logs' => env('SENTRY_BREADCRUMBS_LOGS_ENABLED', true),
 
         // Capture Laravel cache events (hits, writes etc.) as breadcrumbs
-        'cache' => env('SENTRY_BREADCRUMBS_CACHE_ENABLED', true),
+        'cache' => false,
 
         // Capture Livewire components like routes as breadcrumbs
         'livewire' => env('SENTRY_BREADCRUMBS_LIVEWIRE_ENABLED', true),
@@ -74,7 +84,7 @@ return [
         'sql_queries' => env('SENTRY_BREADCRUMBS_SQL_QUERIES_ENABLED', true),
 
         // Capture SQL query bindings (parameters) in SQL query breadcrumbs
-        'sql_bindings' => env('SENTRY_BREADCRUMBS_SQL_BINDINGS_ENABLED', false),
+        'sql_bindings' => false,
 
         // Capture queue job information as breadcrumbs
         'queue_info' => env('SENTRY_BREADCRUMBS_QUEUE_INFO_ENABLED', true),
@@ -101,7 +111,7 @@ return [
         'sql_queries' => env('SENTRY_TRACE_SQL_QUERIES_ENABLED', true),
 
         // Capture SQL query bindings (parameters) in SQL query spans
-        'sql_bindings' => env('SENTRY_TRACE_SQL_BINDINGS_ENABLED', false),
+        'sql_bindings' => false,
 
         // Capture where the SQL query originated from on the SQL query spans
         'sql_origin' => env('SENTRY_TRACE_SQL_ORIGIN_ENABLED', true),
@@ -119,10 +129,10 @@ return [
         'http_client_requests' => env('SENTRY_TRACE_HTTP_CLIENT_REQUESTS_ENABLED', true),
 
         // Capture Laravel cache events (hits, writes etc.) as spans
-        'cache' => env('SENTRY_TRACE_CACHE_ENABLED', true),
+        'cache' => false,
 
         // Capture Redis operations as spans (this enables Redis events in Laravel)
-        'redis_commands' => env('SENTRY_TRACE_REDIS_COMMANDS', false),
+        'redis_commands' => false,
 
         // Capture where the Redis command originated from on the Redis command spans
         'redis_origin' => env('SENTRY_TRACE_REDIS_ORIGIN_ENABLED', true),
@@ -131,7 +141,7 @@ return [
         'notifications' => env('SENTRY_TRACE_NOTIFICATIONS_ENABLED', true),
 
         // Enable tracing for requests without a matching route (404's)
-        'missing_routes' => env('SENTRY_TRACE_MISSING_ROUTES_ENABLED', false),
+        'missing_routes' => false,
 
         // Configures if the performance trace should continue after the response has been sent to the user until the application terminates
         // This is required to capture any spans that are created after the response has been sent like queue jobs dispatched using `dispatch(...)->afterResponse()` for example

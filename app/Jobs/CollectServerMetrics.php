@@ -11,35 +11,54 @@ namespace App\Jobs;
 use App\Enums\ServerStatus;
 use App\Models\Server;
 use App\Services\Server\MetricsCollector;
+use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
-final class CollectServerMetrics implements ShouldQueue
+final class CollectServerMetrics implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
+    public int $tries = 1;
 
-    public int $timeout = 30;
+    public int $timeout = 120;
+
+    public int $uniqueFor = 180;
 
     public function __construct(private readonly Server $server)
     {
         $this->onQueue('default');
     }
 
-    public function handle(SSHConnectionManager $connections, MetricsCollector $metrics): void
+    public function uniqueId(): string
     {
-        if ($this->server->status !== ServerStatus::Active) {
+        return (string) $this->server->getKey();
+    }
+
+    public function handle(SSHConnectionManager $connections, MetricsCollector $metrics, ServerReachability $reachability): void
+    {
+        if ($this->server->status !== ServerStatus::Active || $this->server->pending_host_key_fingerprint !== null) {
             return;
         }
 
         $connection = $connections->for($this->server);
+        $answered = false;
 
         try {
             $metrics->collect($connection);
+            $reachability->answered($this->server);
+            $answered = true;
             $metrics->recordTraffic($connection);
             $metrics->recordOomKills($connection);
+        } catch (Throwable $e) {
+            if ($answered || !ServerReachability::isConnectionFailure($e)) {
+                throw $e;
+            }
+
+            $reachability->failed($this->server, $e);
         } finally {
             $connections->disconnect($this->server);
         }

@@ -24,7 +24,7 @@ final class EnvironmentFile
         $file = escapeshellarg($path);
 
         $connection->execute("mkdir -p {$directory} && chmod 700 {$directory} && install -m 600 -o root -g root /dev/null {$file}", sudo: true)->throw();
-        $connection->uploadContent($this->render($this->parse((string) $application->env_variables)), $path);
+        $connection->uploadContent($this->render([...$this->parse((string) $application->env_variables), ...app(ManagedEnvironment::class)->values($application)]), $path);
         $connection->execute("chown root:root {$file} && chmod 600 {$file}", sudo: true)->throw();
     }
 

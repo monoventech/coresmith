@@ -15,6 +15,7 @@ use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\SharedStorage;
@@ -83,6 +84,12 @@ final class InstallRuntimes implements ShouldQueue
             foreach ($this->runtimes as ['runtime' => $runtime, 'version' => $version]) {
                 $this->installing = $catalog->label($runtime) . ' ' . $version;
                 $this->install($connection, $server, $asdf, $binaries, $log, $runtime, $version);
+
+                if (DeploymentCancellation::requested($this->deployment)) {
+                    $this->stopOnRequest($connection, $log);
+
+                    return;
+                }
             }
         } catch (Throwable $e) {
             $this->abandon($connection, $log, $e);
@@ -105,6 +112,12 @@ final class InstallRuntimes implements ShouldQueue
             $application = $deployment->application;
 
             $this->removeReleaseDirectory($deployment, $application);
+
+            if (DeploymentCancellation::endsCancelled($deployment)) {
+                $this->cancel($deployment);
+
+                return;
+            }
 
             $application === null
                 ? app(DeploymentLog::class)->failLeavingApplication($deployment, $e->getMessage(), $this->reason($e))
@@ -160,6 +173,18 @@ final class InstallRuntimes implements ShouldQueue
         $server->forceFill(['installed_runtimes' => $installed])->save();
     }
 
+    private function stopOnRequest(SSHConnection $connection, DeploymentLog $log): void
+    {
+        $cancellation = app(DeploymentCancellation::class);
+
+        $cancellation->note($this->deployment);
+        $log->append($this->deployment, "cancel: {$this->installing} finishes installing first, the server keeps it for the next deploy");
+        $this->removeRelease($connection, $this->deployment);
+        $cancellation->finish($this->deployment);
+        $this->releaseLock();
+        $cancellation->followUp($this->deployment);
+    }
+
     private function abandon(SSHConnection $connection, DeploymentLog $log, Throwable $e): void
     {
         if ($e instanceof SSHCommandFailedException) {
@@ -168,11 +193,43 @@ final class InstallRuntimes implements ShouldQueue
 
         $this->removeRelease($connection, $this->deployment);
 
-        if ($this->deployment->fresh()?->status === DeploymentStatus::Running) {
+        $deployment = $this->deployment->fresh();
+
+        if ($deployment?->status === DeploymentStatus::Running) {
+            if (DeploymentCancellation::endsCancelled($deployment)) {
+                $this->cancel($deployment);
+
+                return;
+            }
+
             $log->fail($this->deployment, $e->getMessage(), $this->reason($e));
         }
 
         $this->releaseLock();
+    }
+
+    private function cancel(Deployment $deployment): void
+    {
+        $cancelled = Deployment::query()
+            ->whereKey($deployment->getKey())
+            ->where('status', DeploymentStatus::Running->value)
+            ->update(['status' => DeploymentStatus::Cancelled->value, 'finished_at' => now()]);
+
+        if ($cancelled === 0) {
+            $this->releaseLock();
+
+            return;
+        }
+
+        $cancellation = app(DeploymentCancellation::class);
+
+        try {
+            $cancellation->note($deployment);
+            $cancellation->finish($deployment);
+        } finally {
+            $this->releaseLock();
+            $cancellation->followUp($deployment);
+        }
     }
 
     private function removeReleaseDirectory(Deployment $deployment, ?Application $application): void

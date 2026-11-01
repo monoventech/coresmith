@@ -62,6 +62,23 @@ test('a single token userinfo with no colon is redacted too', function () {
         ->and($clean)->toContain('[REDACTED]@github.com');
 });
 
+test('a long run of dotted words is sanitised without stalling', function () {
+    $line = str_repeat('a.', 100_000) . '@x.io';
+    $started = hrtime(true);
+
+    $clean = (new LogSanitizer)->sanitize($line);
+
+    expect((hrtime(true) - $started) / 1_000_000_000)->toBeLessThan(0.5)
+        ->and($clean)->toBe($line);
+});
+
+test('credentials after a word joined to the scheme are redacted too', function () {
+    $clean = (new LogSanitizer)->sanitize('remote_https://deploy:s3cr3t-pass@git.example.com/x.git');
+
+    expect($clean)->not->toContain('s3cr3t-pass')
+        ->and($clean)->toContain('[REDACTED]@git.example.com');
+});
+
 test('common secret shapes are redacted even when not in the environment', function (string $secret, string $line) {
     expect((new LogSanitizer)->sanitize($line))->not->toContain($secret);
 })->with([
@@ -101,6 +118,43 @@ test('a private key block is redacted whole', function () {
     expect((new LogSanitizer)->sanitize("dumped {$key} oops"))
         ->not->toContain('abc123')
         ->toContain('[REDACTED_PRIVATE_KEY]');
+});
+
+test('a key block as long as the largest rsa key is still redacted whole', function () {
+    $lines = array_map(fn(int $line): string => str_repeat(chr(65 + $line % 26), 70), range(1, 181));
+    $key = "-----BEGIN OPENSSH PRIVATE KEY-----\n" . implode("\n", $lines) . "\n-----END OPENSSH PRIVATE KEY-----";
+
+    expect(strlen($key))->toBeGreaterThan(12_800)
+        ->and((new LogSanitizer)->sanitize("dumped {$key} oops"))->toBe('dumped [REDACTED_PRIVATE_KEY] oops');
+});
+
+test('a key cut off before its end marker does not leave its key lines', function () {
+    $lines = array_map(fn(int $line): string => str_repeat(chr(65 + $line % 26), 64), range(1, 30));
+    $output = "Fatal: could not read the signing key\n-----BEGIN RSA PRIVATE KEY-----\n" . implode("\n", $lines);
+
+    expect((new LogSanitizer)->sanitize($output))->toBe("Fatal: could not read the signing key\n[REDACTED_PRIVATE_KEY]");
+});
+
+test('a key with no end marker hides at most 16 KB after it', function () {
+    $output = "-----BEGIN PRIVATE KEY-----\n" . str_repeat("x\n", 10_000) . 'boot step 1';
+
+    $clean = (new LogSanitizer)->sanitize($output);
+
+    expect($clean)->toStartWith('[REDACTED_PRIVATE_KEY]')
+        ->toEndWith("\nx\nboot step 1")
+        ->and(strlen($clean))->toBeLessThan(4_000);
+});
+
+test('a long run of key markers with no end is sanitised without stalling', function () {
+    $output = str_repeat('-----BEGIN PRIVATE KEY-----', 20_000);
+    $started = hrtime(true);
+
+    $clean = (new LogSanitizer)->sanitize($output);
+
+    expect((hrtime(true) - $started) / 1_000_000_000)->toBeLessThan(0.5)
+        ->and(strlen($output))->toBe(540_000)
+        ->and($clean)->toContain('[REDACTED_PRIVATE_KEY]')
+        ->not->toContain('-----BEGIN');
 });
 
 test('ordinary build output is untouched', function () {

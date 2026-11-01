@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\ServerStatus;
 use App\Events\ServerProvisioned;
+use App\Events\ServerProvisioningFailed;
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
 use App\Services\Caddy\CaddyInstaller;
@@ -178,6 +179,13 @@ final class ProvisionServer implements ShouldQueue
             'status' => ServerStatus::Failed,
             'provisioning_error' => trim("{$name} failed. {$reason}\n{$output}"),
         ])->save();
+
+        activity()
+            ->performedOn($this->server)
+            ->withProperties(['phase' => $number, 'name' => $name])
+            ->log('provisioning_failed');
+
+        ServerProvisioningFailed::dispatch($this->server, $number, $name);
     }
 
     private function log(string $line, bool $stamped = true): void

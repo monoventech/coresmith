@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\ServerStatus;
+use App\Enums\TeamRole;
 use App\Events\ServerProvisioned;
+use App\Events\ServerProvisioningFailed;
 use App\Exceptions\ProvisioningVerificationException;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsupportedOperatingSystemException;
 use App\Jobs\ProvisionServer;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Caddy\CaddyInstaller;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -16,7 +19,10 @@ use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Database\QueryException;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
 function provisioningTransport(): FakeSSHTransport
@@ -287,6 +293,39 @@ test('a fully provisioned server becomes active and announces itself', function 
     Event::assertDispatched(ServerProvisioned::class);
 });
 
+test('a mail that cannot be queued does not undo a finished provision', function () {
+    Exceptions::fake();
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $server->team->members()->attach(User::factory()->create(), ['role' => TeamRole::Member->value]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+
+    provision($server, provisioningTransport());
+
+    $fresh = $server->fresh();
+
+    expect($fresh->status)->toBe(ServerStatus::Active)
+        ->and($fresh->provisioning_phase)->toBe(8)
+        ->and($fresh->provisioning_error)->toBeNull()
+        ->and(Activity::query()->where('description', 'provisioning_failed')->exists())->toBeFalse();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+});
+
+test('a mail that cannot be queued does not hide why provisioning stopped', function () {
+    Exceptions::fake();
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $server->team->members()->attach(User::factory()->create(), ['role' => TeamRole::Member->value]);
+    Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
+    $transport = provisioningTransport()->respondTo('apt-get install', 'E: Unable to locate package', 100);
+
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($server->fresh()->status)->toBe(ServerStatus::Failed)
+        ->and(Activity::query()->where('description', 'provisioning_failed')->count())->toBe(1);
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
+});
+
 test('phase 6 opens only ssh, http and https', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'ssh_port' => 2222]);
     $transport = provisioningTransport();
@@ -336,6 +375,36 @@ test('a failure inside handle is recorded once, not twice when the queue also ca
     }
 
     expect(substr_count((string) $server->fresh()->provisioning_log, 'phase 2 of 8, Base system: failed'))->toBe(1);
+});
+
+test('a provision that stops says which phase, once', function () {
+    Event::fake([ServerProvisioningFailed::class]);
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport()->respondTo('apt-get install', 'E: Unable to locate package', 100);
+
+    expect(fn() => provision($server, $transport))->toThrow(SSHCommandFailedException::class);
+
+    (new ProvisionServer($server))->failed(new MaxAttemptsExceededException('Job has timed out.'));
+
+    Event::assertDispatchedTimes(ServerProvisioningFailed::class, 1);
+    Event::assertDispatched(ServerProvisioningFailed::class, fn(ServerProvisioningFailed $event): bool => $event->server->is($server) && $event->phase === 2 && $event->phaseName === 'Base system');
+
+    $rows = Activity::query()->where('description', 'provisioning_failed')->get();
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->subject_id)->toBe($server->id)
+        ->and($rows[0]->properties->toArray())->toBe(['phase' => 2, 'name' => 'Base system']);
+});
+
+test('a job that dies outside handle says which phase it stopped in', function () {
+    Event::fake([ServerProvisioningFailed::class]);
+    $server = Server::factory()->create(['status' => ServerStatus::Provisioning, 'provisioning_phase' => 3, 'host_key_fingerprint' => null]);
+
+    (new ProvisionServer($server))->failed(new MaxAttemptsExceededException('Job has timed out.'));
+
+    Event::assertDispatchedTimes(ServerProvisioningFailed::class, 1);
+    Event::assertDispatched(ServerProvisioningFailed::class, fn(ServerProvisioningFailed $event): bool => $event->phase === 4 && $event->phaseName === 'Directories');
+    expect(Activity::query()->where('description', 'provisioning_failed')->sole()->properties->toArray())->toBe(['phase' => 4, 'name' => 'Directories']);
 });
 
 test('installing the base packages gets twenty minutes, not the ten every other command gets', function () {

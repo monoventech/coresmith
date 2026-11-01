@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Exceptions\InvalidRuntimeException;
+use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\BuildDependencies;
@@ -64,6 +65,15 @@ test('installing an already present version does no work', function () {
     expect($transport->commands())->toHaveCount(1);
 });
 
+function asdfStep(array $commands, string $needle): int
+{
+    $found = array_keys(array_filter($commands, fn(string $command): bool => str_contains($command, $needle)));
+
+    expect($found)->toHaveCount(1);
+
+    return $found[0];
+}
+
 test('installing a missing version installs build dependencies, updates the plugin, then asdf installs it', function () {
     $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
     $connection = asdfConnection($transport);
@@ -71,14 +81,53 @@ test('installing a missing version installs build dependencies, updates the plug
     (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
 
     $commands = $transport->commands();
+    $packages = asdfStep($commands, 'apt-get install -y');
+    $plugin = asdfStep($commands, 'asdf plugin update "$CORESMITH_RUNTIME"');
+    $install = asdfStep($commands, 'asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"');
 
-    expect($commands[1])->toContain('apt-get install -y')
-        ->and($commands[1])->toContain("'libonig-dev'")
-        ->and($commands[2])->toContain('sudo -u coresmith')
-        ->and($commands[2])->toContain('asdf plugin update "$CORESMITH_RUNTIME"')
-        ->and($commands[3])->toContain('sudo -u coresmith')
-        ->and($commands[3])->toContain("CORESMITH_VERSION='8.5.5'")
-        ->and($commands[3])->toContain('asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"');
+    expect($commands[$packages])->toContain("'libonig-dev'")
+        ->and($commands[$plugin])->toContain('sudo -u coresmith')
+        ->and($commands[$install])->toContain('sudo -u coresmith')
+        ->and($commands[$install])->toContain("CORESMITH_VERSION='8.5.5'")
+        ->and($packages)->toBeLessThan($plugin)
+        ->and($plugin)->toBeLessThan($install);
+});
+
+test('build packages are installed from a fresh index', function (string $os, string $update, string $install) {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => $os]);
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+
+    (new AsdfManager)->install((new SSHConnection($server, $transport))->connect(), $server, 'php', '8.5.5');
+
+    $commands = $transport->commands();
+    $refreshed = asdfStep($commands, $update);
+
+    expect($commands[$refreshed + 1])->toContain($install)
+        ->and($transport->budgetFor($update))->toBe(1200);
+})->with([
+    'apt' => ['ubuntu', 'apt-get update -y', 'apt-get install -y --no-install-recommends'],
+    'dnf' => ['rocky', 'dnf check-update -y || true', 'dnf install -y'],
+    'yum' => ['amzn', 'yum check-update -y || true', 'yum install -y'],
+]);
+
+test('a runtime with no build packages refreshes no index', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'bun', '1.4.2');
+
+    expect(implode("\n", $transport->commands()))->not->toContain('apt-get update')
+        ->and(implode("\n", $transport->commands()))->not->toContain('apt-get install');
+});
+
+test('an index that cannot be refreshed stops the install before anything is built', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondTo('apt-get update -y', "E: Could not get lock /var/lib/apt/lists/lock\n", 100);
+    $connection = asdfConnection($transport);
+
+    expect(fn() => (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5'))->toThrow(SSHCommandFailedException::class);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('apt-get install')
+        ->and(implode("\n", $transport->commands()))->not->toContain('asdf install');
 });
 
 test('runtime installs run as the coresmith user, never root directly', function () {

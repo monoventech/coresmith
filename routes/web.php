@@ -79,6 +79,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.releases.index');
     Route::get('servers/{server}/applications/{application}/deployments/{deployment}', [DeploymentController::class, 'show'])
         ->name('servers.applications.deployments.show');
+    Route::post('servers/{server}/applications/{application}/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])
+        ->middleware('throttle:10,1,deploy-cancel')
+        ->name('servers.applications.deployments.cancel');
     Route::post('servers/{server}/applications/{application}/stop', [ApplicationPowerController::class, 'stop'])
         ->name('servers.applications.stop');
     Route::post('servers/{server}/applications/{application}/start', [ApplicationPowerController::class, 'start'])

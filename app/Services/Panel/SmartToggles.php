@@ -19,6 +19,7 @@ use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\AutoDeploy\AutoDeployStatus;
 use App\Services\Process\ProcessManager;
+use App\Services\Server\PortAllocator;
 use InvalidArgumentException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -36,6 +37,12 @@ final class SmartToggles
 
     public const AUTO_DEPLOY = 'auto_deploy';
 
+    public const REVERB = 'reverb';
+
+    public const INERTIA_SSR = 'inertia_ssr';
+
+    public const SSR_COMMAND = 'php artisan inertia:start-ssr';
+
     public const START_WINDOW_SECONDS = 180;
 
     public const CHANGED = 'toggle_changed';
@@ -47,6 +54,8 @@ final class SmartToggles
     public const SCHEDULE_COMMAND = 'php artisan schedule:run';
 
     public const QUEUE_COMMAND = 'php artisan queue:work --sleep=3 --tries=3 --max-time=3600';
+
+    public const HORIZON_COMMAND = 'php artisan horizon';
 
     public const SIDEKIQ_COMMAND = 'bundle exec sidekiq';
 
@@ -72,8 +81,10 @@ final class SmartToggles
         $rails = $application->type === ApplicationType::Ruby && $framework === 'rails';
 
         return array_values(array_filter([
+            $framework === 'laravel' && ($this->ssrDetected($application) || $this->ssrOn($application)) ? self::INERTIA_SSR : null,
             $framework === 'laravel' ? self::QUEUE : null,
             $framework === 'laravel' ? self::SCHEDULER : null,
+            $framework === 'laravel' && (($this->packages($application)['reverb'] ?? false) === true || app(Reverb::class)->on($application)) ? self::REVERB : null,
             $rails && $this->offers($application, self::SIDEKIQ) ? self::SIDEKIQ : null,
             $rails && $this->offers($application, self::SOLID_QUEUE) ? self::SOLID_QUEUE : null,
             self::MAINTENANCE,
@@ -83,7 +94,11 @@ final class SmartToggles
 
     public function process(string $key): ?string
     {
-        return self::WORKERS[$key][0] ?? null;
+        return match ($key) {
+            self::INERTIA_SSR => 'ssr',
+            self::REVERB => 'reverb',
+            default => self::WORKERS[$key][0] ?? null,
+        };
     }
 
     public function failedWorker(Application $application, string $unit): ?string
@@ -117,8 +132,8 @@ final class SmartToggles
             self::QUEUE => [
                 'key' => $key,
                 'label' => 'Queue worker',
-                'description' => 'php artisan queue:work · systemd unit coresmith-app-' . $slug . '-queue',
-                'busy_on' => 'Creating the systemd unit and starting the worker…',
+                'description' => ($this->horizon($application) ? 'Detected: laravel/horizon' : 'php artisan queue:work') . ' · systemd unit coresmith-app-' . $slug . '-queue',
+                'busy_on' => $this->horizon($application) ? 'Creating the systemd unit and starting Horizon…' : 'Creating the systemd unit and starting the worker…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
@@ -150,6 +165,24 @@ final class SmartToggles
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
+            self::INERTIA_SSR => [
+                'key' => $key,
+                'label' => 'Inertia SSR',
+                'description' => $this->ssrDescription($application),
+                'busy_on' => 'Saving, it starts with the next deploy…',
+                'busy_off' => 'Stopping the unit and freeing the port…',
+                'on' => $this->isOn($application, $key),
+                'disabled' => false,
+            ],
+            self::REVERB => [
+                'key' => $key,
+                'label' => 'Reverb websockets',
+                'description' => $this->reverbDescription($application),
+                'busy_on' => 'Saving, it starts with the next deploy…',
+                'busy_off' => 'Stopping the unit and removing the route…',
+                'on' => $this->isOn($application, $key),
+                'disabled' => !$this->isOn($application, $key) && app(Reverb::class)->problem($application) !== null,
+            ],
             self::AUTO_DEPLOY => [
                 'key' => $key,
                 'label' => 'Auto deploy',
@@ -178,6 +211,8 @@ final class SmartToggles
             self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->hasProcess($application, self::WORKERS[$key][0]),
             self::SCHEDULER => collect((array) $application->cron_jobs)->contains(fn(mixed $job): bool => is_array($job) && ($job['command'] ?? null) === self::SCHEDULE_COMMAND),
             self::AUTO_DEPLOY => (bool) $application->quick_deploy,
+            self::REVERB => app(Reverb::class)->on($application),
+            self::INERTIA_SSR => $this->ssrOn($application),
             default => false,
         };
     }
@@ -190,8 +225,52 @@ final class SmartToggles
             self::SIDEKIQ => 'Sidekiq',
             self::SOLID_QUEUE => 'Solid Queue',
             self::AUTO_DEPLOY => 'Auto deploy',
+            self::REVERB => 'Reverb websockets',
+            self::INERTIA_SSR => 'Inertia SSR',
             default => 'Maintenance page',
         };
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    public function packages(Application $application): array
+    {
+        return array_filter((array) (((array) $application->stack)['packages'] ?? []), 'is_bool');
+    }
+
+    public function queueCommand(Application $application): string
+    {
+        return $this->horizon($application) ? self::HORIZON_COMMAND : self::QUEUE_COMMAND;
+    }
+
+    public function syncDeployTimeProcesses(Application $application): void
+    {
+        $queue = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'queue');
+
+        if ($queue !== null && ($queue['command'] ?? null) !== $this->queueCommand($application)) {
+            $this->replaceProcess($application, 'queue', ['name' => 'queue', 'command' => $this->queueCommand($application)]);
+        }
+
+        $reverb = app(Reverb::class);
+        $wanted = $reverb->ready($application) ? Reverb::COMMAND . $reverb->port($application) : null;
+        $current = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'reverb');
+
+        if (($current['command'] ?? null) !== $wanted) {
+            $this->replaceProcess($application, 'reverb', $wanted === null ? null : ['name' => 'reverb', 'command' => $wanted]);
+        }
+
+        $ssr = $this->ssrOn($application) && $application->ssr_port !== null ? $this->ssrCommand($application) : null;
+        $running = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
+
+        if (($running['command'] ?? null) !== $ssr) {
+            $this->replaceProcess($application, 'ssr', $ssr === null ? null : ['name' => 'ssr', 'command' => $ssr]);
+        }
+    }
+
+    public function ssrOn(Application $application): bool
+    {
+        return (((array) $application->toggles)[self::INERTIA_SSR] ?? false) === true;
     }
 
     public function apply(Application $application, string $key, bool $on): void
@@ -210,6 +289,8 @@ final class SmartToggles
             self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->worker($application, $key, $on),
             self::SCHEDULER => $this->scheduler($application, $on),
             self::AUTO_DEPLOY => $this->autoDeploy($application, $on),
+            self::REVERB => $this->reverb($application, $on),
+            self::INERTIA_SSR => $this->ssr($application, $on),
         };
 
         $actor = auth()->user();
@@ -253,6 +334,7 @@ final class SmartToggles
     private function worker(Application $application, string $key, bool $on): void
     {
         [$name, $command] = self::WORKERS[$key];
+        $command = $key === self::QUEUE ? $this->queueCommand($application) : $command;
 
         $this->replaceProcess($application, $name, $on ? ['name' => $name, 'command' => $command] : null);
 
@@ -271,6 +353,79 @@ final class SmartToggles
         }
 
         $application->forceFill(['processes' => $processes === [] ? null : $processes])->save();
+    }
+
+    private function ssr(Application $application, bool $on): void
+    {
+        $port = $on ? ($application->ssr_port ?? app(PortAllocator::class)->allocateSsrPort($application->server)) : null;
+
+        $application->forceFill(['toggles' => [...(array) $application->toggles, self::INERTIA_SSR => $on], 'ssr_port' => $port])->save();
+
+        if ($on) {
+            return;
+        }
+
+        $this->replaceProcess($application, 'ssr');
+
+        SyncApplicationProcesses::dispatch($application, ['ssr']);
+    }
+
+    private function ssrDetected(Application $application): bool
+    {
+        return ($this->packages($application)['inertia'] ?? false) === true && (((array) $application->stack)['tooling']['ssr'] ?? false) === true;
+    }
+
+    private function ssrCommand(Application $application): string
+    {
+        $manager = ((array) $application->stack)['tooling']['manager'] ?? null;
+
+        return 'INERTIA_SSR_PORT=' . $application->ssr_port . ' ' . self::SSR_COMMAND . ' --runtime=' . ($manager === 'bun' ? 'bun' : 'node');
+    }
+
+    private function ssrDescription(Application $application): string
+    {
+        $port = $application->ssr_port;
+        $live = collect((array) $application->processes)->contains(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
+
+        return match (true) {
+            $this->ssrOn($application) && $live => self::SSR_COMMAND . " · port {$port} auto-allocated" . ($port === PortAllocator::SSR_DEFAULT_PORT ? '' : ' · your SSR entry must read INERTIA_SSR_PORT'),
+            $this->ssrOn($application) => "Starts with the next deploy, which builds the SSR bundle · port {$port}",
+            default => 'Detected from composer.json and package.json · turning it on gives it a port from the next deploy',
+        };
+    }
+
+    private function reverb(Application $application, bool $on): void
+    {
+        $application->forceFill(['toggles' => [...(array) $application->toggles, self::REVERB => $on]])->save();
+
+        if ($on) {
+            return;
+        }
+
+        $this->replaceProcess($application, 'reverb');
+
+        SyncApplicationProcesses::dispatch($application, ['reverb']);
+        SyncApplicationRoute::dispatch($application);
+    }
+
+    private function reverbDescription(Application $application): string
+    {
+        $reverb = app(Reverb::class);
+        $port = $reverb->port($application);
+        $socket = 'wss://' . $application->domain . '/app';
+        $problem = $reverb->problem($application);
+
+        return match (true) {
+            $problem !== null => $problem,
+            $reverb->live($application) => "php artisan reverb:start · port {$port} · {$socket}",
+            $reverb->on($application) => "Starts with the next deploy, on port {$port} behind {$socket}",
+            default => "Available, turning it on gives it port {$port} from the next deploy",
+        };
+    }
+
+    private function horizon(Application $application): bool
+    {
+        return ($this->packages($application)['horizon'] ?? false) === true;
     }
 
     private function offers(Application $application, string $key): bool
@@ -299,7 +454,8 @@ final class SmartToggles
         $running = !in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true);
 
         return [
-            'starting' => $latest?->description === self::CHANGED
+            'starting' => !in_array($key, [self::INERTIA_SSR, self::REVERB], true)
+                && $latest?->description === self::CHANGED
                 && ($latest->properties['on'] ?? false) === true
                 && $latest->created_at?->greaterThanOrEqualTo(now()->subSeconds(self::START_WINDOW_SECONDS)) === true
                 && $running

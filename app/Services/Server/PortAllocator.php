@@ -22,6 +22,8 @@ final class PortAllocator
 
     public const SSR_RANGE_START = 13700;
 
+    public const SSR_DEFAULT_PORT = 13714;
+
     public const SSR_RANGE_END = 13899;
 
     /**
@@ -63,7 +65,7 @@ final class PortAllocator
     {
         $used = $server->applications()->withTrashed()->pluck('ssr_port')->filter()->all();
 
-        for ($port = self::SSR_RANGE_START; $port <= self::SSR_RANGE_END; $port++) {
+        foreach ([self::SSR_DEFAULT_PORT, ...range(self::SSR_RANGE_START, self::SSR_RANGE_END)] as $port) {
             if (!in_array($port, $used, true)) {
                 return $port;
             }

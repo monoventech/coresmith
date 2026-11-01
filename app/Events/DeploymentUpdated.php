@@ -11,6 +11,7 @@ namespace App\Events;
 use App\Http\Controllers\DeploymentController;
 use App\Models\Deployment;
 use App\Services\Deployment\DeploymentPhases;
+use App\Services\Panel\Realtime;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -41,5 +42,10 @@ final class DeploymentUpdated implements ShouldBroadcast
     public function broadcastWith(): array
     {
         return DeploymentController::present($this->deployment, app(DeploymentPhases::class));
+    }
+
+    public function broadcastWhen(): bool
+    {
+        return Realtime::available();
     }
 }

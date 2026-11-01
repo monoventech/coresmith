@@ -18,6 +18,7 @@ export type PanelProps = {
     setup: { complete: boolean; current: number; total: number } | null
     attention: number
     can: { createServer: boolean }
+    live: { streaming: boolean; refresh_seconds: number }
 }
 
 export function appPath(url: string, base = ''): string {

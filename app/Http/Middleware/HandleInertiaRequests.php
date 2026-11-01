@@ -8,6 +8,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\CommandPalette;
 use App\Services\Panel\FleetSnapshot;
+use App\Services\Panel\Realtime;
 use App\Services\Panel\SetupProgress;
 use App\Services\Teams\TeamContext;
 use Illuminate\Http\Request;
@@ -112,6 +113,10 @@ class HandleInertiaRequests extends Middleware
             'attention' => $fleet === null ? 0 : count($fleet->attention()),
             'can' => [
                 'createServer' => $team !== null && $user->hasTeamAbility($team, Ability::CreateServer),
+            ],
+            'live' => [
+                'streaming' => Realtime::available(),
+                'refresh_seconds' => (int) config('coresmith.live.refresh_seconds'),
             ],
         ];
     }

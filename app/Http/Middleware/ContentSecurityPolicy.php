@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Support\Sentry\BrowserSentry;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Vite;
@@ -32,7 +33,7 @@ final class ContentSecurityPolicy
 
     public static function policy(string $nonce): string
     {
-        $connect = trim("'self' " . (string) config('coresmith.websocket_origin'));
+        $connect = implode(' ', array_filter(["'self'", config('coresmith.websocket_origin'), BrowserSentry::origin()]));
 
         return implode('; ', [
             "default-src 'self'",

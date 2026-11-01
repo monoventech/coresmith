@@ -11,9 +11,11 @@ namespace App\Jobs;
 use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
+use App\Events\FleetChanged;
 use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
+use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\LogSanitizer;
@@ -25,6 +27,7 @@ use App\Services\Runtime\Stack;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 
 final class RollbackApplication implements ShouldQueue
@@ -32,6 +35,8 @@ final class RollbackApplication implements ShouldQueue
     use Queueable;
 
     public const RELEASE_PATTERN = '/^\d{8}-?\d{6}$/D';
+
+    public const LOCK_SECONDS = 300;
 
     public int $tries = 1;
 
@@ -50,6 +55,19 @@ final class RollbackApplication implements ShouldQueue
 
     public function handle(SSHConnectionManager $connections): void
     {
+        $lock = Cache::lock('deploy:' . $this->application->getKey(), self::LOCK_SECONDS);
+
+        if (!$lock->get()) {
+            activity()
+                ->performedOn($this->application)
+                ->withProperties(['to' => $this->release])
+                ->log('rollback_blocked');
+
+            FleetChanged::forApplication($this->application);
+
+            return;
+        }
+
         $connection = $connections->for($this->application->server);
         $paths = new ReleasePaths($this->application);
 
@@ -72,6 +90,7 @@ final class RollbackApplication implements ShouldQueue
             $before = $this->application->runtimeVersions();
 
             $this->application->forceFill(['current_release' => $name, ...($stack?->applicationAttributes() ?? [])])->save();
+            app(SmartToggles::class)->syncDeployTimeProcesses($this->application);
 
             $processes = app(ProcessManager::class);
 
@@ -110,6 +129,10 @@ final class RollbackApplication implements ShouldQueue
                 ->log('application_rolled_back');
         } finally {
             $connections->disconnect($this->application->server);
+            $lock->release();
+
+            FleetChanged::forApplication($this->application);
+            rescue(fn() => app(AutoDeploy::class)->reconcile($this->application->fresh() ?? $this->application), report: true);
         }
     }
 

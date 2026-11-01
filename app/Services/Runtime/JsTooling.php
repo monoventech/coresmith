@@ -24,6 +24,7 @@ final readonly class JsTooling
         public bool $start,
         public ?string $managerVersion = null,
         public bool $manifest = true,
+        public bool $ssr = false,
     ) {}
 
     public static function for(Application $application, RepositoryFacts $facts): ?self
@@ -62,7 +63,7 @@ final readonly class JsTooling
         $declared = (string) ($facts->json('package.json')['packageManager'] ?? '');
         $version = preg_match('/^' . $manager . '@(\d[\w.+-]*)/', $declared, $matches) === 1 ? $matches[1] : null;
 
-        return new self($manager, $facts->lockfile() !== null, $build, $facts->script('start'), $version);
+        return new self($manager, $facts->lockfile() !== null, $build, $facts->script('start'), $version, ssr: $facts->script('build:ssr'));
     }
 
     public function runtime(): string
@@ -91,23 +92,25 @@ final readonly class JsTooling
     /**
      * @return list<string>
      */
-    public function buildCommands(): array
+    public function buildCommands(bool $ssr = false): array
     {
         if (!$this->build) {
             return [];
         }
 
+        $script = $ssr && $this->ssr ? 'build:ssr' : 'build';
+
         return [match ($this->manager) {
-            'npm' => 'npm run build',
-            'pnpm' => self::COREPACK . 'pnpm run build',
-            'yarn' => self::COREPACK . 'yarn run build',
+            'npm' => "npm run {$script}",
+            'pnpm' => self::COREPACK . "pnpm run {$script}",
+            'yarn' => self::COREPACK . "yarn run {$script}",
             'deno' => 'deno task build',
-            default => 'bun run build',
+            default => "bun run {$script}",
         }];
     }
 
     /**
-     * @return array{manager: string, locked: bool, build: bool, start: bool, manager_version: ?string, manifest: bool}
+     * @return array{manager: string, locked: bool, build: bool, start: bool, manager_version: ?string, manifest: bool, ssr: bool}
      */
     public function toArray(): array
     {
@@ -118,6 +121,7 @@ final readonly class JsTooling
             'start' => $this->start,
             'manager_version' => $this->managerVersion,
             'manifest' => $this->manifest,
+            'ssr' => $this->ssr,
         ];
     }
 
@@ -139,6 +143,7 @@ final readonly class JsTooling
             (bool) ($data['start'] ?? false),
             isset($data['manager_version']) ? (string) $data['manager_version'] : null,
             (bool) ($data['manifest'] ?? true),
+            (bool) ($data['ssr'] ?? false),
         );
     }
 

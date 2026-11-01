@@ -10,6 +10,7 @@ namespace App\Services\Deployment;
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Stack;
 
@@ -51,7 +52,7 @@ final class DeploymentCommands
      */
     public function build(Application $application, Stack $stack): array
     {
-        $javascript = $stack->tooling?->buildCommands() ?? [];
+        $javascript = $stack->tooling?->buildCommands(app(SmartToggles::class)->ssrOn($application)) ?? [];
 
         return match ($application->type) {
             ApplicationType::Php => [...$javascript, ...($application->framework === 'laravel' ? ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'] : [])],

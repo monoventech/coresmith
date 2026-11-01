@@ -26,7 +26,7 @@ final class LogSanitizer
         '/gh[pousr]_[A-Za-z0-9][A-Za-z0-9_.\-]{19,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/github_pat_[A-Za-z0-9_]{22,}/' => '[REDACTED_GITHUB_TOKEN]',
         '/dop_v1_[a-f0-9]{64}/' => '[REDACTED_DIGITALOCEAN_TOKEN]',
-        '/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/' => '[REDACTED_PRIVATE_KEY]',
+        '/-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]{0,16384}?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]{0,16384})/' => '[REDACTED_PRIVATE_KEY]',
     ];
 
     public function sanitize(string $output, ?Application $application = null): string
@@ -65,7 +65,7 @@ final class LogSanitizer
     private function redactCredentialsInUrls(string $output): string
     {
         return (string) preg_replace(
-            '/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s@\/]+@/i',
+            '/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s@\/]+@/i',
             '$1[REDACTED]@',
             $output,
         );

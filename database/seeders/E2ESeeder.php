@@ -22,6 +22,7 @@ use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\ServerMetric;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\TeamDomain;
@@ -33,7 +34,9 @@ use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
+use App\Services\Server\CertificateCheck;
 use App\Services\Server\ProvisioningLog;
+use App\Services\Server\ServerReachability;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\CloudCatalogs;
 use Database\Seeders\Support\DemoLog;
@@ -41,6 +44,7 @@ use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use phpseclib3\Exception\UnableToConnectException;
 use Spatie\Activitylog\Models\Activity;
 
 final class E2ESeeder extends Seeder
@@ -100,6 +104,13 @@ final class E2ESeeder extends Seeder
 
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
+        $this->heldByAQueuedDeploy($this->application('held-app', 9190));
+        $this->realtime('reverb-unset', 9170);
+        $this->cancelFixtures($tenant->owner);
+        $this->certificatesChecked($this->application('certs-app', 9180, [
+            'domain' => 'certs.monoven.io',
+            'additional_domains' => ['soon.monoven.io', 'gone.monoven.io', 'dark.monoven.io'],
+        ]));
         $this->crashedAfterSwap($this->application('crashy', 8030));
         $this->didNotStart($this->rails('dev-mode', 8300, "RAILS_ENV=development\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16))));
         $this->rollbackDidNotStart($this->rails('failed-rollback', 8310));
@@ -139,11 +150,19 @@ final class E2ESeeder extends Seeder
             $this->server("detach-{$code}", '198.51.100.' . (60 + $index), ServerStatus::Active);
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
+            $this->application("busy-{$code}", 9200 + $index * 10);
+            $this->server("live-{$code}", '198.51.100.' . (80 + $index), ServerStatus::Active);
+            $this->realtime("realtime-{$code}", 9120 + $index * 10, [
+                'env_variables' => "APP_ENV=staging\nREVERB_APP_ID=realtime-{$code}\nREVERB_APP_KEY=key-{$code}\nREVERB_APP_SECRET=" . bin2hex(random_bytes(16)),
+                'processes' => [['name' => 'queue', 'command' => SmartToggles::HORIZON_COMMAND]],
+            ]);
         }
 
         $this->githubFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
+        $this->unreachable('down-01', '198.51.100.70');
+        $this->shortOfMemory('hot-01', '198.51.100.71');
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->auditFixtures();
 
@@ -453,6 +472,32 @@ final class E2ESeeder extends Seeder
         ]);
     }
 
+    private function unreachable(string $name, string $ip): void
+    {
+        $server = $this->server($name, $ip, ServerStatus::Active);
+
+        $server->forceFill([
+            'unreachable_since' => now()->subMinutes(25),
+            'connection_failures' => 25,
+            'last_connection_error' => ServerReachability::reason($server, new UnableToConnectException('Cannot connect to ' . $ip . ':22. Error 111. Connection refused')),
+            'last_connected_at' => now()->subMinutes(26),
+        ])->save();
+    }
+
+    private function shortOfMemory(string $name, string $ip): void
+    {
+        $server = $this->server($name, $ip, ServerStatus::Active);
+        $newest = CarbonImmutable::now()->startOfMinute()->addMinutes(self::METRICS_AHEAD_MINUTES);
+
+        foreach ([97, 97, 98] as $step => $memory) {
+            ServerMetric::factory()->for($server)->create([
+                'memory_percent' => $memory,
+                'disk_percent' => 40,
+                'recorded_at' => $newest->subMinutes(2 - $step),
+            ]);
+        }
+    }
+
     private function rekeyed(string $name, string $ip): void
     {
         $this->server($name, $ip, ServerStatus::Active)->forceFill([
@@ -465,9 +510,9 @@ final class E2ESeeder extends Seeder
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function application(string $name, int $port, array $attributes = []): Application
+    private function application(string $name, int $port, array $attributes = [], ?Server $server = null): Application
     {
-        return Application::factory()->for($this->team)->for($this->bench)->create([
+        return Application::factory()->for($this->team)->for($server ?? $this->bench)->create([
             'name' => $name,
             'slug' => $name,
             'system_user' => 'coresmith-app-' . $name,
@@ -507,6 +552,141 @@ final class E2ESeeder extends Seeder
         $this->logAt($application, 'application_rolled_back', ['from' => $newer, 'to' => $older, 'runtimes' => 'unchanged'], CarbonImmutable::now()->subMinutes(90));
 
         $application->forceFill(['current_release' => $older])->save();
+    }
+
+    private function certificatesChecked(Application $application): void
+    {
+        $this->succeeded($application, 2 * 60, 'v1.0.0');
+
+        $now = CarbonImmutable::now();
+        $checked = $now->toIso8601String();
+
+        Cache::put(CertificateCheck::cacheKey($application), ['domains' => [
+            'certs.monoven.io' => ['expires_at' => $now->addDays(60)->toIso8601String(), 'checked_at' => $checked],
+            'soon.monoven.io' => ['expires_at' => $now->addDays(3)->addHours(12)->toIso8601String(), 'checked_at' => $checked],
+            'gone.monoven.io' => ['expires_at' => $now->subDays(2)->toIso8601String(), 'checked_at' => $checked],
+            'dark.monoven.io' => ['expires_at' => null, 'checked_at' => $checked],
+        ]], $now->addYear());
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function realtime(string $name, int $port, array $attributes = []): Application
+    {
+        $application = $this->application($name, $port, [
+            ...MonovenTenant::stack(
+                ['php' => ['8.5.10', 'composer.json', '^8.4']],
+                ['name' => 'laravel', 'major' => 13],
+                new JsTooling('bun', true, true, false, ssr: true),
+                packages: ['horizon' => true, 'reverb' => true, 'inertia' => true],
+            ),
+            'domain' => $name . '.monoven.io',
+            ...$attributes,
+        ]);
+
+        $this->succeeded($application, 6 * 60, 'v1.0.0');
+
+        return $application;
+    }
+
+    private function heldByAQueuedDeploy(Application $application): void
+    {
+        $this->succeeded($application, 3 * 24 * 60, 'v1.0.0');
+        $this->succeeded($application, 2 * 60, 'v1.1.0');
+        $this->queued($application);
+    }
+
+    private function queued(Application $application): void
+    {
+        Deployment::factory()->for($application)->create([
+            'branch' => 'main',
+            'commit_hash' => null,
+            'commit_message' => null,
+            'status' => DeploymentStatus::Pending,
+            'created_at' => CarbonImmutable::now()->subMinutes(5),
+        ]);
+    }
+
+    private function cancelFixtures(User $owner): void
+    {
+        $cancel = $this->server('cancel-01', '198.51.100.72', ServerStatus::Active);
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->runningForTwoHours($this->application("cancel-{$code}", 9000 + $index * 10, server: $cancel));
+            $this->queued($this->application("queued-{$code}", 9050 + $index * 10));
+        }
+
+        $this->runningForTwoHours($this->application('migrating-app', 9100, server: $cancel), ['build: building the release', 'migrate: running migrations against release {release}']);
+        $this->runningForTwoHours($this->application('stopping-app', 9120, server: $cancel), [], $owner);
+        $this->cancelledBy($this->application('cancelled-app', 9110), $owner);
+    }
+
+    /**
+     * @param  list<string>  $after
+     */
+    private function runningForTwoHours(Application $application, array $after = [], ?User $stopping = null): void
+    {
+        $started = CarbonImmutable::now()->subHours(2);
+        $release = $started->format('Ymd-His');
+        $markers = ['clone: fetching over https', 'deps: installing dependencies', ...$after];
+        $log = ['[' . $started->format('H:i:s') . '] release ' . $release . ' · branch main · triggered by Maya Lindqvist'];
+
+        foreach ($markers as $step => $marker) {
+            $log[] = '[' . $started->addSeconds(1 + $step * 20)->format('H:i:s') . '] ' . str_replace('{release}', $release, $marker);
+        }
+
+        if ($stopping !== null) {
+            $log[] = "cancel: {$stopping->name} asked to stop the deploy";
+        }
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => substr(hash('sha1', $application->name), 0, 40),
+            'commit_message' => 'Ship ' . $application->name,
+            'commit_author' => 'Maya Lindqvist',
+            'status' => DeploymentStatus::Running,
+            'started_at' => $started,
+            'created_at' => $started,
+            'stale_after' => CarbonImmutable::now()->addHours(6),
+            'cancel_requested_at' => $stopping === null ? null : $started->addMinutes(3),
+            'cancelled_by' => $stopping?->id,
+            'log' => implode("\n", $log),
+        ]);
+
+        $application->forceFill(['status' => ApplicationStatus::Deploying])->save();
+    }
+
+    private function cancelledBy(Application $application, User $owner): void
+    {
+        $this->succeeded($application, 3 * 60, 'v2.0.0');
+
+        $started = CarbonImmutable::now()->subMinutes(10);
+        $release = $started->format('Ymd-His');
+        $at = fn(int $seconds): string => '[' . $started->addSeconds($seconds)->format('H:i:s') . ']';
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => substr(hash('sha1', $application->name . 'cancelled'), 0, 40),
+            'commit_message' => 'Try the new pricing page',
+            'commit_author' => 'Maya Lindqvist',
+            'status' => DeploymentStatus::Cancelled,
+            'started_at' => $started,
+            'finished_at' => $started->addSeconds(41),
+            'created_at' => $started,
+            'cancel_requested_at' => $started->addSeconds(35),
+            'cancelled_by' => $owner->id,
+            'log' => implode("\n", [
+                $at(0) . ' release ' . $release . ' · branch main · triggered by Maya Lindqvist',
+                $at(1) . ' clone: fetching over https',
+                $at(4) . ' deps: installing dependencies',
+                $at(30) . ' build: building the release',
+                "cancel: {$owner->name} asked to stop the deploy",
+                $at(41) . ' deploy cancelled. the current release is untouched.',
+            ]),
+        ]);
     }
 
     private function failedLatest(Application $application): void

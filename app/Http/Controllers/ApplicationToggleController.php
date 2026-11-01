@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Enums\PowerState;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,12 @@ final class ApplicationToggleController extends Controller
             return back();
         }
 
+        $problem = $toggle === SmartToggles::REVERB && $on ? app(Reverb::class)->problem($application) : null;
+
+        if ($problem !== null) {
+            return back()->with('error', $problem);
+        }
+
         $toggles->apply($application, $toggle, $on);
 
         $message = match (true) {
@@ -41,6 +48,7 @@ final class ApplicationToggleController extends Controller
             $toggle === SmartToggles::MAINTENANCE => 'Maintenance page is off. Traffic reaches the app again.',
             $toggle === SmartToggles::AUTO_DEPLOY && $on => "Auto deploy is on, {$application->repository_branch} deploys whenever it changes.",
             $toggle === SmartToggles::AUTO_DEPLOY => 'Auto deploy is off, deploy from this page when you are ready.',
+            in_array($toggle, [SmartToggles::REVERB, SmartToggles::INERTIA_SSR], true) && $on => "{$label} starts with the next deploy.",
             $on => "{$label} is starting on {$server->name}, no deployment needed.",
             default => "{$label} stopped. Nothing else was touched.",
         };

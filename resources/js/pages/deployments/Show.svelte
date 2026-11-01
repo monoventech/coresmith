@@ -4,7 +4,7 @@
 
 <script lang="ts">
     import { router } from '@inertiajs/svelte'
-    import { OctagonAlert } from '@lucide/svelte'
+    import { CircleSlash, OctagonAlert } from '@lucide/svelte'
     import { onDestroy, onMount, tick } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
@@ -30,6 +30,9 @@
         failed_worker: string | null
         failed_step: string | null
         reached_users: boolean
+        cancel_requested: boolean
+        cancelled_by: string | null
+        cancellable: boolean
         release: string | null
         branch: string | null
         commit: string | null
@@ -43,6 +46,7 @@
     let {
         application,
         deployment,
+        deployment_links,
         back,
         streaming,
         can
@@ -50,6 +54,7 @@
         server: { id: string; name: string; href: string }
         application: { id: string; name: string; href: string; releases_href: string; deploy_href: string; current_release: string | null }
         deployment: Deployment
+        deployment_links: { cancel: string }
         back: { label: string; href: string }
         streaming: boolean
         can: { deploy: boolean }
@@ -84,11 +89,13 @@
     let poller: ReturnType<typeof setInterval> | null = null
     let clock: ReturnType<typeof setInterval> | null = null
     let retrying = $state(false)
+    let cancelling = $state(false)
 
     const live = $derived(pushed && pushed.id === deployment.id ? pushed : deployment)
     const finished = $derived(['succeeded', 'failed', 'cancelled'].includes(live.status))
     const running = $derived(live.status === 'running' || live.status === 'pending')
     const lines = $derived(live.log === '' ? [] : live.log.split('\n'))
+    const stopping = $derived(live.cancel_requested || cancelling)
     const liveFailure = $derived(live.failed_worker ? `${live.failed_worker} did not start` : live.start_failed ? FAILURES.watch : FAILURES.swap)
 
     const elapsed = $derived.by(() => {
@@ -148,6 +155,11 @@
     function retry() {
         retrying = true
         router.post(application.deploy_href, { from: 'app' }, { onFinish: () => (retrying = false) })
+    }
+
+    function cancel() {
+        cancelling = true
+        router.post(deployment_links.cancel, {}, { preserveScroll: true, onFinish: () => (cancelling = false) })
     }
 
     $effect(() => {
@@ -216,8 +228,12 @@
             {#if elapsed}<span class="max-sm:hidden">· {elapsed} elapsed</span>{/if}
         </p>
     </div>
-    {#if live.status === 'succeeded'}
+    {#if running && can.deploy && (live.cancellable || live.cancel_requested)}
+        <Button variant="outline" class="max-sm:hidden" disabled={stopping} onclick={cancel}>{stopping ? 'Cancelling…' : 'Cancel'}</Button>
+    {:else if live.status === 'succeeded'}
         <Button variant="outline" href={application.releases_href} class="max-sm:hidden">View releases</Button>
+    {:else if live.status === 'cancelled' && can.deploy}
+        <Button disabled={retrying} onclick={retry} class="max-sm:hidden">Deploy again</Button>
     {:else if live.status === 'failed' && can.deploy}
         <div class="flex gap-2 max-sm:hidden">
             {#if live.reached_users}
@@ -254,6 +270,21 @@
             {/if}
         </div>
     </div>
+{:else if live.status === 'cancelled'}
+    <div
+        class="mb-5 flex items-start gap-3 rounded-xl border border-border bg-card px-4.5 py-3.5 max-sm:mb-3.5 max-sm:gap-2.5 max-sm:px-3.5 max-sm:py-3"
+        data-testid="cancelled-strip"
+    >
+        <CircleSlash class="mt-0.5 size-4.5 shrink-0 text-muted-foreground max-sm:size-4" />
+        <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal">
+            <span class="font-semibold">{live.cancelled_by ? `${live.cancelled_by} cancelled this deploy, so nothing changed.` : 'This deploy was cancelled, so nothing changed.'}</span>
+            {#if application.current_release}
+                <span>The symlink still points at <span class="font-mono text-[12.5px]">{application.current_release}</span>, users never saw a difference.</span>
+            {:else}
+                <span>Nothing was live yet.</span>
+            {/if}
+        </div>
+    </div>
 {/if}
 
 <div class="grid grid-cols-[300px_1fr] items-start gap-4 max-[900px]:grid-cols-1 max-sm:gap-3.5">
@@ -267,7 +298,7 @@
                 <PhaseIcon state={phase.state} />
                 <span class="flex-1 text-[13.5px] font-medium max-sm:text-[13px]">{phase.label}</span>
                 <span class={cn('font-mono text-[12px] max-sm:text-[11.5px]', phase.state === 'failed' ? 'text-destructive-strong' : 'text-muted-foreground')}>
-                    {phase.state === 'failed' ? 'failed' : phase.duration}
+                    {phase.state === 'failed' ? 'failed' : phase.state === 'cancelled' ? 'cancelled' : phase.duration}
                 </span>
             </div>
         {/each}
@@ -311,6 +342,8 @@
         <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden">Roll back</Button>
     {/if}
     <Button size="lg" disabled={retrying} onclick={retry} class="mt-2.5 w-full sm:hidden">Retry deploy</Button>
+{:else if live.status === 'cancelled' && can.deploy}
+    <Button size="lg" disabled={retrying} onclick={retry} class="mt-3.5 w-full sm:hidden">Deploy again</Button>
 {/if}
 
 <p class="sr-only" data-testid="log-transport">

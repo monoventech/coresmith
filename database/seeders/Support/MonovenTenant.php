@@ -97,7 +97,7 @@ final class MonovenTenant
      * @param  array<string, bool>  $gems
      * @return array<string, mixed>
      */
-    public static function stack(array $runtimes, ?array $framework = null, ?JsTooling $tooling = null, array $gems = []): array
+    public static function stack(array $runtimes, ?array $framework = null, ?JsTooling $tooling = null, array $gems = [], array $packages = []): array
     {
         $resolved = [];
 
@@ -105,7 +105,7 @@ final class MonovenTenant
             $resolved[$runtime] = new ResolvedRuntime($runtime, $version, $source, $detail, true);
         }
 
-        return (new Stack($resolved, $framework, $tooling, gems: $gems))->applicationAttributes();
+        return (new Stack($resolved, $framework, $tooling, gems: $gems, packages: $packages))->applicationAttributes();
     }
 
     private function sshKeys(): void

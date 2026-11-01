@@ -64,7 +64,10 @@ final class AsdfManager
         $dependencies = BuildDependencies::for($runtime, $server->os_name);
 
         if ($dependencies !== []) {
-            $connection->execute(PackageManagerFactory::for($server)->install($dependencies), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+            $packages = PackageManagerFactory::for($server);
+
+            $connection->execute($packages->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+            $connection->execute($packages->install($dependencies), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
         }
 
         $this->withDownloadRetries($connection, $this->asCoresmith('asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);

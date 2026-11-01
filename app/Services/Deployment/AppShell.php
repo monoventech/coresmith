@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Deployment;
 
+use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
@@ -17,22 +18,48 @@ final class AppShell
 {
     public const SYSTEM_PATH = '/usr/local/bin:/usr/bin:/bin';
 
+    public const UNIT_PATTERN = '/^coresmith-(build|migrate|blueprint)-[a-z0-9-]+-\d{8}-?\d{6}\z/D';
+
     public function __construct(private readonly AsdfManager $asdf) {}
 
-    /**
-     * @param  array<string, string>  $versions
-     */
-    public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS): string
+    public static function buildUnit(Application $application, string $release): string
     {
-        return $this->unit($application, $directory, $versions, $this->build($seconds)) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
+        return self::assertUnit('coresmith-build-' . $application->slug . '-' . $release);
+    }
+
+    public static function migrateUnit(Application $application, string $release): string
+    {
+        return self::assertUnit('coresmith-migrate-' . $application->slug . '-' . $release);
+    }
+
+    public static function blueprintUnit(Application $application, string $release): string
+    {
+        return self::assertUnit('coresmith-blueprint-' . $application->slug . '-' . $release);
+    }
+
+    public static function assertUnit(string $unit): string
+    {
+        if (preg_match(self::UNIT_PATTERN, $unit) !== 1) {
+            throw UnsafeNameException::unit($unit);
+        }
+
+        return $unit;
     }
 
     /**
      * @param  array<string, string>  $versions
      */
-    public function runScript(Application $application, string $script, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS): string
+    public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null): string
     {
-        return $this->unit($application, $directory, $versions, $this->build($seconds)) . ' /bin/bash -s < ' . escapeshellarg($script);
+        return $this->unit($application, $directory, $versions, $this->build($seconds), unit: $unit) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
+    }
+
+    /**
+     * @param  array<string, string>  $versions
+     */
+    public function runScript(Application $application, string $script, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null): string
+    {
+        return $this->unit($application, $directory, $versions, $this->build($seconds), unit: $unit) . ' /bin/bash -s < ' . escapeshellarg($script);
     }
 
     /**
@@ -64,7 +91,7 @@ final class AppShell
      * @param  list<string>  $properties
      * @param  array<string, string>  $environment
      */
-    private function unit(Application $application, string $directory, array $versions, array $properties, array $environment = []): string
+    private function unit(Application $application, string $directory, array $versions, array $properties, array $environment = [], ?string $unit = null): string
     {
         $user = SafeName::assertSystemUser($application->system_user);
 
@@ -72,6 +99,7 @@ final class AppShell
             'systemd-run --quiet --wait --pipe --collect --service-type=exec',
             '--uid=' . $user,
             '--gid=' . $user,
+            ...($unit === null ? [] : ['--unit=' . self::assertUnit($unit)]),
             '-p ' . escapeshellarg('WorkingDirectory=' . $directory),
             ...array_map(fn(string $name, string $value): string => '-E ' . escapeshellarg($name . '=' . $value), array_keys($environment), $environment),
             '-p ' . escapeshellarg('EnvironmentFile=' . (new ReleasePaths($application))->envFile()),

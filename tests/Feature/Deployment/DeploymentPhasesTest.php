@@ -228,7 +228,7 @@ test('markers must start the line and name a known phase', function () {
 });
 
 test('a log with no markers follows the deployment status', function (DeploymentStatus $status, array $states, array $durations) {
-    $deployment = phasesDeployment($status, ['Another deployment is already in progress.']);
+    $deployment = phasesDeployment($status, ['Another deploy or a rollback is running for this app, so this one did not start.']);
 
     expect(array_values(phasesStates($deployment)))->toBe($states)
         ->and(array_values(phasesDurations($deployment)))->toBe($durations);
@@ -240,13 +240,13 @@ test('a log with no markers follows the deployment status', function (Deployment
     'cancelled' => [DeploymentStatus::Cancelled, array_fill(0, 6, 'skipped'), array_fill(0, 6, '—')],
 ]);
 
-test('a cancelled deployment that had started fails the phase it stopped in', function () {
+test('a cancelled deployment that had started marks the phase it stopped in cancelled', function () {
     $deployment = phasesDeployment(DeploymentStatus::Cancelled, [
         '[08:00:00] clone: fetching over https',
         '[08:00:05] deps: installing dependencies',
     ]);
 
-    expect(phasesStates($deployment))->toMatchArray(['clone' => 'done', 'deps' => 'failed', 'build' => 'skipped']);
+    expect(phasesStates($deployment))->toMatchArray(['clone' => 'done', 'deps' => 'cancelled', 'build' => 'skipped']);
 });
 
 test('progress names the phase that is running', function () {

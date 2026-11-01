@@ -23,6 +23,11 @@ return [
         )
         : null,
 
+    'sentry' => [
+        'browser_dsn' => env('SENTRY_BROWSER_DSN') ?: null,
+        'browser_traces_sample_rate' => (float) env('SENTRY_BROWSER_TRACES_SAMPLE_RATE', 0.0),
+    ],
+
     'activity' => [
         'ssh_command_days' => (int) env('CORESMITH_SSH_ACTIVITY_DAYS', 90),
     ],
@@ -31,6 +36,10 @@ return [
         'poll_minutes' => (int) env('CORESMITH_POLL_MINUTES', 1),
         'safety_net_minutes' => (int) env('CORESMITH_POLL_SAFETY_NET_MINUTES', 10),
         'server_poll_minutes' => (int) env('CORESMITH_SERVER_POLL_MINUTES', 5),
+    ],
+
+    'live' => [
+        'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
     ],
 
     'runtimes' => [

@@ -13,7 +13,7 @@
     const motion = $derived(
         ['deploying', 'provisioning', 'running', 'creating', 'destroying'].includes(state)
             ? 'status-dot-working'
-            : ['healthy', 'warning', 'live'].includes(state)
+            : ['healthy', 'warning', 'memory', 'live'].includes(state)
               ? 'status-dot-pulse'
               : ''
     )
