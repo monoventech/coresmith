@@ -44,6 +44,8 @@ Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith
 
 Schedule::command('model:prune', ['--model' => [StripeEvent::class]])->dailyAt('05:00')->name('coresmith:prune-stripe-events');
 
+Schedule::command('coresmith:trial-reminders')->dailyAt('09:00')->name('coresmith:trial-reminders')->withoutOverlapping();
+
 Schedule::command('coresmith:backup')->dailyAt('04:00')->name('coresmith:backup')->withoutOverlapping();
 
 Schedule::command('coresmith:weekly-digest')->weeklyOn(1, '08:00')->name('coresmith:weekly-digest')->withoutOverlapping();
