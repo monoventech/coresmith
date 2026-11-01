@@ -5,12 +5,14 @@ declare(strict_types=1);
 use App\Enums\ApplicationStatus;
 use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
+use App\Jobs\DeployApplication;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\DiscardRelease;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -434,4 +436,54 @@ test('a cancelled dead deploy of a removed app ends Cancelled, and the next stal
 
     Event::assertDispatchedTimes(DeploymentFailed::class, 1);
     Queue::assertPushed(DiscardRelease::class, 2);
+});
+
+test('a cancelled dead deploy hands a newer push to auto deploy once its lock is free, and never its own head', function (bool $pushedSince) {
+    Queue::fake();
+    $head = str_repeat('a', 40);
+    $newer = str_repeat('b', 40);
+    $deployment = staleCancelledDeployment(['requested_commit' => $head], ['quick_deploy' => true, 'repository_head' => $head]);
+    Cache::lock('deploy:' . $deployment->application_id, 600)->get();
+    $lockFree = null;
+
+    if ($pushedSince) {
+        app(AutoDeploy::class)->observe($deployment->application->fresh(), $newer, 'push');
+    }
+
+    Deployment::created(function (Deployment $created) use (&$lockFree): void {
+        $lock = Cache::lock('deploy:' . $created->application_id, 10);
+        $lockFree = $lock->get();
+        $lock->release();
+    });
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Cancelled)
+        ->and(Deployment::query()->where('requested_commit', $head)->count())->toBe(1)
+        ->and(Deployment::query()->where('requested_commit', $newer)->count())->toBe($pushedSince ? 1 : 0)
+        ->and($lockFree)->toBe($pushedSince ? true : null)
+        ->and(Queue::pushed(DeployApplication::class))->toHaveCount($pushedSince ? 1 : 0);
+})->with([
+    'a push landed meanwhile' => [true],
+    'nothing new was pushed' => [false],
+]);
+
+test('a cancel that throws once it has won still frees the lock, removes the release and follows up', function () {
+    Queue::fake();
+    $newer = str_repeat('b', 40);
+    $deployment = staleCancelledDeployment(['requested_commit' => str_repeat('a', 40)], ['quick_deploy' => true, 'repository_head' => $newer]);
+    Cache::lock('deploy:' . $deployment->application_id, 600)->get();
+
+    Application::saving(function (): void {
+        throw new RuntimeException('The database went away.');
+    });
+
+    expect(fn() => (new DetectStaleDeployments)->handle())->toThrow(RuntimeException::class, 'The database went away.');
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Cancelled)
+        ->and(Cache::lock('deploy:' . $deployment->application_id, 10)->get())->toBeTrue()
+        ->and(Deployment::query()->where('requested_commit', $newer)->count())->toBe(1);
+
+    Queue::assertPushed(DiscardRelease::class, 1);
+    Queue::assertPushed(DeployApplication::class, 1);
 });

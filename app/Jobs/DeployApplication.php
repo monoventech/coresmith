@@ -66,6 +66,7 @@ use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 use phpseclib3\Exception\ConnectionClosedException;
 use Throwable;
 
@@ -193,39 +194,31 @@ final class DeployApplication implements ShouldQueue
     public function failed(Throwable $e): void
     {
         $deployment = $this->deployment->fresh();
-        $failed = $deployment !== null && $this->endKilled($deployment, $e);
 
-        if ($this->lockOwner !== null) {
-            Cache::restoreLock($this->lockKey(), $this->lockOwner)->release();
-        } elseif ($failed) {
-            Cache::lock($this->lockKey())->forceRelease();
-        }
-    }
+        if ($deployment?->status !== DeploymentStatus::Running) {
+            $this->releaseKilledLock(false);
 
-    private function endKilled(Deployment $deployment, Throwable $e): bool
-    {
-        if ($deployment->status !== DeploymentStatus::Running) {
-            return false;
+            return;
         }
 
         $swapped = $deployment->application?->current_release === $this->timestamp;
 
-        $ended = $deployment->cancel_requested_at !== null && DeploymentCancellation::beforeMigrations($deployment)
-            ? $this->cancelKilled($deployment)
-            : app(DeploymentLog::class)->failIfRunning($deployment, $this->killedReason($e), $swapped);
+        if (DeploymentCancellation::endsCancelled($deployment)) {
+            $this->cancelKilled($deployment, $swapped);
 
-        if (!$ended) {
-            return false;
+            return;
         }
 
-        if (!$swapped) {
+        $failed = app(DeploymentLog::class)->failIfRunning($deployment, $this->killedReason($e), $swapped);
+
+        if ($failed && !$swapped) {
             $this->removeKilledRelease($deployment);
         }
 
-        return true;
+        $this->releaseKilledLock($failed);
     }
 
-    private function cancelKilled(Deployment $deployment): bool
+    private function cancelKilled(Deployment $deployment, bool $swapped): void
     {
         $cancelled = Deployment::query()
             ->whereKey($deployment->getKey())
@@ -233,14 +226,32 @@ final class DeployApplication implements ShouldQueue
             ->update(['status' => DeploymentStatus::Cancelled->value, 'finished_at' => now()]);
 
         if ($cancelled === 0) {
-            return false;
+            $this->releaseKilledLock(false);
+
+            return;
         }
 
-        $cancellation = app(DeploymentCancellation::class);
-        $cancellation->note($deployment);
-        $cancellation->finish($deployment);
+        try {
+            $cancellation = app(DeploymentCancellation::class);
+            $cancellation->note($deployment);
+            $cancellation->finish($deployment);
+        } finally {
+            if (!$swapped) {
+                $this->removeKilledRelease($deployment);
+            }
 
-        return true;
+            $this->releaseKilledLock(true);
+            $this->followUp();
+        }
+    }
+
+    private function releaseKilledLock(bool $ended): void
+    {
+        if ($this->lockOwner !== null) {
+            Cache::restoreLock($this->lockKey(), $this->lockOwner)->release();
+        } elseif ($ended) {
+            Cache::lock($this->lockKey())->forceRelease();
+        }
     }
 
     private function killedReason(Throwable $e): string
@@ -508,10 +519,11 @@ final class DeployApplication implements ShouldQueue
             $this->mark(DeploymentPhases::BUILD, 'running the custom blueprint');
             $this->runBlueprint($connection, $release, $application, $stack);
         } else {
+            $stopBuild = fn() => $this->stopBuild($connection, $application);
             $this->checkpoint();
-            $this->reconnecting($connection, DeploymentPhases::DEPENDENCIES, fn() => $this->installDependencies($connection, $commands, $release, $stack));
+            $this->reconnecting($connection, DeploymentPhases::DEPENDENCIES, fn() => $this->installDependencies($connection, $commands, $release, $stack), $stopBuild);
             $this->checkpoint();
-            $this->reconnecting($connection, DeploymentPhases::BUILD, fn() => $this->build($connection, $commands, $release, $stack));
+            $this->reconnecting($connection, DeploymentPhases::BUILD, fn() => $this->build($connection, $commands, $release, $stack), $stopBuild);
             $this->checkpoint();
             $this->pastCancelPoint = true;
             $this->migrate($connection, $commands, $release, $stack);
@@ -548,7 +560,7 @@ final class DeployApplication implements ShouldQueue
         DeploymentSucceeded::dispatch($this->deployment);
     }
 
-    private function reconnecting(SSHConnection $connection, string $phase, Closure $work): mixed
+    private function reconnecting(SSHConnection $connection, string $phase, Closure $work, ?Closure $beforeRetry = null): mixed
     {
         try {
             return $work();
@@ -558,6 +570,10 @@ final class DeployApplication implements ShouldQueue
             Sleep::for(self::RETRY_SECONDS)->seconds();
 
             try {
+                if ($beforeRetry !== null) {
+                    $beforeRetry();
+                }
+
                 return $work();
             } catch (ConnectionClosedException $e) {
                 $this->failureReason = 'The SSH connection to ' . $connection->server()->name . " dropped twice during {$phase}. Check the server is reachable, then deploy again.";
@@ -565,6 +581,11 @@ final class DeployApplication implements ShouldQueue
                 throw $e;
             }
         }
+    }
+
+    private function stopBuild(SSHConnection $connection, Application $application): void
+    {
+        $connection->execute('systemctl stop ' . AppShell::buildUnit($application, $this->timestamp) . '.service || true', sudo: true);
     }
 
     private function git(SSHConnection $connection, string $command, string $step, ?Closure $beforeRetry = null): void
@@ -830,7 +851,7 @@ final class DeployApplication implements ShouldQueue
     private function startProcesses(SSHConnection $connection, ProcessManager $processes, Application $application, bool $restart): void
     {
         if (in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
-            $this->appendLog('processes: ' . $application->name . ' is ' . $application->power_state->value . ', so the new release starts when the app does');
+            $this->appendLog('processes: ' . Str::squish($application->name) . ' is ' . $application->power_state->value . ', so the new release starts when the app does');
 
             return;
         }
@@ -1040,7 +1061,7 @@ final class DeployApplication implements ShouldQueue
         return match ($this->deployment->trigger) {
             'poll' => 'polling',
             'push' => 'push',
-            default => $this->deployment->triggeredBy?->name ?? 'push',
+            default => Str::squish($this->deployment->triggeredBy?->name ?? 'push'),
         };
     }
 

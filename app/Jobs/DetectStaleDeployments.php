@@ -40,7 +40,7 @@ final class DetectStaleDeployments implements ShouldQueue
         $this->stale(Deployment::query())
             ->get()
             ->each(function (Deployment $deployment): void {
-                if ($deployment->cancel_requested_at !== null && DeploymentCancellation::beforeMigrations($deployment)) {
+                if (DeploymentCancellation::endsCancelled($deployment)) {
                     $this->cancel($deployment);
 
                     return;
@@ -89,13 +89,17 @@ final class DetectStaleDeployments implements ShouldQueue
             return;
         }
 
-        $deployment->refresh();
-
         $cancellation = app(DeploymentCancellation::class);
-        $cancellation->note($deployment);
-        $cancellation->finish($deployment);
 
-        $this->cleanUp($deployment);
+        try {
+            $deployment->refresh();
+
+            $cancellation->note($deployment);
+            $cancellation->finish($deployment);
+        } finally {
+            $this->cleanUp($deployment);
+            $cancellation->followUp($deployment);
+        }
     }
 
     private function cleanUp(Deployment $deployment): void

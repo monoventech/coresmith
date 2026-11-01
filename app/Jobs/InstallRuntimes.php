@@ -113,6 +113,12 @@ final class InstallRuntimes implements ShouldQueue
 
             $this->removeReleaseDirectory($deployment, $application);
 
+            if (DeploymentCancellation::endsCancelled($deployment)) {
+                $this->cancel($deployment);
+
+                return;
+            }
+
             $application === null
                 ? app(DeploymentLog::class)->failLeavingApplication($deployment, $e->getMessage(), $this->reason($e))
                 : app(DeploymentLog::class)->fail($deployment, $e->getMessage(), $this->reason($e));
@@ -176,6 +182,7 @@ final class InstallRuntimes implements ShouldQueue
         $this->removeRelease($connection, $this->deployment);
         $cancellation->finish($this->deployment);
         $this->releaseLock();
+        $cancellation->followUp($this->deployment);
     }
 
     private function abandon(SSHConnection $connection, DeploymentLog $log, Throwable $e): void
@@ -186,11 +193,43 @@ final class InstallRuntimes implements ShouldQueue
 
         $this->removeRelease($connection, $this->deployment);
 
-        if ($this->deployment->fresh()?->status === DeploymentStatus::Running) {
+        $deployment = $this->deployment->fresh();
+
+        if ($deployment?->status === DeploymentStatus::Running) {
+            if (DeploymentCancellation::endsCancelled($deployment)) {
+                $this->cancel($deployment);
+
+                return;
+            }
+
             $log->fail($this->deployment, $e->getMessage(), $this->reason($e));
         }
 
         $this->releaseLock();
+    }
+
+    private function cancel(Deployment $deployment): void
+    {
+        $cancelled = Deployment::query()
+            ->whereKey($deployment->getKey())
+            ->where('status', DeploymentStatus::Running->value)
+            ->update(['status' => DeploymentStatus::Cancelled->value, 'finished_at' => now()]);
+
+        if ($cancelled === 0) {
+            $this->releaseLock();
+
+            return;
+        }
+
+        $cancellation = app(DeploymentCancellation::class);
+
+        try {
+            $cancellation->note($deployment);
+            $cancellation->finish($deployment);
+        } finally {
+            $this->releaseLock();
+            $cancellation->followUp($deployment);
+        }
     }
 
     private function removeReleaseDirectory(Deployment $deployment, ?Application $application): void

@@ -16,6 +16,8 @@ use App\Jobs\PostCommitStatus;
 use App\Jobs\StopDeployBuild;
 use App\Models\Deployment;
 use App\Models\User;
+use App\Services\AutoDeploy\AutoDeploy;
+use Illuminate\Support\Str;
 
 final class DeploymentCancellation
 {
@@ -93,6 +95,11 @@ final class DeploymentCancellation
         };
     }
 
+    public static function endsCancelled(Deployment $deployment): bool
+    {
+        return $deployment->cancel_requested_at !== null && self::beforeMigrations($deployment);
+    }
+
     public static function beforeMigrations(Deployment $deployment): bool
     {
         $log = (string) $deployment->log;
@@ -108,7 +115,7 @@ final class DeploymentCancellation
 
         $name = $this->asker($deployment)?->name;
 
-        $this->log->append($deployment, $name === null ? 'cancel: asked to stop the deploy' : "cancel: {$name} asked to stop the deploy");
+        $this->log->append($deployment, $name === null ? 'cancel: asked to stop the deploy' : 'cancel: ' . Str::squish($name) . ' asked to stop the deploy');
     }
 
     public function finish(Deployment $deployment): void
@@ -143,6 +150,11 @@ final class DeploymentCancellation
         FleetChanged::forDeployment($deployment);
     }
 
+    public function followUp(Deployment $deployment): void
+    {
+        rescue(fn() => app(AutoDeploy::class)->afterDeployment($deployment), report: true);
+    }
+
     private function cancelQueued(Deployment $deployment, User $user): bool
     {
         $now = now();
@@ -161,10 +173,14 @@ final class DeploymentCancellation
             return false;
         }
 
-        $deployment->refresh();
+        try {
+            $deployment->refresh();
 
-        $this->note($deployment);
-        $this->finish($deployment);
+            $this->note($deployment);
+            $this->finish($deployment);
+        } finally {
+            $this->followUp($deployment);
+        }
 
         return true;
     }
