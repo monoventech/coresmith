@@ -101,6 +101,24 @@ A "not built" note names what blocks it. If nothing blocks it, build it.
 - `dev`: active development, may break.
 - `main`: production-deploy branch for Coresmith Cloud and the latest tagged release for self-hosted users.
 
+## Cutting a release
+
+Maintainers release with `scripts/release.sh` from a clean checkout. It runs every check in "Before you commit", builds, bumps `VERSION` and the installer's version, writes `CHANGELOG.md` for a stable release, tags, pushes the branch and the tag together, then publishes a GitHub release with the installer attached. If anything fails before the push, it puts the branch back as it was and says nothing was pushed.
+
+- `./scripts/release.sh 1.0.2` on `main` cuts a stable release. It merges `dev` into `main` first, so both must match their remote copies.
+- `./scripts/release.sh 1.0.3-beta.1` on `dev` cuts a pre-release, tagged on `dev` with no merge.
+- `./scripts/release.sh 1.0.3` on `dev` becomes the next beta, `1.0.3-beta.N`.
+- `./scripts/release.sh 1.0.3-rc.1` cuts a release candidate.
+
+Pass `--yes` to skip the confirmation. `CORESMITH_RELEASE_REMOTE` picks the remote (default `origin`) and `CORESMITH_RELEASE_REPO` the GitHub repository as `owner/name` (default read from the remote's address).
+
+Signing:
+
+- A stable release needs an OpenPGP signing key, or `--unsigned`. The key is `CORESMITH_SIGNING_KEY`, else `git config user.signingkey` when `gpg.format` is unset or `openpgp`. An SSH signing key doesn't count, because updaters can only check OpenPGP signatures. Updaters report an unsigned release as unchecked.
+- The release key's public half is committed to `resources/release-keys/` once. From then on every release must be signed by one of those keys, and `--unsigned` is refused, because every install that has the keys rejects an unsigned release.
+
+Publishing needs the GitHub CLI signed in, so run `gh auth login` first. If publishing fails after the push, the script prints the `gh release create` command that finishes it.
+
 ## Commits
 
 Follow Conventional Commits style (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`).
