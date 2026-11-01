@@ -7,6 +7,7 @@
     import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
+    import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
@@ -15,6 +16,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Textarea } from '@/components/ui/textarea'
+    import type { CronCard, CronSend } from '@/lib/cron'
     import type { EntityState } from '@/lib/fleet'
     import { follow } from '@/lib/live.svelte'
 
@@ -36,6 +38,7 @@
         server,
         application,
         toggles = [],
+        cron,
         can
     }: {
         server: { id: string; name: string; href: string }
@@ -49,7 +52,16 @@
             additional_domains: string[]
             certificates: {
                 checked_at: string
-                domains: Record<string, { state: 'valid' | 'expiring' | 'expired' | 'none'; expires_at: string | null; days: number | null; label: string; title: string }>
+                domains: Record<
+                    string,
+                    {
+                        state: 'valid' | 'expiring' | 'expired' | 'none'
+                        expires_at: string | null
+                        days: number | null
+                        label: string
+                        title: string
+                    }
+                >
             } | null
             repository: string | null
             branch: string
@@ -84,7 +96,8 @@
             runtime_eol: { runtime: string; ended: string; fix: string } | null
         }
         toggles: Toggle[]
-        can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean }
+        cron: CronCard
+        can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
     } = $props()
 
     const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i
@@ -106,6 +119,8 @@
     })
     let poll: ReturnType<typeof setInterval> | null = null
     let checking: { cancel: () => void } | null = null
+    let cronBusy = $state(false)
+    let cronReload: { cancel: () => void } | null = null
 
     const domains = $derived([...(application.domain ? [application.domain] : []), ...application.additional_domains])
     const failedDeploy = $derived(
@@ -138,12 +153,37 @@
         return () => clearInterval(timer)
     })
 
+    $effect(() => {
+        if (cron.state !== 'applying') {
+            return
+        }
+
+        const timer = setInterval(() => {
+            if (!cronBusy && !Object.values(busy).some(Boolean)) {
+                router.reload({ only: ['cron'], onCancelToken: (token) => (cronReload = token) })
+            }
+        }, 3000)
+
+        return () => clearInterval(timer)
+    })
+
+    const sendCron: CronSend = (visit) => {
+        cronReload?.cancel()
+        cronBusy = true
+        visit(() => (cronBusy = false))
+    }
+
+    function retryCron() {
+        sendCron((finish) => router.post(cron.sync_href, {}, { preserveScroll: true, onFinish: finish }))
+    }
+
     function flip(toggle: Toggle, on: boolean) {
         if (busy[toggle.key]) {
             return
         }
 
         checking?.cancel()
+        cronReload?.cancel()
         busy = { ...busy, [toggle.key]: true }
         router.put(
             toggle.href,
@@ -265,7 +305,7 @@
     onMount(() =>
         follow({
             only: ['application', 'toggles', 'panel', ...('cron' in page.props ? ['cron'] : [])],
-            paused: () => working || Object.values(busy).some(Boolean)
+            paused: () => working || cronBusy || Object.values(busy).some(Boolean)
         })
     )
 
@@ -375,6 +415,27 @@
     </div>
 {/each}
 
+{#if cron.error}
+    <div
+        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:items-start max-sm:px-3.5"
+        data-testid="cron-failed-banner"
+    >
+        <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:basis-[calc(100%-1.75rem)] max-sm:text-[12.5px]">
+            <span class="font-semibold">{`The cron jobs did not reach ${server.name}.`}</span>
+            {` ${cron.error}`}
+        </span>
+        {#if can.update}
+            <button
+                type="button"
+                class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7 max-sm:h-11!"
+                disabled={cronBusy}
+                onclick={retryCron}>Try again</button
+            >
+        {/if}
+    </div>
+{/if}
+
 {#if application.oom}
     <div
         class="tint-warning mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
@@ -429,28 +490,39 @@
 {/if}
 
 <div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1 max-sm:gap-3">
-    <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4" data-testid="smart-toggles">
-        <h3 class="type-h3 m-0 mb-1 max-sm:mb-0.5 max-sm:text-[15px]">Smart toggles</h3>
-        <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
-            Based on what {application.kind} apps run.
-            <span class="max-sm:hidden"
-                >Flipping a switch changes what runs on {server.name}, no deployment needed.</span
-            ><span class="sm:hidden">No deployment needed.</span>
-        </p>
-        <div class="flex flex-col">
-            {#each toggles as toggle (toggle.key)}
-                <ToggleRow
-                    label={toggle.label}
-                    description={toggle.description}
-                    checked={toggle.on}
-                    busy={busy[toggle.key]}
-                    busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
-                    disabled={!can.update || toggle.disabled}
-                    onchange={(on) => flip(toggle, on)}
-                    testid="toggle-{toggle.key}"
-                />
-            {/each}
+    <div class="flex flex-col gap-4 max-sm:gap-3">
+        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4" data-testid="smart-toggles">
+            <h3 class="type-h3 m-0 mb-1 max-sm:mb-0.5 max-sm:text-[15px]">Smart toggles</h3>
+            <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
+                Based on what {application.kind} apps run.
+                <span class="max-sm:hidden"
+                    >Flipping a switch changes what runs on {server.name}, no deployment needed.</span
+                ><span class="sm:hidden">No deployment needed.</span>
+            </p>
+            <div class="flex flex-col">
+                {#each toggles as toggle (toggle.key)}
+                    <ToggleRow
+                        label={toggle.label}
+                        description={toggle.description}
+                        checked={toggle.on}
+                        busy={busy[toggle.key]}
+                        busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
+                        disabled={!can.update || toggle.disabled}
+                        onchange={(on) => flip(toggle, on)}
+                        testid="toggle-{toggle.key}"
+                    />
+                {/each}
+            </div>
         </div>
+
+        <CronJobsCard
+            {cron}
+            server={server.name}
+            canUpdate={can.update}
+            canViewLogs={can.viewLogs}
+            busy={cronBusy}
+            send={sendCron}
+        />
     </div>
 
     <div class="flex flex-col gap-4 max-sm:gap-3">
@@ -513,10 +585,15 @@
             </div>
             {#each domains as domain, index (domain)}
                 {@const certificate = application.certificates?.domains[domain]}
-                <div class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]" data-testid="domain-row">
+                <div
+                    class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]"
+                    data-testid="domain-row"
+                >
                     <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{domain}</span>
                     {#if certificate}
-                        <Badge variant={certificateTones[certificate.state]} title={certificate.title}>{certificate.label}</Badge>
+                        <Badge variant={certificateTones[certificate.state]} title={certificate.title}
+                            >{certificate.label}</Badge
+                        >
                     {/if}
                     <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
                 </div>
@@ -570,8 +647,8 @@
             <div class="border-danger rounded-xl border bg-card px-5.5 py-5 max-sm:hidden">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Stopping puts up the maintenance page until you start it again. Removing stops the app and detaches
-                    it from this server, its releases stay on disk until you prune them.
+                    Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops
+                    the app and detaches it from this server, its releases stay on disk until you prune them.
                 </p>
                 <div class="flex flex-wrap gap-2">
                     {#if can.update && !application.stopped}

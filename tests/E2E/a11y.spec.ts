@@ -35,6 +35,46 @@ const PAGES: [string, Visit][] = [
     ['Unreachable server', (page) => gotoServer(page, 'down-01')],
     ['Certificates', (page) => gotoApplication(page, 'bench-01', 'certs-app')],
     ['Realtime toggles', (page) => gotoApplication(page, 'bench-01', 'realtime-chr')],
+    ['Application with cron jobs', (page) => gotoApplication(page, 'bench-01', 'cron-jobs')],
+    [
+        'Application whose cron jobs did not reach the server',
+        (page) => gotoApplication(page, 'bench-01', 'cron-failed')
+    ],
+    ['Application whose cron jobs are paused', (page) => gotoApplication(page, 'bench-01', 'cron-paused')],
+    [
+        'Adding a cron job',
+        async (page) => {
+            await gotoApplication(page, 'bench-01', 'cron-jobs')
+
+            if ((page.viewportSize()?.width ?? 0) >= 640) {
+                await page.getByTestId('cron-jobs').getByRole('button', { name: 'Add cron job' }).click()
+                await page.getByRole('dialog').getByLabel('Runs').selectOption('custom')
+                await page.getByRole('dialog').getByLabel('Expression').waitFor()
+            }
+        }
+    ],
+    [
+        'Removing a cron job',
+        async (page) => {
+            await gotoApplication(page, 'bench-01', 'cron-jobs')
+
+            if ((page.viewportSize()?.width ?? 0) >= 640) {
+                await page.getByTestId('cron-jobs').getByRole('button', { name: 'Remove Nightly backup' }).click()
+                await page.getByRole('dialog').waitFor()
+            }
+        }
+    ],
+    [
+        'Scheduler output',
+        async (page) => {
+            await gotoApplication(page, 'bench-01', 'cron-jobs')
+
+            if ((page.viewportSize()?.width ?? 0) >= 640) {
+                await page.getByTestId('cron-jobs').getByRole('button', { name: 'Show output' }).click()
+                await page.getByTestId('scheduler-log').waitFor()
+            }
+        }
+    ],
     ['Server not connected yet', (page) => gotoServer(page, 'empty-server')],
     ['Server checked before provisioning', (page) => gotoServer(page, 'audit-server')],
     ['Server being checked', (page) => gotoServer(page, 'checking-server')],

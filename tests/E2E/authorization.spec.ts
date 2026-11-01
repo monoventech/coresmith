@@ -1,4 +1,12 @@
-import { asMember, expect, gotoApplication, gotoServer, gotoServerTab, gotoSettings } from './support/fixtures'
+import {
+    asMember,
+    expect,
+    gotoApplication,
+    gotoServer,
+    gotoServerTab,
+    gotoSettings,
+    isMobile
+} from './support/fixtures'
 
 asMember.describe('what a member may do', () => {
     asMember('a member sees the fleet but is not offered provisioning', async ({ page }) => {
@@ -29,6 +37,25 @@ asMember.describe('what a member may do', () => {
         await expect(page.getByTestId('firewall').getByRole('button', { name: 'Apply' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Prune old releases' })).toHaveCount(0)
         await expect(page.getByRole('switch', { name: 'Audit logging' })).toBeDisabled()
+    })
+
+    asMember('a member sees the cron jobs but cannot change them', async ({ page }, testInfo) => {
+        asMember.skip(
+            isMobile(testInfo),
+            'The phone app page keeps only Deploy, the toggles and the current release, as the mobile prototype draws it'
+        )
+
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const card = page.getByTestId('cron-jobs')
+
+        await expect(card.getByTestId('cron-job').filter({ hasText: 'Laravel scheduler' })).toContainText(
+            'Every minute'
+        )
+        await expect(card.getByRole('button', { name: 'Add cron job' })).toHaveCount(0)
+        await expect(card.getByRole('button', { name: 'Edit Laravel scheduler' })).toHaveCount(0)
+        await expect(card.getByRole('button', { name: 'Remove Laravel scheduler' })).toHaveCount(0)
+        await expect(card.getByRole('button', { name: 'Show output' })).toBeVisible()
     })
 
     asMember('a member can deploy but cannot change the app or read its secrets', async ({ page }) => {
