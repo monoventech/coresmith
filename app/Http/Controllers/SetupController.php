@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Panel\SetupProgress;
 use Illuminate\Http\RedirectResponse;
@@ -26,7 +27,7 @@ use Inertia\Response;
 
 final class SetupController extends Controller
 {
-    public function show(Request $request, ServerPresenter $servers, GitHubSettingsPresenter $github): RedirectResponse|Response
+    public function show(Request $request, ServerPresenter $servers, GitHubSettingsPresenter $github, CloudPresenter $cloud): RedirectResponse|Response
     {
         $user = $request->user();
         $team = $this->currentTeam();
@@ -40,6 +41,8 @@ final class SetupController extends Controller
         $current = $progress->current();
         $requested = (int) $request->query('step', (string) $current);
         $step = max(0, min($requested, $current));
+        $account = $request->query('account');
+        $account = is_string($account) ? $account : null;
 
         $server = $team->servers()->whereNot('status', ServerStatus::Active->value)->latest()->first()
             ?? $team->servers()->latest()->first();
@@ -52,6 +55,13 @@ final class SetupController extends Controller
             'complete' => $progress->complete(),
             'github' => fn(): ?array => $step === 0 ? $this->github($github, $team, $user) : null,
             'team' => ['id' => $team->id],
+            'cloud' => fn(): ?array => $step === 1 ? $cloud->choices($team, $user, $account) : null,
+            ...($step === 1 ? ['catalog' => Inertia::defer(function () use ($cloud, $team, $account): ?array {
+                $selected = $cloud->selectedAccount($team, $account);
+
+                return $selected === null ? null : $cloud->catalog($selected);
+            })] : []),
+            'environments' => ServerController::ENVIRONMENTS,
             'server' => $server instanceof Server ? [
                 ...$servers->header($server, $user),
                 'href' => route('servers.show', $server),

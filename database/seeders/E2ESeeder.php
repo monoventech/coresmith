@@ -382,6 +382,18 @@ final class E2ESeeder extends Seeder
             'installation_id' => null,
             'scopes' => SourceProviderType::GitLab->scopes(),
         ]);
+
+        $foundry = Team::factory()->create(['name' => 'Foundry', 'slug' => 'foundry', 'owner_id' => $owner->id]);
+        $foundry->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($foundry)->create(['name' => 'foundry-works', 'access_token' => 'ghs_foundry_never_sent']);
+
+        $kiln = Team::factory()->create(['name' => 'Kiln', 'slug' => 'kiln', 'owner_id' => $owner->id]);
+        $kiln->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+        SourceProvider::factory()->for($kiln)->create(['name' => 'kiln-works', 'access_token' => 'ghs_kiln_never_sent']);
+        $kilnCloud = CloudProvider::factory()->for($kiln)->create(['name' => 'Hetzner Cloud', 'api_token' => 'kiln-e2e-never-sent']);
+        $kiln01 = Server::factory()->fromProvider($kilnCloud)->creating()->create(['name' => 'kiln-01', 'environment' => 'Production', 'host_key_fingerprint' => null]);
+        CloudTask::start($kiln01, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
+        CloudTask::advance($kiln01, 'ssh');
     }
 
     private function registeredApp(Team $team, User $owner, string $login, string $appId): GitHubApp

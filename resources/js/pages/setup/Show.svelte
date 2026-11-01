@@ -1,7 +1,10 @@
 <script lang="ts">
-    import { Form, Link, router } from '@inertiajs/svelte'
+    import { Deferred, Form, Link, router } from '@inertiajs/svelte'
     import { Check, GitBranch } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
+    import CloudConnectFields from '@/components/cloud/CloudConnectFields.svelte'
+    import CloudServerFields from '@/components/cloud/CloudServerFields.svelte'
+    import CloudSteps from '@/components/cloud/CloudSteps.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
@@ -10,6 +13,8 @@
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { NativeSelect } from '@/components/ui/native-select'
+    import type { CloudCatalog, CloudChoices, CloudPicks } from '@/lib/cloud'
     import type { GitHubSetup } from '@/lib/github'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
@@ -23,7 +28,10 @@
         team,
         server = null,
         application = null,
-        create_application_href = null
+        create_application_href = null,
+        cloud = null,
+        catalog,
+        environments = []
     }: {
         steps: { label: string; done: boolean }[]
         current: number
@@ -42,15 +50,69 @@
             deploy_href: string
         } | null
         create_application_href: string | null
+        cloud: CloudChoices | null
+        catalog?: CloudCatalog | null
+        environments: string[]
     } = $props()
 
     let deploying = $state(false)
+    let source = $state<'provider' | 'existing'>('provider')
+    let picked = $state<string | null>(null)
+    let picks = $state<CloudPicks>({})
+
+    const sources = [
+        {
+            key: 'provider' as const,
+            label: 'Provision through a provider',
+            desc: 'Hetzner, DigitalOcean, Vultr or Linode, with an API token'
+        },
+        { key: 'existing' as const, label: 'Use an existing VM', desc: 'Any Ubuntu 24.04 machine with SSH access' }
+    ]
+
+    const options = $derived([
+        ...(cloud?.accounts ?? []).map((row) => ({
+            value: `account:${row.id}`,
+            label: row.refused ? `${row.name}, token refused` : row.name
+        })),
+        ...(cloud?.types ?? []).map((type) => ({
+            value: `connect:${type.value}`,
+            label: `${type.label}, not connected yet`
+        }))
+    ])
+    const choice = $derived(
+        picked !== null && options.some((option) => option.value === picked)
+            ? picked
+            : cloud?.selected.startsWith('account:')
+              ? cloud.selected
+              : (options.find((option) => option.value.startsWith('connect:'))?.value ?? options[0]?.value ?? '')
+    )
+    const account = $derived(cloud?.accounts.find((row) => `account:${row.id}` === choice) ?? null)
+    const connecting = $derived(cloud?.types.find((type) => `connect:${type.value}` === choice) ?? null)
+    const creation = $derived(
+        server?.provisioning?.status === 'creating' && server.cloud?.task?.type === 'create' ? server.cloud : null
+    )
 
     const provisioning = $derived(server?.provisioning ?? null)
     const elsewhere = $derived(github?.elsewhere ? new URL(github.elsewhere).host : null)
 
     function go(index: number) {
         router.visit(route('setup.show', { step: index }), { preserveScroll: true })
+    }
+
+    function choose(value: string) {
+        if (value !== choice) {
+            picks = {}
+        }
+
+        picked = value
+
+        if (value.startsWith('account:')) {
+            router.get(
+                route('setup.show', { step: 1, account: value.slice('account:'.length) }),
+                {},
+                { preserveState: true, preserveScroll: true, replace: true }
+            )
+        }
     }
 
     function deploy() {
@@ -178,20 +240,39 @@
         <div class="rounded-xl border border-border bg-card p-6" data-testid="setup-step">
             <h3 class="type-h3 m-0 mb-1.5">Add your first server</h3>
             <p class="type-body-sm mb-4 text-muted-foreground">
-                Point Coresmith at a machine you already have. It hardens it while it provisions.
+                Provision a fresh VM through a provider, or point Coresmith at a machine you already have.
             </p>
-            <div class="mb-4 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                <div class="rounded-md border border-border p-4 opacity-55" aria-disabled="true">
-                    <div class="mb-1 text-[14px] font-medium">Provision through a provider</div>
-                    <div class="text-[12.5px] text-muted-foreground">
-                        Hetzner, DigitalOcean or AWS via API token. Arrives with provider integrations.
-                    </div>
-                </div>
-                <div class="option-selected rounded-md border p-4">
-                    <div class="mb-1 text-[14px] font-medium">Use an existing VM</div>
-                    <div class="text-[12.5px] text-muted-foreground">Any Ubuntu 24.04 machine with SSH access</div>
-                </div>
+            <div
+                class="mb-4 grid grid-cols-2 gap-3 max-sm:grid-cols-1"
+                role="group"
+                aria-label="Where the first server comes from"
+            >
+                {#each sources as option (option.key)}
+                    <button
+                        type="button"
+                        class={cn(
+                            'focus-ring cursor-pointer rounded-md border p-4 text-left',
+                            source === option.key ? 'option-selected' : 'border-border bg-transparent'
+                        )}
+                        aria-pressed={source === option.key}
+                        onclick={() => (source = option.key)}
+                    >
+                        <div class="mb-1 text-[14px] font-medium">{option.label}</div>
+                        <div class="text-[12.5px] text-muted-foreground">{option.desc}</div>
+                    </button>
+                {/each}
             </div>
+            {#snippet providerSelect()}
+                <div>
+                    <Label for="setup-provider" class="mb-1.5">Provider</Label>
+                    <NativeSelect
+                        id="setup-provider"
+                        {options}
+                        value={choice}
+                        onchange={(event) => choose((event.currentTarget as HTMLSelectElement).value)}
+                    />
+                </div>
+            {/snippet}
             {#if server}
                 <p class="mb-4 text-[13px]">
                     <span class="font-mono">{server.name}</span> is already added.
@@ -203,6 +284,97 @@
                     <Button variant="outline" onclick={() => go(0)}>Back</Button>
                     <Button onclick={() => go(2)}>Continue</Button>
                 </div>
+            {:else if source === 'provider' && cloud && account}
+                <Form method="post" action={route('servers.cloud.store')}>
+                    {#snippet children({ errors, processing })}
+                        <input type="hidden" name="cloud_provider_id" value={account.id} />
+                        <input type="hidden" name="return_to" value="setup" />
+                        <div class="mb-5 flex flex-col gap-3.5">
+                            {@render providerSelect()}
+                            <FieldError message={errors.cloud_provider_id} />
+                            <div>
+                                <Label for="setup-name" class="mb-1.5">Server name</Label>
+                                <Input
+                                    id="setup-name"
+                                    name="name"
+                                    required
+                                    placeholder="forge-01"
+                                    autocomplete="off"
+                                    aria-invalid={errors.name ? true : undefined}
+                                />
+                                <FieldError message={errors.name} />
+                            </div>
+                            {#snippet loading()}
+                                <p class="m-0 text-[12.5px] text-muted-foreground">
+                                    Loading {account.provider}'s regions and sizes.
+                                </p>
+                            {/snippet}
+                            {#if cloud.selected !== choice}
+                                {@render loading()}
+                            {:else}
+                                {#key choice}
+                                    <Deferred data="catalog" fallback={loading}>
+                                        {#if catalog?.error}
+                                            <div
+                                                class="tint-destructive rounded-lg border px-3.5 py-3 text-[12.5px] leading-normal"
+                                                role="alert"
+                                            >
+                                                <p class="m-0">{catalog.error}</p>
+                                                {#if account.refused}
+                                                    <Button
+                                                        class="mt-2.5"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        href={route('teams.index')}>Open team settings</Button
+                                                    >
+                                                {:else}
+                                                    <Button
+                                                        class="mt-2.5"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onclick={() => router.reload({ only: ['catalog'] })}
+                                                        >Try again</Button
+                                                    >
+                                                {/if}
+                                            </div>
+                                        {:else if catalog}
+                                            <CloudServerFields {catalog} {environments} {errors} bind:picks />
+                                        {/if}
+                                    </Deferred>
+                                {/key}
+                            {/if}
+                        </div>
+                        <div class="flex gap-3">
+                            <Button variant="outline" type="button" onclick={() => go(0)}>Back</Button>
+                            <Button type="submit" disabled={processing || !catalog || catalog.error !== null}
+                                >Continue</Button
+                            >
+                        </div>
+                    {/snippet}
+                </Form>
+            {:else if source === 'provider' && cloud && connecting}
+                <Form method="post" action={route('cloud-providers.store')}>
+                    {#snippet children({ errors, processing })}
+                        <input type="hidden" name="type" value={connecting.value} />
+                        <input type="hidden" name="name" value={connecting.label} />
+                        <input type="hidden" name="return_to" value="setup" />
+                        <div class="mb-5 flex flex-col gap-3.5">
+                            {@render providerSelect()}
+                            {#if cloud.can_connect}
+                                <CloudConnectFields type={connecting} error={errors.api_token} id="setup-api-token" />
+                                <FieldError message={errors.type ?? errors.name} />
+                            {:else}
+                                <p class="m-0 text-[12.5px] text-muted-foreground">
+                                    An owner or admin can connect a provider.
+                                </p>
+                            {/if}
+                        </div>
+                        <div class="flex gap-3">
+                            <Button variant="outline" type="button" onclick={() => go(0)}>Back</Button>
+                            <Button type="submit" disabled={processing || !cloud.can_connect}>Continue</Button>
+                        </div>
+                    {/snippet}
+                </Form>
             {:else}
                 <Form method="post" action={route('servers.store')}>
                     {#snippet children({ errors, processing })}
@@ -247,7 +419,45 @@
         </div>
     {:else if step === 2}
         <div class="rounded-xl border border-border bg-card p-6" data-testid="setup-step">
-            {#if server && provisioning}
+            {#if server && provisioning && creation?.task}
+                <div class="mb-1.5 flex flex-wrap items-center gap-3">
+                    <h3 class="type-h3 m-0">Creating {server.name} at {creation.provider}</h3>
+                    {#if creation.task.state === 'failed'}
+                        <Badge variant="destructive" dot>Failed at step {creation.task.position}</Badge>
+                    {:else}
+                        <Badge variant="accent" dot pulse>Step {creation.task.position} of {creation.task.total}</Badge>
+                    {/if}
+                </div>
+                <p class="type-body-sm mb-4 text-muted-foreground">
+                    {creation.provider} is creating it. Provisioning starts by itself once Coresmith can sign in.
+                </p>
+                <CloudSteps steps={creation.task.steps} />
+                {#if creation.task.state === 'failed' && creation.task.error}
+                    <div
+                        class="tint-destructive mt-3 rounded-lg border px-3.5 py-3 text-[12.5px] leading-normal"
+                        data-testid="creation-error"
+                    >
+                        {creation.task.error}
+                    </div>
+                {/if}
+                <div class="mt-3 mb-5 flex flex-col gap-0.5">
+                    {#each provisioning.phases as phase (phase.name)}
+                        <div class="flex items-center gap-3 py-1.5 text-muted-foreground">
+                            <PhaseIcon state="pending" />
+                            <span class="text-[13.5px]"
+                                ><span class="font-medium">{phase.name}</span><span class="text-muted-foreground"
+                                    >{`, ${phase.desc}`}</span
+                                ></span
+                            >
+                        </div>
+                    {/each}
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <Button variant="outline" onclick={() => go(1)}>Back</Button>
+                    <Button variant="outline" href={server.href}>Open {server.name}</Button>
+                    <Button disabled={current < 3} onclick={() => go(3)}>Continue while it finishes</Button>
+                </div>
+            {:else if server && provisioning}
                 <div class="mb-1.5 flex flex-wrap items-center gap-3">
                     <h3 class="type-h3 m-0">Provisioning {server.name}</h3>
                     {#if provisioning.status === 'provisioning'}

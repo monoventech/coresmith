@@ -201,6 +201,7 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Git settings before GitHub is connected', direct('/acme/settings/git')],
     ['Git settings with a suspended GitHub installation', direct('/paused/settings/git')],
     ['Setup before GitHub is connected', direct('/acme/setup')],
+    ['Setup with a provider to connect', direct('/foundry/setup?step=1')],
     [
         'Setup for a member before GitHub is connected',
         async (page) => {
