@@ -93,6 +93,8 @@ final class FleetSnapshot
             $server->pending_host_key_fingerprint !== null => ['key' => 'host_key', 'label' => 'Host key changed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Creating && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'creation_failed', 'label' => 'Creation failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Creating => ['key' => 'creating', 'label' => 'Creating', 'tone' => 'accent'],
+            CloudTask::running($server, CloudTask::DESTROY) => ['key' => 'destroying', 'label' => 'Destroying', 'tone' => 'default'],
+            CloudTask::of($server)?->type === CloudTask::DESTROY && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'destroy_failed', 'label' => 'Destroy failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Failed => ['key' => 'failed', 'label' => 'Provisioning failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Disconnected => ['key' => 'disconnected', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->status === ServerStatus::Provisioning => ['key' => 'provisioning', 'label' => 'Provisioning', 'tone' => 'accent'],
@@ -170,7 +172,7 @@ final class FleetSnapshot
         foreach ($this->servers() as $server) {
             $state = $this->state($server);
 
-            if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'creation_failed'], true)) {
+            if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'creation_failed', 'destroy_failed'], true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
             } elseif ($state['key'] === 'warning' || ($state['key'] === 'deploying' && ($this->latestMetric($server)?->disk_percent ?? 0) >= self::DISK_WARNING)) {
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'disk ' . (int) round((float) $this->latestMetric($server)?->disk_percent) . '%', 'href' => route('servers.show', $server)];

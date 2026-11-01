@@ -161,19 +161,37 @@ test('the server block falls back to the stored image when the task did not name
         ->and($block['task'])->toBeNull();
 });
 
-test('the server block offers retry and remove only when they apply', function (?string $state, TeamRole $role, ?string $instance, array $can) {
+test('the server block offers retry, remove and destroy only when they apply', function (?string $state, TeamRole $role, ?string $instance, array $can) {
     $team = Team::factory()->create();
     $server = cloudPresenterServer($state, 'boot', ['team_id' => $team->id, 'provider_server_id' => $instance]);
 
     expect(app(CloudPresenter::class)->server($server, cloudPresenterMember($team, $role))['can'])->toBe($can);
 })->with([
-    'a failed creation that never reached the provider, for an owner' => [CloudTask::FAILED, TeamRole::Owner, null, ['retry' => true, 'remove' => true, 'detach' => true]],
-    'a failed creation with an instance' => [CloudTask::FAILED, TeamRole::Owner, '4711', ['retry' => true, 'remove' => false, 'detach' => true]],
-    'a running creation' => [CloudTask::RUNNING, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => false]],
-    'a finished creation' => [CloudTask::DONE, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true]],
-    'no task' => [null, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true]],
-    'a failed creation, for a deployer' => [CloudTask::FAILED, TeamRole::Member, null, ['retry' => false, 'remove' => false, 'detach' => false]],
+    'a failed creation that never reached the provider, for an owner' => [CloudTask::FAILED, TeamRole::Owner, null, ['retry' => true, 'remove' => true, 'detach' => true, 'destroy' => false]],
+    'a failed creation with an instance' => [CloudTask::FAILED, TeamRole::Owner, '4711', ['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true]],
+    'a running creation' => [CloudTask::RUNNING, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false]],
+    'a finished creation' => [CloudTask::DONE, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true, 'destroy' => true]],
+    'no task' => [null, TeamRole::Owner, '4711', ['retry' => false, 'remove' => false, 'detach' => true, 'destroy' => true]],
+    'a failed creation, for a deployer' => [CloudTask::FAILED, TeamRole::Member, null, ['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false]],
 ]);
+
+test('a running destroy offers nothing, and a failed one can be tried again by someone who can delete', function () {
+    $team = Team::factory()->create();
+    $server = cloudPresenterServer(attributes: ['team_id' => $team->id, 'status' => ServerStatus::Active]);
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+
+    $running = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Owner));
+
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+
+    $failed = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Owner));
+    $deployer = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Member));
+
+    expect($running['can'])->toBe(['retry' => false, 'remove' => false, 'detach' => false, 'destroy' => false])
+        ->and($running['task']['step_label'])->toBe('deleting it at Hetzner Cloud')
+        ->and($failed['can'])->toBe(['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true])
+        ->and($deployer['can']['retry'])->toBeFalse();
+});
 
 test('a server not from a provider has no cloud block', function () {
     $team = Team::factory()->create();

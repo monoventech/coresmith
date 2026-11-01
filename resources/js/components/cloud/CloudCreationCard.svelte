@@ -1,5 +1,6 @@
 <script lang="ts">
     import CloudSteps from '@/components/cloud/CloudSteps.svelte'
+    import DestroyServerDialog from '@/components/cloud/DestroyServerDialog.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
@@ -15,6 +16,13 @@
     }: { server: ServerHeader; cloud: CloudServer; onretry: () => void; onrestart: () => void } = $props()
 
     let removing = $state(false)
+    let destroying = $state(false)
+    let detaching = $state(false)
+
+    function detach() {
+        working = true
+        router.delete(route('servers.destroy', server.id), { onFinish: () => ((working = false), (detaching = false)) })
+    }
     let working = $state(false)
 
     const task = $derived(
@@ -62,13 +70,15 @@
         >
             {task.error}
         </div>
-        {#if cloud.can.retry || cloud.can.remove}
+        {#if cloud.can.retry || cloud.can.remove || cloud.can.destroy}
             <div class="mt-4 flex flex-wrap gap-2">
                 {#if cloud.can.retry}
                     <Button size="sm" disabled={working} onclick={retry}>Try again</Button>
                 {/if}
                 {#if cloud.can.remove}
                     <Button variant="outline" size="sm" onclick={() => (removing = true)}>Remove</Button>
+                {:else if cloud.can.destroy}
+                    <Button variant="outline" size="sm" onclick={() => (destroying = true)}>Destroy it</Button>
                 {/if}
             </div>
         {/if}
@@ -92,6 +102,29 @@
         {/if}
     {/if}
 </div>
+
+<DestroyServerDialog
+    server={{ id: server.id, name: server.name }}
+    provider={cloud.provider}
+    bind:open={destroying}
+    ondetach={() => (detaching = true)}
+/>
+
+<Dialog.Root bind:open={detaching}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title>Detach {server.name}?</Dialog.Title>
+            <Dialog.Description
+                >Coresmith stops managing {server.name}. It keeps running at {cloud.provider}, and {cloud.provider} keeps
+                billing for it.</Dialog.Description
+            >
+        </Dialog.Header>
+        <Dialog.Footer>
+            <Button variant="ghost" onclick={() => (detaching = false)}>Keep it</Button>
+            <Button variant="destructive" disabled={working} onclick={detach}>Detach server</Button>
+        </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={removing}>
     <Dialog.Content>

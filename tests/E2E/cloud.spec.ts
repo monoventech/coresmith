@@ -183,3 +183,48 @@ test.describe('provisioning through a provider', () => {
         await expect(page.getByTestId('creation-error')).toHaveCount(0)
     })
 })
+
+test.describe('destroying a provider server', () => {
+    test('destroying asks for the name and then marks the server destroying', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'destroy')
+
+        await gotoServer(page, name)
+        await page.getByRole('button', { name: 'Destroy', exact: true }).click()
+
+        await expect(dialog(page).getByRole('button', { name: 'Destroy server' })).toBeDisabled()
+
+        await dialog(page).getByLabel(`Type ${name} to confirm`).fill(name)
+
+        await expect(dialog(page).getByRole('button', { name: 'Destroy server' })).toBeEnabled()
+
+        await dialog(page).getByRole('button', { name: 'Destroy server' }).click()
+
+        await expect(toast(page)).toContainText('It leaves the fleet once Hetzner Cloud confirms.')
+        await expect(page.getByTestId('cloud-task-banner')).toContainText('Destroying')
+        await expect(page.getByRole('button', { name: 'Destroy', exact: true })).toHaveCount(0)
+    })
+
+    test('the destroy dialog leads to detaching instead', async ({ page }) => {
+        await gotoServer(page, 'outpost-01')
+        await page.getByRole('button', { name: 'Destroy', exact: true }).click()
+        await dialog(page).getByRole('button', { name: 'detach it instead' }).click()
+
+        const detach = page.getByRole('dialog', { name: 'Detach outpost-01?' })
+
+        await expect(detach).toContainText('keeps running at DigitalOcean')
+
+        await detach.getByRole('button', { name: 'Keep it' }).click()
+
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('a failed destroy says why and offers to try again or detach', async ({ page }) => {
+        await gotoServer(page, 'destroy-failed')
+
+        const banner = page.getByTestId('cloud-task-banner')
+
+        await expect(banner).toContainText('server is protected')
+        await expect(banner.getByRole('button', { name: 'Try again' })).toBeVisible()
+        await expect(banner.getByRole('button', { name: 'Detach' })).toBeVisible()
+    })
+})

@@ -168,6 +168,33 @@ final class E2ESeeder extends Seeder
         CloudTask::fail($refused, 'Hetzner Cloud refused the request. Hetzner Cloud said: server type cx22 is not available in hel1. Remove this server and provision it again with another size or region.');
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
+            Server::factory()->fromProvider($hetzner)->create([
+                'name' => "destroy-{$code}",
+                'environment' => 'Production',
+                'ip_address' => '203.0.113.' . (140 + $index),
+                'status' => ServerStatus::Active,
+                'provider_server_id' => "48{$index}0",
+                'provider_monthly_cost' => '4.35',
+                'provider_currency' => 'EUR',
+                'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+                'host_key_fingerprint' => null,
+            ]);
+        }
+
+        $protected = Server::factory()->fromProvider($hetzner)->create([
+            'name' => 'destroy-failed',
+            'environment' => 'Production',
+            'ip_address' => '203.0.113.139',
+            'status' => ServerStatus::Active,
+            'provider_server_id' => '4799',
+            'provider_monthly_cost' => '4.35',
+            'provider_currency' => 'EUR',
+            'host_key_fingerprint' => null,
+        ]);
+        CloudTask::start($protected, CloudTask::DESTROY, 'delete');
+        CloudTask::fail($protected, "Hetzner Cloud refused the request. Hetzner Cloud said: server is protected. Try again once that's fixed, or delete it in the Hetzner Cloud console and then detach it here.");
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
             $retry = $this->cloudServer($hetzner, "retry-{$code}", '47' . (30 + $index));
             CloudTask::start($retry, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
             CloudTask::advance($retry, 'boot');

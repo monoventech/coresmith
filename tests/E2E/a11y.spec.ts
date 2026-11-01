@@ -168,6 +168,14 @@ const PAGES: [string, Visit][] = [
     ],
     ['Server being created', (page) => gotoServer(page, 'creating-server')],
     ['Server whose creation failed', (page) => gotoServer(page, 'failed-create')],
+    [
+        'Destroy dialog',
+        async (page) => {
+            await gotoServer(page, 'outpost-01')
+            await page.getByRole('button', { name: 'Destroy', exact: true }).click()
+            await dialog(page).waitFor()
+        }
+    ],
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],

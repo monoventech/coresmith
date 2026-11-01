@@ -1,5 +1,7 @@
 <script lang="ts">
     import BackLink from '@/components/BackLink.svelte'
+    import CloudTaskBanner from '@/components/cloud/CloudTaskBanner.svelte'
+    import DestroyServerDialog from '@/components/cloud/DestroyServerDialog.svelte'
     import HostKeyAlert from '@/components/HostKeyAlert.svelte'
     import PageTabs from '@/components/PageTabs.svelte'
     import Sparkline from '@/components/Sparkline.svelte'
@@ -15,6 +17,7 @@
 
     let renaming = $state(false)
     let detaching = $state(false)
+    let destroying = $state(false)
     let name = $state('')
     let working = $state(false)
 
@@ -91,7 +94,11 @@
                     <Button variant="outline" onclick={reboot}>Reboot server</Button>
                 {/if}
             {/if}
-            {#if server.can.delete}
+            {#if server.cloud?.can.destroy}
+                <Button variant="ghost" class="text-destructive-strong" onclick={() => (destroying = true)}
+                    >Destroy</Button
+                >
+            {:else if server.cloud ? server.cloud.can.detach : server.can.delete}
                 <Button variant="ghost" class="text-destructive-strong" onclick={() => (detaching = true)}
                     >Detach</Button
                 >
@@ -110,6 +117,8 @@
         canManage={server.can.update}
     />
 {/if}
+
+<CloudTaskBanner {server} ondetach={() => (detaching = true)} />
 
 {#if server.disk_warning}
     <div
@@ -164,6 +173,15 @@
         </form>
     </Dialog.Content>
 </Dialog.Root>
+
+{#if server.cloud}
+    <DestroyServerDialog
+        server={{ id: server.id, name: server.name }}
+        provider={server.cloud.provider}
+        bind:open={destroying}
+        ondetach={() => (detaching = true)}
+    />
+{/if}
 
 <Dialog.Root bind:open={detaching}>
     <Dialog.Content>

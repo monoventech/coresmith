@@ -15,6 +15,7 @@ final class CloudTaskHandlers
     /** @var array<string, class-string<CloudTaskHandler>> */
     public const DEFAULTS = [
         CloudTask::CREATE => CreateServerTask::class,
+        CloudTask::DESTROY => DestroyServerTask::class,
     ];
 
     /** @var array<string, CloudTaskHandler|class-string<CloudTaskHandler>> */

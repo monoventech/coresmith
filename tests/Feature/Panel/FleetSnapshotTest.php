@@ -399,3 +399,26 @@ test('a failed creation needs attention first', function () {
         ['severity' => 'warning', 'subject' => 'full-disk', 'summary' => 'disk 91%', 'href' => route('servers.show', $full)],
     ]);
 });
+
+function fleetDestroying(Team $team, bool $failed, array $attributes = []): Server
+{
+    $server = Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->create(['name' => 'outpost-04', 'status' => ServerStatus::Active, ...$attributes]);
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+
+    if ($failed) {
+        CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+    }
+
+    return $server->fresh();
+}
+
+test('a server being destroyed reads so, and a failed destroy needs attention', function () {
+    $team = Team::factory()->create();
+    $running = fleetDestroying($team, false);
+    $failed = fleetDestroying($team, true, ['name' => 'outpost-05']);
+    $fleet = new FleetSnapshot($team);
+
+    expect($fleet->state($running))->toBe(['key' => 'destroying', 'label' => 'Destroying', 'tone' => 'default'])
+        ->and($fleet->state($failed))->toBe(['key' => 'destroy_failed', 'label' => 'Destroy failed', 'tone' => 'destructive'])
+        ->and($fleet->attention())->toContain(['severity' => 'critical', 'subject' => 'outpost-05', 'summary' => 'destroy failed', 'href' => route('servers.show', $failed)]);
+});

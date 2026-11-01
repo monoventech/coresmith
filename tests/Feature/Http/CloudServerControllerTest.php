@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 use App\Enums\CloudFailure;
 use App\Enums\CloudProviderType;
+use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Exceptions\CloudProviderException;
 use App\Jobs\RunCloudTask;
+use App\Models\Application;
 use App\Models\CloudProvider;
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
@@ -340,4 +343,109 @@ test('the provision page with no account offers a manual server and loads no cat
         ->assertInertia(fn($page) => $page
             ->where('cloud.selected', 'manual')
             ->loadDeferredProps(fn($reload) => $reload->where('catalog', null)));
+});
+
+function cloudDestroyable(CloudProvider $account, array $attributes = []): Server
+{
+    return Server::factory()->fromProvider($account)->create(['name' => 'outpost-02', 'status' => ServerStatus::Active, ...$attributes]);
+}
+
+test("destroying needs the server's name typed exactly", function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+
+    $this->actingAs($user)
+        ->from(route('servers.show', $server))
+        ->delete(route('servers.cloud.destroy', $server), ['confirm' => 'Outpost-02'])
+        ->assertSessionHasErrors(['confirm' => 'Type outpost-02 exactly to confirm.']);
+
+    expect(CloudTask::of($server->fresh()))->toBeNull();
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin starts destroying a provider server', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+
+    $this->actingAs($user)
+        ->from(route('servers.show', $server))
+        ->delete(route('servers.cloud.destroy', $server), ['confirm' => 'outpost-02'])
+        ->assertRedirect(route('servers.show', $server))
+        ->assertSessionHas('success', 'Destroying outpost-02 at Hetzner Cloud. It leaves the fleet once Hetzner Cloud confirms.');
+
+    $task = CloudTask::of($server->fresh());
+
+    expect($task->type)->toBe(CloudTask::DESTROY)
+        ->and($task->step)->toBe('delete')
+        ->and($task->by)->toBe($user->id)
+        ->and($server->fresh()->provisioning_log)->toContain('destroying outpost-02 at Hetzner Cloud');
+
+    Queue::assertPushed(RunCloudTask::class, 1);
+});
+
+test('a key left over from creating a server is carried into destroying it', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    CloudTask::start($server, CloudTask::CREATE, 'settle', ['key_id' => 'key-9']);
+    CloudTask::finish($server);
+
+    $this->actingAs($user)->delete(route('servers.cloud.destroy', $server), ['confirm' => 'outpost-02']);
+
+    expect(CloudTask::of($server->fresh())->data)->toBe(['key_id' => 'key-9']);
+});
+
+test('a deployer cannot destroy', function () {
+    [, $user, $account] = cloudServerAdmin(TeamRole::Member);
+    $server = cloudDestroyable($account);
+
+    $this->actingAs($user)->delete(route('servers.cloud.destroy', $server), ['confirm' => 'outpost-02'])->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
+test('a server not from a provider cannot be destroyed here', function () {
+    [$team, $user, $account] = cloudServerAdmin();
+    $manual = Server::factory()->for($team)->create(['name' => 'outpost-02', 'status' => ServerStatus::Active]);
+    $never = cloudDestroyable($account, ['name' => 'never-made', 'provider_server_id' => null]);
+
+    $this->actingAs($user)->delete(route('servers.cloud.destroy', $manual), ['confirm' => 'outpost-02'])->assertNotFound();
+    $this->actingAs($user)->delete(route('servers.cloud.destroy', $never), ['confirm' => 'never-made'])->assertNotFound();
+
+    Queue::assertNothingPushed();
+});
+
+test('destroying waits for other work on the server', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $busy = cloudDestroyable($account);
+    CloudTask::start($busy, CloudTask::RESIZE, 'change');
+    $deploying = cloudDestroyable($account, ['name' => 'outpost-03']);
+    Deployment::factory()->for(Application::factory()->for($deploying->team)->for($deploying)->create())->create(['status' => DeploymentStatus::Running]);
+
+    $this->actingAs($user)
+        ->delete(route('servers.cloud.destroy', $busy), ['confirm' => 'outpost-02'])
+        ->assertSessionHas('error', 'Coresmith is already working on outpost-02. Wait for that to finish first.');
+    $this->actingAs($user)
+        ->delete(route('servers.cloud.destroy', $deploying), ['confirm' => 'outpost-03'])
+        ->assertSessionHas('error', 'A deploy is running on outpost-03. Destroy it once the deploy finishes.');
+
+    expect(CloudTask::of($busy->fresh())->type)->toBe(CloudTask::RESIZE)
+        ->and(CloudTask::of($deploying->fresh()))->toBeNull();
+
+    Queue::assertNothingPushed();
+});
+
+test('a failed destroy can be tried again', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+
+    $this->actingAs($user)
+        ->post(route('servers.cloud.retry', $server))
+        ->assertSessionHas('success', 'Trying again. This page follows along.');
+
+    expect(CloudTask::of($server->fresh())->state)->toBe(CloudTask::RUNNING);
+
+    Queue::assertPushed(RunCloudTask::class, 1);
 });

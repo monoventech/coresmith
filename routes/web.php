@@ -40,6 +40,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.cloud.store');
     Route::post('servers/{server}/cloud/retry', [CloudServerController::class, 'retry'])
         ->name('servers.cloud.retry');
+    Route::delete('servers/{server}/cloud', [CloudServerController::class, 'destroy'])
+        ->middleware('throttle:10,1,cloud-server-destroy')
+        ->name('servers.cloud.destroy');
     Route::resource('servers', ServerController::class)->except(['index', 'edit']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');

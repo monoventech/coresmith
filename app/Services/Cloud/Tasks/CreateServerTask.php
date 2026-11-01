@@ -341,7 +341,7 @@ final class CreateServerTask implements CloudTaskHandler
         return rtrim(mb_substr($message, 0, self::ERROR_LENGTH - mb_strlen(self::CUT))) . self::CUT;
     }
 
-    private static function lastError(mixed $error): string
+    public static function lastError(mixed $error): string
     {
         $error = is_string($error) ? trim($error) : '';
 

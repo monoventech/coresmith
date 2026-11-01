@@ -169,6 +169,7 @@ final class CloudPresenter
 
         $task = CloudTask::of($server);
         $failedCreate = $task !== null && $task->type === CloudTask::CREATE && $task->state === CloudTask::FAILED;
+        $failedDestroy = $task !== null && $task->type === CloudTask::DESTROY && $task->state === CloudTask::FAILED;
 
         return [
             'provider' => $account->type->label(),
@@ -181,11 +182,12 @@ final class CloudPresenter
             'image' => is_string($task?->data['image_label'] ?? null) ? $task->data['image_label'] : $server->provider_image,
             'monthly' => Formats::money($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
             'console_url' => $account->type->consoleUrl($server->provider_server_id),
-            'task' => $task === null ? null : $this->task($task),
+            'task' => $task === null ? null : $this->task($task, $account->type->label()),
             'can' => [
-                'retry' => $failedCreate && $user->can('update', $server),
+                'retry' => ($failedCreate && $user->can('update', $server)) || ($failedDestroy && $user->can('delete', $server)),
                 'remove' => $failedCreate && $server->provider_server_id === null && $user->can('delete', $server),
                 'detach' => $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
+                'destroy' => filled($server->provider_server_id) && $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
             ],
         ];
     }
@@ -208,7 +210,7 @@ final class CloudPresenter
     /**
      * @return array<string, mixed>
      */
-    private function task(CloudTask $task): array
+    private function task(CloudTask $task, string $label): array
     {
         $steps = $task->type === CloudTask::CREATE ? CreateServerTask::STEPS : [$task->step];
         $position = array_search($task->step, $steps, true);
@@ -218,7 +220,7 @@ final class CloudPresenter
             'type' => $task->type,
             'state' => $task->state,
             'step' => $task->step,
-            'step_label' => self::CREATE_STEPS[$task->step][2] ?? $task->step,
+            'step_label' => $task->type === CloudTask::DESTROY ? "deleting it at {$label}" : (self::CREATE_STEPS[$task->step][2] ?? $task->step),
             'position' => $position + 1,
             'total' => count($steps),
             'steps' => array_map(fn(string $step, int $index): array => [

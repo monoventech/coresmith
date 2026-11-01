@@ -62,6 +62,7 @@ test('server events are described in plain words', function (string $description
     'created at the provider' => ['server_created_at_provider', ['provider' => 'Hetzner Cloud', 'seconds' => 48], 'web-1 created at Hetzner Cloud in 0m 48s, checking it before provisioning'],
     'created without a duration' => ['server_created_at_provider', ['provider' => 'Hetzner Cloud', 'seconds' => null], 'web-1 created at Hetzner Cloud, checking it before provisioning'],
     'creation failed' => ['server_creation_failed', ['provider' => 'Hetzner Cloud', 'step' => 'ssh', 'reason' => 'SSH authentication failed.'], 'Creating web-1 at Hetzner Cloud failed'],
+    'destroy failed' => ['server_destroy_failed', ['provider' => 'Hetzner Cloud', 'reason' => 'Hetzner Cloud refused the request.'], 'Destroying web-1 at Hetzner Cloud failed'],
 ]);
 
 test('application events are described in plain words and link to the application', function (string $description, array $properties, string $sentence) {
@@ -304,4 +305,15 @@ test('account events stay off a server feed', function () {
     feedLog($account, 'cloud_provider_connected', ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
 
     expect((new ActivityFeed)->forServer($server))->toBe([]);
+});
+
+test('a destroyed server says its billing stopped and links nowhere', function () {
+    [$team, $server] = feedFixture();
+    feedLog($server, 'server_destroyed', ['provider' => 'Hetzner Cloud', 'size' => 'cx22']);
+    $server->delete();
+
+    $row = (new ActivityFeed)->forTeam($team)[0];
+
+    expect(feedSentence($row))->toBe('web-1 destroyed at Hetzner Cloud, billing for it stopped')
+        ->and($row['href'])->toBeNull();
 });

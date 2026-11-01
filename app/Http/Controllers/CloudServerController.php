@@ -8,9 +8,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
+use App\Http\Requests\Server\DestroyCloudServerRequest;
 use App\Http\Requests\Server\StoreCloudServerRequest;
 use App\Jobs\RunCloudTask;
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Server\ProvisioningLog;
@@ -69,15 +72,45 @@ final class CloudServerController extends Controller
 
     public function retry(Server $server): RedirectResponse
     {
-        $this->authorize('update', $server);
-
         $task = CloudTask::of($server);
 
-        abort_unless($task !== null && $task->type === CloudTask::CREATE && $task->state === CloudTask::FAILED, 404);
+        abort_unless($task !== null && $task->state === CloudTask::FAILED && in_array($task->type, [CloudTask::CREATE, CloudTask::DESTROY], true), 404);
+
+        $this->authorize($task->type === CloudTask::DESTROY ? 'delete' : 'update', $server);
 
         CloudTask::resume($server);
         RunCloudTask::dispatch($server);
 
         return back()->with('success', 'Trying again. This page follows along.');
+    }
+
+    public function destroy(DestroyCloudServerRequest $request, Server $server): RedirectResponse
+    {
+        $account = $server->cloudProvider;
+
+        abort_if($account === null || blank($server->provider_server_id), 404);
+
+        $label = $account->type->label();
+
+        if (CloudTask::running($server)) {
+            return back()->with('error', "Coresmith is already working on {$server->name}. Wait for that to finish first.");
+        }
+
+        $deploying = Deployment::query()
+            ->whereIn('application_id', $server->applications()->select('id'))
+            ->where('status', DeploymentStatus::Running->value)
+            ->exists();
+
+        if ($deploying) {
+            return back()->with('error', "A deploy is running on {$server->name}. Destroy it once the deploy finishes.");
+        }
+
+        $keyId = CloudTask::of($server)?->data['key_id'] ?? null;
+
+        CloudTask::start($server, CloudTask::DESTROY, 'delete', is_string($keyId) && $keyId !== '' ? ['key_id' => $keyId] : [], $request->user());
+        ProvisioningLog::append($server, "destroying {$server->name} at {$label}");
+        RunCloudTask::dispatch($server);
+
+        return back()->with('success', "Destroying {$server->name} at {$label}. It leaves the fleet once {$label} confirms.");
     }
 }
