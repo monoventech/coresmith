@@ -17,6 +17,7 @@ use App\Http\Requests\Server\StoreCloudServerRequest;
 use App\Jobs\RunCloudTask;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Services\Billing\PlanGate;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\ResizeOptions;
@@ -31,7 +32,7 @@ use Illuminate\Http\RedirectResponse;
 
 final class CloudServerController extends Controller
 {
-    public function store(StoreCloudServerRequest $request, KeyPairGenerator $keys, TeamContext $context): RedirectResponse
+    public function store(StoreCloudServerRequest $request, KeyPairGenerator $keys, TeamContext $context, PlanGate $plans): RedirectResponse
     {
         $team = $context->teamOrFail();
         $account = $request->account();
@@ -41,25 +42,28 @@ final class CloudServerController extends Controller
         $name = (string) $request->validated('name');
         $label = $account->type->label();
         $price = $size->priceIn($region);
-        $pair = $keys->generate('coresmith@' . $name);
 
-        $server = Server::query()->create([
-            'team_id' => $team->getKey(),
-            'name' => $name,
-            'environment' => $request->validated('environment'),
-            'region' => $region,
-            'ip_address' => null,
-            'ssh_port' => 22,
-            'ssh_user' => 'root',
-            'ssh_private_key' => $pair->privateKey,
-            'ssh_public_key' => $pair->publicKey,
-            'status' => ServerStatus::Creating,
-            'cloud_provider_id' => $account->getKey(),
-            'provider_size' => $size->id,
-            'provider_image' => $image->id,
-            'provider_monthly_cost' => $price?->monthly,
-            'provider_currency' => $price?->currency,
-        ]);
+        $server = $plans->creatingServer($team, $request->user(), function () use ($team, $name, $request, $region, $account, $size, $image, $price, $keys): Server {
+            $pair = $keys->generate('coresmith@' . $name);
+
+            return Server::query()->create([
+                'team_id' => $team->getKey(),
+                'name' => $name,
+                'environment' => $request->validated('environment'),
+                'region' => $region,
+                'ip_address' => null,
+                'ssh_port' => 22,
+                'ssh_user' => 'root',
+                'ssh_private_key' => $pair->privateKey,
+                'ssh_public_key' => $pair->publicKey,
+                'status' => ServerStatus::Creating,
+                'cloud_provider_id' => $account->getKey(),
+                'provider_size' => $size->id,
+                'provider_image' => $image->id,
+                'provider_monthly_cost' => $price?->monthly,
+                'provider_currency' => $price?->currency,
+            ]);
+        });
 
         CloudTask::start($server, CloudTask::CREATE, 'create', ['image_label' => $image->label, 'region_label' => $request->regionLabel()], $request->user());
         ProvisioningLog::append($server, "creating {$name} at {$label}, {$size->id} in {$region} with {$image->label}");

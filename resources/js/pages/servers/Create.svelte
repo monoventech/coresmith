@@ -4,6 +4,7 @@
 
 <script lang="ts">
     import { Deferred, Form, router } from '@inertiajs/svelte'
+    import { TriangleAlert } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import CloudConnectFields from '@/components/cloud/CloudConnectFields.svelte'
@@ -18,12 +19,14 @@
 
     let {
         teams = [],
+        current = null,
         environments = [],
         phases = [],
         cloud,
         catalog
     }: {
-        teams: { id: string; name: string }[]
+        teams: { id: string; name: string; limit: string | null }[]
+        current?: string | null
         environments: string[]
         phases: { name: string; desc: string }[]
         cloud: CloudChoices
@@ -31,6 +34,11 @@
     } = $props()
 
     let picked = $state<string | null>(null)
+    let team = $state<string | null>(null)
+
+    const chosenTeam = $derived(team ?? current ?? teams[0]?.id ?? null)
+    const note = $derived(teams.find((row) => row.id === chosenTeam)?.limit ?? null)
+    const providerNote = $derived(teams.find((row) => row.id === (current ?? teams[0]?.id))?.limit ?? null)
     let picks = $state<CloudPicks>({})
     let name = $state('')
 
@@ -93,6 +101,17 @@
     </div>
 {/snippet}
 
+{#snippet limitBanner(text: string)}
+    <div
+        class="tint-warning flex items-start gap-3 rounded-xl border px-4.5 py-3 max-sm:px-3.5"
+        role="status"
+        data-testid="server-limit"
+    >
+        <TriangleAlert class="mt-0.5 size-4.5 shrink-0 text-warning max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">{text}</span>
+    </div>
+{/snippet}
+
 <AppHead title="Provision a server" />
 
 <BackLink href={route('dashboard')} label="Fleet" />
@@ -147,8 +166,13 @@
                                         </div>
                                     {:else if catalog}
                                         <CloudServerFields {catalog} {environments} {errors} bind:picks />
-                                        <Button type="submit" class="w-full" disabled={processing}
-                                            >Provision server</Button
+                                        {#if providerNote}
+                                            {@render limitBanner(providerNote)}
+                                        {/if}
+                                        <Button
+                                            type="submit"
+                                            class="w-full"
+                                            disabled={processing || providerNote !== null}>Provision server</Button
                                         >
                                     {/if}
                                 </Deferred>
@@ -251,19 +275,23 @@
                                 <NativeSelect
                                     id="team_id"
                                     name="team_id"
-                                    options={teams.map((team) => ({ value: team.id, label: team.name }))}
-                                    value={teams[0]?.id}
+                                    options={teams.map((row) => ({ value: row.id, label: row.name }))}
+                                    value={chosenTeam ?? undefined}
+                                    onchange={(event) => (team = (event.currentTarget as HTMLSelectElement).value)}
                                 />
                             </div>
                         {:else}
-                            <input type="hidden" name="team_id" value={teams[0]?.id ?? ''} />
+                            <input type="hidden" name="team_id" value={chosenTeam ?? ''} />
                         {/if}
                         <p class="-mt-1 text-[12px] text-muted-foreground">
                             Needs Ubuntu 24.04 or Debian 12 and SSH access. Coresmith generates a key for this server
                             alone, you add it, then it provisions.
                         </p>
                         <FieldError message={errors.team_id} />
-                        <Button type="submit" class="w-full" disabled={processing}>Add server</Button>
+                        {#if note}
+                            {@render limitBanner(note)}
+                        {/if}
+                        <Button type="submit" class="w-full" disabled={processing || note !== null}>Add server</Button>
                     </div>
                 {/snippet}
             </Form>

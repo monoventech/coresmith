@@ -17,6 +17,7 @@
 </script>
 
 <script lang="ts">
+    import PlanNote from '@/components/settings/PlanNote.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -26,7 +27,7 @@
     import { Label } from '@/components/ui/label'
     import { Form, router } from '@inertiajs/svelte'
 
-    let { sso }: { sso: SingleSignOn } = $props()
+    let { sso, planNote = null }: { sso: SingleSignOn; planNote?: string | null } = $props()
 
     let editing = $state(false)
     let removing = $state(false)
@@ -210,7 +211,9 @@
 
     {#if sso.can_manage}
         <div class="mt-4 flex flex-wrap gap-2">
-            {#if !connection}
+            {#if !connection && planNote}
+                <PlanNote note={planNote} />
+            {:else if !connection}
                 <Button variant="outline" size="sm" onclick={() => (editing = true)}>Set up single sign-on</Button>
             {:else}
                 {#if !connection.verified}
@@ -230,6 +233,8 @@
                 >
             {/if}
         </div>
+    {:else if planNote}
+        <div class="mt-4"><PlanNote note={planNote} /></div>
     {:else}
         <p class="mt-4 mb-0 text-[12.5px] text-muted-foreground">Only an owner can change single sign-on.</p>
     {/if}

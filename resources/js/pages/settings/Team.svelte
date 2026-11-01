@@ -3,6 +3,7 @@
     import FieldError from '@/components/FieldError.svelte'
     import CloudProvidersCard from '@/components/settings/CloudProvidersCard.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
+    import PlanNote from '@/components/settings/PlanNote.svelte'
     import type { SingleSignOn } from '@/components/settings/SingleSignOnCard.svelte'
     import SingleSignOnCard from '@/components/settings/SingleSignOnCard.svelte'
     import TeamAddressCard from '@/components/settings/TeamAddressCard.svelte'
@@ -14,7 +15,7 @@
     import { NativeSelect } from '@/components/ui/native-select'
     import type { CloudAccounts } from '@/lib/cloud'
     import { getInitials } from '@/lib/initials'
-    import { Form, router } from '@inertiajs/svelte'
+    import { Form, page, router } from '@inertiajs/svelte'
     import { X } from '@lucide/svelte'
 
     interface Member {
@@ -58,6 +59,9 @@
         cloud: CloudAccounts
     } = $props()
 
+    const billing = $derived(page.props.billing)
+    const memberNote = $derived(billing?.notes.members ?? null)
+
     let inviting = $state(false)
     let removing = $state<Member | null>(null)
     let removeOpen = $state(false)
@@ -94,7 +98,13 @@
             <p class="mt-0.5 text-[12.5px] text-muted-foreground">Everyone with access to this panel.</p>
         </div>
         {#if can.manageMembers}
-            <span class="ml-auto"><Button size="sm" onclick={() => (inviting = true)}>Invite someone</Button></span>
+            <span class="ml-auto"
+                ><Button size="sm" disabled={!!memberNote} onclick={() => (inviting = true)}>Invite someone</Button
+                ></span
+            >
+        {/if}
+        {#if memberNote}
+            <div class="basis-full"><PlanNote note={memberNote} /></div>
         {/if}
     </div>
     <ul class="m-0 list-none p-0">
@@ -154,11 +164,11 @@
 
 <div class="mt-4 grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
     <TeamAddressCard slug={team.slug} path={address.path} subdomain={address.subdomain} canUpdate={can.update} />
-    <CustomDomainCard domain={address.domain} canUpdate={can.update} />
+    <CustomDomainCard domain={address.domain} canUpdate={can.update} planNote={billing?.notes.custom_domain} />
 </div>
 
 <div class="mt-4">
-    <SingleSignOnCard {sso} />
+    <SingleSignOnCard {sso} planNote={billing?.notes.single_sign_on} />
 </div>
 
 <div class="mt-4">

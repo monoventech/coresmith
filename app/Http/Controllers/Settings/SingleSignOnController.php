@@ -8,10 +8,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\PlanFeature;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Models\Team;
 use App\Models\TeamSsoConnection;
+use App\Services\Billing\PlanGate;
 use App\Services\Sso\OidcClient;
 use App\Services\Sso\SsoConnections;
 use App\Services\Sso\SsoException;
@@ -26,6 +28,8 @@ final class SingleSignOnController extends Controller
     public function update(Request $request, TeamContext $context, SsoConnections $connections): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
+
+        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
         $existing = $connections->forTeam($team);
 
         $request->merge([
@@ -110,6 +114,8 @@ final class SingleSignOnController extends Controller
     public function verify(Request $request, TeamContext $context, SsoConnections $connections): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
+
+        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
         $connection = $this->connection($connections, $team);
 
         if ($connection->isVerified()) {
@@ -154,6 +160,8 @@ final class SingleSignOnController extends Controller
             return back()->with('success', 'Single sign-on is off.');
         }
 
+        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+
         if (!$connection->isVerified()) {
             return back()->with('error', 'Verify the email domain first. Add the TXT record, then check DNS.');
         }
@@ -182,6 +190,8 @@ final class SingleSignOnController extends Controller
     public function provisioning(Request $request, TeamContext $context, SsoConnections $connections): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
+
+        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
         $connection = $this->connection($connections, $team);
 
         $request->validate(['jit_provisioning' => ['required', 'boolean']]);

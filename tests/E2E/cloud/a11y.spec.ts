@@ -19,7 +19,8 @@ const PAGES: [string, Visit][] = [
 const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Fleet on a trial', direct('/trial/dashboard')],
     ['Lapsed team', direct('/expired/dashboard')],
-    ['Failed payment', direct('/overdue/dashboard')]
+    ['Failed payment', direct('/overdue/dashboard')],
+    ['Starter team settings', direct('/solo/settings/team')]
 ]
 
 const GUEST_PAGES: [string, string][] = [

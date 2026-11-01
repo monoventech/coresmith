@@ -13,10 +13,55 @@ use App\Enums\PlanFeature;
 use App\Exceptions\PlanRefusal;
 use App\Models\Team;
 use App\Models\User;
+use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 
 final class PlanGate
 {
-    public function __construct(private readonly TeamBilling $billing) {}
+    private const LOCK_SECONDS = 10;
+
+    private const LOCK_WAIT_SECONDS = 5;
+
+    public function __construct(private readonly TeamBilling $billing, private readonly SubscriptionCheck $subscriptions) {}
+
+    public function creatingServer(Team $team, User $user, Closure $create): mixed
+    {
+        if (Edition::current()->isSelfHosted()) {
+            return $create();
+        }
+
+        try {
+            return Cache::lock('team-servers:' . $team->getKey(), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, function () use ($team, $user, $create): mixed {
+                $this->ensureCanAddServer($team, $user);
+                $this->subscriptions->confirm($team);
+
+                return $create();
+            });
+        } catch (LockTimeoutException) {
+            throw new PlanRefusal('Another server is being added to this team. Try again in a moment.', 'busy', 409);
+        }
+    }
+
+    public function serverLimitNote(Team $team, User $user): ?string
+    {
+        if (Edition::current()->isSelfHosted()) {
+            return null;
+        }
+
+        $status = $this->billing->status($team);
+
+        if ($status->readOnly()) {
+            return PlanRefusal::readOnly($status, $this->canManage($team, $user))->getMessage();
+        }
+
+        $limit = $status->serverLimit();
+        $count = $team->servers()->count();
+
+        return $limit !== null && $status->plan !== null && $count >= $limit
+            ? PlanRefusal::servers($status->plan, $count, $this->canManage($team, $user))->getMessage()
+            : null;
+    }
 
     public function ensureWritable(Team $team, User $user): void
     {

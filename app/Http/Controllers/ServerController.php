@@ -21,6 +21,8 @@ use App\Jobs\TestSSHConnection;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
+use App\Models\Team;
+use App\Services\Billing\PlanGate;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
@@ -40,7 +42,7 @@ final class ServerController extends Controller
 {
     public const ENVIRONMENTS = ['Production', 'Staging', 'Development'];
 
-    public function create(Request $request, CloudPresenter $cloud, TeamContext $context): Response
+    public function create(Request $request, CloudPresenter $cloud, TeamContext $context, PlanGate $plans): Response
     {
         $this->authorize('create', Server::class);
 
@@ -49,8 +51,9 @@ final class ServerController extends Controller
         $requested = is_string($requested) ? $requested : null;
 
         return Inertia::render('servers/Create', [
-            'teams' => $request->user()->teams()->get(['teams.id', 'teams.name'])
-                ->map(fn($team): array => ['id' => $team->id, 'name' => $team->name])->values(),
+            'teams' => $request->user()->teams()->get()
+                ->map(fn(Team $choice): array => ['id' => $choice->id, 'name' => $choice->name, 'limit' => $plans->serverLimitNote($choice, $request->user())])->values(),
+            'current' => $team->getKey(),
             'environments' => self::ENVIRONMENTS,
             'phases' => ServerPresenter::PROVISIONING_PHASES,
             'cloud' => fn(): array => $cloud->choices($team, $request->user(), $requested),
@@ -62,16 +65,20 @@ final class ServerController extends Controller
         ]);
     }
 
-    public function store(StoreServerRequest $request, KeyPairGenerator $keys): RedirectResponse
+    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans): RedirectResponse
     {
-        $pair = $keys->generate('coresmith@' . (Str::slug((string) $request->validated('name')) ?: 'server'));
+        $team = Team::query()->findOrFail($request->validated('team_id'));
 
-        $server = Server::create([
-            ...$request->safe()->except([]),
-            'ssh_private_key' => $pair->privateKey,
-            'ssh_public_key' => $pair->publicKey,
-            'status' => ServerStatus::Pending,
-        ]);
+        $server = $plans->creatingServer($team, $request->user(), function () use ($request, $keys): Server {
+            $pair = $keys->generate('coresmith@' . (Str::slug((string) $request->validated('name')) ?: 'server'));
+
+            return Server::create([
+                ...$request->safe()->except([]),
+                'ssh_private_key' => $pair->privateKey,
+                'ssh_public_key' => $pair->publicKey,
+                'status' => ServerStatus::Pending,
+            ]);
+        });
 
         activity()->performedOn($server)->log('server_added');
 

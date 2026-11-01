@@ -29,7 +29,7 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->plan)->toBe(Plan::Trial)
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
-        ->and($owner->teams()->pluck('slug')->sort()->values()->all())->toBe(['ending', 'expired', 'monoven', 'overdue', 'trial'])
+        ->and($owner->teams()->pluck('slug')->sort()->values()->all())->toBe(['ending', 'expired', 'monoven', 'overdue', 'solo', 'trial'])
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 
@@ -49,4 +49,18 @@ test('the cloud browser seed has a lapsed team, one about to lapse and one that 
         ->and($status('ending')->trialDaysLeft())->toBe(2)
         ->and($status('overdue')->state)->toBe(BillingState::PastDue)
         ->and(Team::query()->where('slug', 'overdue')->firstOrFail()->billingInvoices()->where('status', 'open')->count())->toBe(1);
+});
+
+test('the cloud browser seed has a full starter team', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $solo = Team::query()->where('slug', 'solo')->firstOrFail();
+    $status = app(TeamBilling::class)->status($solo);
+
+    expect($status->plan)->toBe(Plan::Starter)
+        ->and($status->serverLimit())->toBe(3)
+        ->and($solo->servers()->count())->toBe(3)
+        ->and($solo->members()->count())->toBe(1);
 });

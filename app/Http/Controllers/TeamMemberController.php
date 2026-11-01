@@ -12,6 +12,7 @@ use App\Enums\TeamRole;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Billing\PlanGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -27,9 +28,11 @@ final class TeamMemberController extends Controller
 
     private const LAST_OWNER = 'A team must keep at least one owner. Make someone else an owner first.';
 
-    public function store(Request $request, Team $team): RedirectResponse
+    public function store(Request $request, Team $team, PlanGate $plans): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
+
+        $plans->ensureCanAddMember($team, $request->user());
 
         $validated = $request->validate([
             'email' => ['required', 'email', Rule::exists('users', 'email')],

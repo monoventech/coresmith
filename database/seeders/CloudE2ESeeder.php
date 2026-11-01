@@ -48,6 +48,7 @@ final class CloudE2ESeeder extends Seeder
         $this->lapsedTeam($tenant->owner, $tenant->member);
         $this->endingTeam($tenant->owner);
         $this->overdueTeam($tenant->owner);
+        $this->soloTeam($tenant->owner);
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
     }
@@ -83,6 +84,18 @@ final class CloudE2ESeeder extends Seeder
 
         Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->status('past_due')->create();
         TeamInvoice::factory()->for($team)->failed(now()->addDays(3))->create();
+    }
+
+    private function soloTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Solo Shop', 'solo');
+        $team->forceFill(['stripe_id' => 'cus_e2e_solo'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Starter)->create();
+
+        foreach (['solo-01', 'solo-02', 'solo-03'] as $name) {
+            Server::factory()->for($team)->create(['name' => $name, 'status' => ServerStatus::Active]);
+        }
     }
 
     private function ownedTeam(User $owner, string $name, string $slug): Team

@@ -22,6 +22,7 @@ use App\Jobs\ReservePortBlock;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
+use App\Services\Billing\SubscriptionCheck;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
@@ -88,7 +89,10 @@ final class ApplicationController extends Controller
         Server $server,
         SlugGenerator $slugs,
         PortAllocator $ports,
+        SubscriptionCheck $subscriptions,
     ): RedirectResponse {
+        $subscriptions->confirm($server->team);
+
         $slug = $slugs->fromName($request->string('name')->value(), $server);
 
         $runtime = $request->runtime();
