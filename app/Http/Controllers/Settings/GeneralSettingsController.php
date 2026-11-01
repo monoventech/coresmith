@@ -14,6 +14,7 @@ use App\Jobs\BackUpPanel;
 use App\Models\InstanceSetting;
 use App\Models\SshKey;
 use App\Services\Panel\PanelBackup;
+use App\Services\Panel\PanelUpdatesPresenter;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
@@ -34,7 +35,7 @@ final class GeneralSettingsController extends Controller
         return back()->with('success', 'Backing up. The database and environment are archived, the last ' . PanelBackup::KEEP . ' are kept.');
     }
 
-    public function show(Request $request, PanelBackup $backups): Response
+    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates): Response
     {
         $installed = InstanceSetting::get('installed_at');
         $latest = $backups->latest();
@@ -64,6 +65,7 @@ final class GeneralSettingsController extends Controller
                 'fingerprint' => $key->fingerprint,
                 'added' => $key->created_at?->format('M Y'),
             ])->values(),
+            'updates' => $updates->present($request->user()),
             'can' => [
                 'manageInstance' => $this->managesInstance($request),
                 'reachServers' => $request->user()->teams->contains(fn($team): bool => in_array($team->pivot->role, [TeamRole::Owner->value, TeamRole::Admin->value], true)),

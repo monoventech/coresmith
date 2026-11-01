@@ -78,5 +78,11 @@ export default defineConfig({
             reuseExistingServer: !process.env.CI,
             timeout: 30_000,
         },
+        {
+            command: 'bun tests/E2E/support/release-feed.ts',
+            url: 'http://127.0.0.1:8125/v1/version',
+            reuseExistingServer: !process.env.CI,
+            timeout: 30_000,
+        },
     ],
 })

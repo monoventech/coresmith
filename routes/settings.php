@@ -6,6 +6,7 @@ use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
 use App\Http\Controllers\Settings\GitHubAppController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
+use App\Http\Controllers\Settings\PanelUpdateController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
@@ -27,6 +28,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/backups', [GeneralSettingsController::class, 'backup'])
         ->middleware('throttle:6,1,backups')
         ->name('settings.backups.store');
+
+    Route::get('settings/updates/status', [PanelUpdateController::class, 'status'])->name('settings.updates.status');
+    Route::post('settings/updates/check', [PanelUpdateController::class, 'check'])
+        ->middleware('throttle:6,1,update-check')
+        ->name('settings.updates.check');
+    Route::post('settings/updates', [PanelUpdateController::class, 'store'])
+        ->middleware('throttle:6,1,update-request')
+        ->name('settings.updates.store');
+    Route::delete('settings/updates/request', [PanelUpdateController::class, 'cancel'])->name('settings.updates.cancel');
+    Route::post('settings/updates/recover', [PanelUpdateController::class, 'recover'])->name('settings.updates.recover');
+    Route::put('settings/updates/auto', [PanelUpdateController::class, 'auto'])->name('settings.updates.auto');
+    Route::get('settings/updates/{run}/log', [PanelUpdateController::class, 'log'])
+        ->where('run', '[0-9A-Za-z]{26}')
+        ->name('settings.updates.log');
 
     Route::get('settings/team', [TeamController::class, 'index'])->name('teams.index');
     Route::put('settings/team/url', [TeamUrlController::class, 'update'])->name('settings.team-url.update');

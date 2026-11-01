@@ -77,7 +77,8 @@ test('the general settings page shows the instance as configured', function () {
             ->where('backups', ['last' => null, 'keep' => 14])
             ->where('timezones', fn($timezones) => $timezones->contains('Europe/London') && $timezones->contains('UTC'))
             ->where('can.manageInstance', true)
-            ->where('can.reachServers', true));
+            ->where('can.reachServers', true)
+            ->where('updates.mode', 'unmanaged'));
 });
 
 test('an unconfigured instance falls back to the application defaults', function () {

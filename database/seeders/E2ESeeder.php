@@ -37,12 +37,15 @@ use App\Services\Runtime\JsTooling;
 use App\Services\Server\CertificateCheck;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\ServerReachability;
+use App\Services\Updates\ReleaseLayout;
+use App\Services\Updates\UpdatePaths;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\CloudCatalogs;
 use Database\Seeders\Support\DemoLog;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use phpseclib3\Exception\UnableToConnectException;
 use Spatie\Activitylog\Models\Activity;
@@ -173,6 +176,30 @@ final class E2ESeeder extends Seeder
             ->withProperties(['from' => '0.1.0', 'to' => '0.1.1', 'trigger' => 'auto', 'duration_seconds' => 94, 'signature' => 'unchecked'])
             ->createdAt(now()->subMinute())
             ->log('panel_updated');
+
+        $this->managedPanel();
+    }
+
+    private function managedPanel(): void
+    {
+        $paths = UpdatePaths::fromConfig();
+
+        File::deleteDirectory($paths->root());
+        File::deleteDirectory($paths->state());
+        File::ensureDirectoryExists($paths->releases() . '/0.1.0-0000000/public');
+        File::ensureDirectoryExists($paths->shared() . '/storage');
+        File::put($paths->shared() . '/.env', "APP_ENV=e2e\n");
+
+        $release = app(ReleaseLayout::class)->seal($paths->releases() . '/0.1.0-0000000', [
+            'version' => '0.1.0',
+            'commit' => '0000000',
+            'tag' => 'v0.1.0',
+            'signature' => 'unchecked',
+            'fingerprint' => null,
+            'built_by' => 'installer',
+        ]);
+
+        symlink($release->path, $paths->current());
     }
 
     private function cloudServers(CloudProvider $hetzner): void

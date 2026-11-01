@@ -1,0 +1,10 @@
+{
+    "schema": 1,
+    "latest": "9.9.9",
+    "minimum": "0.0.1",
+    "withdrawn": ["0.0.9"],
+    "changelog_url": "https://github.com/monoven/coresmith/releases/tag/v9.9.9",
+    "summary": "Faster deploys on large repositories.\nThe deploy log keeps its colours.",
+    "released_at": "2026-10-17",
+    "channel": "stable"
+}

@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\TeamRole;
+use App\Models\Team;
+use App\Models\User;
 use App\Services\Panel\PanelBackup;
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseHealth;
@@ -400,4 +403,12 @@ function updatesInterrupted(Closure $markers, string $step): UpdateStatus
     app(UpdateState::class)->save($status);
 
     return $status;
+}
+
+function updatesOwner(TeamRole $role = TeamRole::Owner): User
+{
+    $user = User::factory()->create();
+    Team::factory()->create()->members()->attach($user, ['role' => $role->value]);
+
+    return $user->fresh();
 }

@@ -6,7 +6,10 @@ test.describe('settings', () => {
 
         const sections = tabs(page, 'Settings')
 
-        await expect(sections.getByRole('link', { name: 'General', exact: true })).toHaveAttribute('aria-current', 'page')
+        await expect(sections.getByRole('link', { name: 'General', exact: true })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
 
         for (const [label, url] of [
             ['Team', /\/settings\/team$/],
@@ -18,7 +21,10 @@ test.describe('settings', () => {
         ] as const) {
             await tabs(page, 'Settings').getByRole('link', { name: label, exact: true }).click()
             await page.waitForURL(url)
-            await expect(tabs(page, 'Settings').getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page')
+            await expect(tabs(page, 'Settings').getByRole('link', { name: label, exact: true })).toHaveAttribute(
+                'aria-current',
+                'page'
+            )
             await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
         }
     })
@@ -28,9 +34,10 @@ test.describe('general settings', () => {
     test('the panel card shows the version and what can be changed', async ({ page }) => {
         await gotoSettings(page, 'General')
 
+        await expect(page.getByTestId('panel-updates-card')).toContainText(/Coresmith v\d+\.\d+\.\d+ · stable channel/)
+
         const panel = page.getByTestId('panel-card')
 
-        await expect(panel).toContainText(/Coresmith v\d+\.\d+\.\d+ · self-hosted/)
         await expect(panel.getByLabel('Panel name')).toHaveValue('Coresmith')
         await expect(panel.getByLabel('Timezone')).toBeVisible()
     })
@@ -56,7 +63,7 @@ test.describe('general settings', () => {
 
         const backups = page.getByTestId('backups-card')
 
-        await expect(backups).toContainText('Taken nightly at 04:00.')
+        await expect(backups).toContainText('Taken nightly at 04:00 and before every update.')
         await backups.getByRole('button', { name: 'Back up now' }).click()
 
         await expect(toast(page)).toContainText('Backing up.')
@@ -71,7 +78,9 @@ test.describe('general settings', () => {
         const keys = page.getByTestId('ssh-keys-card')
 
         await expect(keys).toContainText('maya@monoven')
-        await expect(keys.getByTestId('ssh-keys-reach')).toHaveText('Installed on every server you manage. Password login stays off.')
+        await expect(keys.getByTestId('ssh-keys-reach')).toHaveText(
+            'Installed on every server you manage. Password login stays off.'
+        )
 
         await keys.getByRole('button', { name: 'Add key' }).click()
         await expect(dialog(page)).toContainText("It's installed on your servers straight away.")
@@ -118,7 +127,9 @@ asMember.describe('ssh keys as a deployer', () => {
 
         const keys = page.getByTestId('ssh-keys-card')
 
-        await expect(keys.getByTestId('ssh-keys-reach')).toHaveText("Deployers don't get shell access, so these aren't installed on any server.")
+        await expect(keys.getByTestId('ssh-keys-reach')).toHaveText(
+            "Deployers don't get shell access, so these aren't installed on any server."
+        )
 
         await keys.getByRole('button', { name: 'Add key' }).click()
         await expect(dialog(page)).toContainText("It's installed once you're an owner or admin of a team.")
@@ -152,7 +163,10 @@ test.describe('notification settings', () => {
         await expect(after).toHaveAttribute('aria-checked', before === 'true' ? 'false' : 'true')
 
         await after.click()
-        await expect(page.getByTestId('notification-weekly_digest').getByRole('switch')).toHaveAttribute('aria-checked', before ?? 'false')
+        await expect(page.getByTestId('notification-weekly_digest').getByRole('switch')).toHaveAttribute(
+            'aria-checked',
+            before ?? 'false'
+        )
     })
 })
 
