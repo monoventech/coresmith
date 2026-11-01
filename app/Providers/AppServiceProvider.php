@@ -7,6 +7,8 @@ use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\HttpCloudApiFactory;
 use App\Services\Dns\DnsResolver;
 use App\Services\Dns\NativeDnsResolver;
+use App\Services\Install\NativeProcessHandOff;
+use App\Services\Install\ProcessHandOff;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Teams\TeamContext;
 use App\Services\Updates\UpdatePaths;
@@ -39,6 +41,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(UpdatePaths::class, fn(): UpdatePaths => UpdatePaths::fromConfig());
 
         $this->app->bind(CloudApiFactory::class, HttpCloudApiFactory::class);
+
+        $this->app->bind(ProcessHandOff::class, NativeProcessHandOff::class);
     }
 
     /**
