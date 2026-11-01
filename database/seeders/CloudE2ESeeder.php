@@ -52,6 +52,7 @@ final class CloudE2ESeeder extends Seeder
         $this->overdueTeam($tenant->owner);
         $this->soloTeam($tenant->owner);
         $this->fleetTeam($tenant->owner);
+        $this->businessTeam($tenant->owner);
 
         foreach (self::PROJECTS as $code) {
             $this->planChangeTeams($tenant->owner, $code);
@@ -120,6 +121,20 @@ final class CloudE2ESeeder extends Seeder
         foreach (['fleet-01', 'fleet-02', 'fleet-03', 'fleet-04', 'fleet-05'] as $name) {
             Server::factory()->for($team)->create(['name' => $name, 'status' => ServerStatus::Active]);
         }
+    }
+
+    private function businessTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Atelier Business', 'atelier');
+        $team->forceFill(['stripe_id' => 'cus_e2e_atelier'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Business)->create();
+
+        $server = Server::factory()->for($team)->create(['name' => 'atelier-01', 'status' => ServerStatus::Active]);
+
+        activity()->performedOn($team)->causedBy($owner)->withProperties(['email' => $owner->email, 'role' => 'owner'])->log('member_added');
+        activity()->performedOn($server)->causedBy($owner)->log('server_provisioned');
+        activity()->performedOn($server)->withProperties(['command' => 'systemctl reload caddy'])->log('ssh_command_executed');
     }
 
     private function planChangeTeams(User $owner, string $code): void

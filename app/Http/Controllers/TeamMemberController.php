@@ -53,6 +53,8 @@ final class TeamMemberController extends Controller
 
         $team->members()->attach($user, ['role' => $role->value]);
 
+        activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'role' => $role->value])->log('member_added');
+
         $this->syncServers($team);
 
         return back()->with('success', 'Member added.');
@@ -78,7 +80,11 @@ final class TeamMemberController extends Controller
             return back()->with('error', self::LAST_OWNER);
         }
 
+        $from = $user->roleIn($team);
+
         $team->members()->updateExistingPivot($user->getKey(), ['role' => $role->value]);
+
+        activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'from' => $from?->value, 'to' => $role->value])->log('member_role_changed');
 
         $this->syncServers($team);
 
@@ -98,6 +104,8 @@ final class TeamMemberController extends Controller
         }
 
         $team->members()->detach($user->getKey());
+
+        activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email])->log('member_removed');
 
         $this->syncServers($team);
 

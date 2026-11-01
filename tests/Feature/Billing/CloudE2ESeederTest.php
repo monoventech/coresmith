@@ -7,6 +7,7 @@ use App\Enums\Plan;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
+use App\Services\Teams\AuditLog;
 use Database\Seeders\CloudE2ESeeder;
 use Tests\Support\CloudBilling;
 
@@ -29,8 +30,8 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->plan)->toBe(Plan::Trial)
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
-        ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
-        ->and($owner->teams()->count())->toBe(7 + 4 * count(CloudE2ESeeder::PROJECTS))
+        ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['atelier', 'ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
+        ->and($owner->teams()->count())->toBe(8 + 4 * count(CloudE2ESeeder::PROJECTS))
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 
@@ -110,4 +111,16 @@ test('the cloud browser seed has a fleet too big for starter', function () {
         ->and($fleet->members()->count())->toBe(3)
         ->and($fleet->domain?->hostname)->toBe('deploy.bigfleet.test')
         ->and($fleet->domain?->isVerified())->toBeTrue();
+});
+
+test('the cloud browser seed has a business team with a history', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $atelier = Team::query()->where('slug', 'atelier')->firstOrFail();
+
+    expect(app(TeamBilling::class)->status($atelier)->plan)->toBe(Plan::Business)
+        ->and($atelier->servers()->pluck('name')->all())->toBe(['atelier-01'])
+        ->and(iterator_to_array(app(AuditLog::class)->rows($atelier, null), false))->toHaveCount(3);
 });

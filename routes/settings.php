@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Settings\ApiTokenController;
+use App\Http\Controllers\Settings\AuditLogController;
 use App\Http\Controllers\Settings\BillingController;
 use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
@@ -50,6 +51,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:12,1,domain-verify')
         ->name('settings.team-domain.verify');
     Route::delete('settings/team/domain', [TeamDomainController::class, 'destroy'])->name('settings.team-domain.destroy');
+    Route::get('settings/team/audit-log', AuditLogController::class)
+        ->middleware('throttle:6,1,audit-export')
+        ->name('settings.audit-log');
 
     Route::post('settings/cloud-providers', [CloudProviderController::class, 'store'])
         ->middleware('throttle:10,1,cloud-provider-connect')
