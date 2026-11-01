@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Services\Updates\Release;
+use App\Services\Updates\ReleaseLayout;
+use App\Services\Updates\Version;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -109,4 +112,44 @@ function updatesFakeHorizon(array $pids): MasterSupervisorRepository
     app()->instance(MasterSupervisorRepository::class, $repository);
 
     return $repository;
+}
+
+function updatesRelease(string $root, string $version, string $commit, array $meta = []): Release
+{
+    $name = ReleaseLayout::name(Version::parse($version), $commit);
+    $path = "{$root}/releases/{$name}";
+
+    if (!is_dir("{$path}/public")) {
+        mkdir("{$path}/public", 0755, true);
+    }
+
+    file_put_contents("{$path}/public/index.php", "<?php echo '{$name}';\n");
+    @symlink("{$root}/shared/.env", "{$path}/.env");
+    @symlink("{$root}/shared/storage", "{$path}/storage");
+
+    return app(ReleaseLayout::class)->seal($path, [
+        'version' => $version,
+        'commit' => $commit,
+        'tag' => Version::parse($version)->tag(),
+        'signature' => 'unchecked',
+        'fingerprint' => null,
+        'built_by' => 'installer',
+        ...$meta,
+    ]);
+}
+
+function updatesInstall(string $root, string $version = '0.1.0', string $commit = '8413dcea20f7fd49b704790b8013b5dd4340fa16'): Release
+{
+    foreach (['cache', 'sessions', 'views'] as $directory) {
+        if (!is_dir("{$root}/shared/storage/framework/{$directory}")) {
+            mkdir("{$root}/shared/storage/framework/{$directory}", 0755, true);
+        }
+    }
+
+    file_put_contents("{$root}/shared/.env", "APP_KEY=base64:test\n");
+
+    $release = updatesRelease($root, $version, $commit);
+    symlink($release->path, "{$root}/app");
+
+    return $release;
 }
