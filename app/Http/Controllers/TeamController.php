@@ -12,6 +12,7 @@ use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\User;
+use App\Services\Panel\CloudPresenter;
 use App\Services\Sso\SsoConnections;
 use App\Services\Teams\TeamDomains;
 use App\Services\Teams\TeamUrls;
@@ -46,6 +47,7 @@ final class TeamController extends Controller
                 'domain' => $domain instanceof TeamDomain ? app(TeamDomains::class)->present($domain) : null,
             ],
             'sso' => app(SsoConnections::class)->present($team, $user),
+            'cloud' => app(CloudPresenter::class)->accounts($team, $user),
             'teams' => $user->teams()->get(['teams.id', 'teams.name'])
                 ->map(fn(Team $each): array => ['id' => $each->id, 'name' => $each->name]),
             'members' => $team->members()->orderBy('name')->get()->map(fn(User $member): array => [

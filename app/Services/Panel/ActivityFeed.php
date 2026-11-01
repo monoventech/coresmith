@@ -10,6 +10,7 @@ namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
@@ -31,8 +32,9 @@ final class ActivityFeed
         $servers = Server::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
         $applications = Application::withTrashed()->where('team_id', $team->getKey())->with(['server' => fn($query) => $query->withTrashed()])->get()->keyBy('id');
         $databases = ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
+        $accounts = CloudProvider::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
 
-        return $this->merge($servers, $applications, $databases, $limit);
+        return $this->merge($servers, $applications, $databases, $accounts, $limit);
     }
 
     /**
@@ -43,25 +45,27 @@ final class ActivityFeed
         $applications = Application::withTrashed()->where('server_id', $server->getKey())->with('server')->get()->keyBy('id');
         $databases = ManagedDatabase::withTrashed()->where('server_id', $server->getKey())->get()->keyBy('id');
 
-        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, $limit);
+        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit);
     }
 
     /**
      * @param  Collection<string, Server>  $servers
      * @param  Collection<string, Application>  $applications
      * @param  Collection<string, ManagedDatabase>  $databases
+     * @param  Collection<string, CloudProvider>  $accounts
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    private function merge(Collection $servers, Collection $applications, Collection $databases, int $limit): array
+    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit): array
     {
         $rows = [];
 
         $activities = Activity::query()
             ->whereNotIn('description', self::QUIET)
-            ->where(function ($query) use ($servers, $applications, $databases): void {
+            ->where(function ($query) use ($servers, $applications, $databases, $accounts): void {
                 $query->where(fn($inner) => $inner->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', $servers->keys()))
                     ->orWhere(fn($inner) => $inner->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications->keys()))
-                    ->orWhere(fn($inner) => $inner->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', $databases->keys()));
+                    ->orWhere(fn($inner) => $inner->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', $databases->keys()))
+                    ->orWhere(fn($inner) => $inner->where('subject_type', (new CloudProvider)->getMorphClass())->whereIn('subject_id', $accounts->keys()));
             })
             ->latest('created_at')
             ->latest('id')
@@ -69,7 +73,9 @@ final class ActivityFeed
             ->get();
 
         foreach ($activities as $activity) {
-            $row = $this->describe($activity, $servers, $applications, $databases);
+            $row = $activity->subject_type === (new CloudProvider)->getMorphClass()
+                ? $this->describeAccount($activity, $accounts->get($activity->subject_id))
+                : $this->describe($activity, $servers, $applications, $databases);
 
             if ($row !== null) {
                 $rows[] = $row;
@@ -95,6 +101,25 @@ final class ActivityFeed
         usort($rows, static fn(array $a, array $b): int => strcmp($b['at'], $a['at']));
 
         return array_slice($rows, 0, $limit);
+    }
+
+    /**
+     * @return array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}|null
+     */
+    private function describeAccount(Activity $activity, ?CloudProvider $account): ?array
+    {
+        $properties = $activity->properties?->toArray() ?? [];
+        $provider = (string) ($properties['provider'] ?? $account?->type->label());
+        $name = (string) ($properties['name'] ?? $account?->name);
+
+        $parts = match ($activity->description) {
+            'cloud_provider_connected' => [$this->text($provider . ' connected as '), $this->mono($name)],
+            'cloud_provider_token_replaced' => [$this->text('Token replaced for '), $this->mono($name)],
+            'cloud_provider_removed' => [$this->text($provider . ' account '), $this->mono($name), $this->text(' removed')],
+            default => null,
+        };
+
+        return $parts === null ? null : $this->row($activity->created_at, $parts, route('teams.index'));
     }
 
     /**

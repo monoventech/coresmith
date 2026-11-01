@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\BillingController;
+use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
 use App\Http\Controllers\Settings\GitHubAppController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
@@ -34,6 +35,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:12,1,domain-verify')
         ->name('settings.team-domain.verify');
     Route::delete('settings/team/domain', [TeamDomainController::class, 'destroy'])->name('settings.team-domain.destroy');
+
+    Route::post('settings/cloud-providers', [CloudProviderController::class, 'store'])
+        ->middleware('throttle:10,1,cloud-provider-connect')
+        ->name('cloud-providers.store');
+    Route::put('settings/cloud-providers/{cloudProvider}', [CloudProviderController::class, 'update'])
+        ->middleware('throttle:10,1,cloud-provider-update')
+        ->name('cloud-providers.update');
+    Route::delete('settings/cloud-providers/{cloudProvider}', [CloudProviderController::class, 'destroy'])
+        ->name('cloud-providers.destroy');
 
     Route::get('settings/notifications', [NotificationSettingsController::class, 'edit'])->name('settings.notifications');
     Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('settings.notifications.update');

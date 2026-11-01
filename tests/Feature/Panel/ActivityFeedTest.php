@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\DeploymentStatus;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
@@ -261,4 +262,42 @@ test('a server feed shows up to twenty five entries by default', function () {
     Collection::times(30, fn() => feedLog($server, 'server_rebooted'));
 
     expect((new ActivityFeed)->forServer($server))->toHaveCount(25);
+});
+
+test('cloud account events are described and link to the team page', function (string $description, string $sentence) {
+    [$team] = feedFixture();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+
+    feedLog($account, $description, ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
+
+    $row = (new ActivityFeed)->forTeam($team)[0];
+
+    expect(feedSentence($row))->toBe($sentence)
+        ->and($row['href'])->toBe(route('teams.index'))
+        ->and(array_column(array_values(array_filter($row['parts'], fn(array $part): bool => $part['mono'])), 'text'))->toBe(['Hetzner production']);
+})->with([
+    'connected' => ['cloud_provider_connected', 'Hetzner Cloud connected as Hetzner production'],
+    'token replaced' => ['cloud_provider_token_replaced', 'Token replaced for Hetzner production'],
+    'removed' => ['cloud_provider_removed', 'Hetzner Cloud account Hetzner production removed'],
+]);
+
+test("a removed account keeps its history, and another team's accounts never show", function () {
+    [$team] = feedFixture();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+    $theirs = CloudProvider::factory()->create(['name' => 'Their Hetzner']);
+
+    feedLog($account, 'cloud_provider_removed', ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
+    feedLog($theirs, 'cloud_provider_connected', ['provider' => 'Hetzner Cloud', 'name' => 'Their Hetzner']);
+    $account->delete();
+
+    expect(array_map(feedSentence(...), (new ActivityFeed)->forTeam($team)))->toBe(['Hetzner Cloud account Hetzner production removed']);
+});
+
+test('account events stay off a server feed', function () {
+    [$team, $server] = feedFixture();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+
+    feedLog($account, 'cloud_provider_connected', ['provider' => 'Hetzner Cloud', 'name' => 'Hetzner production']);
+
+    expect((new ActivityFeed)->forServer($server))->toBe([]);
 });
