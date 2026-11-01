@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Team;
 use App\Services\Git\GitHub\ManifestBuilder;
+use Illuminate\Support\Facades\Http;
 
 function manifestBuilder(): ManifestBuilder
 {
@@ -15,7 +16,10 @@ function manifestTeamNamed(string $name): Team
     return new Team(['name' => $name]);
 }
 
-beforeEach(fn() => config(['app.url' => 'https://panel.example.com']));
+beforeEach(function () {
+    Http::preventStrayRequests();
+    config(['app.url' => 'https://panel.example.com']);
+});
 
 test('the manifest asks for the minimum and points github at this panel', function () {
     expect(manifestBuilder()->base())->toBe([

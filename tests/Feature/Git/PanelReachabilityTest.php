@@ -6,6 +6,11 @@ use App\Services\Git\GitHub\PanelReachability;
 use App\Services\Git\GitHub\Reachability;
 use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+
+beforeEach(function () {
+    Http::preventStrayRequests();
+});
 
 function reachabilityResolving(array $map): void
 {
