@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 use Laravel\Horizon\MasterSupervisor;
+use Symfony\Component\Process\Process as SymfonyProcess;
 
 function updatesRegistry(): stdClass
 {
@@ -50,9 +51,17 @@ function updatesCleanUp(): void
         File::deleteDirectory($registry->base);
     }
 
+    foreach ($registry->busy ?? [] as $process) {
+        if ($process->isRunning()) {
+            $process->signal(SIGKILL);
+            $process->wait();
+        }
+    }
+
     $registry->base = null;
     $registry->answers = [];
     $registry->faked = [];
+    $registry->busy = [];
 }
 
 function updatesAnswer(string $url, array|string|Closure $answer, int $status = 200): void
@@ -86,7 +95,7 @@ function updatesFakeHorizon(array $pids): MasterSupervisorRepository
 
         public function names()
         {
-            return array_map(fn(int|string $pid): string => "coresmith-{$pid}", $this->pids);
+            return array_map(fn(int $index): string => MasterSupervisor::basename() . "-{$index}", array_keys($this->pids));
         }
 
         public function all()
@@ -102,7 +111,8 @@ function updatesFakeHorizon(array $pids): MasterSupervisorRepository
         public function get(array $names)
         {
             return array_values(array_filter(array_map(
-                fn(int|string $pid): object => (object) ['name' => "coresmith-{$pid}", 'environment' => 'production', 'pid' => (string) $pid, 'status' => 'running', 'supervisors' => []],
+                fn(int $index, int|string $pid): object => (object) ['name' => MasterSupervisor::basename() . "-{$index}", 'environment' => 'production', 'pid' => (string) $pid, 'status' => 'running', 'supervisors' => []],
+                array_keys($this->pids),
                 $this->pids,
             ), fn(object $master): bool => in_array($master->name, $names, true)));
         }
@@ -283,4 +293,16 @@ function updatesRan(): array
 function updatesProcesses(): array
 {
     return updatesRegistry()->processes ?? [];
+}
+
+function updatesBusyMaster(): SymfonyProcess
+{
+    $process = new SymfonyProcess(['sh', '-c', 'trap "" TERM; echo ready; exec sleep 60']);
+    $process->start();
+    $process->waitUntil(fn(string $type, string $output): bool => str_contains($output, 'ready'));
+
+    $registry = updatesRegistry();
+    $registry->busy = [...($registry->busy ?? []), $process];
+
+    return $process;
 }
