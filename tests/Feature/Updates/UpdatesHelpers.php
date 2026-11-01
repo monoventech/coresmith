@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Laravel\Horizon\Contracts\MasterSupervisorRepository;
+use Laravel\Horizon\MasterSupervisor;
 
 function updatesRegistry(): stdClass
 {
@@ -66,4 +68,45 @@ function updatesAnswer(string $url, array|string|Closure $answer, int $status = 
 function updatesFeed(array|string|Closure $answer, int $status = 200): void
 {
     updatesAnswer((string) config('coresmith.updates.check_url'), $answer, $status);
+}
+
+function updatesFakeHorizon(array $pids): MasterSupervisorRepository
+{
+    $repository = new class($pids) implements MasterSupervisorRepository
+    {
+        public function __construct(public array $pids) {}
+
+        public function names()
+        {
+            return array_map(fn(int|string $pid): string => "coresmith-{$pid}", $this->pids);
+        }
+
+        public function all()
+        {
+            return $this->get($this->names());
+        }
+
+        public function find($name)
+        {
+            return $this->get([$name])[0] ?? null;
+        }
+
+        public function get(array $names)
+        {
+            return array_values(array_filter(array_map(
+                fn(int|string $pid): object => (object) ['name' => "coresmith-{$pid}", 'environment' => 'production', 'pid' => (string) $pid, 'status' => 'running', 'supervisors' => []],
+                $this->pids,
+            ), fn(object $master): bool => in_array($master->name, $names, true)));
+        }
+
+        public function update(MasterSupervisor $master) {}
+
+        public function forget($name) {}
+
+        public function flushExpired() {}
+    };
+
+    app()->instance(MasterSupervisorRepository::class, $repository);
+
+    return $repository;
 }

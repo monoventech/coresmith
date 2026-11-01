@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ServerApiController;
 use App\Http\Controllers\CaddyAskController;
 use App\Http\Controllers\GitHubWebhookController;
 use App\Http\Controllers\ReleaseFeedController;
+use App\Http\Controllers\ReleaseProbeController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Middleware\EnsureInstalled;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,11 @@ Route::get('v1/version', ReleaseFeedController::class)
     ->withoutMiddleware(EnsureInstalled::class)
     ->middleware('throttle:60,1,release-feed')
     ->name('release-feed');
+
+Route::get('up/release', ReleaseProbeController::class)
+    ->withoutMiddleware(EnsureInstalled::class)
+    ->middleware('throttle:60,1,release-probe')
+    ->name('release.probe');
 
 Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1,api-v1'])->group(function () {
     Route::get('servers', [ServerApiController::class, 'index'])
