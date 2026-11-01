@@ -92,7 +92,7 @@
                     rel="noopener noreferrer">Manage repositories</Button
                 >
             {/if}
-            <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (disconnecting = true)}
+            <Button variant="ghost" size="sm" class="text-destructive-strong" onclick={() => (disconnecting = true)}
                 >Disconnect</Button
             >
             {#if connect}

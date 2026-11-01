@@ -225,7 +225,7 @@
                         >{switching ? 'Checking…' : 'Turn on'}</Button
                     >
                 {/if}
-                <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}
+                <Button variant="ghost" size="sm" class="text-destructive-strong" onclick={() => (removing = true)}
                     >Remove</Button
                 >
             {/if}

@@ -204,7 +204,7 @@
                         <Button
                             variant="ghost"
                             size="sm"
-                            class="text-destructive"
+                            class="text-destructive-strong"
                             onclick={() => (disconnecting = provider)}>Disconnect</Button
                         >
                     </div>

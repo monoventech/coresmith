@@ -94,7 +94,7 @@
                 <span class="status-dot-working size-2 shrink-0 rounded-full bg-primary" aria-hidden="true"></span>
                 <span class="text-[14px] font-medium max-sm:flex-1 max-sm:text-[13.5px]">{live.application} is deploying <span class="max-sm:hidden">to {live.server}</span></span>
                 <span class="text-[13px] text-muted-foreground max-sm:hidden">{live.phase}</span>
-                <span class="ml-auto shrink-0 text-[13px] font-medium text-primary max-sm:text-[12.5px]">Watch <span class="max-sm:hidden">live</span></span>
+                <span class="ml-auto shrink-0 text-[13px] font-medium text-primary-strong max-sm:text-[12.5px]">Watch <span class="max-sm:hidden">live</span></span>
             </Link>
         {/if}
 

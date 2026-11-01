@@ -513,7 +513,7 @@
                 <h3 class="type-h3 m-0 max-sm:text-[15px]">Current release</h3>
                 <Link
                     href={application.releases_href}
-                    class="focus-ring rounded-sm text-[13px] font-medium text-primary no-underline max-sm:hidden"
+                    class="focus-ring rounded-sm text-[13px] font-medium text-primary-strong no-underline max-sm:hidden"
                     >All releases →</Link
                 >
             </div>
@@ -558,8 +558,11 @@
                         <Button variant="outline" size="sm" onclick={power}>Stop the app</Button>
                     {/if}
                     {#if can.delete}
-                        <Button variant="outline" size="sm" class="text-destructive" onclick={() => (dialog = 'remove')}
-                            >Remove this app</Button
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="text-destructive-strong"
+                            onclick={() => (dialog = 'remove')}>Remove this app</Button
                         >
                     {/if}
                 </div>

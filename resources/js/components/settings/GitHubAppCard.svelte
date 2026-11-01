@@ -47,7 +47,7 @@
                 >Link an existing installation</Button
             >
             {#if app.remove_href}
-                <Button variant="ghost" size="sm" class="text-destructive" onclick={() => (removing = true)}
+                <Button variant="ghost" size="sm" class="text-destructive-strong" onclick={() => (removing = true)}
                     >Remove</Button
                 >
             {/if}

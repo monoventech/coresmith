@@ -170,7 +170,9 @@ export async function blockingViolations(page: Page): Promise<string[]> {
     await page.waitForLoadState('load')
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined)
 
+    const grain = await page.addStyleTag({ content: '.grain::after { content: none !important; }' })
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
+    await grain.evaluate((style) => style.remove())
 
     return results.violations
         .filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))

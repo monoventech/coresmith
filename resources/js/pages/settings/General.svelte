@@ -146,7 +146,7 @@
             Deleting your account signs you out everywhere and removes your SSH keys and API tokens. {owns_team ? 'Hand the teams you own to someone else first.' : 'Your teams keep running without you.'}
         </p>
         <div class="mt-auto self-start pt-3">
-            <Button variant="outline" size="sm" class="text-destructive" onclick={() => (dialog = 'delete')}>Delete your account</Button>
+            <Button variant="outline" size="sm" class="text-destructive-strong" onclick={() => (dialog = 'delete')}>Delete your account</Button>
         </div>
     </div>
 </div>

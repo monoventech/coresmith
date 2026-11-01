@@ -331,7 +331,7 @@
 
     .badge-accent {
         background: color-mix(in oklab, var(--primary) 10%, transparent);
-        color: var(--primary);
+        color: var(--primary-strong);
     }
 
     .badge-success {

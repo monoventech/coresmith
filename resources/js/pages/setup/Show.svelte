@@ -197,7 +197,7 @@
             {#if server}
                 <p class="mb-4 text-[13px]">
                     <span class="font-mono">{server.name}</span> is already added.
-                    <Link href={server.href} class="focus-ring rounded-sm font-medium text-primary no-underline"
+                    <Link href={server.href} class="focus-ring rounded-sm font-medium text-primary-strong no-underline"
                         >Open it</Link
                     >
                 </p>
@@ -266,7 +266,12 @@
                 </p>
                 <div class="mb-5 flex flex-col gap-0.5">
                     {#each provisioning.phases as phase (phase.name)}
-                        <div class={cn('flex items-center gap-3 py-1.5', phase.state === 'pending' && 'opacity-55')}>
+                        <div
+                            class={cn(
+                                'flex items-center gap-3 py-1.5',
+                                phase.state === 'pending' && 'text-muted-foreground'
+                            )}
+                        >
                             <PhaseIcon state={phase.state} />
                             <span class="text-[13.5px]"
                                 ><span class="font-medium">{phase.name}</span><span class="text-muted-foreground"

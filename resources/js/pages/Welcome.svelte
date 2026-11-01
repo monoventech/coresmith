@@ -85,7 +85,9 @@
                 <div>[14:02:24] deps installed · assets built · migrations run, against the new release</div>
                 <div>[14:03:58] health check passed before anything went live</div>
                 <div>
-                    [14:04:09] symlink: current → releases/20260818-1402 <span class="text-primary">(atomic swap)</span>
+                    [14:04:09] symlink: current → releases/20260818-1402 <span class="text-primary-strong"
+                        >(atomic swap)</span
+                    >
                 </div>
                 <div>[14:04:11] deployed. previous release kept for instant rollback.</div>
             </div>

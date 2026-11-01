@@ -260,13 +260,13 @@
     <div class="rounded-xl border border-border bg-card px-4.5 py-3.5 max-sm:px-4 max-sm:py-2.5" data-testid="phase-rail">
         {#each live.phases as phase (phase.key)}
             <div
-                class={cn('flex min-h-10.5 items-center gap-2.75 max-sm:min-h-9.5 max-sm:gap-2.5', (phase.state === 'pending' || phase.state === 'skipped') && 'opacity-50')}
+                class={cn('flex min-h-10.5 items-center gap-2.75 max-sm:min-h-9.5 max-sm:gap-2.5', (phase.state === 'pending' || phase.state === 'skipped') && 'text-muted-foreground')}
                 data-phase={phase.key}
                 data-state={phase.state}
             >
                 <PhaseIcon state={phase.state} />
                 <span class="flex-1 text-[13.5px] font-medium max-sm:text-[13px]">{phase.label}</span>
-                <span class={cn('font-mono text-[12px] max-sm:text-[11.5px]', phase.state === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>
+                <span class={cn('font-mono text-[12px] max-sm:text-[11.5px]', phase.state === 'failed' ? 'text-destructive-strong' : 'text-muted-foreground')}>
                     {phase.state === 'failed' ? 'failed' : phase.duration}
                 </span>
             </div>

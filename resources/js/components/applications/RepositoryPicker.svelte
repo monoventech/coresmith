@@ -274,7 +274,7 @@
             </div>
         {:else if failure !== null}
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-3" role="alert">
-                <p class="m-0 flex min-w-0 flex-1 items-start gap-2 text-[13px] text-destructive">
+                <p class="m-0 flex min-w-0 flex-1 items-start gap-2 text-[13px] text-destructive-strong">
                     <CircleAlert class="mt-0.5 size-3.75 shrink-0" />
                     {failure}
                 </p>
