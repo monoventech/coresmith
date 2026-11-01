@@ -94,6 +94,7 @@ final class E2ESeeder extends Seeder
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
         $this->heldByAQueuedDeploy($this->application('held-app', 9190));
+        $this->cancelFixtures($tenant->owner);
         $this->certificatesChecked($this->application('certs-app', 9180, [
             'domain' => 'certs.monoven.io',
             'additional_domains' => ['soon.monoven.io', 'gone.monoven.io', 'dark.monoven.io'],
@@ -404,9 +405,9 @@ final class E2ESeeder extends Seeder
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function application(string $name, int $port, array $attributes = []): Application
+    private function application(string $name, int $port, array $attributes = [], ?Server $server = null): Application
     {
-        return Application::factory()->for($this->team)->for($this->bench)->create([
+        return Application::factory()->for($this->team)->for($server ?? $this->bench)->create([
             'name' => $name,
             'slug' => $name,
             'system_user' => 'coresmith-app-' . $name,
@@ -467,13 +468,98 @@ final class E2ESeeder extends Seeder
     {
         $this->succeeded($application, 3 * 24 * 60, 'v1.0.0');
         $this->succeeded($application, 2 * 60, 'v1.1.0');
+        $this->queued($application);
+    }
 
+    private function queued(Application $application): void
+    {
         Deployment::factory()->for($application)->create([
             'branch' => 'main',
             'commit_hash' => null,
             'commit_message' => null,
             'status' => DeploymentStatus::Pending,
             'created_at' => CarbonImmutable::now()->subMinutes(5),
+        ]);
+    }
+
+    private function cancelFixtures(User $owner): void
+    {
+        $cancel = $this->server('cancel-01', '198.51.100.72', ServerStatus::Active);
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->runningForTwoHours($this->application("cancel-{$code}", 9000 + $index * 10, server: $cancel));
+            $this->queued($this->application("queued-{$code}", 9050 + $index * 10));
+        }
+
+        $this->runningForTwoHours($this->application('migrating-app', 9100, server: $cancel), ['build: building the release', 'migrate: running migrations against release {release}']);
+        $this->runningForTwoHours($this->application('stopping-app', 9120, server: $cancel), [], $owner);
+        $this->cancelledBy($this->application('cancelled-app', 9110), $owner);
+    }
+
+    /**
+     * @param  list<string>  $after
+     */
+    private function runningForTwoHours(Application $application, array $after = [], ?User $stopping = null): void
+    {
+        $started = CarbonImmutable::now()->subHours(2);
+        $release = $started->format('Ymd-His');
+        $markers = ['clone: fetching over https', 'deps: installing dependencies', ...$after];
+        $log = ['[' . $started->format('H:i:s') . '] release ' . $release . ' · branch main · triggered by Maya Lindqvist'];
+
+        foreach ($markers as $step => $marker) {
+            $log[] = '[' . $started->addSeconds(1 + $step * 20)->format('H:i:s') . '] ' . str_replace('{release}', $release, $marker);
+        }
+
+        if ($stopping !== null) {
+            $log[] = "cancel: {$stopping->name} asked to stop the deploy";
+        }
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => substr(hash('sha1', $application->name), 0, 40),
+            'commit_message' => 'Ship ' . $application->name,
+            'commit_author' => 'Maya Lindqvist',
+            'status' => DeploymentStatus::Running,
+            'started_at' => $started,
+            'created_at' => $started,
+            'stale_after' => CarbonImmutable::now()->addHours(6),
+            'cancel_requested_at' => $stopping === null ? null : $started->addMinutes(3),
+            'cancelled_by' => $stopping?->id,
+            'log' => implode("\n", $log),
+        ]);
+
+        $application->forceFill(['status' => ApplicationStatus::Deploying])->save();
+    }
+
+    private function cancelledBy(Application $application, User $owner): void
+    {
+        $this->succeeded($application, 3 * 60, 'v2.0.0');
+
+        $started = CarbonImmutable::now()->subMinutes(10);
+        $release = $started->format('Ymd-His');
+        $at = fn(int $seconds): string => '[' . $started->addSeconds($seconds)->format('H:i:s') . ']';
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => substr(hash('sha1', $application->name . 'cancelled'), 0, 40),
+            'commit_message' => 'Try the new pricing page',
+            'commit_author' => 'Maya Lindqvist',
+            'status' => DeploymentStatus::Cancelled,
+            'started_at' => $started,
+            'finished_at' => $started->addSeconds(41),
+            'created_at' => $started,
+            'cancel_requested_at' => $started->addSeconds(35),
+            'cancelled_by' => $owner->id,
+            'log' => implode("\n", [
+                $at(0) . ' release ' . $release . ' · branch main · triggered by Maya Lindqvist',
+                $at(1) . ' clone: fetching over https',
+                $at(4) . ' deps: installing dependencies',
+                $at(30) . ' build: building the release',
+                "cancel: {$owner->name} asked to stop the deploy",
+                $at(41) . ' deploy cancelled. the current release is untouched.',
+            ]),
         ]);
     }
 

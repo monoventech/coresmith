@@ -39,14 +39,27 @@ test.describe('the deployments list', () => {
         }
     })
 
-    test('the running filter shows the deploy in progress', async ({ page }, testInfo) => {
+    test('the running filter shows the deploys in progress', async ({ page }, testInfo) => {
         await gotoDeployments(page, isMobile(testInfo))
 
         await filters(page).getByRole('link', { name: /^Running\s*\d+$/ }).click()
         await page.waitForURL(/status=running/)
 
-        await expect(rows(page)).toHaveCount(1)
         await expect(rows(page).first()).toContainText('atlas-staging')
+
+        for (const row of await rows(page).all()) {
+            await expect(row).toContainText(/Running|Cancelling/)
+        }
+    })
+
+    test('a deploy being cancelled keeps its dot and its Watch link', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
+
+        const row = rows(page).filter({ hasText: 'stopping-app' }).first()
+
+        await expect(row).toContainText('Cancelling')
+        await expect(row).toContainText('Watch')
+        await expect(row.locator('[data-slot="badge"] > span[aria-hidden="true"]')).toHaveCount(1)
     })
 
     test('a row opens its deploy and the back link returns to the list', async ({ page }, testInfo) => {
@@ -149,6 +162,78 @@ asMember.describe('deploys as a member', () => {
         await page.getByTestId('live-deploy').click()
 
         await expect(page.getByLabel('Deployment output')).toContainText('clone: fetching via deploy key')
+    })
+})
+
+test.describe('cancelling a deploy', () => {
+    async function watch(page: Page, application: string) {
+        await gotoApplication(page, 'cancel-01', application)
+        await page.getByRole('link', { name: 'Watch deploy' }).click()
+        await page.getByTestId('phase-rail').waitFor()
+    }
+
+    test('a running deploy can be cancelled and says it is stopping', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), "The mobile prototype's running deploy has no Cancel")
+
+        await watch(page, own(testInfo, 'cancel'))
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+        await expect(toast(page)).toContainText('Cancelling. The current release keeps serving.')
+        await expect(page.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
+        await expect(page.getByTestId('deployment-status')).toHaveText('Cancelling')
+    })
+
+    test('on a phone a running deploy offers no cancel', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'The desktop deploy page draws Cancel in its header, which the test above covers')
+
+        await watch(page, own(testInfo, 'cancel'))
+
+        await expect(page.getByTestId('deployment-status')).toHaveText('Running')
+        await expect(page.getByRole('button', { name: /^Cancel/ })).toHaveCount(0)
+    })
+
+    test('a queued deploy is cancelled at once', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), "The mobile prototype's running deploy has no Cancel")
+
+        await gotoDeployments(page, false)
+        await rows(page).filter({ hasText: own(testInfo, 'queued') }).first().click()
+        await page.getByTestId('phase-rail').waitFor()
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+        await expect(toast(page)).toContainText('Cancelled before it started. Nothing changed.')
+        await expect(page.getByTestId('cancelled-strip')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Deploy again' })).toBeVisible()
+    })
+
+    test('a deploy past its migrations offers no cancel', async ({ page }) => {
+        await watch(page, 'migrating-app')
+
+        await expect(page.getByTestId('deployment-status')).toHaveText('Running')
+        await expect(page.getByRole('button', { name: /^Cancel/ })).toHaveCount(0)
+    })
+
+    test('a deploy already asked to stop says so and cannot be asked twice', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), "The mobile prototype's running deploy has no Cancel")
+
+        await watch(page, 'stopping-app')
+
+        await expect(page.getByTestId('deployment-status')).toHaveText('Cancelling')
+        await expect(page.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
+    })
+
+    test('a cancelled deploy says who stopped it and that nothing changed', async ({ page }, testInfo) => {
+        await gotoDeployments(page, isMobile(testInfo))
+        await rows(page).filter({ hasText: 'cancelled-app' }).first().click()
+
+        const strip = page.getByTestId('cancelled-strip')
+        const build = page.getByTestId('phase-rail').locator('[data-phase="build"]')
+
+        await expect(strip).toContainText('Maya Lindqvist cancelled this deploy, so nothing changed. The symlink still points at ')
+        await expect(strip).toContainText(', users never saw a difference.')
+        await expect(build).toHaveAttribute('data-state', 'cancelled')
+        await expect(build).toContainText('cancelled')
+        await expect(build.getByLabel('Cancelled')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Deploy again' })).toBeVisible()
     })
 })
 

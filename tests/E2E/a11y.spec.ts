@@ -112,6 +112,14 @@ const PAGES: [string, Visit][] = [
         }
     ],
     [
+        'Cancelled deploy',
+        async (page) => {
+            await page.goto('/deployments')
+            await page.getByTestId('deployment-row').filter({ hasText: 'cancelled-app' }).first().click()
+            await page.getByTestId('phase-rail').waitFor()
+        }
+    ],
+    [
         'Failed deploy',
         async (page) => {
             await gotoApplication(page, 'bench-01', 'crashy')
