@@ -89,6 +89,7 @@ final class E2ESeeder extends Seeder
 
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
+        $this->heldByAQueuedDeploy($this->application('held-app', 9190));
         $this->crashedAfterSwap($this->application('crashy', 8030));
         $this->didNotStart($this->rails('dev-mode', 8300, "RAILS_ENV=development\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16))));
         $this->rollbackDidNotStart($this->rails('failed-rollback', 8310));
@@ -409,6 +410,20 @@ final class E2ESeeder extends Seeder
         $this->logAt($application, 'application_rolled_back', ['from' => $newer, 'to' => $older, 'runtimes' => 'unchanged'], CarbonImmutable::now()->subMinutes(90));
 
         $application->forceFill(['current_release' => $older])->save();
+    }
+
+    private function heldByAQueuedDeploy(Application $application): void
+    {
+        $this->succeeded($application, 3 * 24 * 60, 'v1.0.0');
+        $this->succeeded($application, 2 * 60, 'v1.1.0');
+
+        Deployment::factory()->for($application)->create([
+            'branch' => 'main',
+            'commit_hash' => null,
+            'commit_message' => null,
+            'status' => DeploymentStatus::Pending,
+            'created_at' => CarbonImmutable::now()->subMinutes(5),
+        ]);
     }
 
     private function failedLatest(Application $application): void

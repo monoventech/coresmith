@@ -1021,7 +1021,7 @@ test('a deploy cancelled by a held lock is still not counted as an attempt', fun
         'status' => DeploymentStatus::Cancelled,
         'commit_hash' => null,
         'requested_commit' => $head,
-        'log' => 'Another deployment is already in progress.',
+        'log' => DeployApplication::LOCK_HELD,
     ]);
 
     expect(app(AutoDeploy::class)->reconcile($application->fresh())?->requested_commit)->toBe($head);

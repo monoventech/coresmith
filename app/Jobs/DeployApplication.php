@@ -86,6 +86,8 @@ final class DeployApplication implements ShouldQueue
 
     public const RETRY_SECONDS = 5;
 
+    public const LOCK_HELD = 'Another deploy or a rollback is running for this app, so this one did not start.';
+
     private const NETWORK_ERRORS = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'Could not resolve host', 'Connection timed out', 'Operation timed out', 'curl error 28', 'curl error 6', 'could not be downloaded', 'Failed to download', '502 Bad Gateway', '503 Service Unavailable', '504 Gateway Time', 'socket hang up', 'Net::OpenTimeout', 'Gem::RemoteFetcher'];
 
     public int $tries = 1;
@@ -346,10 +348,14 @@ final class DeployApplication implements ShouldQueue
         $lock = Cache::lock($this->lockKey(), self::LOCK_SECONDS);
 
         if (!$lock->get()) {
-            $this->deployment->forceFill([
-                'status' => DeploymentStatus::Cancelled,
-                'log' => 'Another deployment is already in progress.',
-            ])->save();
+            $collided = Deployment::query()
+                ->whereKey($this->deployment->getKey())
+                ->where('status', DeploymentStatus::Pending->value)
+                ->update(['status' => DeploymentStatus::Cancelled->value, 'log' => self::LOCK_HELD]);
+
+            if ($collided > 0) {
+                FleetChanged::forDeployment($this->deployment);
+            }
 
             return null;
         }

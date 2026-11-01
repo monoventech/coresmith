@@ -71,6 +71,22 @@ test.describe('releases', () => {
         await expect(dialog(page)).toHaveCount(0)
     })
 
+    test('a rollback waits for a deploy that is queued', async ({ page }) => {
+        await gotoReleasesOf(page, 'held-app')
+
+        const live = rows(page).filter({ hasText: 'v1.1.0' })
+
+        await expect(live).toHaveAttribute('data-current', 'true')
+
+        await rows(page).filter({ hasText: 'v1.0.0' }).getByRole('button', { name: 'Roll back to this' }).click()
+        await dialog(page).getByRole('button', { name: 'Roll back' }).click()
+
+        await expect(toast(page)).toContainText('A deploy is running for held-app. Cancel it or let it finish, then roll back.')
+        await expect(dialog(page)).toHaveCount(0)
+        await expect(live).toHaveAttribute('data-current', 'true')
+        await expect(rows(page).filter({ hasText: 'v1.0.0' })).toHaveAttribute('data-current', 'false')
+    })
+
     test('an app running an older release says it was rolled back', async ({ page }) => {
         await gotoReleasesOf(page, 'rolled-back')
 

@@ -228,7 +228,7 @@ test('markers must start the line and name a known phase', function () {
 });
 
 test('a log with no markers follows the deployment status', function (DeploymentStatus $status, array $states, array $durations) {
-    $deployment = phasesDeployment($status, ['Another deployment is already in progress.']);
+    $deployment = phasesDeployment($status, ['Another deploy or a rollback is running for this app, so this one did not start.']);
 
     expect(array_values(phasesStates($deployment)))->toBe($states)
         ->and(array_values(phasesDurations($deployment)))->toBe($durations);

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\CancelOutcome;
+use App\Enums\DeploymentStatus;
 use App\Jobs\DeployApplication;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
@@ -87,6 +88,10 @@ final class DeploymentController extends Controller
         $validated = $request->validate([
             'release' => ['nullable', 'string', 'regex:' . RollbackApplication::RELEASE_PATTERN, Rule::exists('deployments', 'release')->where('application_id', $application->id)],
         ]);
+
+        if ($application->deployments()->whereIn('status', [DeploymentStatus::Pending->value, DeploymentStatus::Running->value])->exists()) {
+            return back()->with('error', "A deploy is running for {$application->name}. Cancel it or let it finish, then roll back.");
+        }
 
         RollbackApplication::dispatch($application, $validated['release'] ?? null);
 

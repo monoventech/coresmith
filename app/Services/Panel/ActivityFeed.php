@@ -168,6 +168,7 @@ final class ActivityFeed
             'deployment_cancelled' => [$this->text('Deploy cancelled, '), $this->mono($application?->name), $this->text($this->cancelledBy($properties['by'] ?? null) . ', nothing changed')],
             'application_rolled_back' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', no rebuild')],
             RollbackHistory::WORKER_DID_NOT_START => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but ' . ($properties['worker'] ?? 'a worker') . ' did not start. Open the app to see why.')],
+            'rollback_blocked' => [$this->mono($application?->name), $this->text(' was not rolled back, a deploy was running. Roll back again once it finishes.')],
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
             'application_stopped' => [$this->mono($application?->name), $this->text(' stopped, visitors see the maintenance page')],
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
