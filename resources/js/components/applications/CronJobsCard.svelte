@@ -195,22 +195,19 @@
         </p>
     {/if}
 
-    <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p class="text-[12px] text-muted-foreground">
-            Times are UTC, the server's clock. Every job writes to <span class="font-mono"
-                >shared/logs/scheduler.log</span
-            >.
-        </p>
-        {#if canViewLogs && cron.live}
-            <Button
-                variant="ghost"
-                size="sm"
-                aria-expanded={open}
-                aria-controls={open ? 'scheduler-log' : undefined}
-                onclick={() => (open = !open)}>{open ? 'Hide output' : 'Show output'}</Button
-            >
-        {/if}
-    </div>
+    <p class="mt-2 text-[12px] text-muted-foreground">
+        Times are UTC, the server's clock. Every job writes to <span class="font-mono">shared/logs/scheduler.log</span>.
+    </p>
+    {#if canViewLogs && cron.live}
+        <Button
+            variant="ghost"
+            size="sm"
+            class="mt-1 -ml-3"
+            aria-expanded={open}
+            aria-controls={open ? 'scheduler-log' : undefined}
+            onclick={() => (open = !open)}>{open ? 'Hide output' : 'Show output'}</Button
+        >
+    {/if}
 
     {#if open}
         <div
