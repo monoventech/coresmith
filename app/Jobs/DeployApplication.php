@@ -42,6 +42,7 @@ use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitProviderFactory;
+use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
@@ -538,6 +539,10 @@ final class DeployApplication implements ShouldQueue
         $this->checkHealth($connection, $commands, $paths, $release);
         $phpChanged = $this->swapSymlink($connection, $paths, $release, $stack);
         app(SmartToggles::class)->syncDeployTimeProcesses($application);
+
+        if (app(Reverb::class)->live($application)) {
+            $this->appendLog('reverb: routing wss://' . $application->domain . '/app to port ' . app(Reverb::class)->port($application));
+        }
         $processes = app(ProcessManager::class);
         $processes->install($connection, $application);
         $this->startProcesses($connection, $processes, $application, $phpChanged);

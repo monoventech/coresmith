@@ -36,6 +36,8 @@ final class SmartToggles
 
     public const AUTO_DEPLOY = 'auto_deploy';
 
+    public const REVERB = 'reverb';
+
     public const START_WINDOW_SECONDS = 180;
 
     public const CHANGED = 'toggle_changed';
@@ -76,6 +78,7 @@ final class SmartToggles
         return array_values(array_filter([
             $framework === 'laravel' ? self::QUEUE : null,
             $framework === 'laravel' ? self::SCHEDULER : null,
+            $framework === 'laravel' && (($this->packages($application)['reverb'] ?? false) === true || app(Reverb::class)->on($application)) ? self::REVERB : null,
             $rails && $this->offers($application, self::SIDEKIQ) ? self::SIDEKIQ : null,
             $rails && $this->offers($application, self::SOLID_QUEUE) ? self::SOLID_QUEUE : null,
             self::MAINTENANCE,
@@ -152,6 +155,15 @@ final class SmartToggles
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
+            self::REVERB => [
+                'key' => $key,
+                'label' => 'Reverb websockets',
+                'description' => $this->reverbDescription($application),
+                'busy_on' => 'Saving, it starts with the next deploy…',
+                'busy_off' => 'Stopping the unit and removing the route…',
+                'on' => $this->isOn($application, $key),
+                'disabled' => !$this->isOn($application, $key) && app(Reverb::class)->problem($application) !== null,
+            ],
             self::AUTO_DEPLOY => [
                 'key' => $key,
                 'label' => 'Auto deploy',
@@ -180,6 +192,7 @@ final class SmartToggles
             self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->hasProcess($application, self::WORKERS[$key][0]),
             self::SCHEDULER => collect((array) $application->cron_jobs)->contains(fn(mixed $job): bool => is_array($job) && ($job['command'] ?? null) === self::SCHEDULE_COMMAND),
             self::AUTO_DEPLOY => (bool) $application->quick_deploy,
+            self::REVERB => app(Reverb::class)->on($application),
             default => false,
         };
     }
@@ -192,6 +205,7 @@ final class SmartToggles
             self::SIDEKIQ => 'Sidekiq',
             self::SOLID_QUEUE => 'Solid Queue',
             self::AUTO_DEPLOY => 'Auto deploy',
+            self::REVERB => 'Reverb websockets',
             default => 'Maintenance page',
         };
     }
@@ -216,6 +230,14 @@ final class SmartToggles
         if ($queue !== null && ($queue['command'] ?? null) !== $this->queueCommand($application)) {
             $this->replaceProcess($application, 'queue', ['name' => 'queue', 'command' => $this->queueCommand($application)]);
         }
+
+        $reverb = app(Reverb::class);
+        $wanted = $reverb->ready($application) ? Reverb::COMMAND . $reverb->port($application) : null;
+        $current = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'reverb');
+
+        if (($current['command'] ?? null) !== $wanted) {
+            $this->replaceProcess($application, 'reverb', $wanted === null ? null : ['name' => 'reverb', 'command' => $wanted]);
+        }
     }
 
     public function apply(Application $application, string $key, bool $on): void
@@ -234,6 +256,7 @@ final class SmartToggles
             self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->worker($application, $key, $on),
             self::SCHEDULER => $this->scheduler($application, $on),
             self::AUTO_DEPLOY => $this->autoDeploy($application, $on),
+            self::REVERB => $this->reverb($application, $on),
         };
 
         $actor = auth()->user();
@@ -296,6 +319,35 @@ final class SmartToggles
         }
 
         $application->forceFill(['processes' => $processes === [] ? null : $processes])->save();
+    }
+
+    private function reverb(Application $application, bool $on): void
+    {
+        $application->forceFill(['toggles' => [...(array) $application->toggles, self::REVERB => $on]])->save();
+
+        if ($on) {
+            return;
+        }
+
+        $this->replaceProcess($application, 'reverb');
+
+        SyncApplicationProcesses::dispatch($application, ['reverb']);
+        SyncApplicationRoute::dispatch($application);
+    }
+
+    private function reverbDescription(Application $application): string
+    {
+        $reverb = app(Reverb::class);
+        $port = $reverb->port($application);
+        $socket = 'wss://' . $application->domain . '/app';
+        $problem = $reverb->problem($application);
+
+        return match (true) {
+            $problem !== null => $problem,
+            $reverb->live($application) => "php artisan reverb:start · port {$port} · {$socket}",
+            $reverb->on($application) => "Starts with the next deploy, on port {$port} behind {$socket}",
+            default => "Available, turning it on gives it port {$port} from the next deploy",
+        };
     }
 
     private function horizon(Application $application): bool

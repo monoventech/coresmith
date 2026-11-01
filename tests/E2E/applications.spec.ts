@@ -1139,5 +1139,29 @@ test.describe('what the repository installs', () => {
         await expect(toggleRow(page, 'queue_worker')).toContainText(`Detected: laravel/horizon · systemd unit coresmith-app-${name}-queue`)
         await expect(toggle(page, 'Queue worker')).toBeChecked()
     })
+
+    test('reverb turns on with the next deploy', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'realtime')
+        const row = toggleRow(page, 'reverb')
+
+        await gotoApplication(page, 'bench-01', name)
+
+        await expect(row).toContainText('Reverb websockets')
+        await expect(row).toContainText(/Available, turning it on gives it port 91[2-6]2 from the next deploy/)
+
+        await toggle(page, 'Reverb websockets').click()
+
+        await expect(toast(page)).toContainText('Saved. Reverb websockets starts with the next deploy.')
+        await expect(row).toContainText(`Starts with the next deploy, on port`)
+        await expect(row).toContainText(`behind wss://${name}.monoven.io/app`)
+        await expect(toggle(page, 'Reverb websockets')).toBeChecked()
+    })
+
+    test('reverb needs its settings first', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'reverb-unset')
+
+        await expect(toggleRow(page, 'reverb')).toContainText('Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on')
+        await expect(toggle(page, 'Reverb websockets')).toBeDisabled()
+    })
 })
 
