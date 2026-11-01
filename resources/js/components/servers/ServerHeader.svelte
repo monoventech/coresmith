@@ -7,9 +7,11 @@
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
+    import { follow } from '@/lib/live.svelte'
     import type { ServerHeader } from '@/lib/servers'
     import { router } from '@inertiajs/svelte'
     import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
+    import { onMount } from 'svelte'
 
     let { server }: { server: ServerHeader } = $props()
 
@@ -17,6 +19,8 @@
     let detaching = $state(false)
     let name = $state('')
     let working = $state(false)
+
+    onMount(() => follow({ only: ['server', 'panel'], paused: () => working }))
 
     const tabs = $derived([
         { label: 'Apps', href: server.tabs.apps },

@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-    import { Link, router } from '@inertiajs/svelte'
+    import { Link, page, router } from '@inertiajs/svelte'
     import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
@@ -16,6 +16,7 @@
     import { Input } from '@/components/ui/input'
     import { Textarea } from '@/components/ui/textarea'
     import type { EntityState } from '@/lib/fleet'
+    import { follow } from '@/lib/live.svelte'
 
     type Toggle = {
         key: string
@@ -223,6 +224,13 @@
             }
         }, 10_000)
     })
+
+    onMount(() =>
+        follow({
+            only: ['application', 'toggles', 'panel', ...('cron' in page.props ? ['cron'] : [])],
+            paused: () => working || Object.values(busy).some(Boolean)
+        })
+    )
 
     onDestroy(() => {
         if (poll) {

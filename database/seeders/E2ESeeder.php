@@ -138,6 +138,8 @@ final class E2ESeeder extends Seeder
             $this->server("detach-{$code}", '198.51.100.' . (60 + $index), ServerStatus::Active);
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
+            $this->application("busy-{$code}", 9200 + $index * 10);
+            $this->server("live-{$code}", '198.51.100.' . (80 + $index), ServerStatus::Active);
         }
 
         $this->githubFixtures();

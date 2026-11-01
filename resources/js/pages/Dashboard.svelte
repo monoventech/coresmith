@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Link, router } from '@inertiajs/svelte'
+    import { onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import ActivityRow from '@/components/fleet/ActivityRow.svelte'
     import MetricBar from '@/components/fleet/MetricBar.svelte'
@@ -9,6 +10,7 @@
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import type { ActivityItem, ServerCard } from '@/lib/fleet'
+    import { follow } from '@/lib/live.svelte'
     import { toneText } from '@/lib/fleet'
     import { cn } from '@/lib/utils'
 
@@ -33,6 +35,8 @@
 
     let deployFrom = $state<ServerCard | null>(null)
     let deploying = $state<string | null>(null)
+
+    onMount(() => follow({ only: ['counts', 'live', 'tiles', 'servers', 'activity', 'panel'], paused: () => deploying !== null }))
 
     function plural(count: number, one: string, many: string): string {
         return `${count} ${count === 1 ? one : many}`
