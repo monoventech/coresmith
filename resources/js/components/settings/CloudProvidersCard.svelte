@@ -1,4 +1,7 @@
 <script lang="ts">
+    // Copyright 2026 Monoven Ltd. All rights reserved.
+    // Licensed under the Elastic License v2 (ELv2).
+    // See LICENSE file in the project root.
     import CloudConnectFields from '@/components/cloud/CloudConnectFields.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'

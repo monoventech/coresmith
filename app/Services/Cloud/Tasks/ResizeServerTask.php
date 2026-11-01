@@ -24,7 +24,7 @@ use Throwable;
 
 final class ResizeServerTask implements CloudTaskHandler
 {
-    public const STEPS = ['power_off', 'wait_off', 'change', 'wait_change', 'power_on', 'wait_on', 'reconnect'];
+    public const STEPS = ['power_off', 'wait_off', 'change', 'wait_change', 'power_on', 'wait_on', 'reconnect', 'recover'];
 
     private const POLL_SECONDS = 5;
 

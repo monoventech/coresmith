@@ -1,4 +1,7 @@
 <script lang="ts">
+    // Copyright 2026 Monoven Ltd. All rights reserved.
+    // Licensed under the Elastic License v2 (ELv2).
+    // See LICENSE file in the project root.
     import FieldError from '@/components/FieldError.svelte'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'

@@ -1,5 +1,15 @@
 import type { Page } from '@playwright/test'
-import { asMember, backToMonoven, dialog, expect, gotoServer, own, test, toast } from './support/fixtures'
+import {
+    asMember,
+    backToMonoven,
+    dialog,
+    expect,
+    gotoServer,
+    noSidewaysScroll,
+    own,
+    test,
+    toast
+} from './support/fixtures'
 
 function provider(page: Page) {
     return page.getByLabel('Provider')
@@ -301,5 +311,27 @@ test.describe('resizing and rebooting through the provider', () => {
             'Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. resize-failed was started again on cx22.'
         )
         await expect(banner.getByRole('button', { name: 'Dismiss' })).toBeVisible()
+    })
+})
+
+test.describe('provider servers on a phone', () => {
+    test.skip(({ isMobile }) => !isMobile, 'The phone layout and tap sizes apply only below 640px')
+
+    test('the header actions and the task banner can be tapped', async ({ page }) => {
+        await gotoServer(page, 'resize-failed')
+        await noSidewaysScroll(page)
+
+        for (const name of ['Rename', 'Reboot server', 'Resize', 'Destroy']) {
+            const box = await page.getByRole('button', { name, exact: true }).boundingBox()
+
+            expect(box?.height ?? 0, name).toBeGreaterThanOrEqual(44)
+        }
+
+        const dismiss = await page
+            .getByTestId('cloud-task-banner')
+            .getByRole('button', { name: 'Dismiss' })
+            .boundingBox()
+
+        expect(dismiss?.height ?? 0).toBeGreaterThanOrEqual(44)
     })
 })

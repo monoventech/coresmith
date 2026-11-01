@@ -802,3 +802,11 @@ test('handlers are found by the type of task', function () {
         ->and(CloudTaskHandlers::DEFAULTS)->toBe([CloudTask::CREATE => CreateServerTask::class, CloudTask::DESTROY => DestroyServerTask::class, CloudTask::RESIZE => ResizeServerTask::class])
         ->and(fn() => $handlers->for('unknown'))->toThrow(InvalidArgumentException::class);
 });
+
+test('every step a provider task can take has a time limit', function () {
+    $steps = [...CreateServerTask::STEPS, ...DestroyServerTask::STEPS, ...ResizeServerTask::STEPS];
+
+    expect(array_values(array_diff($steps, array_keys((array) config('coresmith.cloud.step_seconds')))))->toBe([])
+        ->and(ResizeServerTask::STEPS)->toContain('recover');
+});
+
