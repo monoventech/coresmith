@@ -208,6 +208,10 @@ dataset('unsafe cron schedules', [
     'two spaces between fields' => '*  * * * *',
     'a leading space' => ' * * * * *',
     'a command' => '* * * * *; rm -rf /',
+    'a minute cron has no' => '61 * * * *',
+    'a backwards range' => '5-1 * * * *',
+    'a zero step' => '*/0 * * * *',
+    'a step with no range' => '5/10 * * * *',
 ]);
 
 test('the schedule tells the person what to write instead, with what they wrote shown safely', function () {

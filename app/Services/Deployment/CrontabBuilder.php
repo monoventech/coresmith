@@ -25,7 +25,7 @@ final class CrontabBuilder
 
     public static function assertSchedule(string $schedule): string
     {
-        if (preg_match(self::SCHEDULE_PATTERN, $schedule) !== 1) {
+        if (preg_match(self::SCHEDULE_PATTERN, $schedule) !== 1 || CronExpression::problem($schedule) !== null) {
             throw UnsafeNameException::cronSchedule($schedule);
         }
 
