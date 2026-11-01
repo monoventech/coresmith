@@ -809,4 +809,3 @@ test('every step a provider task can take has a time limit', function () {
     expect(array_values(array_diff($steps, array_keys((array) config('coresmith.cloud.step_seconds')))))->toBe([])
         ->and(ResizeServerTask::STEPS)->toContain('recover');
 });
-
