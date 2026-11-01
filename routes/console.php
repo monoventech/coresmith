@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ServerStatus;
+use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
 use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
@@ -15,6 +16,13 @@ Schedule::call(function (): void {
         ->whereNull('pending_host_key_fingerprint')
         ->each(fn(Server $server) => CollectServerMetrics::dispatch($server));
 })->everyMinute()->name('coresmith:collect-metrics')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(fn(Server $server) => CheckCertificates::dispatch($server));
+})->dailyAt('05:30')->name('coresmith:check-certificates')->withoutOverlapping();
 
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
 

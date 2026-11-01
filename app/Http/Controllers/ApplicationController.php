@@ -16,6 +16,7 @@ use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
+use App\Jobs\CheckCertificates;
 use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
 use App\Models\Application;
@@ -32,6 +33,7 @@ use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeDetector;
 use App\Services\Runtime\RuntimeLifecycle;
+use App\Services\Server\CertificateCheck;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
@@ -125,10 +127,16 @@ final class ApplicationController extends Controller
             ->with('success', 'Application created. Deploy it when you are ready.');
     }
 
-    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks): Response
+    public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks, CertificateCheck $certificates): Response
     {
         $this->authorize('view', $application);
         $this->assertBelongsTo($server, $application);
+
+        if (CertificateCheck::domains($application) !== [] && $certificates->stale($application)) {
+            rescue(function () use ($server): void {
+                CheckCertificates::dispatch($server);
+            }, report: true);
+        }
 
         $user = $request->user();
         $canManageEnvironment = $user->can('manageEnvironment', $application);
@@ -149,6 +157,7 @@ final class ApplicationController extends Controller
                 'runtime' => ApplicationPresenter::runtime($application),
                 'domain' => $application->domain,
                 'additional_domains' => array_values((array) $application->additional_domains),
+                'certificates' => $certificates->forApplication($application),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),

@@ -921,6 +921,10 @@ final class DeployApplication implements ShouldQueue
 
         app(CaddyApiClient::class)->putSite($connection, $application);
 
+        rescue(function () use ($application): void {
+            CheckCertificates::dispatch($application->server)->delay(now()->addSeconds(90));
+        }, report: true);
+
         $this->appendLog('caddy: route for ' . implode(', ', $application->allDomains()) . ' is in place');
     }
 

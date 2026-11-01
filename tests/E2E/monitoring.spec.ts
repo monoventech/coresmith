@@ -3,7 +3,7 @@
 // See LICENSE file in the project root.
 
 import type { Page } from '@playwright/test'
-import { expect, gotoServer, gotoSettings, isMobile, test, toast } from './support/fixtures'
+import { expect, gotoApplication, gotoServer, gotoSettings, isMobile, test, toast } from './support/fixtures'
 
 function saved(page: Page) {
     return page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/settings/notifications'))
@@ -43,6 +43,32 @@ test.describe('monitoring', () => {
 
         await expect(page.getByRole('heading', { level: 1, name: 'hot-01' })).toBeVisible()
         await expect(page.getByTestId('unreachable-banner')).toHaveCount(0)
+    })
+
+    test('the domains card says what each certificate is', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), "The Domains card is not drawn below 640px, as the mobile prototype's app page")
+
+        await gotoApplication(page, 'bench-01', 'certs-app')
+
+        const badge = (domain: string) => page.getByTestId('domain-row').filter({ hasText: domain }).locator('[data-slot="badge"]')
+
+        await expect(badge('certs.monoven.io')).toHaveText('TLS')
+        await expect(badge('certs.monoven.io')).toHaveAttribute('title', /^Valid until .+, checked .+$/)
+        await expect(badge('soon.monoven.io')).toHaveText('Expires in 3 days')
+        await expect(badge('soon.monoven.io')).toHaveAttribute('title', 'Caddy should have renewed this by now. Check soon.monoven.io still points at 198.51.100.40.')
+        await expect(badge('gone.monoven.io')).toHaveText('Expired')
+        await expect(badge('gone.monoven.io')).toHaveAttribute('title', 'Caddy should have renewed this by now. Check gone.monoven.io still points at 198.51.100.40.')
+        await expect(badge('dark.monoven.io')).toHaveText('No certificate')
+        await expect(badge('dark.monoven.io')).toHaveAttribute('title', 'Caddy has no certificate for this name yet. Point its DNS at 198.51.100.40 and Caddy requests one.')
+    })
+
+    test('a domain not checked yet carries no badge', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), "The Domains card is not drawn below 640px, as the mobile prototype's app page")
+
+        await gotoApplication(page, 'bench-01', 'hungry')
+
+        await expect(page.getByTestId('domain-row').filter({ hasText: 'hungry.bench.monoven.io' })).toBeVisible()
+        await expect(page.getByTestId('domain-row').locator('[data-slot="badge"]')).toHaveCount(0)
     })
 
     test('sustained memory shows as a warning', async ({ page }) => {

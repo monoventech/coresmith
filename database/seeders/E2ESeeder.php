@@ -30,6 +30,7 @@ use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
+use App\Services\Server\CertificateCheck;
 use App\Services\Server\ServerReachability;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Support\DemoLog;
@@ -93,6 +94,10 @@ final class E2ESeeder extends Seeder
         $this->application('retired-blog', 8000, ['power_state' => PowerState::Stopped]);
         $this->rolledBack($this->application('rolled-back', 8010));
         $this->heldByAQueuedDeploy($this->application('held-app', 9190));
+        $this->certificatesChecked($this->application('certs-app', 9180, [
+            'domain' => 'certs.monoven.io',
+            'additional_domains' => ['soon.monoven.io', 'gone.monoven.io', 'dark.monoven.io'],
+        ]));
         $this->crashedAfterSwap($this->application('crashy', 8030));
         $this->didNotStart($this->rails('dev-mode', 8300, "RAILS_ENV=development\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16))));
         $this->rollbackDidNotStart($this->rails('failed-rollback', 8310));
@@ -441,6 +446,21 @@ final class E2ESeeder extends Seeder
         $this->logAt($application, 'application_rolled_back', ['from' => $newer, 'to' => $older, 'runtimes' => 'unchanged'], CarbonImmutable::now()->subMinutes(90));
 
         $application->forceFill(['current_release' => $older])->save();
+    }
+
+    private function certificatesChecked(Application $application): void
+    {
+        $this->succeeded($application, 2 * 60, 'v1.0.0');
+
+        $now = CarbonImmutable::now();
+        $checked = $now->toIso8601String();
+
+        Cache::put(CertificateCheck::cacheKey($application), ['domains' => [
+            'certs.monoven.io' => ['expires_at' => $now->addDays(60)->toIso8601String(), 'checked_at' => $checked],
+            'soon.monoven.io' => ['expires_at' => $now->addDays(3)->addHours(12)->toIso8601String(), 'checked_at' => $checked],
+            'gone.monoven.io' => ['expires_at' => $now->subDays(2)->toIso8601String(), 'checked_at' => $checked],
+            'dark.monoven.io' => ['expires_at' => null, 'checked_at' => $checked],
+        ]], $now->addYear());
     }
 
     private function heldByAQueuedDeploy(Application $application): void

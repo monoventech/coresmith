@@ -24,6 +24,7 @@ use App\Models\User;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Panel\Realtime;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Server\CertificateCheck;
 use App\Services\Server\MetricsCollector;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnection;
@@ -571,7 +572,8 @@ test('a deploy runs to the end and frees its lock when its ping cannot be queued
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and(Cache::lock('deploy:' . $deployment->application_id, 600)->get())->toBeTrue();
-    Exceptions::assertReportedCount(1);
+    Exceptions::assertReportedCount(2);
+    Exceptions::assertNotReported(fn(Throwable $e): bool => $e->getMessage() !== 'Queue is down');
 });
 
 test('a collection finishes and keeps its alert when its ping cannot be queued', function () {
@@ -604,3 +606,25 @@ test('a provision is not failed by a ping that cannot be queued', function (stri
     Exceptions::assertReportedCount(1);
     Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
 })->with(['finished', 'stopped']);
+
+test('an expiring certificate pings the team once its row is written', function () {
+    Notification::fake();
+    $server = fleetPingServer();
+    $application = fleetPingApplication($server, ['domain' => 'shop.example.com']);
+    $transport = (new FakeSSHTransport)->respondTo('@@cert', '@@cert shop.example.com notAfter=' . now()->addDays(3)->utc()->format('M j H:i:s Y') . " GMT\n");
+    $seen = [];
+
+    Event::listen(FleetChanged::class, function (FleetChanged $ping) use ($application, &$seen): void {
+        $seen[] = [$ping->teamId, $ping->kind, $ping->subjectId, Activity::query()->where('subject_id', $application->id)->where('description', 'certificate_expiring')->exists()];
+    });
+
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        app(CertificateCheck::class)->run(app(SSHConnectionManager::class)->for($server));
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($seen)->toBe([[$application->team_id, 'application', $application->id, true]]);
+});

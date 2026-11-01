@@ -30,6 +30,7 @@ const PAGES: [string, Visit][] = [
     ['Server with a disk warning', (page) => gotoServer(page, 'outpost-01')],
     ['Server with a changed host key', (page) => gotoServer(page, 'rekeyed-server')],
     ['Unreachable server', (page) => gotoServer(page, 'down-01')],
+    ['Certificates', (page) => gotoApplication(page, 'bench-01', 'certs-app')],
     ['Server not connected yet', (page) => gotoServer(page, 'empty-server')],
     ['Server checked before provisioning', (page) => gotoServer(page, 'audit-server')],
     ['Server being checked', (page) => gotoServer(page, 'checking-server')],

@@ -15,6 +15,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\Runtime\Catalog;
+use App\Services\Server\CertificateCheck;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -172,6 +173,7 @@ final class ActivityFeed
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
             'application_stopped' => [$this->mono($application?->name), $this->text(' stopped, visitors see the maintenance page')],
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
+            'certificate_expiring' => [$this->text('Certificate for '), $this->mono((string) ($properties['domain'] ?? '')), $this->text(' on '), $this->mono($application?->name), $this->text(' ' . CertificateCheck::expiry((int) ($properties['days'] ?? 0)))],
             'app_oom_killed' => [$this->mono($application?->name), $this->text(' ' . ($properties['process'] ?? 'a') . ' process killed for going over its ' . (int) ($properties['limit_mb'] ?? 0) . ' MB memory limit, systemd started it again')],
             'runtime_eol_chosen' => [$this->mono($application?->name), $this->text(' was added on ' . app(Catalog::class)->label((string) ($properties['runtime'] ?? '')) . ' ' . ($properties['line'] ?? '') . ', which no longer gets security fixes')],
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
