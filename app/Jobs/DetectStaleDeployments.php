@@ -13,6 +13,7 @@ use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Models\Deployment;
 use App\Services\Deployment\DeploymentCancellation;
+use App\Services\Deployment\DeploymentLog;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
@@ -75,6 +76,16 @@ final class DetectStaleDeployments implements ShouldQueue
                 $this->cleanUp($deployment);
 
                 DeploymentFailed::dispatch($deployment->refresh());
+            });
+
+        Deployment::query()
+            ->where('status', DeploymentStatus::Pending->value)
+            ->where('created_at', '<', now()->subMinutes(self::STALE_AFTER_MINUTES))
+            ->get()
+            ->each(function (Deployment $deployment): void {
+                $minutes = max(1, (int) $deployment->created_at?->diffInMinutes(now()));
+
+                app(DeploymentLog::class)->failIfNeverStarted($deployment, "This deploy was queued {$minutes} " . Str::plural('minute', $minutes) . ' ago and never started, so Coresmith stopped waiting for it. Deploy again.');
             });
     }
 

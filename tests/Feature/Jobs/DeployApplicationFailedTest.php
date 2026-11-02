@@ -145,6 +145,34 @@ test('a deploy that already finished is left alone, and a lock another deploy ho
     'failed, resumed' => [DeploymentStatus::Failed, 'owner-1'],
 ]);
 
+test('a deploy whose job failed before it started is failed instead of left queued, and another deploy keeps its lock', function () {
+    Event::fake([DeploymentFailed::class, DeploymentUpdated::class]);
+    $deployment = killedDeployment(['status' => ApplicationStatus::Active, 'current_release' => '20261001-090000'], [
+        'status' => DeploymentStatus::Pending,
+        'started_at' => null,
+        'stale_after' => null,
+        'release' => null,
+        'log' => null,
+    ]);
+    Cache::lock(killedLockKey($deployment), 600, 'the-running-deploy')->get();
+    $transport = new FakeSSHTransport;
+
+    killedFailed($deployment, $transport, new MaxAttemptsExceededException('App\Jobs\DeployApplication has been attempted too many times.'));
+
+    $fresh = $deployment->fresh();
+
+    expect($fresh->status)->toBe(DeploymentStatus::Failed)
+        ->and($fresh->finished_at)->not->toBeNull()
+        ->and($fresh->failure_reason)->toBe('The deploy never started, so Coresmith ended it. Deploy again.')
+        ->and($fresh->log)->toBe('The deploy never started, so Coresmith ended it. Deploy again.')
+        ->and($deployment->application->fresh()->status)->toBe(ApplicationStatus::Active)
+        ->and($transport->commands())->toBe([])
+        ->and(Cache::lock(killedLockKey($deployment), 10)->get())->toBeFalse();
+
+    Event::assertDispatchedTimes(DeploymentFailed::class, 1);
+    Event::assertDispatched(DeploymentUpdated::class, fn(DeploymentUpdated $event): bool => $event->deployment->status === DeploymentStatus::Failed);
+});
+
 test('a deployment that leaves running after it was read is neither failed again nor unlocked', function () {
     Event::fake([DeploymentFailed::class]);
     $deployment = killedDeployment();

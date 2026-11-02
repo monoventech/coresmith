@@ -487,3 +487,109 @@ test('a cancel that throws once it has won still frees the lock, removes the rel
     Queue::assertPushed(DiscardRelease::class, 1);
     Queue::assertPushed(DeployApplication::class, 1);
 });
+
+function staleQueuedDeployment(int $minutesAgo, array $deployment = [], array $application = []): Deployment
+{
+    $app = Application::factory()->create(['status' => ApplicationStatus::Active, 'current_release' => '20261019-090000', ...$application]);
+
+    return Deployment::factory()->for($app)->create([
+        'status' => DeploymentStatus::Pending,
+        'started_at' => null,
+        'commit_hash' => null,
+        'created_at' => now()->subMinutes($minutesAgo),
+        ...$deployment,
+    ]);
+}
+
+test('a deploy queued past the window whose job never started is failed, saying it never started', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = staleQueuedDeployment(20);
+
+    (new DetectStaleDeployments)->handle();
+
+    $fresh = $deployment->fresh();
+
+    expect($fresh->status)->toBe(DeploymentStatus::Failed)
+        ->and($fresh->finished_at)->not->toBeNull()
+        ->and($fresh->started_at)->toBeNull()
+        ->and($fresh->failure_reason)->toBe('This deploy was queued 20 minutes ago and never started, so Coresmith stopped waiting for it. Deploy again.')
+        ->and($fresh->log)->toBe('This deploy was queued 20 minutes ago and never started, so Coresmith stopped waiting for it. Deploy again.')
+        ->and($deployment->application->fresh()->status)->toBe(ApplicationStatus::Active);
+
+    Event::assertDispatchedTimes(DeploymentFailed::class, 1);
+    Event::assertDispatched(DeploymentFailed::class, fn(DeploymentFailed $event): bool => $event->deployment->is($deployment) && $event->deployment->status === DeploymentStatus::Failed);
+});
+
+test('a deploy queued inside the window is left to its job', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = staleQueuedDeployment(DetectStaleDeployments::STALE_AFTER_MINUTES - 1);
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Pending)
+        ->and($deployment->fresh()->failure_reason)->toBeNull();
+
+    Event::assertNotDispatched(DeploymentFailed::class);
+});
+
+test('a deploy that never started frees no lock and removes no release, since another deploy may own them', function () {
+    Queue::fake();
+    $deployment = staleQueuedDeployment(20);
+    Cache::lock('deploy:' . $deployment->application_id, 600, 'the-running-deploy')->get();
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and(Cache::lock('deploy:' . $deployment->application_id, 10)->get())->toBeFalse();
+
+    Queue::assertNotPushed(DiscardRelease::class);
+});
+
+test('a queued deploy that moves on while the sweep runs is left as it now is', function (array $meanwhile, DeploymentStatus $status) {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = staleQueuedDeployment(20);
+
+    Deployment::retrieved(function (Deployment $retrieved) use ($meanwhile): void {
+        Deployment::query()->whereKey($retrieved->getKey())->update($meanwhile);
+    });
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe($status)
+        ->and($deployment->fresh()->failure_reason)->toBeNull();
+
+    Event::assertNotDispatched(DeploymentFailed::class);
+})->with([
+    'its job picked it up' => [['status' => DeploymentStatus::Running->value, 'started_at' => now()], DeploymentStatus::Running],
+    'a person cancelled it' => [['status' => DeploymentStatus::Cancelled->value, 'finished_at' => now()], DeploymentStatus::Cancelled],
+]);
+
+test('the next head deploys after a lost job', function () {
+    Queue::fake([DeployApplication::class]);
+    $head = str_repeat('a', 40);
+    $next = str_repeat('b', 40);
+    $lost = staleQueuedDeployment(20, ['requested_commit' => $head, 'trigger' => 'push'], ['quick_deploy' => true, 'repository_head' => $head, 'repository_head_source' => 'push']);
+    $application = $lost->application;
+
+    expect(app(AutoDeploy::class)->observe($application->fresh(), $next, 'push'))->toBeNull()
+        ->and(Deployment::query()->where('requested_commit', $next)->exists())->toBeFalse();
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($lost->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and(Deployment::query()->where('application_id', $application->id)->where('requested_commit', $next)->sole()->status)->toBe(DeploymentStatus::Pending)
+        ->and(Deployment::query()->where('requested_commit', $head)->count())->toBe(1);
+
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('a queued deploy that has a start time is not one the sweep calls never started', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = staleQueuedDeployment(20, ['started_at' => now()->subMinutes(19)]);
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Pending);
+
+    Event::assertNotDispatched(DeploymentFailed::class);
+});

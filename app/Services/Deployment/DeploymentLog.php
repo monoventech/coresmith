@@ -95,6 +95,31 @@ final class DeploymentLog
         return true;
     }
 
+    public function failIfNeverStarted(Deployment $deployment, string $reason): bool
+    {
+        $failed = Deployment::query()
+            ->whereKey($deployment->getKey())
+            ->where('status', DeploymentStatus::Pending->value)
+            ->whereNull('started_at')
+            ->update([
+                'status' => DeploymentStatus::Failed->value,
+                'finished_at' => now(),
+                'log' => trim((string) $deployment->log . "\n" . $reason),
+                'failure_reason' => $reason,
+            ]);
+
+        if ($failed === 0) {
+            return false;
+        }
+
+        $deployment->refresh();
+
+        DeploymentUpdated::dispatch($deployment);
+        DeploymentFailed::dispatch($deployment);
+
+        return true;
+    }
+
     private function writeFailure(Deployment $deployment, string $message, ?string $reason, bool $swapped): void
     {
         $application = $deployment->application;

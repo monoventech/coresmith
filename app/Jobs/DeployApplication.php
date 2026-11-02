@@ -91,6 +91,8 @@ final class DeployApplication implements ShouldQueue
 
     public const LOCK_HELD = 'Another deploy or a rollback is running for this app, so this one did not start.';
 
+    public const NEVER_STARTED = 'The deploy never started, so Coresmith ended it. Deploy again.';
+
     private const NETWORK_ERRORS = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'Could not resolve host', 'Connection timed out', 'Operation timed out', 'curl error 28', 'curl error 6', 'could not be downloaded', 'Failed to download', '502 Bad Gateway', '503 Service Unavailable', '504 Gateway Time', 'socket hang up', 'Net::OpenTimeout', 'Gem::RemoteFetcher'];
 
     public int $tries = 1;
@@ -199,6 +201,10 @@ final class DeployApplication implements ShouldQueue
     public function failed(Throwable $e): void
     {
         $deployment = $this->deployment->fresh();
+
+        if ($deployment?->status === DeploymentStatus::Pending) {
+            app(DeploymentLog::class)->failIfNeverStarted($deployment, self::NEVER_STARTED);
+        }
 
         if ($deployment?->status !== DeploymentStatus::Running) {
             $this->releaseKilledLock(false);
