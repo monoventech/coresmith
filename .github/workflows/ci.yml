@@ -161,6 +161,61 @@ jobs:
       - name: Run Pest
         run: php artisan test
 
+  tests-mysql:
+    name: Feature tests on MySQL
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: coresmith_test
+          MYSQL_USER: coresmith
+          MYSQL_PASSWORD: coresmith
+          MYSQL_ROOT_PASSWORD: coresmith
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u coresmith --password=coresmith"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: coresmith_test
+      DB_USERNAME: coresmith
+      DB_PASSWORD: coresmith
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, xml, curl, zip, bcmath, gd, sqlite3, intl, redis, pdo_mysql, mysqli
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress --no-scripts
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan package:discover --ansi
+          php artisan key:generate --force
+          echo "CORESMITH_VAULT_KEY=$(openssl rand -base64 32)" >> .env
+
+      - name: Run Pest
+        run: php artisan test
+
   browser:
     name: Browser tests
     runs-on: ubuntu-24.04

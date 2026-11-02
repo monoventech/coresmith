@@ -42,7 +42,7 @@ Existing starter files do NOT need to be retroactively rewritten; apply headers 
 
 Every change ships with tests at the levels it touches:
 
-- **Pest** for services, jobs, policies, command builders and validation. Run `php artisan test` or `composer test`.
+- **Pest** for services, jobs, policies, command builders and validation. Run `php artisan test` or `composer test`. It uses an in-memory SQLite database; CI also runs it on PostgreSQL and MySQL, and you can too by pointing the `DB_*` variables at a database the suite may wipe, for example `DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3306 DB_DATABASE=coresmith_test DB_USERNAME=coresmith DB_PASSWORD=secret php artisan test` (or `DB_CONNECTION=pgsql` on port 5432).
 - **Playwright** for anything a user can see or click, on chromium, firefox, webkit, mobile-chrome and mobile-safari. Run `bun run test:e2e`.
 
 A feature is done when both exist and both pass on every browser project. Server-side tests call routes directly, so they cannot see a page that never rendered, a control that was never linked or a form that silently failed.

@@ -252,6 +252,16 @@ test('the continuous integration workflows are present and valid', function () {
     }
 });
 
+test('continuous integration runs the feature tests on every database the panel supports', function () {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+
+    expect($ci)->toContain('name: Feature tests on PostgreSQL')
+        ->toContain('DB_CONNECTION: pgsql')
+        ->toContain('name: Feature tests on MySQL')
+        ->toContain('image: mysql:8.0')
+        ->toContain('DB_CONNECTION: mysql');
+});
+
 test('the installer workflow proves the instance it built actually works', function () {
     $workflow = (string) file_get_contents(base_path('.github/workflows/installer.yml'));
 
