@@ -596,12 +596,22 @@ test('a queued deploy that has a start time is not one the sweep calls never sta
     Event::assertNotDispatched(DeploymentFailed::class);
 });
 
-function staleQueueOnDatabase(string $table = 'jobs'): void
+function staleQueueOnDatabase(): void
 {
     config([
         'queue.default' => 'database',
         'queue.connections.database.connection' => config('database.default'),
-        'queue.connections.database.table' => $table,
+        'queue.connections.database.table' => 'jobs',
+    ]);
+}
+
+function staleUnreadableQueue(): void
+{
+    config([
+        'database.connections.stale_queue_without_jobs' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => ''],
+        'queue.default' => 'database',
+        'queue.connections.database.connection' => 'stale_queue_without_jobs',
+        'queue.connections.database.table' => 'jobs',
     ]);
 }
 
@@ -666,7 +676,7 @@ test('a deploy past the window is failed when no waiting job can be its own', fu
 test('a deploy is failed only after an hour when the queue cannot be read', function (int $minutes, DeploymentStatus $status) {
     Event::fake([DeploymentFailed::class]);
     Exceptions::fake();
-    staleQueueOnDatabase('no_such_jobs');
+    staleUnreadableQueue();
     $deployment = staleQueuedDeployment($minutes);
 
     (new DetectStaleDeployments)->handle();
@@ -680,7 +690,7 @@ test('a deploy is failed only after an hour when the queue cannot be read', func
 ]);
 
 test('the queue is not read when no deploy is waiting past the window', function () {
-    staleQueueOnDatabase('no_such_jobs');
+    staleUnreadableQueue();
     Exceptions::fake();
     staleQueuedDeployment(5);
 
