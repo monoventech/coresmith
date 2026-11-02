@@ -172,7 +172,7 @@ test('a token github refuses marks the connection as a deploy would', function (
 })->with([
     'the app was uninstalled' => [404, ['message' => 'Not Found'], 'removed', "Coresmith's GitHub app is no longer installed on monoventech. Connect GitHub again from Settings, Git, then deploy."],
     'the installation is suspended' => [403, ['message' => 'This installation has been suspended'], 'suspended', "Coresmith's GitHub app is suspended on monoventech. Unsuspend it on GitHub, then deploy.", '2026-10-19T14:00:00Z'],
-    'a forbidden token github does not call a suspension' => [403, ['message' => 'Your IP address is not permitted to access this resource.'], 'unchanged', 'GitHub refused to issue an installation token: Your IP address is not permitted to access this resource.'],
+    'a forbidden token github does not call a suspension' => [403, ['message' => 'Your IP address is not permitted to access this resource.'], 'unchanged', 'GitHub would not give Coresmith a token. It said: Your IP address is not permitted to access this resource.'],
     'github failed in some other way' => [500, ['message' => 'Server Error'], 'unchanged', 'GitHub refused to issue an installation token: Server Error'],
 ]);
 

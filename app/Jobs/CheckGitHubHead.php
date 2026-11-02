@@ -8,11 +8,13 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
 use App\Models\Application;
 use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\Deployment\GitFailure;
 use App\Services\Git\GitProviderFactory;
+use App\Services\Git\RefusalReason;
 use App\Services\SafeName;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -51,7 +53,11 @@ final class CheckGitHubHead implements ShouldQueue
         try {
             $sha = $providers->github($connection)->branchHead((string) $application->repositoryFullName(), (string) $application->repository_branch, $application->repository_head);
         } catch (GitProviderException $refusal) {
-            $error = $connection->markRefused($refusal) ? GitFailure::adviceFor($refusal, $application) : $refusal->getMessage();
+            $error = match (true) {
+                $connection->markRefused($refusal) => GitFailure::adviceFor($refusal, $application),
+                $refusal instanceof GitHubInstallationException && $refusal->kind === GitHubInstallationException::REFUSED => 'GitHub would not give Coresmith a token. It said: ' . RefusalReason::sentence($refusal->reason),
+                default => $refusal->getMessage(),
+            };
         }
 
         $autoDeploy->checked($application, $sha, $error);

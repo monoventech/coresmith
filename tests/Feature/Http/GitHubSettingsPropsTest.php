@@ -7,6 +7,7 @@ use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
@@ -221,6 +222,20 @@ test('an installation unsuspended on github shows as installed once the card has
     $this->actingAs($owner)
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page->where('github.connections.0.suspended', false));
+});
+
+test('presenting the github settings queues nothing, the pages that render them do', function () {
+    Queue::fake();
+    [$team, $owner] = githubSettingsPropsTeam();
+    githubSettingsPropsConnection($team, githubSettingsPropsApp($team), ['suspended_at' => now()]);
+
+    app(GitHubSettingsPresenter::class)->present($team, $owner);
+
+    Queue::assertNotPushed(CheckGitHubInstallation::class);
+
+    $this->actingAs($owner)->get(route('setup.show', ['step' => 0]))->assertOk();
+
+    Queue::assertPushed(CheckGitHubInstallation::class, 1);
 });
 
 test('a suspended card whose app is gone asks github nothing', function () {

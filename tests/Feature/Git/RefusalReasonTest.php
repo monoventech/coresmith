@@ -36,3 +36,13 @@ test('the shared oauth base and its providers do not depend on the github classe
 
     expect($source)->not->toContain('Services\\Git\\GitHub');
 })->with([OAuthGitClient::class, GitLabClient::class, BitbucketClient::class]);
+
+test('a reason becomes a sentence of at most three hundred characters', function (string $reason, string $sentence) {
+    expect(RefusalReason::sentence($reason))->toBe($sentence);
+})->with([
+    'no full stop' => ['Forbidden', 'Forbidden.'],
+    'a full stop already' => ['Not permitted.', 'Not permitted.'],
+    'a question' => ['Who are you?', 'Who are you?'],
+    'spaces around it' => ['  Forbidden  ', 'Forbidden.'],
+    'too long' => [str_repeat('a', 400), str_repeat('a', 300) . '...'],
+]);

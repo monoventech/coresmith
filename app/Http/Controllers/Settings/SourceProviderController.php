@@ -35,6 +35,8 @@ final class SourceProviderController extends Controller
         abort_if($team === null, 404);
         $this->authorize('view', $team);
 
+        $github->recheckSuspended($team);
+
         $applications = $team->applications()->with(['server', 'webhookEndpoints'])->orderBy('name')->get();
         $providers = $team->sourceProviders()->latest()->get();
         $lastDelivery = $applications->flatMap(fn(Application $application) => $application->webhookEndpoints)

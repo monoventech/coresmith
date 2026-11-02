@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Git;
 
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Str;
 
 final class RefusalReason
 {
@@ -25,9 +26,11 @@ final class RefusalReason
         return 'HTTP ' . $response->status();
     }
 
+    public const SENTENCE_LIMIT = 300;
+
     public static function sentence(string $reason): string
     {
-        $reason = trim($reason);
+        $reason = Str::limit(trim($reason), self::SENTENCE_LIMIT);
 
         return $reason === '' || preg_match('/[.!?]$/D', $reason) === 1 ? $reason : $reason . '.';
     }

@@ -63,6 +63,19 @@ final class GitHubSettingsPresenter
         ];
     }
 
+    public function recheckSuspended(Team $team): void
+    {
+        $team->sourceProviders()
+            ->where('type', SourceProviderType::GitHubApp->value)
+            ->whereNotNull('suspended_at')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn(SourceProvider $connection): bool => $this->apps->for($connection) !== null)
+            ->each(function (SourceProvider $connection): void {
+                CheckGitHubInstallation::throttled($connection);
+            });
+    }
+
     public function gitSettingsUrl(Team $team, Request $request): string
     {
         return $this->urls->pathUrl($team, $request) . route('source-providers.index', [], false);
@@ -112,10 +125,6 @@ final class GitHubSettingsPresenter
      */
     private function connection(SourceProvider $provider, #[\SensitiveParameter] ?GitHubAppCredentials $app): array
     {
-        if ($provider->suspended_at !== null && $app !== null) {
-            CheckGitHubInstallation::throttled($provider);
-        }
-
         $expires = $provider->token_expires_at;
         $holdsToken = $provider->getRawOriginal('access_token') !== null && $expires !== null && $expires->isFuture();
 

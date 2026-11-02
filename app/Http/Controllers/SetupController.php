@@ -88,6 +88,8 @@ final class SetupController extends Controller
      */
     private function github(GitHubSettingsPresenter $presenter, Team $team, User $user): array
     {
+        $presenter->recheckSuspended($team);
+
         $github = $presenter->present($team, $user);
         $connection = $github['connections'][0] ?? null;
 

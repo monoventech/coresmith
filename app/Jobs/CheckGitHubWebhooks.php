@@ -34,14 +34,6 @@ final class CheckGitHubWebhooks implements ShouldQueue
 
     public function handle(GitHubApps $apps, GitHubAppApi $api, GitHubAppHealth $health): void
     {
-        $env = $apps->env();
-
-        if ($env !== null) {
-            $this->check($env, $api, $health);
-        }
-
-        GitHubApp::query()->orderBy('id')->each(fn(GitHubApp $app) => $this->check($apps->fromModel($app), $api, $health));
-
         SourceProvider::query()
             ->where('type', SourceProviderType::GitHubApp->value)
             ->whereNotNull('suspended_at')
@@ -49,6 +41,14 @@ final class CheckGitHubWebhooks implements ShouldQueue
             ->each(function (SourceProvider $connection): void {
                 CheckGitHubInstallation::throttled($connection);
             });
+
+        $env = $apps->env();
+
+        if ($env !== null) {
+            $this->check($env, $api, $health);
+        }
+
+        GitHubApp::query()->orderBy('id')->each(fn(GitHubApp $app) => $this->check($apps->fromModel($app), $api, $health));
     }
 
     private function check(#[\SensitiveParameter] GitHubAppCredentials $app, GitHubAppApi $api, GitHubAppHealth $health): void

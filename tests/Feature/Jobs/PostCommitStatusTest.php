@@ -72,13 +72,13 @@ function commitStatusDeployment(Application $application, DeploymentStatus $stat
     ], $attributes));
 }
 
-function commitStatusFake(int $statuses = 201, int $mint = 201, ?string $refusal = null): void
+function commitStatusFake(int $statuses = 201, int $mint = 201, ?string $refusal = null, ?string $suspendedAt = '2026-10-19T11:00:00Z'): void
 {
     Http::fake([
         'api.github.com/app/installations/51842/access_tokens' => $mint === 201
             ? Http::response(['token' => 'ghs_1041207_eyJhbGciOiJSUzI1NiJ9.e30.Y2xvbmU', 'expires_at' => '2026-10-19T13:00:00Z', 'permissions' => ['contents' => 'read'], 'repository_selection' => 'selected'], 201)
             : Http::response(['message' => $refusal ?? 'GitHub turned this request down'], $mint),
-        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => '2026-10-19T11:00:00Z']),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => $suspendedAt]),
         'api.github.com/installation/token' => Http::response(null, 204),
         'api.github.com/repos/monoventech/atlas/statuses/*' => $statuses === 201
             ? Http::response(['id' => 1, 'state' => 'pending'], 201)
@@ -481,6 +481,25 @@ test('a token request github turns down for good fails the job once instead of u
     'bad credentials' => [401],
     'unprocessable' => [422],
 ]);
+
+test('a forbidden token github does not call a suspension fails the status once and leaves the connection connected', function () {
+    Exceptions::fake();
+    commitStatusFake(mint: 403, refusal: 'Your IP address is not permitted to access this resource.', suspendedAt: null);
+    $application = commitStatusApp(['access_token' => null, 'token_expires_at' => null]);
+    $job = (new PostCommitStatus(commitStatusDeployment($application, DeploymentStatus::Succeeded)))->withFakeQueueInteractions();
+
+    app()->call([$job, 'handle']);
+
+    $connection = SourceProvider::withTrashed()->find($application->source_provider_id);
+
+    $job->assertFailedWith(GitHubInstallationException::class);
+    Exceptions::assertReported(fn(GitHubInstallationException $refusal): bool => $refusal->kind === GitHubInstallationException::REFUSED && $refusal->getCode() === 403);
+
+    expect($connection->trashed())->toBeFalse()
+        ->and($connection->suspended_at)->toBeNull()
+        ->and($connection->connected())->toBeTrue()
+        ->and(commitStatusPosts())->toBe([]);
+});
 
 test('a token github could not issue is left to the retries and the connection is left alone', function (int $mint, string $refusal) {
     Exceptions::fake();

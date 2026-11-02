@@ -12,6 +12,7 @@ use App\Services\Git\GitHub\GitHubAppHealth;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\WebhookMode;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -225,6 +226,17 @@ test('only suspended github connections are queued for a check', function () {
     SourceProvider::factory()->for($app->team)->create(['type' => 'gitlab', 'installation_id' => null, 'suspended_at' => now()]);
 
     webhookCheckRun();
+
+    Queue::assertPushed(CheckGitHubInstallation::class, 1);
+});
+
+test('an app check that throws does not keep suspended connections from being checked', function () {
+    Queue::fake();
+    $app = GitHubApp::factory()->create(['app_id' => '2000001']);
+    SourceProvider::factory()->for($app->team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '51842', 'suspended_at' => now()]);
+    Http::fake(['api.github.com/app/hook/deliveries*' => Http::response([['id' => 1, 'guid' => 'x', 'delivered_at' => 'not a time', 'status' => 'OK', 'status_code' => 200, 'event' => 'push']])]);
+
+    expect(fn() => webhookCheckRun())->toThrow(InvalidFormatException::class);
 
     Queue::assertPushed(CheckGitHubInstallation::class, 1);
 });

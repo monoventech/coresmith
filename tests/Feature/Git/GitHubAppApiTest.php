@@ -17,6 +17,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 
@@ -684,6 +685,20 @@ test('an installation github will not describe is an error that says why', funct
     'a bad token for the app' => [401, ['message' => 'A JSON web token could not be decoded'], 'A JSON web token could not be decoded'],
     'an answer that is not an installation' => [200, ['message' => 'ok'], 'GitHub did not describe the installation.'],
 ]);
+
+test('an installation check github refuses keeps the app credentials out of its trace', function () {
+    $app = githubApiCredentials();
+    Http::fake(['api.github.com/app/installations/51842' => Http::response(['message' => 'Server Error'], 500)]);
+
+    $failure = githubApiTrace(fn() => app(GitHubAppApi::class)->installation($app, '51842'));
+
+    expect($failure)->toBeInstanceOf(GitProviderException::class)
+        ->and($failure->getMessage())->toBe('Server Error');
+
+    foreach ([$app->clientSecret, substr($app->privateKey, 40, 40), (string) $app->webhookSecret] as $secret) {
+        expect(githubApiTraceExposes($failure, $secret))->toBeFalse();
+    }
+});
 
 test('an installation id that is not a number is never asked about', function (string $installation) {
     $exception = githubApiThrown(fn() => app(GitHubAppApi::class)->installation(githubApiCredentials(), $installation));
@@ -1427,6 +1442,25 @@ test('a 401 for a token another check has already replaced leaves the new one al
     expect(fn() => app(GitProviderFactory::class)->github($connection)->installationRepositories(1))->toThrow(GitProviderException::class);
 
     expect($connection->fresh()->access_token)->toBe('ghs_replaced');
+});
+
+test('a token another check stores just before a 401 drops the old one survives the drop', function () {
+    $connection = githubApiConnection(['access_token' => 'ghs_revoked', 'token_expires_at' => now()->addHour()]);
+    Http::fake(['api.github.com/installation/repositories*' => Http::response(['message' => 'Bad credentials'], 401)]);
+    $stored = false;
+    DB::beforeExecuting(function (string $query) use ($connection, &$stored): void {
+        if ($stored || preg_match('/^update [`"]?source_providers[`"]?/i', $query) !== 1) {
+            return;
+        }
+
+        $stored = true;
+        SourceProvider::query()->find($connection->id)->forceFill(['access_token' => 'ghs_meanwhile', 'token_expires_at' => now()->addHour()])->save();
+    });
+
+    expect(fn() => app(GitProviderFactory::class)->github($connection)->installationRepositories(1))->toThrow(GitProviderException::class);
+
+    expect($stored)->toBeTrue()
+        ->and($connection->fresh()->access_token)->toBe('ghs_meanwhile');
 });
 
 test('a revoke goes through the api with the stored token and only when one is live', function () {

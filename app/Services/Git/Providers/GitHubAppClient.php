@@ -294,19 +294,26 @@ final class GitHubAppClient implements GitProvider
         $response = $this->api->call(fn(): Response => $call($retry ? $request->retry(2, 200, throw: false) : $request));
 
         if ($response->status() === 401) {
-            $this->forget($token);
+            $this->forget();
         }
 
         return $response;
     }
 
-    private function forget(#[\SensitiveParameter] string $token): void
+    private function forget(): void
     {
-        $this->provider->refresh();
+        $stored = $this->provider->getRawOriginal('access_token');
 
-        if ($this->provider->access_token === $token) {
-            $this->provider->forceFill(['access_token' => null, 'token_expires_at' => null])->save();
+        if ($stored === null) {
+            return;
         }
+
+        SourceProvider::withTrashed()
+            ->whereKey($this->provider->getKey())
+            ->where('access_token', $stored)
+            ->update(['access_token' => null, 'token_expires_at' => null]);
+
+        $this->provider->forceFill(['access_token' => null, 'token_expires_at' => null])->syncOriginalAttributes(['access_token', 'token_expires_at']);
     }
 
     /**
