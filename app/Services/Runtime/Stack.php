@@ -74,14 +74,17 @@ final readonly class Stack
         }
 
         $framework = $data['framework'] ?? null;
-        $tooling = $data['tooling'] ?? null;
+        $tooling = JsTooling::fromArray(is_array($data['tooling'] ?? null) ? $data['tooling'] : null);
+        $tool = $tooling?->runtime();
         $gems = array_filter((array) ($data['gems'] ?? []), fn(mixed $locked, int|string $gem): bool => is_string($gem) && is_bool($locked), ARRAY_FILTER_USE_BOTH);
         $packages = array_filter((array) ($data['packages'] ?? []), fn(mixed $installed, int|string $package): bool => in_array($package, self::PACKAGES, true) && is_bool($installed), ARRAY_FILTER_USE_BOTH);
+
+        uksort($runtimes, fn(int|string $a, int|string $b): int => ($a === $tool) <=> ($b === $tool));
 
         return new self(
             $runtimes,
             is_array($framework) && isset($framework['name'], $framework['major']) ? ['name' => (string) $framework['name'], 'major' => (int) $framework['major']] : null,
-            JsTooling::fromArray(is_array($tooling) ? $tooling : null),
+            $tooling,
             gems: $gems,
             packages: $packages,
         );

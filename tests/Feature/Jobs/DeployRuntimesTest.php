@@ -275,6 +275,45 @@ test('a resumed rails deploy keeps the worker gems it read before the runtimes w
         ->and($application->fresh()->stack['gems'])->toBe(['sidekiq' => true, 'solid_queue' => false]);
 });
 
+test('a resumed deploy keeps the runtime that serves the app ahead of the one that builds its assets', function (array $runtimes) {
+    $application = stackApp();
+    $deployment = Deployment::factory()->for($application)->create([
+        'status' => DeploymentStatus::Running,
+        'started_at' => now()->subMinutes(20),
+        'stale_after' => now()->addMinute(),
+        'release' => STACK_RELEASE,
+        'stack' => [
+            'runtimes' => $runtimes,
+            'framework' => ['name' => 'laravel', 'major' => 12],
+            'tooling' => ['manager' => 'bun', 'locked' => true, 'build' => true, 'start' => false, 'manager_version' => null, 'manifest' => true, 'ssr' => false],
+        ],
+    ]);
+    $lock = Cache::lock('deploy:' . $application->id, DeployApplication::LOCK_SECONDS);
+    $lock->get();
+    $transport = stackTransport()
+        ->respondTo("test -d '/opt/asdf-data/installs/php/8.5.10'", "yes\n")
+        ->respondTo("test -d '/opt/asdf-data/installs/bun/1.4.2'", "yes\n");
+
+    stackDeploy($deployment->fresh(), $transport, $lock->owner());
+
+    $commands = implode("\n", $transport->commands());
+    $path = "'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c ";
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($commands)->toContain($path . "'composer install")
+        ->and($commands)->toContain($path . "'bun install --frozen-lockfile'")
+        ->and($commands)->toContain($path . "'bun run build'");
+})->with([
+    'stored in the order it was resolved' => [[
+        'php' => ['runtime' => 'php', 'version' => '8.5.10', 'source' => 'default', 'detail' => null],
+        'bun' => ['runtime' => 'bun', 'version' => '1.4.2', 'source' => 'default', 'detail' => null],
+    ]],
+    'stored in the order mysql reads it back' => [[
+        'bun' => ['runtime' => 'bun', 'version' => '1.4.2', 'source' => 'default', 'detail' => null],
+        'php' => ['runtime' => 'php', 'version' => '8.5.10', 'source' => 'default', 'detail' => null],
+    ]],
+]);
+
 test('a resumed deploy whose deployment was reclaimed after the job started stops without touching anything', function () {
     $application = stackApp(['status' => ApplicationStatus::Deploying]);
     $deployment = stackPausedDeployment($application);
