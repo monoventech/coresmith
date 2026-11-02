@@ -287,7 +287,7 @@ test('a repository the installation lost is named', function () {
 
     $connection = SourceProvider::withTrashed()->find($application->source_provider_id);
 
-    expect($deployment->fresh()->failure_reason)->toBe('GitHub no longer gives Coresmith access to monoventech/atlas. Add it under Manage repositories on GitHub, then deploy again.')
+    expect($deployment->fresh()->failure_reason)->toBe("GitHub no longer gives Coresmith access to monoventech/atlas. Add it under Manage repositories on GitHub, or if it moved to another account, connect that account's installation from Settings, Git. Then deploy again.")
         ->and($connection->trashed())->toBeFalse()
         ->and($connection->suspended_at)->toBeNull();
 });

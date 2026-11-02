@@ -42,7 +42,7 @@ final readonly class GitFailure
         return match ($refusal instanceof GitHubInstallationException ? $refusal->kind : null) {
             GitHubInstallationException::UNINSTALLED => "Coresmith's GitHub app is no longer installed on {$account}. Connect GitHub again from Settings, Git, then deploy.",
             GitHubInstallationException::SUSPENDED => self::suspended($account),
-            GitHubInstallationException::REPOSITORY => 'GitHub no longer gives Coresmith access to ' . self::repository($application) . '. Add it under Manage repositories on GitHub, then deploy again.',
+            GitHubInstallationException::REPOSITORY => 'GitHub no longer gives Coresmith access to ' . self::repository($application) . ". Add it under Manage repositories on GitHub, or if it moved to another account, connect that account's installation from Settings, Git. Then deploy again.",
             GitHubInstallationException::UNREACHABLE => 'Coresmith could not get a clone token from GitHub. Try again in a minute.',
             default => $refusal->getMessage(),
         };

@@ -40,6 +40,7 @@ use App\Services\Deployment\RepositoryCache;
 use App\Services\Deployment\SharedStorage;
 use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
+use App\Services\Git\GitHub\ApplicationRelinker;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Panel\Reverb;
@@ -680,7 +681,7 @@ final class DeployApplication implements ShouldQueue
 
         try {
             $this->cloneAdvice = null;
-            $github = $application->usesGitHubToken() ? $application->githubConnection() : null;
+            $github = $application->usesGitHubToken() ? $application->githubConnection() : app(ApplicationRelinker::class)->relink($application);
             $token = $github === null ? null : $this->mintCloneToken($application, $github);
             $credential = match (true) {
                 $token !== null => 'token',
@@ -988,14 +989,30 @@ final class DeployApplication implements ShouldQueue
     private function mintCloneToken(Application $application, SourceProvider $github): ?string
     {
         try {
-            return app(GitProviderFactory::class)->github($github)->cloneToken((string) $application->repository_id);
+            return $this->cloneTokenThrough($application, $github);
         } catch (GitProviderException $refusal) {
             $github->markRefused($refusal);
+
+            $other = app(ApplicationRelinker::class)->relinkAfter($application, $refusal);
+
+            if ($other !== null) {
+                try {
+                    return $this->cloneTokenThrough($application, $other);
+                } catch (GitProviderException $again) {
+                    $other->markRefused($again);
+                    $refusal = $again;
+                }
+            }
 
             $this->cloneAdvice = GitFailure::adviceFor($refusal, $application);
 
             return null;
         }
+    }
+
+    private function cloneTokenThrough(Application $application, SourceProvider $github): string
+    {
+        return app(GitProviderFactory::class)->github($github)->cloneToken((string) $application->repository_id);
     }
 
     private function installCloneToken(SSHConnection $connection, DeployKeyManager $keys, CloneToken $tokens, Application $application, #[\SensitiveParameter] string $token): void

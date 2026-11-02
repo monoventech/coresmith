@@ -26,6 +26,7 @@ final class GitHubEventHandler
     public function __construct(
         private readonly AutoDeploy $autoDeploy,
         private readonly RepositoryCatalog $catalog,
+        private readonly ApplicationRelinker $relinker,
     ) {}
 
     /**
@@ -101,9 +102,13 @@ final class GitHubEventHandler
         $after = (string) $payload['after'];
         $pushedAt = $this->pushedAt($payload);
         $fullName = $this->fullName($payload);
+        $repositoryId = (string) $payload['repository']['id'];
+
+        $this->relinker->follow($connections, $repositoryId, $fullName);
+
         $applications = Application::query()
             ->whereIn('source_provider_id', $connections->modelKeys())
-            ->where('repository_id', (string) $payload['repository']['id'])
+            ->where('repository_id', $repositoryId)
             ->get()
             ->filter(fn(Application $application): bool => $application->repository_branch === $branch && !$this->autoDeploy->stale($application, $after, $pushedAt));
 

@@ -49,6 +49,7 @@ final class GitHubConnector
         private readonly ManifestBuilder $manifest,
         private readonly GitHubSettingsPresenter $settings,
         private readonly TeamContext $context,
+        private readonly ApplicationRelinker $relinker,
     ) {}
 
     public function appFor(Team $team, ?string $key = null): ?GitHubAppCredentials
@@ -188,6 +189,8 @@ final class GitHubConnector
             ->performedOn($provider)
             ->withProperties(['installation_id' => $provider->installation_id, 'account' => $provider->name, 'app' => $app->key])
             ->log('github_installation_linked');
+
+        $this->relinker->adopt($provider);
 
         return $provider;
     }
