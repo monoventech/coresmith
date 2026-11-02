@@ -320,7 +320,19 @@ function updatesBusyMaster(): SymfonyProcess
 {
     $process = new SymfonyProcess(['sh', '-c', 'trap "" TERM; echo ready; exec sleep 60']);
     $process->start();
-    $process->waitUntil(fn(string $type, string $output): bool => str_contains($output, 'ready'));
+    $deadline = microtime(true) + 5;
+
+    while (!str_contains($process->getOutput(), 'ready')) {
+        $process->checkTimeout();
+
+        if (!$process->isRunning() || microtime(true) > $deadline) {
+            $process->stop(0);
+
+            throw new RuntimeException('The stand-in for a busy queue job never printed "ready" within 5 seconds: ' . trim($process->getErrorOutput()));
+        }
+
+        usleep(1000);
+    }
 
     $registry = updatesRegistry();
     $registry->busy = [...($registry->busy ?? []), $process];
