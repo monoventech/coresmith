@@ -9,6 +9,7 @@ use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
 use App\Services\VaultEncryptor;
 use Symfony\Component\Process\Process;
+use Symfony\Component\Yaml\Yaml;
 
 function installScript(): string
 {
@@ -252,15 +253,18 @@ test('the continuous integration workflows are present and valid', function () {
     }
 });
 
-test('continuous integration runs the feature tests on every database the panel supports', function () {
-    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+test('continuous integration runs the feature tests on every database the panel supports', function (string $job, string $image, string $driver) {
+    $definition = Yaml::parseFile(base_path('.github/workflows/ci.yml'))['jobs'][$job] ?? null;
 
-    expect($ci)->toContain('name: Feature tests on PostgreSQL')
-        ->toContain('DB_CONNECTION: pgsql')
-        ->toContain('name: Feature tests on MySQL')
-        ->toContain('image: mysql:8.0')
-        ->toContain('DB_CONNECTION: mysql');
-});
+    expect($definition)->toBeArray()
+        ->and($definition)->not->toHaveKey('if')
+        ->and(array_column($definition['services'] ?? [], 'image'))->toBe([$image])
+        ->and($definition['env']['DB_CONNECTION'] ?? null)->toBe($driver)
+        ->and(array_map(trim(...), array_column($definition['steps'] ?? [], 'run')))->toContain('php artisan test');
+})->with([
+    'PostgreSQL' => ['tests-pgsql', 'postgres:17', 'pgsql'],
+    'MySQL' => ['tests-mysql', 'mysql:8.0', 'mysql'],
+]);
 
 test('the installer workflow proves the instance it built actually works', function () {
     $workflow = (string) file_get_contents(base_path('.github/workflows/installer.yml'));
