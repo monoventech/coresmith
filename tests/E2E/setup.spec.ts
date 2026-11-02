@@ -256,6 +256,27 @@ test.describe('setup before GitHub is connected', () => {
         })
     }
 
+    test.describe('when the visit to the first step is slow', () => {
+        const member = { connected: false, can_manage: false, connect_href: null, registration: null, elsewhere: null }
+
+        test('continuing moves on from the first step, not from the step that was showing', async ({ page }) => {
+            await openSetupWith(page, 'tidewater', member, 1_000)
+
+            const step = page.getByTestId('setup-step')
+
+            await step.getByRole('button', { name: 'Continue' }).click()
+
+            await expect(page).toHaveURL(/[?&]step=1$/)
+            await expect(step).toContainText('Add your first server')
+        })
+
+        test('the overridden props have rendered by the time the helper returns', async ({ page }) => {
+            await openSetupWith(page, 'acme', member, 1_000)
+
+            expect(await page.getByTestId('setup-step').textContent()).toContain('An owner or admin connects GitHub.')
+        })
+    })
+
     test('a member is told who connects GitHub', async ({ page }) => {
         await openSetupWith(page, 'acme', {
             can_manage: false,
