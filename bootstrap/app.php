@@ -34,6 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->append(ResolveTeamUrl::class);
 
+        $middleware->authenticateSessions();
+
         $middleware->alias([
             'token.can' => EnforceTokenAbility::class,
             'setup.token' => RequireSetupToken::class,
