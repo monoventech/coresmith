@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -37,6 +38,13 @@ class MigrateAllDatabases extends Command
             'sqlite_cache' => ['path' => $cachePath, 'migrations' => 'database/migrations/cache'],
         ];
 
+        if ($this->option('fresh')) {
+            foreach (array_keys($databases) as $connection) {
+                $this->info("Dropping all tables for $connection before migrating...");
+                $this->removeDatabaseFile($connection);
+            }
+        }
+
         // Ensure all SQLite databases exist
         foreach ($databases as $connection => $dbConfig) {
             if (!File::exists($dbConfig['path'])) {
@@ -49,18 +57,11 @@ class MigrateAllDatabases extends Command
         foreach ($databases as $connection => $dbConfig) {
             $this->info("Running migrations for database: $connection");
 
-            $options = [
+            Artisan::call('migrate', [
                 '--database' => $connection,
                 '--path' => $dbConfig['migrations'],
                 '--force' => true,
-            ];
-
-            if ($this->option('fresh')) {
-                $this->info("Dropping all tables for $connection before migrating...");
-                Artisan::call('migrate:refresh', $options);
-            } else {
-                Artisan::call('migrate', $options);
-            }
+            ]);
 
             $this->info(Artisan::output());
 
@@ -71,5 +72,14 @@ class MigrateAllDatabases extends Command
                 $this->info(Artisan::output());
             }
         }
+    }
+
+    private function removeDatabaseFile(string $connection): void
+    {
+        $path = (string) config("database.connections.{$connection}.database");
+
+        DB::purge($connection);
+
+        File::delete([$path, "{$path}-wal", "{$path}-shm"]);
     }
 }
