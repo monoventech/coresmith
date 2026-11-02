@@ -103,6 +103,8 @@ final class InvitationController extends Controller
             return $this->lostRace($exception, $token);
         }
 
+        $this->invitations->syncKeys($invitation);
+
         event(new Registered($user));
 
         Auth::login($user);
@@ -125,7 +127,13 @@ final class InvitationController extends Controller
             return $this->lostRace($exception, $token);
         }
 
-        return $joined ? $this->open($request, $invitation->team) : to_route('invitations.show', $token);
+        if (!$joined) {
+            return to_route('invitations.show', $token);
+        }
+
+        $this->invitations->syncKeys($invitation);
+
+        return $this->open($request, $invitation->team);
     }
 
     private function lostRace(PDOException $exception, string $token): HttpResponse

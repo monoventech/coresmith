@@ -112,9 +112,12 @@ final class TeamInvitations
 
             $user->save();
 
-            DB::afterCommit(fn() => SyncAuthorizedKeys::dispatchForServers(SyncAuthorizedKeys::activeServersOf([$team->getKey()])));
-
             return true;
         });
+    }
+
+    public function syncKeys(TeamInvitation $invitation): void
+    {
+        rescue(fn() => SyncAuthorizedKeys::dispatchForServers(SyncAuthorizedKeys::activeServersOf([$invitation->team_id])));
     }
 }

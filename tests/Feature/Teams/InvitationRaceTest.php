@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Models\Server;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Services\Teams\TeamInvitations;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 
@@ -124,3 +127,27 @@ test('any other database failure is not mistaken for a lost race', function () {
 
     $this->actingAs($user)->post(route('invitations.accept', $token))->assertServerError();
 });
+
+test('a key sync that fails after joining is reported and the person still lands on the team', function (string $path) {
+    Exceptions::fake();
+    [$team, $invitation, $token] = invitationRaceInvite();
+    Server::factory()->for($team)->active()->create();
+    Bus::shouldReceive('dispatch')->andThrow(invitationRaceFailure('SQLSTATE[HY000]: General error: 5 database is locked'));
+
+    if ($path === 'accept') {
+        $this->actingAs(User::factory()->create(['email' => 'new@example.com']))
+            ->post(route('invitations.accept', $token))
+            ->assertRedirect('http://localhost/acme/dashboard');
+    } else {
+        invitationRaceRegister($token)->assertRedirect('http://localhost/acme/dashboard');
+    }
+
+    $user = User::query()->where('email', 'new@example.com')->sole();
+
+    $this->assertAuthenticatedAs($user);
+
+    expect($user->belongsToTeam($team))->toBeTrue()
+        ->and($invitation->fresh()->accepted_at)->not->toBeNull();
+
+    Exceptions::assertReported(fn(QueryException $exception): bool => str_contains($exception->getMessage(), 'database is locked'));
+})->with(['register', 'accept']);
