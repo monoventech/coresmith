@@ -630,6 +630,7 @@ test('an older deploy still waiting on the queue keeps a deploy queued twenty mi
 });
 
 test('a deploy queued within a minute of the oldest waiting job may still be behind it, so it is left pending', function () {
+    $this->freezeSecond();
     Event::fake([DeploymentFailed::class]);
     staleQueueOnDatabase();
     $deployment = staleQueuedDeployment(20);

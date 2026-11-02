@@ -185,6 +185,7 @@ test('the team keeps an index of its own, so the unique index can be dropped whi
 });
 
 test('a restored oldest row takes the state of the newest duplicate that was still connected', function () {
+    $this->freezeSecond();
     $migration = uniqueLinkMigration();
     $migration->down();
     $team = Team::factory()->create();
