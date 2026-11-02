@@ -79,6 +79,19 @@ test('a preference can be turned on and off and is stored with the rest', functi
     ]);
 });
 
+test('turning a preference to the state it already has writes nothing', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->put(route('settings.notifications.update'), ['key' => 'weekly_digest', 'on' => true])->assertSessionHas('success', 'Saved.');
+
+    $saved = $user->fresh()->updated_at?->toIso8601String();
+    $this->travel(5)->minutes();
+
+    $this->actingAs($user->fresh())->put(route('settings.notifications.update'), ['key' => 'weekly_digest', 'on' => true])->assertSessionHas('success', 'Saved.');
+
+    expect($user->fresh()->updated_at?->toIso8601String())->toBe($saved);
+});
+
 test('deploy failure emails cannot be turned off', function () {
     $user = User::factory()->create();
 

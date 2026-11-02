@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Casts\Vaulted;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\GitHubAppFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class GitHubApp extends Model
 {
     /** @use HasFactory<GitHubAppFactory> */
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder;
 
     protected $table = 'github_apps';
 

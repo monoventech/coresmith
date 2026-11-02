@@ -10,6 +10,7 @@ namespace App\Models;
 
 use App\Casts\Vaulted;
 use App\Enums\ServerStatus;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Server extends Model
 {
     /** @use HasFactory<ServerFactory> */
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
 
     protected $guarded = ['id'];
 

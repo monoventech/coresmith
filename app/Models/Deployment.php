@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\DeploymentStatus;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\DeploymentFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Deployment extends Model
 {
     /** @use HasFactory<DeploymentFactory> */
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder;
 
     protected $guarded = ['id'];
 

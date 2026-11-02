@@ -13,6 +13,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Enums\SourceProviderType;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\Repository;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Application extends Model
 {
     /** @use HasFactory<ApplicationFactory> */
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
 
     protected $guarded = ['id'];
 

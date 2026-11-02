@@ -6,6 +6,7 @@ namespace App\Models;
 use App\Enums\Ability;
 use App\Enums\Edition;
 use App\Enums\TeamRole;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -25,7 +26,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasUlids, Notifiable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, HasUlids, IgnoresJsonKeyOrder, Notifiable, TwoFactorAuthenticatable;
 
     public static function findByEmail(string $email): ?self
     {
