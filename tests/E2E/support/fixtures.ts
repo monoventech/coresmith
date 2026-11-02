@@ -157,6 +157,15 @@ export async function captureClipboard(page: Page) {
     })
 }
 
+export async function refuseClipboard(page: Page) {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: () => Promise.reject(new DOMException('Clipboard refused', 'NotAllowedError')) }
+        })
+    })
+}
+
 export function cloudInvitation(testInfo: TestInfo): string {
     return own(testInfo, 'e2eCloudInvite', '').padEnd(40, '0')
 }

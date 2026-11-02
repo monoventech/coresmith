@@ -4,6 +4,8 @@
     import FieldError from '@/components/FieldError.svelte'
     import CloudProvidersCard from '@/components/settings/CloudProvidersCard.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
+    import type { Invitation } from '@/components/settings/InvitationsCard.svelte'
+    import InvitationsCard from '@/components/settings/InvitationsCard.svelte'
     import type { OffsiteDestination } from '@/components/settings/OffsiteBackupsCard.svelte'
     import OffsiteBackupsCard from '@/components/settings/OffsiteBackupsCard.svelte'
     import PlanNote from '@/components/settings/PlanNote.svelte'
@@ -19,7 +21,7 @@
     import type { CloudAccounts } from '@/lib/cloud'
     import { getInitials } from '@/lib/initials'
     import { Form, page, router } from '@inertiajs/svelte'
-    import { Mail, X } from '@lucide/svelte'
+    import { X } from '@lucide/svelte'
 
     interface Member {
         id: string
@@ -29,15 +31,6 @@
         role_label: string | null
         two_factor: boolean
         is_you: boolean
-    }
-
-    interface Invitation {
-        id: string
-        email: string
-        role: string
-        role_label: string
-        expires: string
-        link: string | null
     }
 
     type Address = {
@@ -90,9 +83,6 @@
     let inviting = $state(false)
     let removing = $state<Member | null>(null)
     let removeOpen = $state(false)
-    let revoking = $state<Invitation | null>(null)
-    let revokeOpen = $state(false)
-    let copied = $state<string | null>(null)
 
     const assignable = $derived(can.grantOwner ? roles : roles.filter((role) => role.value !== 'owner'))
 
@@ -113,36 +103,6 @@
         router.delete(route('teams.members.destroy', [team.id, removing.id]), {
             preserveScroll: true,
             onFinish: () => (removeOpen = false)
-        })
-    }
-
-    async function copyLink(invitation: Invitation) {
-        if (!invitation.link) {
-            return
-        }
-
-        try {
-            await navigator.clipboard.writeText(invitation.link)
-            copied = invitation.id
-            setTimeout(() => (copied = null), 2000)
-        } catch {
-            copied = null
-        }
-    }
-
-    function askRevoke(invitation: Invitation) {
-        revoking = invitation
-        revokeOpen = true
-    }
-
-    function revoke() {
-        if (!revoking) {
-            return
-        }
-
-        router.delete(route('teams.invitations.destroy', [team.id, revoking.id]), {
-            preserveScroll: true,
-            onFinish: () => (revokeOpen = false)
         })
     }
 </script>
@@ -215,56 +175,16 @@
             </li>
         {/each}
     </ul>
-    {#if invitations.length > 0}
-        <p class="type-label m-0 border-b border-border px-5.5 pt-4 pb-2 text-muted-foreground" id="invitations-label">
-            Invited
-        </p>
-        <ul class="m-0 list-none p-0" aria-labelledby="invitations-label">
-            {#each invitations as invitation (invitation.id)}
-                <li
-                    class="flex min-h-13 flex-wrap items-center gap-3.5 border-b border-border px-5.5 py-1.5 text-[13.5px]"
-                    data-testid="invitation-row"
-                >
-                    <span
-                        class="inline-flex size-7.5 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground"
-                        aria-hidden="true"
-                    >
-                        <Mail class="size-3.5" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground"
-                        >{invitation.email}</span
-                    >
-                    <div class="flex flex-wrap items-center gap-3.5 max-sm:basis-full max-sm:pl-11">
-                        <span class="text-[12.5px] text-muted-foreground">{invitation.role_label}</span>
-                        <span class="text-[12px] text-muted-foreground">expires {invitation.expires}</span>
-                        {#if invitation.link}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="max-sm:h-11"
-                                aria-label="{copied === invitation.id ? 'Copied' : 'Copy link'} for {invitation.email}"
-                                onclick={() => copyLink(invitation)}
-                                >{copied === invitation.id ? 'Copied' : 'Copy link'}</Button
-                            >
-                        {/if}
-                        {#if can.manageMembers}
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                class="text-destructive-strong max-sm:h-11"
-                                aria-label="Revoke the invitation to {invitation.email}"
-                                onclick={() => askRevoke(invitation)}>Revoke</Button
-                            >
-                        {/if}
-                    </div>
-                </li>
-            {/each}
-        </ul>
-    {/if}
     <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">
         Admins can provision and delete servers. Deployers can deploy and roll back.
     </p>
 </div>
+
+{#if invitations.length > 0}
+    <div class="mt-4">
+        <InvitationsCard teamId={team.id} {invitations} canManage={can.manageMembers} />
+    </div>
+{/if}
 
 <div class="mt-4 grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
     <TeamAddressCard slug={team.slug} path={address.path} subdomain={address.subdomain} canUpdate={can.update} />
@@ -339,21 +259,6 @@
         <Dialog.Footer>
             <Button variant="ghost" onclick={() => (removeOpen = false)}>Keep them</Button>
             <Button variant="destructive" onclick={remove}>Remove from the team</Button>
-        </Dialog.Footer>
-    </Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root bind:open={revokeOpen}>
-    <Dialog.Content>
-        <Dialog.Header>
-            <Dialog.Title>Revoke the invitation to {revoking?.email}?</Dialog.Title>
-            <Dialog.Description
-                >The link stops working straight away. You can invite them again later.</Dialog.Description
-            >
-        </Dialog.Header>
-        <Dialog.Footer>
-            <Button variant="ghost" onclick={() => (revokeOpen = false)}>Keep it</Button>
-            <Button variant="destructive" onclick={revoke}>Revoke invitation</Button>
         </Dialog.Footer>
     </Dialog.Content>
 </Dialog.Root>

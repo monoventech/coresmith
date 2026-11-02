@@ -11,6 +11,7 @@ import {
     guestPage,
     own,
     PASSWORD,
+    refuseClipboard,
     test,
     toast,
     WAITING_INVITATION
@@ -50,6 +51,7 @@ test.describe('inviting someone without an account', () => {
         const link = await clipboardText(page)
 
         expect(link).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/invitations\/[A-Za-z0-9]{40}$/)
+        await expect(row.getByTestId('invitation-link')).toHaveText(link)
 
         const guest = await guestPage(browser, testInfo)
 
@@ -95,6 +97,22 @@ test.describe('inviting someone without an account', () => {
         await expect(invitation(page, email)).toHaveCount(0)
     })
 
+    test('a link that cannot be copied stays on screen to select', async ({ page }, testInfo) => {
+        const email = `${own(testInfo, 'nocopy')}@coresmith.test`
+
+        await refuseClipboard(page)
+        await invite(page, email)
+
+        const row = invitation(page, email)
+
+        await row.getByRole('button', { name: `Copy link for ${email}` }).click()
+
+        await expect(row.getByRole('status')).toHaveText(
+            'The link could not be copied here. Select it and copy it yourself.'
+        )
+        await expect(row.getByTestId('invitation-link')).toHaveText(/\/invitations\/[A-Za-z0-9]{40}$/)
+    })
+
     test('an invitation is listed without its link once the page is opened again', async ({ page }) => {
         await gotoSettings(page, 'Team')
 
@@ -103,6 +121,7 @@ test.describe('inviting someone without an account', () => {
         await expect(row).toContainText('Deployer')
         await expect(row.getByRole('button', { name: /^Revoke/ })).toBeVisible()
         await expect(row.getByRole('button', { name: /^Copy link/ })).toHaveCount(0)
+        await expect(row.getByTestId('invitation-link')).toHaveCount(0)
     })
 
     test('someone signed in with another account is told to sign out first', async ({ page }) => {
@@ -112,6 +131,24 @@ test.describe('inviting someone without an account', () => {
             page.getByText('This invitation is for waiting@coresmith.test. Sign out, then open the link again.')
         ).toBeVisible()
         await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    })
+})
+
+test.describe('invitations on a phone', () => {
+    test.skip(({ isMobile }) => !isMobile, 'The phone layout and tap sizes apply only below 640px')
+
+    test('the copy and revoke buttons can be tapped', async ({ page }, testInfo) => {
+        const email = `${own(testInfo, 'tap')}@coresmith.test`
+
+        await invite(page, email)
+
+        const row = invitation(page, email)
+
+        for (const name of [`Copy link for ${email}`, `Revoke the invitation to ${email}`]) {
+            const box = await row.getByRole('button', { name }).boundingBox()
+
+            expect(box?.height ?? 0, name).toBeGreaterThanOrEqual(44)
+        }
     })
 })
 
