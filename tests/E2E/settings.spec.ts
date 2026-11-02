@@ -1,4 +1,18 @@
-import { asMember, dialog, expect, gotoSettings, own, tabs, test, toast } from './support/fixtures'
+import {
+    asMember,
+    dialog,
+    expect,
+    expectTabInView,
+    gotoSettings,
+    NARROW_PHONE,
+    own,
+    tabComesIntoViewAsStripNarrows,
+    tabOverhang,
+    tabs,
+    tabStaysInViewAsFontLoads,
+    test,
+    toast
+} from './support/fixtures'
 
 test.describe('settings', () => {
     test('the tabs cover the panel, the team, git, notifications and tokens', async ({ page }) => {
@@ -28,6 +42,49 @@ test.describe('settings', () => {
         }
 
         await expect(tabs(page, 'Settings').getByRole('link', { name: 'Billing' })).toHaveCount(0)
+    })
+
+    test('the last tab stays in view when the web font widens the tabs', async ({ page }) => {
+        await tabStaysInViewAsFontLoads(page, '/settings/api-tokens', 'Settings', 'API tokens')
+    })
+
+    test('the last tab comes into view when the strip narrows', async ({ page }) => {
+        await tabComesIntoViewAsStripNarrows(page, '/settings/api-tokens', 'Settings', 'API tokens')
+    })
+
+    test('a tab opened from the strip is brought fully into view', async ({ page }) => {
+        await page.setViewportSize(NARROW_PHONE)
+        await page.goto('/settings')
+
+        const tokens = tabs(page, 'Settings').getByRole('link', { name: 'API tokens', exact: true })
+
+        expect(await tabOverhang(tokens)).toBeGreaterThan(1)
+
+        await tokens.dispatchEvent('click')
+
+        await expect(tokens).toHaveAttribute('aria-current', 'page')
+        await expectTabInView(tokens)
+    })
+
+    test('the current tab comes back when the strip changes size after a swipe', async ({ page }) => {
+        await page.setViewportSize(NARROW_PHONE)
+        await page.goto('/settings')
+
+        const strip = tabs(page, 'Settings')
+        const general = strip.getByRole('link', { name: 'General', exact: true })
+
+        await expect(general).toHaveAttribute('aria-current', 'page')
+        await expect
+            .poll(async () => {
+                await strip.evaluate((element) => element.scrollTo({ left: element.scrollWidth }))
+
+                return tabOverhang(general)
+            })
+            .toBeGreaterThan(1)
+
+        await page.setViewportSize({ ...NARROW_PHONE, width: NARROW_PHONE.width + 20 })
+
+        await expectTabInView(general)
     })
 })
 

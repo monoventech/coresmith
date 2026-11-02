@@ -80,6 +80,70 @@ export function nav(page: Page): Locator {
     return page.getByRole('navigation', { name: 'Main' }).filter({ visible: true })
 }
 
+export const NARROW_PHONE = { width: 280, height: 400 }
+
+export function tabOverhang(tab: Locator): Promise<number> {
+    return tab.evaluate((element) => {
+        const box = element.getBoundingClientRect()
+        const strip = (element.parentElement as HTMLElement).getBoundingClientRect()
+
+        return Math.max(box.right - strip.right, strip.left - box.left)
+    })
+}
+
+export async function expectTabInView(tab: Locator) {
+    await expect.poll(() => tabOverhang(tab)).toBeLessThanOrEqual(1)
+}
+
+export async function tabStaysInViewAsFontLoads(page: Page, url: string, label: string, name: string) {
+    let release = () => {}
+    const font = new Promise<void>((resolve) => (release = resolve))
+
+    await page.setViewportSize(NARROW_PHONE)
+    await page.route('**/build/assets/hanken-grotesk-500-normal-*', async (route) => {
+        await font
+        await route.fulfill({ path: 'resources/fonts/BespokeSlab-Variable.woff2' })
+    })
+    await page.goto(url, { waitUntil: 'commit' })
+
+    const strip = tabs(page, label)
+    const tab = strip.getByRole('link', { name, exact: true })
+    const width = () => strip.evaluate((element) => element.scrollWidth)
+
+    try {
+        await expectTabInView(tab)
+
+        const before = await width()
+
+        await strip.evaluate((element) => {
+            element.style.height = `${element.offsetHeight}px`
+        })
+
+        release()
+
+        await expect.poll(width).toBeGreaterThan(before)
+        await expectTabInView(tab)
+        await expect(main(page)).toHaveJSProperty('scrollTop', 0)
+    } finally {
+        release()
+    }
+}
+
+export async function tabComesIntoViewAsStripNarrows(page: Page, url: string, label: string, name: string) {
+    await page.setViewportSize({ ...NARROW_PHONE, width: 1000 })
+    await page.goto(url)
+
+    const strip = tabs(page, label)
+    const tab = strip.getByRole('link', { name, exact: true })
+
+    await expect(tab).toHaveAttribute('aria-current', 'page')
+    await page.setViewportSize(NARROW_PHONE)
+
+    await expect.poll(() => strip.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+    await expectTabInView(tab)
+    await expect(main(page)).toHaveJSProperty('scrollTop', 0)
+}
+
 export async function useTheme(page: Page, theme: 'light' | 'dark') {
     const origin = new URL(test.info().project.use.baseURL ?? 'http://127.0.0.1:8123')
 

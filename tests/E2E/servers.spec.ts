@@ -6,7 +6,9 @@ import {
     gotoServerTab,
     isMobile,
     own,
+    tabComesIntoViewAsStripNarrows,
     tabs,
+    tabStaysInViewAsFontLoads,
     test,
     toast
 } from './support/fixtures'
@@ -51,6 +53,16 @@ test.describe('a server', () => {
                 'page'
             )
         }
+    })
+
+    test('the last tab stays in view when the web font widens the tabs', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Activity')
+        await tabStaysInViewAsFontLoads(page, page.url(), 'Server sections', 'Activity')
+    })
+
+    test('the last tab comes into view when the strip narrows', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Activity')
+        await tabComesIntoViewAsStripNarrows(page, page.url(), 'Server sections', 'Activity')
     })
 
     test('the apps tab lists each app with how it runs', async ({ page }, testInfo) => {

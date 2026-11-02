@@ -1,4 +1,12 @@
-import { asCloudMember, expect, isMobile, noSidewaysScroll, test } from '../support/fixtures'
+import {
+    asCloudMember,
+    expect,
+    isMobile,
+    noSidewaysScroll,
+    tabComesIntoViewAsStripNarrows,
+    tabStaysInViewAsFontLoads,
+    test
+} from '../support/fixtures'
 
 test.describe('the billing tab on coresmith cloud', () => {
     test.afterEach(async ({ page }) => {
@@ -41,6 +49,14 @@ test.describe('the billing tab on coresmith cloud', () => {
         await expect(
             page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Billing', exact: true })
         ).toBeInViewport({ ratio: 0.9 })
+    })
+
+    test('the billing tab stays in view when the web font widens the tabs', async ({ page }) => {
+        await tabStaysInViewAsFontLoads(page, '/monoven/settings/billing', 'Settings', 'Billing')
+    })
+
+    test('the billing tab comes into view when the strip narrows', async ({ page }) => {
+        await tabComesIntoViewAsStripNarrows(page, '/monoven/settings/billing', 'Settings', 'Billing')
     })
 
     test('the palette shows the plan', async ({ page }) => {

@@ -13,9 +13,7 @@
 
     const path = $derived(new URL(page.url, 'http://localhost').pathname)
 
-    $effect(() => {
-        void path
-
+    function showActiveTab() {
         const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
 
         if (!nav || !active) {
@@ -30,6 +28,24 @@
         } else if (tab.left < strip.left) {
             nav.scrollLeft -= strip.left - tab.left
         }
+    }
+
+    $effect(() => {
+        void path
+
+        if (!nav) {
+            return
+        }
+
+        const resized = new ResizeObserver(showActiveTab)
+
+        resized.observe(nav)
+
+        for (const tab of nav.children) {
+            resized.observe(tab)
+        }
+
+        return () => resized.disconnect()
     })
 
     function pathOf(href: string): string {
