@@ -157,7 +157,7 @@ test('an unsigned or wrongly signed delivery is refused and recorded', function 
     $activity = Activity::query()->where('description', 'webhook_signature_rejected')->sole();
 
     expect($activity->subject?->is($app))->toBeTrue()
-        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app' => $app->id, 'ip' => '127.0.0.1']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app' => $app->id, 'ip' => '127.0.0.1', 'count' => 1]);
 })->with([
     'unsigned' => ['hook-secret', ''],
     'a made up digest' => ['hook-secret', 'sha256=deadbeef'],
@@ -188,7 +188,7 @@ test('the per app webhook records a rejected signature the way the app webhook d
     $activity = Activity::query()->where('description', 'webhook_signature_rejected')->sole();
 
     expect($activity->subject?->is($endpoint))->toBeTrue()
-        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'github', 'ip' => '127.0.0.1']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'github', 'ip' => '127.0.0.1', 'count' => 1]);
 });
 
 test('a delivery signed for one app is refused by another', function () {
@@ -344,7 +344,7 @@ test('a forged delivery to the environment app is refused and recorded against n
 
     expect($activity->subject_type)->toBeNull()
         ->and($activity->subject_id)->toBeNull()
-        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app' => 'env', 'ip' => '127.0.0.1']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app' => 'env', 'ip' => '127.0.0.1', 'count' => 1]);
 });
 
 test('a delivery id is only a replay for the environment app when it was sent there', function () {
@@ -891,4 +891,50 @@ test('the parameters that carry the app and its secret are marked sensitive', fu
 
         expect($parameter?->getAttributes(SensitiveParameter::class))->toHaveCount(1, "{$class}::{$method}(\${$name})");
     }
+});
+
+test('a burst of forged deliveries writes one row that counts them, and the next interval writes another', function () {
+    $this->freezeTime();
+    githubHookConfigureEnv('env-secret');
+    $forge = fn() => githubHookPost(route('webhooks.github'), ['zen' => 'forged'], 'ping', 'wrong-secret')->assertStatus(401);
+
+    foreach (range(1, 5) as $attempt) {
+        $forge();
+    }
+
+    $first = Activity::query()->where('description', 'webhook_signature_rejected')->sole();
+
+    expect($first->properties->toArray())->toBeInAnyKeyOrder(['app' => 'env', 'ip' => '127.0.0.1', 'count' => 5]);
+
+    $this->travel(WebhookDeliveries::REJECTION_LOG_MINUTES + 1)->minutes();
+
+    $forge();
+    $forge();
+
+    $rows = Activity::query()->where('description', 'webhook_signature_rejected')->orderBy('id')->get();
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]->properties['count'])->toBe(5)
+        ->and($rows[1]->properties['count'])->toBe(2);
+});
+
+test('forged deliveries are counted per app and per address', function () {
+    $this->freezeTime();
+    githubHookConfigureEnv('env-secret');
+    $app = githubHookApp();
+
+    githubHookPost(route('webhooks.github'), ['zen' => 'forged'], 'ping', 'wrong-secret')->assertStatus(401);
+    githubHookPost(route('webhooks.github'), ['zen' => 'forged'], 'ping', 'wrong-secret')->assertStatus(401);
+    githubHookPost(route('webhooks.github.app', $app), ['zen' => 'forged'], 'ping', 'wrong-secret')->assertStatus(401);
+
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9']);
+    githubHookPost(route('webhooks.github'), ['zen' => 'forged'], 'ping', 'wrong-secret')->assertStatus(401);
+
+    $rows = Activity::query()->where('description', 'webhook_signature_rejected')->orderBy('id')->get()->map(fn(Activity $row): array => [$row->properties['app'], $row->properties['ip'], $row->properties['count']]);
+
+    expect($rows->all())->toBe([
+        ['env', '127.0.0.1', 2],
+        [$app->id, '127.0.0.1', 1],
+        ['env', '203.0.113.9', 1],
+    ]);
 });

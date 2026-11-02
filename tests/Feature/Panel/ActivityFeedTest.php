@@ -100,6 +100,9 @@ test('application events are described in plain words and link to the applicatio
     'cron job added' => ['cron_job_added', ['schedule' => '0 3 * * *', 'description' => null, 'command' => 'php artisan backup:run'], 'Cron job added to shop, daily at 3:00 AM UTC'],
     'cron job changed' => ['cron_job_updated', ['schedule' => '*/5 * * * *', 'from' => '* * * * *', 'description' => null, 'command' => 'php artisan schedule:run'], 'Cron job changed on shop, runs every 5 minutes'],
     'cron job on a custom schedule' => ['cron_job_added', ['schedule' => '15 9-17 * * 1-5', 'description' => null, 'command' => 'php artisan prices:sync'], 'Cron job added to shop, on a custom schedule'],
+    'one rejected webhook' => ['webhook_signature_rejected', ['count' => 1], 'A webhook with a bad signature was rejected'],
+    'a rejected webhook from before the count' => ['webhook_signature_rejected', [], 'A webhook with a bad signature was rejected'],
+    'a burst of rejected webhooks' => ['webhook_signature_rejected', ['count' => 42], '42 webhooks with a bad signature were rejected'],
     'cron job removed' => ['cron_job_removed', ['schedule' => '0 3 * * *', 'description' => null, 'command' => 'php artisan backup:run'], 'Cron job removed from shop'],
 ]);
 

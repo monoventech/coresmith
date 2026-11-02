@@ -278,7 +278,7 @@ final class ActivityFeed
             SmartToggles::START_FAILED => [$this->text(($properties['label'] ?? 'A worker') . ' did not start on '), $this->mono($application?->name), $this->text(', so its toggle is off again')],
             'domain_added' => [$this->mono((string) ($properties['domain'] ?? '')), $this->text(' added to '), $this->mono($application?->name)],
             'port_block_moved' => [$this->mono($application?->name), $this->text(' moved to ports ' . (int) ($properties['to'] ?? 0) . '–' . ((int) ($properties['to'] ?? 0) + 9) . ', ' . ($properties['process'] ?? 'another process') . ' already listens on ' . (int) ($properties['port'] ?? 0))],
-            'webhook_signature_rejected' => [$this->text('A webhook with a bad signature was rejected')],
+            'webhook_signature_rejected' => [$this->text((int) ($properties['count'] ?? 1) > 1 ? ((int) $properties['count']) . ' webhooks with a bad signature were rejected' : 'A webhook with a bad signature was rejected')],
             'database_created' => [$this->text('Database '), $this->mono($database?->name), $this->text(' created')],
             'database_backed_up' => [$this->text('Backup taken of '), $this->mono($database?->name)],
             default => null,
