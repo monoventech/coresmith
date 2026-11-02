@@ -86,12 +86,12 @@
             Set a lifecycle rule on the bucket to expire old backups.
         </p>
         <div class="mt-auto flex gap-2 pt-3">
-            <Button variant="ghost" size="sm" onclick={edit}>Change</Button>
-            <Button variant="ghost" size="sm" onclick={() => (removing = true)}>Remove</Button>
+            <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={edit}>Change</Button>
+            <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={() => (removing = true)}>Remove</Button>
         </div>
     {:else}
         <div class="mt-auto">
-            <Button variant="outline" size="sm" onclick={edit}>Set up</Button>
+            <Button variant="outline" size="sm" class="max-sm:h-11" onclick={edit}>Set up</Button>
         </div>
     {/if}
 </div>

@@ -9,14 +9,35 @@
 
     let { tabs = [], label = 'Sections', class: className }: { tabs: Tab[]; label?: string; class?: string } = $props()
 
+    let nav = $state<HTMLElement | null>(null)
+
     const path = $derived(new URL(page.url, 'http://localhost').pathname)
+
+    $effect(() => {
+        void path
+
+        const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+
+        if (!nav || !active) {
+            return
+        }
+
+        const strip = nav.getBoundingClientRect()
+        const tab = active.getBoundingClientRect()
+
+        if (tab.right > strip.right) {
+            nav.scrollLeft += tab.right - strip.right
+        } else if (tab.left < strip.left) {
+            nav.scrollLeft -= strip.left - tab.left
+        }
+    })
 
     function pathOf(href: string): string {
         return new URL(href, 'http://localhost').pathname
     }
 </script>
 
-<nav class={cn('flex gap-5 overflow-x-auto border-b border-border', className)} aria-label={label}>
+<nav bind:this={nav} class={cn('flex gap-5 overflow-x-auto border-b border-border', className)} aria-label={label}>
     {#each tabs as tab (tab.href)}
         {@const current = tab.current ?? path === pathOf(tab.href)}
         <Link

@@ -35,6 +35,14 @@ test.describe('the billing tab on coresmith cloud', () => {
         await expect(page.getByRole('main')).toContainText('Coresmith Cloud plans are billed monthly, per team.')
     })
 
+    test('the billing tab is in view even where the tabs scroll', async ({ page }) => {
+        await page.goto('/monoven/settings/billing')
+
+        await expect(
+            page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Billing', exact: true })
+        ).toBeInViewport({ ratio: 0.9 })
+    })
+
     test('the palette shows the plan', async ({ page }) => {
         await page.goto('/monoven/dashboard')
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
