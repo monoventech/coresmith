@@ -26,6 +26,7 @@ use App\Models\ServerMetric;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\TeamDomain;
+use App\Models\TeamInvitation;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Services\Cloud\CloudCatalog;
@@ -65,6 +66,10 @@ final class E2ESeeder extends Seeder
     public const ACME_OWNER_EMAIL = 'elin@coresmith.test';
 
     public const ACME_MEMBER_EMAIL = 'tomas@coresmith.test';
+
+    public const WAITING_INVITATION_TOKEN = 'e2eWaitingInvitation00000000000000000000';
+
+    public const EXPIRED_INVITATION_TOKEN = 'e2eExpiredInvitation00000000000000000000';
 
     public const PASSWORD = 'password-for-e2e';
 
@@ -169,6 +174,7 @@ final class E2ESeeder extends Seeder
         $this->shortOfMemory('hot-01', '198.51.100.71');
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->auditFixtures();
+        $this->invitations($tenant->owner);
 
         $this->otherTeams($tenant->owner, $password);
 
@@ -293,6 +299,12 @@ final class E2ESeeder extends Seeder
             'provider_currency' => 'EUR',
             'host_key_fingerprint' => null,
         ]);
+    }
+
+    private function invitations(User $owner): void
+    {
+        TeamInvitation::factory()->for($this->team)->withToken(self::WAITING_INVITATION_TOKEN)->create(['email' => 'waiting@coresmith.test', 'invited_by' => $owner->id]);
+        TeamInvitation::factory()->for($this->team)->withToken(self::EXPIRED_INVITATION_TOKEN)->expired()->create(['email' => 'expired@coresmith.test', 'invited_by' => $owner->id]);
     }
 
     private function auditFixtures(): void

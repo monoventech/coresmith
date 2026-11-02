@@ -5,14 +5,17 @@ import {
     blockingViolations,
     dialog,
     expect,
+    EXPIRED_INVITATION,
     gotoApplication,
     gotoDatabase,
     gotoServer,
     gotoServerTab,
     openSecurity,
     openSetupWith,
+    own,
     test,
-    useTheme
+    useTheme,
+    WAITING_INVITATION
 } from './support/fixtures'
 
 test.use({ reducedMotion: 'reduce' })
@@ -240,6 +243,23 @@ const PAGES: [string, Visit][] = [
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],
     [
+        'Team settings right after an invitation is sent',
+        async (page) => {
+            const email = `${own(test.info(), 'a11y')}@coresmith.test`
+
+            await page.goto('/settings/team')
+            await page.getByRole('button', { name: 'Invite someone' }).click()
+            await dialog(page).getByLabel('Email address').fill(email)
+            await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
+            await page
+                .getByTestId('invitation-row')
+                .filter({ hasText: email })
+                .getByRole('button', { name: `Copy link for ${email}` })
+                .waitFor()
+        }
+    ],
+    ['Invitation for another account', direct(`/invitations/${WAITING_INVITATION}`)],
+    [
         'Add a provider dialog',
         async (page) => {
             await page.goto('/settings/team')
@@ -296,7 +316,9 @@ const GUEST_PAGES: [string, string][] = [
     ['Sign in', '/login'],
     ['Sign in to a team with single sign-on', '/northwind/login'],
     ['Single sign-on', '/sso'],
-    ['Forgot password', '/forgot-password']
+    ['Forgot password', '/forgot-password'],
+    ['Invitation', `/invitations/${WAITING_INVITATION}`],
+    ['Invitation that has expired', `/invitations/${EXPIRED_INVITATION}`]
 ]
 
 for (const theme of ['light', 'dark'] as const) {

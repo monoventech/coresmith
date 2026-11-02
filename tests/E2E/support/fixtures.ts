@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import type { Locator, Page, TestInfo } from '@playwright/test'
+import type { Browser, Locator, Page, TestInfo } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 
 export const test = base
@@ -23,6 +23,10 @@ export const PASSWORD = 'password-for-e2e'
 export const ORIGINAL_HOST_KEY = 'SHA256:AAAAoriginalkeyfingerprintAAAAAAAAAAAAAAAAAA'
 
 export const PRESENTED_HOST_KEY = 'SHA256:BBBBimpostorkeyfingerprintBBBBBBBBBBBBBBBBBB'
+
+export const WAITING_INVITATION = 'e2eWaitingInvitation00000000000000000000'
+
+export const EXPIRED_INVITATION = 'e2eExpiredInvitation00000000000000000000'
 
 const CODES: Record<string, string> = {
     chromium: 'chr',
@@ -142,6 +146,33 @@ export async function gotoSettings(
             'page'
         )
     }
+}
+
+export async function captureClipboard(page: Page) {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: async (text: string) => void Object.assign(window, { copied: text }) }
+        })
+    })
+}
+
+export async function clipboardText(page: Page): Promise<string> {
+    return page.evaluate(() => String(Reflect.get(window, 'copied') ?? ''))
+}
+
+export async function guestPage(browser: Browser, testInfo: TestInfo): Promise<Page> {
+    const { baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = testInfo.project.use
+    const context = await browser.newContext({
+        baseURL,
+        viewport,
+        userAgent,
+        deviceScaleFactor,
+        ...(isMobile ? { isMobile, hasTouch } : {}),
+        storageState: { cookies: [], origins: [] }
+    })
+
+    return context.newPage()
 }
 
 export async function backToMonoven(page: Page) {
