@@ -105,8 +105,11 @@ export async function tabStaysInViewAsTabsWiden(page: Page, url: string, label: 
 
     await expect(tab).toHaveAttribute('aria-current', 'page')
     await expectTabInView(tab)
+    await expect(main(page)).toHaveJSProperty('scrollTop', 0)
+    await strip.evaluate((element) => element.scrollIntoView({ block: 'nearest' }))
 
     const before = await width()
+    const top = await main(page).evaluate((element) => element.scrollTop)
 
     await strip.evaluate((element) => {
         element.style.height = `${element.offsetHeight}px`
@@ -117,7 +120,7 @@ export async function tabStaysInViewAsTabsWiden(page: Page, url: string, label: 
 
     await expect.poll(width).toBeGreaterThan(before)
     await expectTabInView(tab)
-    await expect(main(page)).toHaveJSProperty('scrollTop', 0)
+    await expect(main(page)).toHaveJSProperty('scrollTop', top)
 }
 
 export async function tabComesIntoViewAsStripNarrows(page: Page, url: string, label: string, name: string) {
