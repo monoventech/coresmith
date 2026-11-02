@@ -61,12 +61,12 @@
         "post-install-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
             "@php artisan app:setup --ansi",
-            "bun i && bun run build:ssr",
+            "bun i && bun run build",
             "@php artisan migrate:all --ansi"
         ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
-            "bun i && bun run build:ssr",
+            "bun i && bun run build",
             "@php artisan migrate:all --ansi"
         ],
         "post-root-package-install": [
@@ -93,11 +93,6 @@
             "@php artisan migrate --force",
             "bun install",
             "bun run build"
-        ],
-        "dev:ssr": [
-            "bun run build:ssr",
-            "Composer\\Config::disableProcessTimeout",
-            "bunx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"php artisan inertia:start-ssr\" --names=server,queue,logs,ssr --kill-others"
         ],
         "lint:check": [
             "pint --parallel --test"
