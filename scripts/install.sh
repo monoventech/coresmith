@@ -1165,7 +1165,7 @@ finalize() {
         setup_token="$(printf '%s\n' "$setup_output" | tail -1)"
     else
         printf '%s\n' "$setup_output" >>"$LOG_FILE"
-        warn "Could not issue a setup token. Run this on the server, then open the URL it prints:"
+        warn "Could not issue a setup token. Run this on the server, then open ${PANEL_URL}/install?token= followed by the token it prints:"
         warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"
     fi
 

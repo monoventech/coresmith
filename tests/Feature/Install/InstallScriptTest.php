@@ -133,6 +133,12 @@ test('the installer issues the token through artisan rather than minting its own
     expect(installScriptBody())->toContain('php artisan coresmith:setup-token --force');
 });
 
+test('a token the installer could not issue comes with the link to use it in', function () {
+    expect(installScriptBody())
+        ->toContain('warn "Could not issue a setup token. Run this on the server, then open ${PANEL_URL}/install?token= followed by the token it prints:"')
+        ->not->toContain('open the URL it prints');
+});
+
 test('secrets are written with restrictive permissions', function () {
     $body = installScriptBody();
 
