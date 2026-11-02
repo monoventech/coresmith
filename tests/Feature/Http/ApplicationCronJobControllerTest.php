@@ -62,7 +62,7 @@ test('an admin adds a cron job and it goes to the server with no deploy', functi
         ->assertRedirect($show)
         ->assertSessionHas('success', 'Saved. web-1 picks it up in a few seconds, no deployment needed.');
 
-    expect($application->fresh()->cron_jobs[1])->toBe(['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Nightly backup']);
+    expect($application->fresh()->cron_jobs[1])->toBeInAnyKeyOrder(['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Nightly backup']);
 
     Queue::assertPushed(SyncApplicationCron::class, 1);
 });
@@ -93,7 +93,7 @@ test('a pasted command keeps its lines and loses its Windows endings and outer b
         ->post(cronRouteStore($application), ['schedule' => "  0  3 * *\t* ", 'command' => "  php artisan report --since='1 day' \"\$(date)\"\r\necho \"100%\" # done  \r\n"])
         ->assertSessionHasNoErrors();
 
-    expect($application->fresh()->cron_jobs[1])->toBe(['schedule' => '0 3 * * *', 'command' => "php artisan report --since='1 day' \"\$(date)\"\necho \"100%\" # done"]);
+    expect($application->fresh()->cron_jobs[1])->toBeInAnyKeyOrder(['schedule' => '0 3 * * *', 'command' => "php artisan report --since='1 day' \"\$(date)\"\necho \"100%\" # done"]);
 });
 
 test('a command with an invisible control or direction character is refused', function (string $command) {
@@ -127,7 +127,7 @@ test('a page left open while the job changed elsewhere changes nothing and says 
     $this->actingAs($owner)->delete($stale)
         ->assertSessionHas('error', 'That cron job changed since this page loaded, so nothing was saved. Check the list and try again.');
 
-    expect($application->fresh()->cron_jobs)->toBe([['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
 
     Queue::assertNothingPushed();
 });
@@ -180,7 +180,7 @@ test('owners and admins change cron jobs, deployers cannot', function (string $a
 
     $response->assertForbidden();
 
-    expect($application->fresh()->cron_jobs)->toBe([['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
 
     Queue::assertNothingPushed();
 })->with(['store', 'update', 'destroy', 'sync'])->with([
@@ -244,7 +244,7 @@ test('a description is optional, short and on one line', function () {
     $this->actingAs($owner)->post(cronRouteStore($application), [...$job, 'description' => '   '])
         ->assertSessionHasNoErrors();
 
-    expect($application->fresh()->cron_jobs[1])->toBe($job);
+    expect($application->fresh()->cron_jobs[1])->toBeInAnyKeyOrder($job);
 });
 
 test('the same job twice is refused, and so is a second scheduler', function () {
@@ -265,7 +265,7 @@ test('the same job twice is refused, and so is a second scheduler', function () 
     $this->actingAs($owner)->put(cronRouteJob($application, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']), ['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'])
         ->assertSessionHasNoErrors();
 
-    expect($application->fresh()->cron_jobs)->toBe([['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'], $backup]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'], $backup]);
 });
 
 test('a job may share its schedule or its command with another, and may be renamed', function () {
@@ -278,7 +278,7 @@ test('a job may share its schedule or its command with another, and may be renam
     $this->actingAs($owner)->post(cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => 'php artisan prune'])->assertSessionHasNoErrors();
     $this->actingAs($owner)->put(cronRouteJob($application, $backup), [...$backup, 'description' => 'Nightly backup'])->assertSessionHasNoErrors();
 
-    expect($application->fresh()->cron_jobs)->toBe([
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([
         [...$backup, 'description' => 'Nightly backup'],
         ['schedule' => '0 4 * * *', 'command' => 'php artisan backup:run'],
         ['schedule' => '0 3 * * *', 'command' => 'php artisan prune'],
@@ -302,7 +302,7 @@ test('an app has at most 20 cron jobs', function () {
         ->put(cronRouteJob($application, $jobs[0]), ['schedule' => '0 3 * * *', 'command' => 'php artisan report:0'])
         ->assertSessionHasNoErrors();
 
-    expect($application->fresh()->cron_jobs[0])->toBe(['schedule' => '0 3 * * *', 'command' => 'php artisan report:0']);
+    expect($application->fresh()->cron_jobs[0])->toBeInAnyKeyOrder(['schedule' => '0 3 * * *', 'command' => 'php artisan report:0']);
 });
 
 test('removing one of two scheduler entries left from before leaves the toggle on', function () {
@@ -323,7 +323,7 @@ test('a job is changed in place by its id', function () {
         ->put(cronRouteJob($application, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']), ['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'])
         ->assertSessionHas('success', 'Saved. web-1 picks it up in a few seconds, no deployment needed.');
 
-    expect($application->fresh()->cron_jobs)->toBe([['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'], $backup]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'], $backup]);
 
     Queue::assertPushed(SyncApplicationCron::class, 1);
 });
@@ -350,7 +350,7 @@ test('removing a job takes it off the list and says when it stops', function () 
         ->delete(cronRouteJob($application, $backup))
         ->assertSessionHas('success', 'Removed. It stops running on web-1 in a few seconds.');
 
-    expect($application->fresh()->cron_jobs)->toBe([['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
 });
 
 test('an app without the scheduler hears nothing about the toggle when other jobs change', function () {

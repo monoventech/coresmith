@@ -88,7 +88,7 @@ test('the repository is read right after the clone and its versions are recorded
     $composer = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'composer install')));
 
     expect($probe)->toBeGreaterThan($archive)->toBeLessThan($composer)
-        ->and($deployment->fresh()->stack['runtimes']['php'])->toBe(['runtime' => 'php', 'version' => '8.4.20', 'source' => 'composer.json', 'detail' => '^8.4'])
+        ->and($deployment->fresh()->stack['runtimes']['php'])->toBeInAnyKeyOrder(['runtime' => 'php', 'version' => '8.4.20', 'source' => 'composer.json', 'detail' => '^8.4'])
         ->and($deployment->fresh()->log)->toContain('PHP 8.4.20 from composer.json (^8.4)');
 });
 

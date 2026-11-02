@@ -199,7 +199,7 @@ test('a subscribed team swaps to business at once, prorated', function () {
         ->and($update['items'][1]['deleted'])->toBe('true')
         ->and($update['proration_behavior'])->toBe('create_prorations')
         ->and($subscription->fresh()->stripe_price)->toBe('price_test_business')
-        ->and($changed?->properties->all())->toBe(['from' => 'pro', 'to' => 'business'])
+        ->and($changed?->properties->all())->toBeInAnyKeyOrder(['from' => 'pro', 'to' => 'business'])
         ->and($changed?->causer_id)->toBe($owner->getKey());
 });
 

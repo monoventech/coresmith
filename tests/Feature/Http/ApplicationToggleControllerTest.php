@@ -248,7 +248,7 @@ test('the scheduler can still be turned off when the app has 20 cron jobs', func
         ->put(toggleRouteUrl($application, 'scheduler'), ['on' => false])
         ->assertSessionHas('success');
 
-    expect($application->fresh()->cron_jobs)->toBe($jobs);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder($jobs);
 });
 
 test('the cron job limit only stops the scheduler', function () {

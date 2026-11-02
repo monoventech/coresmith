@@ -124,7 +124,7 @@ function reachabilityUpdates(Server $server, SSHTransport $transport): array
 
         return collect(DB::getQueryLog())
             ->pluck('query')
-            ->filter(fn(string $query): bool => str_starts_with($query, 'update "servers"'))
+            ->filter(fn(string $query): bool => str_starts_with($query, 'update ' . DB::getQueryGrammar()->wrapTable('servers')))
             ->values()
             ->all();
     } finally {
@@ -323,7 +323,7 @@ test('the answer that ends an outage clears it in one statement', function () {
     $updates = reachabilityUpdates($server, reachabilityHealthy());
 
     expect($updates)->toHaveCount(1)
-        ->and($updates[0])->toContain('"unreachable_since" is not null');
+        ->and($updates[0])->toContain(DB::getQueryGrammar()->wrap('unreachable_since') . ' is not null');
 });
 
 test('a stale view of an outage cannot announce the recovery twice', function () {

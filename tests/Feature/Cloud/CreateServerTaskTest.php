@@ -143,7 +143,7 @@ test('a new server is created once, booted, reached and handed to the audit', fu
         ->data->toMatchArray(['key_id' => null, 'uncertain' => 0])
         ->and($activity->subject?->is($server))->toBeTrue()
         ->and($activity->causer?->is($user))->toBeTrue()
-        ->and($activity->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1', 'seconds' => 200])
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1', 'seconds' => 200])
         ->and(array_values(array_unique(app(CloudApiFactory::class)->accounts())))->toBe([(string) $account->getKey()])
         ->and(in_array(CreateServerTask::SETTLE_PROBE, $this->transport->commands(), true))->toBeTrue()
         ->and($this->transport->connected())->toBeFalse()
@@ -244,7 +244,7 @@ test('a refused create says what to do and removes the uploaded key', function (
         ->provider_server_id->toBeNull()
         ->provisioning_log->toContain("failed: {$reason}")
         ->and($activity->subject?->is($server))->toBeTrue()
-        ->and($activity->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'step' => 'create', 'reason' => $reason])
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'step' => 'create', 'reason' => $reason])
         ->and(Activity::query()->where('description', 'server_created_at_provider')->exists())->toBeFalse();
     Sleep::assertNeverSlept();
     Queue::assertNothingPushed();

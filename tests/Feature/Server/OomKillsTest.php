@@ -63,7 +63,7 @@ test('a kill is logged once against the app it belongs to, with its process and 
     $kills = Activity::query()->where('description', 'app_oom_killed')->get();
 
     expect($kills)->toHaveCount(2)
-        ->and($kills->firstWhere('subject_id', $shop->id)->properties->toArray())->toBe(['process' => 'web', 'at' => '2026-09-14T09:59:10+00:00', 'limit_mb' => 512])
+        ->and($kills->firstWhere('subject_id', $shop->id)->properties->toArray())->toBeInAnyKeyOrder(['process' => 'web', 'at' => '2026-09-14T09:59:10+00:00', 'limit_mb' => 512])
         ->and($kills->where('subject_id', '!=', $shop->id)->first()->properties['process'])->toBe('web');
 });
 

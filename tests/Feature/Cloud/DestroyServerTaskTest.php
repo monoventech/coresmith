@@ -63,7 +63,7 @@ test('destroying deletes the instance and removes the server once the provider c
         ->and(Server::query()->find($server->id))->toBeNull()
         ->and(Server::withTrashed()->find($server->id))->not->toBeNull()
         ->and($activity->causer_id)->toBe($by)
-        ->and($activity->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'size' => 'cx22']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'size' => 'cx22']);
 });
 
 test('an instance whose id was never saved is found by its tag and destroyed', function () {

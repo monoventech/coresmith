@@ -215,7 +215,7 @@ test('disk at 95% sends the critical mail even after today\'s warning', function
     $rows = Activity::query()->where('description', 'disk_pressure')->oldest('id')->get();
 
     expect($rows)->toHaveCount(2)
-        ->and($rows[1]->properties->toArray())->toBe(['percent' => 96, 'level' => 'critical']);
+        ->and($rows[1]->properties->toArray())->toBeInAnyKeyOrder(['percent' => 96, 'level' => 'critical']);
 });
 
 test('a warning row without a level still counts as today\'s warning', function () {

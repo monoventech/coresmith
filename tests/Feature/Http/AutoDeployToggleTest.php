@@ -85,7 +85,7 @@ test('turning auto deploy on and off saves it and clears the last check', functi
         ->assertSessionHas('success', 'Saved. Auto deploy is on, main deploys whenever it changes.');
 
     expect($application->fresh()->only(['quick_deploy', 'polled_at', 'poll_error']))->toBe(['quick_deploy' => true, 'polled_at' => null, 'poll_error' => null])
-        ->and(Activity::query()->where('description', 'toggle_changed')->sole()->properties->toArray())->toBe(['toggle' => 'auto_deploy', 'label' => 'Auto deploy', 'on' => true]);
+        ->and(Activity::query()->where('description', 'toggle_changed')->sole()->properties->toArray())->toBeInAnyKeyOrder(['toggle' => 'auto_deploy', 'label' => 'Auto deploy', 'on' => true]);
 
     Queue::assertNotPushed(DeployApplication::class);
 

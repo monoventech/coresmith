@@ -273,7 +273,7 @@ test('inviting and revoking are recorded, without the link', function () {
     $entries = Activity::query()->where('subject_id', $team->getKey())->orderBy('id')->get();
 
     expect($entries->pluck('description')->all())->toBe(['member_invited', 'invitation_revoked'])
-        ->and($entries->pluck('properties')->map->all()->all())->toBe([
+        ->and($entries->pluck('properties')->map->all()->all())->toBeInAnyKeyOrder([
             ['email' => 'new@example.com', 'role' => 'admin'],
             ['email' => 'new@example.com'],
         ])

@@ -119,7 +119,7 @@ test('creating the account joins the team with the invited role and opens its fl
         ->and($invitation->fresh()->accepted_at)->not->toBeNull()
         ->and($entry->causer_id)->toBe($user->id)
         ->and($entry->subject_id)->toBe($invitation->team_id)
-        ->and($entry->properties->all())->toBe(['email' => 'newcomer@example.com', 'role' => 'admin'])
+        ->and($entry->properties->all())->toBeInAnyKeyOrder(['email' => 'newcomer@example.com', 'role' => 'admin'])
         ->and(Queue::pushed(SyncAuthorizedKeys::class)->map->uniqueId()->all())->toBe([$server->id]);
 });
 

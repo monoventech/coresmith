@@ -56,7 +56,7 @@ test('phase 1 persists the detected os and hardware', function () {
 
     expect($fresh->os_name)->toBe('ubuntu')
         ->and($fresh->os_version)->toBe('24.04')
-        ->and($fresh->meta)->toBe(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40]);
+        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40]);
 });
 
 test('phase 2 installs base packages through the abstraction', function () {
@@ -393,7 +393,7 @@ test('a provision that stops says which phase, once', function () {
 
     expect($rows)->toHaveCount(1)
         ->and($rows[0]->subject_id)->toBe($server->id)
-        ->and($rows[0]->properties->toArray())->toBe(['phase' => 2, 'name' => 'Base system']);
+        ->and($rows[0]->properties->toArray())->toBeInAnyKeyOrder(['phase' => 2, 'name' => 'Base system']);
 });
 
 test('a job that dies outside handle says which phase it stopped in', function () {
@@ -404,7 +404,7 @@ test('a job that dies outside handle says which phase it stopped in', function (
 
     Event::assertDispatchedTimes(ServerProvisioningFailed::class, 1);
     Event::assertDispatched(ServerProvisioningFailed::class, fn(ServerProvisioningFailed $event): bool => $event->phase === 4 && $event->phaseName === 'Directories');
-    expect(Activity::query()->where('description', 'provisioning_failed')->sole()->properties->toArray())->toBe(['phase' => 4, 'name' => 'Directories']);
+    expect(Activity::query()->where('description', 'provisioning_failed')->sole()->properties->toArray())->toBeInAnyKeyOrder(['phase' => 4, 'name' => 'Directories']);
 });
 
 test('installing the base packages gets twenty minutes, not the ten every other command gets', function () {

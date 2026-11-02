@@ -86,7 +86,7 @@ test('a disk at or above eighty percent is logged as disk pressure with a whole 
     $activity = Activity::query()->where('description', 'disk_pressure')->sole();
 
     expect($activity->subject_id)->toBe($connection->server()->id)
-        ->and($activity->properties->toArray())->toBe(['percent' => $logged, 'level' => $level]);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['percent' => $logged, 'level' => $level]);
 })->with([
     'exactly eighty' => [80, 80, 'warning'],
     'rounded up' => [87.6, 88, 'warning'],

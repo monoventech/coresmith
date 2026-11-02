@@ -835,9 +835,15 @@ test('a failed query keeps its sql placeholders and loses its bound values', fun
 
     $value = SentryScrubber::beforeSend($event, EventHint::fromArray(['exception' => $failure]))->getExceptions()[0]->getValue();
 
+    $grammar = DB::getQueryGrammar();
+
     expect($failure->getMessage())->toContain('maya@monoven.io')
-        ->and($value)->toContain(DB::getDriverName() === 'pgsql' ? 'duplicate key value violates unique constraint "users_email_unique"' : 'UNIQUE constraint failed: users.email')
-        ->toContain('insert into "users" ("id", "name", "email", "password") values (?, ?, ?, ?)')
+        ->and($value)->toContain(match (DB::getDriverName()) {
+            'pgsql' => 'duplicate key value violates unique constraint "users_email_unique"',
+            'mysql', 'mariadb' => "Duplicate entry '?' for key",
+            default => 'UNIQUE constraint failed: users.email',
+        })
+        ->toContain('insert into ' . $grammar->wrapTable('users') . ' (' . $grammar->columnize(['id', 'name', 'email', 'password']) . ') values (?, ?, ?, ?)')
         ->not->toContain('maya@monoven.io')
         ->not->toContain('Maya Okafor')
         ->not->toContain('$2y$04$');

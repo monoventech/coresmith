@@ -589,7 +589,7 @@ test('an end-of-life version is refused until the choice is confirmed, and the c
         ->post(route('servers.applications.store', $server), payload(['runtime_version' => '8.1', 'acknowledge_eol' => true]))
         ->assertSessionHasNoErrors();
 
-    expect(Activity::query()->where('description', 'runtime_eol_chosen')->sole()->properties->toArray())->toBe(['runtime' => 'php', 'line' => '8.1']);
+    expect(Activity::query()->where('description', 'runtime_eol_chosen')->sole()->properties->toArray())->toBeInAnyKeyOrder(['runtime' => 'php', 'line' => '8.1']);
 });
 
 test('a version the runtime does not have is refused', function () {

@@ -160,7 +160,7 @@ test('every applied toggle is logged with its key, label and new state', functio
     $activity = Activity::query()->where('description', 'toggle_changed')->sole();
 
     expect($activity->subject_id)->toBe($application->id)
-        ->and($activity->properties->toArray())->toBe(['toggle' => 'scheduler', 'label' => 'Scheduler', 'on' => true]);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['toggle' => 'scheduler', 'label' => 'Scheduler', 'on' => true]);
 });
 
 test('turning the queue worker on adds a worker that names no php version and keeps the others', function () {
@@ -225,7 +225,7 @@ test('turning the scheduler on adds a minutely schedule run and keeps other cron
 
     togglesService()->apply($application, SmartToggles::SCHEDULER, true);
 
-    expect($application->fresh()->cron_jobs)->toBe([
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([
         ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'],
         ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
     ]);

@@ -650,7 +650,7 @@ test('a task is kept on the server in the shape the panel reads', function () {
 
     $task = CloudTask::start($server, CloudTask::CREATE, 'create', ['region_label' => 'Falkenstein'], $user);
 
-    expect($server->fresh()->provider_task)->toBe([
+    expect($server->fresh()->provider_task)->toBeInAnyKeyOrder([
         'type' => 'create',
         'state' => 'running',
         'step' => 'create',
@@ -670,7 +670,7 @@ test('a task is kept on the server in the shape the panel reads', function () {
     $this->travel(20)->seconds();
     CloudTask::finish($server);
 
-    expect($server->fresh()->provider_task)->toBe([
+    expect($server->fresh()->provider_task)->toBeInAnyKeyOrder([
         'type' => 'create',
         'state' => 'done',
         'step' => 'boot',

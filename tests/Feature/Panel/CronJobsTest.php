@@ -50,13 +50,13 @@ test('adding a job keeps the others, records who added what, and sends the list 
 
     $entry = cronJobsService()->add($application, ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Nightly backup']);
 
-    expect($application->fresh()->cron_jobs)->toBe([
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([
         ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
         ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Nightly backup'],
     ])
         ->and($entry['id'])->toBe(CronJobs::id($entry))
         ->and($application->fresh()->cron_pending_since)->not->toBeNull()
-        ->and(Activity::query()->where('description', CronJobs::ADDED)->sole()->properties->toArray())->toBe(['schedule' => '0 3 * * *', 'description' => 'Nightly backup', 'command' => 'php artisan backup:run']);
+        ->and(Activity::query()->where('description', CronJobs::ADDED)->sole()->properties->toArray())->toBeInAnyKeyOrder(['schedule' => '0 3 * * *', 'description' => 'Nightly backup', 'command' => 'php artisan backup:run']);
 
     Queue::assertPushed(SyncApplicationCron::class, 1);
 });
@@ -66,7 +66,7 @@ test('a job with no description is stored without one', function () {
 
     cronJobsService()->add($application, ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => null]);
 
-    expect($application->fresh()->cron_jobs)->toBe([['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']]);
 });
 
 test('changing a job keeps its place in the list', function () {
@@ -79,13 +79,13 @@ test('changing a job keeps its place in the list', function () {
 
     $updated = cronJobsService()->update($application, CronJobs::id($jobs[1]), ['schedule' => '30 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Backup']);
 
-    expect($application->fresh()->cron_jobs)->toBe([
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([
         $jobs[0],
         ['schedule' => '30 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Backup'],
         $jobs[2],
     ])
         ->and($updated['id'])->toBe(CronJobs::id($updated))
-        ->and(Activity::query()->where('description', CronJobs::UPDATED)->sole()->properties->toArray())->toBe(['schedule' => '30 3 * * *', 'from' => '0 3 * * *', 'description' => 'Backup', 'command' => 'php artisan backup:run']);
+        ->and(Activity::query()->where('description', CronJobs::UPDATED)->sole()->properties->toArray())->toBeInAnyKeyOrder(['schedule' => '30 3 * * *', 'from' => '0 3 * * *', 'description' => 'Backup', 'command' => 'php artisan backup:run']);
 
     Queue::assertPushed(SyncApplicationCron::class, 1);
 });
@@ -159,7 +159,7 @@ test('removing a job keeps the rest in order', function () {
 
     cronJobsService()->remove($application, CronJobs::id($jobs[0]));
 
-    expect($application->fresh()->cron_jobs)->toBe([$jobs[1], $jobs[2]]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([$jobs[1], $jobs[2]]);
 });
 
 test('the feed keeps the first 300 characters of a command, with secrets taken out', function () {
@@ -185,7 +185,7 @@ test('removing the last job leaves no list at all', function () {
 
     expect($removed['command'])->toBe('php artisan schedule:run')
         ->and($application->fresh()->cron_jobs)->toBeNull()
-        ->and(Activity::query()->where('description', CronJobs::REMOVED)->sole()->properties->toArray())->toBe(['schedule' => '* * * * *', 'description' => null, 'command' => 'php artisan schedule:run']);
+        ->and(Activity::query()->where('description', CronJobs::REMOVED)->sole()->properties->toArray())->toBeInAnyKeyOrder(['schedule' => '* * * * *', 'description' => null, 'command' => 'php artisan schedule:run']);
 
     Queue::assertPushed(SyncApplicationCron::class, 1);
 });
@@ -206,11 +206,11 @@ test('the scheduler is turned on and off through the same list, and the second c
 
     cronJobsService()->enableScheduler($application);
 
-    expect($application->fresh()->cron_jobs)->toBe([$backup, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([$backup, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]);
 
     cronJobsService()->disableScheduler($application->fresh());
 
-    expect($application->fresh()->cron_jobs)->toBe([$backup])
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder([$backup])
         ->and(cronJobsLogged())->toBe(0);
 
     Queue::assertPushed(SyncApplicationCron::class, 1);

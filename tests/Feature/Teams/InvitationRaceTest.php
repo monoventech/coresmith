@@ -107,7 +107,7 @@ test('a request that loses the race to join lands on the invitation', function (
     $user = User::factory()->create(['email' => 'new@example.com']);
 
     DB::connection()->beforeExecuting(function (string $query): void {
-        if (str_starts_with($query, 'select') && str_contains($query, '"team_invitations"."id" = ?')) {
+        if (str_starts_with($query, 'select') && str_contains($query, DB::getQueryGrammar()->wrap('team_invitations.id') . ' = ?')) {
             throw invitationRaceFailure('SQLSTATE[HY000]: General error: 5 database is locked');
         }
     });

@@ -35,6 +35,26 @@ expect()->extend('toBeOne', function () {
     return $this->toBe(1);
 });
 
+expect()->extend('toBeInAnyKeyOrder', function (array $expected) {
+    $sorted = function (mixed $value) use (&$sorted): mixed {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        $value = array_map($sorted, $value);
+
+        if (!array_is_list($value)) {
+            ksort($value, SORT_STRING);
+        }
+
+        return $value;
+    };
+
+    expect($sorted($this->value))->toBe($sorted($expected));
+
+    return $this;
+});
+
 /*
 |--------------------------------------------------------------------------
 | Functions

@@ -78,7 +78,7 @@ test('each missing runtime is installed, checked and recorded, then the deploy r
         ->and($commands)->toContain('asdf install')
         ->and($commands)->toContain("test -x '/opt/asdf-data/installs/php/8.5.10/sbin/php-fpm'")
         ->and($commands)->toContain("test -x '/opt/asdf-data/installs/bun/1.4.2/bin/bun'")
-        ->and($deployment->application->server->fresh()->installed_runtimes)->toBe(['php' => ['8.5.10'], 'bun' => ['1.4.2']])
+        ->and($deployment->application->server->fresh()->installed_runtimes)->toBeInAnyKeyOrder(['php' => ['8.5.10'], 'bun' => ['1.4.2']])
         ->and($deployment->fresh()->log)->toContain('deps: installing PHP 8.5.10, compiling it, usually 5–15 minutes the first time')
         ->and($deployment->fresh()->log)->toContain('Bun 1.4.2 is installed')
         ->and(Cache::lock('deploy:' . $deployment->application_id, 10)->get())->toBeFalse();

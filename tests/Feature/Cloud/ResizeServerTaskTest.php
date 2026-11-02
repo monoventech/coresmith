@@ -113,7 +113,7 @@ test('a hetzner-style resize shuts down, changes, starts and signs back in', fun
         ->and($server->meta['cpu_cores'])->toBe(4)
         ->and($server->last_connected_at)->not->toBeNull()
         ->and(CloudTask::of($server)->state)->toBe(CloudTask::DONE)
-        ->and($activity->properties->toArray())->toBe(['from' => 'cx22', 'to' => 'cx32', 'provider' => 'Hetzner Cloud'])
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['from' => 'cx22', 'to' => 'cx32', 'provider' => 'Hetzner Cloud'])
         ->and($activity->causer_id)->toBe($by)
         ->and((string) $server->provisioning_log)->toContain('resized from cx22 to cx32');
 });
@@ -156,7 +156,7 @@ test('a refused size starts the server again and says nothing else changed', fun
         ->and($task->error)->toBe('Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. outpost-02 was started again on cx22.')
         ->and($server->fresh()->provider_size)->toBe('cx22')
         ->and(Activity::query()->where('description', 'server_resize_failed')->sole()->properties->toArray())
-        ->toBe(['from' => 'cx22', 'to' => 'cx32', 'reason' => 'Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. outpost-02 was started again on cx22.']);
+        ->toBeInAnyKeyOrder(['from' => 'cx22', 'to' => 'cx32', 'reason' => 'Hetzner Cloud refused the request. Hetzner Cloud said: no capacity. outpost-02 was started again on cx22.']);
 });
 
 test('a refused size on a provider that keeps the power on fails without touching it', function () {

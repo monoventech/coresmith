@@ -76,7 +76,7 @@ test('an admin connects an account once the provider accepts its token', functio
         ->and($account->type)->toBe(CloudProviderType::Hetzner)
         ->and($account->account_label)->toBe('Monoven project')
         ->and($account->verified_at)->not->toBeNull()
-        ->and(Activity::query()->where('description', 'cloud_provider_connected')->sole()->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'name' => 'Hetzner Cloud']);
+        ->and(Activity::query()->where('description', 'cloud_provider_connected')->sole()->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'name' => 'Hetzner Cloud']);
 });
 
 test('the token is checked against hetzner itself', function () {
@@ -277,7 +277,7 @@ test('a replacement token clears the refusal and the cached catalog', function (
         ->and($fresh->token_failed_at)->toBeNull()
         ->and($fresh->verified_at->isToday())->toBeTrue()
         ->and(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse()
-        ->and(Activity::query()->where('description', 'cloud_provider_token_replaced')->sole()->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'name' => $account->name]);
+        ->and(Activity::query()->where('description', 'cloud_provider_token_replaced')->sole()->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'name' => $account->name]);
 });
 
 test('renaming an account checks nothing at the provider', function () {
@@ -336,7 +336,7 @@ test('removing an account forgets its token first', function () {
     expect(DB::table('cloud_providers')->where('id', $account->id)->value('api_token'))->toBeNull()
         ->and($account->fresh()->trashed())->toBeTrue()
         ->and(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse()
-        ->and(Activity::query()->where('description', 'cloud_provider_removed')->sole()->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'name' => $account->name]);
+        ->and(Activity::query()->where('description', 'cloud_provider_removed')->sole()->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'name' => $account->name]);
 });
 
 test('the team page lists accounts without ever sending a token', function () {

@@ -118,7 +118,7 @@ test('a rollback is logged with where it came from and where it went', function 
     $activity = Activity::query()->where('description', 'application_rolled_back')->sole();
 
     expect($activity->subject_id)->toBe($application->id)
-        ->and($activity->properties->toArray())->toBe(['from' => '20260913-120000', 'to' => '20260911-100000', 'runtimes' => 'unchanged']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['from' => '20260913-120000', 'to' => '20260911-100000', 'runtimes' => 'unchanged']);
 });
 
 test('a named release that is no longer on disk is refused and nothing is swapped', function () {
@@ -236,7 +236,7 @@ test('a rollback where only a worker does not start keeps the app live and names
 
     expect($application->fresh()->status)->toBe(ApplicationStatus::Active)
         ->and($application->fresh()->current_release)->toBe('20260911-100000')
-        ->and($activity->properties->toArray())->toBe([
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder([
             'from' => '20260913-120000',
             'to' => '20260911-100000',
             'worker' => 'Queue worker',

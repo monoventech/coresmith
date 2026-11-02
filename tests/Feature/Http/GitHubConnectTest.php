@@ -495,7 +495,7 @@ test('linking is recorded without the user token', function () {
 
     expect($activity->subject?->is(SourceProvider::sole()))->toBeTrue()
         ->and($activity->causer?->is($owner))->toBeTrue()
-        ->and($activity->properties->all())->toBe(['installation_id' => '51842', 'account' => 'monoventech', 'app' => $app->id])
+        ->and($activity->properties->all())->toBeInAnyKeyOrder(['installation_id' => '51842', 'account' => 'monoventech', 'app' => $app->id])
         ->and(json_encode($activity->properties))->not->toContain('ghu_user_token')
         ->and(json_encode($activity->properties))->not->toContain('c0de');
 });

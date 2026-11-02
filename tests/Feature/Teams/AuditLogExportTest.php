@@ -189,7 +189,7 @@ test('membership changes are recorded', function () {
     $entries = Activity::query()->where('subject_id', $team->getKey())->orderBy('id')->get();
 
     expect($entries->pluck('description')->all())->toBe(['member_invited', 'member_added', 'member_role_changed', 'member_removed'])
-        ->and($entries->pluck('properties')->map->all()->all())->toBe([
+        ->and($entries->pluck('properties')->map->all()->all())->toBeInAnyKeyOrder([
             ['email' => 'newcomer@example.test', 'role' => 'member'],
             ['email' => 'newcomer@example.test', 'role' => 'member'],
             ['email' => 'newcomer@example.test', 'from' => 'member', 'to' => 'admin'],

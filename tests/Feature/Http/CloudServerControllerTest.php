@@ -97,7 +97,7 @@ test('an admin provisions a server through a connected account', function () {
         ->and($task->by)->toBe($user->id)
         ->and($task->data)->toMatchArray(['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)'])
         ->and($server->provisioning_log)->toContain('creating outpost-02 at Hetzner Cloud, cx22 in fsn1 with Ubuntu 24.04')
-        ->and(Activity::query()->where('description', 'server_creation_started')->sole()->properties->toArray())->toBe(['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1']);
+        ->and(Activity::query()->where('description', 'server_creation_started')->sole()->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'size' => 'cx22', 'region' => 'fsn1']);
 
     Queue::assertPushed(RunCloudTask::class, 1);
 });
@@ -544,7 +544,7 @@ test('an admin starts a resize', function () {
 
     expect($task->type)->toBe(CloudTask::RESIZE)
         ->and($task->step)->toBe('power_off')
-        ->and($task->data)->toBe(['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true])
+        ->and($task->data)->toBeInAnyKeyOrder(['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true])
         ->and($task->by)->toBe((string) $user->id)
         ->and((string) $server->fresh()->provisioning_log)->toContain('resizing outpost-02 from cx22 to cx32 at Hetzner Cloud');
 

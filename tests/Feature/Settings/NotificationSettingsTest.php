@@ -69,7 +69,7 @@ test('a preference can be turned on and off and is stored with the rest', functi
         ->put(route('settings.notifications.update'), ['key' => 'disk_pressure', 'on' => false])
         ->assertSessionHas('success', 'Saved.');
 
-    expect($user->fresh()->notification_preferences)->toBe([
+    expect($user->fresh()->notification_preferences)->toBeInAnyKeyOrder([
         'deploy_failed' => true,
         'disk_pressure' => false,
         'server_alerts' => true,

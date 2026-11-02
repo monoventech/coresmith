@@ -36,7 +36,7 @@ test('an app whose block another process uses moves to a free block and says why
 
     $activity = Activity::query()->where('description', 'port_block_moved')->sole();
 
-    expect($activity->properties->toArray())->toBe(['from' => 8000, 'to' => 8010, 'port' => 8005, 'process' => 'java']);
+    expect($activity->properties->toArray())->toBeInAnyKeyOrder(['from' => 8000, 'to' => 8010, 'port' => 8005, 'process' => 'java']);
 });
 
 test('two listeners in two consecutive blocks push the app past both', function () {

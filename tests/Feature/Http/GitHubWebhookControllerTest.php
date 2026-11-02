@@ -157,7 +157,7 @@ test('an unsigned or wrongly signed delivery is refused and recorded', function 
     $activity = Activity::query()->where('description', 'webhook_signature_rejected')->sole();
 
     expect($activity->subject?->is($app))->toBeTrue()
-        ->and($activity->properties->toArray())->toBe(['app' => $app->id, 'ip' => '127.0.0.1']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app' => $app->id, 'ip' => '127.0.0.1']);
 })->with([
     'unsigned' => ['hook-secret', ''],
     'a made up digest' => ['hook-secret', 'sha256=deadbeef'],
@@ -188,7 +188,7 @@ test('the per app webhook records a rejected signature the way the app webhook d
     $activity = Activity::query()->where('description', 'webhook_signature_rejected')->sole();
 
     expect($activity->subject?->is($endpoint))->toBeTrue()
-        ->and($activity->properties->toArray())->toBe(['provider' => 'github', 'ip' => '127.0.0.1']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'github', 'ip' => '127.0.0.1']);
 });
 
 test('a delivery signed for one app is refused by another', function () {
@@ -344,7 +344,7 @@ test('a forged delivery to the environment app is refused and recorded against n
 
     expect($activity->subject_type)->toBeNull()
         ->and($activity->subject_id)->toBeNull()
-        ->and($activity->properties->toArray())->toBe(['app' => 'env', 'ip' => '127.0.0.1']);
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app' => 'env', 'ip' => '127.0.0.1']);
 });
 
 test('a delivery id is only a replay for the environment app when it was sent there', function () {

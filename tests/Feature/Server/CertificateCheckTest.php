@@ -206,7 +206,7 @@ test('an expiring certificate is logged and emailed once a day per domain', func
     certificateRun($application->server, $transport);
 
     expect(Activity::query()->where('description', 'certificate_expiring')->count())->toBe(2)
-        ->and(Activity::query()->where('description', 'certificate_expiring')->pluck('properties')->map->toArray()->sortBy('domain')->values()->all())->toBe([
+        ->and(Activity::query()->where('description', 'certificate_expiring')->pluck('properties')->map->toArray()->sortBy('domain')->values()->all())->toBeInAnyKeyOrder([
             ['domain' => 'a.example.com', 'days' => 5],
             ['domain' => 'b.example.com', 'days' => -2],
         ]);

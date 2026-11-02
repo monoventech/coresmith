@@ -177,7 +177,7 @@ test('a worker turned on by its toggle is checked once it has started, and only 
         ->and(implode("\n", $commands))->not->toContain("systemctl is-active 'coresmith-app-shop-fpm'")
         ->and(implode("\n", $commands))->not->toContain("systemctl is-active 'coresmith-app-shop-horizon'")
         ->and(collect($application->fresh()->processes)->pluck('name')->all())->toBe(['horizon', 'queue'])
-        ->and(Activity::query()->where('description', 'toggle_started')->sole()->properties->toArray())->toBe(['toggle' => 'queue_worker', 'label' => 'Queue worker'])
+        ->and(Activity::query()->where('description', 'toggle_started')->sole()->properties->toArray())->toBeInAnyKeyOrder(['toggle' => 'queue_worker', 'label' => 'Queue worker'])
         ->and(Activity::query()->where('description', 'toggle_start_failed')->exists())->toBeFalse();
 });
 

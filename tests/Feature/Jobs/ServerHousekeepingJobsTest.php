@@ -136,7 +136,7 @@ test('pruning a server runs once per application and logs the total removed', fu
 
     expect($transport->commands())->toHaveCount(2)
         ->and($activity->subject_id)->toBe($server->id)
-        ->and($activity->properties->toArray())->toBe(['removed' => 5, 'kept' => ReleasePaths::KEEP_RELEASES])
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['removed' => 5, 'kept' => ReleasePaths::KEEP_RELEASES])
         ->and($transport->connected())->toBeFalse();
 });
 
