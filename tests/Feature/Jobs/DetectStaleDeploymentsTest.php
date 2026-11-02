@@ -14,7 +14,9 @@ use App\Models\Server;
 use App\Models\User;
 use App\Services\AutoDeploy\AutoDeploy;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
@@ -592,4 +594,96 @@ test('a queued deploy that has a start time is not one the sweep calls never sta
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Pending);
 
     Event::assertNotDispatched(DeploymentFailed::class);
+});
+
+function staleQueueOnDatabase(string $table = 'jobs'): void
+{
+    config([
+        'queue.default' => 'database',
+        'queue.connections.database.connection' => config('database.default'),
+        'queue.connections.database.table' => $table,
+    ]);
+}
+
+function staleWaitingDeploy(int $minutesAgo, string $queue = 'deployments', bool $reserved = false): void
+{
+    test()->travel(-$minutesAgo)->minutes();
+    DeployApplication::dispatch(Deployment::factory()->succeeded()->create(), now()->format('Ymd-His'))->onQueue($queue);
+    test()->travelBack();
+
+    if ($reserved) {
+        DB::table('jobs')->latest('id')->limit(1)->update(['reserved_at' => now()->subMinutes($minutesAgo)->getTimestamp(), 'attempts' => 1]);
+    }
+}
+
+test('an older deploy still waiting on the queue keeps a deploy queued twenty minutes ago pending', function () {
+    Event::fake([DeploymentFailed::class]);
+    staleQueueOnDatabase();
+    staleWaitingDeploy(25);
+    $deployment = staleQueuedDeployment(20);
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Pending);
+
+    Event::assertNotDispatched(DeploymentFailed::class);
+});
+
+test('a deploy queued within a minute of the oldest waiting job may still be behind it, so it is left pending', function () {
+    Event::fake([DeploymentFailed::class]);
+    staleQueueOnDatabase();
+    $deployment = staleQueuedDeployment(20);
+    staleWaitingDeploy(19);
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Pending);
+});
+
+test('a deploy past the window is failed when no waiting job can be its own', function (?int $newerJob, string $queue, bool $reserved) {
+    Event::fake([DeploymentFailed::class]);
+    staleQueueOnDatabase();
+    $deployment = staleQueuedDeployment(16);
+
+    if ($newerJob !== null) {
+        staleWaitingDeploy($newerJob, $queue, $reserved);
+    }
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($deployment->fresh()->failure_reason)->toBe('This deploy was queued 16 minutes ago and never started, so Coresmith stopped waiting for it. Deploy again.');
+
+    Event::assertDispatchedTimes(DeploymentFailed::class, 1);
+})->with([
+    'an empty queue' => [null, 'deployments', false],
+    'a queue holding only newer jobs' => [2, 'deployments', false],
+    'an older job on another queue' => [30, 'default', false],
+    'an older job a worker reserved' => [30, 'deployments', true],
+]);
+
+test('a deploy is failed only after an hour when the queue cannot be read', function (int $minutes, DeploymentStatus $status) {
+    Event::fake([DeploymentFailed::class]);
+    Exceptions::fake();
+    staleQueueOnDatabase('no_such_jobs');
+    $deployment = staleQueuedDeployment($minutes);
+
+    (new DetectStaleDeployments)->handle();
+
+    expect($deployment->fresh()->status)->toBe($status);
+
+    Exceptions::assertReported(QueryException::class);
+})->with([
+    'fifty-nine minutes' => [59, DeploymentStatus::Pending],
+    'sixty-one minutes' => [61, DeploymentStatus::Failed],
+]);
+
+test('the queue is not read when no deploy is waiting past the window', function () {
+    staleQueueOnDatabase('no_such_jobs');
+    Exceptions::fake();
+    staleQueuedDeployment(5);
+
+    (new DetectStaleDeployments)->handle();
+
+    Exceptions::assertNothingReported();
 });

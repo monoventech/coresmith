@@ -79,6 +79,8 @@ final class DeployApplication implements ShouldQueue
 
     public const TIMEOUT = 780;
 
+    public const QUEUE = 'deployments';
+
     public const LOCK_SECONDS = 10800;
 
     public const DISK_ABORT_PERCENT = 95;
@@ -118,7 +120,7 @@ final class DeployApplication implements ShouldQueue
         private readonly string $timestamp,
         private readonly ?string $lockOwner = null,
     ) {
-        $this->onQueue('deployments');
+        $this->onQueue(self::QUEUE);
     }
 
     public function handle(SSHConnectionManager $connections, DeploymentCommands $commands): void
