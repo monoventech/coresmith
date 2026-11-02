@@ -104,7 +104,7 @@ final class GitHubEventHandler
         $fullName = $this->fullName($payload);
         $repositoryId = (string) $payload['repository']['id'];
 
-        $this->relinker->follow($connections, $repositoryId, $fullName);
+        $this->relinker->follow($connections, $repositoryId, $fullName, $fullName === null ? null : strstr($fullName, '/', true));
 
         $applications = Application::query()
             ->whereIn('source_provider_id', $connections->modelKeys())

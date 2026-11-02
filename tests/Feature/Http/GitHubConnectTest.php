@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\SourceProviderType;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
+use App\Jobs\AdoptStrandedApplications;
 use App\Models\Application;
 use App\Models\GitHubApp;
 use App\Models\Server;
@@ -13,6 +14,7 @@ use App\Models\TeamDomain;
 use App\Models\User;
 use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\GitHub\GitHubAppHealth;
+use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\GitHubConnector;
 use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitHub\InstallationChoices;
@@ -20,8 +22,10 @@ use App\Services\Git\GitHub\RepositoryCatalog;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Sleep;
 use Illuminate\Testing\TestResponse;
 use Spatie\Activitylog\Models\Activity;
 
@@ -1144,6 +1148,10 @@ test('a check github cannot finish refuses that installation by name and still r
         'an installation removed mid-flow' => ['api.github.com/app/installations/*/access_tokens' => Http::response(['message' => 'Not Found'], 404)],
         'a suspended installation' => ['api.github.com/app/installations/*/access_tokens' => Http::response(['message' => 'This installation has been suspended'], 403)],
         'a rate limit' => ['api.github.com/app/installations/*/access_tokens' => Http::response(['message' => 'API rate limit exceeded for installation.'], 403, ['X-RateLimit-Remaining' => '0'])],
+        'a forbidden token that is not a suspension' => [
+            'api.github.com/app/installations/*/access_tokens' => Http::response(['message' => 'Your IP address is not permitted to access this resource.'], 403),
+            'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'suspended_at' => null]),
+        ],
         'what the installation covers' => ['api.github.com/installation/repositories*' => Http::failedConnection()],
         'a list that changed while it was read' => ['api.github.com/installation/repositories*' => Http::sequence()
             ->push(['total_count' => 150, 'repositories' => array_map(fn(int $id): array => ['id' => $id], range(70000001, 70000100))])
@@ -1171,6 +1179,7 @@ test('a check github cannot finish refuses that installation by name and still r
     'an installation removed mid-flow' => ['an installation removed mid-flow', 'GitHub refused to issue an installation token: Not Found'],
     'a suspended installation' => ['a suspended installation', 'GitHub refused to issue an installation token: This installation has been suspended'],
     'a rate limit' => ['a rate limit', 'GitHub refused to issue an installation token: API rate limit exceeded for installation.'],
+    'a forbidden token that is not a suspension' => ['a forbidden token that is not a suspension', 'GitHub refused to issue an installation token: Your IP address is not permitted to access this resource.'],
     'what the installation covers' => ['what the installation covers', 'GitHub did not answer.'],
     'a list that changed while it was read' => ['a list that changed while it was read', 'GitHub\'s repository list changed while Coresmith was reading it.'],
 ]);
@@ -1431,4 +1440,53 @@ test('every parameter that carries a credential is marked sensitive', function (
     }
 
     expect($unmarked)->toBe([]);
+});
+
+test('the callback leaves taking over stranded apps to a queued job and reads no repository list itself', function () {
+    Queue::fake();
+    [$team, $owner, $app] = githubConnectTeam();
+    $removed = SourceProvider::factory()->for($team)->githubApp($app)->create(['name' => 'oseughu', 'installation_id' => '51842']);
+    $application = Application::factory()->for($team)->create(['source_provider_id' => $removed->id, 'repository_id' => '70000001', 'repository_url' => 'https://github.com/oseughu/atlas.git']);
+    $removed->markUninstalled();
+    githubConnectFake([githubConnectInstallation(51900, 'oseughu', 'User', 'all')], github: ['login' => 'oseughu']);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51900']))
+        ->assertSessionHas('success', 'GitHub connected. Repositories on oseughu can be picked when you add an app.');
+
+    $linked = SourceProvider::query()->where('installation_id', '51900')->sole();
+
+    expect($application->fresh()->source_provider_id)->toBe($removed->id);
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/installation/repositories'));
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/access_tokens'));
+    Queue::assertPushed(AdoptStrandedApplications::class, 1);
+    Queue::assertPushed(AdoptStrandedApplications::class, fn(AdoptStrandedApplications $job): bool => $job->provider->is($linked));
+});
+
+test('a link with no stranded app of the team queues nothing', function () {
+    Queue::fake();
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51900, 'oseughu', 'User', 'all')], github: ['login' => 'oseughu']);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51900']))
+        ->assertSessionHas('success');
+
+    Queue::assertNotPushed(AdoptStrandedApplications::class);
+});
+
+test('a chooser pick that cannot get the link lock in time and finds no connection says github would not complete it', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectOffer($owner, $team, $app);
+    Cache::lock(GitHubConnector::linkLock($team, app(GitHubApps::class)->fromModel($app), '2'), GitHubConnector::LINK_LOCK_SECONDS)->get();
+    Sleep::fake(syncWithCarbon: true);
+
+    $this->actingAs($owner)
+        ->post(route('github.installations.store'), ['installation_id' => '2'])
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('error', 'GitHub would not complete the connection. Nothing was saved.');
+
+    expect(SourceProvider::withTrashed()->count())->toBe(0);
 });

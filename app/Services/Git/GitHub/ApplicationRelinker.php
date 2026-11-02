@@ -35,13 +35,21 @@ final class ApplicationRelinker
             && $this->apps->for($connection) !== null;
     }
 
-    public function adopt(SourceProvider $connection): void
+    /**
+     * @return Collection<int, Application>
+     */
+    public function stranded(SourceProvider $connection): Collection
     {
         if (!$this->usable($connection)) {
-            return;
+            return new Collection;
         }
 
-        $stranded = $this->linked($connection)->reject(fn(Application $application): bool => $this->usable($application->sourceProvider));
+        return $this->linked($connection)->reject(fn(Application $application): bool => $this->usable($application->sourceProvider))->values();
+    }
+
+    public function adopt(SourceProvider $connection): void
+    {
+        $stranded = $this->stranded($connection);
 
         if ($stranded->isEmpty()) {
             return;
@@ -115,7 +123,7 @@ final class ApplicationRelinker
     /**
      * @param  Collection<int, SourceProvider>  $connections
      */
-    public function follow(Collection $connections, string $repositoryId, ?string $fullName): void
+    public function follow(Collection $connections, string $repositoryId, ?string $fullName, ?string $owner): void
     {
         foreach ($connections as $connection) {
             if (!$this->usable($connection)) {
@@ -123,7 +131,7 @@ final class ApplicationRelinker
             }
 
             foreach ($this->linked($connection, $repositoryId) as $application) {
-                if ($this->leaves($application->sourceProvider, $connection)) {
+                if ($this->leaves($application->sourceProvider, $connection, $owner)) {
                     $this->move($application, $connection, $fullName ?? (string) $application->repositoryFullName());
                 }
             }
@@ -148,9 +156,14 @@ final class ApplicationRelinker
             ->values();
     }
 
-    private function leaves(?SourceProvider $from, SourceProvider $to): bool
+    private function leaves(?SourceProvider $from, SourceProvider $to, ?string $owner): bool
     {
-        return !$this->usable($from) || strcasecmp((string) $from?->name, (string) $to->name) !== 0;
+        if (!$this->usable($from)) {
+            return true;
+        }
+
+        return strcasecmp((string) $from?->name, (string) $to->name) !== 0
+            && ($owner === null || strcasecmp((string) $from?->name, $owner) !== 0);
     }
 
     private function move(Application $application, SourceProvider $to, string $repository): bool

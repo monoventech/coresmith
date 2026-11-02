@@ -352,7 +352,7 @@ test('a linked app whose connection was removed clones anonymously and names the
 });
 
 test('a connection suspended before the deploy began is named as suspended', function () {
-    tokenCloneFake();
+    tokenCloneFake(suspendedAt: '2026-10-19T11:00:00Z');
     $deployment = Deployment::factory()->for(tokenCloneApp(['suspended_at' => now()->subDay()]))->create();
     $transport = tokenCloneRefusedTransport();
 
@@ -363,7 +363,34 @@ test('a connection suspended before the deploy began is named as suspended', fun
     expect($clone)->not->toContain('credential.helper')
         ->and($deployment->fresh()->failure_reason)->toBe("Coresmith's GitHub app is suspended on monoventech. Unsuspend it on GitHub, then deploy.");
 
-    Http::assertNothingSent();
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => $request->method() === 'GET' && $request->url() === 'https://api.github.com/app/installations/51842');
+});
+
+test('a deploy right after unsuspending on github clears the suspension and clones through the connection', function () {
+    tokenCloneFake();
+    $application = tokenCloneApp(['suspended_at' => now()->subDay()]);
+    $deployment = Deployment::factory()->for($application)->create();
+
+    tokenCloneRun($deployment, (new FakeSSHTransport)->respondTo('df /', "40\n"));
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($deployment->fresh()->log)->toContain('clone: fetching with a one-hour GitHub token (read-only, monoventech/atlas)')
+        ->and(SourceProvider::query()->find($application->source_provider_id)->suspended_at)->toBeNull();
+
+    Http::assertSent(fn($request) => $request->method() === 'GET' && $request->url() === 'https://api.github.com/app/installations/51842');
+});
+
+test('a deploy whose suspended connection github no longer has forgets it', function () {
+    Http::fake(['api.github.com/app/installations/51842' => Http::response(['message' => 'Not Found'], 404)]);
+    tokenCloneFake();
+    $application = tokenCloneApp(['suspended_at' => now()->subDay()]);
+    $deployment = Deployment::factory()->for($application)->create();
+
+    expect(fn() => tokenCloneRun($deployment, tokenCloneRefusedTransport()))->toThrow(DeploymentAborted::class);
+
+    expect(SourceProvider::withTrashed()->find($application->source_provider_id)->trashed())->toBeTrue()
+        ->and($deployment->fresh()->failure_reason)->toBe("This app's GitHub connection was removed, so the private repository monoventech/atlas could not be read. Connect GitHub again from Settings, Git, then deploy.");
 });
 
 test('apps cloned over ssh keep their deploy key', function () {

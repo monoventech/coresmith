@@ -11,11 +11,13 @@ namespace App\Services\Git\GitHub;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
+use App\Jobs\AdoptStrandedApplications;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Services\Teams\TeamContext;
 use Carbon\CarbonImmutable;
 use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -42,7 +44,7 @@ final class GitHubConnector
 
     public const TOO_MANY = 'This installation covers more repositories than Coresmith can check. Choose only the repositories Coresmith needs for the app on GitHub, then connect again.';
 
-    public const LINK_LOCK_SECONDS = 10;
+    public const LINK_LOCK_SECONDS = 30;
 
     public const LINK_WAIT_SECONDS = 10;
 
@@ -171,8 +173,12 @@ final class GitHubConnector
      */
     public function link(Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): SourceProvider
     {
-        $provider = Cache::lock(self::linkLock($team, $app, $installation['id']), self::LINK_LOCK_SECONDS)
-            ->block(self::LINK_WAIT_SECONDS, fn(): SourceProvider => $this->record($team, $app, $installation));
+        try {
+            $provider = Cache::lock(self::linkLock($team, $app, $installation['id']), self::LINK_LOCK_SECONDS)
+                ->block(self::LINK_WAIT_SECONDS, fn(): SourceProvider => $this->record($team, $app, $installation));
+        } catch (LockTimeoutException) {
+            return SourceProvider::query()->where($this->keys($team, $app, $installation['id']))->first() ?? throw new GitProviderException(self::REFUSED);
+        }
 
         $this->catalog->forget($provider);
 
@@ -181,7 +187,9 @@ final class GitHubConnector
             ->withProperties(['installation_id' => $provider->installation_id, 'account' => $provider->name, 'app' => $app->key])
             ->log('github_installation_linked');
 
-        $this->relinker->adopt($provider);
+        if ($this->relinker->stranded($provider)->isNotEmpty()) {
+            AdoptStrandedApplications::dispatch($provider);
+        }
 
         return $provider;
     }
@@ -191,12 +199,7 @@ final class GitHubConnector
      */
     private function record(Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): SourceProvider
     {
-        $provider = SourceProvider::withTrashed()->firstOrNew([
-            'team_id' => $team->getKey(),
-            'type' => SourceProviderType::GitHubApp->value,
-            'github_app_id' => $app->isEnv() ? null : $app->key,
-            'installation_id' => $installation['id'],
-        ]);
+        $provider = SourceProvider::withTrashed()->firstOrNew($this->keys($team, $app, $installation['id']));
 
         $provider->forceFill([
             'name' => $installation['account'],
@@ -214,6 +217,19 @@ final class GitHubConnector
         }
 
         return $provider;
+    }
+
+    /**
+     * @return array{team_id: string, type: string, github_app_id: ?string, installation_id: string}
+     */
+    private function keys(Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, string $installationId): array
+    {
+        return [
+            'team_id' => (string) $team->getKey(),
+            'type' => SourceProviderType::GitHubApp->value,
+            'github_app_id' => $app->isEnv() ? null : $app->key,
+            'installation_id' => $installationId,
+        ];
     }
 
     /**
@@ -377,7 +393,11 @@ final class GitHubConnector
      */
     private function connected(Request $request, Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): RedirectResponse
     {
-        $provider = $this->link($team, $app, $installation);
+        try {
+            $provider = $this->link($team, $app, $installation);
+        } catch (GitProviderException $refusal) {
+            return $this->refuse($request, $team, $refusal->getMessage());
+        }
 
         return redirect()->to($this->settings->gitSettingsUrl($team, $request))
             ->with('success', "GitHub connected. Repositories on {$provider->name} can be picked when you add an app.");

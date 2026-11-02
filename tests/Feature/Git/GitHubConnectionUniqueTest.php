@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\GitProviderException;
 use App\Models\Application;
 use App\Models\GitHubApp;
 use App\Models\SourceProvider;
@@ -223,4 +224,33 @@ test('an oldest row that was still connected keeps its own state when its duplic
         ->name->toBe('monoventech')
         ->repository_selection->toBe('selected')
         ->access_token->toBe('ghs_oldest');
+});
+
+test('a link that cannot get its lock in time returns the connection the request holding it saved', function () {
+    $team = Team::factory()->create();
+    $app = uniqueLinkApp($team, false);
+    $saved = uniqueLinkConnection($team, $app->key);
+    Cache::lock(GitHubConnector::linkLock($team, $app, '51842'), GitHubConnector::LINK_LOCK_SECONDS)->get();
+    Sleep::fake(syncWithCarbon: true);
+
+    $linked = app(GitHubConnector::class)->link($team, $app, ['id' => '51842', 'account' => 'monoventech', 'account_type' => 'Organization', 'repository_selection' => 'all', 'suspended_at' => null]);
+
+    expect($linked->id)->toBe($saved->id)
+        ->and(SourceProvider::withTrashed()->count())->toBe(1);
+});
+
+test('a link that cannot get its lock in time and finds no connection is refused with nothing saved', function () {
+    $team = Team::factory()->create();
+    $app = uniqueLinkApp($team, true);
+    Cache::lock(GitHubConnector::linkLock($team, $app, '51842'), GitHubConnector::LINK_LOCK_SECONDS)->get();
+    Sleep::fake(syncWithCarbon: true);
+
+    expect(fn() => app(GitHubConnector::class)->link($team, $app, ['id' => '51842', 'account' => 'monoventech', 'account_type' => 'Organization', 'repository_selection' => 'all', 'suspended_at' => null]))
+        ->toThrow(GitProviderException::class, 'GitHub would not complete the connection. Nothing was saved.');
+
+    expect(SourceProvider::withTrashed()->count())->toBe(0);
+});
+
+test('the link lock outlives the longest wait for it', function () {
+    expect(GitHubConnector::LINK_LOCK_SECONDS)->toBeGreaterThan(GitHubConnector::LINK_WAIT_SECONDS);
 });

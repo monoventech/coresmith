@@ -42,6 +42,7 @@ use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\ApplicationRelinker;
 use App\Services\Git\GitHub\GitHubAppApi;
+use App\Services\Git\GitHub\SuspensionCheck;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
@@ -689,7 +690,7 @@ final class DeployApplication implements ShouldQueue
 
         try {
             $this->cloneAdvice = null;
-            $github = $application->usesGitHubToken() ? $application->githubConnection() : app(ApplicationRelinker::class)->relink($application);
+            $github = $this->cloneConnection($application);
             $token = $github === null ? null : $this->mintCloneToken($application, $github);
             $credential = match (true) {
                 $token !== null => 'token',
@@ -992,6 +993,17 @@ final class DeployApplication implements ShouldQueue
         $connection->execute($keys->prepareDirectory($application), sudo: true)->throw();
         $connection->execute($keys->reserveFile($application), sudo: true)->throw();
         $connection->uploadContent((string) $application->deploy_key_private, $keys->keyPath($application));
+    }
+
+    private function cloneConnection(Application $application): ?SourceProvider
+    {
+        $connection = $application->githubConnection();
+
+        if ($connection !== null && $connection->suspended_at !== null) {
+            app(SuspensionCheck::class)->recheck($connection);
+        }
+
+        return $application->usesGitHubToken() ? $application->githubConnection() : app(ApplicationRelinker::class)->relink($application);
     }
 
     private function mintCloneToken(Application $application, SourceProvider $github): ?string

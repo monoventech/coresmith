@@ -8,10 +8,8 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Exceptions\GitProviderException;
 use App\Models\SourceProvider;
-use App\Services\Git\GitHub\GitHubAppApi;
-use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\GitHub\SuspensionCheck;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -42,32 +40,12 @@ final class CheckGitHubInstallation implements ShouldQueue
         }, report: true);
     }
 
-    public function handle(GitHubApps $apps, GitHubAppApi $api): void
+    public function handle(SuspensionCheck $check): void
     {
         $connection = $this->provider->fresh();
 
-        if ($connection === null || $connection->trashed() || $connection->suspended_at === null) {
-            return;
-        }
-
-        $app = $apps->for($connection);
-
-        if ($app === null) {
-            return;
-        }
-
-        try {
-            $installation = $api->installation($app, (string) $connection->installation_id);
-        } catch (GitProviderException $e) {
-            report_if(app()->hasDebugModeEnabled(), $e);
-
-            return;
-        }
-
-        if ($installation === null) {
-            $connection->markUninstalled();
-        } elseif ($installation['suspended_at'] === null) {
-            $connection->markSuspended(null);
+        if ($connection !== null) {
+            $check->recheck($connection);
         }
     }
 }

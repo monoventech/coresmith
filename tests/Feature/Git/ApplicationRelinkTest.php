@@ -91,6 +91,7 @@ function relinkFake(array $mints, array $listing = []): void
         'api.github.com/installation/repositories*' => Http::response(['total_count' => count($listing), 'repositories' => $listing]),
         'api.github.com/installation/token' => Http::response(null, 204),
         'api.github.com/repos/*/statuses/*' => Http::response(['id' => 1], 201),
+        'api.github.com/app/installations/*' => Http::response(['id' => 51842, 'suspended_at' => '2026-11-01T09:00:00Z']),
     ]);
 }
 
@@ -267,6 +268,22 @@ test('a deploy whose connection is gone clones through the team connection that 
     'suspended' => [['suspended_at' => now()]],
 ]);
 
+test('a deploy whose suspension github will not confirm or deny relinks as before', function () {
+    $team = Team::factory()->create();
+    $githubApp = GitHubApp::factory()->for($team)->create();
+    $old = relinkConnection($team, $githubApp, ['suspended_at' => now()]);
+    $other = relinkConnection($team, $githubApp, ['name' => 'monoven-labs', 'installation_id' => '61842']);
+    $application = relinkApp($old);
+    relinkCatalog($other, [relinkRepository(70000001, 'monoventech/atlas')]);
+    Http::fake(['api.github.com/app/installations/51842' => Http::response(['message' => 'Server Error'], 500)]);
+    relinkFake(['61842' => 201]);
+
+    expect(relinkDeploy($application->fresh())->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($old->fresh()->suspended_at)->not->toBeNull()
+        ->and($application->fresh()->source_provider_id)->toBe($other->id)
+        ->and(relinkMinted('61842'))->toBeTrue();
+});
+
 test('a deploy whose app was removed from the panel clones through the team connection that can see the repository', function () {
     $team = Team::factory()->create();
     $gone = GitHubApp::factory()->for($team)->create();
@@ -333,6 +350,7 @@ test('after a transfer between two linked accounts a push from the new account d
     expect($events->push($credentials, relinkPush('61842', 'monoven-labs/atlas'), 'delivery-1'))->toBe(1);
 
     expect($application->fresh()->source_provider_id)->toBe($to->id)
+        ->and($application->fresh()->repository_url)->toBe('https://github.com/monoven-labs/atlas.git')
         ->and($application->fresh()->repository_head)->toBe(str_repeat('c', 40))
         ->and(Deployment::query()->where('application_id', $application->id)->sole()->requested_commit)->toBe(str_repeat('c', 40))
         ->and(relinkActivities())->toBe([[$application->id, ['from' => $from->id, 'repository' => 'monoven-labs/atlas', 'to' => $to->id]]]);
@@ -511,4 +529,61 @@ test('a deploy whose app another check moved meanwhile clones through the connec
         ->and(relinkMinted('71842'))->toBeTrue()
         ->and(relinkMinted('61842'))->toBeFalse()
         ->and(relinkActivities())->toBe([]);
+});
+
+test('after an account rename two apps on that account settle the app on the link named for the current owner', function (string $startsOn) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $before = GitHubApp::factory()->for($team)->create();
+    $after = GitHubApp::factory()->for($team)->create();
+    $linkedBeforeRename = relinkConnection($team, $before, ['name' => 'monoventech-old']);
+    $linkedAfterRename = relinkConnection($team, $after, ['installation_id' => '61842']);
+    $application = relinkApp($startsOn === 'the stale name' ? $linkedBeforeRename : $linkedAfterRename, ['quick_deploy' => true]);
+    $events = app(GitHubEventHandler::class);
+    $pushes = [
+        [$after, '61842'], [$before, '51842'], [$before, '51842'], [$after, '61842'], [$before, '51842'],
+    ];
+
+    foreach ($pushes as $index => [$githubApp, $installation]) {
+        $events->push(app(GitHubApps::class)->fromModel($githubApp), relinkPush($installation, 'monoventech/atlas', 'c', 1793620800 + $index), "delivery-{$index}");
+    }
+
+    expect($application->fresh()->source_provider_id)->toBe($linkedAfterRename->id)
+        ->and(relinkActivities())->toHaveCount($startsOn === 'the stale name' ? 1 : 0);
+})->with([
+    'the app starts on the link with the stale name' => ['the stale name'],
+    'the app starts on the link with the current name' => ['the current name'],
+]);
+
+test('a token github refuses for a reason other than a suspension never moves the app', function () {
+    $team = Team::factory()->create();
+    $githubApp = GitHubApp::factory()->for($team)->create();
+    $current = relinkConnection($team, $githubApp);
+    $application = relinkApp($current);
+    $other = relinkConnection($team, $githubApp, ['name' => 'monoven-labs', 'installation_id' => '61842']);
+    relinkCatalog($other, [relinkRepository(70000001, 'monoventech/atlas')]);
+    Http::fake(['api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'suspended_at' => null])]);
+    relinkFake(['51842' => 403, '61842' => 201]);
+
+    expect(fn() => relinkDeploy($application->fresh(), relinkRefusedTransport()))->toThrow(DeploymentAborted::class);
+
+    expect($application->fresh()->source_provider_id)->toBe($current->id)
+        ->and($current->fresh()->connected())->toBeTrue()
+        ->and(relinkMinted('61842'))->toBeFalse()
+        ->and(relinkActivities())->toBe([]);
+});
+
+test('linking an installation takes over the apps of a connection whose app was removed from the panel', function () {
+    $team = Team::factory()->create();
+    $gone = GitHubApp::factory()->for($team)->create();
+    $current = GitHubApp::factory()->for($team)->create();
+    $appLess = relinkConnection($team, $gone);
+    $application = relinkApp($appLess);
+    $gone->delete();
+    relinkFake(['61842' => 201], [relinkRepository(70000001, 'monoventech/atlas')]);
+
+    $linked = app(GitHubConnector::class)->link($team, app(GitHubApps::class)->fromModel($current), relinkInstallation('61842', 'monoventech'));
+
+    expect($application->fresh()->source_provider_id)->toBe($linked->id)
+        ->and(relinkActivities())->toBe([[$application->id, ['from' => $appLess->id, 'repository' => 'monoventech/atlas', 'to' => $linked->id]]]);
 });
