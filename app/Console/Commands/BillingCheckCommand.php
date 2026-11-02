@@ -43,8 +43,14 @@ final class BillingCheckCommand extends Command
         }
 
         $mailer = Mailer::name();
+        $failure = match (true) {
+            $mailer === '' => 'MAIL_MAILER is not set, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.',
+            !Mailer::defined() => "MAIL_MAILER is {$mailer}, which is not a mailer this panel knows, so no email can be sent. Set it to a configured mailer such as smtp.",
+            !Mailer::delivers() => "MAIL_MAILER is {$mailer}, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.",
+            default => null,
+        };
 
-        $this->check(Mailer::delivers(), "MAIL_MAILER is {$mailer}, so the panel can send email.", "MAIL_MAILER is {$mailer}, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.");
+        $this->check($failure === null, "MAIL_MAILER is {$mailer}, so the panel can send email.", (string) $failure);
 
         if ($this->option('live') && $this->filled(config('cashier.secret'))) {
             $this->live();

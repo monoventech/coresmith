@@ -20,8 +20,13 @@ final class Mailer
         return self::name() === 'log';
     }
 
+    public static function defined(): bool
+    {
+        return is_array(config('mail.mailers.' . self::name()));
+    }
+
     public static function delivers(): bool
     {
-        return !self::writesToLog() && self::name() !== 'array';
+        return self::defined() && !self::writesToLog() && self::name() !== 'array';
     }
 }

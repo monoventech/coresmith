@@ -104,6 +104,23 @@ test('a panel whose mail goes nowhere fails the check', function (string $mailer
         ->and($output)->not->toContain('mailer-password-e2e');
 })->with(['log', 'array']);
 
+test('a panel with no mailer, or one it does not know, fails the check', function (?string $mailer, string $line) {
+    config(['mail.default' => $mailer]);
+    FakeStripe::fake();
+
+    [$code, $output] = billingCheck();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain($line)
+        ->and($output)->not->toContain('✓ MAIL_MAILER')
+        ->and($output)->not->toContain('mailer-login-e2e')
+        ->and($output)->not->toContain('mailer-password-e2e');
+})->with([
+    'none set' => [null, '✗ MAIL_MAILER is not set, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.'],
+    'an empty name' => ['', '✗ MAIL_MAILER is not set, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.'],
+    'a name with a typo' => ['stmp', '✗ MAIL_MAILER is stmp, which is not a mailer this panel knows, so no email can be sent. Set it to a configured mailer such as smtp.'],
+]);
+
 test('without --live nothing is asked of stripe', function () {
     FakeStripe::fake();
 

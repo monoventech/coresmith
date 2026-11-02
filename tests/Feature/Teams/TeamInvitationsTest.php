@@ -11,6 +11,7 @@ use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Notifications\TeamInvitationNotification;
 use App\Services\Teams\TeamInvitations;
+use App\Support\Mailer;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -637,4 +638,19 @@ test('the team tab knows whether this panel hands out links instead of email', f
     'self-hosted that writes email to the log' => ['self-hosted', 'log', true],
     'self-hosted that keeps email in memory' => ['self-hosted', 'array', true],
     'cloud, whatever its mailer' => ['cloud', 'array', false],
+]);
+
+test('only a mailer this panel defines, other than log or array, delivers', function (?string $mailer, bool $delivers) {
+    config(['mail.default' => $mailer]);
+
+    expect(Mailer::delivers())->toBe($delivers)
+        ->and(app(TeamInvitations::class)->offersLinks())->toBe(!$delivers);
+})->with([
+    'no mailer at all' => [null, false],
+    'an empty name' => ['', false],
+    'a name with a typo' => ['stmp', false],
+    'log' => ['log', false],
+    'array' => ['array', false],
+    'smtp' => ['smtp', true],
+    'failover, judged by its name' => ['failover', true],
 ]);
