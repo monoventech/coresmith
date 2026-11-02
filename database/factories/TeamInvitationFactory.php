@@ -29,8 +29,14 @@ class TeamInvitationFactory extends Factory
             'email' => Str::lower(fake()->unique()->safeEmail()),
             'role' => TeamRole::Member,
             'token_hash' => TeamInvitation::hash(Str::random(TeamInvitation::TOKEN_LENGTH)),
+            'link_offered' => false,
             'expires_at' => now()->addDays(TeamInvitation::VALID_DAYS),
         ];
+    }
+
+    public function offered(): static
+    {
+        return $this->state(['link_offered' => true]);
     }
 
     public function withToken(string $token): static

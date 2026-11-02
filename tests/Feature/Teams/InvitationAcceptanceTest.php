@@ -347,3 +347,38 @@ test('accepting when already on the team only opens it', function () {
         ->and($invitation->fresh()->accepted_at)->not->toBeNull()
         ->and(Activity::query()->where('description', 'member_added')->count())->toBe(0);
 });
+
+test('an account made from a link that was offered for copying is not confirmed', function () {
+    [$invitation, $token] = invitationAcceptanceInvite(['link_offered' => true]);
+
+    invitationAcceptanceAccount($token)->assertRedirect('http://localhost/acme/dashboard');
+
+    $user = User::query()->where('email', 'newcomer@example.com')->sole();
+
+    expect($user->email_verified_at)->toBeNull()
+        ->and($user->roleIn($invitation->team))->toBe(TeamRole::Admin);
+});
+
+test('on cloud accepting an emailed invitation confirms the address of an unconfirmed account', function () {
+    CloudBilling::enable();
+    [$invitation, $token] = invitationAcceptanceInvite([], Team::factory()->subscribed(Plan::Pro)->create(['name' => 'Acme Labs', 'slug' => 'acme']));
+    $user = User::factory()->unverified()->create(['email' => 'newcomer@example.com']);
+
+    $this->actingAs($user)->get(route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page->where('state', 'join'));
+    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
+
+    expect($user->fresh()->email_verified_at)->not->toBeNull()
+        ->and($user->fresh()->roleIn($invitation->team))->toBe(TeamRole::Admin);
+
+    $this->actingAs($user->fresh())->get('/acme/dashboard')->assertOk();
+});
+
+test('accepting a link that was offered for copying joins without confirming the address', function () {
+    [$invitation, $token] = invitationAcceptanceInvite(['link_offered' => true]);
+    $user = User::factory()->unverified()->create(['email' => 'newcomer@example.com']);
+
+    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
+
+    expect($user->fresh()->email_verified_at)->toBeNull()
+        ->and($user->fresh()->roleIn($invitation->team))->toBe(TeamRole::Admin);
+});

@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\Edition;
 use App\Enums\TeamRole;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
@@ -44,7 +45,7 @@ final class TeamMemberController extends Controller
 
         $email = Str::lower($validated['email']);
         $role = TeamRole::from($validated['role']);
-        $user = User::query()->whereRaw('lower(email) = ?', [$email])->first();
+        $user = User::findByEmail($email);
 
         $errors = array_filter([
             'email' => $user instanceof User && $team->members()->whereKey($user->getKey())->exists() ? self::ALREADY_ON_TEAM : null,
@@ -55,7 +56,7 @@ final class TeamMemberController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
-        if (!$user instanceof User) {
+        if (!$user instanceof User || !$this->joinsAtOnce($user)) {
             return $this->invite($request, $team, $email, $role, $invitations);
         }
 
@@ -127,17 +128,28 @@ final class TeamMemberController extends Controller
         $limit = (int) config('coresmith.teams.invitations_per_hour', 20);
 
         if (RateLimiter::tooManyAttempts($key, $limit)) {
-            throw ValidationException::withMessages(['email' => "This team has sent {$limit} invitations in the last hour. Try again in an hour."]);
+            $minutes = max(1, (int) ceil(RateLimiter::availableIn($key) / 60));
+
+            throw ValidationException::withMessages(['email' => "This team has sent {$limit} invitations in the last hour. Try again in {$minutes} " . Str::plural('minute', $minutes) . '.']);
         }
 
         RateLimiter::hit($key, 3600);
 
         [$invitation, $token] = $invitations->invite($team, $email, $role, $request->user());
 
+        if (!$invitation->link_offered) {
+            return back()->with('success', "Invitation sent to {$invitation->email}.");
+        }
+
         return back()->with([
-            'success' => "Invitation sent to {$invitation->email}.",
+            'success' => "Invitation created. This panel cannot send email yet, so copy the link below and send it to {$invitation->email} yourself.",
             TeamInvitations::ISSUED => ['id' => $invitation->getKey(), 'token' => $token],
         ]);
+    }
+
+    private function joinsAtOnce(User $user): bool
+    {
+        return Edition::current()->isSelfHosted() && $user->hasVerifiedEmail();
     }
 
     private function syncServers(Team $team): void

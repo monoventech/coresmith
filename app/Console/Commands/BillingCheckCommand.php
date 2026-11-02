@@ -11,6 +11,7 @@ namespace App\Console\Commands;
 use App\Enums\Edition;
 use App\Enums\Plan;
 use App\Services\Panel\Formats;
+use App\Support\Mailer;
 use Illuminate\Console\Command;
 use Laravel\Cashier\Cashier;
 use Stripe\Exception\ApiErrorException;
@@ -40,6 +41,10 @@ final class BillingCheckCommand extends Command
         foreach (Plan::purchasable() as $plan) {
             $this->check($plan->checkoutPrice() !== null, "{$plan->label()} has a price.", 'STRIPE_PRICE_' . strtoupper($plan->value) . ' is missing.');
         }
+
+        $mailer = Mailer::name();
+
+        $this->check(Mailer::delivers(), "MAIL_MAILER is {$mailer}, so the panel can send email.", "MAIL_MAILER is {$mailer}, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.");
 
         if ($this->option('live') && $this->filled(config('cashier.secret'))) {
             $this->live();

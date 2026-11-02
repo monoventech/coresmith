@@ -6,6 +6,7 @@ use App\Enums\BillingState;
 use App\Enums\Plan;
 use App\Models\ManagedDatabase;
 use App\Models\Team;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
 use App\Services\Teams\AuditLog;
@@ -145,5 +146,20 @@ test('the cloud browser seed has a business team sending its databases to s3', f
         expect(app(TeamBilling::class)->status($vault)->plan)->toBe(Plan::Business)
             ->and($vault->backupDestination)->toBeNull()
             ->and(ManagedDatabase::query()->where('team_id', $vault->getKey())->pluck('name')->all())->toBe(['vault_main']);
+    }
+});
+
+test('the cloud browser seed has an emailed invitation to monoven for every browser', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    foreach (CloudE2ESeeder::PROJECTS as $code) {
+        $invitation = TeamInvitation::usable(CloudE2ESeeder::invitationToken($code));
+
+        expect($invitation?->team?->slug)->toBe('monoven')
+            ->and($invitation?->email)->toBe("joiner-{$code}@cloud.test")
+            ->and($invitation?->link_offered)->toBeFalse()
+            ->and(User::findByEmail("joiner-{$code}@cloud.test"))->toBeNull();
     }
 });

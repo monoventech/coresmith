@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('email');
             $table->string('role', 16);
             $table->char('token_hash', 64)->unique();
+            $table->boolean('link_offered')->default(false);
             $table->foreignUlid('invited_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('expires_at');
             $table->timestamp('accepted_at')->nullable();

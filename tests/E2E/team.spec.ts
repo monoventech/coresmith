@@ -87,7 +87,9 @@ test.describe('the team', () => {
         await dialog(page).getByLabel('Email address').fill(email)
         await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
 
-        await expect(toast(page)).toContainText(`Invitation sent to ${email}.`)
+        await expect(toast(page)).toContainText(
+            `Invitation created. This panel cannot send email yet, so copy the link below and send it to ${email} yourself.`
+        )
         await expect(dialog(page)).toHaveCount(0)
         await expect(member(page, email)).toHaveCount(0)
     })

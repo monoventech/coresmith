@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -25,6 +26,11 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasUlids, Notifiable, TwoFactorAuthenticatable;
+
+    public static function findByEmail(string $email): ?self
+    {
+        return self::query()->whereRaw('lower(email) = ?', [Str::lower(trim($email))])->first();
+    }
 
     public function roleIn(?Team $team): ?TeamRole
     {

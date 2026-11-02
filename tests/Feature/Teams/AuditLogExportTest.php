@@ -10,8 +10,12 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
+use App\Notifications\TeamInvitationNotification;
 use App\Services\Teams\AuditLog;
 use Carbon\CarbonImmutable;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\CloudBilling;
@@ -164,24 +168,34 @@ test('deployers cannot export', function () {
 });
 
 test('membership changes are recorded', function () {
+    Notification::fake();
     $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
     $owner = auditOwner($team);
     $newcomer = User::factory()->create(['email' => 'newcomer@example.test']);
-    $this->actingAs($owner);
 
-    $this->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => TeamRole::Member->value])->assertSessionHasNoErrors();
-    $this->put(route('teams.members.update', [$team, $newcomer]), ['role' => TeamRole::Admin->value])->assertSessionHasNoErrors();
-    $this->delete(route('teams.members.destroy', [$team, $newcomer]))->assertSessionHasNoErrors();
+    $this->actingAs($owner)->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => TeamRole::Member->value])->assertSessionHasNoErrors();
+
+    $link = '';
+    Notification::assertSentOnDemand(TeamInvitationNotification::class, function (TeamInvitationNotification $notification, array $channels, AnonymousNotifiable $notifiable) use (&$link): bool {
+        $link = (string) $notification->toMail($notifiable)->actionUrl;
+
+        return true;
+    });
+
+    $this->actingAs($newcomer)->post(route('invitations.accept', Str::afterLast($link, '/')))->assertRedirect();
+    $this->actingAs($owner)->put(route('teams.members.update', [$team, $newcomer]), ['role' => TeamRole::Admin->value])->assertSessionHasNoErrors();
+    $this->actingAs($owner)->delete(route('teams.members.destroy', [$team, $newcomer]))->assertSessionHasNoErrors();
 
     $entries = Activity::query()->where('subject_id', $team->getKey())->orderBy('id')->get();
 
-    expect($entries->pluck('description')->all())->toBe(['member_added', 'member_role_changed', 'member_removed'])
+    expect($entries->pluck('description')->all())->toBe(['member_invited', 'member_added', 'member_role_changed', 'member_removed'])
         ->and($entries->pluck('properties')->map->all()->all())->toBe([
+            ['email' => 'newcomer@example.test', 'role' => 'member'],
             ['email' => 'newcomer@example.test', 'role' => 'member'],
             ['email' => 'newcomer@example.test', 'from' => 'member', 'to' => 'admin'],
             ['email' => 'newcomer@example.test'],
         ])
-        ->and($entries->pluck('causer_id')->unique()->all())->toBe([$owner->getKey()]);
+        ->and($entries->pluck('causer_id')->all())->toBe([$owner->getKey(), $newcomer->getKey(), $owner->getKey(), $owner->getKey()]);
 });
 
 test('an export is itself recorded', function () {

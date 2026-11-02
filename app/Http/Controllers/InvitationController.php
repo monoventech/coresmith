@@ -17,18 +17,20 @@ use App\Models\User;
 use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Auth\Events\Registered;
+use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use PDOException;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 final class InvitationController extends Controller
 {
-    use PasswordValidationRules, ProfileValidationRules;
+    use DetectsConcurrencyErrors, PasswordValidationRules, ProfileValidationRules;
 
     public function __construct(private readonly TeamInvitations $invitations) {}
 
@@ -43,8 +45,8 @@ final class InvitationController extends Controller
         $user = $request->user();
 
         $state = match (true) {
-            $user instanceof User => Str::lower((string) $user->email) === $invitation->email ? 'join' : 'other',
-            $this->accountFor($invitation) instanceof User => 'sign-in',
+            $user instanceof User => $invitation->isFor($user) ? 'join' : 'other',
+            User::findByEmail($invitation->email) instanceof User => 'sign-in',
             default => 'register',
         };
 
@@ -73,7 +75,7 @@ final class InvitationController extends Controller
     {
         $invitation = TeamInvitation::usable($token);
 
-        if (!$invitation instanceof TeamInvitation || $this->accountFor($invitation) instanceof User) {
+        if (!$invitation instanceof TeamInvitation || User::findByEmail($invitation->email) instanceof User) {
             return to_route('invitations.show', $token);
         }
 
@@ -82,21 +84,24 @@ final class InvitationController extends Controller
             'password' => $this->passwordRules(),
         ]);
 
-        $user = DB::transaction(function () use ($invitation, $validated, $token): User {
-            $user = new User;
-            $user->forceFill([
-                'name' => $validated['name'],
-                'email' => $invitation->email,
-                'password' => $validated['password'],
-                'email_verified_at' => now(),
-            ])->save();
+        try {
+            $user = DB::transaction(function () use ($invitation, $validated, $token): User {
+                $user = new User;
+                $user->forceFill([
+                    'name' => $validated['name'],
+                    'email' => $invitation->email,
+                    'password' => $validated['password'],
+                ])->save();
 
-            if (!$this->invitations->join($invitation, $user)) {
-                throw new HttpResponseException(to_route('invitations.show', $token));
-            }
+                if (!$this->invitations->join($invitation, $user)) {
+                    throw new HttpResponseException(to_route('invitations.show', $token));
+                }
 
-            return $user;
-        });
+                return $user;
+            });
+        } catch (PDOException $exception) {
+            return $this->lostRace($exception, $token);
+        }
 
         event(new Registered($user));
 
@@ -109,22 +114,27 @@ final class InvitationController extends Controller
     public function accept(Request $request, string $token): HttpResponse
     {
         $invitation = TeamInvitation::usable($token);
-        $user = $request->user();
 
-        if (!$invitation instanceof TeamInvitation || Str::lower((string) $user->email) !== $invitation->email) {
+        if (!$invitation instanceof TeamInvitation) {
             return to_route('invitations.show', $token);
         }
 
-        if (!$this->invitations->join($invitation, $user)) {
-            return to_route('invitations.show', $token);
+        try {
+            $joined = $this->invitations->join($invitation, $request->user());
+        } catch (PDOException $exception) {
+            return $this->lostRace($exception, $token);
         }
 
-        return $this->open($request, $invitation->team);
+        return $joined ? $this->open($request, $invitation->team) : to_route('invitations.show', $token);
     }
 
-    private function accountFor(TeamInvitation $invitation): ?User
+    private function lostRace(PDOException $exception, string $token): HttpResponse
     {
-        return User::query()->whereRaw('lower(email) = ?', [$invitation->email])->first();
+        if (!$exception instanceof UniqueConstraintViolationException && !$this->causedByConcurrencyError($exception)) {
+            throw $exception;
+        }
+
+        return to_route('invitations.show', $token);
     }
 
     private function open(Request $request, ?Team $team): HttpResponse

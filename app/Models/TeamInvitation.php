@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class TeamInvitation extends Model
 {
@@ -25,7 +26,7 @@ class TeamInvitation extends Model
 
     public const TOKEN_LENGTH = 40;
 
-    protected $fillable = ['team_id', 'email', 'role', 'token_hash', 'invited_by', 'expires_at', 'accepted_at'];
+    protected $fillable = ['team_id', 'email', 'role', 'token_hash', 'link_offered', 'invited_by', 'expires_at', 'accepted_at'];
 
     protected $hidden = ['token_hash'];
 
@@ -49,9 +50,9 @@ class TeamInvitation extends Model
         return $this->belongsTo(User::class, 'invited_by');
     }
 
-    public function isPending(): bool
+    public function isFor(User $user): bool
     {
-        return $this->accepted_at === null && $this->expires_at->isFuture();
+        return Str::lower(trim((string) $user->email)) === $this->email;
     }
 
     public function scopePending(Builder $query): void
@@ -66,6 +67,7 @@ class TeamInvitation extends Model
     {
         return [
             'role' => TeamRole::class,
+            'link_offered' => 'boolean',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
         ];

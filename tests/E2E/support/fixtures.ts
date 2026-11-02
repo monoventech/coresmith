@@ -157,6 +157,10 @@ export async function captureClipboard(page: Page) {
     })
 }
 
+export function cloudInvitation(testInfo: TestInfo): string {
+    return own(testInfo, 'e2eCloudInvite', '').padEnd(40, '0')
+}
+
 export async function clipboardText(page: Page): Promise<string> {
     return page.evaluate(() => String(Reflect.get(window, 'copied') ?? ''))
 }

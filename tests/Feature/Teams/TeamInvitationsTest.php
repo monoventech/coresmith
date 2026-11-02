@@ -62,8 +62,19 @@ function teamInvitationsToken(string $link): string
     return Str::afterLast($link, '/');
 }
 
+function teamInvitationsCopied(): string
+{
+    return (string) (session(TeamInvitations::ISSUED)['token'] ?? '');
+}
+
+function teamInvitationsWithoutMail(): void
+{
+    config(['mail.default' => 'array']);
+}
+
 beforeEach(function () {
     Notification::fake();
+    config(['mail.default' => 'smtp']);
 });
 
 test('an address without an account is invited instead of refused', function () {
@@ -107,16 +118,21 @@ test('an invitation keeps only a hash of its token', function () {
 });
 
 test('an accepted, expired or orphaned invitation is not usable', function () {
-    $accepted = TeamInvitation::factory()->accepted()->withToken('accepted-token-00000000000000000000000000')->create();
-    $expired = TeamInvitation::factory()->expired()->withToken('expired-token-000000000000000000000000000')->create();
+    TeamInvitation::factory()->accepted()->withToken('accepted-token-00000000000000000000000000')->create();
+    TeamInvitation::factory()->expired()->withToken('expired-token-000000000000000000000000000')->create();
     $orphaned = TeamInvitation::factory()->withToken('orphaned-token-00000000000000000000000000')->create();
     $orphaned->team->delete();
 
     expect(TeamInvitation::usable('accepted-token-00000000000000000000000000'))->toBeNull()
         ->and(TeamInvitation::usable('expired-token-000000000000000000000000000'))->toBeNull()
-        ->and(TeamInvitation::usable('orphaned-token-00000000000000000000000000'))->toBeNull()
-        ->and($accepted->isPending())->toBeFalse()
-        ->and($expired->isPending())->toBeFalse();
+        ->and(TeamInvitation::usable('orphaned-token-00000000000000000000000000'))->toBeNull();
+});
+
+test('an invitation is for the address it was sent to, whatever its case', function () {
+    $invitation = TeamInvitation::factory()->create(['email' => 'maya@example.com']);
+
+    expect($invitation->isFor(User::factory()->make(['email' => 'Maya@Example.com'])))->toBeTrue()
+        ->and($invitation->isFor(User::factory()->make(['email' => 'someone@example.com'])))->toBeFalse();
 });
 
 test('an invitation lasts seven days', function () {
@@ -139,10 +155,10 @@ test('an invitation lasts seven days', function () {
 test('someone with an account still joins at once, whatever case the address is typed in', function () {
     $team = teamInvitationsTeam();
     $owner = teamInvitationsMember($team);
-    $person = User::factory()->create(['email' => 'person@example.com']);
+    $person = User::factory()->create(['email' => 'Person@Example.com']);
     TeamInvitation::factory()->for($team)->create(['email' => 'person@example.com']);
 
-    teamInvitationsSend($owner, $team, 'Person@Example.com')->assertSessionHas('success', 'Member added.');
+    teamInvitationsSend($owner, $team, 'PERSON@example.com')->assertSessionHas('success', 'Member added.');
 
     expect($team->members()->whereKey($person->id)->exists())->toBeTrue()
         ->and(TeamInvitation::query()->count())->toBe(0);
@@ -229,11 +245,17 @@ test("the link points at the panel's own address, whichever team address it was 
         ->post('/acme' . route('teams.members.store', $team, false), ['email' => 'new@example.com', 'role' => TeamRole::Member->value])
         ->assertSessionHasNoErrors();
 
-    $link = teamInvitationsLink('new@example.com');
+    expect(teamInvitationsLink('new@example.com'))->toStartWith('http://localhost/invitations/');
 
-    expect($link)->toStartWith('http://localhost/invitations/');
+    teamInvitationsWithoutMail();
 
-    $this->actingAs($owner)->get('/acme/settings/team')->assertInertia(fn($page) => $page->where('invitations.0.link', $link));
+    $this->actingAs($owner)
+        ->post('/acme' . route('teams.members.store', $team, false), ['email' => 'other@example.com', 'role' => TeamRole::Member->value])
+        ->assertSessionHasNoErrors();
+
+    $copied = 'http://localhost/invitations/' . teamInvitationsCopied();
+
+    $this->actingAs($owner)->get('/acme/settings/team')->assertInertia(fn($page) => $page->where('invitations.1.link', $copied));
 });
 
 test('inviting and revoking are recorded, without the link', function () {
@@ -323,20 +345,23 @@ test('a team sends at most twenty invitations an hour', function () {
     $admin = teamInvitationsMember($team, TeamRole::Admin, 'Jonas Weber');
     $other = teamInvitationsTeam('Globex', 'globex');
     $otherOwner = teamInvitationsMember($other, name: 'Hank Scorpio');
-    $refusal = 'This team has sent 20 invitations in the last hour. Try again in an hour.';
 
     foreach (range(1, 20) as $number) {
         teamInvitationsSend($owner, $team, "person{$number}@example.com")->assertSessionHasNoErrors();
     }
 
-    teamInvitationsSend($owner, $team, 'person21@example.com')->assertSessionHasErrors(['email' => $refusal]);
-    teamInvitationsSend($admin, $team, 'person21@example.com')->assertSessionHasErrors(['email' => $refusal]);
+    teamInvitationsSend($owner, $team, 'person21@example.com')->assertSessionHasErrors(['email' => 'This team has sent 20 invitations in the last hour. Try again in 60 minutes.']);
+    teamInvitationsSend($admin, $team, 'person21@example.com')->assertSessionHasErrors('email');
     teamInvitationsSend($owner, $team, User::factory()->create()->email)->assertSessionHas('success', 'Member added.');
     teamInvitationsSend($otherOwner, $other, 'person21@example.com')->assertSessionHasNoErrors();
 
     expect(TeamInvitation::query()->where('team_id', $team->id)->count())->toBe(20);
 
-    $this->travel(61)->minutes();
+    $this->travel(59)->minutes();
+
+    teamInvitationsSend($owner, $team, 'person21@example.com')->assertSessionHasErrors(['email' => 'This team has sent 20 invitations in the last hour. Try again in 1 minute.']);
+
+    $this->travel(2)->minutes();
 
     teamInvitationsSend($owner, $team, 'person21@example.com')->assertSessionHasNoErrors();
 
@@ -350,7 +375,7 @@ test('the hourly limit follows the panel setting', function () {
 
     teamInvitationsSend($owner, $team, 'first@example.com')->assertSessionHasNoErrors();
     teamInvitationsSend($owner, $team, 'second@example.com')->assertSessionHasNoErrors();
-    teamInvitationsSend($owner, $team, 'third@example.com')->assertSessionHasErrors(['email' => 'This team has sent 2 invitations in the last hour. Try again in an hour.']);
+    teamInvitationsSend($owner, $team, 'third@example.com')->assertSessionHasErrors(['email' => 'This team has sent 2 invitations in the last hour. Try again in 60 minutes.']);
 });
 
 test('the team tab lists pending invitations with their role and expiry', function () {
@@ -380,40 +405,47 @@ test('the team tab lists pending invitations with their role and expiry', functi
 });
 
 test('whoever sent an invitation can copy its link once, right after sending it', function () {
+    teamInvitationsWithoutMail();
     $team = teamInvitationsTeam();
     $owner = teamInvitationsMember($team);
     $admin = teamInvitationsMember($team, TeamRole::Admin, 'Jonas Weber');
 
     teamInvitationsSend($owner, $team, 'new@example.com')->assertSessionHasNoErrors();
-    $link = teamInvitationsLink('new@example.com');
+    $link = 'http://localhost/invitations/' . teamInvitationsCopied();
 
     $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn($page) => $page->where('invitations.0.link', $link));
     $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn($page) => $page->where('invitations.0.link', null));
 
     teamInvitationsSend($owner, $team, 'new@example.com')->assertSessionHasNoErrors();
+    $token = teamInvitationsCopied();
 
     $this->actingAs($admin)->get(route('teams.index'))
         ->assertInertia(fn($page) => $page->where('invitations.0.link', null))
-        ->assertDontSee(teamInvitationsToken(teamInvitationsLink('new@example.com')));
+        ->assertDontSee($token);
 });
 
 test('a link is only offered while it still opens the invitation', function () {
-    $invitation = TeamInvitation::factory()->withToken('the-current-token-0000000000000000000000')->create();
+    $invitation = TeamInvitation::factory()->offered()->withToken('the-current-token-0000000000000000000000')->create();
+    $emailed = TeamInvitation::factory()->withToken('an-emailed-token-00000000000000000000000')->create();
     $invitations = app(TeamInvitations::class);
 
     expect($invitations->issuedLink($invitation, ['id' => $invitation->id, 'token' => 'the-current-token-0000000000000000000000']))->toBe('http://localhost/invitations/the-current-token-0000000000000000000000')
         ->and($invitations->issuedLink($invitation, ['id' => $invitation->id, 'token' => 'a-token-that-was-replaced-00000000000000']))->toBeNull()
         ->and($invitations->issuedLink($invitation, ['id' => 'another-invitation', 'token' => 'the-current-token-0000000000000000000000']))->toBeNull()
-        ->and($invitations->issuedLink($invitation, null))->toBeNull();
+        ->and($invitations->issuedLink($invitation, null))->toBeNull()
+        ->and($invitations->issuedLink($emailed, ['id' => $emailed->id, 'token' => 'an-emailed-token-00000000000000000000000']))->toBeNull();
 });
 
 test("the link never reaches a deployer's page", function () {
+    teamInvitationsWithoutMail();
     $team = teamInvitationsTeam();
     $admin = teamInvitationsMember($team, TeamRole::Admin);
     $deployer = teamInvitationsMember($team, TeamRole::Member, 'Priya Nair');
 
     teamInvitationsSend($admin, $team, 'new@example.com')->assertSessionHasNoErrors();
-    $token = teamInvitationsToken(teamInvitationsLink('new@example.com'));
+    $token = teamInvitationsCopied();
+
+    expect($token)->toHaveLength(40);
 
     $this->actingAs($deployer)->get(route('teams.index'))
         ->assertInertia(fn($page) => $page
@@ -423,7 +455,7 @@ test("the link never reaches a deployer's page", function () {
         ->assertDontSee($token);
 
     teamInvitationsSend($admin, $team, 'other@example.com')->assertSessionHasNoErrors();
-    $other = teamInvitationsToken(teamInvitationsLink('other@example.com'));
+    $other = teamInvitationsCopied();
     $team->members()->updateExistingPivot($admin->id, ['role' => TeamRole::Member->value]);
 
     $this->actingAs($admin->fresh())->get(route('teams.index'))
@@ -462,3 +494,147 @@ test('a read-only team can still revoke an invitation', function () {
 
     expect(TeamInvitation::query()->count())->toBe(0);
 });
+
+test('a panel that cannot send email offers the link instead of sending it', function (string $mailer) {
+    config(['mail.default' => $mailer]);
+    $team = teamInvitationsTeam();
+    $owner = teamInvitationsMember($team);
+
+    teamInvitationsSend($owner, $team, 'new@example.com')
+        ->assertSessionHas('success', 'Invitation created. This panel cannot send email yet, so copy the link below and send it to new@example.com yourself.');
+
+    $invitation = TeamInvitation::query()->sole();
+    $token = teamInvitationsCopied();
+
+    expect($invitation->link_offered)->toBeTrue()
+        ->and(TeamInvitation::usable($token)?->is($invitation))->toBeTrue();
+
+    Notification::assertNothingSent();
+
+    $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn($page) => $page->where('invitations.0.link', "http://localhost/invitations/{$token}"));
+})->with(['log', 'array']);
+
+test('a panel that can send email sends the link and never offers it', function () {
+    $team = teamInvitationsTeam();
+    $owner = teamInvitationsMember($team);
+
+    teamInvitationsSend($owner, $team, 'new@example.com')
+        ->assertSessionHas('success', 'Invitation sent to new@example.com.')
+        ->assertSessionMissing(TeamInvitations::ISSUED);
+
+    expect(TeamInvitation::query()->sole()->link_offered)->toBeFalse()
+        ->and(teamInvitationsLink('new@example.com'))->toStartWith('http://localhost/invitations/');
+
+    $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn($page) => $page->where('invitations.0.link', null));
+});
+
+test('cloud never offers the link, whatever its mailer', function (string $mailer) {
+    CloudBilling::enable();
+    config(['mail.default' => $mailer]);
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $owner = CloudBilling::owner($team);
+
+    teamInvitationsSend($owner, $team, 'new@example.com')
+        ->assertSessionHas('success', 'Invitation sent to new@example.com.')
+        ->assertSessionMissing(TeamInvitations::ISSUED);
+
+    expect(TeamInvitation::query()->sole()->link_offered)->toBeFalse()
+        ->and(teamInvitationsLink('new@example.com'))->toStartWith('http://localhost/invitations/');
+
+    $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn($page) => $page->where('invitations.0.link', null));
+})->with(['log', 'array', 'smtp']);
+
+test('on cloud an address that already has an account is invited, never added at once', function () {
+    CloudBilling::enable();
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $owner = CloudBilling::owner($team);
+    $person = User::factory()->create(['email' => 'person@example.com']);
+
+    teamInvitationsSend($owner, $team, 'Person@Example.com')->assertSessionHas('success', 'Invitation sent to person@example.com.');
+
+    expect($team->members()->whereKey($person->id)->exists())->toBeFalse()
+        ->and(TeamInvitation::query()->sole()->email)->toBe('person@example.com')
+        ->and(Activity::query()->where('description', 'member_added')->exists())->toBeFalse()
+        ->and(teamInvitationsLink('person@example.com'))->toStartWith('http://localhost/invitations/');
+});
+
+test('a self-hosted panel adds an account at once only when its address is confirmed', function () {
+    $team = teamInvitationsTeam();
+    $owner = teamInvitationsMember($team);
+    $unconfirmed = User::factory()->unverified()->create(['email' => 'unconfirmed@example.com']);
+    $confirmed = User::factory()->create(['email' => 'confirmed@example.com']);
+
+    teamInvitationsSend($owner, $team, 'unconfirmed@example.com')->assertSessionHas('success', 'Invitation sent to unconfirmed@example.com.');
+    teamInvitationsSend($owner, $team, 'confirmed@example.com')->assertSessionHas('success', 'Member added.');
+
+    expect($team->members()->whereKey($unconfirmed->id)->exists())->toBeFalse()
+        ->and($team->members()->whereKey($confirmed->id)->exists())->toBeTrue()
+        ->and(TeamInvitation::query()->sole()->email)->toBe('unconfirmed@example.com');
+});
+
+test('an account made from a copied link does not let another team add it at once', function () {
+    teamInvitationsWithoutMail();
+    $first = teamInvitationsTeam();
+    $second = teamInvitationsTeam('Globex', 'globex');
+    $secondOwner = teamInvitationsMember($second, name: 'Hank Scorpio');
+
+    teamInvitationsSend(teamInvitationsMember($first), $first, 'cto@victim.example')->assertSessionHasNoErrors();
+    $token = teamInvitationsCopied();
+
+    $this->post(route('logout'));
+    $this->post(route('invitations.register', $token), [
+        'name' => 'Not The Cto',
+        'password' => 'a-long-enough-passphrase',
+        'password_confirmation' => 'a-long-enough-passphrase',
+    ])->assertRedirect('http://localhost/acme/dashboard');
+
+    $squat = User::query()->where('email', 'cto@victim.example')->sole();
+
+    expect($squat->email_verified_at)->toBeNull();
+
+    $this->post(route('logout'));
+
+    teamInvitationsSend($secondOwner, $second, 'cto@victim.example')
+        ->assertSessionHas('success', 'Invitation created. This panel cannot send email yet, so copy the link below and send it to cto@victim.example yourself.');
+
+    expect($second->members()->whereKey($squat->id)->exists())->toBeFalse()
+        ->and(TeamInvitation::query()->where('team_id', $second->id)->sole()->email)->toBe('cto@victim.example');
+});
+
+test('an account made from an emailed link joins the next team at once', function () {
+    $first = teamInvitationsTeam();
+    $second = teamInvitationsTeam('Globex', 'globex');
+    $secondOwner = teamInvitationsMember($second, name: 'Hank Scorpio');
+
+    teamInvitationsSend(teamInvitationsMember($first), $first, 'cto@example.com')->assertSessionHasNoErrors();
+    $token = teamInvitationsToken(teamInvitationsLink('cto@example.com'));
+
+    $this->post(route('logout'));
+    $this->post(route('invitations.register', $token), [
+        'name' => 'The Cto',
+        'password' => 'a-long-enough-passphrase',
+        'password_confirmation' => 'a-long-enough-passphrase',
+    ])->assertRedirect('http://localhost/acme/dashboard');
+
+    $account = User::query()->where('email', 'cto@example.com')->sole();
+
+    expect($account->email_verified_at)->not->toBeNull();
+
+    $this->post(route('logout'));
+
+    teamInvitationsSend($secondOwner, $second, 'cto@example.com')->assertSessionHas('success', 'Member added.');
+
+    expect($second->members()->whereKey($account->id)->exists())->toBeTrue();
+});
+
+test('the team tab knows whether this panel hands out links instead of email', function (string $edition, string $mailer, bool $links) {
+    config(['coresmith.edition' => $edition, 'mail.default' => $mailer]);
+    $team = Team::factory()->owned()->create();
+
+    $this->actingAs(CloudBilling::owner($team))->get(route('teams.index'))->assertInertia(fn($page) => $page->where('invite_links', $links));
+})->with([
+    'self-hosted that can send email' => ['self-hosted', 'smtp', false],
+    'self-hosted that writes email to the log' => ['self-hosted', 'log', true],
+    'self-hosted that keeps email in memory' => ['self-hosted', 'array', true],
+    'cloud, whatever its mailer' => ['cloud', 'array', false],
+]);

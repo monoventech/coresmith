@@ -62,6 +62,7 @@ function billingCheck(array $options = []): array
 beforeEach(function () {
     CloudBilling::enable();
     config(['cashier.key' => 'pk_test_coresmith_fake_key', 'cashier.secret' => FakeStripe::SECRET, 'cashier.webhook.secret' => FakeStripe::WEBHOOK_SECRET]);
+    config(['mail.default' => 'smtp', 'mail.mailers.smtp.username' => 'mailer-login-e2e', 'mail.mailers.smtp.password' => 'mailer-password-e2e']);
 });
 
 test('a panel ready for stripe passes every check', function () {
@@ -81,11 +82,27 @@ test('a panel ready for stripe passes every check', function () {
         ->and($output)->toContain('✓ Pro costs $19 a month in Stripe.')
         ->and($output)->toContain('✓ Business costs $39 a month in Stripe.')
         ->and($output)->toContain('✓ Stripe sends every event the panel needs to ' . route('cashier.webhook') . '.')
+        ->and($output)->toContain('✓ MAIL_MAILER is smtp, so the panel can send email.')
         ->and($output)->not->toContain('✗')
         ->and($output)->not->toContain(FakeStripe::SECRET)
         ->and($output)->not->toContain(FakeStripe::WEBHOOK_SECRET)
-        ->and($output)->not->toContain('pk_test_coresmith_fake_key');
+        ->and($output)->not->toContain('pk_test_coresmith_fake_key')
+        ->and($output)->not->toContain('mailer-login-e2e')
+        ->and($output)->not->toContain('mailer-password-e2e');
 });
+
+test('a panel whose mail goes nowhere fails the check', function (string $mailer) {
+    config(['mail.default' => $mailer]);
+    FakeStripe::fake();
+
+    [$code, $output] = billingCheck();
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain("✗ MAIL_MAILER is {$mailer}, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.")
+        ->and($output)->toContain('✓ Pro has a price.')
+        ->and($output)->not->toContain('mailer-login-e2e')
+        ->and($output)->not->toContain('mailer-password-e2e');
+})->with(['log', 'array']);
 
 test('without --live nothing is asked of stripe', function () {
     FakeStripe::fake();

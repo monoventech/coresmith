@@ -36,7 +36,7 @@ final class AccountLinker
         }
 
         $identity = SsoIdentity::query()->where('issuer', $issuer)->where('subject', $profile['sub'])->with('user')->first();
-        $user = $identity?->user ?? User::query()->whereRaw('lower(email) = ?', [$email])->first();
+        $user = $identity?->user ?? User::findByEmail($email);
 
         if (!$user instanceof User && !$connection->jit_provisioning) {
             throw new SsoException("There is no Coresmith account for {$email}. Ask an owner of {$team->name} to add you.", 'account.missing', $team);

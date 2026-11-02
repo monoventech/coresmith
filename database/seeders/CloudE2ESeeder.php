@@ -19,6 +19,7 @@ use App\Models\Server;
 use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamDomain;
+use App\Models\TeamInvitation;
 use App\Models\TeamInvoice;
 use App\Models\User;
 use Database\Seeders\Support\MonovenTenant;
@@ -36,6 +37,11 @@ final class CloudE2ESeeder extends Seeder
 
     public const PROJECTS = E2ESeeder::PROJECTS;
 
+    public static function invitationToken(string $code): string
+    {
+        return str_pad("e2eCloudInvite{$code}", TeamInvitation::TOKEN_LENGTH, '0');
+    }
+
     public function run(): void
     {
         $tenant = (new MonovenTenant(E2ESeeder::METRICS_AHEAD_MINUTES, E2ESeeder::METRICS_AHEAD_MINUTES))->build([
@@ -48,6 +54,7 @@ final class CloudE2ESeeder extends Seeder
         $tenant->team->forceFill(['stripe_id' => 'cus_e2e_monoven', 'pm_type' => 'visa', 'pm_last_four' => '4242', 'pm_expires' => '08/28'])->save();
         Subscription::factory()->for($tenant->team, 'owner')->plan(Plan::Pro)->create(['renews_at' => now()->addDays(13)]);
         $this->invoices($tenant->team);
+        $this->invitations($tenant->team, $tenant->owner);
 
         $this->trialTeam($tenant->owner);
         $this->lapsedTeam($tenant->owner, $tenant->member);
@@ -187,6 +194,13 @@ final class CloudE2ESeeder extends Seeder
                 'renews_at' => now()->addDays(10),
             ]);
             $subscription->items()->update(['stripe_id' => "si_e2e_{$prefix}_{$code}"]);
+        }
+    }
+
+    private function invitations(Team $team, User $owner): void
+    {
+        foreach (self::PROJECTS as $code) {
+            TeamInvitation::factory()->for($team)->withToken(self::invitationToken($code))->create(['email' => "joiner-{$code}@cloud.test", 'invited_by' => $owner->id]);
         }
     }
 

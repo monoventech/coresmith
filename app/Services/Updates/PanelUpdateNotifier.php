@@ -11,6 +11,7 @@ namespace App\Services\Updates;
 use App\Models\InstanceSetting;
 use App\Models\User;
 use App\Notifications\PanelUpdateFailedNotification;
+use App\Support\Mailer;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
 
@@ -18,7 +19,7 @@ final class PanelUpdateNotifier
 {
     public function mailable(): bool
     {
-        return config('mail.default') !== 'log';
+        return !Mailer::writesToLog();
     }
 
     public function failed(UpdateStatus $status): bool

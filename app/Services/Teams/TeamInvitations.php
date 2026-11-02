@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Teams;
 
+use App\Enums\Edition;
 use App\Enums\TeamRole;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
@@ -15,6 +16,7 @@ use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Notifications\TeamInvitationNotification;
 use App\Services\Billing\PlanGate;
+use App\Support\Mailer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -37,6 +39,7 @@ final class TeamInvitations
             [
                 'role' => $role,
                 'token_hash' => TeamInvitation::hash($token),
+                'link_offered' => $this->offersLinks(),
                 'invited_by' => $inviter->getKey(),
                 'expires_at' => now()->addDays(TeamInvitation::VALID_DAYS),
                 'accepted_at' => null,
@@ -45,9 +48,16 @@ final class TeamInvitations
 
         activity()->performedOn($team)->causedBy($inviter)->withProperties(['email' => $invitation->email, 'role' => $role->value])->log('member_invited');
 
-        Notification::route('mail', $invitation->email)->notify(new TeamInvitationNotification((string) $team->name, (string) $inviter->name, $this->link($token)));
+        if (!$invitation->link_offered) {
+            Notification::route('mail', $invitation->email)->notify(new TeamInvitationNotification((string) $team->name, (string) $inviter->name, $this->link($token)));
+        }
 
         return [$invitation, $token];
+    }
+
+    public function offersLinks(): bool
+    {
+        return Edition::current()->isSelfHosted() && !Mailer::delivers();
     }
 
     public function link(string $token): string
@@ -57,7 +67,7 @@ final class TeamInvitations
 
     public function issuedLink(TeamInvitation $invitation, mixed $issued): ?string
     {
-        if (!is_array($issued) || ($issued['id'] ?? null) !== $invitation->getKey() || !is_string($issued['token'] ?? null)) {
+        if (!$invitation->link_offered || !is_array($issued) || ($issued['id'] ?? null) !== $invitation->getKey() || !is_string($issued['token'] ?? null)) {
             return null;
         }
 
@@ -68,7 +78,7 @@ final class TeamInvitations
     {
         $team = $invitation->team;
 
-        if (!$team instanceof Team) {
+        if (!$team instanceof Team || !$invitation->isFor($user)) {
             return false;
         }
 
@@ -94,7 +104,13 @@ final class TeamInvitations
             }
 
             $pending->forceFill(['accepted_at' => now()])->save();
-            $user->forceFill(['current_team_id' => $team->getKey()])->save();
+            $user->forceFill(['current_team_id' => $team->getKey()]);
+
+            if (!$pending->link_offered && !$user->hasVerifiedEmail()) {
+                $user->forceFill(['email_verified_at' => now()]);
+            }
+
+            $user->save();
 
             DB::afterCommit(fn() => SyncAuthorizedKeys::dispatchForServers(SyncAuthorizedKeys::activeServersOf([$team->getKey()])));
 

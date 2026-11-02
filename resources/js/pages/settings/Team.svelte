@@ -58,6 +58,7 @@
         address,
         members = [],
         invitations = [],
+        invite_links: inviteLinks = false,
         roles = [],
         can,
         sso,
@@ -68,6 +69,7 @@
         address: Address
         members: Member[]
         invitations?: Invitation[]
+        invite_links?: boolean
         roles: { value: string; label: string }[]
         can: { update: boolean; manageMembers: boolean; grantOwner: boolean }
         sso: SingleSignOn
@@ -77,6 +79,13 @@
 
     const billing = $derived(page.props.billing)
     const memberNote = $derived(billing?.notes.members ?? null)
+    const inviteHelp = $derived(
+        page.props.edition === 'cloud'
+            ? 'They get an email with a link to join.'
+            : inviteLinks
+              ? 'Someone with a confirmed account here joins straight away. For anyone else you get a link to send them.'
+              : 'Someone with a confirmed account here joins straight away. Anyone else gets an email with a link to join.'
+    )
 
     let inviting = $state(false)
     let removing = $state<Member | null>(null)
@@ -289,10 +298,7 @@
             {#snippet children({ errors, processing })}
                 <Dialog.Header>
                     <Dialog.Title>Invite someone</Dialog.Title>
-                    <Dialog.Description
-                        >Someone with an account here joins straight away. Anyone else gets an email with a link to
-                        join. Their role decides what they can change.</Dialog.Description
-                    >
+                    <Dialog.Description>{inviteHelp} Their role decides what they can change.</Dialog.Description>
                 </Dialog.Header>
                 <div class="mt-4 flex flex-col gap-3">
                     <div>

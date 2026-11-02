@@ -134,9 +134,10 @@ test('starter is for one person', function () {
     foreach ([Team::factory()->subscribed(Plan::Pro)->owned()->create(), Team::factory()->onTrial()->owned()->create()] as $team) {
         $this->actingAs(planLimitsOwner($team))
             ->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => TeamRole::Member->value])
-            ->assertSessionMissing('error');
+            ->assertSessionMissing('error')
+            ->assertSessionHas('success', "Invitation sent to {$newcomer->email}.");
 
-        expect($team->members()->count())->toBe(2);
+        expect($team->invitations()->pluck('email')->all())->toBe([$newcomer->email]);
     }
 });
 

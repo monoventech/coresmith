@@ -67,6 +67,7 @@ final class TeamController extends Controller
                 'is_you' => $member->id === $user->id,
             ]),
             'invitations' => $this->invitations($request, $team, $user, $manages),
+            'invite_links' => app(TeamInvitations::class)->offersLinks(),
             'roles' => array_map(
                 fn(TeamRole $role): array => ['value' => $role->value, 'label' => $role->label()],
                 TeamRole::cases(),
