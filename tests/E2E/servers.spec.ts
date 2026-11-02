@@ -56,8 +56,10 @@ test.describe('a server', () => {
     })
 
     test('the last tab stays in view when the web font widens the tabs', async ({ page }) => {
-        await gotoServerTab(page, 'forge-01', 'Activity')
-        await tabStaysInViewAsFontLoads(page, page.url(), 'Server sections', 'Activity')
+        await tabStaysInViewAsFontLoads(page, '/dashboard', 'Server sections', 'Activity', async () => {
+            await page.getByTestId('server-card').getByRole('link', { name: 'forge-01', exact: true }).click()
+            await tabs(page, 'Server sections').getByRole('link', { name: 'Activity', exact: true }).click()
+        })
     })
 
     test('the last tab comes into view when the strip narrows', async ({ page }) => {

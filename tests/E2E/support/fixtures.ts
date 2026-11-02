@@ -95,7 +95,13 @@ export async function expectTabInView(tab: Locator) {
     await expect.poll(() => tabOverhang(tab)).toBeLessThanOrEqual(1)
 }
 
-export async function tabStaysInViewAsFontLoads(page: Page, url: string, label: string, name: string) {
+export async function tabStaysInViewAsFontLoads(
+    page: Page,
+    url: string,
+    label: string,
+    name: string,
+    reach?: () => Promise<void>
+) {
     let release = () => {}
     const font = new Promise<void>((resolve) => (release = resolve))
 
@@ -105,12 +111,14 @@ export async function tabStaysInViewAsFontLoads(page: Page, url: string, label: 
         await route.fulfill({ path: 'resources/fonts/BespokeSlab-Variable.woff2' })
     })
     await page.goto(url, { waitUntil: 'commit' })
+    await reach?.()
 
     const strip = tabs(page, label)
     const tab = strip.getByRole('link', { name, exact: true })
     const width = () => strip.evaluate((element) => element.scrollWidth)
 
     try {
+        await expect(tab).toHaveAttribute('aria-current', 'page')
         await expectTabInView(tab)
 
         const before = await width()
@@ -118,6 +126,7 @@ export async function tabStaysInViewAsFontLoads(page: Page, url: string, label: 
         await strip.evaluate((element) => {
             element.style.height = `${element.offsetHeight}px`
         })
+        await main(page).evaluate((element) => element.scrollTo({ top: 0 }))
 
         release()
 
