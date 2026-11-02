@@ -118,6 +118,13 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
         ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
 
+test('too little disk stops the install and a little is a warning', function () {
+    expect(installScriptBody())
+        ->toContain('[ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb}GB of disk space is free. Coresmith needs at least 5GB, and 10GB or more is recommended."')
+        ->toContain('warn "Only ${disk_gb}GB of disk space is free. Coresmith recommends at least 10GB."')
+        ->not->toContain('Coresmith needs at least 10GB');
+});
+
 test('the installer turns off public registration, which the holding page depends on', function () {
     expect(installScriptBody())->toContain('update_env CORESMITH_ALLOW_REGISTRATION "false"');
 });

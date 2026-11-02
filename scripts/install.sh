@@ -260,8 +260,12 @@ preflight() {
 
     local disk_gb
     disk_gb="$(df -P / | awk 'NR==2 {printf "%.0f", $4/1048576}')"
-    [ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb}GB of disk space is free. Coresmith needs at least 10GB."
-    success "Disk: ${disk_gb}GB free"
+    [ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb}GB of disk space is free. Coresmith needs at least 5GB, and 10GB or more is recommended."
+    if [ "${disk_gb:-0}" -lt 10 ]; then
+        warn "Only ${disk_gb}GB of disk space is free. Coresmith recommends at least 10GB."
+    else
+        success "Disk: ${disk_gb}GB free"
+    fi
 }
 
 # ── Prompts ──────────────────────────────────────────────────────────────────
