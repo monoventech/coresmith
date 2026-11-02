@@ -395,6 +395,28 @@ test('an admin can save environment variables and they are encrypted at rest', f
         ->and($application->fresh()->env_variables)->toContain('secret-value');
 });
 
+test('an environment as long as the form accepts is saved and read back whole', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create();
+    $lines = [];
+
+    for ($number = 1; strlen(implode("\n", $lines)) < 65000; $number++) {
+        $lines[] = sprintf('SETTING_%04d=%s', $number, str_repeat('a', 48));
+    }
+
+    $env = implode("\n", $lines);
+    $env .= "\nLAST=" . str_repeat('b', 65535 - strlen($env) - 6);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.env.update', [$server, $application]), ['env' => $env])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect(strlen($env))->toBe(65535)
+        ->and($application->fresh()->env_variables)->toBe($env);
+});
+
 test('the slug generator never produces an invalid system user', function () {
     $server = Server::factory()->create();
     $slugs = new SlugGenerator;

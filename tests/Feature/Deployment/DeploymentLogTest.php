@@ -27,3 +27,16 @@ test('a failure is still written to the deployment when the application cannot b
         ->and($fresh->log)->toContain('composer install exited with 1')
         ->and($fresh->log)->toEndWith(' deploy failed. the current release is untouched.');
 });
+
+test('a deploy log longer than 64 KB is kept whole', function () {
+    $deployment = Deployment::factory()->create(['status' => DeploymentStatus::Running, 'log' => '[12:00:00] build: building assets']);
+    $output = implode("\n", array_map(fn(int $line): string => "dist/assets/chunk-{$line}.js   12.34 kB │ gzip: 4.56 kB", range(1, 2000)));
+
+    app(DeploymentLog::class)->append($deployment, $output);
+
+    $log = (string) $deployment->fresh()->log;
+
+    expect(strlen($log))->toBeGreaterThan(65535)
+        ->and($log)->toStartWith('[12:00:00] build: building assets')
+        ->and($log)->toEndWith('dist/assets/chunk-2000.js   12.34 kB │ gzip: 4.56 kB');
+});

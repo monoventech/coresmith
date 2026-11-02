@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Models\Server;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\MySqlConnection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -50,4 +52,20 @@ test('a database that is not sqlite gets no sqlite file named after it', functio
     @unlink(base_path($name));
 
     expect($created)->toBeFalse();
+});
+
+test('a time in the hour the clocks skip in spring is kept as it was written', function () {
+    $this->travelTo(CarbonImmutable::parse('2027-03-28 01:30:00'));
+
+    $server = Server::factory()->create();
+
+    expect($server->fresh()->created_at?->toIso8601ZuluString())->toBe('2027-03-28T01:30:00Z');
+});
+
+test('the database reads and writes times in utc whatever zone its own server keeps', function () {
+    if (!Schema::getConnection() instanceof MySqlConnection) {
+        $this->markTestSkipped('Only MySQL and MariaDB convert timestamps through the session time zone; SQLite stores text and PostgreSQL keeps a timestamp without time zone as written.');
+    }
+
+    expect(DB::selectOne('select @@session.time_zone as zone')->zone)->toBe('+00:00');
 });
