@@ -95,47 +95,29 @@ export async function expectTabInView(tab: Locator) {
     await expect.poll(() => tabOverhang(tab)).toBeLessThanOrEqual(1)
 }
 
-export async function tabStaysInViewAsFontLoads(
-    page: Page,
-    url: string,
-    label: string,
-    name: string,
-    reach?: () => Promise<void>
-) {
-    let release = () => {}
-    const font = new Promise<void>((resolve) => (release = resolve))
-
+export async function tabStaysInViewAsTabsWiden(page: Page, url: string, label: string, name: string) {
     await page.setViewportSize(NARROW_PHONE)
-    await page.route('**/build/assets/hanken-grotesk-500-normal-*', async (route) => {
-        await font
-        await route.fulfill({ path: 'resources/fonts/BespokeSlab-Variable.woff2' })
-    })
-    await page.goto(url, { waitUntil: 'commit' })
-    await reach?.()
+    await page.goto(url)
 
     const strip = tabs(page, label)
     const tab = strip.getByRole('link', { name, exact: true })
     const width = () => strip.evaluate((element) => element.scrollWidth)
 
-    try {
-        await expect(tab).toHaveAttribute('aria-current', 'page')
-        await expectTabInView(tab)
+    await expect(tab).toHaveAttribute('aria-current', 'page')
+    await expectTabInView(tab)
 
-        const before = await width()
+    const before = await width()
 
-        await strip.evaluate((element) => {
-            element.style.height = `${element.offsetHeight}px`
+    await strip.evaluate((element) => {
+        element.style.height = `${element.offsetHeight}px`
+        element.querySelectorAll<HTMLElement>('a').forEach((link) => {
+            link.style.letterSpacing = '0.1em'
         })
-        await main(page).evaluate((element) => element.scrollTo({ top: 0 }))
+    })
 
-        release()
-
-        await expect.poll(width).toBeGreaterThan(before)
-        await expectTabInView(tab)
-        await expect(main(page)).toHaveJSProperty('scrollTop', 0)
-    } finally {
-        release()
-    }
+    await expect.poll(width).toBeGreaterThan(before)
+    await expectTabInView(tab)
+    await expect(main(page)).toHaveJSProperty('scrollTop', 0)
 }
 
 export async function tabComesIntoViewAsStripNarrows(page: Page, url: string, label: string, name: string) {

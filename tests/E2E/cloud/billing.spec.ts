@@ -4,7 +4,7 @@ import {
     isMobile,
     noSidewaysScroll,
     tabComesIntoViewAsStripNarrows,
-    tabStaysInViewAsFontLoads,
+    tabStaysInViewAsTabsWiden,
     test
 } from '../support/fixtures'
 
@@ -51,8 +51,8 @@ test.describe('the billing tab on coresmith cloud', () => {
         ).toBeInViewport({ ratio: 0.9 })
     })
 
-    test('the billing tab stays in view when the web font widens the tabs', async ({ page }) => {
-        await tabStaysInViewAsFontLoads(page, '/monoven/settings/billing', 'Settings', 'Billing')
+    test('the billing tab stays in view when the tabs widen', async ({ page }) => {
+        await tabStaysInViewAsTabsWiden(page, '/monoven/settings/billing', 'Settings', 'Billing')
     })
 
     test('the billing tab comes into view when the strip narrows', async ({ page }) => {

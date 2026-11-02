@@ -9,7 +9,7 @@ import {
     tabComesIntoViewAsStripNarrows,
     tabOverhang,
     tabs,
-    tabStaysInViewAsFontLoads,
+    tabStaysInViewAsTabsWiden,
     test,
     toast
 } from './support/fixtures'
@@ -44,8 +44,8 @@ test.describe('settings', () => {
         await expect(tabs(page, 'Settings').getByRole('link', { name: 'Billing' })).toHaveCount(0)
     })
 
-    test('the last tab stays in view when the web font widens the tabs', async ({ page }) => {
-        await tabStaysInViewAsFontLoads(page, '/settings/api-tokens', 'Settings', 'API tokens')
+    test('the last tab stays in view when the tabs widen', async ({ page }) => {
+        await tabStaysInViewAsTabsWiden(page, '/settings/api-tokens', 'Settings', 'API tokens')
     })
 
     test('the last tab comes into view when the strip narrows', async ({ page }) => {
