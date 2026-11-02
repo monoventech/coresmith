@@ -116,8 +116,9 @@ test('an installation failure is a provider failure that carries its kind', func
             GitHubInstallationException::UNINSTALLED,
             GitHubInstallationException::SUSPENDED,
             GitHubInstallationException::REPOSITORY,
+            GitHubInstallationException::REFUSED,
             GitHubInstallationException::UNREACHABLE,
-        ])->toBe(['uninstalled', 'suspended', 'repository', 'unreachable'])
+        ])->toBe(['uninstalled', 'suspended', 'repository', 'refused', 'unreachable'])
         ->and(GitHubAppApi::API)->toBe('https://api.github.com')
         ->and(GitHubAppApi::WEB)->toBe('https://github.com');
 });
@@ -590,7 +591,6 @@ test('a refused token says why', function (int $status, array $body, array $head
     Http::assertSentCount(1);
 })->with([
     'uninstalled' => [404, ['message' => 'Not Found'], [], 'uninstalled'],
-    'suspended' => [403, ['message' => 'This installation has been suspended'], [], 'suspended'],
     'a repository that is not granted' => [422, ['message' => 'The repository with id 70000001 is not accessible to this installation'], [], 'repository'],
     'a server error' => [500, ['message' => 'Server Error'], [], 'unreachable'],
     'a bad token for the app' => [401, ['message' => 'A JSON web token could not be decoded'], [], 'unreachable'],
@@ -600,6 +600,97 @@ test('a refused token says why', function (int $status, array $body, array $head
     'a secondary rate limit' => [403, ['message' => 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.'], [], 'unreachable'],
     'a forbidden with a retry after' => [403, ['message' => 'Forbidden'], ['Retry-After' => '60'], 'unreachable'],
     'a forbidden with no calls left' => [403, ['message' => 'Forbidden'], ['X-RateLimit-Remaining' => '0'], 'unreachable'],
+]);
+
+test('a forbidden token is a suspension only when github says the installation is suspended', function (mixed $installation, string $kind) {
+    $app = githubApiCredentials();
+    $reason = 'Although you appear to have the correct authorization credentials, the `monoventech` organization has an IP allow list enabled, and your IP address is not permitted to access this resource.';
+    Http::fake([
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => $reason], 403),
+        'api.github.com/app/installations/51842' => $installation,
+    ]);
+
+    $exception = githubApiThrown(fn() => app(GitHubAppApi::class)->mintToken($app, '51842'));
+
+    expect($exception)->toBeInstanceOf(GitHubInstallationException::class)
+        ->and($exception->kind)->toBe($kind)
+        ->and($exception->reason)->toBe($reason)
+        ->and($exception->getCode())->toBe(403)
+        ->and($exception->getMessage())->toBe('GitHub refused to issue an installation token: ' . $reason);
+    Http::assertSentCount(2);
+    Http::assertSent(fn(Request $request) => $request->method() === 'GET'
+        && $request->url() === 'https://api.github.com/app/installations/51842'
+        && githubApiClaims($request)['iss'] === $app->appId);
+})->with([
+    'github confirms the suspension' => [fn() => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => '2026-10-30T09:00:00Z']), 'suspended'],
+    'the installation is not suspended' => [fn() => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => null]), 'refused'],
+    'the installation is gone' => [fn() => Http::response(['message' => 'Not Found'], 404), 'uninstalled'],
+    'github will not say' => [fn() => Http::response(['message' => 'Server Error'], 500), 'refused'],
+    'github does not answer' => [fn() => Http::failedConnection(), 'refused'],
+]);
+
+test('a rate limited forbidden token is never checked as a suspension', function () {
+    Http::fake(['api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'API rate limit exceeded for installation ID 51842.'], 403)]);
+
+    $exception = githubApiThrown(fn() => app(GitHubAppApi::class)->mintToken(githubApiCredentials(), '51842'));
+
+    expect($exception->kind)->toBe('unreachable');
+    Http::assertSentCount(1);
+});
+
+test('an installation is read with the app jwt and says when it was suspended', function (?string $suspendedAt) {
+    $app = githubApiCredentials();
+    Http::fake(['api.github.com/app/installations/51842' => Http::response([
+        'id' => 51842,
+        'account' => ['login' => 'monoventech', 'type' => 'Organization'],
+        'repository_selection' => 'selected',
+        'suspended_at' => $suspendedAt,
+    ])]);
+
+    expect(app(GitHubAppApi::class)->installation($app, '51842'))->toBe([
+        'id' => '51842',
+        'account' => 'monoventech',
+        'account_type' => 'Organization',
+        'repository_selection' => 'selected',
+        'suspended_at' => $suspendedAt,
+    ]);
+    Http::assertSentCount(1);
+    Http::assertSent(fn(Request $request) => $request->method() === 'GET'
+        && $request->url() === 'https://api.github.com/app/installations/51842'
+        && githubApiClaims($request)['iss'] === $app->appId
+        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+})->with([
+    'suspended' => ['2026-10-30T09:00:00Z'],
+    'not suspended' => [null],
+]);
+
+test('an installation github no longer has is null', function () {
+    Http::fake(['api.github.com/app/installations/51842' => Http::response(['message' => 'Not Found'], 404)]);
+
+    expect(app(GitHubAppApi::class)->installation(githubApiCredentials(), '51842'))->toBeNull();
+});
+
+test('an installation github will not describe is an error that says why', function (int $status, array $body, string $message) {
+    Http::fake(['api.github.com/app/installations/51842' => Http::response($body, $status)]);
+
+    $exception = githubApiThrown(fn() => app(GitHubAppApi::class)->installation(githubApiCredentials(), '51842'));
+
+    expect($exception)->toBeInstanceOf(GitProviderException::class)
+        ->and($exception->getMessage())->toBe($message);
+})->with([
+    'a server error' => [500, ['message' => 'Server Error'], 'Server Error'],
+    'a bad token for the app' => [401, ['message' => 'A JSON web token could not be decoded'], 'A JSON web token could not be decoded'],
+    'an answer that is not an installation' => [200, ['message' => 'ok'], 'GitHub did not describe the installation.'],
+]);
+
+test('an installation id that is not a number is never asked about', function (string $installation) {
+    $exception = githubApiThrown(fn() => app(GitHubAppApi::class)->installation(githubApiCredentials(), $installation));
+
+    expect($exception)->toBeInstanceOf(GitProviderException::class);
+    Http::assertNothingSent();
+})->with([
+    'a path' => '51842/../x',
+    'nothing' => '',
 ]);
 
 test('a token request that gets no answer is unreachable', function () {
@@ -1196,7 +1287,10 @@ test('a clone token reads one repository and is not kept on the connection', fun
 });
 
 test('a clone token github refuses carries why it was refused', function (int $status, string $kind) {
-    Http::fake(['api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'No'], $status)]);
+    Http::fake([
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'No'], $status),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'suspended_at' => '2026-10-30T09:00:00Z']),
+    ]);
 
     $exception = githubApiThrown(fn() => githubApiClient()->cloneToken('70000001'));
 

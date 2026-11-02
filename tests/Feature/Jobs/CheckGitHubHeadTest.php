@@ -146,11 +146,14 @@ test('a refusal longer than the page can hold is cut to fit', function () {
         ->and($error)->toStartWith('GitHub refused the check. Resource not accessible by integration.');
 });
 
-test('a token github refuses marks the connection as a deploy would', function (int $status, array $body, string $state, string $error) {
+test('a token github refuses marks the connection as a deploy would', function (int $status, array $body, string $state, string $error, ?string $suspendedAt = null) {
     $application = githubHeadApp(['repository_head' => githubHeadSha('a')], ['access_token' => null, 'token_expires_at' => null]);
     $connection = $application->githubConnection();
     Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => githubHeadSha('a')]);
-    Http::fake(['api.github.com/app/installations/51842/access_tokens' => Http::response($body, $status)]);
+    Http::fake([
+        'api.github.com/app/installations/51842/access_tokens' => Http::response($body, $status),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => $suspendedAt]),
+    ]);
 
     githubHeadRun($application);
 
@@ -164,11 +167,12 @@ test('a token github refuses marks the connection as a deploy would', function (
         })->toBeTrue();
 
     Queue::assertNotPushed(DeployApplication::class);
-    Http::assertSentCount(1);
+    Http::assertSentCount($status === 403 ? 2 : 1);
     Http::assertNotSent(fn($request) => str_contains($request->url(), '/commits/heads/'));
 })->with([
     'the app was uninstalled' => [404, ['message' => 'Not Found'], 'removed', "Coresmith's GitHub app is no longer installed on monoventech. Connect GitHub again from Settings, Git, then deploy."],
-    'the installation is suspended' => [403, ['message' => 'This installation has been suspended'], 'suspended', "Coresmith's GitHub app is suspended on monoventech. Unsuspend it on GitHub, then deploy."],
+    'the installation is suspended' => [403, ['message' => 'This installation has been suspended'], 'suspended', "Coresmith's GitHub app is suspended on monoventech. Unsuspend it on GitHub, then deploy.", '2026-10-19T14:00:00Z'],
+    'a forbidden token github does not call a suspension' => [403, ['message' => 'Your IP address is not permitted to access this resource.'], 'unchanged', 'GitHub refused to issue an installation token: Your IP address is not permitted to access this resource.'],
     'github failed in some other way' => [500, ['message' => 'Server Error'], 'unchanged', 'GitHub refused to issue an installation token: Server Error'],
 ]);
 

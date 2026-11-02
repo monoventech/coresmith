@@ -8,8 +8,10 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
 use App\Models\GitHubApp;
+use App\Models\SourceProvider;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\GitHub\GitHubAppHealth;
@@ -39,6 +41,14 @@ final class CheckGitHubWebhooks implements ShouldQueue
         }
 
         GitHubApp::query()->orderBy('id')->each(fn(GitHubApp $app) => $this->check($apps->fromModel($app), $api, $health));
+
+        SourceProvider::query()
+            ->where('type', SourceProviderType::GitHubApp->value)
+            ->whereNotNull('suspended_at')
+            ->orderBy('id')
+            ->each(function (SourceProvider $connection): void {
+                CheckGitHubInstallation::throttled($connection);
+            });
     }
 
     private function check(#[\SensitiveParameter] GitHubAppCredentials $app, GitHubAppApi $api, GitHubAppHealth $health): void

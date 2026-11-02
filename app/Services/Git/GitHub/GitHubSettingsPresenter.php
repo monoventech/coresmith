@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Git\GitHub;
 
 use App\Enums\SourceProviderType;
+use App\Jobs\CheckGitHubInstallation;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
@@ -111,6 +112,10 @@ final class GitHubSettingsPresenter
      */
     private function connection(SourceProvider $provider, #[\SensitiveParameter] ?GitHubAppCredentials $app): array
     {
+        if ($provider->suspended_at !== null && $app !== null) {
+            CheckGitHubInstallation::throttled($provider);
+        }
+
         $expires = $provider->token_expires_at;
         $holdsToken = $provider->getRawOriginal('access_token') !== null && $expires !== null && $expires->isFuture();
 

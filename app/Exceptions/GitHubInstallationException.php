@@ -16,9 +16,11 @@ final class GitHubInstallationException extends GitProviderException
 
     public const REPOSITORY = 'repository';
 
+    public const REFUSED = 'refused';
+
     public const UNREACHABLE = 'unreachable';
 
-    public function __construct(string $message, public readonly string $kind, int $status = 0)
+    public function __construct(string $message, public readonly string $kind, int $status = 0, public readonly string $reason = '')
     {
         parent::__construct($message, $status);
     }

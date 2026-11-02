@@ -72,6 +72,10 @@ function githubConnectFake(array $installations, string $clientId = 'Iv1.client'
             'token' => 'ghs_checking_' . preg_replace('#^.*/app/installations/([0-9]+)/access_tokens$#', '$1', $request->url()),
             'expires_at' => '2030-01-01T00:00:00Z',
         ], 201),
+        'api.github.com/app/installations/*' => fn($request) => Http::response([
+            'id' => (int) preg_replace('#^.*/app/installations/([0-9]+)$#', '$1', $request->url()),
+            'suspended_at' => '2026-10-18T14:00:00Z',
+        ]),
         'api.github.com/installation/repositories*' => fn($request) => $page($ids('covered', substr((string) ($request->header('Authorization')[0] ?? ''), strlen('Bearer ghs_checking_'))), $request),
         'api.github.com/installation/token' => Http::response(null, 204),
         "api.github.com/applications/{$clientId}/token" => Http::response(null, 204),

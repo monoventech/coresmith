@@ -11,6 +11,7 @@ namespace App\Services\Deployment;
 use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
 use App\Models\Application;
+use App\Services\Git\RefusalReason;
 
 final readonly class GitFailure
 {
@@ -38,11 +39,13 @@ final readonly class GitFailure
     public static function adviceFor(GitProviderException $refusal, Application $application): string
     {
         $account = (string) $application->githubConnection()?->name;
+        $installation = $refusal instanceof GitHubInstallationException ? $refusal : null;
 
-        return match ($refusal instanceof GitHubInstallationException ? $refusal->kind : null) {
+        return match ($installation?->kind) {
             GitHubInstallationException::UNINSTALLED => "Coresmith's GitHub app is no longer installed on {$account}. Connect GitHub again from Settings, Git, then deploy.",
             GitHubInstallationException::SUSPENDED => self::suspended($account),
             GitHubInstallationException::REPOSITORY => 'GitHub no longer gives Coresmith access to ' . self::repository($application) . ". Add it under Manage repositories on GitHub, or if it moved to another account, connect that account's installation from Settings, Git. Then deploy again.",
+            GitHubInstallationException::REFUSED => 'GitHub would not give Coresmith a clone token for ' . self::repository($application) . '. It said: ' . RefusalReason::sentence((string) $installation?->reason) . ' Fix that on GitHub, then deploy again.',
             GitHubInstallationException::UNREACHABLE => 'Coresmith could not get a clone token from GitHub. Try again in a minute.',
             default => $refusal->getMessage(),
         };

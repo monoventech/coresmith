@@ -146,13 +146,29 @@ final class GitHubAppApi
         $response = $this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get(self::API . '/user/installations', ['per_page' => 100])));
         $installations = array_filter((array) $response->json('installations', []), 'is_array');
 
-        return array_values(array_map(fn(array $installation): array => [
-            'id' => (string) $installation['id'],
-            'account' => (string) ($installation['account']['login'] ?? $installation['account']['slug'] ?? ''),
-            'account_type' => (string) ($installation['account']['type'] ?? ''),
-            'repository_selection' => (string) ($installation['repository_selection'] ?? ''),
-            'suspended_at' => isset($installation['suspended_at']) ? (string) $installation['suspended_at'] : null,
-        ], $installations));
+        return array_values(array_map(fn(array $installation): array => $this->describe($installation), $installations));
+    }
+
+    /**
+     * @return array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}|null
+     */
+    public function installation(#[\SensitiveParameter] GitHubAppCredentials $app, string $installationId): ?array
+    {
+        $url = self::API . '/app/installations/' . $this->installationId($installationId);
+        $request = $this->asApp($app);
+        $response = $this->call(fn(): Response => $request->get($url));
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        $installation = $this->guard($response)->json();
+
+        if (!is_array($installation) || !is_int($installation['id'] ?? null)) {
+            throw new GitProviderException('GitHub did not describe the installation.');
+        }
+
+        return $this->describe($installation);
     }
 
     public function userLogin(#[\SensitiveParameter] string $userToken): string
@@ -171,7 +187,7 @@ final class GitHubAppApi
      */
     public function userRepositoryIds(#[\SensitiveParameter] string $userToken, string $installationId, int $maxPages): ?array
     {
-        return $this->repositoryIds($userToken, self::API . '/user/installations/' . $this->installation($installationId) . '/repositories', $maxPages);
+        return $this->repositoryIds($userToken, self::API . '/user/installations/' . $this->installationId($installationId) . '/repositories', $maxPages);
     }
 
     public function revokeUserToken(#[\SensitiveParameter] GitHubAppCredentials $app, #[\SensitiveParameter] string $userToken): void
@@ -187,7 +203,7 @@ final class GitHubAppApi
      */
     public function mintToken(#[\SensitiveParameter] GitHubAppCredentials $app, string $installationId, array $scope = []): array
     {
-        $url = self::API . '/app/installations/' . $this->installation($installationId) . '/access_tokens';
+        $url = self::API . '/app/installations/' . $this->installationId($installationId) . '/access_tokens';
         $request = $this->asApp($app);
 
         try {
@@ -197,7 +213,9 @@ final class GitHubAppApi
         }
 
         if (!$response->successful()) {
-            throw new GitHubInstallationException('GitHub refused to issue an installation token: ' . RefusalReason::for($response), $this->refusal($response), $response->status());
+            $reason = RefusalReason::for($response);
+
+            throw new GitHubInstallationException('GitHub refused to issue an installation token: ' . $reason, $this->refusal($app, $installationId, $response), $response->status(), $reason);
         }
 
         $token = $response->json('token');
@@ -309,14 +327,44 @@ final class GitHubAppApi
         return $total;
     }
 
-    private function refusal(Response $response): string
+    private function refusal(#[\SensitiveParameter] GitHubAppCredentials $app, string $installationId, Response $response): string
     {
         return match (true) {
             $response->status() === 404 => GitHubInstallationException::UNINSTALLED,
-            $response->status() === 403 && !$this->rateLimited($response) => GitHubInstallationException::SUSPENDED,
+            $response->status() === 403 && !$this->rateLimited($response) => $this->forbidden($app, $installationId),
             $response->status() === 422 => GitHubInstallationException::REPOSITORY,
             default => GitHubInstallationException::UNREACHABLE,
         };
+    }
+
+    private function forbidden(#[\SensitiveParameter] GitHubAppCredentials $app, string $installationId): string
+    {
+        try {
+            $installation = $this->installation($app, $installationId);
+        } catch (GitProviderException) {
+            return GitHubInstallationException::REFUSED;
+        }
+
+        return match (true) {
+            $installation === null => GitHubInstallationException::UNINSTALLED,
+            $installation['suspended_at'] !== null => GitHubInstallationException::SUSPENDED,
+            default => GitHubInstallationException::REFUSED,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $installation
+     * @return array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}
+     */
+    private function describe(array $installation): array
+    {
+        return [
+            'id' => (string) $installation['id'],
+            'account' => (string) ($installation['account']['login'] ?? $installation['account']['slug'] ?? ''),
+            'account_type' => (string) ($installation['account']['type'] ?? ''),
+            'repository_selection' => (string) ($installation['repository_selection'] ?? ''),
+            'suspended_at' => isset($installation['suspended_at']) ? (string) $installation['suspended_at'] : null,
+        ];
     }
 
     private function rateLimited(Response $response): bool
@@ -335,7 +383,7 @@ final class GitHubAppApi
         return $code;
     }
 
-    private function installation(string $installationId): string
+    private function installationId(string $installationId): string
     {
         if (preg_match('/^[0-9]{1,20}$/D', $installationId) !== 1) {
             throw new GitProviderException("\"{$installationId}\" is not a valid installation id.");

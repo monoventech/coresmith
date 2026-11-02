@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Jobs\CheckGitHubInstallation;
 use App\Jobs\CheckGitHubWebhooks;
 use App\Models\GitHubApp;
+use App\Models\SourceProvider;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\GitHub\GitHubAppHealth;
@@ -14,6 +16,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 function webhookCheckPem(): string
 {
@@ -181,6 +184,64 @@ test('the environment app records nothing when github will not say where its web
     webhookCheckRun();
 
     expect(Cache::has(app(GitHubAppHealth::class)->key($env)))->toBeFalse();
+});
+
+test('every suspended connection is asked about again, so one unsuspended on github is connected again', function () {
+    $app = GitHubApp::factory()->withoutWebhook()->create(['app_id' => '2000001']);
+    $connection = fn(string $installation, array $attributes = []): SourceProvider => SourceProvider::factory()->for($app->team)->create([
+        'type' => 'github_app',
+        'github_app_id' => $app->id,
+        'name' => "account-{$installation}",
+        'installation_id' => $installation,
+        'suspended_at' => now()->subDay(),
+        ...$attributes,
+    ]);
+    $unsuspended = $connection('51842');
+    $suspended = $connection('51843');
+    $live = $connection('51844', ['suspended_at' => null]);
+    $removed = $connection('51845', ['deleted_at' => now()]);
+    Http::fake(['api.github.com/app/installations/*' => fn(Request $request) => Http::response([
+        'id' => (int) basename($request->url()),
+        'suspended_at' => str_ends_with($request->url(), '/51843') ? '2026-10-18T09:00:00Z' : null,
+    ])]);
+
+    webhookCheckRun();
+
+    expect($unsuspended->fresh()->suspended_at)->toBeNull()
+        ->and($unsuspended->fresh()->connected())->toBeTrue()
+        ->and($suspended->fresh()->suspended_at)->not->toBeNull()
+        ->and($suspended->fresh()->connected())->toBeFalse();
+    Http::assertSentCount(2);
+    Http::assertSent(fn(Request $request) => $request->url() === 'https://api.github.com/app/installations/51842' && webhookCheckIssuer($request) === '2000001');
+    Http::assertSent(fn(Request $request) => $request->url() === 'https://api.github.com/app/installations/51843');
+    Http::assertNotSent(fn(Request $request) => in_array(basename($request->url()), [$live->installation_id, $removed->installation_id], true));
+});
+
+test('only suspended github connections are queued for a check', function () {
+    Queue::fake();
+    $app = GitHubApp::factory()->withoutWebhook()->create();
+    SourceProvider::factory()->for($app->team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '51842', 'suspended_at' => now()]);
+    SourceProvider::factory()->for($app->team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '51843', 'suspended_at' => null]);
+    SourceProvider::factory()->for($app->team)->create(['type' => 'gitlab', 'installation_id' => null, 'suspended_at' => now()]);
+
+    webhookCheckRun();
+
+    Queue::assertPushed(CheckGitHubInstallation::class, 1);
+});
+
+test('a suspended connection github will not describe does not stop the next one', function () {
+    $app = GitHubApp::factory()->withoutWebhook()->create();
+    $first = SourceProvider::factory()->for($app->team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '51842', 'suspended_at' => now()]);
+    $second = SourceProvider::factory()->for($app->team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '51843', 'suspended_at' => now()]);
+    Http::fake([
+        'api.github.com/app/installations/51842' => Http::response(['message' => 'Server Error'], 500),
+        'api.github.com/app/installations/51843' => Http::response(['id' => 51843, 'suspended_at' => null]),
+    ]);
+
+    webhookCheckRun();
+
+    expect($first->fresh()->suspended_at)->not->toBeNull()
+        ->and($second->fresh()->suspended_at)->toBeNull();
 });
 
 test('it is scheduled every fifteen minutes', function () {

@@ -78,6 +78,7 @@ function commitStatusFake(int $statuses = 201, int $mint = 201, ?string $refusal
         'api.github.com/app/installations/51842/access_tokens' => $mint === 201
             ? Http::response(['token' => 'ghs_1041207_eyJhbGciOiJSUzI1NiJ9.e30.Y2xvbmU', 'expires_at' => '2026-10-19T13:00:00Z', 'permissions' => ['contents' => 'read'], 'repository_selection' => 'selected'], 201)
             : Http::response(['message' => $refusal ?? 'GitHub turned this request down'], $mint),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => '2026-10-19T11:00:00Z']),
         'api.github.com/installation/token' => Http::response(null, 204),
         'api.github.com/repos/monoventech/atlas/statuses/*' => $statuses === 201
             ? Http::response(['id' => 1, 'state' => 'pending'], 201)

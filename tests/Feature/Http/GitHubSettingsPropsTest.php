@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Jobs\CheckGitHubInstallation;
 use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -10,6 +11,7 @@ use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Network\AddressResolver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 function githubSettingsPropsTeam(string $role = 'owner'): array
 {
@@ -182,12 +184,55 @@ test('a token is shown only while it is held', function (string $case, ?string $
 ]);
 
 test('a suspended installation says so', function () {
+    Queue::fake();
     [$team, $owner] = githubSettingsPropsTeam();
     githubSettingsPropsConnection($team, githubSettingsPropsApp($team), ['suspended_at' => now()]);
 
     $this->actingAs($owner)
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page->where('github.connections.0.suspended', true));
+});
+
+test('a suspended card asks github about its installation again, at most once a minute', function () {
+    Queue::fake();
+    [$team, $owner] = githubSettingsPropsTeam();
+    $app = githubSettingsPropsApp($team);
+    githubSettingsPropsConnection($team, $app, ['suspended_at' => now()]);
+    githubSettingsPropsConnection($team, $app, ['name' => 'monoven-labs', 'installation_id' => '51843']);
+
+    $this->actingAs($owner)->get(route('source-providers.index'))->assertOk();
+    $this->actingAs($owner)->get(route('source-providers.index'))->assertOk();
+
+    Queue::assertPushed(CheckGitHubInstallation::class, 1);
+
+    $this->travel(CheckGitHubInstallation::THROTTLE_SECONDS + 1)->seconds();
+    $this->actingAs($owner)->get(route('source-providers.index'))->assertOk();
+
+    Queue::assertPushed(CheckGitHubInstallation::class, 2);
+});
+
+test('an installation unsuspended on github shows as installed once the card has asked', function () {
+    [$team, $owner] = githubSettingsPropsTeam();
+    githubSettingsPropsConnection($team, githubSettingsPropsApp($team), ['suspended_at' => now()]);
+    Http::fake(['api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => null])]);
+
+    $this->actingAs($owner)->get(route('source-providers.index'))->assertOk();
+
+    $this->actingAs($owner)
+        ->get(route('source-providers.index'))
+        ->assertInertia(fn($page) => $page->where('github.connections.0.suspended', false));
+});
+
+test('a suspended card whose app is gone asks github nothing', function () {
+    Queue::fake();
+    [$team, $owner] = githubSettingsPropsTeam();
+    $app = githubSettingsPropsApp($team);
+    githubSettingsPropsConnection($team, $app, ['suspended_at' => now()]);
+    $app->delete();
+
+    $this->actingAs($owner)->get(route('source-providers.index'))->assertOk();
+
+    Queue::assertNotPushed(CheckGitHubInstallation::class);
 });
 
 test('a connection whose app is gone is still listed, without an app name', function () {

@@ -63,12 +63,13 @@ function tokenCloneRun(Deployment $deployment, FakeSSHTransport $transport): voi
     }
 }
 
-function tokenCloneFake(int $mintStatus = 201, ?Closure $revoke = null): void
+function tokenCloneFake(int $mintStatus = 201, ?Closure $revoke = null, ?string $suspendedAt = null): void
 {
     Http::fake([
         'api.github.com/app/installations/51842/access_tokens' => $mintStatus === 201
             ? Http::response(['token' => 'ghs_1041207_eyJhbGciOiJSUzI1NiJ9.e30.c2lnbmF0dXJl', 'expires_at' => '2026-10-19T13:00:00Z', 'permissions' => ['contents' => 'read'], 'repository_selection' => 'selected'], 201)
             : Http::response(['message' => 'GitHub turned this request down'], $mintStatus),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'account' => ['login' => 'monoventech', 'type' => 'Organization'], 'suspended_at' => $suspendedAt]),
         'api.github.com/installation/token' => $revoke ?? Http::response(null, 204),
         'api.github.com/repos/*/statuses/*' => Http::response(['id' => 1], 201),
     ]);
@@ -266,7 +267,7 @@ test('an uninstalled app marks its connection and says how to fix it', function 
 
 test('a suspended installation is marked and named', function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-19 12:00:00'));
-    tokenCloneFake(403);
+    tokenCloneFake(403, suspendedAt: '2026-10-19T11:00:00Z');
     $application = tokenCloneApp();
     $deployment = Deployment::factory()->for($application)->create();
 
@@ -276,6 +277,23 @@ test('a suspended installation is marked and named', function () {
 
     expect($connection->suspended_at?->toDateTimeString())->toBe('2026-10-19 12:00:00')
         ->and($deployment->fresh()->failure_reason)->toBe("Coresmith's GitHub app is suspended on monoventech. Unsuspend it on GitHub, then deploy.");
+});
+
+test('a forbidden token github does not call a suspension leaves the connection alone and says what github said', function () {
+    tokenCloneFake(403);
+    $application = tokenCloneApp();
+    $deployment = Deployment::factory()->for($application)->create();
+
+    expect(fn() => tokenCloneRun($deployment, tokenCloneRefusedTransport()))->toThrow(DeploymentAborted::class);
+
+    $connection = SourceProvider::withTrashed()->find($application->source_provider_id);
+
+    expect($connection->trashed())->toBeFalse()
+        ->and($connection->suspended_at)->toBeNull()
+        ->and($connection->connected())->toBeTrue()
+        ->and($deployment->fresh()->failure_reason)->toBe('GitHub would not give Coresmith a clone token for monoventech/atlas. It said: GitHub turned this request down. Fix that on GitHub, then deploy again.');
+
+    Http::assertSent(fn($request) => $request->method() === 'GET' && $request->url() === 'https://api.github.com/app/installations/51842');
 });
 
 test('a repository the installation lost is named', function () {

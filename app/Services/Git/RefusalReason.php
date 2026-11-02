@@ -24,4 +24,11 @@ final class RefusalReason
 
         return 'HTTP ' . $response->status();
     }
+
+    public static function sentence(string $reason): string
+    {
+        $reason = trim($reason);
+
+        return $reason === '' || preg_match('/[.!?]$/D', $reason) === 1 ? $reason : $reason . '.';
+    }
 }
