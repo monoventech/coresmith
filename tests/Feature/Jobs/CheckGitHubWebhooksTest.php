@@ -112,25 +112,19 @@ test('a check with no deliveries to show records that it looked', function () {
         ->and(webhookCheckMode($app)->reason)->toBe('unproven');
 });
 
-test('the environment app also reports where its webhook points', function () {
+test('the environment app is checked for its latest delivery, and github is asked nothing about its hook', function () {
     $env = webhookCheckEnv();
-    Http::fake([
-        'api.github.com/app/hook/config' => Http::response(['url' => 'https://panel.example.com/api/webhooks/github', 'content_type' => 'json', 'secret' => '********', 'insecure_ssl' => '0']),
-        'api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z')),
-    ]);
+    Http::fake(['api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z'))]);
 
     webhookCheckRun();
 
     $evidence = Cache::get(app(GitHubAppHealth::class)->key($env));
 
-    Http::assertSentCount(2);
-    Http::assertSent(fn(Request $request) => $request->url() === 'https://api.github.com/app/hook/config' && webhookCheckIssuer($request) === '1041207');
-    Http::assertSent(fn(Request $request) => str_starts_with($request->url(), 'https://api.github.com/app/hook/deliveries') && webhookCheckIssuer($request) === '1041207');
+    Http::assertSentCount(1);
+    Http::assertNotSent(fn(Request $request) => str_contains($request->url(), '/app/hook/config'));
 
-    expect($evidence['hook_url'])->toBe('https://panel.example.com/api/webhooks/github')
-        ->and($evidence['checked_at'])->toBe(now()->getTimestamp())
-        ->and(webhookCheckMode($env)->instant)->toBeTrue()
-        ->and(webhookCheckMode($env)->sentence)->toBe('GitHub reached this panel 15 minutes ago.');
+    expect($evidence)->not->toHaveKey('hook_url')
+        ->and($evidence['checked_at'])->toBe(now()->getTimestamp());
 });
 
 test('an environment app without a webhook is not asked about one', function () {
@@ -173,18 +167,6 @@ test('an app github refuses keeps the evidence it had', function () {
 
     expect(Cache::get(app(GitHubAppHealth::class)->key($credentials)))->toBe($before)
         ->and(webhookCheckMode($app)->instant)->toBeTrue();
-});
-
-test('the environment app records nothing when github will not say where its webhook points', function () {
-    $env = webhookCheckEnv();
-    Http::fake([
-        'api.github.com/app/hook/config' => Http::response(['message' => 'A JSON web token could not be decoded'], 401),
-        'api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z')),
-    ]);
-
-    webhookCheckRun();
-
-    expect(Cache::has(app(GitHubAppHealth::class)->key($env)))->toBeFalse();
 });
 
 test('every suspended connection is asked about again, so one unsuspended on github is connected again', function () {

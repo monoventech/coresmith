@@ -22,7 +22,7 @@ final class GitHubAppHealth
 
     private const NO_DELIVERY = 'No delivery from GitHub has reached this panel yet.';
 
-    private const EVIDENCE = ['received_at' => null, 'event' => null, 'delivery_id' => null, 'checked_at' => null, 'latest' => null, 'hook_url' => null, 'repointed_at' => null];
+    private const EVIDENCE = ['received_at' => null, 'event' => null, 'delivery_id' => null, 'checked_at' => null, 'latest' => null, 'repointed_at' => null];
 
     public function __construct(
         private readonly PanelReachability $reachability,
@@ -43,7 +43,7 @@ final class GitHubAppHealth
     /**
      * @param  array{status_code: int, status: string, delivered_at: CarbonInterface, event?: string}|null  $latest
      */
-    public function checked(#[\SensitiveParameter] GitHubAppCredentials $app, ?array $latest, ?string $hookUrl = null): void
+    public function checked(#[\SensitiveParameter] GitHubAppCredentials $app, ?array $latest): void
     {
         $delivered = $latest['delivered_at'] ?? null;
 
@@ -55,7 +55,6 @@ final class GitHubAppHealth
                 'delivered_at' => $delivered->getTimestamp(),
                 'event' => (string) ($latest['event'] ?? ''),
             ] : null,
-            'hook_url' => $hookUrl,
         ]);
     }
 

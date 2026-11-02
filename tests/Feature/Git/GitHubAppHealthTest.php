@@ -249,7 +249,7 @@ test('evidence belongs to one app in one environment', function () {
     $second = healthApp();
     $health = app(GitHubAppHealth::class);
 
-    $health->checked($first, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:00:00Z'), 'https://panel.example.com/api/webhooks/github/x');
+    $health->checked($first, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:00:00Z'));
     $health->received($first, 'push', 'delivery-1');
 
     expect($health->key($first))->toBe("github:app-health:testing:{$first->key}")
@@ -260,7 +260,6 @@ test('evidence belongs to one app in one environment', function () {
             'delivery_id' => 'delivery-1',
             'checked_at' => now()->getTimestamp(),
             'latest' => ['status_code' => 502, 'status' => 'Invalid HTTP Response: 502', 'delivered_at' => CarbonImmutable::parse('2026-10-18T13:00:00Z')->getTimestamp(), 'event' => 'push'],
-            'hook_url' => 'https://panel.example.com/api/webhooks/github/x',
             'repointed_at' => null,
         ])
         ->and($health->mode($first)->instant)->toBeTrue()
@@ -277,7 +276,7 @@ test('a repoint clears what was received and logged before it, and every later w
     $app = healthApp();
     $health = app(GitHubAppHealth::class);
     $health->received($app, 'push', 'delivery-1');
-    $health->checked($app, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:00:00Z'), 'https://panel.example.com/api/webhooks/github/x');
+    $health->checked($app, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:00:00Z'));
     $health->repointed($app);
 
     expect(Cache::get($health->key($app)))->toBe([
@@ -286,7 +285,6 @@ test('a repoint clears what was received and logged before it, and every later w
         'delivery_id' => null,
         'checked_at' => now()->getTimestamp(),
         'latest' => null,
-        'hook_url' => 'https://panel.example.com/api/webhooks/github/x',
         'repointed_at' => now()->getTimestamp(),
     ]);
 

@@ -58,9 +58,7 @@ final class CheckGitHubWebhooks implements ShouldQueue
         }
 
         try {
-            $hookUrl = $app->isEnv() ? $api->hookUrl($app) : null;
-
-            $health->checked($app, $api->latestDelivery($app), $hookUrl);
+            $health->checked($app, $api->latestDelivery($app));
         } catch (GitProviderException $e) {
             report_if(app()->hasDebugModeEnabled(), $e);
         }
