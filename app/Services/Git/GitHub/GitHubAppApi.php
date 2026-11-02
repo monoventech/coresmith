@@ -171,15 +171,20 @@ final class GitHubAppApi
         return $this->describe($installation);
     }
 
-    public function userLogin(#[\SensitiveParameter] string $userToken): string
+    /**
+     * @return array{id: string, login: string}
+     */
+    public function user(#[\SensitiveParameter] string $userToken): array
     {
-        $login = $this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get(self::API . '/user')))->json('login');
+        $response = $this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get(self::API . '/user')));
+        $id = $response->json('id');
+        $login = $response->json('login');
 
-        if (!is_string($login) || $login === '') {
+        if (!is_int($id) || !is_string($login) || $login === '') {
             throw new GitProviderException('GitHub did not say which account is signed in.');
         }
 
-        return $login;
+        return ['id' => (string) $id, 'login' => $login];
     }
 
     /**

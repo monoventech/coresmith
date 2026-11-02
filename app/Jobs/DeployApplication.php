@@ -17,6 +17,7 @@ use App\Events\FleetChanged;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\DeploymentCancelled;
 use App\Exceptions\ExplainsFailure;
+use App\Exceptions\GitHubLinkProofException;
 use App\Exceptions\GitProviderException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
@@ -42,6 +43,7 @@ use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\ApplicationRelinker;
 use App\Services\Git\GitHub\GitHubAppApi;
+use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\SuspensionCheck;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Panel\Reverb;
@@ -1010,6 +1012,8 @@ final class DeployApplication implements ShouldQueue
     {
         try {
             return $this->cloneTokenThrough($application, $github);
+        } catch (GitHubLinkProofException $refusal) {
+            throw new DeploymentAborted($refusal->getMessage());
         } catch (GitProviderException $refusal) {
             $github->markRefused($refusal);
 
@@ -1018,6 +1022,8 @@ final class DeployApplication implements ShouldQueue
             if ($other !== null) {
                 try {
                     return $this->cloneTokenThrough($application, $other);
+                } catch (GitHubLinkProofException $again) {
+                    throw new DeploymentAborted($again->getMessage());
                 } catch (GitProviderException $again) {
                     $other->markRefused($again);
                     $refusal = $again;
@@ -1032,6 +1038,8 @@ final class DeployApplication implements ShouldQueue
 
     private function cloneTokenThrough(Application $application, SourceProvider $github): string
     {
+        app(LinkProof::class)->check($github, (string) $application->repositoryFullName());
+
         return app(GitProviderFactory::class)->github($github)->cloneToken((string) $application->repository_id);
     }
 

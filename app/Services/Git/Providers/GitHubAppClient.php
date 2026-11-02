@@ -132,6 +132,49 @@ final class GitHubAppClient implements GitProvider
         return $sha;
     }
 
+    /**
+     * @return array{permission: string, user_id: ?string}|null
+     */
+    public function repositoryPermission(string $fullName, string $login): ?array
+    {
+        $path = '/repos/' . $this->path($fullName) . '/collaborators/' . rawurlencode($login) . '/permission';
+        $response = $this->send(fn(PendingRequest $request): Response => $request->get(GitHubAppApi::API . $path), retry: false);
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        $permission = $this->guard($response)->json('permission');
+        $userId = $response->json('user.id');
+
+        if (!is_string($permission)) {
+            throw new GitProviderException(GitHubAppApi::NO_ANSWER);
+        }
+
+        return ['permission' => $permission, 'user_id' => is_int($userId) ? (string) $userId : null];
+    }
+
+    public function loginOfUser(string $userId): ?string
+    {
+        if (preg_match('/^[0-9]{1,20}$/D', $userId) !== 1) {
+            throw new GitProviderException("\"{$userId}\" is not a valid GitHub user id.");
+        }
+
+        $response = $this->send(fn(PendingRequest $request): Response => $request->get(GitHubAppApi::API . '/user/' . $userId), retry: false);
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        $login = $this->guard($response)->json('login');
+
+        if (!is_string($login) || $login === '') {
+            throw new GitProviderException(GitHubAppApi::NO_ANSWER);
+        }
+
+        return $login;
+    }
+
     public function cloneToken(string $repositoryId): string
     {
         if (preg_match('/^[0-9]{1,18}$/D', $repositoryId) !== 1) {

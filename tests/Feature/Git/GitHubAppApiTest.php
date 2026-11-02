@@ -389,7 +389,7 @@ test('a user with no installations gets an empty list and a refusal is an error'
 test('the signed-in account is read with the user\'s own token', function () {
     Http::fake(['api.github.com/user' => Http::response(['login' => 'oseughu', 'id' => 10, 'type' => 'User'])]);
 
-    expect(app(GitHubAppApi::class)->userLogin('ghu_user'))->toBe('oseughu');
+    expect(app(GitHubAppApi::class)->user('ghu_user'))->toBe(['id' => '10', 'login' => 'oseughu']);
     Http::assertSentCount(1);
     Http::assertSent(fn($request) => $request->method() === 'GET'
         && $request->url() === 'https://api.github.com/user'
@@ -401,12 +401,14 @@ test('the signed-in account is read with the user\'s own token', function () {
 test('an account github will not name is an error that says why', function (int $status, array $body, string $message) {
     Http::fake(['api.github.com/user' => Http::response($body, $status)]);
 
-    expect(fn() => app(GitHubAppApi::class)->userLogin('ghu_user'))->toThrow(GitProviderException::class, $message);
+    expect(fn() => app(GitHubAppApi::class)->user('ghu_user'))->toThrow(GitProviderException::class, $message);
 })->with([
     'a refusal' => [401, ['message' => 'Bad credentials'], 'Bad credentials'],
     'no login' => [200, ['id' => 10], 'GitHub did not say which account is signed in.'],
-    'an empty login' => [200, ['login' => ''], 'GitHub did not say which account is signed in.'],
-    'a login that is not a string' => [200, ['login' => 10], 'GitHub did not say which account is signed in.'],
+    'an empty login' => [200, ['id' => 10, 'login' => ''], 'GitHub did not say which account is signed in.'],
+    'a login that is not a string' => [200, ['id' => 10, 'login' => 10], 'GitHub did not say which account is signed in.'],
+    'no id' => [200, ['login' => 'oseughu'], 'GitHub did not say which account is signed in.'],
+    'an id that is not a number' => [200, ['id' => 'ten', 'login' => 'oseughu'], 'GitHub did not say which account is signed in.'],
 ]);
 
 function githubApiRepositoryPages(array $ids): Closure
@@ -800,7 +802,7 @@ test('a request to github that gets no answer is a provider error for every app 
         fn() => $api->latestDelivery($app),
         fn() => $api->exchangeUserCode($app, 'c0de', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_user'),
-        fn() => $api->userLogin('ghu_user'),
+        fn() => $api->user('ghu_user'),
         fn() => $api->userRepositoryIds('ghu_user', '51842', 30),
         fn() => $api->installationRepositoryIds('ghs_x', 30),
         fn() => $api->revokeUserToken($app, 'ghu_user'),
@@ -886,7 +888,7 @@ test('every request waits at most twenty seconds and a post is never sent twice'
         fn() => $api->latestDelivery($app),
         fn() => $api->exchangeUserCode($app, 'c0de', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_user'),
-        fn() => $api->userLogin('ghu_user'),
+        fn() => $api->user('ghu_user'),
         fn() => $api->userRepositoryIds('ghu_user', '51842', 30),
         fn() => $api->installationRepositoryIds('ghs_x', 30),
         fn() => $api->revokeUserToken($app, 'ghu_user'),
@@ -918,7 +920,7 @@ test('no credential reaches an exception message', function (string $failure) {
         fn() => $api->updateHook($app, 'https://panel.example.com/hook', 'hook-secret-xyz'),
         fn() => $api->exchangeUserCode($app, 'usercode456', 'https://panel.example.com/cb'),
         fn() => $api->userInstallations('ghu_secret_user'),
-        fn() => $api->userLogin('ghu_secret_user'),
+        fn() => $api->user('ghu_secret_user'),
         fn() => $api->userRepositoryIds('ghu_secret_user', '51842', 30),
         fn() => $api->installationRepositoryIds('ghs_secret_install', 30),
         fn() => $api->mintToken($app, '51842'),

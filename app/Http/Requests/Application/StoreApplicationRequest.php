@@ -12,10 +12,12 @@ use App\Enums\Ability;
 use App\Enums\ApplicationType;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitHubInstallationException;
+use App\Exceptions\GitHubLinkProofException;
 use App\Exceptions\GitProviderException;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Services\Git\GitHub\GitHubApps;
+use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Git\RefusalReason;
 use App\Services\Runtime\Catalog;
@@ -207,6 +209,18 @@ final class StoreApplicationRequest extends FormRequest
             return;
         }
 
+        try {
+            app(LinkProof::class)->check($connection, (string) $repository['full_name']);
+        } catch (GitHubLinkProofException $refusal) {
+            $validator->errors()->add('repository_id', $refusal->getMessage());
+
+            return;
+        } catch (GitProviderException $refusal) {
+            $validator->errors()->add(...$this->refusal($connection, $refusal));
+
+            return;
+        }
+
         $this->repository = $repository;
     }
 
@@ -222,6 +236,7 @@ final class StoreApplicationRequest extends FormRequest
         return match ($installation?->kind) {
             GitHubInstallationException::UNINSTALLED => ['source_provider_id', "Coresmith's GitHub app is no longer installed on {$connection->name}. Pick another connection, or connect GitHub again in Git settings."],
             GitHubInstallationException::SUSPENDED => ['source_provider_id', self::CONNECTION_SUSPENDED],
+            GitHubInstallationException::REPOSITORY => ['repository_id', RepositoryCatalog::NOT_VISIBLE],
             GitHubInstallationException::REFUSED => ['source_provider_id', "GitHub would not give Coresmith a token for {$connection->name}. It said: " . RefusalReason::sentence((string) $installation?->reason) . ' Fix that on GitHub, then try again.'],
             default => ['repository_id', RepositoryCatalog::UNREACHABLE],
         };

@@ -116,6 +116,10 @@
                 return { branches: body.branches, failure: null }
             }
 
+            if (response.status === 409 && body.message) {
+                return { ...fallback, failure: body.message }
+            }
+
             return body.message === REPOSITORY_NOT_VISIBLE ? { ...fallback, failure: REPOSITORY_NOT_VISIBLE } : fallback
         } catch {
             return fallback

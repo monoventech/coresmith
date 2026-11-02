@@ -10,9 +10,12 @@ namespace App\Http\Controllers\Settings;
 
 use App\Enums\Ability;
 use App\Enums\SourceProviderType;
+use App\Exceptions\GitHubInstallationException;
+use App\Exceptions\GitHubLinkProofException;
 use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Controller;
 use App\Models\SourceProvider;
+use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +26,10 @@ final class SourceRepositoryController extends Controller
 
     private const BRANCH_LIST = 'GitHub did not send the branch list. ';
 
-    public function __construct(private readonly RepositoryCatalog $catalog) {}
+    public function __construct(
+        private readonly RepositoryCatalog $catalog,
+        private readonly LinkProof $proof,
+    ) {}
 
     public function index(Request $request, SourceProvider $sourceProvider): JsonResponse
     {
@@ -54,6 +60,16 @@ final class SourceRepositoryController extends Controller
 
         if ($repository === null) {
             return response()->json(['message' => RepositoryCatalog::NOT_VISIBLE], 404);
+        }
+
+        try {
+            $this->proof->check($sourceProvider, (string) $repository['full_name']);
+        } catch (GitHubLinkProofException $refusal) {
+            return response()->json(['message' => $refusal->getMessage()], 409);
+        } catch (GitHubInstallationException $refusal) {
+            return $refusal->kind === GitHubInstallationException::REPOSITORY
+                ? response()->json(['message' => RepositoryCatalog::NOT_VISIBLE], 404)
+                : $this->unavailable(self::BRANCH_LIST, $refusal);
         }
 
         try {

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProviderType;
+use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
 use App\Jobs\AdoptStrandedApplications;
 use App\Models\Application;
@@ -19,10 +20,12 @@ use App\Services\Git\GitHub\GitHubConnector;
 use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitHub\InstallationChoices;
 use App\Services\Git\GitHub\RepositoryCatalog;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Sleep;
@@ -37,6 +40,11 @@ function githubConnectTeam(string $role = 'owner'): array
     $app = GitHubApp::factory()->for($team)->create(['slug' => 'coresmith-monoven', 'name' => 'Coresmith Monoven', 'client_id' => 'Iv1.client', 'client_secret' => 'client-secret']);
 
     return [$team, $user->fresh(), $app];
+}
+
+function githubConnectEnvIntent(Team $team): array
+{
+    return [SourceProviderConnectController::STATE_KEY => ['state' => 'the-state', 'type' => 'github_app', 'team' => $team->getKey(), 'app' => GitHubApps::ENV_KEY, 'at' => now()->getTimestamp(), 'bounced' => false]];
 }
 
 function githubConnectIntent(Team $team, GitHubApp $app, string $state = 'the-state', bool $bounced = false): array
@@ -1489,4 +1497,229 @@ test('a chooser pick that cannot get the link lock in time and finds no connecti
         ->assertSessionHas('error', 'GitHub would not complete the connection. Nothing was saved.');
 
     expect(SourceProvider::withTrashed()->count())->toBe(0);
+});
+
+test('the environment app records who proved the link, and no token', function () {
+    githubConnectEnv();
+    $team = Team::factory()->create(['slug' => 'monoven']);
+    $owner = User::factory()->create();
+    $team->members()->attach($owner, ['role' => 'owner']);
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')], 'Iv1.env');
+
+    $this->actingAs($owner->fresh())
+        ->withSession(githubConnectEnvIntent($team))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('success');
+
+    $connection = SourceProvider::sole();
+
+    expect($connection->proof_github_id)->toBe('10')
+        ->and($connection->proof_github_login)->toBe('oseughu')
+        ->and(githubConnectStoredAnywhere('ghu_user_token'))->toBeFalse();
+});
+
+test('connecting again through the environment app replaces the proof with the new person', function () {
+    githubConnectEnv();
+    $team = Team::factory()->create(['slug' => 'monoven']);
+    $owner = User::factory()->create();
+    $team->members()->attach($owner, ['role' => 'owner']);
+    SourceProvider::factory()->for($team)->create(['type' => 'github_app', 'github_app_id' => null, 'installation_id' => '51842', 'proof_github_id' => '77', 'proof_github_login' => 'grace']);
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')], 'Iv1.env');
+
+    $this->actingAs($owner->fresh())
+        ->withSession(githubConnectEnvIntent($team))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('success');
+
+    expect(SourceProvider::sole()->proof_github_login)->toBe('oseughu');
+});
+
+test('a choice made from the chooser records who proved it, after the user token is gone', function () {
+    githubConnectEnv();
+    $team = Team::factory()->create(['slug' => 'monoven']);
+    $owner = User::factory()->create();
+    $team->members()->attach($owner, ['role' => 'owner']);
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech'), githubConnectInstallation(51843, 'othercorp')], 'Iv1.env');
+
+    $this->actingAs($owner->fresh())
+        ->withSession(githubConnectEnvIntent($team))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state']))
+        ->assertRedirect();
+
+    expect(SourceProvider::query()->count())->toBe(0);
+
+    $this->post(route('github.installations.store'), ['installation_id' => '51843'])->assertSessionHas('success');
+
+    expect(SourceProvider::sole()->proof_github_login)->toBe('oseughu')
+        ->and(SourceProvider::sole()->proof_github_id)->toBe('10');
+});
+
+test('a registered app records nobody and asks github nothing extra', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')]);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('success');
+
+    expect(SourceProvider::sole()->proof_github_id)->toBeNull()
+        ->and(SourceProvider::sole()->proof_github_login)->toBeNull();
+
+    Http::assertNotSent(githubConnectAskedAs('https://api.github.com/user'));
+});
+
+test('a person github will not name through the environment app connects nothing', function () {
+    githubConnectEnv();
+    $team = Team::factory()->create(['slug' => 'monoven']);
+    $owner = User::factory()->create();
+    $team->members()->attach($owner, ['role' => 'owner']);
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')], 'Iv1.env', override: ['api.github.com/user' => Http::response(['message' => 'Server Error'], 500)]);
+
+    $this->actingAs($owner->fresh())
+        ->withSession(githubConnectEnvIntent($team))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('error', GitHubConnector::REFUSED);
+
+    expect(SourceProvider::query()->count())->toBe(0);
+    Http::assertSent(githubConnectRevoked('Iv1.env'));
+});
+
+test('only the installation github named is proven', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech'), githubConnectInstallation(51843, 'othercorp')]);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('success');
+
+    Http::assertSent(fn($request) => str_ends_with($request->url(), '/app/installations/51842/access_tokens'));
+    Http::assertNotSent(fn($request) => str_ends_with($request->url(), '/app/installations/51843/access_tokens'));
+});
+
+test('one callback proves a limited number of organizations and says how to reach the rest', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    $count = GitHubConnector::MAX_ORGANIZATION_PROOFS + 2;
+    $personal = githubConnectInstallation(60000, 'oseughu', 'User');
+    $organizations = array_map(fn(int $n): array => githubConnectInstallation(51000 + $n, "org{$n}"), range(1, $count));
+    githubConnectFake([$personal, ...$organizations]);
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state']))
+        ->assertRedirect();
+
+    $offered = collect(session(GitHubConnector::CHOICES_KEY)['installations'])->keyBy('account');
+    $minted = collect(Http::recorded())->filter(fn(array $pair): bool => str_ends_with($pair[0]->url(), '/access_tokens'));
+    $last = 'org' . $count;
+
+    expect($minted)->toHaveCount(GitHubConnector::MAX_ORGANIZATION_PROOFS)
+        ->and($offered['oseughu']['proven'])->toBeTrue()
+        ->and($offered['org1']['proven'])->toBeTrue()
+        ->and($offered['org' . GitHubConnector::MAX_ORGANIZATION_PROOFS]['proven'])->toBeTrue()
+        ->and($offered[$last]['proven'])->toBeFalse()
+        ->and($offered[$last]['refusal'])->toBe('Coresmith checks ' . GitHubConnector::MAX_ORGANIZATION_PROOFS . " organizations at a time, and this one was past that. Connect GitHub again and choose {$last} on GitHub's page.");
+});
+
+test('proof traffic for one installation is limited across people and teams', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')]);
+    $connect = fn() => $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']));
+
+    foreach (range(1, GitHubConnector::PROOFS_PER_INSTALLATION) as $attempt) {
+        $connect()->assertSessionHas('success');
+        $this->travel(10)->seconds();
+    }
+
+    $mints = fn(): int => collect(Http::recorded())->filter(fn(array $pair): bool => str_ends_with($pair[0]->url(), '/access_tokens'))->count();
+    $before = $mints();
+
+    $connect()->assertSessionHas('error', 'Coresmith has checked monoventech too many times in the last hour, so nothing was connected. Try again in 59 minutes.');
+
+    expect($mints())->toBe($before);
+
+    $this->travel(61)->minutes();
+
+    $connect()->assertSessionHas('success');
+});
+
+test('proof traffic for one app is limited across installations', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')]);
+
+    foreach (range(1, GitHubConnector::PROOFS_PER_APP) as $attempt) {
+        RateLimiter::hit(GitHubConnector::proofKey('app', $app->getKey()), 3600);
+    }
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('error', 'Coresmith is checking too many GitHub connections right now, so nothing was connected. Try again in 60 minutes.');
+
+    Http::assertNotSent(fn($request) => str_ends_with($request->url(), '/access_tokens'));
+    expect(SourceProvider::query()->count())->toBe(0);
+});
+
+test('a personal installation spends no proof traffic', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectFake([githubConnectInstallation(51842, 'oseughu', 'User')]);
+
+    foreach (range(1, GitHubConnector::PROOFS_PER_APP) as $attempt) {
+        RateLimiter::hit(GitHubConnector::proofKey('app', $app->getKey()), 3600);
+    }
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertSessionHas('success');
+});
+
+test('a queue that cannot take the adoption job still saves the connection and says so', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    $removed = SourceProvider::factory()->for($team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '40000', 'name' => 'old']);
+    $server = Server::factory()->for($team)->create();
+    Application::factory()->for($team)->for($server)->create(['source_provider_id' => $removed->id, 'repository_id' => '70000001', 'repository_url' => 'https://github.com/monoventech/atlas.git', 'repository_provider' => 'github']);
+    $removed->delete();
+    githubConnectFake([githubConnectInstallation(51842, 'monoventech')]);
+    $reported = [];
+    $this->app->make(ExceptionHandler::class)->reportable(function (Throwable $e) use (&$reported): bool {
+        $reported[] = $e->getMessage();
+
+        return false;
+    });
+    Queue::shouldReceive('connection')->andThrow(new RuntimeException('the queue is down'));
+
+    $this->actingAs($owner)
+        ->withSession(githubConnectIntent($team, $app))
+        ->get(githubConnectCallback(['code' => 'c0de', 'state' => 'the-state', 'installation_id' => '51842']))
+        ->assertRedirect('http://localhost/monoven/settings/git')
+        ->assertSessionHas('success', 'GitHub connected. Repositories on monoventech can be picked when you add an app.');
+
+    expect(SourceProvider::query()->where('installation_id', '51842')->exists())->toBeTrue()
+        ->and($reported)->toContain('the queue is down');
+});
+
+test('a lock that times out never hands back another team\'s row or another app\'s', function () {
+    [$team, , $app] = githubConnectTeam();
+    $otherTeam = Team::factory()->create(['slug' => 'elsewhere']);
+    $otherApp = GitHubApp::factory()->for($team)->create(['slug' => 'other-app']);
+    $elsewhere = SourceProvider::factory()->for($otherTeam)->create(['type' => 'github_app', 'github_app_id' => GitHubApp::factory()->for($otherTeam)->create()->id, 'installation_id' => '51842']);
+    $sibling = SourceProvider::factory()->for($team)->create(['type' => 'github_app', 'github_app_id' => $otherApp->id, 'installation_id' => '51842']);
+    $credentials = app(GitHubApps::class)->fromModel($app);
+    $lock = Cache::lock(GitHubConnector::linkLock($team, $credentials, '51842'), GitHubConnector::LINK_LOCK_SECONDS);
+    $lock->get();
+    Sleep::fake(syncWithCarbon: true);
+
+    try {
+        expect(fn() => app(GitHubConnector::class)->link($team, $credentials, ['id' => '51842', 'account' => 'monoventech', 'account_type' => 'Organization', 'repository_selection' => 'selected', 'suspended_at' => null]))
+            ->toThrow(GitProviderException::class, GitHubConnector::REFUSED);
+    } finally {
+        $lock->release();
+    }
+
+    expect($elsewhere->fresh()->name)->not->toBe('monoventech')
+        ->and($sibling->fresh()->name)->not->toBe('monoventech');
 });

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Exceptions\DeploymentAborted;
+use App\Jobs\AdoptStrandedApplications;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -12,6 +13,7 @@ use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Git\GitHub\ApplicationRelinker;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\GitHubConnector;
 use App\Services\Git\GitHub\GitHubEventHandler;
@@ -587,3 +589,24 @@ test('linking an installation takes over the apps of a connection whose app was 
     expect($application->fresh()->source_provider_id)->toBe($linked->id)
         ->and(relinkActivities())->toBe([[$application->id, ['from' => $appLess->id, 'repository' => 'monoventech/atlas', 'to' => $linked->id]]]);
 });
+
+test('an adoption that runs after its connection was disconnected or suspended moves nothing', function (string $state) {
+    $team = Team::factory()->create();
+    $app = GitHubApp::factory()->for($team)->create();
+    $removed = relinkConnection($team, $app, ['installation_id' => '40000', 'name' => 'old']);
+    $application = relinkApp($removed);
+    $removed->delete();
+    $connection = relinkConnection($team, $app);
+    relinkCatalog($connection, [relinkRepository(70000001, 'monoventech/atlas')]);
+
+    expect(app(ApplicationRelinker::class)->stranded($connection))->toHaveCount(1);
+
+    match ($state) {
+        'disconnected' => $connection->disconnect(),
+        'suspended' => $connection->markSuspended(now()),
+    };
+
+    (new AdoptStrandedApplications($connection))->handle(app(ApplicationRelinker::class));
+
+    expect($application->fresh()->source_provider_id)->toBe($removed->id);
+})->with(['disconnected', 'suspended']);

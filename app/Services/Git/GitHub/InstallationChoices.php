@@ -15,20 +15,22 @@ final class InstallationChoices
 {
     /**
      * @param  list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, proven: bool, refusal: ?string}>  $installations
+     * @param  array{id: string, login: string}|null  $person
      */
-    public function offer(Team $team, User $user, string $app, array $installations): void
+    public function offer(Team $team, User $user, string $app, array $installations, ?array $person = null): void
     {
         session()->put(GitHubConnector::CHOICES_KEY, [
             'team' => (string) $team->getKey(),
             'user' => (string) $user->getKey(),
             'app' => $app,
             'installations' => $installations,
+            'person' => $person,
             'at' => now()->getTimestamp(),
         ]);
     }
 
     /**
-     * @return array{team: string, app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, proven: bool, refusal: ?string}>}|null
+     * @return array{team: string, app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string, proven: bool, refusal: ?string}>, person: array{id: string, login: string}|null}|null
      */
     public function pending(User $user): ?array
     {
@@ -72,7 +74,14 @@ final class InstallationChoices
             ];
         }
 
-        return ['team' => $choices['team'], 'app' => $choices['app'], 'installations' => $installations];
+        $person = $choices['person'] ?? null;
+
+        return [
+            'team' => $choices['team'],
+            'app' => $choices['app'],
+            'installations' => $installations,
+            'person' => is_string($person['id'] ?? null) && is_string($person['login'] ?? null) ? ['id' => $person['id'], 'login' => $person['login']] : null,
+        ];
     }
 
     public function forget(): void

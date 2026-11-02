@@ -1002,6 +1002,21 @@ test.describe('adding an application from GitHub', () => {
         await expect(main).not.toContainText('GitHub did not send the branch list')
     })
 
+    test('a repository the connection can no longer deploy says who must connect again', async ({ page }) => {
+        const refusal =
+            'ada can no longer read monoventech/atlas on GitHub, so this connection cannot deploy it. Someone who can read it connects GitHub again from Settings, Git.'
+
+        await page.route('**/repositories/*/branches', (route) =>
+            route.fulfill({ status: 409, json: { message: refusal } })
+        )
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        await repository(page, 'atlas').click()
+
+        await expect(page.getByRole('main')).toContainText(refusal)
+    })
+
     for (const theme of ['light', 'dark'] as const) {
         test(`a connection whose app was removed from the panel is refused under Source, in ${theme}`, async ({
             page
