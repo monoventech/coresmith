@@ -266,6 +266,28 @@ test('continuous integration runs the feature tests on every database the panel 
     'MySQL' => ['tests-mysql', 'mysql:8.0', 'mysql'],
 ]);
 
+test('continuous integration splits the browser suite across parallel shards that cover all of it', function () {
+    $jobs = Yaml::parseFile(base_path('.github/workflows/ci.yml'))['jobs'];
+    $shards = $jobs['browser']['strategy']['matrix']['shard'] ?? [];
+    $count = count($shards);
+    $steps = collect($jobs['browser']['steps'] ?? []);
+
+    expect($count)->toBeGreaterThan(1)
+        ->and($shards)->toBe(range(1, $count))
+        ->and($jobs['browser']['strategy']['fail-fast'] ?? null)->toBeFalse()
+        ->and($steps->firstWhere('name', 'Run Playwright')['run'] ?? null)->toBe('bun run test:e2e --shard=${{ matrix.shard }}/' . $count)
+        ->and($steps->firstWhere('name', 'Upload failure report')['with']['name'] ?? null)->toBe('playwright-report-${{ matrix.shard }}');
+});
+
+test('continuous integration reports one browser result, whatever the shards did', function () {
+    $result = Yaml::parseFile(base_path('.github/workflows/ci.yml'))['jobs']['browser-result'] ?? null;
+
+    expect($result['name'] ?? null)->toBe('Browser tests')
+        ->and($result['needs'] ?? null)->toBe('browser')
+        ->and($result['if'] ?? null)->toBe('always()')
+        ->and(array_column($result['steps'] ?? [], 'run'))->toBe(['test "${{ needs.browser.result }}" = "success"']);
+});
+
 test('the installer workflow proves the instance it built actually works', function () {
     $workflow = (string) file_get_contents(base_path('.github/workflows/installer.yml'));
 
