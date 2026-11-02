@@ -11,6 +11,7 @@ use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\GitHubConnector;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Sleep;
@@ -80,7 +81,7 @@ test('the database refuses a second connection of one team for the same app and 
     $app = GitHubApp::factory()->for($team)->create();
     uniqueLinkConnection($team, $app->id, $removed ? ['deleted_at' => now()] : []);
 
-    expect(fn() => uniqueLinkConnection($team, $app->id))->toThrow(UniqueConstraintViolationException::class);
+    expect(fn() => DB::transaction(fn() => uniqueLinkConnection($team, $app->id)))->toThrow(UniqueConstraintViolationException::class);
 
     uniqueLinkConnection(Team::factory()->create(), $app->id);
     uniqueLinkConnection($team, GitHubApp::factory()->for($team)->create()->id);
@@ -129,7 +130,7 @@ test('the migration merges existing duplicates onto the oldest connection and mo
         ->and($onEnv->fresh()->source_provider_id)->toBe($envOldest->id)
         ->and($onAlone->fresh()->source_provider_id)->toBe($alone->id);
 
-    expect(fn() => uniqueLinkConnection($team, $app->id))->toThrow(UniqueConstraintViolationException::class);
+    expect(fn() => DB::transaction(fn() => uniqueLinkConnection($team, $app->id)))->toThrow(UniqueConstraintViolationException::class);
 });
 
 test('a group of removed duplicates stays removed when it is merged', function () {

@@ -484,3 +484,31 @@ test('an app another check moved meanwhile is neither moved again nor logged', f
     expect($application->fresh()->source_provider_id)->toBe($elsewhere->id)
         ->and(relinkActivities())->toBe([]);
 });
+
+test('a deploy whose app another check moved meanwhile clones through the connection it was moved to', function () {
+    $team = Team::factory()->create();
+    $githubApp = GitHubApp::factory()->for($team)->create();
+    $removed = relinkConnection($team, $githubApp);
+    $candidate = relinkConnection($team, $githubApp, ['name' => 'monoven-labs', 'installation_id' => '61842']);
+    $movedTo = relinkConnection($team, $githubApp, ['name' => 'monoven-ops', 'installation_id' => '71842']);
+    $application = relinkApp($removed);
+    $removed->markUninstalled();
+    Http::fake([
+        'api.github.com/app/installations/*/access_tokens' => fn($request) => Http::response(['token' => relinkToken((string) preg_replace('#^.*/installations/([0-9]+)/access_tokens$#', '$1', $request->url())), 'expires_at' => now()->addHour()->toIso8601ZuluString()], 201),
+        'api.github.com/installation/repositories*' => function () use ($application, $movedTo) {
+            Application::query()->whereKey($application->id)->update(['source_provider_id' => $movedTo->id]);
+
+            return Http::response(['total_count' => 1, 'repositories' => [relinkRepository(70000001, 'monoventech/atlas')]]);
+        },
+        'api.github.com/installation/token' => Http::response(null, 204),
+        'api.github.com/repos/*/statuses/*' => Http::response(['id' => 1], 201),
+    ]);
+
+    $deployment = relinkDeploy($application->fresh());
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($application->fresh()->source_provider_id)->toBe($movedTo->id)
+        ->and(relinkMinted('71842'))->toBeTrue()
+        ->and(relinkMinted('61842'))->toBeFalse()
+        ->and(relinkActivities())->toBe([]);
+});
