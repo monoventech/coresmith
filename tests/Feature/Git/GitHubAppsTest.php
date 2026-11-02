@@ -447,8 +447,10 @@ test('an uninstalled installation forgets its token and leaves', function () {
 
 test('the link migration reverses cleanly and puts the dropped columns back as nullable', function () {
     $migration = require base_path('database/migrations/2026_10_18_200100_link_github_apps_to_source_providers.php');
+    $unique = require base_path('database/migrations/2026_11_02_062907_make_github_connections_unique.php');
     $added = ['github_app_id', 'account_type', 'repository_selection', 'suspended_at', 'last_delivery_id', 'last_event', 'last_status', 'last_delivered_at'];
 
+    $unique->down();
     $migration->down();
 
     $restored = collect(Schema::getColumns('source_providers'))->keyBy('name');
@@ -458,6 +460,7 @@ test('the link migration reverses cleanly and puts the dropped columns back as n
         ->and(array_filter($added, fn(string $column): bool => Schema::hasColumn('source_providers', $column)))->toBe([]);
 
     $migration->up();
+    $unique->up();
 
     expect(Schema::hasColumns('source_providers', $added))->toBeTrue()
         ->and(Schema::hasColumn('source_providers', 'app_id'))->toBeFalse()

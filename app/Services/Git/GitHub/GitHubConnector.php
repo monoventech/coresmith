@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
@@ -41,6 +42,10 @@ final class GitHubConnector
 
     public const TOO_MANY = 'This installation covers more repositories than Coresmith can check. Choose only the repositories Coresmith needs for the app on GitHub, then connect again.';
 
+    public const LINK_LOCK_SECONDS = 10;
+
+    public const LINK_WAIT_SECONDS = 10;
+
     public function __construct(
         private readonly GitHubAppApi $api,
         private readonly GitHubApps $apps,
@@ -51,6 +56,11 @@ final class GitHubConnector
         private readonly TeamContext $context,
         private readonly ApplicationRelinker $relinker,
     ) {}
+
+    public static function linkLock(Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, string $installationId): string
+    {
+        return 'github:link:' . $team->getKey() . ':' . $app->key . ':' . $installationId;
+    }
 
     public function appFor(Team $team, ?string $key = null): ?GitHubAppCredentials
     {
@@ -161,6 +171,26 @@ final class GitHubConnector
      */
     public function link(Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): SourceProvider
     {
+        $provider = Cache::lock(self::linkLock($team, $app, $installation['id']), self::LINK_LOCK_SECONDS)
+            ->block(self::LINK_WAIT_SECONDS, fn(): SourceProvider => $this->record($team, $app, $installation));
+
+        $this->catalog->forget($provider);
+
+        activity()
+            ->performedOn($provider)
+            ->withProperties(['installation_id' => $provider->installation_id, 'account' => $provider->name, 'app' => $app->key])
+            ->log('github_installation_linked');
+
+        $this->relinker->adopt($provider);
+
+        return $provider;
+    }
+
+    /**
+     * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}  $installation
+     */
+    private function record(Team $team, #[\SensitiveParameter] GitHubAppCredentials $app, array $installation): SourceProvider
+    {
         $provider = SourceProvider::withTrashed()->firstOrNew([
             'team_id' => $team->getKey(),
             'type' => SourceProviderType::GitHubApp->value,
@@ -182,15 +212,6 @@ final class GitHubConnector
         if ($provider->trashed()) {
             $provider->restore();
         }
-
-        $this->catalog->forget($provider);
-
-        activity()
-            ->performedOn($provider)
-            ->withProperties(['installation_id' => $provider->installation_id, 'account' => $provider->name, 'app' => $app->key])
-            ->log('github_installation_linked');
-
-        $this->relinker->adopt($provider);
 
         return $provider;
     }
