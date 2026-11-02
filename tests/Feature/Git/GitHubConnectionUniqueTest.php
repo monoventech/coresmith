@@ -130,7 +130,7 @@ test('the migration merges existing duplicates onto the oldest connection and mo
         ->and($onEnv->fresh()->source_provider_id)->toBe($envOldest->id)
         ->and($onAlone->fresh()->source_provider_id)->toBe($alone->id);
 
-    expect(fn() => DB::transaction(fn() => uniqueLinkConnection($team, $app->id)))->toThrow(UniqueConstraintViolationException::class);
+    expect(fn() => uniqueLinkConnection($team, $app->id))->toThrow(UniqueConstraintViolationException::class);
 });
 
 test('a group of removed duplicates stays removed when it is merged', function () {
@@ -165,4 +165,62 @@ test('the unique migration reverses cleanly', function () {
     expect(SourceProvider::count())->toBe(1)
         ->and(collect(Schema::getIndexes('source_providers'))->firstWhere('name', 'source_providers_github_installation_unique'))
         ->toMatchArray(['columns' => ['team_id', 'type', 'github_app_id', 'installation_id'], 'unique' => true]);
+});
+
+test('the team keeps an index of its own, so the unique index can be dropped while the foreign key stays', function () {
+    $migration = uniqueLinkMigration();
+
+    expect(Schema::hasIndex('source_providers', 'source_providers_team_id_index'))->toBeTrue();
+
+    $migration->down();
+
+    expect(Schema::hasIndex('source_providers', 'source_providers_github_installation_unique'))->toBeFalse()
+        ->and(Schema::hasIndex('source_providers', 'source_providers_team_id_index'))->toBeTrue();
+
+    $migration->up();
+
+    expect(collect(Schema::getIndexes('source_providers'))->where('name', 'source_providers_team_id_index')->count())->toBe(1)
+        ->and(Schema::hasIndex('source_providers', 'source_providers_github_installation_unique'))->toBeTrue();
+});
+
+test('a restored oldest row takes the state of the newest duplicate that was still connected', function () {
+    $migration = uniqueLinkMigration();
+    $migration->down();
+    $team = Team::factory()->create();
+    $app = GitHubApp::factory()->for($team)->create();
+    $created = now()->subDays(3)->startOfSecond();
+    $oldest = uniqueLinkConnection($team, $app->id, ['name' => 'monoventech-old', 'repository_selection' => 'selected', 'suspended_at' => now()->subDays(2), 'access_token' => null, 'token_expires_at' => null, 'created_at' => $created, 'deleted_at' => now()->subDays(2)]);
+    uniqueLinkConnection($team, $app->id, ['name' => 'monoventech-mid', 'repository_selection' => 'selected', 'access_token' => 'ghs_middle', 'created_at' => now()->subDays(2)]);
+    uniqueLinkConnection($team, $app->id, ['name' => 'monoventech', 'repository_selection' => 'all', 'suspended_at' => null, 'access_token' => 'ghs_newest', 'refresh_token' => null, 'token_expires_at' => now()->addHour()->startOfSecond(), 'created_at' => now()->subDay()]);
+    uniqueLinkConnection($team, $app->id, ['name' => 'monoventech-gone', 'access_token' => 'ghs_removed', 'created_at' => now()->subHour(), 'deleted_at' => now()->subMinute()]);
+
+    $migration->up();
+
+    $kept = SourceProvider::withTrashed()->sole();
+
+    expect($kept->id)->toBe($oldest->id)
+        ->and($kept->created_at->equalTo($created))->toBeTrue()
+        ->and($kept->trashed())->toBeFalse()
+        ->and($kept->name)->toBe('monoventech')
+        ->and($kept->repository_selection)->toBe('all')
+        ->and($kept->suspended_at)->toBeNull()
+        ->and($kept->access_token)->toBe('ghs_newest')
+        ->and($kept->token_expires_at?->equalTo(now()->addHour()->startOfSecond()))->toBeTrue();
+});
+
+test('an oldest row that was still connected keeps its own state when its duplicates are merged', function () {
+    $migration = uniqueLinkMigration();
+    $migration->down();
+    $team = Team::factory()->create();
+    $app = GitHubApp::factory()->for($team)->create();
+    $oldest = uniqueLinkConnection($team, $app->id, ['name' => 'monoventech', 'repository_selection' => 'selected', 'access_token' => 'ghs_oldest', 'created_at' => now()->subDays(2)]);
+    uniqueLinkConnection($team, $app->id, ['name' => 'monoventech-newer', 'repository_selection' => 'all', 'access_token' => 'ghs_newer', 'created_at' => now()->subDay()]);
+
+    $migration->up();
+
+    expect(SourceProvider::withTrashed()->sole())
+        ->id->toBe($oldest->id)
+        ->name->toBe('monoventech')
+        ->repository_selection->toBe('selected')
+        ->access_token->toBe('ghs_oldest');
 });

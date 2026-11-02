@@ -142,7 +142,7 @@ function relinkPush(string $installation, string $fullName, string $after = 'c',
 function relinkActivities(): array
 {
     return Activity::query()->where('description', 'application_relinked')->get()
-        ->map(fn(Activity $activity): array => [$activity->subject_id, $activity->properties->all()])
+        ->map(fn(Activity $activity): array => [$activity->subject_id, collect($activity->properties->all())->sortKeys()->all()])
         ->all();
 }
 
@@ -163,7 +163,7 @@ test('reinstalling the app moves the apps of the removed installation onto the n
     expect($linked->id)->not->toBe($removed->id)
         ->and($application->fresh()->source_provider_id)->toBe($linked->id)
         ->and($application->fresh()->repository_url)->toBe('https://github.com/monoventech/atlas.git')
-        ->and(relinkActivities())->toBe([[$application->id, ['from' => $removed->id, 'to' => $linked->id, 'repository' => 'monoventech/atlas']]])
+        ->and(relinkActivities())->toBe([[$application->id, ['from' => $removed->id, 'repository' => 'monoventech/atlas', 'to' => $linked->id]]])
         ->and(json_encode(Activity::query()->get()))->not->toContain('ghs_');
 
     $deployment = relinkDeploy($application->fresh());
@@ -242,7 +242,7 @@ test('a link github will not list its repositories for still links, and the app 
     expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
         ->and($application->fresh()->source_provider_id)->toBe($linked->id)
         ->and(relinkMinted('61842'))->toBeTrue()
-        ->and(relinkActivities())->toBe([[$application->id, ['from' => $removed->id, 'to' => $linked->id, 'repository' => 'monoventech/atlas']]]);
+        ->and(relinkActivities())->toBe([[$application->id, ['from' => $removed->id, 'repository' => 'monoventech/atlas', 'to' => $linked->id]]]);
 });
 
 test('a deploy whose connection is gone clones through the team connection that can see the repository', function (array $gone) {
@@ -261,7 +261,7 @@ test('a deploy whose connection is gone clones through the team connection that 
         ->and($application->fresh()->source_provider_id)->toBe($other->id)
         ->and($application->fresh()->repository_url)->toBe('https://github.com/monoventech/atlas.git')
         ->and(relinkMinted('61842'))->toBeTrue()
-        ->and(relinkActivities())->toBe([[$application->id, ['from' => $old->id, 'to' => $other->id, 'repository' => 'monoventech/atlas']]]);
+        ->and(relinkActivities())->toBe([[$application->id, ['from' => $old->id, 'repository' => 'monoventech/atlas', 'to' => $other->id]]]);
 })->with([
     'removed' => [['deleted_at' => now()]],
     'suspended' => [['suspended_at' => now()]],
@@ -317,7 +317,7 @@ test('after a transfer between two linked accounts the clone is minted through t
         ->and($from->fresh()->connected())->toBeTrue()
         ->and(relinkMinted('51842'))->toBeTrue()
         ->and(relinkMinted('61842'))->toBeTrue()
-        ->and(relinkActivities())->toBe([[$application->id, ['from' => $from->id, 'to' => $to->id, 'repository' => 'monoven-labs/atlas']]]);
+        ->and(relinkActivities())->toBe([[$application->id, ['from' => $from->id, 'repository' => 'monoven-labs/atlas', 'to' => $to->id]]]);
 });
 
 test('after a transfer between two linked accounts a push from the new account deploys the app and keeps it there', function () {
@@ -335,7 +335,7 @@ test('after a transfer between two linked accounts a push from the new account d
     expect($application->fresh()->source_provider_id)->toBe($to->id)
         ->and($application->fresh()->repository_head)->toBe(str_repeat('c', 40))
         ->and(Deployment::query()->where('application_id', $application->id)->sole()->requested_commit)->toBe(str_repeat('c', 40))
-        ->and(relinkActivities())->toBe([[$application->id, ['from' => $from->id, 'to' => $to->id, 'repository' => 'monoven-labs/atlas']]]);
+        ->and(relinkActivities())->toBe([[$application->id, ['from' => $from->id, 'repository' => 'monoven-labs/atlas', 'to' => $to->id]]]);
 
     Queue::assertPushed(DeployApplication::class, 1);
 
