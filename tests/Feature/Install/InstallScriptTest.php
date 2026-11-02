@@ -266,6 +266,16 @@ test('continuous integration runs the feature tests on every database the panel 
     'MySQL' => ['tests-mysql', 'mysql:8.0', 'mysql'],
 ]);
 
+test('the installer clones from a directory the coresmith user can enter', function () {
+    $body = installScriptBody();
+    $clone = strpos($body, 'sudo -u coresmith git clone');
+    $leaves = strrpos(substr($body, 0, (int) $clone), "\n    cd /\n");
+
+    expect($clone)->not->toBeFalse()
+        ->and($leaves)->not->toBeFalse()
+        ->and(substr_count(substr($body, (int) $leaves, (int) $clone - (int) $leaves), "\n    cd "))->toBe(1);
+});
+
 test('continuous integration splits the browser suite across parallel shards that cover all of it', function () {
     $jobs = Yaml::parseFile(base_path('.github/workflows/ci.yml'))['jobs'];
     $shards = $jobs['browser']['strategy']['matrix']['shard'] ?? [];
