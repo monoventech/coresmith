@@ -13,6 +13,7 @@ import {
     openSecurity,
     openSetupWith,
     own,
+    refuseClipboard,
     test,
     useTheme,
     WAITING_INVITATION
@@ -256,6 +257,31 @@ const PAGES: [string, Visit][] = [
                 .filter({ hasText: email })
                 .getByRole('button', { name: `Copy link for ${email}` })
                 .waitFor()
+        }
+    ],
+    [
+        'Invite someone dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page.getByRole('button', { name: 'Invite someone' }).click()
+            await dialog(page).getByLabel('Email address').waitFor()
+        }
+    ],
+    [
+        'Team settings after a link could not be copied',
+        async (page) => {
+            const email = `${own(test.info(), 'a11y-nocopy')}@coresmith.test`
+
+            await refuseClipboard(page)
+            await page.goto('/settings/team')
+            await page.getByRole('button', { name: 'Invite someone' }).click()
+            await dialog(page).getByLabel('Email address').fill(email)
+            await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
+
+            const row = page.getByTestId('invitation-row').filter({ hasText: email })
+
+            await row.getByRole('button', { name: `Copy link for ${email}` }).click()
+            await row.getByRole('status').waitFor()
         }
     ],
     ['Invitation for another account', direct(`/invitations/${WAITING_INVITATION}`)],

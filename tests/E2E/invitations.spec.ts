@@ -97,6 +97,15 @@ test.describe('inviting someone without an account', () => {
         await expect(invitation(page, email)).toHaveCount(0)
     })
 
+    test('the invite dialog says this panel hands out links instead of email', async ({ page }) => {
+        await gotoSettings(page, 'Team')
+        await page.getByRole('button', { name: 'Invite someone' }).click()
+
+        await expect(dialog(page)).toContainText(
+            'Someone with a confirmed account here joins straight away. For anyone else you get a link to send them. Their role decides what they can change.'
+        )
+    })
+
     test('a link that cannot be copied stays on screen to select', async ({ page }, testInfo) => {
         const email = `${own(testInfo, 'nocopy')}@coresmith.test`
 
