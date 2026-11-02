@@ -69,3 +69,31 @@ test('the database reads and writes times in utc whatever zone its own server ke
 
     expect(DB::selectOne('select @@session.time_zone as zone')->zone)->toBe('+00:00');
 });
+
+test('the unique indexes the panel relies on survive every migration', function () {
+    $unique = fn(string $table): array => collect(Schema::getIndexes($table))->where('unique', true)->pluck('columns')->all();
+
+    expect($unique('sso_identities'))->toContain(['issuer', 'subject'])
+        ->and($unique('users'))->toContain(['email'])
+        ->and($unique('team_invitations'))->toContain(['team_id', 'email'])
+        ->and($unique('password_reset_tokens'))->toContain(['email']);
+});
+
+test('on mysql, identities and email addresses compare byte for byte and long text has room', function () {
+    $connection = Schema::getConnection();
+
+    if (!$connection instanceof MySqlConnection) {
+        $this->markTestSkipped('Only MySQL and MariaDB get binary collations and LONGTEXT; SQLite and PostgreSQL keep these columns as created.');
+    }
+
+    $binary = $connection->isMaria() ? 'utf8mb4_nopad_bin' : 'utf8mb4_0900_bin';
+    $column = fn(string $table, string $name): array => collect(Schema::getColumns($table))->firstWhere('name', $name) ?? [];
+
+    expect($column('sso_identities', 'issuer')['collation'] ?? null)->toBe($binary)
+        ->and($column('sso_identities', 'subject')['collation'] ?? null)->toBe($binary)
+        ->and($column('users', 'email')['collation'] ?? null)->toBe($binary)
+        ->and($column('team_invitations', 'email')['collation'] ?? null)->toBe($binary)
+        ->and($column('password_reset_tokens', 'email')['collation'] ?? null)->toBe($binary)
+        ->and($column('deployments', 'log')['type_name'] ?? null)->toBe('longtext')
+        ->and($column('applications', 'env_variables')['type_name'] ?? null)->toBe('longtext');
+});

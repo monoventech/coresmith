@@ -10,6 +10,7 @@ namespace App\Models;
 
 use App\Casts\Vaulted;
 use App\Enums\DatabaseType;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\ManagedDatabaseFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class ManagedDatabase extends Model
 {
     /** @use HasFactory<ManagedDatabaseFactory> */
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
 
     protected $table = 'databases';
 

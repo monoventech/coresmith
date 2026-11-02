@@ -601,7 +601,6 @@ function staleQueueOnDatabase(): void
     config([
         'queue.default' => 'database',
         'queue.connections.database.connection' => config('database.default'),
-        'queue.connections.database.table' => 'jobs',
     ]);
 }
 
@@ -611,7 +610,6 @@ function staleUnreadableQueue(): void
         'database.connections.stale_queue_without_jobs' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => ''],
         'queue.default' => 'database',
         'queue.connections.database.connection' => 'stale_queue_without_jobs',
-        'queue.connections.database.table' => 'jobs',
     ]);
 }
 

@@ -12,6 +12,7 @@ use App\Casts\Vaulted;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Services\Git\ProviderHost;
 use Carbon\CarbonInterface;
 use Database\Factories\SourceProviderFactory;
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class SourceProvider extends Model
 {
     /** @use HasFactory<SourceProviderFactory> */
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
 
     protected $guarded = ['id'];
 

@@ -16,6 +16,10 @@ trait IgnoresJsonKeyOrder
             return parent::originalIsEquivalent($key);
         }
 
+        if ($this->attributes[$key] === $this->original[$key]) {
+            return true;
+        }
+
         return self::withSortedKeys($this->castAttribute($key, $this->attributes[$key])) === self::withSortedKeys($this->castAttribute($key, $this->original[$key]));
     }
 

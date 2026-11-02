@@ -8,11 +8,14 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class ApiToken extends PersonalAccessToken
 {
+    use IgnoresJsonKeyOrder;
+
     protected $table = 'personal_access_tokens';
 
     public function team(): BelongsTo
