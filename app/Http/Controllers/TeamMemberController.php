@@ -13,8 +13,11 @@ use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\PlanGate;
+use App\Services\Teams\TeamInvitations;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -28,22 +31,23 @@ final class TeamMemberController extends Controller
 
     private const LAST_OWNER = 'A team must keep at least one owner. Make someone else an owner first.';
 
-    public function store(Request $request, Team $team, PlanGate $plans): RedirectResponse
+    public function store(Request $request, Team $team, PlanGate $plans, TeamInvitations $invitations): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
 
         $plans->ensureCanAddMember($team, $request->user());
 
         $validated = $request->validate([
-            'email' => ['required', 'email', Rule::exists('users', 'email')],
+            'email' => ['required', 'email', 'max:255'],
             'role' => ['required', Rule::enum(TeamRole::class)],
         ]);
 
+        $email = Str::lower($validated['email']);
         $role = TeamRole::from($validated['role']);
-        $user = User::where('email', $validated['email'])->firstOrFail();
+        $user = User::query()->whereRaw('lower(email) = ?', [$email])->first();
 
         $errors = array_filter([
-            'email' => $team->members()->whereKey($user->getKey())->exists() ? self::ALREADY_ON_TEAM : null,
+            'email' => $user instanceof User && $team->members()->whereKey($user->getKey())->exists() ? self::ALREADY_ON_TEAM : null,
             'role' => $this->refusesOwnerGrant($request, $team, $role) ? self::OWNER_GRANT : null,
         ]);
 
@@ -51,7 +55,12 @@ final class TeamMemberController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
+        if (!$user instanceof User) {
+            return $this->invite($request, $team, $email, $role, $invitations);
+        }
+
         $team->members()->attach($user, ['role' => $role->value]);
+        $team->invitations()->where('email', $email)->delete();
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'role' => $role->value])->log('member_added');
 
@@ -110,6 +119,25 @@ final class TeamMemberController extends Controller
         $this->syncServers($team);
 
         return back()->with('success', 'Member removed.');
+    }
+
+    private function invite(Request $request, Team $team, string $email, TeamRole $role, TeamInvitations $invitations): RedirectResponse
+    {
+        $key = 'team-invitations:' . $team->getKey();
+        $limit = (int) config('coresmith.teams.invitations_per_hour', 20);
+
+        if (RateLimiter::tooManyAttempts($key, $limit)) {
+            throw ValidationException::withMessages(['email' => "This team has sent {$limit} invitations in the last hour. Try again in an hour."]);
+        }
+
+        RateLimiter::hit($key, 3600);
+
+        [$invitation, $token] = $invitations->invite($team, $email, $role, $request->user());
+
+        return back()->with([
+            'success' => "Invitation sent to {$invitation->email}.",
+            TeamInvitations::ISSUED => ['id' => $invitation->getKey(), 'token' => $token],
+        ]);
     }
 
     private function syncServers(Team $team): void

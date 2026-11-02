@@ -68,6 +68,11 @@ class Team extends Model
         return $this->members()->wherePivot('role', TeamRole::Owner->value);
     }
 
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(TeamInvitation::class);
+    }
+
     public function servers(): HasMany
     {
         return $this->hasMany(Server::class);

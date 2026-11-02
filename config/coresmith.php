@@ -50,6 +50,10 @@ return [
     'setup_token_path' => env('CORESMITH_SETUP_TOKEN_PATH', '/var/lib/coresmith/setup-token'),
     'tenant_domain' => env('CORESMITH_TENANT_DOMAIN'),
 
+    'teams' => [
+        'invitations_per_hour' => (int) env('CORESMITH_INVITATIONS_PER_HOUR', 20),
+    ],
+
     'content_security_policy' => (bool) env('CORESMITH_CSP', true),
     'websocket_origin' => env('VITE_REVERB_APP_KEY') && env('VITE_REVERB_HOST')
         ? sprintf(

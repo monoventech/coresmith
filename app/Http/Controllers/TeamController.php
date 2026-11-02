@@ -13,11 +13,13 @@ use App\Models\BackupDestination;
 use App\Models\ManagedDatabase;
 use App\Models\Team;
 use App\Models\TeamDomain;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Sso\SsoConnections;
 use App\Services\Teams\TeamDomains;
+use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -41,6 +43,7 @@ final class TeamController extends Controller
         $user = $request->user();
         $urls = app(TeamUrls::class);
         $domain = $team->domain()->first();
+        $manages = $user->can('manageMembers', $team);
 
         return Inertia::render('settings/Team', [
             'team' => ['id' => $team->id, 'name' => $team->name, 'slug' => $team->slug],
@@ -63,16 +66,35 @@ final class TeamController extends Controller
                 'two_factor' => $member->two_factor_confirmed_at !== null,
                 'is_you' => $member->id === $user->id,
             ]),
+            'invitations' => $this->invitations($request, $team, $user, $manages),
             'roles' => array_map(
                 fn(TeamRole $role): array => ['value' => $role->value, 'label' => $role->label()],
                 TeamRole::cases(),
             ),
             'can' => [
                 'update' => $user->can('update', $team),
-                'manageMembers' => $user->can('manageMembers', $team),
+                'manageMembers' => $manages,
                 'grantOwner' => $user->roleIn($team) === TeamRole::Owner,
             ],
         ]);
+    }
+
+    /**
+     * @return list<array{id: string, email: string, role: string, role_label: string, expires: string, link: ?string}>
+     */
+    private function invitations(Request $request, Team $team, User $user, bool $manages): array
+    {
+        $issued = $request->session()->get(TeamInvitations::ISSUED);
+        $invitations = app(TeamInvitations::class);
+
+        return $team->invitations()->pending()->orderBy('email')->get()->map(fn(TeamInvitation $invitation): array => [
+            'id' => (string) $invitation->id,
+            'email' => $invitation->email,
+            'role' => $invitation->role->value,
+            'role_label' => $invitation->role->label(),
+            'expires' => $invitation->expires_at->format('M j'),
+            'link' => $manages && $invitation->invited_by === $user->id ? $invitations->issuedLink($invitation, $issued) : null,
+        ])->values()->all();
     }
 
     /**

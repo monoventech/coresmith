@@ -78,14 +78,18 @@ test.describe('the team', () => {
         await removeMember(page, email, name)
     })
 
-    test('an address without an account is refused in the dialog', async ({ page }) => {
+    test('an address without an account is sent an invitation', async ({ page }, testInfo) => {
+        const email = `${own(testInfo, 'stranger')}@coresmith.test`
+
         await gotoSettings(page, 'Team')
 
         await page.getByRole('button', { name: 'Invite someone' }).click()
-        await dialog(page).getByLabel('Email address').fill('nobody@coresmith.test')
+        await dialog(page).getByLabel('Email address').fill(email)
         await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
 
-        await expect(dialog(page).getByLabel('Email address')).toHaveAttribute('aria-invalid', 'true')
+        await expect(toast(page)).toContainText(`Invitation sent to ${email}.`)
+        await expect(dialog(page)).toHaveCount(0)
+        await expect(member(page, email)).toHaveCount(0)
     })
 
     test('someone already on the team is refused in the dialog', async ({ page }) => {

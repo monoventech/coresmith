@@ -14,6 +14,7 @@ use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\InstallationController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ReleasesController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\ServerTabsController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
@@ -135,7 +137,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
+    Route::delete('teams/{team}/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('teams.invitations.destroy');
 });
+
+Route::get('invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+Route::post('invitations/{token}', [InvitationController::class, 'register'])
+    ->middleware(['guest', 'throttle:10,1,invitation-register'])
+    ->name('invitations.register');
+Route::post('invitations/{token}/accept', [InvitationController::class, 'accept'])
+    ->middleware(['auth', 'throttle:10,1,invitation-accept'])
+    ->name('invitations.accept');
 
 require __DIR__ . '/settings.php';
 require __DIR__ . '/sso.php';

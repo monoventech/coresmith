@@ -20,6 +20,7 @@ use App\Models\SourceProvider;
 use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\TeamDomain;
+use App\Models\TeamInvitation;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
@@ -150,6 +151,7 @@ test('a read-only team can still leave, secure itself, shrink and pay', function
 
         return $test->delete(route('teams.members.destroy', [$team, $member]));
     }],
+    'revoke an invitation' => [fn($test, Team $team, User $owner) => $test->delete(route('teams.invitations.destroy', [$team, TeamInvitation::factory()->for($team)->create()]))],
     'remove the domain' => [function ($test, Team $team, User $owner) {
         TeamDomain::factory()->for($team)->create();
 
