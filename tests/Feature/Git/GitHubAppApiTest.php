@@ -16,7 +16,9 @@ use App\Services\Git\Providers\GitHubAppClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 function githubApiCredentials(): GitHubAppCredentials
 {
@@ -817,6 +819,7 @@ test('the installation client and the api say a refusal in the same words', func
     $refusal = ['error' => 'access_denied', 'error_description' => 'The token was revoked'];
     Http::fake([
         'api.github.com/installation/repositories*' => Http::response($refusal, 401),
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['token' => 'ghs_after_the_401', 'expires_at' => now()->addHour()->toIso8601ZuluString()], 201),
         'api.github.com/repos/monoven/atlas/commits/heads/main' => Http::response($refusal, 403),
         'api.github.com/app/hook/config' => Http::response($refusal, 401),
     ]);
@@ -1338,6 +1341,92 @@ test('a refused connection token keeps the old one and says why', function () {
         ->and($exception->kind)->toBe('uninstalled')
         ->and($connection->fresh()->access_token)->toBe('ghs_old');
     Http::assertSentCount(1);
+});
+
+test('a check that finds another check minting waits and uses the token it stored', function () {
+    $connection = githubApiConnection(['access_token' => null, 'token_expires_at' => null]);
+    $client = app(GitProviderFactory::class)->github($connection);
+    $minting = Cache::lock(GitHubAppClient::tokenLock($connection), GitHubAppClient::TOKEN_LOCK_SECONDS);
+    $minting->get();
+    Sleep::fake();
+    Sleep::whenFakingSleep(function () use ($connection, $minting): void {
+        SourceProvider::query()->find($connection->id)->forceFill(['access_token' => 'ghs_minted_elsewhere', 'token_expires_at' => now()->addHour()])->save();
+        $minting->release();
+    });
+    Http::fake(['api.github.com/installation/repositories*' => Http::response(['total_count' => 0, 'repositories' => []])]);
+
+    $client->installationRepositories(1);
+
+    Http::assertNotSent(fn($request) => str_contains($request->url(), '/access_tokens'));
+    Http::assertSent(fn($request) => str_contains($request->url(), '/installation/repositories') && $request->hasHeader('Authorization', 'Bearer ghs_minted_elsewhere'));
+});
+
+test('a token is minted under the connection lock and the lock is let go after', function () {
+    $connection = githubApiConnection(['access_token' => null, 'token_expires_at' => null]);
+    $heldWhileMinting = null;
+    Http::fake(['api.github.com/app/installations/51842/access_tokens' => function () use ($connection, &$heldWhileMinting) {
+        $heldWhileMinting = !Cache::lock(GitHubAppClient::tokenLock($connection), 1)->get();
+
+        return Http::response(['token' => 'ghs_fresh', 'expires_at' => now()->addHour()->toIso8601ZuluString()], 201);
+    }]);
+
+    expect(app(GitProviderFactory::class)->github($connection)->token())->toBe('ghs_fresh')
+        ->and($heldWhileMinting)->toBeTrue()
+        ->and(Cache::lock(GitHubAppClient::tokenLock($connection), 1)->get())->toBeTrue();
+});
+
+test('a check that cannot get the connection lock in time mints a token of its own', function () {
+    $connection = githubApiConnection(['access_token' => null, 'token_expires_at' => null]);
+    Cache::lock(GitHubAppClient::tokenLock($connection), GitHubAppClient::TOKEN_LOCK_SECONDS)->get();
+    Sleep::fake(syncWithCarbon: true);
+    Http::fake(['api.github.com/app/installations/51842/access_tokens' => Http::response(['token' => 'ghs_own', 'expires_at' => now()->addHour()->toIso8601ZuluString()], 201)]);
+
+    expect(app(GitProviderFactory::class)->github($connection)->token())->toBe('ghs_own');
+});
+
+test('a token github answers 401 to is dropped so the next call mints a fresh one', function (Closure $call) {
+    $connection = githubApiConnection(['access_token' => 'ghs_revoked', 'token_expires_at' => now()->addHour()]);
+    Http::fake([
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['token' => 'ghs_fresh', 'expires_at' => now()->addHour()->toIso8601ZuluString()], 201),
+        'api.github.com/*' => fn($request) => $request->hasHeader('Authorization', 'Bearer ghs_revoked')
+            ? Http::response(['message' => 'Bad credentials'], 401)
+            : Http::response(['total_count' => 0, 'repositories' => []]),
+    ]);
+
+    expect(fn() => $call(app(GitProviderFactory::class)->github($connection)))->toThrow(GitProviderException::class);
+
+    expect($connection->fresh()->access_token)->toBeNull()
+        ->and($connection->fresh()->token_expires_at)->toBeNull();
+
+    app(GitProviderFactory::class)->github($connection->fresh())->installationRepositories(1);
+
+    Http::assertSent(fn($request) => str_contains($request->url(), '/installation/repositories') && $request->hasHeader('Authorization', 'Bearer ghs_fresh'));
+})->with([
+    'a list' => [fn(GitHubAppClient $client) => $client->installationRepositories(1)],
+    'a branch head' => [fn(GitHubAppClient $client) => $client->branchHead('monoventech/atlas', 'main', null)],
+    'a status' => [fn(GitHubAppClient $client) => $client->postDeployStatus('monoventech/atlas', githubApiSha(), 'success', 'https://panel.example.com/d/1', 'Live', 'coresmith/atlas')],
+]);
+
+test('a token is kept when github turns a request down for any other reason', function (int $status) {
+    $connection = githubApiConnection(['access_token' => 'ghs_live', 'token_expires_at' => now()->addHour()]);
+    Http::fake(['api.github.com/installation/repositories*' => Http::response(['message' => 'No'], $status)]);
+
+    expect(fn() => app(GitProviderFactory::class)->github($connection)->installationRepositories(1))->toThrow(GitProviderException::class);
+
+    expect($connection->fresh()->access_token)->toBe('ghs_live');
+})->with([403, 404, 500]);
+
+test('a 401 for a token another check has already replaced leaves the new one alone', function () {
+    $connection = githubApiConnection(['access_token' => 'ghs_revoked', 'token_expires_at' => now()->addHour()]);
+    Http::fake(['api.github.com/installation/repositories*' => function () use ($connection) {
+        SourceProvider::query()->find($connection->id)->forceFill(['access_token' => 'ghs_replaced', 'token_expires_at' => now()->addHour()])->save();
+
+        return Http::response(['message' => 'Bad credentials'], 401);
+    }]);
+
+    expect(fn() => app(GitProviderFactory::class)->github($connection)->installationRepositories(1))->toThrow(GitProviderException::class);
+
+    expect($connection->fresh()->access_token)->toBe('ghs_replaced');
 });
 
 test('a revoke goes through the api with the stored token and only when one is live', function () {

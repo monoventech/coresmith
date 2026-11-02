@@ -15,19 +15,31 @@ use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\GitHubAppCredentials;
 use App\Services\Git\RefusalReason;
 use App\Services\Git\Repository;
+use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 final class GitHubAppClient implements GitProvider
 {
     public const TOKEN_SKEW_SECONDS = 300;
+
+    public const TOKEN_LOCK_SECONDS = 30;
+
+    public const TOKEN_WAIT_SECONDS = 5;
 
     public function __construct(
         private readonly SourceProvider $provider,
         #[\SensitiveParameter] private readonly GitHubAppCredentials $app,
         private readonly GitHubAppApi $api,
     ) {}
+
+    public static function tokenLock(SourceProvider $provider): string
+    {
+        return 'github:token:' . config('app.env') . ':' . $provider->getKey();
+    }
 
     public static function isFullName(string $fullName): bool
     {
@@ -97,8 +109,7 @@ final class GitHubAppClient implements GitProvider
             $headers['If-None-Match'] = '"' . $knownSha . '"';
         }
 
-        $request = $this->request(retry: false)->replaceHeaders($headers);
-        $response = $this->api->call(fn(): Response => $request->get(GitHubAppApi::API . $path));
+        $response = $this->send(fn(PendingRequest $request): Response => $request->replaceHeaders($headers)->get(GitHubAppApi::API . $path), retry: false);
 
         if ($response->status() === 304) {
             return null;
@@ -199,7 +210,27 @@ final class GitHubAppClient implements GitProvider
 
     public function token(): string
     {
-        return $this->cachedToken() ?? $this->mintInstallationToken();
+        $cached = $this->cachedToken();
+
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $lock = Cache::lock(self::tokenLock($this->provider), self::TOKEN_LOCK_SECONDS);
+
+        try {
+            $lock->block(self::TOKEN_WAIT_SECONDS);
+        } catch (LockTimeoutException) {
+            return $this->mintInstallationToken();
+        }
+
+        try {
+            $this->provider->refresh();
+
+            return $this->cachedToken() ?? $this->mintInstallationToken();
+        } finally {
+            $lock->release();
+        }
     }
 
     private function cachedToken(): ?string
@@ -256,11 +287,26 @@ final class GitHubAppClient implements GitProvider
         return implode('/', array_map('rawurlencode', $segments));
     }
 
-    private function request(bool $retry = true): PendingRequest
+    private function send(Closure $call, bool $retry = true): Response
     {
-        $request = $this->api->http()->withToken($this->token());
+        $token = $this->token();
+        $request = $this->api->http()->withToken($token);
+        $response = $this->api->call(fn(): Response => $call($retry ? $request->retry(2, 200, throw: false) : $request));
 
-        return $retry ? $request->retry(2, 200, throw: false) : $request;
+        if ($response->status() === 401) {
+            $this->forget($token);
+        }
+
+        return $response;
+    }
+
+    private function forget(#[\SensitiveParameter] string $token): void
+    {
+        $this->provider->refresh();
+
+        if ($this->provider->access_token === $token) {
+            $this->provider->forceFill(['access_token' => null, 'token_expires_at' => null])->save();
+        }
     }
 
     /**
@@ -268,9 +314,7 @@ final class GitHubAppClient implements GitProvider
      */
     private function get(string $path, array $query = []): Response
     {
-        $request = $this->request();
-
-        return $this->guard($this->api->call(fn(): Response => $request->get(GitHubAppApi::API . $path, $query)));
+        return $this->guard($this->send(fn(PendingRequest $request): Response => $request->get(GitHubAppApi::API . $path, $query)));
     }
 
     /**
@@ -278,16 +322,12 @@ final class GitHubAppClient implements GitProvider
      */
     private function post(string $path, #[\SensitiveParameter] array $payload): Response
     {
-        $request = $this->request(retry: false);
-
-        return $this->guard($this->api->call(fn(): Response => $request->post(GitHubAppApi::API . $path, $payload)));
+        return $this->guard($this->send(fn(PendingRequest $request): Response => $request->post(GitHubAppApi::API . $path, $payload), retry: false));
     }
 
     private function delete(string $path): void
     {
-        $request = $this->request();
-
-        $this->api->call(fn(): Response => $request->delete(GitHubAppApi::API . $path));
+        $this->send(fn(PendingRequest $request): Response => $request->delete(GitHubAppApi::API . $path));
     }
 
     private function guard(Response $response): Response
