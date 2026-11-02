@@ -274,6 +274,39 @@ test('a new account without a name claim is named after the email', function () 
     expect(User::query()->where('email', 'grace@example.test')->sole()->name)->toBe('grace');
 });
 
+test('a subject that differs from a linked one only in case, accents or a trailing space is another person', function (string $subject) {
+    $team = ssoTeam();
+    ssoConnection($team, ['jit_provisioning' => true]);
+    $ada = ssoLinkedMember($team, subject: 'Ada');
+
+    ssoSignIn(['sub' => $subject, 'email' => 'grace@example.test', 'name' => 'Grace Hopper'])->assertRedirect('http://localhost/acme/dashboard');
+
+    $grace = User::query()->where('email', 'grace@example.test')->sole();
+
+    $this->assertAuthenticatedAs($grace);
+
+    expect(SsoIdentity::query()->where('user_id', $ada->id)->sole())
+        ->subject->toBe('Ada')
+        ->email->toBe('ada@example.test')
+        ->and(SsoIdentity::query()->where('user_id', $grace->id)->sole()->subject)->toBe($subject);
+})->with([
+    'letter case' => ['ada'],
+    'an accent' => ['Adá'],
+    'a trailing space' => ['Ada '],
+]);
+
+test('identities from issuers that differ only in letter case are kept apart', function () {
+    $team = ssoTeam();
+    $ada = ssoMember($team, TeamRole::Member, ['email' => 'ada@example.test']);
+    $grace = ssoMember($team, TeamRole::Member, ['email' => 'grace@example.test']);
+
+    SsoIdentity::factory()->create(['user_id' => $ada->id, 'team_id' => $team->id, 'issuer' => 'https://idp.example.test/realms/Acme', 'subject' => 'user-123', 'email' => 'ada@example.test']);
+    SsoIdentity::factory()->create(['user_id' => $grace->id, 'team_id' => $team->id, 'issuer' => 'https://idp.example.test/realms/acme', 'subject' => 'user-123', 'email' => 'grace@example.test']);
+
+    expect(SsoIdentity::query()->where('issuer', 'https://idp.example.test/realms/Acme')->where('subject', 'user-123')->sole()->user_id)->toBe($ada->id)
+        ->and(SsoIdentity::query()->where('issuer', 'https://idp.example.test/realms/acme')->where('subject', 'user-123')->sole()->user_id)->toBe($grace->id);
+});
+
 test('a new person is refused when the team does not create accounts', function () {
     $team = ssoTeam();
     ssoConnection($team);
