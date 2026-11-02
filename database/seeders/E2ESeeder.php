@@ -48,6 +48,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use phpseclib3\Exception\UnableToConnectException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -166,7 +167,7 @@ final class E2ESeeder extends Seeder
             ]);
         }
 
-        $this->githubFixtures();
+        $this->githubFixtures($tenant->applications['atlas']);
         $this->cronFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
@@ -177,6 +178,7 @@ final class E2ESeeder extends Seeder
         $this->invitations($tenant->owner);
 
         $this->otherTeams($tenant->owner, $password);
+        $this->connectionWithoutItsApp($tenant->owner);
 
         activity()
             ->withProperties(['from' => '0.1.0', 'to' => '0.1.1', 'trigger' => 'auto', 'duration_seconds' => 94, 'signature' => 'unchecked'])
@@ -343,13 +345,16 @@ final class E2ESeeder extends Seeder
         }
     }
 
-    private function githubFixtures(): void
+    private function githubFixtures(Application $atlas): void
     {
         $this->repositoryCatalog();
 
+        $removed = $this->removedConnection();
+
         $this->linkedApplication('linked-app', 8070);
         $this->linkedApplication('pushing-app', 8080, ['quick_deploy' => true, 'polled_at' => now()->subSeconds(30)]);
-        $this->linkedApplication('orphaned-app', 8090, ['source_provider_id' => $this->removedConnection()->id]);
+        $this->linkedApplication('orphaned-app', 8090, ['source_provider_id' => $removed->id]);
+        $this->logAt($atlas, 'application_relinked', ['from' => $removed->id, 'to' => $this->github->id, 'repository' => 'monoventech/atlas'], CarbonImmutable::now()->subHours(6));
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $this->linkedApplication("linked-{$code}", 8400 + $index * 10);
@@ -381,6 +386,41 @@ final class E2ESeeder extends Seeder
         }
 
         Cache::put(RepositoryCatalog::key($this->github), ['total' => count($repositories), 'truncated' => false, 'repositories' => $repositories], $expires);
+    }
+
+    private function connectionWithoutItsApp(User $owner): void
+    {
+        $stray = Team::factory()->create(['name' => 'Stray Works', 'slug' => 'stray', 'owner_id' => $owner->id]);
+        $stray->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+        Server::factory()->for($stray)->create([
+            'name' => 'stray-01',
+            'environment' => 'Production',
+            'region' => 'lon1',
+            'ip_address' => '198.51.100.92',
+            'status' => ServerStatus::Active,
+            'os_name' => 'ubuntu',
+            'os_version' => '24.04',
+            'provisioning_phase' => 8,
+            'last_connected_at' => now(),
+        ]);
+
+        $connection = SourceProvider::factory()->for($stray)->create([
+            'type' => SourceProviderType::GitHubApp->value,
+            'github_app_id' => strtolower((string) Str::ulid()),
+            'name' => 'stray-works',
+            'account_type' => 'Organization',
+            'repository_selection' => 'selected',
+            'installation_id' => '51846',
+            'access_token' => null,
+            'token_expires_at' => null,
+        ]);
+        $expires = now()->addYear();
+
+        Cache::put(RepositoryCatalog::key($connection), ['total' => 1, 'truncated' => false, 'repositories' => [
+            ['id' => '70000201', 'full_name' => 'stray-works/harbor', 'private' => true, 'default_branch' => 'main', 'archived' => false, 'pushed_at' => now()->subDay()->toIso8601ZuluString()],
+        ]], $expires);
+        Cache::put(RepositoryCatalog::branchesKey($connection, '70000201'), ['main'], $expires);
     }
 
     private function removedConnection(): SourceProvider

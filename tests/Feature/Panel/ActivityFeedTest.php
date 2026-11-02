@@ -8,11 +8,13 @@ use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Services\Panel\ActivityFeed;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 function feedSentence(array $row): string
 {
@@ -361,4 +363,37 @@ test('other events without a subject stay out of the feed and take no place in i
     }
 
     expect(array_map(feedSentence(...), app(ActivityFeed::class)->forTeam($team)))->toHaveCount(1);
+});
+
+test('an app that moved to another github connection says what it clones and through which account', function (bool $disconnected) {
+    [$team, $server, $application] = feedFixture();
+    $connection = SourceProvider::factory()->for($team)->create(['type' => 'github_app', 'name' => 'monoven-labs', 'installation_id' => '61842']);
+
+    if ($disconnected) {
+        $connection->disconnect();
+    }
+
+    feedLog($application, 'application_relinked', ['from' => (string) Str::ulid(), 'to' => $connection->id, 'repository' => 'monoven-labs/shop']);
+
+    $row = (new ActivityFeed)->forTeam($team)[0];
+
+    expect($row['parts'])->toBe([
+        ['text' => 'shop', 'mono' => true],
+        ['text' => ' now clones ', 'mono' => false],
+        ['text' => 'monoven-labs/shop', 'mono' => true],
+        ['text' => ' through GitHub on ', 'mono' => false],
+        ['text' => 'monoven-labs', 'mono' => true],
+    ])
+        ->and($row['href'])->toBe(route('servers.applications.show', [$server, $application]));
+})->with([
+    'a connected account' => [false],
+    'an account disconnected since' => [true],
+]);
+
+test('an app that moved to a github connection that no longer exists still says what it clones', function () {
+    [$team,, $application] = feedFixture();
+
+    feedLog($application, 'application_relinked', ['from' => (string) Str::ulid(), 'to' => (string) Str::ulid(), 'repository' => 'monoven-labs/shop']);
+
+    expect(feedSentence((new ActivityFeed)->forTeam($team)[0]))->toBe('shop now clones monoven-labs/shop through another GitHub connection');
 });

@@ -1003,6 +1003,39 @@ test.describe('adding an application from GitHub', () => {
     })
 
     for (const theme of ['light', 'dark'] as const) {
+        test(`a connection whose app was removed from the panel is refused under Source, in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+
+            try {
+                await page.goto('/stray/dashboard')
+                await page.getByTestId('server-card').getByRole('link', { name: 'stray-01', exact: true }).click()
+                await expect(page.getByRole('heading', { level: 1, name: 'stray-01' })).toBeVisible()
+                await page.getByRole('link', { name: 'Add an app' }).click()
+                await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+
+                await page.getByLabel('Name', { exact: true }).fill('harbor')
+                await page
+                    .getByRole('listbox', { name: 'Repositories on stray-works' })
+                    .getByRole('option', { name: /stray-works\/harbor/ })
+                    .click()
+                await expect(page.getByLabel('Branch', { exact: true })).toHaveValue('main')
+                await page.getByRole('button', { name: 'Add the app' }).click()
+
+                const source = page.locator('div:has(> label[for="source"])')
+
+                await expect(page.getByLabel('Source', { exact: true })).toHaveAttribute('aria-invalid', 'true')
+                await expect(source.getByRole('alert')).toHaveText(
+                    'That GitHub connection was made through an app this panel no longer has. Pick another one, or connect GitHub again in Git settings.'
+                )
+                await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+                expect(await blockingViolations(page)).toEqual([])
+            } finally {
+                await page.goto('/monoven/dashboard')
+            }
+        })
+
         test(`a team without GitHub gets the URL field and the way to connect GitHub, in ${theme}`, async ({
             page
         }) => {
@@ -1300,7 +1333,9 @@ test.describe('what the repository installs', () => {
 
         await gotoApplication(page, 'bench-01', name)
 
-        await expect(toggleRow(page, 'queue_worker')).toContainText(`Detected: laravel/horizon · systemd unit coresmith-app-${name}-queue`)
+        await expect(toggleRow(page, 'queue_worker')).toContainText(
+            `Detected: laravel/horizon · systemd unit coresmith-app-${name}-queue`
+        )
         await expect(toggle(page, 'Queue worker')).toBeChecked()
     })
 
@@ -1326,8 +1361,13 @@ test.describe('what the repository installs', () => {
 
         await gotoApplication(page, 'bench-01', own(testInfo, 'realtime'))
 
-        await expect(page.getByTestId('smart-toggles').locator('[data-testid^="toggle-"]').first()).toHaveAttribute('data-testid', 'toggle-inertia_ssr')
-        await expect(row).toContainText('Detected from composer.json and package.json · turning it on gives it a port from the next deploy')
+        await expect(page.getByTestId('smart-toggles').locator('[data-testid^="toggle-"]').first()).toHaveAttribute(
+            'data-testid',
+            'toggle-inertia_ssr'
+        )
+        await expect(row).toContainText(
+            'Detected from composer.json and package.json · turning it on gives it a port from the next deploy'
+        )
 
         await toggle(page, 'Inertia SSR').click()
 
@@ -1339,8 +1379,9 @@ test.describe('what the repository installs', () => {
     test('reverb needs its settings first', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'reverb-unset')
 
-        await expect(toggleRow(page, 'reverb')).toContainText('Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on')
+        await expect(toggleRow(page, 'reverb')).toContainText(
+            'Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on'
+        )
         await expect(toggle(page, 'Reverb websockets')).toBeDisabled()
     })
 })
-

@@ -1,4 +1,15 @@
-import { applicationRow, dialog, expect, gotoServer, gotoServerTab, isMobile, own, tabs, test, toast } from './support/fixtures'
+import {
+    applicationRow,
+    dialog,
+    expect,
+    gotoServer,
+    gotoServerTab,
+    isMobile,
+    own,
+    tabs,
+    test,
+    toast
+} from './support/fixtures'
 
 test.describe('a server', () => {
     test('the header names it, says how it is doing and what it is', async ({ page }) => {
@@ -35,7 +46,10 @@ test.describe('a server', () => {
         ] as const) {
             await sections.getByRole('link', { name: label, exact: true }).click()
             await page.waitForURL(url)
-            await expect(tabs(page, 'Server sections').getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page')
+            await expect(tabs(page, 'Server sections').getByRole('link', { name: label, exact: true })).toHaveAttribute(
+                'aria-current',
+                'page'
+            )
         }
     })
 
@@ -56,7 +70,10 @@ test.describe('a server', () => {
     })
 
     test('the apps table shows each app’s real runtime version', async ({ page }, testInfo) => {
-        test.skip(isMobile(testInfo), 'The Runtime column is hidden below 640px, matching the prototype’s mobile apps table')
+        test.skip(
+            isMobile(testInfo),
+            'The Runtime column is hidden below 640px, matching the prototype’s mobile apps table'
+        )
 
         await gotoServer(page, 'forge-01')
 
@@ -224,6 +241,7 @@ test.describe('activity', () => {
 
         await expect(activity).toContainText('9090')
         await expect(activity).toContainText('atlas')
+        await expect(activity).toContainText('atlas now clones monoventech/atlas through GitHub on monoventech')
     })
 })
 

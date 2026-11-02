@@ -15,6 +15,7 @@ use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\CertificateCheck;
@@ -81,11 +82,13 @@ final class ActivityFeed
             ->limit($limit)
             ->get();
 
+        $connections = $this->relinkedTo($activities);
+
         foreach ($activities as $activity) {
             $row = match (true) {
                 $activity->subject_type === null => $this->describePanel($activity),
                 $activity->subject_type === (new CloudProvider)->getMorphClass() => $this->describeAccount($activity, $accounts->get($activity->subject_id)),
-                default => $this->describe($activity, $servers, $applications, $databases),
+                default => $this->describe($activity, $servers, $applications, $databases, $connections),
             };
 
             if ($row !== null) {
@@ -182,12 +185,28 @@ final class ActivityFeed
     }
 
     /**
+     * @param  Collection<int, Activity>  $activities
+     * @return Collection<string, string>
+     */
+    private function relinkedTo(Collection $activities): Collection
+    {
+        $ids = $activities->where('description', 'application_relinked')
+            ->map(fn(Activity $activity): mixed => $activity->properties?->get('to'))
+            ->filter(fn(mixed $id): bool => is_string($id) && $id !== '')
+            ->unique()
+            ->values();
+
+        return $ids->isEmpty() ? collect() : SourceProvider::withTrashed()->whereIn('id', $ids)->pluck('name', 'id');
+    }
+
+    /**
      * @param  Collection<string, Server>  $servers
      * @param  Collection<string, Application>  $applications
      * @param  Collection<string, ManagedDatabase>  $databases
+     * @param  Collection<string, string>  $connections
      * @return array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}|null
      */
-    private function describe(Activity $activity, Collection $servers, Collection $applications, Collection $databases): ?array
+    private function describe(Activity $activity, Collection $servers, Collection $applications, Collection $databases, Collection $connections): ?array
     {
         $properties = $activity->properties?->toArray() ?? [];
         $server = $servers->get($activity->subject_id);
@@ -233,6 +252,12 @@ final class ActivityFeed
             'application_removed' => [$this->mono($application?->name), $this->text(' stopped and detached from ' . $application?->server?->name)],
             'deployment_cancelled' => [$this->text('Deploy cancelled, '), $this->mono($application?->name), $this->text($this->cancelledBy($properties['by'] ?? null) . ', nothing changed')],
             'application_rolled_back' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', no rebuild')],
+            'application_relinked' => [
+                $this->mono($application?->name),
+                $this->text(' now clones '),
+                $this->mono((string) ($properties['repository'] ?? '')),
+                ...($connections->has($properties['to'] ?? '') ? [$this->text(' through GitHub on '), $this->mono($connections->get($properties['to']))] : [$this->text(' through another GitHub connection')]),
+            ],
             RollbackHistory::WORKER_DID_NOT_START => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but ' . ($properties['worker'] ?? 'a worker') . ' did not start. Open the app to see why.')],
             'rollback_blocked' => [$this->mono($application?->name), $this->text(' was not rolled back, a deploy was running. Roll back again once it finishes.')],
             'rollback_processes_failed' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', but its processes did not start. Open the app to see why, then deploy a release that starts.')],
