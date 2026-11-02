@@ -11,6 +11,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -28,9 +29,16 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasUlids, IgnoresJsonKeyOrder, Notifiable, TwoFactorAuthenticatable;
 
+    public static function normaliseEmail(string $email): string
+    {
+        return Str::lower(trim($email));
+    }
+
     public static function findByEmail(string $email): ?self
     {
-        return self::query()->whereRaw('lower(email) = ?', [Str::lower(trim($email))])->first();
+        $email = self::normaliseEmail($email);
+
+        return self::query()->where('email', $email)->get()->first(fn(self $user): bool => $user->email === $email);
     }
 
     public function roleIn(?Team $team): ?TeamRole
@@ -98,6 +106,11 @@ class User extends Authenticatable
     public function sshKeys(): HasMany
     {
         return $this->hasMany(SshKey::class);
+    }
+
+    protected function email(): Attribute
+    {
+        return Attribute::make(set: fn(?string $value): ?string => $value === null ? null : self::normaliseEmail($value));
     }
 
     /**

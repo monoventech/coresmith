@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\TeamRole;
+use App\Http\Middleware\RequireSetupToken;
 use App\Models\InstanceSetting;
 use App\Models\Team;
 use App\Models\User;
@@ -136,6 +137,32 @@ test('the new owner is signed in', function () {
     $this->post('/install', installPayload(['setup_token' => $token]));
 
     $this->assertAuthenticatedAs(User::firstOrFail());
+});
+
+test('an owner who types capitals signs in with that address afterwards', function () {
+    $token = issueToken();
+
+    $this->post('/install', installPayload(['setup_token' => $token, 'email' => ' Ada@Example.com ']))
+        ->assertRedirect(route('dashboard'));
+
+    expect(User::firstOrFail()->email)->toBe('ada@example.com');
+
+    $this->post(route('logout'));
+    $this->post(route('login.store'), ['email' => 'Ada@Example.com', 'password' => 'a-long-enough-passphrase']);
+
+    $this->assertAuthenticatedAs(User::firstOrFail());
+});
+
+test('a setup submitted twice refuses the address the first one took in another case', function () {
+    User::factory()->create(['email' => 'ada@example.com']);
+
+    $this->withoutMiddleware(RequireSetupToken::class)
+        ->from('/install')
+        ->post('/install', installPayload(['email' => 'ADA@Example.com']))
+        ->assertRedirect('/install')
+        ->assertSessionHasErrors('email');
+
+    expect(User::query()->count())->toBe(1);
 });
 
 test('a short password is refused', function () {

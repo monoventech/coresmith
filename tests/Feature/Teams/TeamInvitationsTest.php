@@ -573,6 +573,59 @@ test('a self-hosted panel adds an account at once only when its address is confi
         ->and(TeamInvitation::query()->sole()->email)->toBe('unconfirmed@example.com');
 });
 
+test('adding an address never adds the account of an address that differs only by an accent', function () {
+    $team = teamInvitationsTeam();
+    $owner = teamInvitationsMember($team);
+    $other = User::factory()->create(['email' => 'jose@acmé.com']);
+
+    teamInvitationsSend($owner, $team, 'jose@acme.com', TeamRole::Admin)->assertSessionHas('success', 'Invitation sent to jose@acme.com.');
+
+    expect($team->members()->whereKey($other->id)->exists())->toBeFalse()
+        ->and(TeamInvitation::query()->sole()->email)->toBe('jose@acme.com')
+        ->and(teamInvitationsLink('jose@acme.com'))->not->toBe('');
+});
+
+test('inviting an address never re-sends the invitation of an address that differs only by an accent', function () {
+    $team = teamInvitationsTeam();
+    $owner = teamInvitationsMember($team);
+
+    teamInvitationsSend($owner, $team, 'jose@acmé.com')->assertSessionHas('success', 'Invitation sent to jose@acmé.com.');
+    teamInvitationsSend($owner, $team, 'jose@acme.com', TeamRole::Admin)->assertSessionHas('success', 'Invitation sent to jose@acme.com.');
+
+    expect(TeamInvitation::query()->orderBy('email')->pluck('role', 'email')->map->value->all())->toBe(['jose@acme.com' => 'admin', 'jose@acmé.com' => 'member'])
+        ->and(teamInvitationsLink('jose@acme.com'))->not->toBe('');
+});
+
+test('the person an invitation names can make their account while an address differing only by an accent has one', function () {
+    $team = teamInvitationsTeam();
+    User::factory()->create(['email' => 'jose@acmé.com']);
+
+    teamInvitationsSend(teamInvitationsMember($team), $team, 'jose@acme.com')->assertSessionHasNoErrors();
+    $token = teamInvitationsToken(teamInvitationsLink('jose@acme.com'));
+
+    $this->post(route('logout'));
+    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'register'));
+    $this->post(route('invitations.register', $token), [
+        'name' => 'Jose Acme',
+        'password' => 'a-long-enough-passphrase',
+        'password_confirmation' => 'a-long-enough-passphrase',
+    ])->assertRedirect('http://localhost/acme/dashboard');
+
+    expect(User::query()->where('email', 'jose@acme.com')->sole()->belongsToTeam($team))->toBeTrue();
+});
+
+test('adding someone removes only the pending invitation for their own address', function () {
+    $team = teamInvitationsTeam();
+    $owner = teamInvitationsMember($team);
+    User::factory()->create(['email' => 'jose@acme.com']);
+    TeamInvitation::factory()->for($team)->create(['email' => 'jose@acme.com']);
+    TeamInvitation::factory()->for($team)->create(['email' => 'jose@acmé.com']);
+
+    teamInvitationsSend($owner, $team, 'jose@acme.com')->assertSessionHas('success', 'Member added.');
+
+    expect(TeamInvitation::query()->pluck('email')->all())->toBe(['jose@acmé.com']);
+});
+
 test('an account made from a copied link does not let another team add it at once', function () {
     teamInvitationsWithoutMail();
     $first = teamInvitationsTeam();
