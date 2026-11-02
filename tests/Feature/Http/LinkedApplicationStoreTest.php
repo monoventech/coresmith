@@ -344,23 +344,33 @@ test('a repository without a connection is refused and says the connection is th
     Http::assertNothingSent();
 });
 
-test('github being unreachable while checking is said plainly', function () {
-    Http::fake(['api.github.com/installation/repositories*' => Http::response(['message' => 'Server Error'], 500)]);
+test('github being unreachable while checking is said plainly, and only then is it worth trying again in a minute', function (Closure $fake) {
+    Http::fake($fake());
     [$owner, $server] = linkedStoreTeam();
-    $connection = linkedStoreConnection($server->team, ['name' => 'quiet'], seed: false);
+    $connection = linkedStoreConnection($server->team, ['name' => 'quiet', 'access_token' => null, 'token_expires_at' => null], seed: false);
 
     $this->actingAs($owner)
         ->post(route('servers.applications.store', $server), linkedStorePayload([
             'source_provider_id' => $connection->id,
             'repository_id' => '70000001',
         ]))
-        ->assertSessionHasErrors(['repository_id' => 'Coresmith could not reach GitHub to check that repository. Try again in a minute.']);
+        ->assertSessionHasErrors(['repository_id' => 'Coresmith could not reach GitHub to check that repository. Try again in a minute.'])
+        ->assertSessionDoesntHaveErrors('source_provider_id');
 
-    expect(Application::query()->count())->toBe(0);
+    expect(Application::query()->count())->toBe(0)
+        ->and($connection->fresh()->connected())->toBeTrue();
     Queue::assertNothingPushed();
-});
+})->with([
+    'the list fails' => [fn() => [
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['token' => 'ghs_fresh', 'expires_at' => '2030-01-01T00:00:00Z'], 201),
+        'api.github.com/installation/repositories*' => Http::response(['message' => 'Server Error'], 500),
+    ]],
+    'the token fails' => [fn() => ['api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'Server Error'], 500)]],
+    'github is rate limiting' => [fn() => ['api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'API rate limit exceeded for installation ID 51842.'], 403)]],
+    'github does not answer' => [fn() => ['api.github.com/app/installations/51842/access_tokens' => Http::failedConnection()]],
+]);
 
-test('a connection whose app is gone is said plainly too', function () {
+test('a connection whose app is gone is said plainly, with nothing to try again', function () {
     [$owner, $server] = linkedStoreTeam();
     $connection = linkedStoreConnection($server->team, ['name' => 'orphan'], seed: false);
     GitHubApp::query()->delete();
@@ -370,10 +380,68 @@ test('a connection whose app is gone is said plainly too', function () {
             'source_provider_id' => $connection->id,
             'repository_id' => '70000001',
         ]))
-        ->assertSessionHasErrors(['repository_id' => 'Coresmith could not reach GitHub to check that repository. Try again in a minute.']);
+        ->assertSessionHasErrors(['source_provider_id' => 'That GitHub connection was made through an app this panel no longer has. Pick another one, or connect GitHub again in Git settings.'])
+        ->assertSessionDoesntHaveErrors('repository_id');
 
     expect(Application::query()->count())->toBe(0);
     Http::assertNothingSent();
+});
+
+test('an installation github no longer has is said plainly and the connection is forgotten', function () {
+    Http::fake(['api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'Not Found'], 404)]);
+    [$owner, $server] = linkedStoreTeam();
+    $connection = linkedStoreConnection($server->team, ['name' => 'monoven-labs', 'access_token' => null, 'token_expires_at' => null], seed: false);
+
+    $this->actingAs($owner)
+        ->post(route('servers.applications.store', $server), linkedStorePayload([
+            'source_provider_id' => $connection->id,
+            'repository_id' => '70000001',
+        ]))
+        ->assertSessionHasErrors(['source_provider_id' => "Coresmith's GitHub app is no longer installed on monoven-labs. Pick another connection, or connect GitHub again in Git settings."])
+        ->assertSessionDoesntHaveErrors('repository_id');
+
+    expect(Application::query()->count())->toBe(0)
+        ->and(SourceProvider::withTrashed()->find($connection->id)->trashed())->toBeTrue();
+});
+
+test('a suspension github confirms while checking says to unsuspend it', function () {
+    Http::fake([
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'This installation has been suspended'], 403),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'suspended_at' => '2026-11-01T09:00:00Z']),
+    ]);
+    [$owner, $server] = linkedStoreTeam();
+    $connection = linkedStoreConnection($server->team, ['name' => 'monoven-labs', 'access_token' => null, 'token_expires_at' => null], seed: false);
+
+    $this->actingAs($owner)
+        ->post(route('servers.applications.store', $server), linkedStorePayload([
+            'source_provider_id' => $connection->id,
+            'repository_id' => '70000001',
+        ]))
+        ->assertSessionHasErrors(['source_provider_id' => linkedStoreSuspended()])
+        ->assertSessionDoesntHaveErrors('repository_id');
+
+    expect(Application::query()->count())->toBe(0)
+        ->and($connection->fresh()->suspended_at)->not->toBeNull();
+});
+
+test('a token github refuses for any other reason says what github said', function () {
+    Http::fake([
+        'api.github.com/app/installations/51842/access_tokens' => Http::response(['message' => 'Your IP address is not permitted to access this resource'], 403),
+        'api.github.com/app/installations/51842' => Http::response(['id' => 51842, 'suspended_at' => null]),
+    ]);
+    [$owner, $server] = linkedStoreTeam();
+    $connection = linkedStoreConnection($server->team, ['name' => 'monoven-labs', 'access_token' => null, 'token_expires_at' => null], seed: false);
+
+    $this->actingAs($owner)
+        ->post(route('servers.applications.store', $server), linkedStorePayload([
+            'source_provider_id' => $connection->id,
+            'repository_id' => '70000001',
+        ]))
+        ->assertSessionHasErrors(['source_provider_id' => 'GitHub would not give Coresmith a token for monoven-labs. It said: Your IP address is not permitted to access this resource. Fix that on GitHub, then try again.'])
+        ->assertSessionDoesntHaveErrors('repository_id');
+
+    expect(Application::query()->count())->toBe(0)
+        ->and($connection->fresh()->connected())->toBeTrue();
 });
 
 test('an app from a git url is stored exactly as before', function () {

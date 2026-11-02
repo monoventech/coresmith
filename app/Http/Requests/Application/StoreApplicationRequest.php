@@ -11,10 +11,13 @@ namespace App\Http\Requests\Application;
 use App\Enums\Ability;
 use App\Enums\ApplicationType;
 use App\Enums\SourceProviderType;
+use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
 use App\Models\Server;
 use App\Models\SourceProvider;
+use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\RepositoryCatalog;
+use App\Services\Git\RefusalReason;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
 use App\Services\SafeName;
@@ -27,6 +30,8 @@ final class StoreApplicationRequest extends FormRequest
     private const CONNECTION_UNAVAILABLE = "That GitHub connection isn't available. Pick another one, or connect GitHub again in Git settings.";
 
     private const CONNECTION_SUSPENDED = 'GitHub has suspended this installation. Unsuspend it on GitHub to deploy again.';
+
+    private const APP_GONE = 'That GitHub connection was made through an app this panel no longer has. Pick another one, or connect GitHub again in Git settings.';
 
     private const REPOSITORY_NOT_PICKED = 'Pick a repository from the list.';
 
@@ -182,10 +187,16 @@ final class StoreApplicationRequest extends FormRequest
             return;
         }
 
+        if (app(GitHubApps::class)->for($connection) === null) {
+            $validator->errors()->add('source_provider_id', self::APP_GONE);
+
+            return;
+        }
+
         try {
             $repository = app(RepositoryCatalog::class)->find($connection, $this->string('repository_id')->value());
-        } catch (GitProviderException) {
-            $validator->errors()->add('repository_id', RepositoryCatalog::UNREACHABLE);
+        } catch (GitProviderException $refusal) {
+            $validator->errors()->add(...$this->refusal($connection, $refusal));
 
             return;
         }
@@ -197,6 +208,23 @@ final class StoreApplicationRequest extends FormRequest
         }
 
         $this->repository = $repository;
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function refusal(SourceProvider $connection, GitProviderException $refusal): array
+    {
+        $installation = $refusal instanceof GitHubInstallationException ? $refusal : null;
+
+        $connection->markRefused($refusal);
+
+        return match ($installation?->kind) {
+            GitHubInstallationException::UNINSTALLED => ['source_provider_id', "Coresmith's GitHub app is no longer installed on {$connection->name}. Pick another connection, or connect GitHub again in Git settings."],
+            GitHubInstallationException::SUSPENDED => ['source_provider_id', self::CONNECTION_SUSPENDED],
+            GitHubInstallationException::REFUSED => ['source_provider_id', "GitHub would not give Coresmith a token for {$connection->name}. It said: " . RefusalReason::sentence((string) $installation?->reason) . ' Fix that on GitHub, then try again.'],
+            default => ['repository_id', RepositoryCatalog::UNREACHABLE],
+        };
     }
 
     /**
