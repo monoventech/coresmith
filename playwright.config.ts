@@ -108,12 +108,14 @@ export default defineConfig({
     webServer: [
         {
             command: `php artisan serve --port=${PORT} --env=e2e`,
+            env: { APP_URL: baseURL },
             url: baseURL,
             reuseExistingServer: !process.env.CI,
             timeout: 30_000,
         },
         {
             command: `php artisan serve --port=${INSTALL_PORT} --env=e2e-install`,
+            env: { APP_URL: baseURL },
             url: `${installBaseURL}/up`,
             reuseExistingServer: !process.env.CI,
             timeout: 30_000,
@@ -126,6 +128,7 @@ export default defineConfig({
         },
         {
             command: `php artisan serve --port=${CLOUD_PORT} --env=e2e-cloud`,
+            env: { APP_URL: cloudBaseURL, CORESMITH_STRIPE_API_BASE: `http://127.0.0.1:${STRIPE_PORT}` },
             url: `${cloudBaseURL}/up`,
             reuseExistingServer: !process.env.CI,
             timeout: 30_000,

@@ -18,6 +18,7 @@
         "types:check": "svelte-check --tsconfig ./tsconfig.json",
         "shadcn:update": "bunx shadcn-svelte update --all",
         "test:e2e": "playwright test",
+        "ci": "bash scripts/ci-local.sh",
         "test:e2e:ui": "playwright test --ui",
         "e2e:refresh": "php artisan migrate:fresh --seed --seeder=E2ESeeder --env=e2e --force",
         "e2e:install-refresh": "php artisan migrate:fresh --env=e2e-install --force && php artisan coresmith:setup-token --env=e2e-install --force",

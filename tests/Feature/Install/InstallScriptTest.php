@@ -276,6 +276,26 @@ test('the installer clones from a directory the coresmith user can enter', funct
         ->and(substr_count(substr($body, (int) $leaves, (int) $clone - (int) $leaves), "\n    cd "))->toBe(1);
 });
 
+test('the local run checks everything continuous integration does', function () {
+    $script = (string) file_get_contents(base_path('scripts/ci-local.sh'));
+    $package = json_decode((string) file_get_contents(base_path('package.json')), true);
+
+    foreach (['pint', '--test', 'lint:check', 'lint:sh', 'format:check', 'lint:tailwind', 'types:check', 'run build', 'pest --parallel', 'DB_CONNECTION=pgsql', 'DB_CONNECTION=mysql', 'e2e:refresh', 'e2e:install-refresh', 'e2e:cloud-refresh', 'playwright test', '--shard='] as $step) {
+        expect($script)->toContain($step);
+    }
+
+    expect($package['scripts']['ci'] ?? null)->toBe('bash scripts/ci-local.sh');
+});
+
+test('browser shards can run side by side, each server on its own address', function () {
+    $config = (string) file_get_contents(base_path('playwright.config.ts'));
+
+    expect($config)
+        ->toContain('command: `php artisan serve --port=${PORT} --env=e2e`,' . "\n            env: { APP_URL: baseURL },")
+        ->toContain('command: `php artisan serve --port=${INSTALL_PORT} --env=e2e-install`,' . "\n            env: { APP_URL: baseURL },")
+        ->toContain('command: `php artisan serve --port=${CLOUD_PORT} --env=e2e-cloud`,' . "\n" . '            env: { APP_URL: cloudBaseURL, CORESMITH_STRIPE_API_BASE: `http://127.0.0.1:${STRIPE_PORT}` },');
+});
+
 test('continuous integration splits the browser suite across parallel shards that cover all of it', function () {
     $jobs = Yaml::parseFile(base_path('.github/workflows/ci.yml'))['jobs'];
     $shards = $jobs['browser']['strategy']['matrix']['shard'] ?? [];

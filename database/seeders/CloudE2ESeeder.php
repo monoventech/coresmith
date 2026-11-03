@@ -212,7 +212,7 @@ final class CloudE2ESeeder extends Seeder
             TeamInvoice::factory()->for($team)->create([
                 'number' => $number,
                 'period_start' => now()->startOfMonth()->subMonths(4 - $index),
-                'pdf_url' => "http://127.0.0.1:8126/invoices/{$number}.pdf",
+                'pdf_url' => (config('coresmith.billing.stripe_api_base') ?: 'http://127.0.0.1:8126') . "/invoices/{$number}.pdf",
             ]);
         }
     }

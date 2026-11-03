@@ -63,7 +63,7 @@ All of these must pass:
 
 `./vendor/bin/pint --test` · `bun run lint:check` · `bun run lint:sh` · `bun run format:check` · `bun run lint:tailwind` · `bun run types:check` · `bun run build` · `php artisan test` · `bun run test:e2e`
 
-CI runs the same list.
+CI runs the same list. `bun run ci` runs it all on your machine: every check above, Pest on SQLite, PostgreSQL and MySQL, and the whole browser suite in parallel shards. It checks what HEAD would push, so commit first. It expects PostgreSQL on port 5432 and MySQL on port 3310 (`CI_PG_PORT`, `CI_MYSQL_PORT`, `CI_DB_DATABASE`, `CI_DB_USERNAME` and `CI_DB_PASSWORD` change that), and `CI_SHARDS` sets how many browser shards run at once. `bun run ci browser` runs only that stage, likewise `static` and `pest`.
 
 ## Design
 
