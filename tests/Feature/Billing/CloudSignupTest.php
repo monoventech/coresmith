@@ -14,6 +14,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\CloudBilling;
 
@@ -219,11 +220,14 @@ test('the unique trial index survives addresses that already repeat', function (
         $table->index('email');
     });
 
+    $first = (string) Str::ulid();
+    $only = (string) Str::ulid();
+
     DB::table('trial_history')->insert([
-        ['email' => 'maya@example.com', 'team_id' => 'second', 'started_at' => '2026-02-01 00:00:00'],
-        ['email' => 'maya@example.com', 'team_id' => 'first', 'started_at' => '2026-01-01 00:00:00'],
-        ['email' => 'maya@example.com', 'team_id' => 'third', 'started_at' => '2026-03-01 00:00:00'],
-        ['email' => 'ines@example.com', 'team_id' => 'only', 'started_at' => '2026-02-01 00:00:00'],
+        ['email' => 'maya@example.com', 'team_id' => (string) Str::ulid(), 'started_at' => '2026-02-01 00:00:00'],
+        ['email' => 'maya@example.com', 'team_id' => $first, 'started_at' => '2026-01-01 00:00:00'],
+        ['email' => 'maya@example.com', 'team_id' => (string) Str::ulid(), 'started_at' => '2026-03-01 00:00:00'],
+        ['email' => 'ines@example.com', 'team_id' => $only, 'started_at' => '2026-02-01 00:00:00'],
     ]);
 
     (require $migration)->up();
@@ -232,6 +236,6 @@ test('the unique trial index survives addresses that already repeat', function (
 
     DB::table('trial_history')->delete();
 
-    expect($kept)->toBe(['ines@example.com' => 'only', 'maya@example.com' => 'first'])
+    expect($kept)->toBe(['ines@example.com' => $only, 'maya@example.com' => $first])
         ->and(collect(Schema::getIndexes('trial_history'))->filter(fn(array $index): bool => $index['columns'] === ['email'])->sole()['unique'])->toBeTrue();
 });
