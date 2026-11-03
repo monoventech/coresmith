@@ -291,9 +291,9 @@ test('browser shards can run side by side, each server on its own address', func
     $config = (string) file_get_contents(base_path('playwright.config.ts'));
 
     expect($config)
-        ->toContain('command: `php artisan serve --port=${PORT} --env=e2e`,' . "\n            env: { APP_URL: baseURL },")
-        ->toContain('command: `php artisan serve --port=${INSTALL_PORT} --env=e2e-install`,' . "\n            env: { APP_URL: baseURL },")
-        ->toContain('command: `php artisan serve --port=${CLOUD_PORT} --env=e2e-cloud`,' . "\n" . '            env: { APP_URL: cloudBaseURL, CORESMITH_STRIPE_API_BASE: `http://127.0.0.1:${STRIPE_PORT}` },');
+        ->toContain('command: `php artisan serve --no-reload --port=${PORT} --env=e2e`,' . "\n            env: { APP_URL: baseURL },")
+        ->toContain('command: `php artisan serve --no-reload --port=${INSTALL_PORT} --env=e2e-install`,' . "\n            env: { APP_URL: baseURL },")
+        ->toContain('command: `php artisan serve --no-reload --port=${CLOUD_PORT} --env=e2e-cloud`,' . "\n" . '            env: { APP_URL: cloudBaseURL, CORESMITH_STRIPE_API_BASE: `http://127.0.0.1:${STRIPE_PORT}` },');
 });
 
 test('continuous integration splits the browser suite across parallel shards that cover all of it', function () {
