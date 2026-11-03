@@ -56,6 +56,9 @@
     let pointing = $state<string | null>(null)
 
     const others = $derived(providers.filter((provider) => provider.type !== 'github_app'))
+    const unconnected = $derived(
+        connectable.filter((option) => !others.some((provider) => provider.type === option.type))
+    )
     const notInstalled = $derived(github.apps.filter((app) => !app.installed))
     const elsewhere = $derived(github.elsewhere === null ? null : new URL(github.elsewhere).host)
 
@@ -212,14 +215,14 @@
             </div>
         {/each}
 
-        {#if providers.length === 0}
+        {#if unconnected.length > 0}
             <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="connect-card">
                 <h3 class="type-h3 m-0 mb-1">Connect a Git provider</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Tokens list repositories and register webhooks. Clones always use a separate read-only deploy key
-                    per app.
+                    GitLab and Bitbucket tokens list repositories and register webhooks. They clone with a separate
+                    read-only deploy key per app.
                 </p>
-                {#each connectable as option (option.type)}
+                {#each unconnected as option (option.type)}
                     <div class="flex min-h-11 flex-wrap items-center gap-3 border-t border-border text-[13px]">
                         <span class="flex-1 font-medium">{option.label}</span>
                         {#if !option.configured}

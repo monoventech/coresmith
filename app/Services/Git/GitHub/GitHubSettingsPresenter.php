@@ -257,6 +257,7 @@ final class GitHubSettingsPresenter
                 'refusal' => $installation['proven'] ? null : ($installation['refusal'] ?? GitHubConnector::UNREACHABLE),
             ], $pending['installations']),
             'post_href' => route('github.installations.store'),
+            'cancel_href' => route('github.installations.destroy'),
         ];
     }
 }

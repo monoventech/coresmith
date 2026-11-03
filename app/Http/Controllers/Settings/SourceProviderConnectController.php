@@ -105,6 +105,13 @@ final class SourceProviderConnectController extends Controller
         return $this->github->choose($request, is_int($installation) || is_string($installation) ? (string) $installation : '');
     }
 
+    public function cancelChoice(): RedirectResponse
+    {
+        $this->github->cancelChoice();
+
+        return back();
+    }
+
     private function startGitHub(Request $request, TeamContext $context): RedirectResponse
     {
         $key = $request->query('app');

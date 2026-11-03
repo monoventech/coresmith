@@ -17,6 +17,11 @@
 
     const linkable = $derived(choose.installations.filter((installation) => installation.refusal === null))
 
+    function cancel() {
+        open = false
+        router.delete(choose.cancel_href, { preserveScroll: true })
+    }
+
     function connect() {
         working = true
         router.post(
@@ -27,7 +32,14 @@
     }
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root
+    bind:open
+    onOpenChange={(next) => {
+        if (!next) {
+            cancel()
+        }
+    }}
+>
     <Dialog.Content data-testid="github-chooser">
         <Dialog.Header>
             <Dialog.Title>Choose the account to connect</Dialog.Title>
@@ -43,7 +55,7 @@
             {#each choose.installations as installation (installation.id)}
                 <label
                     class={cn(
-                        'flex items-center gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0',
+                        'flex items-center gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0 max-sm:min-h-11',
                         installation.refusal === null ? 'cursor-pointer hover:bg-muted' : 'cursor-not-allowed'
                     )}
                 >
@@ -71,7 +83,7 @@
             {/each}
         </RadioGroup.Root>
         <Dialog.Footer>
-            <Button variant="ghost" onclick={() => (open = false)}>Cancel</Button>
+            <Button variant="ghost" onclick={cancel}>Cancel</Button>
             {#if linkable.length > 0}
                 <Button disabled={selected === '' || working} onclick={connect}>Connect</Button>
             {/if}

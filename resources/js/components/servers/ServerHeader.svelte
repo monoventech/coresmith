@@ -95,20 +95,20 @@
     {#if server.can.update || server.can.delete}
         <div class="flex flex-wrap gap-2">
             {#if server.can.update}
-                <Button variant="ghost" class="max-sm:h-11" onclick={openRename}>Rename</Button>
+                <Button variant="ghost" onclick={openRename}>Rename</Button>
                 {#if server.active && server.cloud?.task?.state !== 'running'}
-                    <Button variant="outline" class="max-sm:h-11" onclick={reboot}>Reboot server</Button>
+                    <Button variant="outline" onclick={reboot}>Reboot server</Button>
                 {/if}
                 {#if server.cloud?.can.resize}
-                    <Button variant="outline" class="max-sm:h-11" onclick={() => (resizing = true)}>Resize</Button>
+                    <Button variant="outline" onclick={() => (resizing = true)}>Resize</Button>
                 {/if}
             {/if}
             {#if server.cloud?.can.destroy}
-                <Button variant="ghost" class="text-destructive-strong max-sm:h-11" onclick={() => (destroying = true)}
+                <Button variant="ghost" class="text-destructive-strong" onclick={() => (destroying = true)}
                     >Destroy</Button
                 >
             {:else if server.cloud ? server.cloud.can.detach : server.can.delete}
-                <Button variant="ghost" class="text-destructive-strong max-sm:h-11" onclick={() => (detaching = true)}
+                <Button variant="ghost" class="text-destructive-strong" onclick={() => (detaching = true)}
                     >Detach</Button
                 >
             {/if}

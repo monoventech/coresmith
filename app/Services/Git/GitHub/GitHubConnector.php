@@ -182,6 +182,11 @@ final class GitHubConnector
         return $this->connected($request, $team, $app, $installation, $pending['person']);
     }
 
+    public function cancelChoice(): void
+    {
+        $this->choices->forget();
+    }
+
     /**
      * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}  $installation
      * @param  array{id: string, login: string}|null  $person

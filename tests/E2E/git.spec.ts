@@ -1,4 +1,5 @@
-import { asMember, dialog, expect, gotoSettings, test } from './support/fixtures'
+import type { Page } from '@playwright/test'
+import { asMember, dialog, expect, gotoSettings, isMobile, test } from './support/fixtures'
 
 test.describe('git settings', () => {
     test('the connected GitHub App shows where it is installed and when its token rotates', async ({ page }) => {
@@ -17,6 +18,82 @@ test.describe('git settings', () => {
             'GitHub App with fine-grained, per-repository permissions, not OAuth.'
         )
     })
+
+    test('a team with GitHub connected can still connect GitLab', async ({ page }) => {
+        await gotoSettings(page, 'Git')
+
+        const card = page.getByTestId('connect-card')
+
+        await expect(card.getByRole('link', { name: 'Connect GitLab' })).toBeVisible()
+        await expect(card).toContainText('GitLab and Bitbucket tokens list repositories and register webhooks.')
+    })
+
+    test('card buttons and dialog footers are 44px tall on a phone', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'phone layout only')
+
+        await gotoSettings(page, 'Git')
+
+        const disconnect = page.getByTestId('provider-card').getByRole('button', { name: 'Disconnect' })
+
+        expect((await disconnect.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+
+        await disconnect.click()
+
+        const keep = dialog(page).getByRole('button', { name: 'Keep it' })
+
+        await expect.poll(async () => (await keep.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+
+        await keep.click()
+    })
+
+    for (const [way, dismiss] of [
+        ['Cancel', (page: Page) => dialog(page).getByRole('button', { name: 'Cancel' }).click()],
+        ['Escape', (page: Page) => page.keyboard.press('Escape')]
+    ] as const) {
+        test(`closing the installation chooser with ${way} forgets the choices`, async ({ page }) => {
+            let offered = false
+
+            await page.route('**/settings/git', async (route) => {
+                if (offered || route.request().headers()['x-inertia'] === undefined) {
+                    await route.continue()
+
+                    return
+                }
+
+                offered = true
+
+                const response = await route.fetch()
+                const body = await response.json()
+
+                body.props.github.choose = {
+                    app: 'Coresmith Monoven',
+                    post_href: '/settings/source-providers/github_app/installations',
+                    cancel_href: '/settings/source-providers/github_app/installations',
+                    installations: [
+                        { id: '1', account: 'first', repository_selection: 'all', refusal: null },
+                        { id: '2', account: 'second', repository_selection: 'selected', refusal: null }
+                    ]
+                }
+
+                await route.fulfill({ response, json: body })
+            })
+            await gotoSettings(page, 'Git')
+
+            const chooser = page.getByTestId('github-chooser')
+            const forgotten = page.waitForRequest(
+                (request) => request.method() === 'DELETE' && request.url().endsWith('/github_app/installations')
+            )
+
+            await expect(chooser).toBeVisible()
+            await dismiss(page)
+            await forgotten
+            await expect(chooser).toBeHidden()
+
+            await page.reload()
+            await expect(page.getByTestId('provider-card')).toBeVisible()
+            await expect(chooser).toBeHidden()
+        })
+    }
 
     test('manage repositories opens the installation on GitHub', async ({ page }) => {
         await gotoSettings(page, 'Git')

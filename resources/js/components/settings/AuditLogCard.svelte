@@ -33,12 +33,8 @@
                 <Label for="audit-log-period" class="mb-1.5">Period</Label>
                 <NativeSelect id="audit-log-period" bind:value={period} options={PERIODS} />
             </div>
-            <Button
-                variant="outline"
-                size="sm"
-                class="max-sm:h-11"
-                href={route('settings.audit-log', { period })}
-                download>Export CSV</Button
+            <Button variant="outline" size="sm" href={route('settings.audit-log', { period })} download
+                >Export CSV</Button
             >
         </div>
     {/if}

@@ -450,7 +450,7 @@ test('a callback with matching state links the installation the user can reach',
         && $request['client_id'] === 'Iv1.client'
         && $request['code'] === 'c0de'
         && $request['redirect_uri'] === 'http://localhost/settings/source-providers/github_app/callback');
-    Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations?per_page=100'));
+    Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations?per_page=100&page=1'));
     Http::assertSent(githubConnectAskedAs('https://api.github.com/user/installations/51842/repositories?per_page=100&page=1'));
     Http::assertSent(githubConnectRevoked());
     githubConnectChecked('51842');
@@ -768,6 +768,7 @@ test('several reachable installations open a chooser', function () {
                     ['id' => '2', 'account' => 'oseughu', 'account_type' => 'User', 'repository_selection' => 'selected', 'refusal' => null],
                 ],
                 'post_href' => route('github.installations.store'),
+                'cancel_href' => route('github.installations.destroy'),
             ]));
 });
 
@@ -1722,4 +1723,22 @@ test('a lock that times out never hands back another team\'s row or another app\
 
     expect($elsewhere->fresh()->name)->not->toBe('monoventech')
         ->and($sibling->fresh()->name)->not->toBe('monoventech');
+});
+
+test('cancelling the chooser forgets the choices, so it does not reopen', function () {
+    [$team, $owner, $app] = githubConnectTeam();
+    githubConnectOffer($owner, $team, $app);
+
+    expect(session(GitHubConnector::CHOICES_KEY))->not->toBeNull();
+
+    $this->actingAs($owner)
+        ->from(route('source-providers.index'))
+        ->delete(route('github.installations.destroy'))
+        ->assertRedirect(route('source-providers.index'));
+
+    expect(session(GitHubConnector::CHOICES_KEY))->toBeNull();
+
+    $this->actingAs($owner)
+        ->get(route('source-providers.index'))
+        ->assertInertia(fn($page) => $page->where('github.choose', null));
 });

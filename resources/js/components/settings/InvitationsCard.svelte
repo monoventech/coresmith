@@ -93,7 +93,7 @@
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                class="text-destructive-strong max-sm:h-11"
+                                class="text-destructive-strong"
                                 aria-label="Revoke the invitation to {invitation.email}"
                                 onclick={() => askRevoke(invitation)}>Revoke</Button
                             >
@@ -109,7 +109,6 @@
                         <Button
                             variant="outline"
                             size="sm"
-                            class="max-sm:h-11"
                             aria-label="{copied === invitation.id ? 'Copied' : 'Copy link'} for {invitation.email}"
                             onclick={() => copyLink(invitation)}
                             >{copied === invitation.id ? 'Copied' : 'Copy link'}</Button

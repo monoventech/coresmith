@@ -153,7 +153,7 @@
                     <div class="mt-0.5 text-[12.5px] text-muted-foreground" role="status">{progress}</div>
                 </div>
                 {#if run.state === 'requested'}
-                    <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={cancel}>Cancel request</Button>
+                    <Button variant="ghost" size="sm" onclick={cancel}>Cancel request</Button>
                 {/if}
             </div>
             {#if run.log.length > 0}
@@ -182,18 +182,17 @@
                     {/if}
                     <div class="mt-2 -ml-3 flex flex-wrap gap-2">
                         {#if run.log_href}
-                            <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={openLog}>View log</Button>
+                            <Button variant="ghost" size="sm" onclick={openLog}>View log</Button>
                         {/if}
                         {#if run.state === 'aborted' || run.state === 'rolled_back'}
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                class="max-sm:h-11"
                                 disabled={!updates.managed || !(updates.available?.version ?? run.to)}
                                 onclick={() => confirm(updates.available?.version ?? run.to)}>Try again</Button
                             >
                         {:else if run.state === 'interrupted'}
-                            <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={recover}>Recover</Button>
+                            <Button variant="ghost" size="sm" onclick={recover}>Recover</Button>
                         {/if}
                     </div>
                 </div>
@@ -220,7 +219,7 @@
                     {/if}
                 </div>
                 {#if updates.managed}
-                    <Button class="max-sm:h-11" onclick={() => confirm(updates.available?.version)}>Update now</Button>
+                    <Button onclick={() => confirm(updates.available?.version)}>Update now</Button>
                 {/if}
             </div>
         {/if}

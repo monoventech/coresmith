@@ -54,11 +54,10 @@
             >{task.error}</span
         >
         {#if cloud.can.retry}
-            <Button variant="outline" size="sm" class="max-sm:ml-7 max-sm:h-11" disabled={working} onclick={retry}
-                >Try again</Button
+            <Button variant="outline" size="sm" class="max-sm:ml-7" disabled={working} onclick={retry}>Try again</Button
             >
         {/if}
-        <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={ondetach}>Detach</Button>
+        <Button variant="ghost" size="sm" onclick={ondetach}>Detach</Button>
     </div>
 {:else if cloud && resize?.state === 'running'}
     <div
@@ -80,9 +79,7 @@
             >{resize.error}</span
         >
         {#if cloud.can.dismiss}
-            <Button variant="ghost" size="sm" class="max-sm:ml-7 max-sm:h-11" disabled={working} onclick={dismiss}
-                >Dismiss</Button
-            >
+            <Button variant="ghost" size="sm" class="max-sm:ml-7" disabled={working} onclick={dismiss}>Dismiss</Button>
         {/if}
     </div>
 {/if}

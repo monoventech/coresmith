@@ -59,7 +59,12 @@ export type GitHubInstallationChoice = {
     refusal: string | null
 }
 
-export type GitHubChoice = { app: string; installations: GitHubInstallationChoice[]; post_href: string }
+export type GitHubChoice = {
+    app: string
+    installations: GitHubInstallationChoice[]
+    post_href: string
+    cancel_href: string
+}
 
 export type GitHubWebhook = { app_name: string; instant: boolean; sentence: string; sync_href: string | null }
 

@@ -123,12 +123,10 @@
             {#if can_manage}
                 <div class="mt-4 flex flex-wrap gap-2.5">
                     {#if plan.primary}
-                        <Button variant="outline" size="sm" class="max-sm:h-11" disabled={working} onclick={primary}
-                            >{primaryLabel}</Button
-                        >
+                        <Button variant="outline" size="sm" disabled={working} onclick={primary}>{primaryLabel}</Button>
                     {/if}
                     {#if plan.self_host}
-                        <Button variant="ghost" size="sm" class="max-sm:h-11" onclick={() => openDialog('self-hosted')}
+                        <Button variant="ghost" size="sm" onclick={() => openDialog('self-hosted')}
                             >Move to self-host</Button
                         >
                     {/if}
@@ -153,7 +151,6 @@
                             ><Button
                                 variant="ghost"
                                 size="sm"
-                                class="max-sm:h-11"
                                 disabled={working}
                                 onclick={() => post(route('settings.billing.portal'))}>Update</Button
                             ></span

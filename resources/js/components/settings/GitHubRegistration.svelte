@@ -78,12 +78,12 @@
                 class="gap-0 overflow-hidden rounded-lg border border-border"
             >
                 <label
-                    class="flex cursor-pointer items-center gap-3 border-b border-border px-3.5 py-2.5 hover:bg-muted"
+                    class="flex cursor-pointer items-center gap-3 border-b border-border px-3.5 py-2.5 hover:bg-muted max-sm:min-h-11"
                 >
                     <RadioGroup.Item value="personal" aria-labelledby="github-owner-personal" />
                     <span id="github-owner-personal" class="text-[13.5px]">Your personal account</span>
                 </label>
-                <label class="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-muted">
+                <label class="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-muted max-sm:min-h-11">
                     <RadioGroup.Item value="organization" aria-labelledby="github-owner-organization" />
                     <span id="github-owner-organization" class="text-[13.5px]">An organization</span>
                 </label>

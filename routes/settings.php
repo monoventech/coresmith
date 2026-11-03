@@ -118,6 +118,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/source-providers/github_app/installations', [SourceProviderConnectController::class, 'chooseInstallation'])
         ->middleware('throttle:10,1,github-choose')
         ->name('github.installations.store');
+    Route::delete('settings/source-providers/github_app/installations', [SourceProviderConnectController::class, 'cancelChoice'])
+        ->middleware('throttle:10,1,github-choose-cancel')
+        ->name('github.installations.destroy');
     Route::delete('settings/source-providers/{sourceProvider}', [SourceProviderController::class, 'destroy'])
         ->whereUlid('sourceProvider')
         ->name('source-providers.destroy');
