@@ -11,6 +11,7 @@ namespace App\Jobs;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Deployment\RemovedApplicationFolders;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -38,6 +39,8 @@ final class PruneReleases implements ShouldQueue
                 $result = $connection->execute(self::command($application), sudo: true)->throw();
                 $removed += (int) trim($result->output);
             }
+
+            app(RemovedApplicationFolders::class)->clear($connection, $this->server);
         } finally {
             $connections->disconnect($this->server);
         }

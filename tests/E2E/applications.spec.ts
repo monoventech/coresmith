@@ -201,6 +201,9 @@ test.describe('an application', () => {
 
         await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeVisible()
         await expect(page.getByTestId('smart-toggles')).toBeVisible()
+        await expect(page.getByTestId('smart-toggles')).toContainText(
+            'Turning on Auto deploy deploys the branch if the live release is behind.'
+        )
         await expect(page.getByRole('heading', { name: 'Current release' })).toBeVisible()
         await expect(page.getByRole('heading', { name: 'Environment' })).toHaveCount(0)
         await expect(page.getByRole('heading', { name: 'Domains' })).toHaveCount(0)
@@ -412,6 +415,7 @@ test.describe('what the full app page adds on a wider screen', () => {
 
         await page.getByRole('button', { name: 'Remove this app' }).click()
         await expect(dialog(page)).toContainText(`Remove ${name}?`)
+        await expect(dialog(page)).toContainText('Its releases stay on disk for 7 days in case you change your mind.')
         await dialog(page).getByRole('button', { name: 'Remove the app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'bench-01' })).toBeVisible()

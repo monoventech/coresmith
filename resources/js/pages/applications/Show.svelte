@@ -340,9 +340,9 @@
         </p>
     </div>
     {#if application.running_href}
-        <Button href={application.running_href} class="max-sm:h-11 max-sm:w-full">Watch deploy</Button>
+        <Button href={application.running_href} class="max-sm:w-full">Watch deploy</Button>
     {:else if can.deploy}
-        <Button disabled={working} onclick={deploy} class="max-sm:h-11 max-sm:w-full">Deploy</Button>
+        <Button disabled={working} onclick={deploy} class="max-sm:w-full">Deploy</Button>
     {/if}
 </div>
 
@@ -496,8 +496,9 @@
             <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
                 Based on what {application.kind} apps run.
                 <span class="max-sm:hidden"
-                    >Flipping a switch changes what runs on {server.name}, no deployment needed.</span
-                ><span class="sm:hidden">No deployment needed.</span>
+                    >Flipping a switch changes what runs on {server.name}, no deployment needed. Turning on Auto deploy
+                    deploys the branch if the live release is behind.</span
+                ><span class="sm:hidden">No deployment needed, except Auto deploy.</span>
             </p>
             <div class="flex flex-col">
                 {#each toggles as toggle (toggle.key)}
@@ -648,7 +649,7 @@
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
                     Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops
-                    the app and detaches it from this server, its releases stay on disk until you prune them.
+                    the app and detaches it from this server, its releases stay on disk for 7 days.
                 </p>
                 <div class="flex flex-wrap gap-2">
                     {#if can.update && !application.stopped}
@@ -731,7 +732,8 @@
         <Dialog.Header>
             <Dialog.Title>Remove {application.name}?</Dialog.Title>
             <Dialog.Description
-                >The app is stopped and detached from {server.name}. Its releases stay on disk until you prune them.</Dialog.Description
+                >The app is stopped and detached from {server.name}. Its releases stay on disk for 7 days in case you
+                change your mind.</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>

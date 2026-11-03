@@ -7,10 +7,12 @@ use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\IdleAppSleeper;
 use App\Jobs\PollRepositories;
+use App\Jobs\PruneRemovedApplications;
 use App\Jobs\ResumeCloudTasks;
 use App\Models\InstanceSetting;
 use App\Models\Server;
 use App\Models\StripeEvent;
+use App\Services\Deployment\RemovedApplicationFolders;
 use App\Services\Updates\UpdateChecker;
 use App\Services\Updates\UpdateState;
 use Illuminate\Support\Facades\Schedule;
@@ -28,6 +30,18 @@ Schedule::call(function (): void {
         ->whereNull('pending_host_key_fingerprint')
         ->each(fn(Server $server) => CheckCertificates::dispatch($server));
 })->dailyAt('05:30')->name('coresmith:check-certificates')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->whereNull('unreachable_since')
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(function (Server $server): void {
+            if (app(RemovedApplicationFolders::class)->due($server)->isNotEmpty()) {
+                PruneRemovedApplications::dispatch($server);
+            }
+        });
+})->dailyAt('03:45')->name('coresmith:prune-removed-apps')->withoutOverlapping();
 
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
 
