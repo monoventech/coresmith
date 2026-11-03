@@ -49,6 +49,7 @@
     --destructive: oklch(0.58 0.18 25);
     --destructive-strong: oklch(0.45 0.17 25);
     --destructive-foreground: oklch(0.992 0.006 80);
+    --destructive-hover: color-mix(in oklab, var(--destructive) 94%, black);
     --success: oklch(0.62 0.13 150);
     --success-strong: oklch(0.44 0.12 150);
     --warning: oklch(0.72 0.15 75);
@@ -114,6 +115,7 @@
     --destructive: oklch(0.62 0.18 25);
     --destructive-strong: oklch(0.82 0.14 25);
     --destructive-foreground: oklch(0.185 0.01 60);
+    --destructive-hover: color-mix(in oklab, var(--destructive) 94%, white);
     --success: oklch(0.68 0.13 150);
     --success-strong: oklch(0.84 0.13 150);
     --warning: oklch(0.76 0.15 75);
@@ -196,7 +198,7 @@
 
     --color-primary-hover: color-mix(in oklab, var(--primary) 94%, black);
     --color-secondary-hover: color-mix(in oklab, var(--secondary) 94%, black);
-    --color-destructive-hover: color-mix(in oklab, var(--destructive) 94%, black);
+    --color-destructive-hover: var(--destructive-hover);
     --color-scrim: oklch(0.2 0.02 60 / 0.4);
     --color-track-busy: color-mix(in oklab, var(--primary) 40%, var(--muted));
 

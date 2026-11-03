@@ -65,6 +65,7 @@ const PAGES: [string, Visit][] = [
             if ((page.viewportSize()?.width ?? 0) >= 640) {
                 await page.getByTestId('cron-jobs').getByRole('button', { name: 'Remove Nightly backup' }).click()
                 await page.getByRole('dialog').waitFor()
+                await page.getByRole('dialog').locator('.bg-destructive').hover()
             }
         }
     ],
