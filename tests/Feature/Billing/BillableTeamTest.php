@@ -82,7 +82,7 @@ test("the team's invoices are local records, not stripe calls", function () {
         ->and($team->billingInvoices()->getRelated())->toBeInstanceOf(TeamInvoice::class);
 });
 
-test("changing an owner's email tells stripe where receipts go, and only that", function () {
+test("a changed owner's email reaches stripe once it is confirmed, and nothing else does", function () {
     CloudBilling::enable();
     $owner = User::factory()->create(['email' => 'old@monoven.test']);
     $team = Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1']);
@@ -94,12 +94,41 @@ test("changing an owner's email tells stripe where receipts go, and only that", 
 
     $this->actingAs($owner)->patch(route('profile.update'), ['name' => $owner->name, 'email' => 'new@monoven.test'])->assertSessionHasNoErrors();
 
+    Http::assertNothingSent();
+
+    $owner->fresh()->markEmailAsVerified();
+
     $sent = collect(Http::recorded())->map(fn(array $pair): Request => $pair[0]);
 
     expect($sent->map(fn(Request $request): string => $request->method() . ' ' . parse_url($request->url(), PHP_URL_PATH))->sort()->values()->all())->toBe(['POST /v1/customers/cus_1', 'POST /v1/customers/cus_2', 'POST /v1/customers/cus_3'])
         ->and($sent->map(fn(Request $request): array => $request->data())->unique()->values()->all())->toBe([['email' => 'new@monoven.test']])
         ->and($team->fresh()->stripeEmail())->toBe('new@monoven.test')
         ->and($other->fresh()->stripeEmail())->toBe('new@monoven.test');
+});
+
+test('an address that stays confirmed reaches stripe at once', function () {
+    CloudBilling::enable();
+    $owner = User::factory()->create(['email' => 'old@monoven.test']);
+    Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1']);
+
+    FakeStripe::fake([FakeStripe::url('customers/*') => Http::response(FakeStripe::customer('cus_1'))]);
+
+    $owner->forceFill(['email' => 'new@monoven.test'])->save();
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn(Request $request): bool => $request['email'] === 'new@monoven.test');
+});
+
+test('a job already waiting never sends an address that is no longer confirmed', function () {
+    CloudBilling::enable();
+    $owner = User::factory()->unverified()->create();
+    $team = Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1']);
+
+    FakeStripe::fake();
+
+    (new SyncStripeCustomerEmail($team))->handle();
+
+    Http::assertNothingSent();
 });
 
 test('stripe hears nothing when no receipt address changed', function () {
@@ -138,17 +167,20 @@ test('stripe being down does not stop an email changing, and the job retries', f
     FakeStripe::fake([FakeStripe::url('customers/*') => FakeStripe::error('api_error', "Something went wrong on Stripe's end.", 500)]);
 
     $this->actingAs($owner)->patch(route('profile.update'), ['name' => $owner->name, 'email' => 'new@monoven.test'])->assertSessionHasNoErrors();
+    $owner->fresh()->markEmailAsVerified();
 
     expect($owner->fresh()->email)->toBe('new@monoven.test');
 
     Http::assertNothingSent();
 
-    $pushed = Queue::pushed(SyncStripeCustomerEmail::class)->sole();
+    $pushed = Queue::pushed(SyncStripeCustomerEmail::class);
+    $job = $pushed->last();
 
-    expect($pushed->team->is($team))->toBeTrue()
-        ->and($pushed->queue)->toBe('default')
-        ->and($pushed->tries)->toBeGreaterThan(1)
-        ->and(fn() => $pushed->handle())->toThrow(ApiErrorException::class);
+    expect($pushed)->toHaveCount(2)
+        ->and($job->team->is($team))->toBeTrue()
+        ->and($job->queue)->toBe('default')
+        ->and($job->tries)->toBeGreaterThan(1)
+        ->and(fn() => $job->handle())->toThrow(ApiErrorException::class);
 });
 
 test('a team that lost its stripe customer before the job ran is left alone', function () {

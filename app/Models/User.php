@@ -102,7 +102,7 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::updated(function (User $user): void {
-            if ($user->wasChanged('email') && !Edition::current()->isSelfHosted()) {
+            if ($user->wasChanged(['email', 'email_verified_at']) && !Edition::current()->isSelfHosted()) {
                 $user->ownedTeams()->withTrashed()->whereNotNull('stripe_id')->each(fn(Team $team) => SyncStripeCustomerEmail::dispatch($team));
             }
         });

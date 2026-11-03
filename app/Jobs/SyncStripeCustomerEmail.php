@@ -33,7 +33,7 @@ final class SyncStripeCustomerEmail implements ShouldQueue
 
     public function handle(): void
     {
-        if ($this->team->hasStripeId()) {
+        if ($this->team->hasStripeId() && $this->team->owner?->hasVerifiedEmail() === true) {
             $this->team->updateStripeCustomer(['email' => $this->team->stripeEmail()]);
         }
     }
