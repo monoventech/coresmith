@@ -18,6 +18,7 @@ use App\Services\Git\GitHub\GitHubAppHealth;
 use App\Services\Git\GitHub\GitHubApps;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
 
 final class CheckGitHubWebhooks implements ShouldQueue
 {
@@ -51,6 +52,20 @@ final class CheckGitHubWebhooks implements ShouldQueue
         GitHubApp::query()->orderBy('id')->each(fn(GitHubApp $app) => $this->check($apps->fromModel($app), $api, $health));
     }
 
+    /**
+     * @return list<string>|null
+     */
+    private function events(#[\SensitiveParameter] GitHubAppCredentials $app, GitHubAppApi $api): ?array
+    {
+        try {
+            return $api->appEvents($app);
+        } catch (GitProviderException $e) {
+            report_if(app()->hasDebugModeEnabled(), $e);
+
+            return null;
+        }
+    }
+
     private function check(#[\SensitiveParameter] GitHubAppCredentials $app, GitHubAppApi $api, GitHubAppHealth $health): void
     {
         if (!$health->hasWebhook($app)) {
@@ -58,9 +73,13 @@ final class CheckGitHubWebhooks implements ShouldQueue
         }
 
         try {
-            $health->checked($app, $api->latestDelivery($app));
+            $latest = $api->latestDelivery($app);
+
+            $health->checked($app, $latest, $this->events($app, $api));
         } catch (GitProviderException $e) {
             report_if(app()->hasDebugModeEnabled(), $e);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 }

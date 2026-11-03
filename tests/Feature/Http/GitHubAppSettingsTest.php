@@ -72,6 +72,7 @@ function githubAppSettingsGitHub(array &$log): void
         'api.github.com/app/hook/deliveries*' => function () use (&$log) {
             return Http::response($log);
         },
+        'api.github.com/app' => Http::response(['id' => 1, 'events' => ['push']]),
     ]);
 }
 

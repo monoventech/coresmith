@@ -34,6 +34,8 @@ final class GitHubAppApi
 
     private const PER_PAGE = 100;
 
+    private const INSTALLATION_PAGES = 30;
+
     private const LIST_CHANGED = 'GitHub\'s repository list changed while Coresmith was reading it.';
 
     public function __construct(private readonly AppJwt $jwt) {}
@@ -66,6 +68,17 @@ final class GitHubAppApi
             'permissions' => (array) ($app['permissions'] ?? []),
             'events' => array_values(array_map('strval', (array) ($app['events'] ?? []))),
         ];
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    public function appEvents(#[\SensitiveParameter] GitHubAppCredentials $app): ?array
+    {
+        $request = $this->asApp($app);
+        $events = $this->guard($this->call(fn(): Response => $request->get(self::API . '/app')))->json('events');
+
+        return is_array($events) ? array_values(array_map('strval', $events)) : null;
     }
 
     public function hookUrl(#[\SensitiveParameter] GitHubAppCredentials $app): ?string
@@ -143,10 +156,22 @@ final class GitHubAppApi
      */
     public function userInstallations(#[\SensitiveParameter] string $userToken): array
     {
-        $response = $this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get(self::API . '/user/installations', ['per_page' => 100])));
-        $installations = array_filter((array) $response->json('installations', []), 'is_array');
+        $installations = [];
 
-        return array_values(array_map(fn(array $installation): array => $this->describe($installation), $installations));
+        for ($page = 1; $page <= self::INSTALLATION_PAGES; $page++) {
+            $response = $this->guard($this->call(fn(): Response => $this->http()->withToken($userToken)->get(self::API . '/user/installations', ['per_page' => self::PER_PAGE, 'page' => $page])));
+            $batch = array_filter((array) $response->json('installations', []), 'is_array');
+
+            foreach ($batch as $installation) {
+                $installations[] = $this->describe($installation);
+            }
+
+            if ($batch === [] || count($installations) >= (int) $response->json('total_count', 0)) {
+                break;
+            }
+        }
+
+        return $installations;
     }
 
     /**

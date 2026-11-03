@@ -304,7 +304,7 @@ final class GitHubAppClient implements GitProvider
         $installation = (string) $this->provider->installation_id;
 
         if ($installation === '') {
-            throw new GitProviderException('This GitHub connection has no installation to mint a token for. Reconnect it from Settings → Source providers.');
+            throw new GitProviderException('This GitHub connection has no installation to mint a token for. Connect it again from Settings, Git.');
         }
 
         return $installation;

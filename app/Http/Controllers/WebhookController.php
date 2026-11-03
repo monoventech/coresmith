@@ -23,6 +23,8 @@ final class WebhookController extends Controller
 {
     private const DELIVERY_HEADERS = ['X-GitHub-Delivery', 'X-Gitlab-Event-UUID', 'X-Request-UUID', 'X-Coresmith-Delivery'];
 
+    private const NO_COMMIT = '0000000000000000000000000000000000000000';
+
     private const EVENT_HEADERS = ['X-GitHub-Event', 'X-Gitlab-Event', 'X-Event-Key', 'X-Coresmith-Event'];
 
     public function __construct(private readonly WebhookDeliveries $deliveries) {}
@@ -67,6 +69,14 @@ final class WebhookController extends Controller
             return $this->respond($webhook, $request, 202, 'Branch ignored.');
         }
 
+        if ($this->deletesBranch($request)) {
+            return $this->respond($webhook, $request, 202, 'Branch deleted.');
+        }
+
+        if (!$application->quick_deploy) {
+            return $this->respond($webhook, $request, 202, 'Auto deploy is off.');
+        }
+
         $refusal = app(DeployGuard::class)->refusal($application);
 
         if ($refusal !== null) {
@@ -87,6 +97,11 @@ final class WebhookController extends Controller
         DeployApplication::dispatch($deployment, now()->format('Ymd-His'));
 
         return $this->respond($webhook, $request, 202, 'Deployment queued.');
+    }
+
+    private function deletesBranch(Request $request): bool
+    {
+        return $request->input('after') === self::NO_COMMIT || $request->input('checkout_sha') === self::NO_COMMIT;
     }
 
     private function requestedCommit(Request $request): ?string

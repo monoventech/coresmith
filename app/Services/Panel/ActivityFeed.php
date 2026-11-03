@@ -234,6 +234,7 @@ final class ActivityFeed
             'provisioning_restarted' => [$this->text('Provisioning started over on '), $this->mono($server?->name)],
             'audit_fix_applied' => [$this->mono((string) ($properties['service'] ?? '')), $this->text(' stopped and disabled on '), $this->mono($server?->name), $this->text(' so Caddy can take ports 80 and 443')],
             'server_detached' => [$this->mono($server?->name), $this->text(' detached, the VM itself is untouched')],
+            'removed_apps_cleared' => [$this->text('Folders cleared on '), $this->mono($server?->name), $this->text(' for ' . (int) ($properties['apps'] ?? 0) . ' apps removed over 7 days ago')],
             'releases_pruned' => [$this->text('Old releases pruned on '), $this->mono($server?->name), $this->text(', ' . (int) ($properties['removed'] ?? 0) . ' removed')],
             'disk_pressure' => ($properties['level'] ?? 'warning') === 'critical'
                 ? [$this->text('Disk at ' . (int) ($properties['percent'] ?? 0) . '% on '), $this->mono($server?->name), $this->text(', deploys are paused until space is freed')]
@@ -273,7 +274,11 @@ final class ActivityFeed
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
-            'toggle_changed' => [$this->text('Smart toggle ' . (($properties['on'] ?? false) ? 'enabled' : 'disabled') . ', ' . ($properties['label'] ?? 'a toggle') . ' on '), $this->mono($application?->name), $this->text(', no deployment needed')],
+            'toggle_changed' => match (true) {
+                ($properties['toggle'] ?? null) !== SmartToggles::AUTO_DEPLOY => [$this->text('Smart toggle ' . (($properties['on'] ?? false) ? 'enabled' : 'disabled') . ', ' . ($properties['label'] ?? 'a toggle') . ' on '), $this->mono($application?->name), $this->text(', no deployment needed')],
+                (bool) ($properties['on'] ?? false) => [$this->text('Auto deploy turned on for '), $this->mono($application?->name), $this->text(', it deploys the branch if the live release is behind')],
+                default => [$this->text('Auto deploy turned off for '), $this->mono($application?->name)],
+            },
             'processes_sync_failed' => [$this->text('Couldn\'t apply the process change on '), $this->mono($application?->name), $this->text(', ' . ($properties['error'] ?? 'the server did not respond'))],
             SmartToggles::START_FAILED => [$this->text(($properties['label'] ?? 'A worker') . ' did not start on '), $this->mono($application?->name), $this->text(', so its toggle is off again')],
             'domain_added' => [$this->mono((string) ($properties['domain'] ?? '')), $this->text(' added to '), $this->mono($application?->name)],

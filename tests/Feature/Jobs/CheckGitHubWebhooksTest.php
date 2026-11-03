@@ -16,6 +16,7 @@ use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -82,11 +83,14 @@ beforeEach(function () {
 test('each registered app with a webhook has its newest delivery recorded', function () {
     $first = GitHubApp::factory()->create(['app_id' => '2000001']);
     GitHubApp::factory()->withoutWebhook()->create(['app_id' => '2000002']);
-    Http::fake(['api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(502, 'Invalid HTTP Response: 502', '2026-10-18T14:00:00Z'))]);
+    Http::fake([
+        'api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(502, 'Invalid HTTP Response: 502', '2026-10-18T14:00:00Z')),
+        'api.github.com/app' => Http::response(['id' => 1, 'events' => ['push']]),
+    ]);
 
     webhookCheckRun();
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
     Http::assertSent(fn(Request $request) => $request->method() === 'GET'
         && $request->url() === 'https://api.github.com/app/hook/deliveries?per_page=10'
         && webhookCheckIssuer($request) === '2000001');
@@ -100,7 +104,10 @@ test('each registered app with a webhook has its newest delivery recorded', func
 
 test('a check with no deliveries to show records that it looked', function () {
     $app = GitHubApp::factory()->create();
-    Http::fake(['api.github.com/app/hook/deliveries*' => Http::response([])]);
+    Http::fake([
+        'api.github.com/app/hook/deliveries*' => Http::response([]),
+        'api.github.com/app' => Http::response(['id' => 1, 'events' => ['push']]),
+    ]);
 
     webhookCheckRun();
 
@@ -114,13 +121,16 @@ test('a check with no deliveries to show records that it looked', function () {
 
 test('the environment app is checked for its latest delivery, and github is asked nothing about its hook', function () {
     $env = webhookCheckEnv();
-    Http::fake(['api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z'))]);
+    Http::fake([
+        'api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z')),
+        'api.github.com/app' => Http::response(['id' => 1041207, 'events' => ['push']]),
+    ]);
 
     webhookCheckRun();
 
     $evidence = Cache::get(app(GitHubAppHealth::class)->key($env));
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
     Http::assertNotSent(fn(Request $request) => str_contains($request->url(), '/app/hook/config'));
 
     expect($evidence)->not->toHaveKey('hook_url')
@@ -146,7 +156,7 @@ test('one app github refuses does not stop the next', function (int $refused) {
 
     webhookCheckRun();
 
-    Http::assertSentCount(2);
+    Http::assertSentCount(3);
 
     expect(webhookCheckMode($checkedApp)->instant)->toBeTrue()
         ->and(webhookCheckMode($refusedApp)->reason)->toBe('unproven')
@@ -218,7 +228,11 @@ test('an app check that throws does not keep suspended connections from being ch
     SourceProvider::factory()->for($app->team)->create(['type' => 'github_app', 'github_app_id' => $app->id, 'installation_id' => '51842', 'suspended_at' => now()]);
     Http::fake(['api.github.com/app/hook/deliveries*' => Http::response([['id' => 1, 'guid' => 'x', 'delivered_at' => 'not a time', 'status' => 'OK', 'status_code' => 200, 'event' => 'push']])]);
 
-    expect(fn() => webhookCheckRun())->toThrow(InvalidFormatException::class);
+    Exceptions::fake();
+
+    webhookCheckRun();
+
+    Exceptions::assertReported(InvalidFormatException::class);
 
     Queue::assertPushed(CheckGitHubInstallation::class, 1);
 });
@@ -248,4 +262,34 @@ test('it is scheduled every fifteen minutes', function () {
         ->and($job->queue)->toBe('default')
         ->and($job->timeout)->toBe(120)
         ->and($job->tries)->toBe(1);
+});
+
+test('an app that sends no push events stops counting as instant at the next check', function () {
+    $env = webhookCheckEnv();
+    Http::fake([
+        'api.github.com/app/hook/deliveries*' => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z')),
+        'api.github.com/app' => Http::response(['id' => 1041207, 'events' => ['installation']]),
+    ]);
+
+    webhookCheckRun();
+
+    expect(app(GitHubAppHealth::class)->mode($env)->reason)->toBe(WebhookMode::NO_PUSH);
+});
+
+test('one app that breaks the check is reported and the next app is still checked', function () {
+    Exceptions::fake();
+    $broken = GitHubApp::factory()->create(['app_id' => '2000001']);
+    $fine = GitHubApp::factory()->create(['app_id' => '2000002']);
+    Http::fake(fn(Request $request) => match (true) {
+        str_contains($request->url(), '/app/hook/deliveries') && webhookCheckIssuer($request) === '2000001' => Http::response([['id' => 1, 'delivered_at' => 'not a moment', 'status' => 'OK', 'status_code' => 200, 'event' => 'push']]),
+        str_contains($request->url(), '/app/hook/deliveries') => Http::response(webhookCheckDeliveries(200, 'OK', '2026-10-18T13:50:00Z')),
+        default => Http::response(['id' => 1, 'events' => ['push']]),
+    });
+
+    webhookCheckRun();
+
+    Exceptions::assertReported(InvalidFormatException::class);
+
+    expect(Cache::has(app(GitHubAppHealth::class)->key(app(GitHubApps::class)->fromModel($broken))))->toBeFalse()
+        ->and(Cache::has(app(GitHubAppHealth::class)->key(app(GitHubApps::class)->fromModel($fine))))->toBeTrue();
 });

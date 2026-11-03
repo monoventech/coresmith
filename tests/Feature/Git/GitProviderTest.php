@@ -264,7 +264,7 @@ test('a gitlab connection that cannot be refreshed tells the user to reconnect',
 
     client(provider(SourceProviderType::GitLab, ['refresh_token' => null, 'token_expires_at' => now()->subHour()]))
         ->listRepositories();
-})->throws(GitProviderException::class, 'Reconnect it from Settings → Source providers.');
+})->throws(GitProviderException::class, 'Connect it again from Settings, Git.');
 
 test('gitlab deploy keys cannot push', function () {
     Http::fake(['gitlab.com/api/v4/*' => Http::response(['id' => 9])]);

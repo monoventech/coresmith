@@ -13,7 +13,7 @@ use Illuminate\Testing\TestResponse;
 
 function deliveryEndpoint(array $endpointAttributes = [], array $applicationAttributes = []): WebhookEndpoint
 {
-    $application = Application::factory()->create(array_merge(['repository_branch' => 'main'], $applicationAttributes));
+    $application = Application::factory()->create(array_merge(['repository_branch' => 'main', 'quick_deploy' => true], $applicationAttributes));
 
     return WebhookEndpoint::factory()->for($application)->create(array_merge([
         'secret' => 'delivery-secret',

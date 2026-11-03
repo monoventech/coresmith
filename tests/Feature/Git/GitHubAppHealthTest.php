@@ -220,7 +220,7 @@ test('the environment app is judged by its deliveries alone', function () {
     expect($app->hookUrl)->toBeNull()
         ->and($health->mode($app)->reason)->toBe('unproven');
 
-    $health->checked($app, null, 'https://elsewhere.example.com/api/webhooks/github');
+    $health->checked($app, null);
 
     expect($health->mode($app)->reason)->toBe('unproven')
         ->and($health->mode($app)->sentence)->toBe('No delivery from GitHub has reached this panel yet.');
@@ -260,6 +260,7 @@ test('evidence belongs to one app in one environment', function () {
             'delivery_id' => 'delivery-1',
             'checked_at' => now()->getTimestamp(),
             'latest' => ['status_code' => 502, 'status' => 'Invalid HTTP Response: 502', 'delivered_at' => CarbonImmutable::parse('2026-10-18T13:00:00Z')->getTimestamp(), 'event' => 'push'],
+            'sends_push' => true,
             'repointed_at' => null,
         ])
         ->and($health->mode($first)->instant)->toBeTrue()
@@ -285,6 +286,7 @@ test('a repoint clears what was received and logged before it, and every later w
         'delivery_id' => null,
         'checked_at' => now()->getTimestamp(),
         'latest' => null,
+        'sends_push' => null,
         'repointed_at' => now()->getTimestamp(),
     ]);
 
@@ -314,3 +316,52 @@ test('evidence the cache cannot read is no evidence at all', function (mixed $ga
     'times that are not times' => [['received_at' => 'yesterday', 'latest' => ['status_code' => 500, 'status' => 'x', 'delivered_at' => 'today']]],
     'a delivery without a status code' => [['latest' => ['status' => 'x', 'delivered_at' => 1792332000]]],
 ]);
+
+test('an app github says sends no push events is never called instant', function () {
+    $app = healthApp();
+    $health = app(GitHubAppHealth::class);
+    $health->received($app, 'installation', 'delivery-1');
+
+    expect(healthMode($app)->instant)->toBeTrue();
+
+    $health->checked($app, healthDelivery(200, 'OK', '2026-10-18T14:03:00Z'), ['installation', 'installation_repositories']);
+
+    expect(healthMode($app)->instant)->toBeFalse()
+        ->and(healthMode($app)->reason)->toBe(WebhookMode::NO_PUSH)
+        ->and(healthMode($app)->sentence)->toBe('The GitHub app does not send push events, so Coresmith checks for new commits instead. Turn on the Push event in the app\'s settings on GitHub.');
+
+    $health->checked($app, healthDelivery(200, 'OK', '2026-10-18T14:04:00Z'), ['push', 'installation']);
+
+    expect(healthMode($app)->instant)->toBeTrue();
+});
+
+test('a push that arrives proves the app sends them', function () {
+    $app = healthApp();
+    $health = app(GitHubAppHealth::class);
+    $health->checked($app, null, ['installation']);
+
+    expect(healthMode($app)->reason)->toBe(WebhookMode::NO_PUSH);
+
+    $health->received($app, 'push', 'delivery-1');
+
+    expect(healthMode($app)->instant)->toBeTrue();
+});
+
+test('a check github cannot answer about events leaves what is known alone', function () {
+    $app = healthApp();
+    $health = app(GitHubAppHealth::class);
+    $health->checked($app, null, ['installation']);
+    $health->checked($app, null, null);
+
+    expect(healthMode($app)->reason)->toBe(WebhookMode::NO_PUSH);
+});
+
+test('a repoint forgets what github said about the app\'s events', function () {
+    $app = healthApp();
+    $health = app(GitHubAppHealth::class);
+    $health->checked($app, null, ['installation']);
+    $health->repointed($app);
+    $health->received($app, 'ping', 'delivery-1');
+
+    expect(healthMode($app)->instant)->toBeTrue();
+});

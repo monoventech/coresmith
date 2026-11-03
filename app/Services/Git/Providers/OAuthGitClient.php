@@ -48,7 +48,7 @@ abstract class OAuthGitClient implements GitProvider
         $token = (string) $this->provider->access_token;
 
         if ($token === '') {
-            throw new GitProviderException("This {$this->providerName()} connection has no access token. Reconnect it from Settings → Source providers.");
+            throw new GitProviderException("This {$this->providerName()} connection has no access token. Connect it again from Settings, Git.");
         }
 
         return $token;
@@ -59,7 +59,7 @@ abstract class OAuthGitClient implements GitProvider
         $refresh = (string) $this->provider->refresh_token;
 
         if ($refresh === '') {
-            throw new GitProviderException("This {$this->providerName()} connection has expired and cannot be refreshed. Reconnect it from Settings → Source providers.");
+            throw new GitProviderException("This {$this->providerName()} connection has expired and cannot be refreshed. Connect it again from Settings, Git.");
         }
 
         $response = Http::asForm()->withOptions(self::NO_REDIRECTS)->timeout(20)->post($this->tokenEndpoint(), array_merge($this->credentials(), [

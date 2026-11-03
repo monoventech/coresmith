@@ -186,7 +186,9 @@ test('detaching a server works while read-only', function () {
 
 test("a push to a read-only team's webhook is refused and can be delivered again later", function () {
     $team = readOnlyTeam();
-    $endpoint = WebhookEndpoint::factory()->for(readOnlyApplication($team))->create(['secret' => 'shhh-secret', 'provider' => 'github', 'active' => true]);
+    $application = readOnlyApplication($team);
+    $application->forceFill(['quick_deploy' => true])->save();
+    $endpoint = WebhookEndpoint::factory()->for($application)->create(['secret' => 'shhh-secret', 'provider' => 'github', 'active' => true]);
     $payload = ['ref' => 'refs/heads/main', 'after' => str_repeat('b', 40)];
     $headers = ['X-GitHub-Event' => 'push', 'X-GitHub-Delivery' => 'push-while-read-only'];
 

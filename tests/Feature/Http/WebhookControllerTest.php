@@ -17,6 +17,7 @@ function endpointFor(array $applicationAttributes = [], array $endpointAttribute
 {
     $application = Application::factory()->create(array_merge([
         'repository_branch' => 'main',
+        'quick_deploy' => true,
     ], $applicationAttributes));
 
     return WebhookEndpoint::factory()->for($application)->create(array_merge([
@@ -268,4 +269,28 @@ test('a push while the server is being resized is refused and can be delivered a
         ->assertExactJson(['message' => 'Deployment queued.']);
 
     expect(Deployment::query()->count())->toBe(1);
+});
+
+test('a branch deletion is acknowledged and deploys nothing', function (string $field) {
+    Queue::fake();
+    $endpoint = endpointFor();
+
+    signedPost($endpoint, ['ref' => 'refs/heads/main', $field => str_repeat('0', 40)])
+        ->assertStatus(202)
+        ->assertJsonPath('message', 'Branch deleted.');
+
+    expect(Deployment::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
+})->with(['after', 'checkout_sha']);
+
+test('a push is acknowledged but not deployed while auto deploy is off', function () {
+    Queue::fake();
+    $endpoint = endpointFor(['quick_deploy' => false]);
+
+    signedPost($endpoint, ['ref' => 'refs/heads/main', 'after' => str_repeat('a', 40)])
+        ->assertStatus(202)
+        ->assertJsonPath('message', 'Auto deploy is off.');
+
+    expect(Deployment::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
 });

@@ -371,7 +371,7 @@ test('installations the user can reach are listed with their account', function 
     ]);
     Http::assertSentCount(1);
     Http::assertSent(fn($request) => $request->method() === 'GET'
-        && $request->url() === 'https://api.github.com/user/installations?per_page=100'
+        && $request->url() === 'https://api.github.com/user/installations?per_page=100&page=1'
         && $request->hasHeader('Authorization', 'Bearer ghu_user')
         && $request->hasHeader('Accept', 'application/vnd.github+json')
         && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
@@ -1524,4 +1524,42 @@ test('the factory refuses a github connection whose app is gone', function () {
     $connection->githubApp->delete();
 
     expect(fn() => app(GitProviderFactory::class)->github($connection->fresh()))->toThrow(GitProviderException::class, 'Connect GitHub again from Settings, Git.');
+});
+
+test('installations past the first hundred a person can reach are read', function () {
+    $all = array_map(fn(int $id): array => ['id' => $id, 'account' => ['login' => "org{$id}", 'type' => 'Organization'], 'repository_selection' => 'all', 'suspended_at' => null], range(1, 250));
+    Http::fake(['api.github.com/user/installations*' => function (Request $request) use ($all) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return Http::response(['total_count' => count($all), 'installations' => array_slice($all, ((int) $query['page'] - 1) * 100, 100)]);
+    }]);
+
+    $installations = app(GitHubAppApi::class)->userInstallations('ghu_user');
+
+    expect($installations)->toHaveCount(250)
+        ->and($installations[249]['id'])->toBe('250');
+
+    Http::assertSentCount(3);
+});
+
+test('a list github cuts short stops at what it sent', function () {
+    Http::fake(['api.github.com/user/installations*' => Http::response(['total_count' => 500, 'installations' => []])]);
+
+    expect(app(GitHubAppApi::class)->userInstallations('ghu_user'))->toBe([]);
+
+    Http::assertSentCount(1);
+});
+
+test('the events an app subscribes to are read as the app', function () {
+    Http::fake(['api.github.com/app' => Http::response(['id' => 1, 'events' => ['push', 'installation']])]);
+
+    expect(app(GitHubAppApi::class)->appEvents(githubApiCredentials()))->toBe(['push', 'installation']);
+
+    Http::assertSent(fn(Request $request) => $request->method() === 'GET' && $request->url() === 'https://api.github.com/app');
+});
+
+test('an app github says nothing about has unknown events', function () {
+    Http::fake(['api.github.com/app' => Http::response(['id' => 1])]);
+
+    expect(app(GitHubAppApi::class)->appEvents(githubApiCredentials()))->toBeNull();
 });

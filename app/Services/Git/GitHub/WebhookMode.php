@@ -24,6 +24,8 @@ final readonly class WebhookMode
 
     public const UNREACHABLE = 'unreachable';
 
+    public const NO_PUSH = 'no_push';
+
     public function __construct(
         public bool $instant,
         public string $reason,
