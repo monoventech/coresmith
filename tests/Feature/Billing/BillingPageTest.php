@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvoice;
 use App\Models\User;
+use App\Services\Panel\Formats;
 use Carbon\CarbonImmutable;
 use Database\Factories\SubscriptionFactory;
 use Tests\Support\CloudBilling;
@@ -252,4 +253,48 @@ test('moving to self-host knows when cloud stops', function () {
     expect(billingPagePlan($paying)['self_hosting'])->toBe(['has_subscription' => true, 'ends_on' => 'Nov 1', 'trial_ends_on' => null, 'guide' => $guide])
         ->and(billingPagePlan($trying)['self_hosting'])->toBe(['has_subscription' => false, 'ends_on' => null, 'trial_ends_on' => 'Oct 25', 'guide' => $guide])
         ->and(billingPagePlan($lapsed)['self_hosting'])->toBe(['has_subscription' => false, 'ends_on' => null, 'trial_ends_on' => null, 'guide' => $guide]);
+});
+
+test('the plan card and the dialog show what the team pays, not the configured price', function () {
+    $team = Team::factory()->owned()->create();
+    billingPageSubscribed(Plan::Pro)->for($team, 'owner')->create(['renews_at' => CarbonImmutable::parse('2026-11-01'), 'unit_amount' => 1500, 'currency' => 'usd']);
+
+    $page = billingPagePlan($team);
+
+    expect($page['plan']['line'])->toBe('$15 per month · renews Nov 1')
+        ->and($page['plan']['amount'])->toBe('$15')
+        ->and($page['plans'][0]['summary'])->toBe('$9 per month · 3 servers · one person')
+        ->and($page['plans'][1]['summary'])->toBe('$15 per month · unlimited servers · teammates and roles · custom domain')
+        ->and($page['plans'][2]['summary'])->toStartWith('$39 per month');
+});
+
+test('a mirrored price keeps its cents and its currency', function () {
+    $team = Team::factory()->owned()->create();
+    billingPageSubscribed(Plan::Pro)->for($team, 'owner')->create(['renews_at' => CarbonImmutable::parse('2026-11-01'), 'unit_amount' => 1550, 'currency' => 'gbp']);
+
+    $page = billingPagePlan($team);
+
+    expect($page['plan']['amount'])->toBe(Formats::cents(1550, 'gbp'))
+        ->and($page['plan']['amount'])->not->toBe(Formats::cents(1550, 'usd'))
+        ->and($page['plan']['line'])->toStartWith(Formats::cents(1550, 'gbp') . ' per month');
+});
+
+test('the configured price stands in only when nothing is mirrored', function () {
+    $team = Team::factory()->owned()->create();
+    billingPageSubscribed(Plan::Pro)->for($team, 'owner')->create(['unit_amount' => null, 'currency' => null]);
+
+    $page = billingPagePlan($team);
+
+    expect($page['plan']['amount'])->toBe('$19')
+        ->and($page['plans'][1]['summary'])->toStartWith('$19 per month');
+});
+
+test('an ended plan\'s price is not shown as the price of the next one', function () {
+    $team = Team::factory()->onTrial(9)->owned()->create();
+    billingPageSubscribed(Plan::Pro)->ended(now()->subMonth())->for($team, 'owner')->create(['unit_amount' => 1500, 'currency' => 'usd']);
+
+    $page = billingPagePlan($team);
+
+    expect($page['plan']['amount'])->toBe('$0')
+        ->and($page['plans'][1]['summary'])->toStartWith('$19 per month');
 });

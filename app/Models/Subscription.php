@@ -16,6 +16,7 @@ class Subscription extends CashierSubscription
     protected $casts = [
         'ends_at' => 'datetime',
         'quantity' => 'integer',
+        'unit_amount' => 'integer',
         'trial_ends_at' => 'datetime',
         'renews_at' => 'datetime',
         'synced_at' => 'datetime',

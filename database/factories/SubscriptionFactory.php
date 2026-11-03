@@ -35,6 +35,7 @@ class SubscriptionFactory extends Factory
             'stripe_price' => Plan::Pro->checkoutPrice(),
             'quantity' => 1,
             'renews_at' => now()->addDays(30),
+            'synced_at' => now()->subDay(),
         ];
     }
 

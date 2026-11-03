@@ -25,17 +25,12 @@ final class TrialHistory
         return Str::before(Str::beforeLast($email, '@'), '+') . '@' . Str::afterLast($email, '@');
     }
 
-    public function used(string $email): bool
+    public function claim(string $email, Team $team): bool
     {
-        return DB::table('trial_history')->where('email', self::normalise($email))->exists();
-    }
-
-    public function record(string $email, Team $team): void
-    {
-        DB::table('trial_history')->insert([
+        return DB::table('trial_history')->insertOrIgnore([
             'email' => self::normalise($email),
             'team_id' => $team->getKey(),
             'started_at' => now(),
-        ]);
+        ]) === 1;
     }
 }

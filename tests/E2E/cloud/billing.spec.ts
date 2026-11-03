@@ -1,5 +1,6 @@
 import {
     asCloudMember,
+    dialog,
     expect,
     isMobile,
     noSidewaysScroll,
@@ -35,6 +36,33 @@ test.describe('the billing tab on coresmith cloud', () => {
         }
 
         await expect(page.getByTestId('invoices-card')).toContainText('Stripe emails each receipt to owner@cloud.test.')
+    })
+
+    test('a plan on an older price shows what the team pays', async ({ page }) => {
+        await page.goto('/old-price/settings/billing')
+
+        const plan = page.getByTestId('plan-card')
+
+        await expect(plan).toContainText('$15 per month · renews')
+        await expect(plan.getByText('$15', { exact: true })).toBeVisible()
+
+        await plan.getByRole('button', { name: 'Change plan' }).click()
+
+        await expect(dialog(page).getByRole('radio', { name: 'Pro', exact: true })).toHaveAccessibleDescription(
+            /^\$15 per month/
+        )
+        await expect(dialog(page).getByRole('radio', { name: 'Business', exact: true })).toHaveAccessibleDescription(
+            /^\$39 per month/
+        )
+
+        await page.keyboard.press('Escape')
+        await expect(dialog(page)).toBeHidden()
+        await page.keyboard.press('ControlOrMeta+K')
+
+        await expect(
+            page.getByRole('dialog', { name: 'Command palette' }).getByRole('option', { name: /Billing/ })
+        ).toContainText('Pro · $15 / month')
+        await page.keyboard.press('Escape')
     })
 
     test('the tab says how cloud bills', async ({ page }) => {

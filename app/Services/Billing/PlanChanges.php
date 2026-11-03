@@ -48,6 +48,8 @@ final class PlanChanges
         if ($subscription instanceof Subscription && $subscription->valid()) {
             $this->stripe($team, 'swap', fn() => $subscription->swap($price));
 
+            $subscription->forceFill(['unit_amount' => null, 'currency' => null])->save();
+
             activity()->performedOn($team)->causedBy($user)->withProperties(['from' => $status->plan?->value, 'to' => $plan->value])->log('plan_changed');
 
             return null;

@@ -57,6 +57,14 @@ test('billing on cloud says what the team is on', function () {
         ->and($hint($trial))->toBe('trial · 9 days left');
 });
 
+test('billing on cloud shows what the team pays when stripe has said', function () {
+    config(['coresmith.edition' => 'cloud']);
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $team->subscription('default')->forceFill(['unit_amount' => 1500, 'currency' => 'usd'])->save();
+
+    expect(collect(paletteCommands(User::query()->findOrFail($team->owner_id), $team->fresh()))->firstWhere('label', 'Billing')['hint'])->toBe('Pro · $15 / month');
+});
+
 test('a healthy server is opened with its environment and app count', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => ServerStatus::Active, 'environment' => 'Production']);

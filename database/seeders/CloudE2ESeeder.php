@@ -63,6 +63,7 @@ final class CloudE2ESeeder extends Seeder
         $this->soloTeam($tenant->owner);
         $this->fleetTeam($tenant->owner);
         $this->businessTeam($tenant->owner);
+        $this->oldPriceTeam($tenant->owner);
 
         foreach (self::PROJECTS as $code) {
             $this->planChangeTeams($tenant->owner, $code);
@@ -166,6 +167,14 @@ final class CloudE2ESeeder extends Seeder
             'name' => 'atelier_legacy',
             'last_offsite_error' => 'The bucket refused the upload: curl: (22) The requested URL returned error: 403. Check the bucket name, region and keys.',
         ]);
+    }
+
+    private function oldPriceTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Old Price', 'old-price');
+        $team->forceFill(['stripe_id' => 'cus_e2e_old_price'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create(['renews_at' => now()->addDays(13), 'unit_amount' => 1500, 'currency' => 'usd']);
     }
 
     private function vaultTeam(User $owner, string $code): void

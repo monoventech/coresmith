@@ -101,18 +101,18 @@ test.describe('changing the plan on coresmith cloud', () => {
         await expect(page.getByTestId('checkout-status')).toHaveText("You're on Pro.")
     })
 
-    test('a payment waits for stripe, then says what to do', async ({ page }) => {
+    test('a checkout waits for stripe, then says what to do', async ({ page }) => {
         await page.clock.install()
         await page.goto('/trial/settings/billing?checkout=success')
 
         await expect(page.getByTestId('checkout-status')).toHaveText(
-            'Payment received. The plan appears here as soon as Stripe confirms it.'
+            'Checkout finished. The plan appears here as soon as Stripe confirms it.'
         )
 
         await page.clock.runFor(61_000)
 
         await expect(page.getByTestId('checkout-status')).toHaveText(
-            'Stripe has not confirmed the payment yet. Refresh in a minute; the receipt is in your email.'
+            'Stripe has not confirmed the plan yet. Refresh in a minute.'
         )
     })
 })

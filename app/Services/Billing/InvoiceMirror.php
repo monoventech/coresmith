@@ -14,6 +14,8 @@ use Carbon\CarbonImmutable;
 
 final class InvoiceMirror
 {
+    private const RANKS = ['open' => 1, 'uncollectible' => 2, 'paid' => 3, 'void' => 3];
+
     public function record(Team $team, array $invoice, int $eventCreated): ?TeamInvoice
     {
         if (!is_string($invoice['id'] ?? null) || ($invoice['status'] ?? 'draft') === 'draft') {
@@ -23,7 +25,7 @@ final class InvoiceMirror
         $updated = CarbonImmutable::createFromTimestamp($eventCreated);
         $row = TeamInvoice::query()->where('stripe_id', $invoice['id'])->first();
 
-        if ($row?->stripe_updated_at?->gt($updated)) {
+        if ($row !== null && $this->outdated($row, $invoice, $updated)) {
             return $row;
         }
 
@@ -45,6 +47,18 @@ final class InvoiceMirror
         ])->save();
 
         return $row;
+    }
+
+    private function outdated(TeamInvoice $row, array $invoice, CarbonImmutable $updated): bool
+    {
+        $status = (string) $invoice['status'];
+
+        if ($status === 'open' && $row->status !== 'open') {
+            return true;
+        }
+
+        return [$row->stripe_updated_at->getTimestamp(), self::RANKS[$row->status] ?? 0, $row->attempt_count]
+            > [$updated->getTimestamp(), self::RANKS[$status] ?? 0, (int) ($invoice['attempt_count'] ?? 0)];
     }
 
     private function moment(mixed $timestamp): ?CarbonImmutable

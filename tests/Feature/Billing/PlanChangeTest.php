@@ -203,6 +203,25 @@ test('a subscribed team swaps to business at once, prorated', function () {
         ->and($changed?->causer_id)->toBe($owner->getKey());
 });
 
+test('a changed plan shows the configured price until stripe says what it costs', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $subscription = $team->subscription('default');
+    $subscription->forceFill(['unit_amount' => 1500, 'currency' => 'usd'])->save();
+
+    FakeStripe::fake([
+        FakeStripe::url("subscriptions/{$subscription->stripe_id}*") => fn(Request $request) => Http::response(
+            $request->method() === 'GET' ? planChangeSubscription($team, 'price_test_pro') : FakeStripe::subscription($subscription->stripe_id, $team->stripe_id, 'price_test_business'),
+        ),
+    ]);
+
+    $this->actingAs(planChangeOwner($team))->from(route('settings.billing'))->put(route('settings.billing.plan.update'), ['plan' => 'business'])->assertSessionHasNoErrors();
+
+    expect($subscription->fresh()->unit_amount)->toBeNull()
+        ->and($subscription->fresh()->currency)->toBeNull();
+
+    $this->get(route('settings.billing'))->assertInertia(fn($page) => $page->where('plan.amount', '$39'));
+});
+
 test('a downgrade over the limits is refused before stripe hears of it', function () {
     $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
     Server::factory()->for($team)->count(5)->create(['status' => ServerStatus::Active]);
@@ -419,7 +438,7 @@ test('self-hosted has no billing routes', function () {
 test('returning from checkout', function () {
     $waiting = Team::factory()->onTrial()->owned()->create();
     $paid = Team::factory()->subscribed(Plan::Pro)->owned()->create();
-    $timeout = 'Stripe has not confirmed the payment yet. Refresh in a minute; the receipt is in your email.';
+    $timeout = 'Stripe has not confirmed the plan yet. Refresh in a minute.';
     $checkout = function (Team $team, array $query): mixed {
         $props = null;
 
@@ -434,7 +453,7 @@ test('returning from checkout', function () {
     expect($checkout($waiting, ['checkout' => 'success']))->toBe([
         'status' => 'success',
         'awaiting' => true,
-        'message' => 'Payment received. The plan appears here as soon as Stripe confirms it.',
+        'message' => 'Checkout finished. The plan appears here as soon as Stripe confirms it.',
         'timeout_message' => $timeout,
     ])->and($checkout($paid, ['checkout' => 'success']))->toBe([
         'status' => 'success',

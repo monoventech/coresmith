@@ -96,3 +96,9 @@ test('every read-only reason says why', function () {
         "This team's payments failed, so it is read-only.",
     ]);
 });
+
+test('a plan can state a price other than the configured one', function () {
+    expect(Plan::Starter->summary('$7'))->toBe('$7 per month · 3 servers · one person')
+        ->and(Plan::Pro->summary('$15'))->toBe('$15 per month · unlimited servers · teammates and roles · custom domain')
+        ->and(Plan::Business->summary('$29'))->toBe('$29 per month · everything in Pro · single sign-on · database backups to S3 · audit log export');
+});

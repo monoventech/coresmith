@@ -10,8 +10,10 @@ use App\Models\User;
 use App\Services\Billing\TeamBilling;
 use App\Services\Billing\TrialHistory;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\CloudBilling;
 
@@ -147,4 +149,89 @@ test('the profile knows cloud confirms email', function () {
     CloudBilling::enable();
 
     $this->actingAs($user)->get(route('profile.edit'))->assertInertia(fn($page) => $page->where('mustVerifyEmail', true));
+});
+
+test('two tags of one address get one trial, without an error', function () {
+    CloudBilling::enable();
+
+    cloudSignup('maya+1@example.com')->assertSessionHasNoErrors();
+    auth()->logout();
+    cloudSignup('maya+2@example.com')->assertSessionHasNoErrors();
+
+    expect(DB::table('trial_history')->pluck('email')->all())->toBe(['maya@example.com'])
+        ->and(Team::query()->whereNotNull('trial_ends_at')->count())->toBe(1)
+        ->and(Team::query()->count())->toBe(2);
+});
+
+test('claiming a trial twice grants it once and leaves the transaction usable', function () {
+    $team = Team::factory()->create();
+    $history = app(TrialHistory::class);
+
+    DB::transaction(function () use ($history, $team) {
+        expect($history->claim('Maya+1@Example.com', $team))->toBeTrue()
+            ->and($history->claim('maya+2@example.com', $team))->toBeFalse()
+            ->and(DB::table('trial_history')->count())->toBe(1);
+    });
+
+    $row = DB::table('trial_history')->sole();
+
+    expect($row->email)->toBe('maya@example.com')
+        ->and($row->team_id)->toBe($team->id)
+        ->and($row->started_at)->not->toBeNull();
+});
+
+test('a trial is claimed by inserting, with no check first to race', function () {
+    $team = Team::factory()->create();
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    app(TrialHistory::class)->claim('maya@example.com', $team);
+
+    $queries = collect(DB::getQueryLog())->pluck('query')->filter(fn(string $query): bool => str_contains($query, 'trial_history'))->values();
+
+    DB::disableQueryLog();
+
+    expect($queries)->toHaveCount(1)
+        ->and(strtolower($queries[0]))->toStartWith('insert');
+});
+
+test('the database holds one trial per address', function () {
+    $indexes = collect(Schema::getIndexes('trial_history'))->filter(fn(array $index): bool => $index['columns'] === ['email']);
+
+    expect($indexes)->toHaveCount(1)
+        ->and($indexes->first()['unique'])->toBeTrue();
+});
+
+test('addresses that only look alike are different trials', function () {
+    $team = Team::factory()->create();
+    $history = app(TrialHistory::class);
+
+    expect($history->claim('jose@example.com', $team))->toBeTrue()
+        ->and($history->claim('josé@example.com', $team))->toBeTrue();
+});
+
+test('the unique trial index survives addresses that already repeat', function () {
+    $migration = database_path('migrations/' . collect(scandir(database_path('migrations')))->first(fn(string $file): bool => str_ends_with($file, '_allow_one_trial_per_address.php')));
+
+    Schema::table('trial_history', function (Blueprint $table) {
+        $table->dropUnique(['email']);
+        $table->index('email');
+    });
+
+    DB::table('trial_history')->insert([
+        ['email' => 'maya@example.com', 'team_id' => 'second', 'started_at' => '2026-02-01 00:00:00'],
+        ['email' => 'maya@example.com', 'team_id' => 'first', 'started_at' => '2026-01-01 00:00:00'],
+        ['email' => 'maya@example.com', 'team_id' => 'third', 'started_at' => '2026-03-01 00:00:00'],
+        ['email' => 'ines@example.com', 'team_id' => 'only', 'started_at' => '2026-02-01 00:00:00'],
+    ]);
+
+    (require $migration)->up();
+
+    $kept = DB::table('trial_history')->orderBy('email')->pluck('team_id', 'email')->all();
+
+    DB::table('trial_history')->delete();
+
+    expect($kept)->toBe(['ines@example.com' => 'only', 'maya@example.com' => 'first'])
+        ->and(collect(Schema::getIndexes('trial_history'))->filter(fn(array $index): bool => $index['columns'] === ['email'])->sole()['unique'])->toBeTrue();
 });

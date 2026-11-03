@@ -2,12 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Jobs\SyncStripeCustomerEmail;
 use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvoice;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Cashier\Cashier;
+use Stripe\Exception\ApiErrorException;
+use Tests\Support\CloudBilling;
 use Tests\Support\FakeStripe;
 
 test('cashier bills teams, including soft-deleted ones', function () {
@@ -74,4 +80,84 @@ test("the team's invoices are local records, not stripe calls", function () {
 
     expect($team->billingInvoices())->toBeInstanceOf(HasMany::class)
         ->and($team->billingInvoices()->getRelated())->toBeInstanceOf(TeamInvoice::class);
+});
+
+test("changing an owner's email tells stripe where receipts go, and only that", function () {
+    CloudBilling::enable();
+    $owner = User::factory()->create(['email' => 'old@monoven.test']);
+    $team = Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1']);
+    $other = Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_2']);
+    Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_3'])->delete();
+    Team::factory()->create(['owner_id' => $owner->id]);
+
+    FakeStripe::fake([FakeStripe::url('customers/*') => Http::response(FakeStripe::customer('cus_1'))]);
+
+    $this->actingAs($owner)->patch(route('profile.update'), ['name' => $owner->name, 'email' => 'new@monoven.test'])->assertSessionHasNoErrors();
+
+    $sent = collect(Http::recorded())->map(fn(array $pair): Request => $pair[0]);
+
+    expect($sent->map(fn(Request $request): string => $request->method() . ' ' . parse_url($request->url(), PHP_URL_PATH))->sort()->values()->all())->toBe(['POST /v1/customers/cus_1', 'POST /v1/customers/cus_2', 'POST /v1/customers/cus_3'])
+        ->and($sent->map(fn(Request $request): array => $request->data())->unique()->values()->all())->toBe([['email' => 'new@monoven.test']])
+        ->and($team->fresh()->stripeEmail())->toBe('new@monoven.test')
+        ->and($other->fresh()->stripeEmail())->toBe('new@monoven.test');
+});
+
+test('stripe hears nothing when no receipt address changed', function () {
+    CloudBilling::enable();
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1'])->members()->attach($member, ['role' => 'member']);
+
+    FakeStripe::fake();
+
+    $owner->forceFill(['name' => 'Someone else'])->save();
+    $member->forceFill(['email' => 'member@monoven.test'])->save();
+
+    Http::assertNothingSent();
+});
+
+test('a self-hosted panel never tells stripe about an email', function () {
+    config(['coresmith.edition' => 'self-hosted']);
+    $owner = User::factory()->create();
+    Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1']);
+
+    FakeStripe::fake();
+
+    $owner->forceFill(['email' => 'new@monoven.test'])->save();
+
+    Http::assertNothingSent();
+});
+
+test('stripe being down does not stop an email changing, and the job retries', function () {
+    CloudBilling::enable();
+    $owner = User::factory()->create(['email' => 'old@monoven.test']);
+    $team = Team::factory()->create(['owner_id' => $owner->id, 'stripe_id' => 'cus_1']);
+    Team::factory()->create(['owner_id' => $owner->id]);
+
+    Queue::fake();
+    FakeStripe::fake([FakeStripe::url('customers/*') => FakeStripe::error('api_error', "Something went wrong on Stripe's end.", 500)]);
+
+    $this->actingAs($owner)->patch(route('profile.update'), ['name' => $owner->name, 'email' => 'new@monoven.test'])->assertSessionHasNoErrors();
+
+    expect($owner->fresh()->email)->toBe('new@monoven.test');
+
+    Http::assertNothingSent();
+
+    $pushed = Queue::pushed(SyncStripeCustomerEmail::class)->sole();
+
+    expect($pushed->team->is($team))->toBeTrue()
+        ->and($pushed->queue)->toBe('default')
+        ->and($pushed->tries)->toBeGreaterThan(1)
+        ->and(fn() => $pushed->handle())->toThrow(ApiErrorException::class);
+});
+
+test('a team that lost its stripe customer before the job ran is left alone', function () {
+    CloudBilling::enable();
+    $team = Team::factory()->owned()->create(['stripe_id' => null]);
+
+    FakeStripe::fake();
+
+    (new SyncStripeCustomerEmail($team))->handle();
+
+    Http::assertNothingSent();
 });

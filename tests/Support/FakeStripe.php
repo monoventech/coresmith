@@ -64,6 +64,7 @@ final class FakeStripe
             'canceled_at' => null,
             'ended_at' => null,
             'trial_end' => null,
+            'default_payment_method' => null,
             'metadata' => [],
             'items' => [
                 'object' => 'list',

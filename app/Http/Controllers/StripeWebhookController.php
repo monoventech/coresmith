@@ -25,6 +25,19 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class StripeWebhookController extends WebhookController
 {
+    private const ENDED = 5;
+
+    private const STATUS_RANKS = [
+        'incomplete' => 0,
+        'trialing' => 1,
+        'active' => 2,
+        'past_due' => 3,
+        'paused' => 3,
+        'unpaid' => 4,
+        'incomplete_expired' => self::ENDED,
+        'canceled' => self::ENDED,
+    ];
+
     public function __construct() {}
 
     public function handleWebhook(Request $request): Response
@@ -47,18 +60,11 @@ final class StripeWebhookController extends WebhookController
             return $this->successMethod();
         }
 
-        $existed = $team->subscriptions()->where('stripe_id', $data['id'])->exists();
+        $first = $this->localSubscription($team, $data)?->synced_at === null;
 
         parent::handleCustomerSubscriptionCreated($payload);
 
-        $subscription = $this->sync($team, $data, $payload);
-
-        if (!$existed && $subscription !== null) {
-            $plan = Plan::fromPriceId($subscription->stripe_price) ?? Plan::Starter;
-
-            activity()->performedOn($team)->withProperties(['plan' => $plan->value])->log('plan_started');
-            Notification::send($team->owners()->get(), new PlanStartedNotification($team, $plan));
-        }
+        $this->sync($team, $data, $payload, $first);
 
         return $this->successMethod();
     }
@@ -72,17 +78,19 @@ final class StripeWebhookController extends WebhookController
             return $this->successMethod();
         }
 
-        $synced = $team->subscriptions()->where('stripe_id', $data['id'])->value('synced_at');
+        $subscription = $this->localSubscription($team, $data);
 
-        if ($synced !== null && CarbonImmutable::parse($synced)->gt($this->createdAt($payload))) {
+        if ($subscription !== null && $this->outdated($subscription, $data, $this->createdAt($payload))) {
             return $this->successMethod();
         }
+
+        $first = $subscription?->synced_at === null;
 
         if (parent::handleCustomerSubscriptionUpdated($payload) === null) {
             return $this->successMethod();
         }
 
-        $this->sync($team, $data, $payload);
+        $this->sync($team, $data, $payload, $first);
 
         return $this->successMethod();
     }
@@ -91,13 +99,45 @@ final class StripeWebhookController extends WebhookController
     {
         $data = $payload['data']['object'];
         $team = $this->team($data['customer'] ?? null);
-        $wasRunning = $team?->subscriptions()->where('stripe_id', $data['id'])->first()?->valid() === true;
+
+        if ($team === null) {
+            return $this->successMethod();
+        }
+
+        $subscription = $this->localSubscription($team, $data);
+        $wasRunning = $subscription?->valid() === true;
+
+        if ($subscription === null && ($data['status'] ?? null) === 'canceled') {
+            parent::handleCustomerSubscriptionCreated($payload);
+        }
 
         parent::handleCustomerSubscriptionDeleted($payload);
 
-        if ($team !== null && $wasRunning && !$team->subscriptions()->get()->contains(fn(Subscription $subscription): bool => $subscription->valid())) {
-            activity()->performedOn($team)->log('plan_ended');
-            Notification::send($team->owners()->get(), new PlanEndedNotification($team));
+        $this->localSubscription($team, $data)?->forceFill(['synced_at' => $this->createdAt($payload)])->save();
+
+        if ($wasRunning && !$this->running($team)) {
+            $this->planEnded($team);
+        }
+
+        return $this->successMethod();
+    }
+
+    protected function handleCustomerDeleted(array $payload)
+    {
+        $team = $this->team($payload['data']['object']['id'] ?? null);
+
+        if ($team === null) {
+            return $this->successMethod();
+        }
+
+        $wasRunning = $this->running($team);
+
+        parent::handleCustomerDeleted($payload);
+
+        $team->forceFill(['pm_expires' => null, 'pending_checkout_id' => null])->save();
+
+        if ($wasRunning) {
+            $this->planEnded($team);
         }
 
         return $this->successMethod();
@@ -121,16 +161,18 @@ final class StripeWebhookController extends WebhookController
             return $this->successMethod();
         }
 
+        $subscription = is_string($session['subscription'] ?? null) ? $team->stripe()->subscriptions->retrieve($session['subscription']) : null;
+
+        if ($subscription !== null && $this->localSubscription($team, ['id' => $subscription->id]) === null) {
+            $this->handleCustomerSubscriptionCreated(['created' => $payload['created'] ?? null, 'data' => ['object' => $subscription->toArray()]]);
+        }
+
         if ($team->pending_checkout_id !== null && $team->pending_checkout_id === ($session['id'] ?? null)) {
             $team->forceFill(['pending_checkout_id' => null])->save();
         }
 
-        if (is_string($session['subscription'] ?? null)) {
-            $method = $team->stripe()->subscriptions->retrieve($session['subscription'])->default_payment_method;
-
-            if (is_string($method)) {
-                $team->updateDefaultPaymentMethod($method);
-            }
+        if (is_string($subscription?->default_payment_method)) {
+            $team->updateDefaultPaymentMethod($subscription->default_payment_method);
         }
 
         return $this->successMethod();
@@ -166,6 +208,11 @@ final class StripeWebhookController extends WebhookController
         }
 
         $row = app(InvoiceMirror::class)->record($team, $invoice, $this->createdAt($payload)->getTimestamp());
+
+        if (in_array($row?->status, ['paid', 'void'], true)) {
+            return $this->successMethod();
+        }
+
         $next = $row?->next_attempt_at === null ? null : CarbonImmutable::instance($row->next_attempt_at);
 
         activity()->performedOn($team)->withProperties(['invoice' => $invoice['number'] ?? $invoice['id'], 'next_attempt' => $next?->toIso8601String()])->log('payment_failed');
@@ -186,18 +233,68 @@ final class StripeWebhookController extends WebhookController
         return $this->successMethod();
     }
 
-    private function sync(Team $team, array $data, array $payload): ?Subscription
+    private function sync(Team $team, array $data, array $payload, bool $first): void
     {
-        $subscription = $team->subscriptions()->where('stripe_id', $data['id'])->first();
+        $subscription = $this->localSubscription($team, $data);
         $created = $this->createdAt($payload);
 
-        if ($subscription === null || $subscription->synced_at?->gt($created)) {
-            return $subscription;
+        if ($subscription === null) {
+            return;
         }
 
-        $subscription->forceFill(['renews_at' => $this->periodEnd($data), 'synced_at' => $created])->save();
+        if (!$this->outdated($subscription, $data, $created)) {
+            $subscription->forceFill(['renews_at' => $this->periodEnd($data), ...$this->price($data), 'synced_at' => $created])->save();
+        }
 
-        return $subscription;
+        if ($first && !$subscription->ended()) {
+            $plan = Plan::fromPriceId($subscription->stripe_price) ?? Plan::Starter;
+
+            activity()->performedOn($team)->withProperties(['plan' => $plan->value])->log('plan_started');
+            Notification::send($team->owners()->get(), new PlanStartedNotification($team, $plan));
+        }
+    }
+
+    private function outdated(Subscription $subscription, array $data, CarbonImmutable $created): bool
+    {
+        $held = self::STATUS_RANKS[$subscription->stripe_status] ?? 0;
+        $incoming = self::STATUS_RANKS[$data['status'] ?? ''] ?? 0;
+
+        return match (true) {
+            $held === self::ENDED && $incoming < self::ENDED => true,
+            $subscription->synced_at === null => false,
+            default => $subscription->synced_at->gt($created) || ($subscription->synced_at->eq($created) && $held > $incoming),
+        };
+    }
+
+    /**
+     * @return array{unit_amount: ?int, currency: ?string}
+     */
+    private function price(array $data): array
+    {
+        $items = $data['items']['data'] ?? [];
+        $price = count($items) === 1 ? $items[0]['price'] ?? [] : [];
+        $amount = $price['unit_amount'] ?? null;
+        $currency = $price['currency'] ?? null;
+
+        return is_int($amount) && is_string($currency)
+            ? ['unit_amount' => $amount, 'currency' => strtolower($currency)]
+            : ['unit_amount' => null, 'currency' => null];
+    }
+
+    private function running(Team $team): bool
+    {
+        return $team->subscriptions()->get()->contains(fn(Subscription $subscription): bool => $subscription->valid());
+    }
+
+    private function planEnded(Team $team): void
+    {
+        activity()->performedOn($team)->log('plan_ended');
+        Notification::send($team->owners()->get(), new PlanEndedNotification($team));
+    }
+
+    private function localSubscription(Team $team, array $data): ?Subscription
+    {
+        return $team->subscriptions()->where('stripe_id', $data['id'])->first();
     }
 
     private function periodEnd(array $data): ?CarbonImmutable

@@ -27,9 +27,8 @@ final class CloudSignup
             $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
             $user->forceFill(['current_team_id' => $team->getKey()])->save();
 
-            if (!$this->history->used((string) $user->email)) {
+            if ($this->history->claim((string) $user->email, $team)) {
                 $team->forceFill(['trial_ends_at' => now()->addDays((int) config('coresmith.billing.trial_days', 14))])->save();
-                $this->history->record((string) $user->email, $team);
             }
 
             return $team;

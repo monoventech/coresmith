@@ -6,6 +6,7 @@ namespace App\Models;
 use App\Enums\Ability;
 use App\Enums\Edition;
 use App\Enums\TeamRole;
+use App\Jobs\SyncStripeCustomerEmail;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -96,6 +97,15 @@ class User extends Authenticatable
         }
 
         $query->whereHas('teams', fn(Builder $teams) => $teams->where('team_user.role', TeamRole::Owner->value));
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('email') && !Edition::current()->isSelfHosted()) {
+                $user->ownedTeams()->withTrashed()->whereNotNull('stripe_id')->each(fn(Team $team) => SyncStripeCustomerEmail::dispatch($team));
+            }
+        });
     }
 
     public function ownedTeams(): HasMany

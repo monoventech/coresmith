@@ -42,7 +42,7 @@ final class SubscriptionCheck
                 return;
             }
 
-            $subscription->markAsCanceled();
+            $subscription->forceFill(['synced_at' => CarbonImmutable::now()])->markAsCanceled();
 
             throw PlanRefusal::inactive();
         } catch (ApiErrorException) {
@@ -60,6 +60,7 @@ final class SubscriptionCheck
         $subscription->forceFill([
             'stripe_status' => $stripe->status,
             'ends_at' => is_int($ended) ? CarbonImmutable::createFromTimestamp($ended) : CarbonImmutable::now(),
+            'synced_at' => CarbonImmutable::now(),
         ])->save();
 
         throw PlanRefusal::inactive();

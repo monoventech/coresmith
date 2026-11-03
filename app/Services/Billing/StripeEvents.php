@@ -19,7 +19,7 @@ final class StripeEvents
     {
         $id = (string) $payload['id'];
 
-        return Cache::lock('stripe-event:' . $id, 120)->block(30, function () use ($payload, $id, $handle): Response {
+        return Cache::lock($this->lockKey($payload), 120)->block(30, function () use ($payload, $id, $handle): Response {
             if (StripeEvent::query()->whereKey($id)->exists()) {
                 return new Response('Already handled', 200);
             }
@@ -32,5 +32,13 @@ final class StripeEvents
 
             return $response;
         });
+    }
+
+    private function lockKey(array $payload): string
+    {
+        $object = $payload['data']['object'] ?? null;
+        $customer = ($object['object'] ?? null) === 'customer' ? ($object['id'] ?? null) : ($object['customer'] ?? null);
+
+        return is_string($customer) ? 'stripe-customer:' . $customer : 'stripe-event:' . $payload['id'];
     }
 }

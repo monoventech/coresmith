@@ -31,10 +31,12 @@ final class PlanGate
             return $create();
         }
 
+        $this->ensureCanAddServer($team, $user);
+        $this->subscriptions->confirm($team);
+
         try {
             return Cache::lock('team-servers:' . $team->getKey(), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, function () use ($team, $user, $create): mixed {
                 $this->ensureCanAddServer($team, $user);
-                $this->subscriptions->confirm($team);
 
                 return $create();
             });

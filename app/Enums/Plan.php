@@ -100,12 +100,14 @@ enum Plan: string
         };
     }
 
-    public function summary(): string
+    public function summary(?string $price = null): string
     {
+        $price ??= "\${$this->amount()}";
+
         return match ($this) {
-            self::Starter => "\${$this->amount()} per month · {$this->serverLimit()} servers · one person",
-            self::Pro => "\${$this->amount()} per month · unlimited servers · teammates and roles · custom domain",
-            self::Business => "\${$this->amount()} per month · everything in Pro · single sign-on · database backups to S3 · audit log export",
+            self::Starter => "{$price} per month · {$this->serverLimit()} servers · one person",
+            self::Pro => "{$price} per month · unlimited servers · teammates and roles · custom domain",
+            self::Business => "{$price} per month · everything in Pro · single sign-on · database backups to S3 · audit log export",
             self::SelfHosted => 'Free · every feature · you run the panel',
             self::Trial => 'Pro features on ' . $this->serverLimit() . ' server for ' . (int) config('coresmith.billing.trial_days', 14) . ' days',
         };

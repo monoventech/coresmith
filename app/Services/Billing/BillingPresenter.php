@@ -102,7 +102,7 @@ final class BillingPresenter
             'plans' => array_map(fn(Plan $option): array => [
                 'key' => $option->value,
                 'label' => $option->label(),
-                'summary' => $option->summary(),
+                'summary' => $option->summary($status->plan === $option ? $this->paid($team) : null),
                 'current' => $status->plan === $option,
                 'available' => $option->checkoutPrice() !== null,
                 'blockers' => $canManage ? $this->guard->blockers($team, $option) : [],
@@ -132,7 +132,7 @@ final class BillingPresenter
                 default => "trial · {$days} days left",
             },
             $status->state === BillingState::Trialing => "{$label} · first charge {$this->day($status->trialEndsAt)}",
-            default => "{$label} · {$this->price($status->plan)} / month",
+            default => "{$label} · {$this->price($team, $status->plan)} / month",
         };
     }
 
@@ -142,7 +142,7 @@ final class BillingPresenter
     private function planCard(Team $team, BillingStatus $status): array
     {
         $plan = $status->plan;
-        $price = $this->price($plan);
+        $price = $this->price($team, $plan);
         $read = ['label' => 'Read-only', 'tone' => 'destructive'];
 
         [$label, $badge, $line] = match (true) {
@@ -186,10 +186,10 @@ final class BillingPresenter
             'awaiting' => $awaiting,
             'message' => match (true) {
                 $checkout === 'cancelled' => 'Checkout was cancelled, so nothing was charged.',
-                $awaiting => 'Payment received. The plan appears here as soon as Stripe confirms it.',
+                $awaiting => 'Checkout finished. The plan appears here as soon as Stripe confirms it.',
                 default => "You're on {$status->plan?->label()}.",
             },
-            'timeout_message' => 'Stripe has not confirmed the payment yet. Refresh in a minute; the receipt is in your email.',
+            'timeout_message' => 'Stripe has not confirmed the plan yet. Refresh in a minute.',
         ];
     }
 
@@ -233,9 +233,16 @@ final class BillingPresenter
         return self::BRANDS[$type] ?? ucfirst(str_replace('_', ' ', $type));
     }
 
-    private function price(?Plan $plan): string
+    private function price(Team $team, ?Plan $plan): string
     {
-        return Formats::cents(($plan?->amount() ?? 0) * 100, 'usd');
+        return $this->paid($team) ?? Formats::cents(($plan?->amount() ?? 0) * 100, 'usd');
+    }
+
+    private function paid(Team $team): ?string
+    {
+        $subscription = $team->subscription('default');
+
+        return $subscription?->unit_amount === null ? null : Formats::cents($subscription->unit_amount, (string) $subscription->currency);
     }
 
     private function dayOrNull(?CarbonImmutable $moment): ?string

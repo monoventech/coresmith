@@ -10,10 +10,13 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
+use App\Services\Billing\PlanGate;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Dns\DnsResolver;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 use Tests\Support\CloudBilling;
 use Tests\Support\CloudFixtures;
 use Tests\Support\FakeCloudApiFactory;
@@ -213,4 +216,85 @@ test('the create page explains a full team before anyone fills the form', functi
         ->where('current', $starter->id)
         ->where('teams', fn($teams) => collect($teams)->firstWhere('id', $starter->id)['limit'] === 'Starter includes 3 servers and this team has 3. Choose Pro or Business for unlimited servers.'
             && collect($teams)->firstWhere('id', $pro->id)['limit'] === null));
+});
+
+test('the stripe check runs outside the server lock', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $held = null;
+
+    FakeStripe::fake([FakeStripe::url('subscriptions/*') => function () use ($team, &$held) {
+        $lock = Cache::lock("team-servers:{$team->id}", 1);
+        $held = !$lock->get();
+        $lock->release();
+
+        return Http::response(FakeStripe::subscription('sub_x', 'cus_x', 'price_test_pro'));
+    }]);
+
+    $this->actingAs(planLimitsOwner($team))->post(route('servers.store'), planLimitsServer($team))->assertSessionHasNoErrors();
+
+    expect($held)->toBeFalse()
+        ->and($team->servers()->count())->toBe(1);
+});
+
+test('the server is created inside the lock', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    FakeStripe::fake([FakeStripe::url('subscriptions/*') => FakeStripe::subscription('sub_x', 'cus_x', 'price_test_pro')]);
+
+    $free = app(PlanGate::class)->creatingServer($team, planLimitsOwner($team), function () use ($team): bool {
+        $lock = Cache::lock("team-servers:{$team->id}", 1);
+        $free = $lock->get();
+
+        if ($free) {
+            $lock->release();
+        }
+
+        return $free;
+    });
+
+    expect($free)->toBeFalse();
+});
+
+test('the server limit is counted again once the lock is held', function () {
+    $team = Team::factory()->subscribed(Plan::Starter)->owned()->create();
+    planLimitsServers($team, 2);
+
+    FakeStripe::fake([FakeStripe::url('subscriptions/*') => function () use ($team) {
+        planLimitsServers($team, 1);
+
+        return Http::response(FakeStripe::subscription('sub_x', 'cus_x', 'price_test_starter'));
+    }]);
+
+    $this->actingAs(planLimitsOwner($team))->post(route('servers.store'), planLimitsServer($team))
+        ->assertSessionHas('error', fn(string $message): bool => str_contains($message, 'Starter includes 3 servers'));
+
+    expect($team->servers()->count())->toBe(3)
+        ->and($team->servers()->where('name', 'web-new')->exists())->toBeFalse();
+});
+
+test('a team at its limit is refused before stripe is asked', function () {
+    $team = Team::factory()->subscribed(Plan::Starter)->owned()->create();
+    planLimitsServers($team, 3);
+    FakeStripe::fake();
+
+    $this->actingAs(planLimitsOwner($team))->post(route('servers.store'), planLimitsServer($team))
+        ->assertSessionHas('error', fn(string $message): bool => str_contains($message, 'Starter includes 3 servers'));
+
+    Http::assertNothingSent();
+});
+
+test('a server being added elsewhere makes the next one wait, then says so', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    FakeStripe::fake([FakeStripe::url('subscriptions/*') => FakeStripe::subscription('sub_x', 'cus_x', 'price_test_pro')]);
+    Sleep::fake(syncWithCarbon: true);
+
+    $lock = Cache::lock("team-servers:{$team->id}", 300);
+
+    expect($lock->get())->toBeTrue();
+
+    $this->actingAs(planLimitsOwner($team))->post(route('servers.store'), planLimitsServer($team))
+        ->assertSessionHas('error', 'Another server is being added to this team. Try again in a moment.');
+
+    $lock->release();
+
+    expect($team->servers()->count())->toBe(0);
 });

@@ -23,6 +23,8 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Failed payment', direct('/overdue/dashboard')],
     ['Starter team settings', direct('/solo/settings/team')],
     ['Billing on a trial', direct('/trial/settings/billing')],
+    ['Billing waiting for stripe', direct('/trial/settings/billing?checkout=success')],
+    ['Billing on an older price', direct('/old-price/settings/billing')],
     ['Billing on a lapsed team', direct('/expired/settings/billing')],
     [
         'Database backups to S3 dialog on Business',

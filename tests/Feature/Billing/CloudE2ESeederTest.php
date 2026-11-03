@@ -13,6 +13,17 @@ use App\Services\Teams\AuditLog;
 use Database\Seeders\CloudE2ESeeder;
 use Tests\Support\CloudBilling;
 
+test('the cloud browser seed has a team on an older price', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $team = Team::query()->where('slug', 'old-price')->firstOrFail();
+
+    expect($team->subscription('default')->unit_amount)->toBe(1500)
+        ->and(app(TeamBilling::class)->status($team)->plan)->toBe(Plan::Pro);
+});
+
 test('the cloud browser seed has a paying team and a team on its trial', function () {
     CloudBilling::enable();
 
@@ -33,7 +44,7 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
         ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['atelier', 'ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
-        ->and($owner->teams()->count())->toBe(8 + 5 * count(CloudE2ESeeder::PROJECTS))
+        ->and($owner->teams()->count())->toBe(9 + 5 * count(CloudE2ESeeder::PROJECTS))
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 
