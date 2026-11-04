@@ -14,6 +14,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
+use App\Models\User;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\GitHubConnector;
 use App\Services\Teams\TeamContext;
@@ -89,7 +90,7 @@ final class SourceProviderConnectController extends Controller
         }
 
         try {
-            $this->store($provider, $team, (string) $request->query('code'));
+            $this->store($provider, $team, (string) $request->query('code'), $request->user());
         } catch (GitProviderException $e) {
             return redirect()->route('source-providers.index')->with('error', $e->getMessage());
         }
@@ -141,11 +142,11 @@ final class SourceProviderConnectController extends Controller
         return $context->explicit() && $context->team()?->isNot($team) ? null : $team;
     }
 
-    private function store(SourceProviderType $provider, Team $team, string $code): void
+    private function store(SourceProviderType $provider, Team $team, string $code, User $user): void
     {
         $tokens = $this->exchange($provider, $code);
 
-        SourceProvider::updateOrCreate(
+        $source = SourceProvider::updateOrCreate(
             ['team_id' => $team->getKey(), 'type' => $provider->value],
             [
                 'name' => $this->accountName($provider, (string) $tokens['access_token']),
@@ -156,6 +157,12 @@ final class SourceProviderConnectController extends Controller
                 'scopes' => $provider->scopes(),
             ],
         );
+
+        activity()
+            ->performedOn($source)
+            ->causedBy($user)
+            ->withProperties(['type' => $provider->label(), 'name' => $source->name])
+            ->log('source_provider_connected');
     }
 
     /**

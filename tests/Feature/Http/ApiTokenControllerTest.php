@@ -7,6 +7,7 @@ use App\Enums\TeamRole;
 use App\Models\ApiToken;
 use App\Models\Team;
 use App\Models\User;
+use Spatie\Activitylog\Models\Activity;
 
 function tokenPageUser(Team $team, TeamRole $role): User
 {
@@ -122,6 +123,51 @@ test('a token can be revoked', function () {
         ->assertRedirect();
 
     expect(ApiToken::count())->toBe(0);
+});
+
+test('creating and revoking a token are recorded against its team', function () {
+    $team = Team::factory()->create();
+    $user = tokenPageUser($team, TeamRole::Owner);
+
+    $this->actingAs($user);
+    $this->post(route('api-tokens.store'), ['name' => 'CI', 'abilities' => [Ability::DeployApplication->value]])->assertRedirect();
+    $plain = (string) session('plainTextToken');
+    $token = ApiToken::query()->where('name', 'CI')->sole();
+    $this->delete(route('api-tokens.destroy', $token->getKey()))->assertRedirect();
+
+    $created = Activity::query()->where('description', 'api_token_created')->sole();
+    $revoked = Activity::query()->where('description', 'api_token_revoked')->sole();
+
+    expect($created->subject?->is($team))->toBeTrue()
+        ->and($created->causer?->is($user))->toBeTrue()
+        ->and($created->properties->toArray())->toBeInAnyKeyOrder(['name' => 'CI', 'abilities' => [Ability::DeployApplication->value]])
+        ->and($revoked->subject?->is($team))->toBeTrue()
+        ->and($revoked->causer?->is($user))->toBeTrue()
+        ->and($revoked->properties->toArray())->toBe(['name' => 'CI'])
+        ->and($plain)->not->toBe('')
+        ->and(json_encode($created->getAttributes()))->not->toContain($plain);
+});
+
+test('a token that failed to revoke records nothing', function () {
+    $team = Team::factory()->create();
+    $mine = tokenPageUser($team, TeamRole::Owner);
+    $theirs = tokenPageUser($team, TeamRole::Owner);
+    $token = $theirs->createToken('theirs', ['server.view'])->accessToken;
+    ApiToken::whereKey($token->getKey())->update(['team_id' => $team->id]);
+
+    $this->actingAs($mine)->delete(route('api-tokens.destroy', $token->getKey()))->assertNotFound();
+
+    expect(Activity::query()->where('description', 'api_token_revoked')->count())->toBe(0);
+});
+
+test('revoking a token with no team records nothing and still works', function () {
+    $user = tokenPageUser(Team::factory()->create(), TeamRole::Owner);
+    $token = $user->createToken('CI', ['server.view'])->accessToken;
+
+    $this->actingAs($user)->delete(route('api-tokens.destroy', $token->getKey()))->assertRedirect()->assertSessionHas('success', 'Token revoked.');
+
+    expect(ApiToken::count())->toBe(0)
+        ->and(Activity::query()->where('description', 'api_token_revoked')->count())->toBe(0);
 });
 
 test('another users token cannot be revoked', function () {

@@ -8,6 +8,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Spatie\Activitylog\Models\Activity;
 
 function connector(Team $team, TeamRole $role): User
 {
@@ -174,6 +175,29 @@ test('a successful callback stores the tokens encrypted with the granted scopes'
         ->and($source->scopes)->toBe(['read_repository', 'read_api', 'api'])
         ->and($source->token_expires_at->isFuture())->toBeTrue()
         ->and($source->team_id)->toBe($team->getKey());
+});
+
+test('connecting a provider is recorded without any token', function () {
+    configureGitLab();
+    Http::fake([
+        'gitlab.com/oauth/token' => Http::response(['access_token' => 'gl-access-never-logged', 'refresh_token' => 'gl-refresh-never-logged', 'expires_in' => 7200]),
+        'gitlab.com/api/v4/user' => Http::response(['username' => 'monoven-labs']),
+    ]);
+    $team = Team::factory()->create();
+    $user = connector($team, TeamRole::Owner);
+
+    $this->actingAs($user)
+        ->withSession([SourceProviderConnectController::STATE_KEY => ['state' => 'good-state', 'type' => 'gitlab', 'team' => $team->id]])
+        ->get(route('source-providers.callback', ['gitlab', 'state' => 'good-state', 'code' => 'a-code']))
+        ->assertRedirect(route('source-providers.index'));
+
+    $activity = Activity::query()->where('description', 'source_provider_connected')->sole();
+    $source = SourceProvider::query()->where('team_id', $team->id)->sole();
+
+    expect($activity->causer?->is($user))->toBeTrue()
+        ->and($activity->subject?->is($source))->toBeTrue()
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['type' => 'GitLab', 'name' => $source->name])
+        ->and(json_encode($activity->getAttributes()))->not->toContain('never-logged');
 });
 
 test('a gitlab callback stores no installation id, even one the query carries', function (bool $existing) {

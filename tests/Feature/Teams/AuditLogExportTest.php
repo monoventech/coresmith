@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Enums\Ability;
 use App\Enums\Plan;
 use App\Enums\TeamRole;
+use App\Models\ApiToken;
 use App\Models\Application;
 use App\Models\CloudProvider;
 use App\Models\GitHubApp;
@@ -17,6 +19,7 @@ use App\Notifications\TeamInvitationNotification;
 use App\Services\Teams\AuditLog;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -118,6 +121,32 @@ test("the team's cloud provider, git provider and github app events are in the e
         ['github_app_registered', 'github_app', 'Coresmith Monoven'],
         ['github_app_removed', 'github_app', 'Coresmith Monoven'],
     ]);
+});
+
+test('disconnecting a git provider and creating and revoking an api token are in the export', function () {
+    Http::fake(['gitlab.com/oauth/revoke' => Http::response([])]);
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+    $owner = auditOwner($team);
+    $source = SourceProvider::factory()->for($team)->create(['type' => 'gitlab', 'name' => 'monoven-gitlab', 'access_token' => 'gitlab-token-never-exported']);
+
+    $this->actingAs($owner);
+    $this->delete(route('source-providers.destroy', $source))->assertRedirect();
+    $this->post(route('api-tokens.store'), ['name' => 'ci-token', 'abilities' => [Ability::DeployApplication->value]])->assertRedirect();
+    $plain = (string) session('plainTextToken');
+    $this->delete(route('api-tokens.destroy', ApiToken::query()->where('name', 'ci-token')->sole()->getKey()))->assertRedirect();
+
+    $response = auditExport($team)->assertOk();
+    $rows = array_values(array_filter(array_slice(auditCsv($response), 1), fn(array $row): bool => $row[3] !== 'audit_log_exported'));
+
+    expect(array_map(fn(array $row): array => [$row[1], $row[3], $row[4], $row[5]], $rows))->toBe([
+        [$owner->name, 'source_provider_disconnected', 'source_provider', 'monoven-gitlab'],
+        [$owner->name, 'api_token_created', 'team', $team->name],
+        [$owner->name, 'api_token_revoked', 'team', $team->name],
+    ])
+        ->and($rows[1][6])->toContain('ci-token')->toContain(Ability::DeployApplication->value)
+        ->and($rows[2][6])->toContain('ci-token')
+        ->and($plain)->not->toBe('')
+        ->and(json_encode($rows))->not->toContain($plain)->not->toContain('gitlab-token-never-exported');
 });
 
 test('provider rows are escaped and redacted like the rest', function () {

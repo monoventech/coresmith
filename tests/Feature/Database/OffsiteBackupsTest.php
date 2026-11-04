@@ -224,7 +224,7 @@ test('a dump that is gone is named and nothing is sent', function () {
 
     offsiteRun(new SendBackupOffsite($database, '/var/coresmith/backups/app_db/app_db-20261018023000.sql.gz'), $transport);
 
-    expect($database->fresh()->last_offsite_error)->toBe('The dump app_db-20261018023000.sql.gz is not on forge-01, so nothing was sent. Back up again.')
+    expect($database->fresh()->last_offsite_error)->toBe('Could not find the dump app_db-20261018023000.sql.gz on forge-01, so nothing was sent. Back up again.')
         ->and($database->fresh()->last_offsite_at)->toBeNull()
         ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, 'curl')))->toBeEmpty();
 });

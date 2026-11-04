@@ -104,6 +104,12 @@ final class SourceProviderController extends Controller
 
         $sourceProvider->disconnect();
 
+        activity()
+            ->performedOn($sourceProvider)
+            ->causedBy($request->user())
+            ->withProperties(['type' => $sourceProvider->type->label(), 'name' => $sourceProvider->name])
+            ->log('source_provider_disconnected');
+
         return back()->with('success', $sourceProvider->type === SourceProviderType::GitHubApp
             ? 'Disconnected. To remove the app\'s access on GitHub too, uninstall it there.'
             : 'Disconnected. Apps keep deploying with their own deploy keys.');

@@ -84,6 +84,12 @@ final class ApiTokenController extends Controller
 
         ApiToken::whereKey($token->accessToken->getKey())->update(['team_id' => $team->getKey()]);
 
+        activity()
+            ->performedOn($team)
+            ->causedBy($user)
+            ->withProperties(['name' => $validated['name'], 'abilities' => $granted])
+            ->log('api_token_created');
+
         return back()->with([
             'success' => 'Token created. Copy it now, it can\'t be shown again.',
             'plainTextToken' => $token->plainTextToken,
@@ -94,13 +100,24 @@ final class ApiTokenController extends Controller
     {
         $user = $request->user();
 
-        $deleted = ApiToken::query()
+        $record = ApiToken::query()
             ->whereKey($token)
             ->where('tokenable_type', $user->getMorphClass())
             ->where('tokenable_id', $user->getKey())
-            ->delete();
+            ->first();
 
-        abort_if($deleted === 0, 404);
+        abort_if($record === null, 404);
+
+        $team = $record->team;
+        $record->delete();
+
+        if ($team !== null) {
+            activity()
+                ->performedOn($team)
+                ->causedBy($user)
+                ->withProperties(['name' => $record->name])
+                ->log('api_token_revoked');
+        }
 
         return back()->with('success', 'Token revoked.');
     }

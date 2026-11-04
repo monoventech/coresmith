@@ -20,7 +20,7 @@ final class OffsiteUploadFailed extends RuntimeException
 
     public static function dumpMissing(string $file, string $server): self
     {
-        return new self("The dump {$file} is not on {$server}, so nothing was sent. Back up again.");
+        return new self("Could not find the dump {$file} on {$server}, so nothing was sent. Back up again.");
     }
 
     public static function noAddress(): self
