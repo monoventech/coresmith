@@ -298,3 +298,90 @@ test('a server being added elsewhere makes the next one wait, then says so', fun
 
     expect($team->servers()->count())->toBe(0);
 });
+
+function planLimitsTeams(): array
+{
+    $lapsed = Team::factory()->trialEnded()->owned()->create();
+    $owner = planLimitsOwner($lapsed);
+    $pro = Team::factory()->subscribed(Plan::Pro)->create(['owner_id' => $owner->id]);
+    $pro->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    FakeStripe::fake([FakeStripe::url('subscriptions/*') => FakeStripe::subscription('sub_x', 'cus_x', 'price_test_pro')]);
+
+    return [$lapsed, $pro, $owner];
+}
+
+test('a paying team named from a lapsed team\'s context gets its server', function () {
+    [$lapsed, $pro, $owner] = planLimitsTeams();
+
+    $owner->forceFill(['current_team_id' => $lapsed->id])->save();
+
+    $response = $this->actingAs($owner->fresh())->post(route('servers.store'), planLimitsServer($pro))->assertSessionMissing('error');
+
+    expect($pro->servers()->count())->toBe(1)
+        ->and($lapsed->servers()->count())->toBe(0)
+        ->and(parse_url((string) $response->headers->get('Location'), PHP_URL_PATH))->toBe('/servers/' . $pro->servers()->sole()->id);
+});
+
+test('a lapsed team named from a paying team\'s context is refused for the lapsed team', function () {
+    [$lapsed, $pro, $owner] = planLimitsTeams();
+
+    $owner->forceFill(['current_team_id' => $pro->id])->save();
+
+    $this->actingAs($owner->fresh())->post(route('servers.store'), planLimitsServer($lapsed))
+        ->assertSessionHas('error', "This team's trial has ended, so it is read-only. Servers and apps keep running. Choose a plan in Billing settings to make changes again.");
+
+    expect($lapsed->servers()->count())->toBe(0)
+        ->and($pro->servers()->count())->toBe(0);
+});
+
+test('a server added on another team\'s address opens on its own team\'s address', function () {
+    [$lapsed, $pro, $owner] = planLimitsTeams();
+
+    $response = $this->actingAs($owner)->post("/{$lapsed->slug}/servers", planLimitsServer($pro));
+    $server = $pro->servers()->sole();
+
+    $response->assertRedirect(url("/{$pro->slug}/servers/{$server->id}"))
+        ->assertSessionHas('success', 'Server added. Add the public key to it, then test the connection.');
+
+    $this->get("/{$pro->slug}/servers/{$server->id}")->assertOk();
+});
+
+test('an inertia form follows the move to the other team\'s address with a full visit', function () {
+    [$lapsed, $pro, $owner] = planLimitsTeams();
+
+    $response = $this->actingAs($owner)->withHeaders(['X-Inertia' => 'true', 'X-Requested-With' => 'XMLHttpRequest'])->post("/{$lapsed->slug}/servers", planLimitsServer($pro));
+    $server = $pro->servers()->sole();
+
+    $response->assertStatus(409)->assertHeader('X-Inertia-Location', url("/{$pro->slug}/servers/{$server->id}"));
+});
+
+test('a server added on its own team\'s address stays there', function () {
+    [, $pro, $owner] = planLimitsTeams();
+
+    $response = $this->actingAs($owner)->withHeaders(['X-Inertia' => 'true', 'X-Requested-With' => 'XMLHttpRequest'])->post("/{$pro->slug}/servers", planLimitsServer($pro));
+    $server = $pro->servers()->sole();
+
+    $response->assertStatus(302);
+
+    expect(parse_url((string) $response->headers->get('Location'), PHP_URL_PATH))->toBe("/{$pro->slug}/servers/{$server->id}");
+});
+
+test('a form naming no team the user can use is still refused', function () {
+    [$lapsed, , $owner] = planLimitsTeams();
+    $stranger = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+
+    $this->actingAs($owner)->post("/{$lapsed->slug}/servers", planLimitsServer($stranger))->assertForbidden();
+
+    expect($stranger->servers()->count())->toBe(0);
+});
+
+test('other writes on a lapsed team\'s address are still refused', function () {
+    [$lapsed, $pro, $owner] = planLimitsTeams();
+    $server = Server::factory()->for($lapsed)->create(['status' => ServerStatus::Active]);
+
+    $this->actingAs($owner)->post("/{$lapsed->slug}/servers/{$server->id}/databases", ['name' => 'shop'])
+        ->assertSessionHas('error', "This team's trial has ended, so it is read-only. Servers and apps keep running. Choose a plan in Billing settings to make changes again.");
+
+    expect($pro->servers()->count())->toBe(0);
+});

@@ -52,7 +52,7 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $this->signedIn($request->user()),
             ],
             'appName' => Edition::current()->isCloud() ? config('app.name') : InstanceSetting::get('instance_name', config('app.name')),
             'edition' => Edition::current()->value,
@@ -62,6 +62,19 @@ class HandleInertiaRequests extends Middleware
             'palette' => Inertia::optional(fn(): array => $request->user() === null
                 ? []
                 : (new CommandPalette($request->user(), app(TeamContext::class)->team()))->commands()),
+        ];
+    }
+
+    /**
+     * @return array{id: string, name: string, email: string, email_verified_at: ?string}|null
+     */
+    private function signedIn(?User $user): ?array
+    {
+        return $user === null ? null : [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'email_verified_at' => $user->email_verified_at?->toISOString(),
         ];
     }
 

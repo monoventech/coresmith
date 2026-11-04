@@ -91,6 +91,20 @@ test.describe('changing the plan on coresmith cloud', () => {
         await expect(page.getByRole('heading', { name: 'Stripe billing portal (test double)' })).toBeVisible()
     })
 
+    test('a failed payment with no card on file can still reach stripe', async ({ page }) => {
+        await page.goto('/no-card/dashboard')
+        await page.getByTestId('billing-banner').getByRole('link', { name: 'Update payment method' }).click()
+        await page.waitForURL(/\/no-card\/settings\/billing$/)
+
+        const card = page.getByTestId('payment-card')
+
+        await expect(card).toContainText('No card shown here yet. Add or update it at Stripe.')
+
+        await card.getByRole('button', { name: 'Update' }).click()
+
+        await expect(page.getByRole('heading', { name: 'Stripe billing portal (test double)' })).toBeVisible()
+    })
+
     test('coming back from checkout', async ({ page }) => {
         await page.goto('/monoven/settings/billing?checkout=cancelled')
 

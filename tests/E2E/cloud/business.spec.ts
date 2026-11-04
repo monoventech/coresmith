@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { dialog, expect, own, test, toast } from '../support/fixtures'
+import { dialog, expect, own, pageData, test, toast } from '../support/fixtures'
 
 test.describe('business features on coresmith cloud', () => {
     test.afterEach(async ({ page }) => {
@@ -53,7 +53,11 @@ test.describe('database backups to s3 on coresmith cloud', () => {
 
         await expect(toast(page)).toContainText('Saved.')
         await expect(card).toContainText('s3://vault-backups/')
-        expect(await page.content()).not.toContain('an-e2e-secret-access-key')
+
+        const data = await pageData(page)
+
+        expect(data).toContain('vault-backups')
+        expect(data).not.toContain('an-e2e-secret-access-key')
 
         await card.getByRole('button', { name: 'Remove' }).click()
         await dialog(page).getByRole('button', { name: 'Remove destination' }).click()
@@ -68,6 +72,39 @@ test.describe('database backups to s3 on coresmith cloud', () => {
 
         await expect(card).toContainText('Database backups to S3 are part of Business.')
         await expect(card.getByRole('button', { name: 'Set up' })).toHaveCount(0)
+    })
+
+    test('a team below business can still see and remove its destination', async ({ page }, testInfo) => {
+        await page.goto(`/${own(testInfo, 'leftover')}/settings/team`)
+
+        const card = page.getByTestId('offsite-backups-card')
+
+        await expect(card).toContainText('Database backups to S3 are part of Business.')
+        await expect(card).toContainText('s3://leftover-backups/')
+        await expect(card.getByText('On', { exact: true })).toHaveCount(0)
+        await expect(card.getByRole('button', { name: 'Change' })).toHaveCount(0)
+        await expect(card.getByRole('button', { name: 'Set up' })).toHaveCount(0)
+
+        await card.getByRole('button', { name: 'Remove' }).click()
+        await dialog(page).getByRole('button', { name: 'Remove destination' }).click()
+
+        await expect(toast(page)).toContainText('Removed. Databases are no longer sent to S3.')
+        await expect(card).not.toContainText('s3://leftover-backups/')
+        await expect(card).toContainText('Database backups to S3 are part of Business.')
+        await expect(card.getByRole('button', { name: 'Remove' })).toHaveCount(0)
+    })
+
+    test('a redis database says nothing about s3', async ({ page }) => {
+        await page.goto('/atelier/dashboard')
+        await page.getByTestId('server-card').getByRole('link', { name: 'atelier-01', exact: true }).click()
+        await page
+            .getByRole('navigation', { name: 'Server sections' })
+            .getByRole('link', { name: 'Databases', exact: true })
+            .click()
+        await page.getByTestId('databases-table').getByRole('link').filter({ hasText: 'atelier_cache' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'atelier_cache', exact: true })).toBeVisible()
+        await expect(page.getByTestId('offsite-status')).toHaveCount(0)
     })
 
     test('a failing database shows on the team tab and on its own page', async ({ page }) => {

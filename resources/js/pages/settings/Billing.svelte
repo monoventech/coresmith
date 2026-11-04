@@ -13,6 +13,7 @@
     const POLLED = [
         'plan',
         'payment',
+        'portal',
         'payment_note',
         'invoices',
         'invoice_count',
@@ -27,6 +28,7 @@
         can_manage,
         plan,
         payment,
+        portal = false,
         payment_note,
         invoices = [],
         invoice_count = 0,
@@ -146,18 +148,18 @@
                             >expires {payment.expires}</span
                         >
                     {/if}
-                    {#if can_manage}
-                        <span class="ml-auto"
-                            ><Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={working}
-                                onclick={() => post(route('settings.billing.portal'))}>Update</Button
-                            ></span
-                        >
-                    {/if}
                 {:else}
                     <span class="min-w-0 flex-1 text-muted-foreground">{payment_note}</span>
+                {/if}
+                {#if portal}
+                    <span class="ml-auto"
+                        ><Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={working}
+                            onclick={() => post(route('settings.billing.portal'))}>Update</Button
+                        ></span
+                    >
                 {/if}
             </div>
         </div>

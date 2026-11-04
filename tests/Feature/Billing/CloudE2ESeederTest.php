@@ -44,7 +44,7 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
         ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['atelier', 'ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
-        ->and($owner->teams()->count())->toBe(9 + 5 * count(CloudE2ESeeder::PROJECTS))
+        ->and($owner->teams()->count())->toBe(11 + 6 * count(CloudE2ESeeder::PROJECTS))
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 

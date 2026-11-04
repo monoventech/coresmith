@@ -7,6 +7,7 @@
     let { note }: { note: string } = $props()
 
     const billing = $derived(page.props.billing)
+    const action = $derived(billing?.read_only ? billing.banner?.action : 'Change plan')
 </script>
 
 <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="plan-note">
@@ -15,9 +16,9 @@
         <Link
             href={billing.href}
             class="focus-ring rounded-sm font-medium text-primary-strong no-underline underline-offset-4 hover:underline"
-            >Change plan</Link
+            >{action}</Link
         >
-    {:else}
+    {:else if !billing?.read_only}
         Ask an owner to change the plan.
     {/if}
 </p>

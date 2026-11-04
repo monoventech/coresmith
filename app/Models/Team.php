@@ -34,6 +34,19 @@ class Team extends Model
 
     protected $fillable = ['name', 'slug', 'owner_id'];
 
+    protected $hidden = [
+        'stripe_id',
+        'pm_type',
+        'pm_last_four',
+        'pm_expires',
+        'trial_ends_at',
+        'trial_reminded_at',
+        'pending_checkout_id',
+        'subscriptions',
+        'billingInvoices',
+        'backupDestination',
+    ];
+
     protected static function booted(): void
     {
         static::creating(function (Team $team): void {

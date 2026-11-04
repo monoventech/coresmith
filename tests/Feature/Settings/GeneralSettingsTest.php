@@ -246,3 +246,23 @@ test('general settings require authentication', function () {
     $this->put(route('settings.instance.update'), ['instance_name' => 'x'])->assertRedirect(route('login'));
     $this->post(route('settings.backups.store'))->assertRedirect(route('login'));
 });
+
+test('cloud customers are not told about the operator\'s panel', function () {
+    generalSettingsArchive('coresmith-2026-09-13.tar.gz', CarbonImmutable::parse('2026-09-13 04:00:00'));
+    InstanceSetting::put('notification_email', 'ops@example.com');
+    InstanceSetting::put('installed_at', '2026-08-08T10:00:00+00:00');
+
+    $user = generalSettingsUser(TeamRole::Owner);
+
+    $this->actingAs($user)->get(route('settings.general'))->assertInertia(fn($page) => $page
+        ->where('instance.notification_email', 'ops@example.com')
+        ->where('instance.installed', 'Aug 8, 2026')
+        ->where('backups.last.when', 'today 04:00'));
+
+    config(['coresmith.edition' => 'cloud']);
+
+    $this->actingAs($user)->get(route('settings.general'))->assertInertia(fn($page) => $page
+        ->where('instance.notification_email', null)
+        ->where('instance.installed', null)
+        ->where('backups.last', null));
+});

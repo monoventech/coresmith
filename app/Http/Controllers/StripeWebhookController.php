@@ -25,6 +25,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class StripeWebhookController extends WebhookController
 {
+    private const INCOMPLETE_EXPIRES_HOURS = 23;
+
     private const ENDED = 5;
 
     private const STATUS_RANKS = [
@@ -60,11 +62,11 @@ final class StripeWebhookController extends WebhookController
             return $this->successMethod();
         }
 
-        $first = $this->localSubscription($team, $data)?->synced_at === null;
+        if ($this->localSubscription($team, $data) === null && ($data['status'] ?? null) === 'incomplete' && $this->createdAt($payload)->lt(CarbonImmutable::now()->subHours(self::INCOMPLETE_EXPIRES_HOURS))) {
+            return $this->successMethod();
+        }
 
-        parent::handleCustomerSubscriptionCreated($payload);
-
-        $this->sync($team, $data, $payload, $first);
+        $this->storeCreated($team, $data, $payload);
 
         return $this->successMethod();
     }
@@ -132,9 +134,11 @@ final class StripeWebhookController extends WebhookController
 
         $wasRunning = $this->running($team);
 
-        parent::handleCustomerDeleted($payload);
+        $team->subscriptions()->get()
+            ->reject(fn(Subscription $subscription): bool => $subscription->ended())
+            ->each(fn(Subscription $subscription) => $subscription->skipTrial()->markAsCanceled());
 
-        $team->forceFill(['pm_expires' => null, 'pending_checkout_id' => null])->save();
+        $team->forceFill(['stripe_id' => null, 'pm_type' => null, 'pm_last_four' => null, 'pm_expires' => null, 'pending_checkout_id' => null])->save();
 
         if ($wasRunning) {
             $this->planEnded($team);
@@ -164,7 +168,9 @@ final class StripeWebhookController extends WebhookController
         $subscription = is_string($session['subscription'] ?? null) ? $team->stripe()->subscriptions->retrieve($session['subscription']) : null;
 
         if ($subscription !== null && $this->localSubscription($team, ['id' => $subscription->id]) === null) {
-            $this->handleCustomerSubscriptionCreated(['created' => $payload['created'] ?? null, 'data' => ['object' => $subscription->toArray()]]);
+            $data = $subscription->toArray();
+
+            $this->storeCreated($team, $data, ['created' => $payload['created'] ?? null, 'data' => ['object' => $data]]);
         }
 
         if ($team->pending_checkout_id !== null && $team->pending_checkout_id === ($session['id'] ?? null)) {
@@ -231,6 +237,15 @@ final class StripeWebhookController extends WebhookController
         }
 
         return $this->successMethod();
+    }
+
+    private function storeCreated(Team $team, array $data, array $payload): void
+    {
+        $first = $this->localSubscription($team, $data)?->synced_at === null;
+
+        parent::handleCustomerSubscriptionCreated($payload);
+
+        $this->sync($team, $data, $payload, $first);
     }
 
     private function sync(Team $team, array $data, array $payload, bool $first): void

@@ -8,6 +8,7 @@ import {
     gotoServer,
     isMobile,
     own,
+    pageData,
     tabs,
     test,
     toast,
@@ -292,8 +293,9 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(key).toContainText('monoventech/atlas')
         await expect(key.getByRole('button', { name: 'Copy public key' })).toBeVisible()
 
-        const html = await page.content()
+        const html = await pageData(page)
 
+        expect(html).toContain('monoventech/atlas')
         expect(html).not.toContain('BEGIN OPENSSH PRIVATE KEY')
         expect(html).not.toContain('deploy_key_private')
     })

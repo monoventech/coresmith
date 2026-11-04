@@ -51,6 +51,22 @@ test.describe('read-only teams on coresmith cloud', () => {
         ).toBeVisible()
     })
 
+    test('a plan that ended gives the reason on its cards and keeps the destination removable', async ({ page }) => {
+        await page.goto('/ended-business/settings/team')
+
+        const reason = "This team's plan has ended, so it is read-only."
+        const offsite = page.getByTestId('offsite-backups-card')
+        const audit = page.getByTestId('audit-log-card')
+
+        await expect(offsite.getByTestId('plan-note')).toContainText(reason)
+        await expect(offsite.getByTestId('plan-note').getByRole('link', { name: 'Choose a plan' })).toBeVisible()
+        await expect(offsite).toContainText('s3://ended-backups/')
+        await expect(offsite.getByRole('button', { name: 'Remove' })).toBeVisible()
+        await expect(offsite.getByRole('button', { name: 'Change' })).toHaveCount(0)
+        await expect(audit.getByTestId('plan-note')).toContainText(reason)
+        await expect(page.getByRole('main')).not.toContainText('part of Business')
+    })
+
     test('the banner fits a phone', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'Only phones are narrow enough to scroll sideways')
 

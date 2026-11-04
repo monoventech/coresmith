@@ -71,6 +71,7 @@ export type BillingPage = {
         self_host: boolean
     }
     payment: { label: string; expires: string | null } | null
+    portal: boolean
     payment_note: string
     invoices: {
         id: string

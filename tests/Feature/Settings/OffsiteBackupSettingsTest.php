@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\DatabaseType;
 use App\Enums\Plan;
 use App\Enums\TeamRole;
 use App\Jobs\BackupDatabase;
@@ -224,4 +225,32 @@ test('a backup started by hand goes to s3 when the team sends them there', funct
 
     Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($database) && $job->offsite);
     Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($proDatabase) && !$job->offsite);
+});
+
+test('the database page states s3 facts only for databases that go to s3', function (Closure $team, DatabaseType $type, bool $facts) {
+    $team = $team();
+    BackupDestination::factory()->for($team)->create();
+    $server = Server::factory()->for($team)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['type' => $type, 'last_offsite_at' => now()->subHours(2)]);
+
+    $this->actingAs(offsiteSettingsOwner($team))->get(route('servers.databases.show', [$server, $database]))
+        ->assertInertia(fn($page) => $page->where('offsite', $facts ? ['sent' => 'today 10:00', 'error' => null] : null));
+})->with([
+    'postgresql on business' => [fn() => Team::factory()->subscribed(Plan::Business)->owned()->create(), DatabaseType::Postgresql, true],
+    'mysql on business' => [fn() => Team::factory()->subscribed(Plan::Business)->owned()->create(), DatabaseType::Mysql, true],
+    'redis on business' => [fn() => Team::factory()->subscribed(Plan::Business)->owned()->create(), DatabaseType::Redis, false],
+    'postgresql on pro with a destination left over' => [fn() => Team::factory()->subscribed(Plan::Pro)->owned()->create(), DatabaseType::Postgresql, false],
+    'postgresql on a lapsed team' => [fn() => Team::factory()->trialEnded()->owned()->create(), DatabaseType::Postgresql, false],
+]);
+
+test('a redis backup started by hand does not claim to go to s3', function () {
+    Queue::fake();
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+    BackupDestination::factory()->for($team)->create();
+    $server = Server::factory()->for($team)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['type' => DatabaseType::Redis]);
+
+    $this->actingAs(offsiteSettingsOwner($team))->post(route('servers.databases.backup', [$server, $database]));
+
+    Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->offsite === false);
 });

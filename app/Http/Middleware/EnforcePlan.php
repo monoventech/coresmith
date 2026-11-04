@@ -52,6 +52,8 @@ final class EnforcePlan
         'settings.offsite-backups.destroy',
     ];
 
+    public const NAMES_ITS_OWN_TEAM = ['servers.store'];
+
     public const BLOCKED_READS = ['source-providers.connect', 'source-providers.callback', 'github-apps.registered'];
 
     public function __construct(private readonly PlanGate $gate, private readonly TeamContext $context) {}
@@ -70,7 +72,7 @@ final class EnforcePlan
             return $next($request);
         }
 
-        if (in_array($route, self::OPEN_WHILE_READ_ONLY, true) || $request->is('broadcasting/auth')) {
+        if (in_array($route, self::OPEN_WHILE_READ_ONLY, true) || in_array($route, self::NAMES_ITS_OWN_TEAM, true) || $request->is('broadcasting/auth')) {
             return $next($request);
         }
 

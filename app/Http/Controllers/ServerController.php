@@ -32,11 +32,13 @@ use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamContext;
+use App\Services\Teams\TeamUrls;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 final class ServerController extends Controller
 {
@@ -65,7 +67,7 @@ final class ServerController extends Controller
         ]);
     }
 
-    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans): RedirectResponse
+    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls): HttpResponse
     {
         $team = Team::query()->findOrFail($request->validated('team_id'));
 
@@ -82,8 +84,15 @@ final class ServerController extends Controller
 
         activity()->performedOn($server)->log('server_added');
 
-        return to_route('servers.show', $server)
-            ->with('success', 'Server added. Add the public key to it, then test the connection.');
+        $added = 'Server added. Add the public key to it, then test the connection.';
+
+        if ($context->explicit() && $context->team()?->isNot($team)) {
+            $request->session()->flash('success', $added);
+
+            return Inertia::location($urls->pathUrl($team, $request) . route('servers.show', $server, false));
+        }
+
+        return to_route('servers.show', $server)->with('success', $added);
     }
 
     public function show(Request $request, Server $server, ServerPresenter $presenter): Response

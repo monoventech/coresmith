@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { asMember, dialog, expect, gotoSettings, isMobile, test } from './support/fixtures'
+import { asMember, dialog, expect, gotoSettings, isMobile, pageData, test } from './support/fixtures'
 
 test.describe('git settings', () => {
     test('the connected GitHub App shows where it is installed and when its token rotates', async ({ page }) => {
@@ -111,7 +111,7 @@ test.describe('git settings', () => {
     test('no credential reaches the page', async ({ page }) => {
         await gotoSettings(page, 'Git')
 
-        const html = await page.content()
+        const html = await pageData(page)
 
         expect(html).not.toContain('ghs_demo_never_rendered')
         expect(html).not.toContain('access_token')

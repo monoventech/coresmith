@@ -1,4 +1,4 @@
-import { expect, test } from '../support/fixtures'
+import { expect, own, test, toast } from '../support/fixtures'
 
 test.describe('plan limits on coresmith cloud', () => {
     test.afterEach(async ({ page }) => {
@@ -17,6 +17,26 @@ test.describe('plan limits on coresmith cloud', () => {
 
         await expect(page.getByTestId('server-limit')).toContainText('Starter includes 3 servers and this team has 3.')
         await expect(page.getByRole('button', { name: 'Add server' })).toBeDisabled()
+    })
+
+    test("a lapsed team's address can add a server to a paying team", async ({ page }, testInfo) => {
+        const name = `paid-from-lapsed-${testInfo.retry}`
+
+        await page.goto('/expired/servers/create')
+        await page.getByLabel('Provider').selectOption('manual')
+        await expect(page.getByTestId('server-limit')).toContainText("This team's trial has ended")
+
+        await page.getByLabel('Team').selectOption({ label: own(testInfo, 'Vault', ' ') })
+
+        await expect(page.getByTestId('server-limit')).toHaveCount(0)
+
+        await page.getByLabel('Server name').fill(name)
+        await page.getByLabel('IP address').fill('203.0.113.77')
+        await page.getByRole('button', { name: 'Add server' }).click()
+
+        await page.waitForURL(new RegExp(`/${own(testInfo, 'vault')}/servers/[A-Za-z0-9]+$`))
+        await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+        await expect(toast(page)).toContainText('Server added.')
     })
 
     test('starter cannot invite', async ({ page }) => {

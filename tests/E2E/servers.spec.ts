@@ -6,6 +6,7 @@ import {
     gotoServerTab,
     isMobile,
     own,
+    pageData,
     tabComesIntoViewAsStripNarrows,
     tabs,
     tabStaysInViewAsTabsWiden,
@@ -171,8 +172,9 @@ test.describe('a server', () => {
     test('the private half of the server key never reaches the page', async ({ page }) => {
         await gotoServerTab(page, 'forge-01', 'Hardening')
 
-        const html = await page.content()
+        const html = await pageData(page)
 
+        expect(html).toContain('forge-01')
         expect(html).not.toContain('BEGIN OPENSSH PRIVATE KEY')
         expect(html).not.toContain('ssh_private_key')
     })

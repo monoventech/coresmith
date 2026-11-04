@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\Edition;
 use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Jobs\BackUpPanel;
@@ -37,8 +38,9 @@ final class GeneralSettingsController extends Controller
 
     public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates): Response
     {
-        $installed = InstanceSetting::get('installed_at');
-        $latest = $backups->latest();
+        $cloud = Edition::current()->isCloud();
+        $installed = $cloud ? null : InstanceSetting::get('installed_at');
+        $latest = $cloud ? null : $backups->latest();
 
         return Inertia::render('settings/General', [
             'instance' => [
@@ -46,7 +48,7 @@ final class GeneralSettingsController extends Controller
                 'version' => (string) config('coresmith.version', '0.1.0'),
                 'installed' => is_string($installed) ? CarbonImmutable::parse($installed)->format('M j, Y') : null,
                 'timezone' => InstanceSetting::get('timezone', config('app.timezone')),
-                'notification_email' => InstanceSetting::get('notification_email'),
+                'notification_email' => $cloud ? null : InstanceSetting::get('notification_email'),
             ],
             'backups' => [
                 'last' => $latest === null ? null : [

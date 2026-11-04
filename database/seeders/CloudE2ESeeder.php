@@ -64,10 +64,13 @@ final class CloudE2ESeeder extends Seeder
         $this->fleetTeam($tenant->owner);
         $this->businessTeam($tenant->owner);
         $this->oldPriceTeam($tenant->owner);
+        $this->noCardTeam($tenant->owner);
+        $this->endedBusinessTeam($tenant->owner);
 
         foreach (self::PROJECTS as $code) {
             $this->planChangeTeams($tenant->owner, $code);
             $this->vaultTeam($tenant->owner, $code);
+            $this->leftoverTeam($tenant->owner, $code);
         }
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
@@ -162,6 +165,7 @@ final class CloudE2ESeeder extends Seeder
             'last_offsite_at' => now()->subHours(2),
             'last_offsite_key' => 'nightly/atelier/atelier-01/atelier_main/atelier_main-' . now()->subHours(2)->format('YmdHis') . '.sql.gz',
         ]);
+        ManagedDatabase::factory()->for($team)->for($server)->create(['type' => DatabaseType::Redis, 'name' => 'atelier_cache']);
         ManagedDatabase::factory()->for($team)->for($server)->create([
             'type' => DatabaseType::Mysql,
             'name' => 'atelier_legacy',
@@ -175,6 +179,32 @@ final class CloudE2ESeeder extends Seeder
         $team->forceFill(['stripe_id' => 'cus_e2e_old_price'])->save();
 
         Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create(['renews_at' => now()->addDays(13), 'unit_amount' => 1500, 'currency' => 'usd']);
+    }
+
+    private function noCardTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'No Card', 'no-card');
+        $team->forceFill(['stripe_id' => 'cus_e2e_no_card'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->status('past_due')->create();
+    }
+
+    private function endedBusinessTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Ended Business', 'ended-business');
+        $team->forceFill(['stripe_id' => 'cus_e2e_ended_business'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Business)->ended(now()->subDays(2))->create();
+        BackupDestination::factory()->for($team)->create(['region' => 'eu-central-1', 'bucket' => 'ended-backups', 'prefix' => null]);
+    }
+
+    private function leftoverTeam(User $owner, string $code): void
+    {
+        $team = $this->ownedTeam($owner, "Leftover {$code}", "leftover-{$code}");
+        $team->forceFill(['stripe_id' => "cus_e2e_leftover_{$code}"])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create();
+        BackupDestination::factory()->for($team)->create(['region' => 'eu-central-1', 'bucket' => 'leftover-backups', 'prefix' => null]);
     }
 
     private function vaultTeam(User $owner, string $code): void

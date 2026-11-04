@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\Plan;
 use App\Enums\TeamRole;
+use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvoice;
 use App\Models\User;
@@ -113,3 +114,25 @@ test('a business team is missing nothing', function () {
 
     expect(array_filter(billingBannerSummary($team)['notes']))->toBe([]);
 });
+
+test('a read-only team\'s notes give the reason, not the plan', function (Closure $team, string $title) {
+    $notes = billingBannerSummary($team())['notes'];
+
+    expect($notes)->toBe([
+        'members' => null,
+        'custom_domain' => $title,
+        'single_sign_on' => $title,
+        'offsite_backups' => $title,
+        'audit_log_export' => $title,
+    ]);
+})->with([
+    'a trial that ended' => [fn() => Team::factory()->trialEnded()->owned()->create(), "This team's trial has ended, so it is read-only."],
+    'a business plan that ended' => [function () {
+        $team = Team::factory()->owned()->create();
+        Subscription::factory()->plan(Plan::Business)->ended(now()->subDay())->for($team, 'owner')->create();
+
+        return $team;
+    }, "This team's plan has ended, so it is read-only."],
+    'payments that failed' => [fn() => Team::factory()->subscribed(Plan::Business, 'unpaid')->owned()->create(), "This team's payments failed, so it is read-only."],
+    'no plan at all' => [fn() => Team::factory()->owned()->create(), 'This team has no plan yet, so it is read-only.'],
+]);

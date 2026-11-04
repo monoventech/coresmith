@@ -1,11 +1,13 @@
-import { asGuest, asMember, dialog, expect, own, test, toast } from './support/fixtures'
+import { asGuest, asMember, dialog, expect, own, pageData, test, toast } from './support/fixtures'
 
 test.describe('single sign-on settings', () => {
     test.afterEach(async ({ page }) => {
         await page.goto('/monoven/dashboard')
     })
 
-    test('an owner sets it up, is shown the record that proves the domain, and removes it', async ({ page }, testInfo) => {
+    test('an owner sets it up, is shown the record that proves the domain, and removes it', async ({
+        page
+    }, testInfo) => {
         const slug = own(testInfo, 'lab')
 
         await page.goto(`/${slug}/settings/team`)
@@ -25,7 +27,11 @@ test.describe('single sign-on settings', () => {
         await expect(card).toContainText('Waiting for DNS')
         await expect(card).toContainText('Saved, never shown')
         await expect(card.getByTestId('sso-dns-record')).toContainText(`_coresmith-sso.${slug}.test`)
-        expect(await page.content()).not.toContain('an-e2e-client-secret')
+
+        const data = await pageData(page)
+
+        expect(data).toContain('coresmith-e2e')
+        expect(data).not.toContain('an-e2e-client-secret')
 
         await card.getByRole('button', { name: 'Check DNS' }).click()
         await expect(toast(page)).toContainText('The TXT record is not visible yet.')
@@ -64,14 +70,17 @@ asMember.describe('single sign-on as a deployer', () => {
 })
 
 asGuest.describe('signing in with single sign-on', () => {
-    asGuest('a team that uses it offers it on its sign-in page and says when the provider cannot be reached', async ({ page }) => {
-        await page.goto('/northwind/login')
+    asGuest(
+        'a team that uses it offers it on its sign-in page and says when the provider cannot be reached',
+        async ({ page }) => {
+            await page.goto('/northwind/login')
 
-        await page.getByTestId('sso-entry').getByRole('link', { name: 'Continue with single sign-on' }).click()
+            await page.getByTestId('sso-entry').getByRole('link', { name: 'Continue with single sign-on' }).click()
 
-        await expect(toast(page)).toContainText('Coresmith could not reach your identity provider.')
-        await expect(page).toHaveURL(/\/northwind\/login$/)
-    })
+            await expect(toast(page)).toContainText('Coresmith could not reach your identity provider.')
+            await expect(page).toHaveURL(/\/northwind\/login$/)
+        }
+    )
 
     asGuest('the sign-in page leads to single sign-on, which finds the team from a work email', async ({ page }) => {
         await page.goto('/login')
@@ -91,6 +100,10 @@ asGuest.describe('signing in with single sign-on', () => {
         await page.getByLabel('Work email').fill('someone@nowhere.test')
         await page.getByRole('button', { name: 'Continue' }).click()
 
-        await expect(page.getByText('No team signs in with single sign-on for that email domain. Sign in with your password instead.')).toBeVisible()
+        await expect(
+            page.getByText(
+                'No team signs in with single sign-on for that email domain. Sign in with your password instead.'
+            )
+        ).toBeVisible()
     })
 })

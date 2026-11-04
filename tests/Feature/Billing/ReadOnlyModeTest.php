@@ -10,8 +10,10 @@ use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Exceptions\PlanRefusal;
 use App\Http\Middleware\EnforcePlan;
+use App\Jobs\RunCloudTask;
 use App\Models\ApiToken;
 use App\Models\Application;
+use App\Models\BackupDestination;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
@@ -33,6 +35,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\CloudBilling;
+use Tests\Support\FakeStripe;
 
 function readOnlyTrialMessage(): string
 {
@@ -108,7 +111,7 @@ test('a read-only team cannot change anything on the web', function (Closure $wr
     'deploy' => [fn($test, Team $team, Application $app) => $test->post(route('servers.applications.deploy', [$app->server, $app]))],
     'environment' => [fn($test, Team $team, Application $app) => $test->put(route('servers.applications.env.update', [$app->server, $app]), ['env' => "APP_ENV=production\n"])],
     'maintenance' => [fn($test, Team $team, Application $app) => $test->put(route('servers.applications.maintenance', [$app->server, $app]), ['enabled' => true])],
-    'a new server' => [fn($test, Team $team, Application $app) => $test->post(route('servers.store'), ['team_id' => $team->id, 'name' => 'web-2', 'ip_address' => '203.0.113.20'])],
+    'a new server' => [fn($test, Team $team, Application $app) => $test->post(route('servers.store'), ['team_id' => $team->id, 'name' => 'web-2', 'ip_address' => '203.0.113.20', 'ssh_port' => 22, 'ssh_user' => 'root'])],
     'a database' => [fn($test, Team $team, Application $app) => $test->post(route('servers.databases.store', $app->server), ['name' => 'shop'])],
     'a teammate' => [fn($test, Team $team, Application $app) => $test->post(route('teams.members.store', $team), ['email' => 'new@example.com', 'role' => 'member'])],
     'an ssh key' => [fn($test, Team $team, Application $app) => $test->post(route('ssh-keys.store'), ['name' => 'laptop', 'public_key' => 'ssh-ed25519 AAAA'])],
@@ -130,48 +133,136 @@ test('a read-only team cannot change anything through the api', function () {
     Queue::assertNothingPushed();
 });
 
-test('a read-only team can still leave, secure itself, shrink and pay', function (Closure $request) {
-    Http::fake();
+test('a read-only team can still leave, secure itself, shrink and pay', function (Closure $action) {
+    FakeStripe::fake([
+        FakeStripe::url('customers') => Http::response(FakeStripe::customer('cus_read_only')),
+        FakeStripe::url('checkout/sessions') => Http::response(FakeStripe::checkoutSession('cs_read_only', 'https://checkout.stripe.com/c/pay/cs_read_only')),
+        FakeStripe::url('billing_portal/sessions') => Http::response(FakeStripe::portalSession('https://billing.stripe.com/p/session/read_only')),
+        '*' => Http::response(),
+    ]);
     $team = readOnlyTeam();
     $owner = readOnlyOwner($team);
     $this->actingAs($owner);
 
-    $response = $request($this, $team, $owner);
+    $action($this, $team, $owner);
 
-    expect($response->getStatusCode())->not->toBe(402)
-        ->and(session('error'))->not->toBe(readOnlyTrialMessage());
+    expect(session('error'))->not->toBe(readOnlyTrialMessage());
 })->with([
-    'sign out' => [fn($test, Team $team, User $owner) => $test->post(route('logout'))],
-    'switch team' => [fn($test, Team $team, User $owner) => $test->put(route('current-team.update'), ['team_id' => $team->id])],
-    'remove an ssh key' => [fn($test, Team $team, User $owner) => $test->delete(route('ssh-keys.destroy', SshKey::factory()->for($owner)->create()))],
-    'revoke an api token' => [fn($test, Team $team, User $owner) => $test->delete(route('api-tokens.destroy', $owner->createToken('old')->accessToken->getKey()))],
+    'sign out' => [function ($test, Team $team, User $owner) {
+        $test->post(route('logout'))->assertRedirect();
+
+        expect(auth()->guest())->toBeTrue();
+    }],
+    'switch team' => [function ($test, Team $team, User $owner) {
+        $other = Team::factory()->create();
+        $other->members()->attach($owner, ['role' => TeamRole::Member->value]);
+
+        $test->put(route('current-team.update'), ['team' => $other->id])->assertRedirect();
+
+        expect($owner->fresh()->current_team_id)->toBe($other->id);
+    }],
+    'remove an ssh key' => [function ($test, Team $team, User $owner) {
+        $key = SshKey::factory()->for($owner)->create();
+
+        $test->delete(route('ssh-keys.destroy', $key))->assertRedirect();
+
+        expect(SshKey::query()->find($key->id))->toBeNull();
+    }],
+    'revoke an api token' => [function ($test, Team $team, User $owner) {
+        $token = $owner->createToken('old')->accessToken;
+
+        $test->delete(route('api-tokens.destroy', $token->getKey()))->assertRedirect();
+
+        expect(ApiToken::query()->find($token->getKey()))->toBeNull();
+    }],
     'remove a teammate' => [function ($test, Team $team, User $owner) {
         $member = User::factory()->create();
         $team->members()->attach($member, ['role' => TeamRole::Member->value]);
 
-        return $test->delete(route('teams.members.destroy', [$team, $member]));
+        $test->delete(route('teams.members.destroy', [$team, $member]))->assertRedirect();
+
+        expect($team->members()->whereKey($member->id)->exists())->toBeFalse();
     }],
-    'revoke an invitation' => [fn($test, Team $team, User $owner) => $test->delete(route('teams.invitations.destroy', [$team, TeamInvitation::factory()->for($team)->create()]))],
+    'revoke an invitation' => [function ($test, Team $team, User $owner) {
+        $invitation = TeamInvitation::factory()->for($team)->create();
+
+        $test->delete(route('teams.invitations.destroy', [$team, $invitation]))->assertRedirect();
+
+        expect(TeamInvitation::query()->find($invitation->id))->toBeNull();
+    }],
     'remove the domain' => [function ($test, Team $team, User $owner) {
         TeamDomain::factory()->for($team)->create();
 
-        return $test->delete(route('settings.team-domain.destroy'));
+        $test->delete(route('settings.team-domain.destroy'))->assertRedirect();
+
+        expect(TeamDomain::query()->where('team_id', $team->id)->exists())->toBeFalse();
     }],
     'remove single sign-on' => [function ($test, Team $team, User $owner) {
         TeamSsoConnection::factory()->for($team)->create();
 
-        return $test->delete(route('settings.sso.destroy'));
+        $test->delete(route('settings.sso.destroy'))->assertRedirect();
+
+        expect(TeamSsoConnection::query()->where('team_id', $team->id)->exists())->toBeFalse();
     }],
-    'disconnect a git provider' => [fn($test, Team $team, User $owner) => $test->delete(route('source-providers.destroy', SourceProvider::factory()->for($team)->create()))],
-    'remove a github app' => [fn($test, Team $team, User $owner) => $test->delete(route('github-apps.destroy', GitHubApp::factory()->withoutWebhook()->for($team)->create()))],
-    'disconnect a cloud provider' => [fn($test, Team $team, User $owner) => $test->delete(route('cloud-providers.destroy', CloudProvider::factory()->for($team)->create()))],
+    'disconnect a git provider' => [function ($test, Team $team, User $owner) {
+        $provider = SourceProvider::factory()->for($team)->create();
+
+        $test->delete(route('source-providers.destroy', $provider))->assertRedirect();
+
+        expect(SourceProvider::query()->find($provider->id))->toBeNull();
+    }],
+    'remove a github app' => [function ($test, Team $team, User $owner) {
+        $app = GitHubApp::factory()->withoutWebhook()->for($team)->create();
+
+        $test->delete(route('github-apps.destroy', $app))->assertRedirect();
+
+        expect(GitHubApp::query()->find($app->id))->toBeNull();
+    }],
+    'disconnect a cloud provider' => [function ($test, Team $team, User $owner) {
+        $account = CloudProvider::factory()->for($team)->create();
+
+        $test->delete(route('cloud-providers.destroy', $account))->assertRedirect();
+
+        expect(CloudProvider::query()->find($account->id))->toBeNull();
+    }],
     'destroy a provider server' => [function ($test, Team $team, User $owner) {
         $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
         $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
 
-        return $test->delete(route('servers.cloud.destroy', $server));
+        $test->from(route('servers.show', $server))->delete(route('servers.cloud.destroy', $server), ['confirm' => $server->name])->assertSessionHasNoErrors()->assertRedirect();
+
+        Queue::assertPushed(RunCloudTask::class);
     }],
-    'detach a server' => [fn($test, Team $team, User $owner) => $test->delete(route('servers.destroy', $team->servers()->firstOrFail()))],
+    'detach a server' => [function ($test, Team $team, User $owner) {
+        $server = $team->servers()->firstOrFail();
+
+        $test->delete(route('servers.destroy', $server))->assertRedirect();
+
+        expect(Server::query()->find($server->id))->toBeNull();
+    }],
+    'choose a plan' => [function ($test, Team $team, User $owner) {
+        $test->put(route('settings.billing.plan.update'), ['plan' => 'pro'])->assertRedirect('https://checkout.stripe.com/c/pay/cs_read_only');
+
+        expect($team->fresh()->pending_checkout_id)->toBe('cs_read_only');
+    }],
+    'open the billing portal' => [function ($test, Team $team, User $owner) {
+        $team->forceFill(['stripe_id' => 'cus_read_only'])->save();
+
+        $test->post(route('settings.billing.portal'))->assertRedirect('https://billing.stripe.com/p/session/read_only');
+    }],
+    'end the plan, which reaches its own answer' => [function ($test, Team $team, User $owner) {
+        $test->delete(route('settings.billing.plan.destroy'))->assertSessionHasErrors(['plan' => 'There is no plan to end. The trial ends on its own.']);
+    }],
+    'keep the plan, which reaches its own answer' => [function ($test, Team $team, User $owner) {
+        $test->post(route('settings.billing.plan.resume'))->assertSessionHasErrors(['plan' => 'This plan is not ending, so there is nothing to keep.']);
+    }],
+    'remove the s3 destination' => [function ($test, Team $team, User $owner) {
+        BackupDestination::factory()->for($team)->create();
+
+        $test->delete(route('settings.offsite-backups.destroy'))->assertRedirect()->assertSessionHas('success', 'Removed. Databases are no longer sent to S3.');
+
+        expect($team->backupDestination()->exists())->toBeFalse();
+    }],
 ]);
 
 test('detaching a server works while read-only', function () {

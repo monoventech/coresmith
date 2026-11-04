@@ -298,3 +298,42 @@ test('an ended plan\'s price is not shown as the price of the next one', functio
     expect($page['plan']['amount'])->toBe('$0')
         ->and($page['plans'][1]['summary'])->toStartWith('$19 per month');
 });
+
+test('the card can be changed at stripe whenever the team has a customer', function () {
+    $team = Team::factory()->subscribed(Plan::Pro, 'past_due')->owned()->create();
+
+    $page = billingPagePlan($team);
+
+    expect($page['portal'])->toBeTrue()
+        ->and($page['payment'])->toBeNull()
+        ->and($page['payment_note'])->toBe('No card shown here yet. Add or update it at Stripe.');
+});
+
+test('a team with a card can change it at stripe', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $team->forceFill(['pm_type' => 'visa', 'pm_last_four' => '4242', 'pm_expires' => '08/28'])->save();
+
+    $page = billingPagePlan($team->fresh());
+
+    expect($page['portal'])->toBeTrue()
+        ->and($page['payment']['label'])->toBe('Visa •••• 4242')
+        ->and($page['payment_note'])->toBe('');
+});
+
+test('a team that has never been to stripe has nowhere to change a card', function () {
+    $team = Team::factory()->onTrial()->owned()->create();
+
+    $page = billingPagePlan($team);
+
+    expect($page['portal'])->toBeFalse()
+        ->and($page['payment_note'])->toBe('No card yet. You add one when you choose a plan.');
+});
+
+test('only an owner can go to stripe', function () {
+    $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+
+    $page = billingPagePlan($team, CloudBilling::member($team, TeamRole::Admin));
+
+    expect($page['portal'])->toBeFalse()
+        ->and($page['payment_note'])->toBe('Only an owner can see and change the payment method.');
+});

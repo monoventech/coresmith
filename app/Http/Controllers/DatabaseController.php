@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\DatabaseType;
 use App\Enums\PlanFeature;
 use App\Http\Requests\Database\StoreDatabaseRequest;
 use App\Jobs\BackupDatabase;
@@ -77,7 +78,7 @@ final class DatabaseController extends Controller
                 'backup' => auth()->user()?->can('backup', $database) ?? false,
                 'delete' => auth()->user()?->can('delete', $database) ?? false,
             ],
-            'offsite' => $database->team?->backupDestination === null ? null : [
+            'offsite' => !$this->goesToS3($database) ? null : [
                 'sent' => Formats::when($database->last_offsite_at),
                 'error' => $database->last_offsite_error,
             ],
@@ -99,12 +100,18 @@ final class DatabaseController extends Controller
         $this->authorize('backup', $database);
         $this->assertBelongsTo($server, $database);
 
-        $team = $database->team;
-        $offsite = $team?->backupDestination !== null && app(TeamBilling::class)->status($team)->allows(PlanFeature::OffsiteBackups);
-
-        BackupDatabase::dispatch($database, now()->format('YmdHis'), offsite: $offsite);
+        BackupDatabase::dispatch($database, now()->format('YmdHis'), offsite: $this->goesToS3($database));
 
         return back()->with('success', 'Backup started.');
+    }
+
+    private function goesToS3(ManagedDatabase $database): bool
+    {
+        $team = $database->team;
+
+        return in_array($database->type, [DatabaseType::Mysql, DatabaseType::Postgresql], true)
+            && $team?->backupDestination !== null
+            && app(TeamBilling::class)->status($team)->allows(PlanFeature::OffsiteBackups);
     }
 
     private function assertBelongsTo(Server $server, ManagedDatabase $database): void

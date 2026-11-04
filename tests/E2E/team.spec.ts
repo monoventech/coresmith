@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { asMember, backToMonoven, dialog, expect, gotoSettings, own, test, toast } from './support/fixtures'
+import { asMember, backToMonoven, dialog, expect, gotoSettings, own, pageData, test, toast } from './support/fixtures'
 
 function member(page: Page, email: string) {
     return page.getByTestId('member-row').filter({ hasText: email })
@@ -170,7 +170,11 @@ test.describe('database backups to s3', () => {
         await expect(toast(page)).toContainText('Saved.')
         await expect(card).toContainText('s3://lab-backups/')
         await expect(card).toContainText('not run yet')
-        expect(await page.content()).not.toContain('an-e2e-secret-access-key')
+
+        const data = await pageData(page)
+
+        expect(data).toContain('lab-backups')
+        expect(data).not.toContain('an-e2e-secret-access-key')
 
         await card.getByRole('button', { name: 'Remove' }).click()
         await dialog(page).getByRole('button', { name: 'Remove destination' }).click()

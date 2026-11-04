@@ -60,19 +60,22 @@
 >
     <div class="mb-1 flex flex-wrap items-center gap-2.5">
         <h3 class="type-h3 m-0">Database backups to S3</h3>
-        {#if offsite && offsite.failing > 0}
-            <Badge variant="destructive">Failing</Badge>
-        {:else if offsite}
-            <Badge variant="success" dot>On</Badge>
+        {#if offsite && !planNote}
+            {#if offsite.failing > 0}
+                <Badge variant="destructive">Failing</Badge>
+            {:else}
+                <Badge variant="success" dot>On</Badge>
+            {/if}
         {/if}
     </div>
     <p class="mb-3 text-[12.5px] text-muted-foreground">
         Every night at 02:30, each MySQL and PostgreSQL database goes from its server straight to your bucket. Coresmith
         never holds the dump.
     </p>
-    {#if planNote}
-        <PlanNote note={planNote} />
-    {:else if offsite}
+    {#if offsite}
+        {#if planNote}
+            <div class="mb-3"><PlanNote note={planNote} /></div>
+        {/if}
         <div class="flex flex-col gap-1 border-t border-border pt-3">
             <span class="truncate font-mono text-[12.5px]">s3://{offsite.bucket}/{offsite.prefix ?? ''}</span>
             <span class="truncate font-mono text-[12.5px] text-muted-foreground"
@@ -82,13 +85,19 @@
                 >{offsite.last_run ? `last run ${offsite.last_run}` : 'not run yet'}</span
             >
         </div>
-        <p class="mt-3 mb-0 text-[12.5px] text-muted-foreground">
-            Set a lifecycle rule on the bucket to expire old backups.
-        </p>
+        {#if !planNote}
+            <p class="mt-3 mb-0 text-[12.5px] text-muted-foreground">
+                Set a lifecycle rule on the bucket to expire old backups.
+            </p>
+        {/if}
         <div class="mt-auto flex gap-2 pt-3">
-            <Button variant="ghost" size="sm" onclick={edit}>Change</Button>
+            {#if !planNote}
+                <Button variant="ghost" size="sm" onclick={edit}>Change</Button>
+            {/if}
             <Button variant="ghost" size="sm" onclick={() => (removing = true)}>Remove</Button>
         </div>
+    {:else if planNote}
+        <PlanNote note={planNote} />
     {:else}
         <div class="mt-auto">
             <Button variant="outline" size="sm" onclick={edit}>Set up</Button>

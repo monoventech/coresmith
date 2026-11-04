@@ -60,6 +60,16 @@ export function escape(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+export async function pageData(page: Page): Promise<string> {
+    await page.reload()
+
+    const data = JSON.parse((await page.locator('script[data-page]').textContent()) ?? '{}')
+
+    expect(Object.keys(data.props)).toContain('auth')
+
+    return JSON.stringify(data)
+}
+
 export function main(page: Page): Locator {
     return page.getByTestId('panel-main')
 }

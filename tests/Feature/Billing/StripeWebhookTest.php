@@ -875,3 +875,95 @@ test('the same event arriving twice at once is still handled once', function () 
 
     Notification::assertSentToTimes(stripeWebhookOwner($team), PlanStartedNotification::class, 1);
 });
+
+test('an incomplete first event older than its 23 hours is not stored', function () {
+    $team = Team::factory()->onTrial(9)->owned()->create(['stripe_id' => 'cus_1']);
+
+    stripeWebhook(FakeStripe::event('customer.subscription.updated', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro', 'incomplete_expired')))->assertOk();
+    stripeWebhook(FakeStripe::event('customer.subscription.created', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro', 'incomplete'), ['created' => now()->subHours(23)->subSecond()->getTimestamp()]))->assertOk();
+
+    expect($team->subscriptions()->count())->toBe(0)
+        ->and($team->fresh()->trial_ends_at)->not->toBeNull();
+
+    Notification::assertNothingSent();
+});
+
+test('an incomplete first event inside its 23 hours is stored', function () {
+    $team = Team::factory()->onTrial(9)->owned()->create(['stripe_id' => 'cus_1']);
+
+    stripeWebhook(FakeStripe::event('customer.subscription.created', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro', 'incomplete'), ['created' => now()->subHours(23)->getTimestamp()]))->assertOk();
+
+    expect($team->subscriptions()->sole()->stripe_status)->toBe('incomplete');
+});
+
+test('an old first event that is not incomplete is stored', function () {
+    $team = Team::factory()->onTrial(9)->owned()->create(['stripe_id' => 'cus_1']);
+
+    stripeWebhook(FakeStripe::event('customer.subscription.created', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro'), ['created' => now()->subDays(2)->getTimestamp()]))->assertOk();
+
+    expect($team->subscriptions()->sole()->stripe_status)->toBe('active');
+});
+
+test('an old incomplete event for a subscription already stored still ends the free trial', function () {
+    $team = Team::factory()->onTrial(9)->owned()->create(['stripe_id' => 'cus_1']);
+
+    stripeWebhook(FakeStripe::event('customer.subscription.updated', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro')))->assertOk();
+    stripeWebhook(FakeStripe::event('customer.subscription.created', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro', 'incomplete'), ['created' => now()->subDays(2)->getTimestamp()]))->assertOk();
+
+    expect($team->subscriptions()->sole()->stripe_status)->toBe('active')
+        ->and($team->fresh()->trial_ends_at)->toBeNull();
+});
+
+test('a retried checkout still stores what stripe says now, however old the event', function () {
+    $team = Team::factory()->onTrial()->owned()->create(['stripe_id' => 'cus_1']);
+
+    FakeStripe::fake([FakeStripe::url('subscriptions/sub_1*') => Http::response(FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro', 'incomplete'))]);
+
+    stripeWebhook(FakeStripe::event('checkout.session.completed', FakeStripe::checkoutSession('cs_1', 'https://checkout.stripe.com/c/pay/cs_1', [
+        'status' => 'complete',
+        'customer' => 'cus_1',
+        'subscription' => 'sub_1',
+    ]), ['created' => now()->subDays(2)->getTimestamp()]))->assertOk();
+
+    expect($team->subscriptions()->sole()->stripe_status)->toBe('incomplete');
+});
+
+test('a deleted customer leaves a plan that ended long ago with its own end date', function () {
+    $team = Team::factory()->owned()->create(['stripe_id' => 'cus_1']);
+    $ended = Subscription::factory()->ended(now()->subMonth())->for($team, 'owner')->create();
+
+    stripeWebhook(FakeStripe::event('customer.deleted', FakeStripe::customer('cus_1')))->assertOk();
+
+    expect($ended->fresh()->ends_at?->toDateString())->toBe('2026-09-18')
+        ->and($team->fresh()->stripe_id)->toBeNull();
+
+    Notification::assertNothingSent();
+});
+
+test('a deleted customer ends a plan still on its own trial', function () {
+    $team = Team::factory()->owned()->create(['stripe_id' => 'cus_1']);
+    $trialing = Subscription::factory()->trialing(now()->addDays(5))->for($team, 'owner')->create();
+
+    stripeWebhook(FakeStripe::event('customer.deleted', FakeStripe::customer('cus_1')))->assertOk();
+
+    $trialing->refresh();
+
+    expect($trialing->stripe_status)->toBe('canceled')
+        ->and($trialing->trial_ends_at)->toBeNull()
+        ->and($trialing->ends_at?->toDateString())->toBe('2026-10-18');
+
+    Notification::assertSentTo(stripeWebhookOwner($team), PlanEndedNotification::class);
+});
+
+test('a deleted customer leaves a free trial running', function () {
+    $team = Team::factory()->onTrial(9)->owned()->create(['stripe_id' => 'cus_1']);
+
+    stripeWebhook(FakeStripe::event('customer.deleted', FakeStripe::customer('cus_1')))->assertOk();
+
+    $status = stripeWebhookStatus($team);
+
+    expect($team->fresh()->stripe_id)->toBeNull()
+        ->and($team->fresh()->trial_ends_at)->not->toBeNull()
+        ->and($status->state)->toBe(BillingState::Trialing)
+        ->and($status->plan)->toBe(Plan::Trial);
+});

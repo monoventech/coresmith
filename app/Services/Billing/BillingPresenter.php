@@ -78,9 +78,11 @@ final class BillingPresenter
                 'self_host' => $canManage && $status->state !== BillingState::Ending,
             ],
             'payment' => $card ? ['label' => $this->brand((string) $team->pm_type) . ' •••• ' . $team->pm_last_four, 'expires' => $team->pm_expires] : null,
+            'portal' => $canManage && $team->stripe_id !== null,
             'payment_note' => match (true) {
                 !$canManage => 'Only an owner can see and change the payment method.',
                 $card => '',
+                $team->stripe_id !== null => 'No card shown here yet. Add or update it at Stripe.',
                 default => 'No card yet. You add one when you choose a plan.',
             },
             'invoices' => $canManage ? $invoices->limit(self::INVOICES)->get()->map(fn(TeamInvoice $invoice): array => [
@@ -309,6 +311,10 @@ final class BillingPresenter
 
     private function note(BillingStatus $status, PlanFeature $feature): ?string
     {
+        if ($status->readOnly()) {
+            return ($status->reason ?? ReadOnlyReason::NoPlan)->title();
+        }
+
         return $status->allows($feature) ? null : $feature->note();
     }
 
