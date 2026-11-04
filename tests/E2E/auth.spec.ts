@@ -1,4 +1,4 @@
-import { asGuest, expect, own, PASSWORD } from './support/fixtures'
+import { asGuest, expect, own, PASSWORD, toast } from './support/fixtures'
 
 const OWNER = 'owner@coresmith.test'
 
@@ -42,6 +42,27 @@ asGuest.describe('signing in', () => {
         await page.getByRole('button', { name: 'Sign in' }).click()
 
         await expect(page.getByText(/credentials do not match/)).toBeVisible()
+        await expect(page).toHaveURL(/\/login$/)
+    })
+
+    asGuest('too many attempts say so and say when to try again', async ({ page }, testInfo) => {
+        await page.goto('/login')
+
+        const attempt = async () => {
+            await page.getByLabel('Email address').fill(`${own(testInfo, 'throttled')}@coresmith.test`)
+            await page.getByLabel('Password', { exact: true }).fill('not-the-password')
+            await page.getByRole('button', { name: 'Sign in' }).click()
+        }
+
+        for (let count = 0; count < 5; count++) {
+            await Promise.all([page.waitForResponse((response) => response.request().method() === 'POST'), attempt()])
+            await expect(page.getByText(/credentials do not match/)).toBeVisible()
+        }
+
+        await attempt()
+
+        await expect(toast(page)).toContainText(/Too many attempts\.\s*Try again in (\d+ seconds?|1 minute)\./)
+        await expect(page.locator('dialog iframe')).toHaveCount(0)
         await expect(page).toHaveURL(/\/login$/)
     })
 

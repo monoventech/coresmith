@@ -13,6 +13,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequireSetupToken;
 use App\Http\Middleware\ResolveTeamUrl;
 use App\Http\Middleware\ThrottleSignups;
+use App\Http\Responses\RefusedForm;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -59,5 +60,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->dontFlash(['api_token']);
         $exceptions->dontReport([PlanRefusal::class]);
+        $exceptions->respond(new RefusedForm);
         Integration::handles($exceptions);
     })->create();
