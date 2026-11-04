@@ -116,7 +116,6 @@ final class E2ESeeder extends Seeder
         $this->heldByAQueuedDeploy($this->application('held-app', 9190));
         $this->realtime('reverb-unset', 9170);
         $this->releaseMovedOn($this->realtime('release-moved-on', 9210));
-        $this->ssrDidNotStart($this->realtime('ssr-failed', 9220));
         $this->cancelFixtures($tenant->owner);
         $this->certificatesChecked($this->application('certs-app', 9180, [
             'domain' => 'certs.monoven.io',
@@ -180,6 +179,7 @@ final class E2ESeeder extends Seeder
         $this->rekeyed('rekeyed-server', '203.0.113.30');
         $this->unreachable('down-01', '198.51.100.70');
         $this->shortOfMemory('hot-01', '198.51.100.71');
+        $this->ssrDidNotStart($this->realtime('ssr-failed', 9220, [], Server::query()->where('name', 'hot-01')->sole()));
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->auditFixtures();
         $this->invitations($tenant->owner);
@@ -716,7 +716,7 @@ final class E2ESeeder extends Seeder
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function realtime(string $name, int $port, array $attributes = []): Application
+    private function realtime(string $name, int $port, array $attributes = [], ?Server $server = null): Application
     {
         $application = $this->application($name, $port, [
             ...MonovenTenant::stack(
@@ -727,7 +727,7 @@ final class E2ESeeder extends Seeder
             ),
             'domain' => $name . '.monoven.io',
             ...$attributes,
-        ]);
+        ], $server);
 
         $this->succeeded($application, 6 * 60, 'v1.0.0');
 

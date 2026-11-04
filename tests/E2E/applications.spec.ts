@@ -1413,7 +1413,7 @@ test.describe('what the repository installs', () => {
     })
 
     test('an ssr server that did not start says so on the toggle and in the activity', async ({ page }) => {
-        await gotoApplication(page, 'bench-01', 'ssr-failed')
+        await gotoApplication(page, 'hot-01', 'ssr-failed')
 
         await expect(page.getByTestId('toggle-failed-banner')).toContainText('Inertia SSR did not start.')
         await expect(page.getByTestId('toggle-failed-banner')).toContainText(
@@ -1421,7 +1421,7 @@ test.describe('what the repository installs', () => {
         )
         await expect(toggle(page, 'Inertia SSR')).toBeChecked()
 
-        await gotoServerTab(page, 'bench-01', 'Activity')
+        await gotoServerTab(page, 'hot-01', 'Activity')
 
         await expect(main(page)).toContainText(
             'Inertia SSR did not start on ssr-failed, pages render in the browser until the next deploy'
