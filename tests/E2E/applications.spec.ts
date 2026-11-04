@@ -6,7 +6,9 @@ import {
     expect,
     gotoApplication,
     gotoServer,
+    gotoServerTab,
     isMobile,
+    main,
     own,
     pageData,
     tabs,
@@ -1395,6 +1397,35 @@ test.describe('what the repository installs', () => {
         await expect(toast(page)).toContainText('Saved. Inertia SSR starts with the next deploy.')
         await expect(row).toContainText(/Starts with the next deploy, which builds the SSR bundle · port 137\d\d/)
         await expect(toggle(page, 'Inertia SSR')).toBeChecked()
+    })
+
+    test('a toggle that is on says why the release no longer runs it', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'release-moved-on')
+
+        await expect(toggleRow(page, 'reverb')).toContainText(
+            'composer.json no longer requires laravel/reverb, so it does not start'
+        )
+        await expect(toggleRow(page, 'inertia_ssr')).toContainText(
+            'package.json no longer has a build:ssr script, so it does not start'
+        )
+        await expect(toggle(page, 'Reverb websockets')).toBeChecked()
+        await expect(toggle(page, 'Inertia SSR')).toBeChecked()
+    })
+
+    test('an ssr server that did not start says so on the toggle and in the activity', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'ssr-failed')
+
+        await expect(page.getByTestId('toggle-failed-banner')).toContainText('Inertia SSR did not start.')
+        await expect(page.getByTestId('toggle-failed-banner')).toContainText(
+            'The SSR server did not start on port 13791.'
+        )
+        await expect(toggle(page, 'Inertia SSR')).toBeChecked()
+
+        await gotoServerTab(page, 'bench-01', 'Activity')
+
+        await expect(main(page)).toContainText(
+            'Inertia SSR did not start on ssr-failed, pages render in the browser until the next deploy'
+        )
     })
 
     test('reverb needs its settings first', async ({ page }) => {

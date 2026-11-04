@@ -19,6 +19,7 @@ use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\AutoDeploy\AutoDeployStatus;
 use App\Services\Process\ProcessManager;
+use App\Services\Runtime\Stack;
 use App\Services\Server\PortAllocator;
 use InvalidArgumentException;
 use Spatie\Activitylog\Models\Activity;
@@ -42,6 +43,10 @@ final class SmartToggles
     public const INERTIA_SSR = 'inertia_ssr';
 
     public const SSR_COMMAND = 'php artisan inertia:start-ssr';
+
+    public const SSR_NO_INERTIA = 'composer.json and package.json no longer include Inertia, so it does not start';
+
+    public const SSR_NO_SCRIPT = 'package.json no longer has a build:ssr script, so it does not start';
 
     public const START_WINDOW_SECONDS = 180;
 
@@ -111,8 +116,8 @@ final class SmartToggles
 
         $process = $processes->process($application, $unit);
 
-        foreach (self::WORKERS as $key => [$name]) {
-            if ($name === $process) {
+        foreach ([...array_keys(self::WORKERS), self::REVERB, self::INERTIA_SSR] as $key) {
+            if ($this->process($key) === $process) {
                 return $this->label($key);
             }
         }
@@ -170,7 +175,7 @@ final class SmartToggles
                 'label' => 'Inertia SSR',
                 'description' => $this->ssrDescription($application),
                 'busy_on' => 'Saving, it starts with the next deploy…',
-                'busy_off' => 'Stopping the unit and freeing the port…',
+                'busy_off' => 'Stopping the unit and keeping its port…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
@@ -244,8 +249,12 @@ final class SmartToggles
         return $this->horizon($application) ? self::HORIZON_COMMAND : self::QUEUE_COMMAND;
     }
 
-    public function syncDeployTimeProcesses(Application $application): void
+    /**
+     * @return list<string>
+     */
+    public function syncDeployTimeProcesses(Application $application): array
     {
+        $dropped = [];
         $queue = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'queue');
 
         if ($queue !== null && ($queue['command'] ?? null) !== $this->queueCommand($application)) {
@@ -258,14 +267,53 @@ final class SmartToggles
 
         if (($current['command'] ?? null) !== $wanted) {
             $this->replaceProcess($application, 'reverb', $wanted === null ? null : ['name' => 'reverb', 'command' => $wanted]);
+            $dropped = $wanted === null ? [...$dropped, 'reverb'] : $dropped;
         }
 
-        $ssr = $this->ssrOn($application) && $application->ssr_port !== null ? $this->ssrCommand($application) : null;
+        $ssr = $this->ssrOn($application) && $application->ssr_port !== null && $this->ssrBuilt((array) $application->stack) ? $this->ssrCommand($application) : null;
         $running = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
 
         if (($running['command'] ?? null) !== $ssr) {
             $this->replaceProcess($application, 'ssr', $ssr === null ? null : ['name' => 'ssr', 'command' => $ssr]);
+            $dropped = $ssr === null ? [...$dropped, 'ssr'] : $dropped;
         }
+
+        return $dropped;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function leftOutOfRelease(Application $application): array
+    {
+        $stack = (array) $application->stack;
+        $reverb = app(Reverb::class);
+
+        return array_values(array_filter([
+            $reverb->on($application) && !$reverb->installed($stack) ? 'reverb: ' . Reverb::NOT_INSTALLED : null,
+            $this->ssrOn($application) && !$this->ssrBuilt($stack) ? 'ssr: ' . $this->ssrMissing($stack) : null,
+        ]));
+    }
+
+    /**
+     * @param  array<string, mixed>  $stack
+     */
+    public function ssrBuilt(array $stack): bool
+    {
+        return $this->hasInertia($stack) && (((array) ($stack['tooling'] ?? []))['ssr'] ?? false) === true;
+    }
+
+    public function ssrBuilds(Application $application, Stack $stack): bool
+    {
+        return $this->ssrOn($application) && $this->ssrBuilt($stack->toArray());
+    }
+
+    /**
+     * @param  array<string, mixed>  $stack
+     */
+    public function hasInertia(array $stack): bool
+    {
+        return (((array) ($stack['packages'] ?? []))['inertia'] ?? false) === true;
     }
 
     public function ssrOn(Application $application): bool
@@ -298,7 +346,7 @@ final class SmartToggles
         app(TeamNotifier::class)->send(
             $application->team,
             Preferences::TOGGLE_CHANGES,
-            new ApplicationToggledNotification($application, $this->label($key) . ' turned ' . ($on ? 'on' : 'off'), $actor?->name, withoutDeployment: $key !== self::AUTO_DEPLOY),
+            new ApplicationToggledNotification($application, $this->label($key) . ' turned ' . ($on ? 'on' : 'off'), $actor?->name, withoutDeployment: $key !== self::AUTO_DEPLOY && !($on && in_array($key, [self::REVERB, self::INERTIA_SSR], true))),
             $actor instanceof User ? $actor : null,
         );
     }
@@ -357,7 +405,7 @@ final class SmartToggles
 
     private function ssr(Application $application, bool $on): void
     {
-        $port = $on ? ($application->ssr_port ?? app(PortAllocator::class)->allocateSsrPort($application->server)) : null;
+        $port = $application->ssr_port ?? ($on ? app(PortAllocator::class)->allocateSsrPort($application->server) : null);
 
         $application->forceFill(['toggles' => [...(array) $application->toggles, self::INERTIA_SSR => $on], 'ssr_port' => $port])->save();
 
@@ -372,7 +420,15 @@ final class SmartToggles
 
     private function ssrDetected(Application $application): bool
     {
-        return ($this->packages($application)['inertia'] ?? false) === true && (((array) $application->stack)['tooling']['ssr'] ?? false) === true;
+        return $this->ssrBuilt((array) $application->stack);
+    }
+
+    /**
+     * @param  array<string, mixed>  $stack
+     */
+    private function ssrMissing(array $stack): string
+    {
+        return $this->hasInertia($stack) ? self::SSR_NO_SCRIPT : self::SSR_NO_INERTIA;
     }
 
     private function ssrCommand(Application $application): string
@@ -388,6 +444,7 @@ final class SmartToggles
         $live = collect((array) $application->processes)->contains(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
 
         return match (true) {
+            $this->ssrOn($application) && !$this->ssrDetected($application) => $this->ssrMissing((array) $application->stack),
             $this->ssrOn($application) && $live => self::SSR_COMMAND . " · port {$port} auto-allocated" . ($port === PortAllocator::SSR_DEFAULT_PORT ? '' : ' · your SSR entry must read INERTIA_SSR_PORT'),
             $this->ssrOn($application) => "Starts with the next deploy, which builds the SSR bundle · port {$port}",
             default => 'Detected from composer.json and package.json · turning it on gives it a port from the next deploy',
@@ -416,6 +473,7 @@ final class SmartToggles
         $problem = $reverb->problem($application);
 
         return match (true) {
+            $reverb->on($application) && !$reverb->installed((array) $application->stack) => Reverb::NOT_INSTALLED,
             $problem !== null => $problem,
             $reverb->live($application) => "php artisan reverb:start · port {$port} · {$socket}",
             $reverb->on($application) => "Starts with the next deploy, on port {$port} behind {$socket}",

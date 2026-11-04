@@ -280,7 +280,9 @@ final class ActivityFeed
                 default => [$this->text('Auto deploy turned off for '), $this->mono($application?->name)],
             },
             'processes_sync_failed' => [$this->text('Couldn\'t apply the process change on '), $this->mono($application?->name), $this->text(', ' . ($properties['error'] ?? 'the server did not respond'))],
-            SmartToggles::START_FAILED => [$this->text(($properties['label'] ?? 'A worker') . ' did not start on '), $this->mono($application?->name), $this->text(', so its toggle is off again')],
+            SmartToggles::START_FAILED => ($properties['toggle'] ?? null) === SmartToggles::INERTIA_SSR
+                ? [$this->text('Inertia SSR did not start on '), $this->mono($application?->name), $this->text(', pages render in the browser until the next deploy')]
+                : [$this->text(($properties['label'] ?? 'A worker') . ' did not start on '), $this->mono($application?->name), $this->text(', so its toggle is off again')],
             'domain_added' => [$this->mono((string) ($properties['domain'] ?? '')), $this->text(' added to '), $this->mono($application?->name)],
             'port_block_moved' => [$this->mono($application?->name), $this->text(' moved to ports ' . (int) ($properties['to'] ?? 0) . '–' . ((int) ($properties['to'] ?? 0) + 9) . ', ' . ($properties['process'] ?? 'another process') . ' already listens on ' . (int) ($properties['port'] ?? 0))],
             'webhook_signature_rejected' => [$this->text((int) ($properties['count'] ?? 1) > 1 ? ((int) $properties['count']) . ' webhooks with a bad signature were rejected' : 'A webhook with a bad signature was rejected')],

@@ -25,6 +25,8 @@ final class Reverb
 
     public const NO_DOMAIN = 'Add a domain first, browsers reach Reverb through it';
 
+    public const NOT_INSTALLED = 'composer.json no longer requires laravel/reverb, so it does not start';
+
     public function __construct(private readonly EnvironmentFile $environment) {}
 
     public function port(Application $application): int
@@ -62,9 +64,20 @@ final class Reverb
         return (((array) $application->toggles)['reverb'] ?? false) === true;
     }
 
-    public function ready(Application $application): bool
+    /**
+     * @param  array<string, mixed>|null  $stack
+     */
+    public function ready(Application $application, ?array $stack = null): bool
     {
-        return $this->on($application) && $this->problem($application) === null;
+        return $this->on($application) && $this->installed($stack ?? (array) $application->stack) && $this->problem($application) === null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $stack
+     */
+    public function installed(array $stack): bool
+    {
+        return (((array) ($stack['packages'] ?? []))['reverb'] ?? false) === true;
     }
 
     public function live(Application $application): bool

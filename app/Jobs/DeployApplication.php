@@ -48,9 +48,9 @@ use App\Services\Git\GitHub\SuspensionCheck;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
+use App\Services\Panel\SsrServer;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
-use App\Services\Process\SystemdUnitBuilder;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RepositoryProbe;
@@ -97,6 +97,8 @@ final class DeployApplication implements ShouldQueue
     public const LOCK_HELD = 'Another deploy or a rollback is running for this app, so this one did not start.';
 
     public const NEVER_STARTED = 'The deploy never started, so Coresmith ended it. Deploy again.';
+
+    private const SSR_STOPPED = 'ssr: inertia:start-ssr did not start, pages render in the browser until it does';
 
     private const NETWORK_ERRORS = ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'Could not resolve host', 'Connection timed out', 'Operation timed out', 'curl error 28', 'curl error 6', 'could not be downloaded', 'Failed to download', '502 Bad Gateway', '503 Service Unavailable', '504 Gateway Time', 'socket hang up', 'Net::OpenTimeout', 'Gem::RemoteFetcher'];
 
@@ -427,6 +429,7 @@ final class DeployApplication implements ShouldQueue
         $this->checkpoint();
 
         $stack = $this->resolveStack($connection, $paths, $release, $application);
+        $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(EnvironmentFile::class)->write($connection, $application, $stack->toArray()));
         $this->checkpoint();
 
         return $stack;
@@ -551,12 +554,18 @@ final class DeployApplication implements ShouldQueue
 
         $this->checkHealth($connection, $commands, $paths, $release);
         $phpChanged = $this->swapSymlink($connection, $paths, $release, $stack);
-        app(SmartToggles::class)->syncDeployTimeProcesses($application);
+        $toggles = app(SmartToggles::class);
+        $processes = app(ProcessManager::class);
+        $processes->removeUnits($connection, $application, $toggles->syncDeployTimeProcesses($application));
+
+        foreach ($toggles->leftOutOfRelease($application) as $note) {
+            $this->appendLog($note);
+        }
 
         if (app(Reverb::class)->live($application)) {
             $this->appendLog('reverb: routing wss://' . $application->domain . '/app to port ' . app(Reverb::class)->port($application));
         }
-        $processes = app(ProcessManager::class);
+
         $processes->install($connection, $application);
         $this->startProcesses($connection, $processes, $application, $phpChanged);
         $this->routeTraffic($connection, $application);
@@ -825,7 +834,7 @@ final class DeployApplication implements ShouldQueue
 
         $this->mark(DeploymentPhases::BUILD, 'building the release');
 
-        if ($stack->tooling !== null && $stack->tooling->build && $stack->tooling->ssr && app(SmartToggles::class)->ssrOn($this->deployment->application)) {
+        if ($stack->tooling !== null && $stack->tooling->build && app(SmartToggles::class)->ssrBuilds($this->deployment->application, $stack)) {
             $this->appendLog('ssr: building with build:ssr');
         }
 
@@ -894,7 +903,8 @@ final class DeployApplication implements ShouldQueue
 
         $processes->refresh($connection, $application, $restart);
 
-        $ssr = $this->ssrUnit($application);
+        $server = app(SsrServer::class);
+        $ssr = $server->unit($application);
 
         try {
             $processes->verifyStarted($connection, $application, $ssr === null ? null : array_values(array_diff($units, [$ssr])));
@@ -909,33 +919,9 @@ final class DeployApplication implements ShouldQueue
             throw $e;
         }
 
-        if ($ssr === null) {
-            return;
+        if ($ssr !== null && !$server->confirm($connection, $application, $ssr)) {
+            $this->appendLog(self::SSR_STOPPED);
         }
-
-        try {
-            $processes->verifyStarted($connection, $application, [$ssr]);
-        } catch (ProcessDidNotStart) {
-            $this->ssrDidNotStart($connection, $application, $ssr);
-        }
-    }
-
-    private function ssrUnit(Application $application): ?string
-    {
-        $runs = collect((array) $application->processes)->contains(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === 'ssr');
-
-        return $runs ? app(SystemdUnitBuilder::class)->unitName($application, 'ssr') : null;
-    }
-
-    private function ssrDidNotStart(SSHConnection $connection, Application $application, string $unit): void
-    {
-        $connection->execute('systemctl disable --now ' . escapeshellarg($unit) . ' || true', sudo: true);
-        $connection->execute('rm -f ' . escapeshellarg(app(SystemdUnitBuilder::class)->unitPath($application, 'ssr')), sudo: true);
-        $connection->execute('systemctl daemon-reload', sudo: true);
-
-        app(SmartToggles::class)->failedToStart($application, SmartToggles::INERTIA_SSR, 'ssr', "The SSR server did not start on port {$application->ssr_port}. Pass Number(process.env.INERTIA_SSR_PORT) as the port in your SSR entry, then deploy again.");
-
-        $this->appendLog('ssr: inertia:start-ssr did not start, pages render in the browser until it does');
     }
 
     private function watchProcesses(SSHConnection $connection, ProcessManager $processes, Application $application): void
@@ -952,11 +938,13 @@ final class DeployApplication implements ShouldQueue
 
         $this->appendLog($this->stamp() . " watch: keeping an eye on the processes for {$seconds} seconds");
 
-        $ssr = $this->ssrUnit($application);
+        $server = app(SsrServer::class);
+        $ssr = $server->unit($application);
         $loop = app(CrashLoopWatch::class)->watch($connection, $application);
 
         if ($loop !== null && $ssr !== null && $loop->unit === $ssr) {
-            $this->ssrDidNotStart($connection, $application, $ssr);
+            $server->stop($connection, $application);
+            $this->appendLog(self::SSR_STOPPED);
             $loop = app(CrashLoopWatch::class)->watch($connection, $application);
         }
 

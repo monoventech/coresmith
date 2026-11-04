@@ -22,6 +22,7 @@ function managedEnvApp(array $env, bool $reverb, array $attributes = []): Applic
         'base_port' => 8200,
         'env_variables' => implode("\n", array_map(fn(string $key, string $value): string => "{$key}={$value}", array_keys($env), $env)) . "\n",
         'toggles' => ['reverb' => $reverb],
+        'stack' => ['packages' => ['reverb' => true]],
         ...$attributes,
     ]);
 }
@@ -65,6 +66,13 @@ test("the app's own value wins and is not repeated", function () {
         ->and($written)->toContain("\nVITE_REVERB_PORT=\"8443\"\n");
 });
 
+test('the stack being deployed decides, not the one running now', function () {
+    $application = managedEnvApp(MANAGED_CREDENTIALS, true, ['stack' => ['packages' => ['reverb' => false]]]);
+
+    expect(app(ManagedEnvironment::class)->values($application, ['packages' => ['reverb' => true]]))->toHaveKey('REVERB_SERVER_PORT')
+        ->and(app(ManagedEnvironment::class)->values(managedEnvApp(MANAGED_CREDENTIALS, true, ['slug' => 'chat-two']), ['packages' => ['reverb' => false]]))->toBe([]);
+});
+
 test('nothing is managed while reverb is off or not ready', function (array $env, bool $reverb, array $attributes) {
     $application = managedEnvApp($env, $reverb, $attributes);
 
@@ -72,6 +80,7 @@ test('nothing is managed while reverb is off or not ready', function (array $env
         ->and(managedWritten($application))->not->toContain('REVERB_SERVER_PORT');
 })->with([
     'off' => [MANAGED_CREDENTIALS, false, []],
+    'a release without the package' => [MANAGED_CREDENTIALS, true, ['stack' => ['packages' => ['reverb' => false]]]],
     'no secret' => [['REVERB_APP_ID' => 'chat-app', 'REVERB_APP_KEY' => 'chat-key'], true, []],
     'a key that is not path safe' => [[...MANAGED_CREDENTIALS, 'REVERB_APP_KEY' => 'chat/key'], true, []],
     'no domain' => [MANAGED_CREDENTIALS, true, ['domain' => null]],

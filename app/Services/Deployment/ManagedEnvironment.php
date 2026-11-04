@@ -20,20 +20,30 @@ final class ManagedEnvironment
     ) {}
 
     /**
+     * @param  array<string, mixed>|null  $stack
      * @return array<string, string>
      */
-    public function values(Application $application): array
+    public function values(Application $application, ?array $stack = null): array
     {
-        return array_diff_key([...$this->reverbValues($application), ...$this->ssrValues($application)], $this->environment->parse((string) $application->env_variables));
+        $stack ??= (array) $application->stack;
+
+        return array_diff_key([...$this->reverbValues($application, $stack), ...$this->ssrValues($application, $stack)], $this->environment->parse((string) $application->env_variables));
     }
 
     /**
+     * @param  array<string, mixed>  $stack
      * @return array<string, string>
      */
-    private function ssrValues(Application $application): array
+    private function ssrValues(Application $application, array $stack): array
     {
-        if (!app(SmartToggles::class)->ssrOn($application) || $application->ssr_port === null) {
+        $toggles = app(SmartToggles::class);
+
+        if (!$toggles->hasInertia($stack)) {
             return [];
+        }
+
+        if (!$toggles->ssrOn($application) || $application->ssr_port === null || !$toggles->ssrBuilt($stack)) {
+            return ['INERTIA_SSR_ENABLED' => 'false'];
         }
 
         return [
@@ -43,13 +53,14 @@ final class ManagedEnvironment
     }
 
     /**
+     * @param  array<string, mixed>  $stack
      * @return array<string, string>
      */
-    private function reverbValues(Application $application): array
+    private function reverbValues(Application $application, array $stack): array
     {
         $credentials = $this->reverb->credentials($application);
 
-        if (!$this->reverb->ready($application) || $credentials === null) {
+        if (!$this->reverb->ready($application, $stack) || $credentials === null) {
             return [];
         }
 

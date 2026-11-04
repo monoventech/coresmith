@@ -20,8 +20,10 @@ use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Panel\Reverb;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
+use App\Services\Panel\SsrServer;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\Stack;
 use App\Services\SSH\SSHConnectionManager;
@@ -90,22 +92,32 @@ final class RollbackApplication implements ShouldQueue
             $before = $this->application->runtimeVersions();
 
             $this->application->forceFill(['current_release' => $name, ...($stack?->applicationAttributes() ?? [])])->save();
-            app(SmartToggles::class)->syncDeployTimeProcesses($this->application);
-
+            $reverb = app(Reverb::class);
+            $routed = $reverb->live($this->application);
+            $listed = $this->application->processes;
             $processes = app(ProcessManager::class);
 
-            if ($stack !== null) {
+            $processes->removeUnits($connection, $this->application, app(SmartToggles::class)->syncDeployTimeProcesses($this->application));
+
+            if ($stack !== null || $this->application->processes !== $listed) {
                 $processes->install($connection, $this->application);
             }
 
             app(EnvironmentFile::class)->write($connection, $this->application);
             app(CrontabBuilder::class)->write($connection, $this->application);
 
+            if ($reverb->live($this->application) !== $routed) {
+                SyncApplicationRoute::dispatch($this->application);
+            }
+
             if (!in_array($this->application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
                 $processes->refresh($connection, $this->application, restart: $before !== $this->application->runtimeVersions());
 
+                $server = app(SsrServer::class);
+                $ssr = $server->unit($this->application);
+
                 try {
-                    $processes->verifyStarted($connection, $this->application);
+                    $processes->verifyStarted($connection, $this->application, $ssr === null ? null : array_values(array_diff($processes->unitNames($this->application), [$ssr])));
                 } catch (ProcessDidNotStart $e) {
                     $worker = app(SmartToggles::class)->failedWorker($this->application, $e->unit);
                     $error = app(LogSanitizer::class)->sanitize($e->getMessage(), $this->application);
@@ -118,6 +130,10 @@ final class RollbackApplication implements ShouldQueue
                         ->log($worker === null ? RollbackHistory::DID_NOT_START : RollbackHistory::WORKER_DID_NOT_START);
 
                     throw $e;
+                }
+
+                if ($ssr !== null) {
+                    $server->confirm($connection, $this->application, $ssr);
                 }
             }
 

@@ -52,7 +52,7 @@ final class DeploymentCommands
      */
     public function build(Application $application, Stack $stack): array
     {
-        $javascript = $stack->tooling?->buildCommands(app(SmartToggles::class)->ssrOn($application)) ?? [];
+        $javascript = $stack->tooling?->buildCommands(app(SmartToggles::class)->ssrBuilds($application, $stack)) ?? [];
 
         return match ($application->type) {
             ApplicationType::Php => [...$javascript, ...($application->framework === 'laravel' ? ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'] : [])],

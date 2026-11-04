@@ -124,6 +124,23 @@ final class ProcessManager
         $application->forceFill(['power_state' => PowerState::Stopped])->save();
     }
 
+    /**
+     * @param  list<string>  $names
+     */
+    public function removeUnits(SSHConnection $connection, Application $application, array $names): void
+    {
+        if ($names === []) {
+            return;
+        }
+
+        foreach ($names as $name) {
+            $connection->execute('systemctl disable --now ' . escapeshellarg($this->units->unitName($application, $name)) . ' || true', sudo: true);
+            $connection->execute('rm -f ' . escapeshellarg($this->units->unitPath($application, $name)), sudo: true);
+        }
+
+        $connection->execute('systemctl daemon-reload', sudo: true);
+    }
+
     public function refresh(SSHConnection $connection, Application $application, bool $restart = false): void
     {
         $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;

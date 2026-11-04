@@ -115,6 +115,8 @@ final class E2ESeeder extends Seeder
         $this->rolledBack($this->application('rolled-back', 8010));
         $this->heldByAQueuedDeploy($this->application('held-app', 9190));
         $this->realtime('reverb-unset', 9170);
+        $this->releaseMovedOn($this->realtime('release-moved-on', 9210));
+        $this->ssrDidNotStart($this->realtime('ssr-failed', 9220));
         $this->cancelFixtures($tenant->owner);
         $this->certificatesChecked($this->application('certs-app', 9180, [
             'domain' => 'certs.monoven.io',
@@ -730,6 +732,25 @@ final class E2ESeeder extends Seeder
         $this->succeeded($application, 6 * 60, 'v1.0.0');
 
         return $application;
+    }
+
+    private function releaseMovedOn(Application $application): void
+    {
+        $application->forceFill([
+            'toggles' => ['reverb' => true, SmartToggles::INERTIA_SSR => true],
+            'ssr_port' => 13790,
+            'stack' => [...(array) $application->stack, 'tooling' => [...(array) ((array) $application->stack)['tooling'], 'ssr' => false], 'packages' => ['horizon' => true, 'reverb' => false, 'inertia' => true]],
+        ])->save();
+    }
+
+    private function ssrDidNotStart(Application $application): void
+    {
+        $application->forceFill(['toggles' => [SmartToggles::INERTIA_SSR => true], 'ssr_port' => 13791])->save();
+
+        activity()
+            ->performedOn($application)
+            ->withProperties(['toggle' => SmartToggles::INERTIA_SSR, 'label' => 'Inertia SSR', 'error' => 'The SSR server did not start on port 13791. Pass Number(process.env.INERTIA_SSR_PORT) as the port in your SSR entry, then deploy again.'])
+            ->log(SmartToggles::START_FAILED);
     }
 
     private function heldByAQueuedDeploy(Application $application): void
