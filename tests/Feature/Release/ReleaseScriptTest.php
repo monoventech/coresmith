@@ -212,7 +212,6 @@ test('a stable release merges dev, runs every gate, bumps, tags and publishes', 
         ->and(releaseOutput($process))->not->toContain('—')
         ->and(file_get_contents($sandbox['notes']))->toBe("### Added\n- feat: deploy faster\n\n### Fixed\n- fix: keep log colours\n")
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('')
-        ->and(file_get_contents("{$sandbox['clone']}/public/service-worker.js"))->toBe("self.version = 'source'\n")
         ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main');
 });
 
@@ -366,6 +365,20 @@ test('a build that changes other tracked files is refused', function () {
         ->and(releaseOutput($process))->toContain('The build changed tracked files: VERSION. Commit them on dev first.')
         ->and(releaseGit($sandbox, ['rev-parse', 'main']))->toBe($main)
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
+});
+
+test('a build rewrites nothing, so nothing is put back afterwards', function () {
+    $package = json_decode((string) file_get_contents(base_path('package.json')), true);
+
+    expect($package['scripts']['build'])->toBe('vite build')
+        ->and($package['scripts']['dev'])->toBe('vite')
+        ->and($package['scripts'])->not->toHaveKey('generate')
+        ->and(releaseScriptBody())->not->toContain('service-worker')
+        ->and((string) file_get_contents(base_path('scripts/ci-local.sh')))->not->toContain('service-worker');
+
+    foreach (['service-worker.js', 'manifest.json', 'offline.html', 'scripts', 'images/icons'] as $leftover) {
+        expect(file_exists(public_path($leftover)))->toBeFalse("public/{$leftover} is back");
+    }
 });
 
 test('the GitHub repository is read from the remote address', function (string $url) {

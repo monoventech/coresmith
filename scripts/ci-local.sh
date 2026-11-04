@@ -47,7 +47,7 @@ static_checks() {
     gate tailwind bun run lint:tailwind
     gate types bun run types:check
     gate build bun run build
-    git checkout --quiet -- public/service-worker.js public/manifest.json
+    gate clean-build git diff --exit-code
 }
 
 pest_on() {

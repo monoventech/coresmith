@@ -378,15 +378,9 @@ gates() {
 }
 
 build() {
-    local file changed
+    local changed
 
     gate bun run build
-
-    for file in public/manifest.json public/service-worker.js; do
-        if [ -f "$file" ] && ! git diff --quiet -- "$file"; then
-            git checkout --quiet -- "$file"
-        fi
-    done
 
     changed="$(git status --porcelain --untracked-files=no | awk '{ print $2 }' | paste -sd, - | sed 's/,/, /g')"
 

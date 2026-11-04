@@ -20,7 +20,6 @@ SH;
 
 const RELEASE_BUN_BUILD = <<<'SH'
 if [ "$*" = "run build" ]; then
-    printf "self.version = 'built'\n" > public/service-worker.js
     for file in ${STUB_BUILD_EDITS:-}; do
         printf 'edited\n' >> "$file"
     done
@@ -136,8 +135,6 @@ function releaseScriptSandbox(): array
         'VERSION' => "0.1.0\n",
         'scripts/install.sh' => (string) file_get_contents(base_path('scripts/install.sh')),
         'scripts/release.sh' => releaseScriptBody(),
-        'public/manifest.json' => "{}\n",
-        'public/service-worker.js' => "self.version = 'source'\n",
         '.gitignore' => "vendor/\n",
     ];
 

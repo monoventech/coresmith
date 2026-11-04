@@ -19,6 +19,22 @@ asGuest.describe('signing in', () => {
         await expect(page.getByText('Made by Monoven')).toBeVisible()
     })
 
+    asGuest('the sign in page loads without a console error', async ({ page }) => {
+        const problems: string[] = []
+
+        page.on('console', (message) => {
+            if (message.type() === 'error') {
+                problems.push(message.text())
+            }
+        })
+        page.on('pageerror', (error) => problems.push(error.message))
+
+        await page.goto('/login')
+        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to your panel' })).toBeVisible()
+
+        expect(problems).toEqual([])
+    })
+
     asGuest('a wrong password is refused without saying which field was wrong', async ({ page }) => {
         await page.goto('/login')
         await page.getByLabel('Email address').fill(OWNER)

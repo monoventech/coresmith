@@ -7,10 +7,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "generate": "bun public/scripts/generate-manifest.ts && bun public/scripts/generate-service-worker.ts",
-        "build": "bun run generate && vite build",
+        "build": "vite build",
         "build:ssr": "bun run build && vite build --ssr",
-        "dev": "bun run generate && vite",
+        "dev": "vite",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
