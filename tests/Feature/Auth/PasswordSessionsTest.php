@@ -71,7 +71,7 @@ function passwordSessionsChange(array $cookies): void
         'current_password' => 'the-old-passphrase',
         'password' => 'a-brand-new-passphrase',
         'password_confirmation' => 'a-brand-new-passphrase',
-    ])->assertSessionHasNoErrors()->assertSessionHas('success', 'Saved. Your new password works from the next sign-in.');
+    ])->assertSessionHasNoErrors()->assertSessionHas('success', "Saved. You're signed out everywhere else.");
 }
 
 beforeEach(function () {

@@ -9,8 +9,11 @@ declare(strict_types=1);
 namespace App\Services\Teams;
 
 use App\Models\Application;
+use App\Models\CloudProvider;
+use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
@@ -35,6 +38,9 @@ final class AuditLog
         Application::class => 'application',
         ManagedDatabase::class => 'database',
         WebhookEndpoint::class => 'webhook',
+        CloudProvider::class => 'cloud_provider',
+        SourceProvider::class => 'source_provider',
+        GitHubApp::class => 'github_app',
     ];
 
     public function __construct(private readonly LogSanitizer $sanitizer) {}
@@ -52,6 +58,8 @@ final class AuditLog
                 Server::class => fn(Builder $query) => $query->withTrashed(),
                 Application::class => fn(Builder $query) => $query->withTrashed(),
                 ManagedDatabase::class => fn(Builder $query) => $query->withTrashed(),
+                CloudProvider::class => fn(Builder $query) => $query->withTrashed(),
+                SourceProvider::class => fn(Builder $query) => $query->withTrashed(),
                 WebhookEndpoint::class => fn(Builder $query) => $query->with(['application' => fn($application) => $application->withTrashed()]),
             ])])
             ->where(fn(Builder $query) => $query
@@ -59,7 +67,10 @@ final class AuditLog
                 ->orWhere(fn(Builder $query) => $query->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', Server::withTrashed()->where('team_id', $team->getKey())->select('id')))
                 ->orWhere(fn(Builder $query) => $query->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications))
                 ->orWhere(fn(Builder $query) => $query->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->select('id')))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new WebhookEndpoint)->getMorphClass())->whereIn('subject_id', WebhookEndpoint::query()->whereIn('application_id', $applications)->select('id'))))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new WebhookEndpoint)->getMorphClass())->whereIn('subject_id', WebhookEndpoint::query()->whereIn('application_id', $applications)->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new CloudProvider)->getMorphClass())->whereIn('subject_id', CloudProvider::withTrashed()->where('team_id', $team->getKey())->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new SourceProvider)->getMorphClass())->whereIn('subject_id', SourceProvider::withTrashed()->where('team_id', $team->getKey())->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new GitHubApp)->getMorphClass())->where('properties->team_id', $team->getKey())))
             ->when($since !== null, fn(Builder $query) => $query->where('created_at', '>=', $since))
             ->orderBy('created_at')
             ->orderBy('id');
@@ -93,16 +104,19 @@ final class AuditLog
             $causer instanceof User ? $causer->email : '',
             $activity->description,
             $type,
-            $this->name($subject),
+            $this->name($subject, $properties),
             $properties === [] ? '' : $this->sanitizer->sanitize((string) json_encode($properties, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)),
         ];
     }
 
-    private function name(?Model $subject): string
+    /**
+     * @param  array<string, mixed>  $properties
+     */
+    private function name(?Model $subject, array $properties): string
     {
         return match (true) {
             $subject instanceof WebhookEndpoint => (string) $subject->application?->name,
-            $subject === null => '',
+            $subject === null => (string) ($properties['name'] ?? ''),
             default => (string) $subject->getAttribute('name'),
         };
     }

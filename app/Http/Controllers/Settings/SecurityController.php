@@ -53,6 +53,6 @@ class SecurityController extends Controller implements HasMiddleware
             'password' => $request->password,
         ]);
 
-        return back()->with('success', 'Saved. Your new password works from the next sign-in.');
+        return back()->with('success', "Saved. You're signed out everywhere else.");
     }
 }

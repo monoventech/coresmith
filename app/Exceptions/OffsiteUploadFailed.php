@@ -18,6 +18,16 @@ final class OffsiteUploadFailed extends RuntimeException
         return new self('The dump is ' . Number::fileSize($bytes, maxPrecision: 1) . ', over the 5 GB a single upload can carry, so it stayed on the server.');
     }
 
+    public static function dumpMissing(string $file, string $server): self
+    {
+        return new self("The dump {$file} is not on {$server}, so nothing was sent. Back up again.");
+    }
+
+    public static function noAddress(): self
+    {
+        return new self('Could not build the upload address. Check the bucket, region and endpoint in the S3 settings.');
+    }
+
     public static function rejected(string $output): self
     {
         $line = collect(preg_split('/\r?\n/', $output) ?: [])->map(fn(string $line): string => trim($line))->first(fn(string $line): bool => $line !== '') ?? 'no reason given';

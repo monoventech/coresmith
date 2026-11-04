@@ -49,7 +49,7 @@ final class SendBackupOffsite implements ShouldQueue
 
             $this->database->forceFill(['last_offsite_at' => now(), 'last_offsite_key' => $key, 'last_offsite_error' => null])->save();
 
-            $offsite->pruneDumps($connection, $this->database, $this->dumpPath);
+            rescue(fn() => $offsite->pruneDumps($connection, $this->database, $this->dumpPath), report: false);
         } catch (OffsiteUploadFailed $exception) {
             $this->database->forceFill(['last_offsite_error' => Str::limit($exception->getMessage(), 497)])->save();
         } finally {
@@ -60,7 +60,7 @@ final class SendBackupOffsite implements ShouldQueue
     public function failed(Throwable $exception): void
     {
         $this->database->forceFill([
-            'last_offsite_error' => "The backup was not sent. Check that {$this->database->server?->name} is reachable, then back up again.",
+            'last_offsite_error' => "The upload failed. Check that {$this->database->server?->name} is online and the S3 settings are right, then back up again.",
         ])->save();
     }
 }

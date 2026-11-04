@@ -93,6 +93,16 @@ final class CloudE2ESeeder extends Seeder
 
         $server = Server::factory()->for($team)->create(['name' => 'lapsed-01', 'status' => ServerStatus::Active]);
         Application::factory()->for($team)->for($server)->create(['name' => 'lapsed-app']);
+
+        foreach (self::PROJECTS as $code) {
+            Server::factory()->for($team)->create([
+                'name' => "lapsed-rekeyed-{$code}",
+                'status' => ServerStatus::Active,
+                'host_key_fingerprint' => E2ESeeder::ORIGINAL_HOST_KEY,
+                'pending_host_key_fingerprint' => E2ESeeder::PRESENTED_HOST_KEY,
+                'host_key_changed_at' => now(),
+            ]);
+        }
     }
 
     private function endingTeam(User $owner): void

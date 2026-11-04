@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { asGuest, blockingViolations, expect, openSecurity, PASSWORD, tabs, test, toast } from './support/fixtures'
+import { asGuest, blockingViolations, expect, openSecurity, own, PASSWORD, tabs, test, toast } from './support/fixtures'
 
 async function gotoAccount(page: Page) {
     await page.goto('/dashboard')
@@ -13,7 +13,10 @@ test.describe('your account', () => {
         await gotoAccount(page)
 
         await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible()
-        await expect(tabs(page, 'Account').getByRole('link', { name: 'Profile' })).toHaveAttribute('aria-current', 'page')
+        await expect(tabs(page, 'Account').getByRole('link', { name: 'Profile' })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
         await expect(page.getByLabel('Name')).toHaveValue('Maya Lindqvist')
         await expect(page.getByLabel('Email address')).toHaveValue('owner@coresmith.test')
     })
@@ -35,11 +38,17 @@ test.describe('your account', () => {
 
     test('the security tab holds the password and two-factor', async ({ page }) => {
         await gotoAccount(page)
-        await expect(tabs(page, 'Account').getByRole('link', { name: 'Security' })).toHaveAttribute('href', /\/settings\/security$/)
+        await expect(tabs(page, 'Account').getByRole('link', { name: 'Security' })).toHaveAttribute(
+            'href',
+            /\/settings\/security$/
+        )
 
         await openSecurity(page)
 
-        await expect(tabs(page, 'Account').getByRole('link', { name: 'Security' })).toHaveAttribute('aria-current', 'page')
+        await expect(tabs(page, 'Account').getByRole('link', { name: 'Security' })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
         await expect(page.getByTestId('password-card').getByLabel('New password')).toBeVisible()
         await expect(page.getByTestId('two-factor-card')).toContainText('Off')
         await expect(page.getByRole('button', { name: 'Enable 2FA' })).toBeVisible()
@@ -56,6 +65,30 @@ test.describe('your account', () => {
         await card.getByRole('button', { name: 'Save password' }).click()
 
         await expect(card).toContainText(/password is incorrect/i)
+    })
+})
+
+asGuest.describe('changing the password', () => {
+    asGuest('the toast says the other sessions ended', async ({ page }, testInfo) => {
+        await page.goto('/login')
+        await page.getByLabel('Email address').fill(`${own(testInfo, 'new-password')}@coresmith.test`)
+        await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
+        await page.getByRole('button', { name: 'Sign in' }).click()
+        await page.waitForURL(/\/dashboard$/)
+
+        await page.goto('/settings/security')
+        await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
+        await page.getByRole('button', { name: 'Confirm' }).click()
+        await page.waitForURL(/\/settings\/security$/)
+
+        const card = page.getByTestId('password-card')
+
+        await card.getByLabel('Current password').fill(PASSWORD)
+        await card.getByLabel('New password').fill('a-long-enough-passphrase')
+        await card.getByLabel('Confirm password').fill('a-long-enough-passphrase')
+        await card.getByRole('button', { name: 'Save password' }).click()
+
+        await expect(toast(page)).toContainText("Saved. You're signed out everywhere else.")
     })
 })
 

@@ -1,4 +1,4 @@
-import { asCloudMember, expect, isMobile, noSidewaysScroll, test, toast } from '../support/fixtures'
+import { asCloudMember, dialog, expect, isMobile, noSidewaysScroll, own, test, toast } from '../support/fixtures'
 
 test.describe('read-only teams on coresmith cloud', () => {
     test.afterEach(async ({ page }) => {
@@ -31,6 +31,28 @@ test.describe('read-only teams on coresmith cloud', () => {
         await page.getByRole('button', { name: 'Deploy', exact: true }).click()
 
         await expect(toast(page)).toContainText("This team's trial has ended, so it is read-only.")
+    })
+
+    test('a lapsed team can dismiss a changed host key but cannot trust it', async ({ page }, testInfo) => {
+        await page.goto('/expired/dashboard')
+        await page
+            .getByTestId('server-card')
+            .getByRole('link', { name: own(testInfo, 'lapsed-rekeyed'), exact: true })
+            .click()
+        await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+
+        const alert = page.getByTestId('host-key-alert')
+
+        await alert.getByRole('button', { name: 'Trust the new key' }).click()
+        await dialog(page).getByRole('button', { name: 'Trust this key' }).click()
+
+        await expect(toast(page)).toContainText("This team's trial has ended, so it is read-only.")
+        await expect(alert).toBeVisible()
+
+        await alert.getByRole('button', { name: 'Dismiss for now' }).click()
+
+        await expect(alert).toHaveCount(0)
+        await expect(toast(page)).toContainText('Dismissed. The original key is still the only one trusted')
     })
 
     test('a trial about to end warns', async ({ page }) => {

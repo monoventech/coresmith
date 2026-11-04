@@ -59,7 +59,8 @@ test('the cloud browser seed has a lapsed team, one about to lapse and one that 
 
     expect($status('expired')->readOnly())->toBeTrue()
         ->and($expired->applications()->pluck('name')->all())->toBe(['lapsed-app'])
-        ->and($expired->servers()->pluck('name')->all())->toBe(['lapsed-01'])
+        ->and($expired->servers()->where('name', 'not like', 'lapsed-rekeyed-%')->pluck('name')->all())->toBe(['lapsed-01'])
+        ->and($expired->servers()->whereNotNull('pending_host_key_fingerprint')->count())->toBe(count(CloudE2ESeeder::PROJECTS))
         ->and($expired->members()->whereKey($member->id)->first()?->pivot->role)->toBe('member')
         ->and($status('ending')->trialDaysLeft())->toBe(2)
         ->and($status('overdue')->state)->toBe(BillingState::PastDue)

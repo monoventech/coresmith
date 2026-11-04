@@ -25,11 +25,12 @@ use Illuminate\Support\Facades\DB;
 
 final class SingleSignOnController extends Controller
 {
-    public function update(Request $request, TeamContext $context, SsoConnections $connections): RedirectResponse
+    public function update(Request $request, TeamContext $context, SsoConnections $connections, PlanGate $plans): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
 
-        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+        $plans->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+
         $existing = $connections->forTeam($team);
 
         $request->merge([
@@ -111,11 +112,12 @@ final class SingleSignOnController extends Controller
         });
     }
 
-    public function verify(Request $request, TeamContext $context, SsoConnections $connections): RedirectResponse
+    public function verify(Request $request, TeamContext $context, SsoConnections $connections, PlanGate $plans): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
 
-        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+        $plans->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+
         $connection = $this->connection($connections, $team);
 
         if ($connection->isVerified()) {
@@ -143,7 +145,7 @@ final class SingleSignOnController extends Controller
         return back()->with('success', 'Verified. You can turn on single sign-on now.');
     }
 
-    public function enabled(Request $request, TeamContext $context, SsoConnections $connections, OidcClient $client): RedirectResponse
+    public function enabled(Request $request, TeamContext $context, SsoConnections $connections, OidcClient $client, PlanGate $plans): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
         $connection = $this->connection($connections, $team);
@@ -160,7 +162,7 @@ final class SingleSignOnController extends Controller
             return back()->with('success', 'Single sign-on is off.');
         }
 
-        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+        $plans->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
 
         if (!$connection->isVerified()) {
             return back()->with('error', 'Verify the email domain first. Add the TXT record, then check DNS.');
@@ -187,11 +189,12 @@ final class SingleSignOnController extends Controller
         return back()->with('success', 'Single sign-on is on. People at ' . $connection->email_domain . ' can use it to sign in.');
     }
 
-    public function provisioning(Request $request, TeamContext $context, SsoConnections $connections): RedirectResponse
+    public function provisioning(Request $request, TeamContext $context, SsoConnections $connections, PlanGate $plans): RedirectResponse
     {
         $team = $this->ownedTeam($request, $context);
 
-        app(PlanGate::class)->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+        $plans->ensureIncludes($team, PlanFeature::SingleSignOn, $request->user());
+
         $connection = $this->connection($connections, $team);
 
         $request->validate(['jit_provisioning' => ['required', 'boolean']]);

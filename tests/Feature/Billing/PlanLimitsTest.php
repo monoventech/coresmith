@@ -14,6 +14,7 @@ use App\Services\Billing\PlanGate;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Dns\DnsResolver;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
@@ -384,4 +385,14 @@ test('other writes on a lapsed team\'s address are still refused', function () {
         ->assertSessionHas('error', "This team's trial has ended, so it is read-only. Servers and apps keep running. Choose a plan in Billing settings to make changes again.");
 
     expect($pro->servers()->count())->toBe(0);
+});
+
+test('no controller reaches for the plan gate through the container', function () {
+    $offenders = collect(File::allFiles(app_path('Http/Controllers')))
+        ->filter(fn(SplFileInfo $file): bool => str_contains($file->getContents(), 'app(PlanGate::class)'))
+        ->map(fn(SplFileInfo $file): string => $file->getRelativePathname())
+        ->values()
+        ->all();
+
+    expect($offenders)->toBe([]);
 });

@@ -362,6 +362,8 @@ test('registering an app is recorded without any secret', function () {
 
     expect($activity->causer?->is($user))->toBeTrue()
         ->and($activity->subject?->is(GitHubApp::find($intent['key'])))->toBeTrue()
+        ->and($activity->properties['team_id'])->toBe($team->id)
+        ->and($activity->properties['name'])->toBe(GitHubApp::find($intent['key'])->name)
         ->and($properties)->not->toContain('whs-live-secret')
         ->and($properties)->not->toContain('cs-live-secret')
         ->and($properties)->not->toContain('PRIVATE KEY')

@@ -5,8 +5,11 @@ declare(strict_types=1);
 use App\Enums\Plan;
 use App\Enums\TeamRole;
 use App\Models\Application;
+use App\Models\CloudProvider;
+use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
@@ -80,6 +83,62 @@ test("an owner downloads the team's audit log", function () {
             ['2026-10-18T12:00:00Z', 'Coresmith', '', 'webhook_received', 'webhook', 'shop', ''],
         ])
         ->and(collect($rows)->pluck(5)->contains('not-ours'))->toBeFalse();
+});
+
+test("the team's cloud provider, git provider and github app events are in the export, removed ones too", function () {
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+    $owner = auditOwner($team);
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+    $source = SourceProvider::factory()->for($team)->create(['name' => 'monoven-labs']);
+    $app = GitHubApp::factory()->for($team)->create(['name' => 'Coresmith Monoven']);
+    $theirs = Team::factory()->create();
+    $theirAccount = CloudProvider::factory()->for($theirs)->create(['name' => 'Their Hetzner']);
+    $theirSource = SourceProvider::factory()->for($theirs)->create(['name' => 'their-labs']);
+    $theirApp = GitHubApp::factory()->for($theirs)->create(['name' => 'Their app']);
+
+    activity()->performedOn($account)->causedBy($owner)->withProperties(['provider' => 'Hetzner Cloud', 'name' => $account->name])->log('cloud_provider_connected');
+    $account->delete();
+    activity()->performedOn($account)->causedBy($owner)->withProperties(['provider' => 'Hetzner Cloud'])->log('cloud_provider_removed');
+    activity()->performedOn($source)->withProperties(['installation_id' => '61842'])->log('github_installation_linked');
+    $source->markUninstalled();
+    activity()->performedOn($app)->causedBy($owner)->withProperties(['team_id' => $team->id, 'name' => $app->name])->log('github_app_registered');
+    $this->actingAs($owner)->delete(route('github-apps.destroy', $app))->assertRedirect();
+    activity()->performedOn($theirAccount)->withProperties(['provider' => 'Hetzner Cloud', 'name' => $theirAccount->name])->log('cloud_provider_connected');
+    activity()->performedOn($theirSource)->log('github_installation_linked');
+    activity()->performedOn($theirApp)->withProperties(['team_id' => $theirs->id, 'name' => $theirApp->name])->log('github_app_registered');
+    $theirApp->delete();
+
+    $rows = array_filter(array_slice(auditCsv(auditExport($team)->assertOk()), 1), fn(array $row): bool => $row[3] !== 'audit_log_exported');
+
+    expect(array_map(fn(array $row): array => [$row[3], $row[4], $row[5]], $rows))->toBe([
+        ['cloud_provider_connected', 'cloud_provider', 'Hetzner production'],
+        ['cloud_provider_removed', 'cloud_provider', 'Hetzner production'],
+        ['github_installation_linked', 'source_provider', 'monoven-labs'],
+        ['github_installation_removed', 'source_provider', 'monoven-labs'],
+        ['github_app_registered', 'github_app', 'Coresmith Monoven'],
+        ['github_app_removed', 'github_app', 'Coresmith Monoven'],
+    ]);
+});
+
+test('provider rows are escaped and redacted like the rest', function () {
+    $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
+    $account = CloudProvider::factory()->for($team)->create(['name' => '=HYPERLINK("http://x")']);
+    $source = SourceProvider::factory()->for($team)->create(['name' => '+1+1']);
+    $app = GitHubApp::factory()->for($team)->create();
+
+    activity()->performedOn($account)->withProperties(['command' => 'mysql --password=hunter2hunter2'])->log('cloud_provider_token_replaced');
+    activity()->performedOn($source)->withProperties(['command' => 'mysql --password=hunter3hunter3'])->log('github_installation_linked');
+    activity()->performedOn($app)->withProperties(['team_id' => $team->id, 'name' => '@SUM(A1)', 'command' => 'mysql --password=hunter4hunter4'])->log('github_app_removed');
+    $app->delete();
+
+    [$cloud, $git, $github] = array_slice(auditCsv(auditExport($team)->assertOk()), 1);
+
+    expect($cloud[5])->toBe('\'=HYPERLINK("http://x")')
+        ->and($cloud[6])->toContain('[REDACTED]')->not->toContain('hunter2hunter2')
+        ->and($git[5])->toBe("'+1+1")
+        ->and($git[6])->toContain('[REDACTED]')->not->toContain('hunter3hunter3')
+        ->and($github[5])->toBe("'@SUM(A1)")
+        ->and($github[6])->toContain('[REDACTED]')->not->toContain('hunter4hunter4');
 });
 
 test('the period limits the rows', function () {

@@ -14,6 +14,7 @@ use App\Models\ManagedDatabase;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\SSHConnection;
 use Aws\S3\S3Client;
+use Throwable;
 
 final class OffsiteBackups
 {
@@ -55,17 +56,24 @@ final class OffsiteBackups
 
     public function send(SSHConnection $connection, ManagedDatabase $database, string $dumpPath, BackupDestination $destination): string
     {
-        $size = (int) trim($connection->execute('stat -c %s ' . escapeshellarg($dumpPath), sudo: true)->throw()->output);
+        $stat = $connection->execute('stat -c %s ' . escapeshellarg($dumpPath), sudo: true);
+
+        if ($stat->failed()) {
+            throw OffsiteUploadFailed::dumpMissing(basename($dumpPath), (string) $database->server?->name);
+        }
+
+        $size = (int) trim($stat->output);
 
         if ($size > self::SINGLE_UPLOAD_LIMIT) {
             throw OffsiteUploadFailed::tooLarge($size);
         }
 
         $key = $this->objectKey($destination, $database, $dumpPath);
+        $url = $this->uploadAddress($destination, $key);
         $config = trim($connection->execute('mktemp')->throw()->output);
 
         try {
-            $connection->uploadContent('url = "' . $this->presignedPut($destination, $key) . '"' . "\n", $config);
+            $connection->uploadContent('url = "' . $url . '"' . "\n", $config);
 
             $result = $connection->execute(
                 'curl --fail --silent --show-error --max-time ' . self::UPLOAD_SECONDS . ' --config ' . escapeshellarg($config) . ' --upload-file ' . escapeshellarg($dumpPath),
@@ -81,6 +89,15 @@ final class OffsiteBackups
         }
 
         return $key;
+    }
+
+    private function uploadAddress(BackupDestination $destination, string $key): string
+    {
+        try {
+            return $this->presignedPut($destination, $key);
+        } catch (Throwable) {
+            throw OffsiteUploadFailed::noAddress();
+        }
     }
 
     public function pruneDumps(SSHConnection $connection, ManagedDatabase $database, string $dumpPath): void

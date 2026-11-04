@@ -104,7 +104,7 @@ final class GitHubAppRegistrar
         activity()
             ->performedOn($app)
             ->causedBy($user)
-            ->withProperties(['app_id' => $app->app_id, 'slug' => $app->slug, 'owner' => $app->owner_login])
+            ->withProperties(['team_id' => $app->team_id, 'name' => $app->name, 'app_id' => $app->app_id, 'slug' => $app->slug, 'owner' => $app->owner_login])
             ->log('github_app_registered');
 
         return $app;

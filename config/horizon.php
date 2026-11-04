@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Str;
 
+$workers = fn(string $name, int $default): int => max(1, (int) (env($name) ?: $default));
+
 return [
 
     /*
@@ -257,23 +259,23 @@ return [
     'environments' => [
         'production' => [
             'provisioning' => [
-                'maxProcesses' => 2,
+                'maxProcesses' => $workers('HORIZON_PROVISIONING_PROCESSES', 2),
             ],
 
             'deployments' => [
-                'maxProcesses' => 3,
+                'maxProcesses' => $workers('HORIZON_DEPLOYMENTS_PROCESSES', 3),
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
 
             'server-tasks' => [
-                'maxProcesses' => 5,
+                'maxProcesses' => $workers('HORIZON_SERVER_TASKS_PROCESSES', 5),
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
 
             'default' => [
-                'maxProcesses' => 3,
+                'maxProcesses' => $workers('HORIZON_DEFAULT_PROCESSES', 3),
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],

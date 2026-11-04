@@ -97,7 +97,7 @@ final class GitHubAppController extends Controller
         activity()
             ->performedOn($githubApp)
             ->causedBy($request->user())
-            ->withProperties(['app_id' => $githubApp->app_id, 'slug' => $githubApp->slug, 'owner' => $githubApp->owner_login])
+            ->withProperties(['team_id' => $githubApp->team_id, 'name' => $githubApp->name, 'app_id' => $githubApp->app_id, 'slug' => $githubApp->slug, 'owner' => $githubApp->owner_login])
             ->log('github_app_removed');
 
         return back()->with('success', 'Removed. Delete the app on GitHub to finish.');

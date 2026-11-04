@@ -297,7 +297,7 @@ test('removing an app with no live installation forgets its secrets', function (
         ->and(Cache::has($health->key($credentials)))->toBeFalse()
         ->and($activity->causer_id)->toBe($owner->id)
         ->and($activity->subject_id)->toBe($app->id)
-        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['app_id' => $app->app_id, 'slug' => 'coresmith-monoven', 'owner' => 'monoventech'])
+        ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['team_id' => $team->id, 'name' => $app->name, 'app_id' => $app->app_id, 'slug' => 'coresmith-monoven', 'owner' => 'monoventech'])
         ->and(json_encode($activity->getAttributes()))->not->toContain('remove_me');
 
     Http::assertNothingSent();

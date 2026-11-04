@@ -18,7 +18,11 @@ use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Tests\Support\CloudBilling;
 use Tests\Support\FakeSSHTransport;
 
@@ -94,6 +98,18 @@ test('a custom endpoint with path-style addressing puts the bucket in the path',
     expect($url['host'])->toBe('minio.example.com')
         ->and($url['path'])->toBe('/my-bucket/backups/x.sql.gz');
 });
+
+test('a bucket with a dot in its name goes in the path, because its host would fail tls', function (array $attributes, string $host, string $path) {
+    $url = parse_url(offsite()->presignedPut(offsiteDestination(Team::factory()->create(), $attributes), 'backups/x.sql.gz'));
+
+    expect($url['host'])->toBe($host)
+        ->and($url['path'])->toBe($path);
+})->with([
+    'on aws' => [['bucket' => 'backups.example.com'], 's3.eu-west-1.amazonaws.com', '/backups.example.com/backups/x.sql.gz'],
+    'on another endpoint' => [['bucket' => 'backups.example.com', 'endpoint' => 'https://s3.example.com'], 's3.example.com', '/backups.example.com/backups/x.sql.gz'],
+    'without a dot on aws' => [['bucket' => 'my-bucket'], 'my-bucket.s3.eu-west-1.amazonaws.com', '/backups/x.sql.gz'],
+    'without a dot on another endpoint' => [['bucket' => 'my-bucket', 'endpoint' => 'https://s3.example.com'], 'my-bucket.s3.example.com', '/backups/x.sql.gz'],
+]);
 
 test('object keys keep only safe characters', function () {
     $database = offsiteDatabase(server: ['name' => 'forge 01/../x']);
@@ -193,12 +209,118 @@ test('a refused upload is recorded and keeps every dump', function () {
         ->and(implode("\n", $transport->commands()))->not->toContain('tail -n +4');
 });
 
-test('a failed upload job is recorded', function () {
+test('a failed upload job says what to check without guessing the cause', function () {
     $database = offsiteDatabase(server: ['name' => 'forge-01']);
 
     (new SendBackupOffsite($database, '/var/coresmith/backups/app_db/app_db-1.sql.gz'))->failed(new RuntimeException('Connection refused'));
 
-    expect($database->fresh()->last_offsite_error)->toBe('The backup was not sent. Check that forge-01 is reachable, then back up again.');
+    expect($database->fresh()->last_offsite_error)->toBe('The upload failed. Check that forge-01 is online and the S3 settings are right, then back up again.');
+});
+
+test('a dump that is gone is named and nothing is sent', function () {
+    $database = offsiteDatabase(server: ['name' => 'forge-01']);
+    offsiteDestination($database->team);
+    $transport = (new FakeSSHTransport)->respondTo('stat -c %s', "stat: cannot statx: No such file or directory\n", 1);
+
+    offsiteRun(new SendBackupOffsite($database, '/var/coresmith/backups/app_db/app_db-20261018023000.sql.gz'), $transport);
+
+    expect($database->fresh()->last_offsite_error)->toBe('The dump app_db-20261018023000.sql.gz is not on forge-01, so nothing was sent. Back up again.')
+        ->and($database->fresh()->last_offsite_at)->toBeNull()
+        ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, 'curl')))->toBeEmpty();
+});
+
+test('settings that cannot build an upload address say so before touching the server', function () {
+    $database = offsiteDatabase();
+    offsiteDestination($database->team, ['endpoint' => 'not an address']);
+    $transport = offsiteTransport();
+
+    offsiteRun(new SendBackupOffsite($database, '/var/coresmith/backups/app_db/app_db-20261018023000.sql.gz'), $transport);
+
+    expect($database->fresh()->last_offsite_error)->toBe('Could not build the upload address. Check the bucket, region and endpoint in the S3 settings.')
+        ->and($database->fresh()->last_offsite_at)->toBeNull()
+        ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, 'curl') || str_contains($command, 'mktemp')))->toBeEmpty();
+});
+
+test('a prune that fails after a good upload leaves the backup recorded as sent', function () {
+    $database = offsiteDatabase();
+    offsiteDestination($database->team);
+    $transport = offsiteTransport()->timeOutOn('tail -n +4');
+
+    offsiteRun(new SendBackupOffsite($database, '/var/coresmith/backups/app_db/app_db-20261018023000.sql.gz'), $transport);
+
+    expect($database->fresh()->last_offsite_key)->toBe('backups/monoven/forge-01/app_db/app_db-20261018023000.sql.gz')
+        ->and($database->fresh()->last_offsite_error)->toBeNull();
+});
+
+test('the longest key the panel can build survives the save after a good upload', function () {
+    $database = offsiteDatabase(server: ['name' => str_repeat('s', 255)]);
+    offsiteDestination($database->team, ['prefix' => str_repeat('p', 200)]);
+
+    offsiteRun(new SendBackupOffsite($database, '/var/coresmith/backups/app_db/app_db-20261018023000.sql.gz'), offsiteTransport());
+
+    $key = (string) $database->fresh()->last_offsite_key;
+
+    expect(strlen($key))->toBeGreaterThan(255)
+        ->and($key)->toEndWith('/app_db/app_db-20261018023000.sql.gz')
+        ->and(Schema::getColumnType('databases', 'last_offsite_key'))->toBe('text');
+});
+
+test('widening the key keeps the rows, the indexes and the foreign keys', function () {
+    $migration = require database_path('migrations/2026_11_04_162049_fit_long_offsite_keys.php');
+    $database = offsiteDatabase(attributes: ['last_offsite_key' => 'backups/old.sql.gz', 'last_offsite_error' => 'Refused.']);
+    $server = $database->server;
+    $team = $database->team;
+    $owner = $team->owner;
+    $shape = fn(): array => [
+        collect(Schema::getIndexes('databases'))->pluck('name')->sort()->values()->all(),
+        collect(Schema::getForeignKeys('databases'))->pluck('columns')->sortBy(fn(array $columns): string => $columns[0])->values()->all(),
+    ];
+    $before = $shape();
+
+    $migration->down();
+    $narrow = Schema::getColumnType('databases', 'last_offsite_key');
+    $migration->up();
+
+    $wide = Schema::getColumnType('databases', 'last_offsite_key');
+    $kept = ManagedDatabase::query()->find($database->id);
+    $after = $shape();
+
+    $kept?->forceDelete();
+    $server->forceDelete();
+    $team->forceDelete();
+    $owner?->forceDelete();
+
+    expect($narrow)->not->toBe('text')
+        ->and($wide)->toBe('text')
+        ->and($kept?->last_offsite_key)->toBe('backups/old.sql.gz')
+        ->and($kept?->last_offsite_error)->toBe('Refused.')
+        ->and($after)->toBe($before);
+});
+
+test('pruning keeps the newest three dumps of this database and touches nothing else', function () {
+    $directory = sys_get_temp_dir() . '/coresmith prune ' . Str::random(12);
+    $ours = ['app_db-20261014023000.sql.gz', 'app_db-20261015023000.sql.gz', 'app_db-20261016023000.sql.gz', 'app_db-20261017023000.sql.gz', 'app_db-20261018023000.sql.gz'];
+    $others = ['app_db-20261018023000.sql', 'app_db-notes.sql.gz', 'app_db_two-20261010023000.sql.gz', 'my_app_db-20261010023000.sql.gz', 'other-20261010023000.sql.gz', 'other-20261011023000.sql.gz', 'other-20261012023000.sql.gz', 'other-20261013023000.sql.gz'];
+    File::ensureDirectoryExists($directory);
+
+    try {
+        foreach ([...$ours, ...$others] as $name) {
+            touch("{$directory}/{$name}");
+        }
+
+        $database = offsiteDatabase(server: ['ssh_user' => 'root']);
+        $transport = new FakeSSHTransport;
+        offsite()->pruneDumps(offsiteConnection($database, $transport), $database, "{$directory}/app_db-20261018023000.sql.gz");
+        $command = collect($transport->commands())->first(fn(string $command): bool => str_contains($command, 'tail -n +4'));
+
+        expect(Process::run(['bash', '-c', $command])->successful())->toBeTrue();
+
+        $left = collect(File::files($directory))->map(fn(SplFileInfo $file): string => $file->getFilename())->sort()->values()->all();
+
+        expect($left)->toBe(collect([...array_slice($ours, 2), ...$others])->sort()->values()->all());
+    } finally {
+        File::deleteDirectory($directory);
+    }
 });
 
 test('a team without a destination sends nothing', function () {

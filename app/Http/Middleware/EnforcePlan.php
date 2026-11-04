@@ -45,6 +45,7 @@ final class EnforcePlan
         'settings.team-domain.destroy',
         'servers.destroy',
         'servers.cloud.destroy',
+        'servers.host-key.reject',
         'settings.billing.plan.update',
         'settings.billing.plan.destroy',
         'settings.billing.plan.resume',

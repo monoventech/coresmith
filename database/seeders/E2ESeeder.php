@@ -149,6 +149,11 @@ final class E2ESeeder extends Seeder
         foreach (array_values(self::PROJECTS) as $index => $code) {
             User::factory()->create(['name' => 'Invitee ' . $code, 'email' => "invitee-{$code}@coresmith.test", 'password' => $password]);
 
+            $newPassword = User::factory()->create(['name' => 'New password ' . $code, 'email' => "new-password-{$code}@coresmith.test", 'password' => $password]);
+            $newPasswordTeam = Team::factory()->create(['name' => 'New password ' . $code, 'slug' => 'new-password-' . $code, 'owner_id' => $newPassword->id]);
+            $newPasswordTeam->members()->attach($newPassword, ['role' => TeamRole::Owner->value]);
+            $newPassword->forceFill(['current_team_id' => $newPasswordTeam->id])->save();
+
             $this->failedLatest($this->application("deploy-{$code}", 8100 + $index * 30));
             $this->application("scratch-{$code}", 8110 + $index * 30);
             $this->application("doomed-{$code}", 8120 + $index * 30);

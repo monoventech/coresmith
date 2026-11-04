@@ -116,6 +116,11 @@ test('a read-only team cannot change anything on the web', function (Closure $wr
     'a teammate' => [fn($test, Team $team, Application $app) => $test->post(route('teams.members.store', $team), ['email' => 'new@example.com', 'role' => 'member'])],
     'an ssh key' => [fn($test, Team $team, Application $app) => $test->post(route('ssh-keys.store'), ['name' => 'laptop', 'public_key' => 'ssh-ed25519 AAAA'])],
     'an api token' => [fn($test, Team $team, Application $app) => $test->post(route('api-tokens.store'), ['name' => 'ci', 'abilities' => [Ability::DeployApplication->value]])],
+    'trust a changed host key' => [function ($test, Team $team, Application $app) {
+        $app->server->forceFill(['host_key_fingerprint' => 'SHA256:old', 'pending_host_key_fingerprint' => 'SHA256:new', 'host_key_changed_at' => now()])->save();
+
+        return $test->post(route('servers.host-key.accept', $app->server), ['fingerprint' => 'SHA256:new']);
+    }],
 ]);
 
 test('a read-only team cannot change anything through the api', function () {
@@ -255,6 +260,16 @@ test('a read-only team can still leave, secure itself, shrink and pay', function
     }],
     'keep the plan, which reaches its own answer' => [function ($test, Team $team, User $owner) {
         $test->post(route('settings.billing.plan.resume'))->assertSessionHasErrors(['plan' => 'This plan is not ending, so there is nothing to keep.']);
+    }],
+    'dismiss a changed host key' => [function ($test, Team $team, User $owner) {
+        $server = Server::factory()->for($team)->create(['host_key_fingerprint' => 'SHA256:old', 'pending_host_key_fingerprint' => 'SHA256:new', 'host_key_changed_at' => now()]);
+
+        $test->post(route('servers.host-key.reject', $server))->assertRedirect()->assertSessionHas('success', 'Dismissed. The original key is still the only one trusted, so operations stay blocked until the server presents it again.');
+
+        $server->refresh();
+
+        expect($server->pending_host_key_fingerprint)->toBeNull()
+            ->and($server->host_key_fingerprint)->toBe('SHA256:old');
     }],
     'remove the s3 destination' => [function ($test, Team $team, User $owner) {
         BackupDestination::factory()->for($team)->create();
