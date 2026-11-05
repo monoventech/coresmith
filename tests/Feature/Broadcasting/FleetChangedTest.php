@@ -200,6 +200,10 @@ test('the team channel is registered under its name', function () {
     expect(Broadcast::getChannels()->get('teams.{team}'))->toBe(TeamChannel::class);
 });
 
+test('only the deploy and team channels can be joined', function () {
+    expect(Broadcast::getChannels()->keys()->sort()->values()->all())->toBe(['deployments.{deployment}', 'teams.{team}']);
+});
+
 test('the ping carries only a kind and an id', function () {
     Event::fake([FleetChanged::class]);
     [$team] = fleetTeam();
