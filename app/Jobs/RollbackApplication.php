@@ -70,10 +70,11 @@ final class RollbackApplication implements ShouldQueue
             return;
         }
 
-        $connection = $connections->for($this->application->server);
-        $paths = new ReleasePaths($this->application);
+        $server = $this->application->server;
 
         try {
+            $connection = $connections->for($server);
+            $paths = new ReleasePaths($this->application);
             $releases = $connection->execute('ls -1dt ' . $paths->releases() . '/*/ 2>/dev/null || true', sudo: true)->output;
             $ordered = array_values(array_filter(array_map(
                 static fn(string $line): string => rtrim(trim($line), '/'),
@@ -113,8 +114,8 @@ final class RollbackApplication implements ShouldQueue
             if (!in_array($this->application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
                 $processes->refresh($connection, $this->application, restart: $before !== $this->application->runtimeVersions());
 
-                $server = app(SsrServer::class);
-                $ssr = $server->unit($this->application);
+                $ssrServer = app(SsrServer::class);
+                $ssr = $ssrServer->unit($this->application);
 
                 try {
                     $processes->verifyStarted($connection, $this->application, $ssr === null ? null : array_values(array_diff($processes->unitNames($this->application), [$ssr])));
@@ -133,7 +134,7 @@ final class RollbackApplication implements ShouldQueue
                 }
 
                 if ($ssr !== null) {
-                    $server->confirm($connection, $this->application, $ssr);
+                    $ssrServer->confirm($connection, $this->application, $ssr);
                 }
             }
 
@@ -144,8 +145,11 @@ final class RollbackApplication implements ShouldQueue
                 ->withProperties(['from' => $previous, 'to' => $name, 'runtimes' => $stack === null ? 'unchanged' : 'restored'])
                 ->log('application_rolled_back');
         } finally {
-            $connections->disconnect($this->application->server);
             $lock->release();
+
+            if ($server !== null) {
+                $connections->disconnect($server);
+            }
 
             FleetChanged::forApplication($this->application);
             rescue(fn() => app(AutoDeploy::class)->reconcile($this->application->fresh() ?? $this->application), report: true);

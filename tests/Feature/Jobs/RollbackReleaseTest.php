@@ -6,12 +6,15 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
+use App\Events\FleetChanged;
 use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -180,6 +183,17 @@ test('the connection is released after a rollback, even a refused one', function
         ->toThrow(NoPreviousReleaseException::class);
 
     expect($refused->connected())->toBeFalse();
+});
+
+test('a rollback that fails before it reaches the server still frees the deploy lock and says so', function () {
+    Event::fake([FleetChanged::class]);
+    $application = rollbackApp();
+    $application->server->delete();
+
+    expect(fn() => rollbackRun($application->fresh(), rollbackTransport()))->toThrow(TypeError::class);
+
+    expect(Cache::lock('deploy:' . $application->getKey(), 10)->get())->toBeTrue();
+    Event::assertDispatched(FleetChanged::class);
 });
 
 test('a restart failure after the swap still records the release that is now live', function () {
