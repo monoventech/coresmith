@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\Ability;
+use App\Enums\DeploymentStatus;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -51,6 +52,16 @@ test('the browser seed records atlas moving to the monoventech connection, and f
         ->and($moved->properties->get('repository'))->toBe('monoventech/atlas')
         ->and(SourceProvider::withTrashed()->find($moved->properties->get('from'))?->trashed())->toBeTrue()
         ->and($sentences->all())->toContain('atlas now clones monoventech/atlas through GitHub on monoventech');
+});
+
+test('the browser seed gives every browser project its own running deploy to cancel while it streams', function () {
+    e2eSeedRun();
+
+    $streamed = collect(E2ESeeder::PROJECTS)->map(fn(string $code): Application => Application::query()->where('slug', "streamed-{$code}")->firstOrFail());
+
+    expect($streamed->map(fn(Application $application): string => $application->server->name)->unique()->values()->all())->toBe(['cancel-01'])
+        ->and($streamed->map(fn(Application $application): int => $application->base_port)->unique())->toHaveCount(5)
+        ->and($streamed->every(fn(Application $application): bool => $application->deployments()->sole()->status === DeploymentStatus::Running && $application->deployments()->sole()->cancel_requested_at === null))->toBeTrue();
 });
 
 test('the browser seed has a team whose github connection lost its app, with a repository to pick from the cache', function () {

@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\ActivityFeed;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Spatie\Activitylog\Models\Activity;
@@ -130,6 +131,45 @@ test('a running deploy is asked to stop and its build is stopped', function () {
 
     Queue::assertPushedOn('server-tasks', StopDeployBuild::class, fn(StopDeployBuild $job): bool => cancelScreenJobDeployment($job)->is($deployment));
     Queue::assertPushed(StopDeployBuild::class, 1);
+});
+
+test('a running deploy pushes its cancel to the open page at once', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $deployment = cancelScreenRunning($team);
+    $pushed = [];
+
+    Event::listen(DeploymentUpdated::class, function (DeploymentUpdated $update) use (&$pushed): void {
+        $pushed[] = $update->broadcastWith();
+    });
+
+    $this->actingAs(cancelScreenMember($team))->post(cancelEndpoint($deployment));
+
+    expect($pushed)->toHaveCount(1)
+        ->and($pushed[0]['id'])->toBe($deployment->id)
+        ->and($pushed[0]['cancel_requested'])->toBeTrue()
+        ->and($pushed[0]['cancelled_by'])->toBe('Maya Lindqvist')
+        ->and($pushed[0]['cancellable'])->toBeFalse()
+        ->and($pushed[0]['state'])->toBe(['key' => 'cancelling', 'label' => 'Cancelling', 'tone' => 'default', 'live' => false]);
+});
+
+test('a cancel that cannot be pushed still stops the build', function () {
+    Queue::fake();
+    Exceptions::fake();
+    $team = Team::factory()->create();
+    $deployment = cancelScreenRunning($team);
+
+    Event::listen(DeploymentUpdated::class, function (): void {
+        throw new RuntimeException('Broadcaster is down');
+    });
+
+    $this->actingAs(cancelScreenMember($team))
+        ->post(cancelEndpoint($deployment))
+        ->assertSessionHas('success', 'Cancelling. The current release keeps serving.');
+
+    expect($deployment->fresh()->cancel_requested_at)->not->toBeNull();
+    Queue::assertPushed(StopDeployBuild::class, 1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Broadcaster is down');
 });
 
 test('asking twice is harmless', function () {

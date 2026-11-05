@@ -159,7 +159,11 @@
 
     function cancel() {
         cancelling = true
-        router.post(deployment_links.cancel, {}, { preserveScroll: true, onFinish: () => (cancelling = false) })
+        router.post(
+            deployment_links.cancel,
+            {},
+            { preserveScroll: true, onSuccess: () => (pushed = null), onFinish: () => (cancelling = false) }
+        )
     }
 
     $effect(() => {

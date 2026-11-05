@@ -16,6 +16,61 @@ function rows(page: Page) {
     return page.getByTestId('deployment-row')
 }
 
+type Pushed = Record<string, unknown> & { id: string; log: string }
+
+async function streamDeploys(page: Page) {
+    let shown: Pushed | null = null
+    let channel: string | null = null
+    let send: ((message: string) => void) | null = null
+
+    await page.route(
+        (url) => /\/deployments\/[^/]+$/.test(url.pathname),
+        async (route) => {
+            const response = await route.fetch()
+
+            if (!route.request().headers()['x-inertia']) {
+                return route.fulfill({ response })
+            }
+
+            const visit = await response.json()
+            shown = visit.props.deployment
+
+            await route.fulfill({ response, json: { ...visit, props: { ...visit.props, streaming: true } } })
+        }
+    )
+
+    await page.route('**/broadcasting/auth', (route) => route.fulfill({ json: { auth: 'coresmith-local:signature' } }))
+
+    await page.routeWebSocket(/\/app\//, (socket) => {
+        send = (message) => socket.send(message)
+        socket.send(
+            JSON.stringify({
+                event: 'pusher:connection_established',
+                data: JSON.stringify({ socket_id: '1234.5678', activity_timeout: 120 })
+            })
+        )
+        socket.onMessage((message) => {
+            const frame = JSON.parse(String(message))
+
+            if (frame.event === 'pusher:subscribe') {
+                channel = frame.data.channel
+                socket.send(JSON.stringify({ event: 'pusher_internal:subscription_succeeded', channel, data: '{}' }))
+            }
+        })
+    })
+
+    return {
+        async push(change: (deployment: Pushed) => Pushed) {
+            await expect
+                .poll(() => channel !== null && shown !== null && channel === `private-deployments.${shown.id}`)
+                .toBe(true)
+            send?.(
+                JSON.stringify({ event: 'deployment.updated', channel, data: JSON.stringify(change(shown as Pushed)) })
+            )
+        }
+    }
+}
+
 test.describe('the deployments list', () => {
     test('every deploy across the fleet is listed with the running one pinned on top', async ({ page }, testInfo) => {
         await gotoDeployments(page, isMobile(testInfo))
@@ -181,6 +236,25 @@ test.describe('cancelling a deploy', () => {
         await expect(toast(page)).toContainText('Cancelling. The current release keeps serving.')
         await expect(page.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
         await expect(page.getByTestId('deployment-status')).toHaveText('Cancelling')
+    })
+
+    test('a cancel keeps saying it is stopping while the deploy streams', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), "The mobile prototype's running deploy has no Cancel")
+
+        const stream = await streamDeploys(page)
+
+        await watch(page, own(testInfo, 'streamed'))
+        await stream.push((deployment) => ({
+            ...deployment,
+            log: `${deployment.log}\n[12:00:00] build: compiling assets`
+        }))
+        await expect(page.getByLabel('Deployment output')).toContainText('build: compiling assets')
+
+        await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+        await expect(toast(page)).toContainText('Cancelling. The current release keeps serving.')
+        await expect(page.getByTestId('deployment-status')).toHaveText('Cancelling')
+        await expect(page.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
     })
 
     test('on a phone a running deploy offers no cancel', async ({ page }, testInfo) => {

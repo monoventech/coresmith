@@ -11,6 +11,7 @@ namespace App\Services\Deployment;
 use App\Enums\ApplicationStatus;
 use App\Enums\CancelOutcome;
 use App\Enums\DeploymentStatus;
+use App\Events\DeploymentUpdated;
 use App\Events\FleetChanged;
 use App\Jobs\PostCommitStatus;
 use App\Jobs\StopDeployBuild;
@@ -73,6 +74,10 @@ final class DeploymentCancellation
         if ($asked === 0) {
             return $deployment->fresh()?->status === DeploymentStatus::Running ? CancelOutcome::AlreadyRequested : CancelOutcome::Finished;
         }
+
+        rescue(function () use ($deployment): void {
+            DeploymentUpdated::dispatch($deployment->refresh());
+        }, report: true);
 
         rescue(function () use ($deployment): void {
             StopDeployBuild::dispatch($deployment);

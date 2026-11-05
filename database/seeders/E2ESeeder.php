@@ -777,6 +777,7 @@ final class E2ESeeder extends Seeder
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $this->runningForTwoHours($this->application("cancel-{$code}", 9000 + $index * 10, server: $cancel));
+            $this->runningForTwoHours($this->application("streamed-{$code}", 9230 + $index * 10, server: $cancel));
             $this->queued($this->application("queued-{$code}", 9050 + $index * 10));
         }
 
