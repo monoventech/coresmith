@@ -327,6 +327,7 @@ test.describe('with the environment GitHub App', () => {
         await card.getByRole('link', { name: 'Install on GitHub' }).click()
 
         await expect.poll(() => captured.url).toBe(connect)
+        await expect(page).toHaveTitle('stub')
         expect(captured.navigation).toBe(true)
     })
 
@@ -360,6 +361,7 @@ test.describe('other Git providers', () => {
         await connect.click()
 
         await expect.poll(() => captured.location).toMatch(/^https:\/\/gitlab\.com\/oauth\/authorize\?/)
+        await expect(page).toHaveTitle('stub')
         expect(captured.navigation).toBe(true)
     })
 })
