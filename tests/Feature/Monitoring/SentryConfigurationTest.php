@@ -128,7 +128,8 @@ test('a blank sample rate leaves tracing off until a rate is given', function ()
 
 test('the test suite can never send a real event', function () {
     expect(config('sentry.dsn'))->toBeEmpty()
-        ->and((string) file_get_contents(base_path('phpunit.xml')))->toContain('<env name="SENTRY_LARAVEL_DSN" value="" force="true"/>');
+        ->and((string) file_get_contents(base_path('phpunit.xml')))->toContain('<env name="SENTRY_LARAVEL_DSN" value="" force="true"/>')
+        ->toContain('<server name="SENTRY_LARAVEL_DSN" value=""/>');
 });
 
 test('a reported exception reaches sentry', function () {

@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Support\Sentry\BrowserSentry;
-use Illuminate\Support\Env;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\TemporaryEnvironment;
 
 function browserSentryMeta(string $html): ?array
 {
@@ -35,19 +35,7 @@ function browserSentryConfigured(?string $dsn, float|int|string|null $rate = 0.0
 
 function browserSentryConfigWith(array $environment): array
 {
-    $repository = Env::getRepository();
-
-    foreach ($environment as $name => $value) {
-        $repository->set($name, $value);
-    }
-
-    try {
-        return require config_path('coresmith.php');
-    } finally {
-        foreach (array_keys($environment) as $name) {
-            $repository->clear($name);
-        }
-    }
+    return TemporaryEnvironment::with($environment, fn(): array => require config_path('coresmith.php'));
 }
 
 test('without a browser dsn the page carries no settings and the policy stays tight', function () {
@@ -167,6 +155,12 @@ test('the environment and release follow sentry\'s own settings', function () {
     config(['sentry.environment' => '']);
 
     expect(BrowserSentry::settings()['environment'])->toBe('testing');
+});
+
+test('the test suite never renders the browser tag, whatever the environment says', function () {
+    expect(config('coresmith.sentry.browser_dsn'))->toBeNull()
+        ->and((string) file_get_contents(base_path('phpunit.xml')))->toContain('<env name="SENTRY_BROWSER_DSN" value="" force="true"/>')
+        ->toContain('<server name="SENTRY_BROWSER_DSN" value=""/>');
 });
 
 test('the example environment names the browser keys', function () {
