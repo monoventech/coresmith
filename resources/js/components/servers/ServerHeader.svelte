@@ -97,7 +97,13 @@
             {#if server.can.update}
                 <Button variant="ghost" onclick={openRename}>Rename</Button>
                 {#if server.active && server.cloud?.task?.state !== 'running'}
-                    <Button variant="outline" onclick={reboot}>Reboot server</Button>
+                    <Button
+                        variant="outline"
+                        onclick={reboot}
+                        disabled={server.unreachable?.can_reboot === false}
+                        aria-describedby={server.unreachable?.can_reboot === false ? 'reboot-needs-ssh' : undefined}
+                        >Reboot server</Button
+                    >
                 {/if}
                 {#if server.cloud?.can.resize}
                     <Button variant="outline" onclick={() => (resizing = true)}>Resize</Button>
@@ -138,6 +144,9 @@
         <span class="min-w-0 flex-1 text-[13.5px]">
             <span class="font-semibold">Coresmith can't reach {server.name} over SSH.</span>
             {`${server.unreachable.last_answer === null ? '' : ` The last answer was ${server.unreachable.last_answer}.`} ${server.unreachable.reason}`}
+            {#if !server.unreachable.can_reboot}<span id="reboot-needs-ssh"
+                    >Reboot server needs SSH, so restart the machine yourself until Coresmith can reach it.</span
+                >{/if}
         </span>
     </div>
 {/if}

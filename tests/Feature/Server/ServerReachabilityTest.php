@@ -688,6 +688,7 @@ test('the server header carries the outage', function (?int $answeredMinutesAgo,
     expect(app(ServerPresenter::class)->header($server->fresh(), $user)['unreachable'])->toBe([
         'last_answer' => $lastAnswer,
         'reason' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
+        'can_reboot' => false,
     ]);
 })->with([
     'a known last answer' => [50, 'today 13:10'],

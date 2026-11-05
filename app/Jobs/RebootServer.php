@@ -30,12 +30,15 @@ final class RebootServer implements ShouldQueue
         $this->onQueue('default');
     }
 
+    public static function viaProvider(Server $server): bool
+    {
+        return $server->cloudProvider !== null && filled($server->provider_server_id);
+    }
+
     public function handle(SSHConnectionManager $connections, CloudApiFactory $apis): void
     {
-        $account = $this->server->cloudProvider;
-
-        if ($account !== null && filled($this->server->provider_server_id)) {
-            $this->throughProvider($apis, $account->type->label());
+        if (self::viaProvider($this->server)) {
+            $this->throughProvider($apis, $this->server->cloudProvider->type->label());
 
             return;
         }

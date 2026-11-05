@@ -33,7 +33,7 @@ export type ServerHeader = {
     meta: string
     active: boolean
     metrics: { cpu: MetricSeries; memory: MetricSeries; disk: MetricSeries }
-    unreachable: { last_answer: string | null; reason: string } | null
+    unreachable: { last_answer: string | null; reason: string; can_reboot: boolean } | null
     disk_warning: { percent: number; apps: number } | null
     host_key: { expected: string | null; observed: string; changed_at: string | null } | null
     provisioning: {

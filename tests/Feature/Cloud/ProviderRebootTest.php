@@ -14,6 +14,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -51,6 +52,28 @@ test('a provider server is rebooted through its provider', function () {
     expect($this->api->calls('reboot'))->toBe([['reboot', ['4711']]])
         ->and($this->transport->commands())->toBe([])
         ->and(Activity::query()->where('description', 'server_rebooted')->sole()->properties->toArray())->toBe(['via' => 'Hetzner Cloud']);
+});
+
+test('a provider server that is not answering is still rebooted through its provider', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+    $server = rebootingServer($team);
+    $server->forceFill(['unreachable_since' => now()->subMinutes(5), 'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.'])->save();
+
+    expect(app(ServerPresenter::class)->header($server->fresh(), $user->fresh())['unreachable']['can_reboot'])->toBeTrue();
+
+    $this->actingAs($user->fresh())
+        ->post(route('servers.reboot', $server))
+        ->assertSessionHas('success', 'Reboot scheduled. outpost-02 restarts in a few seconds, apps come back via systemd.');
+
+    Queue::assertPushed(RebootServer::class, 1);
+
+    app()->call([new RebootServer($server->fresh()), 'handle']);
+
+    expect($this->api->calls('reboot'))->toBe([['reboot', ['4711']]])
+        ->and($this->transport->commands())->toBe([]);
 });
 
 test('a provider server whose instance is unknown is rebooted over SSH', function () {

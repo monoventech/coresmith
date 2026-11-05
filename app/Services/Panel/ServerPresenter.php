@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\ServerStatus;
+use App\Jobs\RebootServer;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
@@ -55,6 +56,7 @@ final class ServerPresenter
             'unreachable' => $unreachable ? [
                 'last_answer' => Formats::when($server->last_connected_at),
                 'reason' => (string) $server->last_connection_error,
+                'can_reboot' => RebootServer::viaProvider($server),
             ] : null,
             'disk_warning' => $metrics['disk']['now'] !== null && $metrics['disk']['now'] >= FleetSnapshot::DISK_WARNING
                 ? ['percent' => $metrics['disk']['now'], 'apps' => $server->applications->count()]

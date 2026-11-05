@@ -35,6 +35,21 @@ test('an admin can reboot a server that is not deploying', function () {
     Queue::assertPushed(RebootServer::class, 1);
 });
 
+test('a server Coresmith cannot reach is not sent a reboot over SSH', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'unreachable_since' => now()->subMinutes(5)]);
+
+    $this->actingAs(housekeepingMember($team, TeamRole::Admin))
+        ->from(route('servers.show', $server))
+        ->post(route('servers.reboot', $server))
+        ->assertRedirect(route('servers.show', $server))
+        ->assertSessionHas('error', "Coresmith can't reach web-1 over SSH, so it can't reboot it. Restart the machine yourself.")
+        ->assertSessionMissing('success');
+
+    Queue::assertNotPushed(RebootServer::class);
+});
+
 test('a reboot is refused while a deployment is running on that server', function () {
     Queue::fake();
     $team = Team::factory()->create();

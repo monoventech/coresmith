@@ -269,6 +269,10 @@ final class ServerController extends Controller
             return back()->with('error', $refusal);
         }
 
+        if ($server->unreachable_since !== null && !RebootServer::viaProvider($server)) {
+            return back()->with('error', "Coresmith can't reach {$server->name} over SSH, so it can't reboot it. Restart the machine yourself.");
+        }
+
         $busy = Deployment::query()
             ->whereIn('application_id', $server->applications()->select('id'))
             ->where('status', DeploymentStatus::Running->value)

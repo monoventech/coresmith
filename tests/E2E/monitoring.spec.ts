@@ -38,11 +38,23 @@ test.describe('monitoring', () => {
         await expect(page.getByTestId('disk-warning')).toHaveCount(0)
     })
 
+    test('a server it cannot reach over SSH offers no reboot and says why', async ({ page }) => {
+        await gotoServer(page, 'down-01')
+
+        const reboot = page.getByRole('button', { name: 'Reboot server' })
+        const why = 'Reboot server needs SSH, so restart the machine yourself until Coresmith can reach it.'
+
+        await expect(reboot).toBeDisabled()
+        await expect(reboot).toHaveAccessibleDescription(why)
+        await expect(page.getByTestId('unreachable-banner')).toContainText(why)
+    })
+
     test('a server that answers shows no unreachable banner', async ({ page }) => {
         await gotoServer(page, 'hot-01')
 
         await expect(page.getByRole('heading', { level: 1, name: 'hot-01' })).toBeVisible()
         await expect(page.getByTestId('unreachable-banner')).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Reboot server' })).toBeEnabled()
     })
 
     test('the domains card says what each certificate is', async ({ page }, testInfo) => {
