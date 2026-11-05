@@ -375,13 +375,18 @@ test('an outage and a recovery ping the team', function () {
     $reachability->answered($server);
     $reachability->answered($server);
 
+    expect(fleetPings())->toBe([$ping]);
+
+    $reachability->answered($server);
+    $reachability->answered($server);
+
     expect(fleetPings())->toBe([$ping, $ping]);
 });
 
 test('a stale view of an outage cannot ping its recovery twice', function () {
     Event::fake([FleetChanged::class]);
     Notification::fake();
-    $server = fleetPingServer(attributes: ['unreachable_since' => now()->subMinutes(5), 'connection_failures' => 5]);
+    $server = fleetPingServer(attributes: ['unreachable_since' => now()->subMinutes(5), 'connection_failures' => 5, 'connection_answers' => 2]);
     $stale = $server->fresh();
 
     app(ServerReachability::class)->answered($server);

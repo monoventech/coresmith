@@ -29,6 +29,10 @@ final class ServerReachability
 {
     public const FAILURES_BEFORE_UNREACHABLE = 3;
 
+    public const ANSWERS_BEFORE_REACHABLE = 3;
+
+    public const MAIL_COOL_DOWN_HOURS = 3;
+
     private const FAILURES_CEILING = 255;
 
     private const PRE_BANNER_FAILURES = ['Connection timed out whilst', 'Error reading SSH identification string'];
@@ -58,6 +62,7 @@ final class ServerReachability
 
         $this->query($server)->update([
             'connection_failures' => DB::raw("CASE WHEN connection_failures < {$ceiling} THEN connection_failures + 1 ELSE {$ceiling} END"),
+            'connection_answers' => 0,
             'last_connection_error' => $reason,
         ]);
 
@@ -67,13 +72,45 @@ final class ServerReachability
             return;
         }
 
-        $markedAt = now();
-
-        if ($this->query($server)->whereNull('unreachable_since')->update(['unreachable_since' => $markedAt]) !== 1) {
+        if ($server->unreachable_since === null && !$this->open($server, $reason)) {
             return;
         }
 
-        $server->forceFill(['unreachable_since' => $markedAt])->syncOriginalAttribute('unreachable_since');
+        $this->mailOutage($server, $reason);
+    }
+
+    public function answered(Server $server): void
+    {
+        $answer = ['last_connected_at' => now(), 'connection_failures' => 0];
+
+        if ($server->unreachable_since === null) {
+            $this->query($server)->update([...$answer, 'last_connection_error' => null]);
+            $server->forceFill([...$answer, 'last_connection_error' => null])->syncOriginalAttributes([...array_keys($answer), 'last_connection_error']);
+
+            return;
+        }
+
+        $this->query($server)->update([...$answer, 'connection_answers' => DB::raw('connection_answers + 1')]);
+
+        $server->refresh();
+
+        if ($server->connection_answers >= self::ANSWERS_BEFORE_REACHABLE) {
+            $this->close($server);
+        }
+    }
+
+    private function open(Server $server, string $reason): bool
+    {
+        $opened = $this->query($server)->whereNull('unreachable_since')->update([
+            'unreachable_since' => $server->last_connected_at ?? now(),
+            'unalerted_outages' => DB::raw('unalerted_outages + 1'),
+        ]) === 1;
+
+        if (!$opened) {
+            return false;
+        }
+
+        $server->refresh();
 
         activity()
             ->performedOn($server)
@@ -82,29 +119,41 @@ final class ServerReachability
 
         FleetChanged::forServer($server);
 
-        $this->alert($server, new ServerUnreachableNotification($server, $reason));
+        return true;
     }
 
-    public function answered(Server $server): void
+    private function mailOutage(Server $server, string $reason): void
     {
-        $outageFrom = $server->last_connected_at ?? $server->unreachable_since;
+        $outages = $server->unalerted_outages;
+        $lastMailed = $server->unreachable_alerted_at;
         $now = now();
-        $answer = ['last_connected_at' => $now, 'connection_failures' => 0, 'last_connection_error' => null];
 
-        $recovered = $server->unreachable_since !== null
-            && $this->query($server)->whereNotNull('unreachable_since')->update([...$answer, 'unreachable_since' => null]) === 1;
+        $claimed = $this->query($server)
+            ->where('unalerted_outages', '>', 0)
+            ->where(fn(Builder $query) => $query->whereNull('unreachable_alerted_at')->orWhere('unreachable_alerted_at', '<=', $now->copy()->subHours(self::MAIL_COOL_DOWN_HOURS)))
+            ->update(['unreachable_alerted_at' => $now, 'unalerted_outages' => 0]) === 1;
 
-        if (!$recovered) {
-            $this->query($server)->update($answer);
-        }
-
-        $server->forceFill([...$answer, 'unreachable_since' => null])->syncOriginalAttributes([...array_keys($answer), 'unreachable_since']);
-
-        if (!$recovered) {
+        if (!$claimed) {
             return;
         }
 
-        $seconds = $outageFrom === null ? 0 : max(0, (int) $outageFrom->diffInSeconds($now));
+        $server->forceFill(['unreachable_alerted_at' => $now, 'unalerted_outages' => 0])->syncOriginalAttributes(['unreachable_alerted_at', 'unalerted_outages']);
+
+        $this->alert($server, new ServerUnreachableNotification($server, $reason, $outages, $lastMailed));
+    }
+
+    private function close(Server $server): void
+    {
+        $since = $server->unreachable_since;
+        $now = now();
+
+        if ($this->query($server)->whereNotNull('unreachable_since')->update(['unreachable_since' => null, 'last_connection_error' => null]) !== 1) {
+            return;
+        }
+
+        $server->forceFill(['unreachable_since' => null, 'last_connection_error' => null])->syncOriginalAttributes(['unreachable_since', 'last_connection_error']);
+
+        $seconds = max(0, (int) $since->diffInSeconds($now));
 
         activity()
             ->performedOn($server)
@@ -113,7 +162,9 @@ final class ServerReachability
 
         FleetChanged::forServer($server);
 
-        $this->alert($server, new ServerReachableNotification($server, Formats::downFor($seconds)));
+        if ($server->unalerted_outages === 0) {
+            $this->alert($server, new ServerReachableNotification($server, Formats::downFor($seconds)));
+        }
     }
 
     private function alert(Server $server, Notification $notification): void

@@ -10,6 +10,7 @@ namespace App\Notifications;
 
 use App\Models\Server;
 use App\Services\Panel\Formats;
+use Carbon\CarbonInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -19,7 +20,12 @@ final class ServerUnreachableNotification extends Notification implements Should
 {
     use Queueable;
 
-    public function __construct(public readonly Server $server, public readonly string $reason) {}
+    public function __construct(
+        public readonly Server $server,
+        public readonly string $reason,
+        public readonly int $outages = 1,
+        public readonly ?CarbonInterface $lastMailed = null,
+    ) {}
 
     /**
      * @return list<string>
@@ -33,9 +39,15 @@ final class ServerUnreachableNotification extends Notification implements Should
     {
         $since = Formats::absolute($this->server->last_connected_at ?? $this->server->unreachable_since);
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject("{$this->server->name} is not answering")
-            ->line("Coresmith has not been able to reach {$this->server->name} ({$this->server->ip_address}) over SSH since {$since}.")
+            ->line("Coresmith has not been able to reach {$this->server->name} ({$this->server->ip_address}) over SSH since {$since}.");
+
+        if ($this->outages > 1 && $this->lastMailed !== null) {
+            $mail->line("It has stopped answering {$this->outages} times since the last email about it, on " . Formats::absolute($this->lastMailed) . '.');
+        }
+
+        return $mail
             ->line($this->reason)
             ->line('Its apps may still be serving. Coresmith checks every minute and emails again when it answers.')
             ->action('Open ' . $this->server->name, route('servers.show', $this->server));

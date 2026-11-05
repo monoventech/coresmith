@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Events\FleetChanged;
 use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandFailedException;
@@ -31,6 +32,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -131,6 +133,19 @@ function reachabilityUpdates(Server $server, SSHTransport $transport): array
         DB::disableQueryLog();
         DB::flushQueryLog();
     }
+}
+
+function reachabilitySequence(Server $server, string $steps): void
+{
+    foreach (str_split($steps) as $step) {
+        reachabilityCollect($server->fresh(), $step === 'x' ? (new FakeSSHTransport)->refuseConnections() : reachabilityHealthy());
+        test()->travel(1)->minutes();
+    }
+}
+
+function reachabilityRows(string $description): int
+{
+    return Activity::query()->where('description', $description)->count();
 }
 
 beforeEach(function () {
@@ -241,17 +256,17 @@ test('a read that fails after the server answered is not a miss', function (SSHT
     'the journal read times out' => [fn() => reachabilityHealthy()->timeOutOn('journalctl'), SSHCommandTimedOut::class],
 ]);
 
-test('the first answer after an outage clears it and says so', function (?int $answeredMinutesAgo, int $unreachableMinutesAgo, int $seconds, string $downFor) {
+test('three answers in a row end an outage and say how long it lasted', function (int $unreachableMinutesAgo, int $seconds, string $downFor) {
     Notification::fake();
     $server = reachabilityServer([
-        'last_connected_at' => $answeredMinutesAgo === null ? null : now()->subMinutes($answeredMinutesAgo),
+        'last_connected_at' => null,
         'unreachable_since' => now()->subMinutes($unreachableMinutesAgo),
         'connection_failures' => $unreachableMinutesAgo,
         'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
     ]);
     $member = $server->team->members()->first();
 
-    reachabilityCollect($server, reachabilityHealthy());
+    reachabilitySequence($server, 'ooo');
 
     $fresh = $server->fresh();
     $reachable = Activity::query()->where('description', 'server_reachable')->sole();
@@ -259,21 +274,161 @@ test('the first answer after an outage clears it and says so', function (?int $a
     expect($fresh->unreachable_since)->toBeNull()
         ->and($fresh->connection_failures)->toBe(0)
         ->and($fresh->last_connection_error)->toBeNull()
-        ->and($fresh->last_connected_at?->toDateTimeString())->toBe('2026-10-20 14:00:00')
+        ->and($fresh->last_connected_at?->toDateTimeString())->toBe('2026-10-20 14:02:00')
         ->and($reachable->subject_id)->toBe($server->id)
         ->and($reachable->properties->toArray())->toBe(['seconds' => $seconds]);
 
     Notification::assertSentTo($member, ServerReachableNotification::class, fn(ServerReachableNotification $notification): bool => $notification->server->is($server) && $notification->downFor === $downFor);
 
-    reachabilityCollect($server, reachabilityHealthy());
+    reachabilitySequence($server, 'o');
 
     Notification::assertSentToTimes($member, ServerReachableNotification::class, 1);
 
-    expect(Activity::query()->where('description', 'server_reachable')->count())->toBe(1);
+    expect(reachabilityRows('server_reachable'))->toBe(1);
 })->with([
-    'never answered before' => [null, 47, 2820, '47m 00s'],
-    'last answered two hours five minutes ago' => [125, 122, 7500, '2 hours 5 minutes'],
+    'under an hour' => [47, 2940, '49m 00s'],
+    'over an hour' => [123, 7500, '2 hours 5 minutes'],
 ]);
+
+test('an outage is dated from the last answer before it', function () {
+    Notification::fake();
+    $server = reachabilityServer(['last_connected_at' => now()->subMinutes(10)]);
+
+    reachabilitySequence($server, 'xxx');
+
+    expect($server->fresh()->unreachable_since?->toDateTimeString())->toBe('2026-10-20 13:50:00');
+});
+
+test('an outage stays open until the server answers three times in a row', function () {
+    Notification::fake();
+    $reason = 'The server took the connection but stopped answering. It may be overloaded or rebooting.';
+    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(10), 'connection_failures' => 10, 'last_connection_error' => $reason]);
+
+    reachabilitySequence($server, 'oo');
+
+    expect($server->fresh()->unreachable_since)->not->toBeNull()
+        ->and($server->fresh()->last_connection_error)->toBe($reason)
+        ->and($server->fresh()->last_connected_at?->toDateTimeString())->toBe('2026-10-20 14:01:00');
+
+    reachabilitySequence($server, 'xoo');
+
+    expect($server->fresh()->unreachable_since)->not->toBeNull()
+        ->and(reachabilityRows('server_reachable'))->toBe(0);
+    Notification::assertNothingSent();
+
+    reachabilitySequence($server, 'o');
+
+    expect($server->fresh()->unreachable_since)->toBeNull()
+        ->and(reachabilityRows('server_reachable'))->toBe(1);
+    Notification::assertSentTimes(ServerReachableNotification::class, 1);
+});
+
+test('a server that flaps inside one outage sends one mail each way', function () {
+    Notification::fake();
+    Event::fake([FleetChanged::class]);
+    $server = reachabilityServer();
+    $member = $server->team->members()->first();
+
+    reachabilitySequence($server, 'xxxoxxxo');
+
+    expect($server->fresh()->unreachable_since)->not->toBeNull()
+        ->and(reachabilityRows('server_unreachable'))->toBe(1)
+        ->and(reachabilityRows('server_reachable'))->toBe(0);
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 1);
+    Notification::assertNotSentTo($member, ServerReachableNotification::class);
+    Event::assertDispatchedTimes(FleetChanged::class, 1);
+
+    reachabilitySequence($server, 'oo');
+
+    expect($server->fresh()->unreachable_since)->toBeNull()
+        ->and(reachabilityRows('server_unreachable'))->toBe(1)
+        ->and(reachabilityRows('server_reachable'))->toBe(1);
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 1);
+    Notification::assertSentToTimes($member, ServerReachableNotification::class, 1);
+    Event::assertDispatchedTimes(FleetChanged::class, 2);
+});
+
+test('an outage soon after the last mail is logged and pinged but not mailed', function () {
+    Notification::fake();
+    Event::fake([FleetChanged::class]);
+    $server = reachabilityServer();
+    $member = $server->team->members()->first();
+
+    reachabilitySequence($server, 'xxxooo');
+    reachabilitySequence($server, 'xxxooo');
+
+    expect(reachabilityRows('server_unreachable'))->toBe(2)
+        ->and(reachabilityRows('server_reachable'))->toBe(2);
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 1);
+    Notification::assertSentToTimes($member, ServerReachableNotification::class, 1);
+    Event::assertDispatchedTimes(FleetChanged::class, 4);
+});
+
+test('the first outage after the cool-down is mailed with how often it stopped answering', function () {
+    Notification::fake();
+    $server = reachabilityServer();
+    $member = $server->team->members()->first();
+
+    reachabilitySequence($server, 'xxxooo');
+    reachabilitySequence($server, 'xxxooo');
+    $this->travel(ServerReachability::MAIL_COOL_DOWN_HOURS)->hours();
+    reachabilitySequence($server, 'xxx');
+
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 2);
+    Notification::assertSentTo($member, ServerUnreachableNotification::class, fn(ServerUnreachableNotification $notification): bool => $notification->outages === 2 && $notification->lastMailed?->toDateTimeString() === '2026-10-20 14:02:00');
+
+    reachabilitySequence($server, 'ooo');
+
+    Notification::assertSentToTimes($member, ServerReachableNotification::class, 2);
+});
+
+test('the cool-down lasts three hours from the last mail', function (int $minutes, int $mails) {
+    Notification::fake();
+    $server = reachabilityServer();
+
+    reachabilitySequence($server, 'xxxooo');
+    $this->travelTo(CarbonImmutable::parse('2026-10-20 14:02:00')->addMinutes($minutes - 2));
+    reachabilitySequence($server, 'xxx');
+
+    expect(ServerReachability::MAIL_COOL_DOWN_HOURS)->toBe(3);
+    Notification::assertSentTimes(ServerUnreachableNotification::class, $mails);
+})->with([
+    'a minute short' => [179, 1],
+    'three hours on' => [180, 2],
+]);
+
+test('an outage still open when the cool-down ends is mailed then, once', function () {
+    Notification::fake();
+    $server = reachabilityServer();
+    $member = $server->team->members()->first();
+
+    reachabilitySequence($server, 'xxxooo');
+    reachabilitySequence($server, 'xxx');
+    $this->travel(ServerReachability::MAIL_COOL_DOWN_HOURS)->hours();
+
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 1);
+
+    reachabilitySequence($server, 'xx');
+
+    Notification::assertSentToTimes($member, ServerUnreachableNotification::class, 2);
+    Notification::assertSentTo($member, ServerUnreachableNotification::class, fn(ServerUnreachableNotification $notification): bool => $notification->outages === 1);
+
+    reachabilitySequence($server, 'ooo');
+
+    expect(reachabilityRows('server_unreachable'))->toBe(2);
+    Notification::assertSentToTimes($member, ServerReachableNotification::class, 2);
+});
+
+test('a mailed outage that outlasts the cool-down is not mailed again', function () {
+    Notification::fake();
+    $server = reachabilityServer();
+
+    reachabilitySequence($server, 'xxx');
+    $this->travel(ServerReachability::MAIL_COOL_DOWN_HOURS + 1)->hours();
+    reachabilitySequence($server, 'xx');
+
+    Notification::assertSentTimes(ServerUnreachableNotification::class, 1);
+});
 
 test('an outage mail that cannot be sent is reported and the outage still stands', function () {
     Exceptions::fake();
@@ -290,7 +445,7 @@ test('an outage mail that cannot be sent is reported and the outage still stands
 
 test('a recovery mail that cannot be sent is reported and the collection carries on', function () {
     Exceptions::fake();
-    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(10), 'connection_failures' => 10]);
+    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(10), 'connection_failures' => 10, 'connection_answers' => 2]);
     $transport = reachabilityHealthy();
     Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
 
@@ -312,23 +467,25 @@ test('a healthy collection records its answer in one statement', function () {
         ->and($updates[0])->not->toContain('unreachable_since');
 });
 
-test('the answer that ends an outage clears it in one statement', function () {
+test('the answer that ends an outage clears it with a compare-and-set', function () {
     Notification::fake();
     $server = reachabilityServer([
         'host_key_fingerprint' => HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY),
         'unreachable_since' => now()->subMinutes(5),
         'connection_failures' => 5,
+        'connection_answers' => 2,
     ]);
 
     $updates = reachabilityUpdates($server, reachabilityHealthy());
 
-    expect($updates)->toHaveCount(1)
-        ->and($updates[0])->toContain(DB::getQueryGrammar()->wrap('unreachable_since') . ' is not null');
+    expect($updates)->toHaveCount(2)
+        ->and($updates[0])->not->toContain('unreachable_since')
+        ->and($updates[1])->toContain(DB::getQueryGrammar()->wrap('unreachable_since') . ' is not null');
 });
 
 test('a stale view of an outage cannot announce the recovery twice', function () {
     Notification::fake();
-    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(5), 'connection_failures' => 5]);
+    $server = reachabilityServer(['unreachable_since' => now()->subMinutes(5), 'connection_failures' => 5, 'connection_answers' => 2]);
     $member = $server->team->members()->first();
     $stale = $server->fresh();
 
@@ -479,12 +636,8 @@ test('people who turned server problems off are not emailed', function () {
     $listening = $server->team->members()->first();
     $quiet = User::factory()->create(['notification_preferences' => ['server_alerts' => false]]);
     $server->team->members()->attach($quiet, ['role' => TeamRole::Member->value]);
-    $transport = (new FakeSSHTransport)->refuseConnections(3);
 
-    reachabilityCollect($server, $transport);
-    reachabilityCollect($server, $transport);
-    reachabilityCollect($server, $transport);
-    reachabilityCollect($server, reachabilityHealthy());
+    reachabilitySequence($server, 'xxxooo');
 
     Notification::assertSentTo($listening, ServerUnreachableNotification::class);
     Notification::assertSentTo($listening, ServerReachableNotification::class);
@@ -606,6 +759,25 @@ test('the mails say what happened and what to check', function () {
         ->and($up->actionText)->toBe('Open web-1')
         ->and($up->actionUrl)->toBe(route('servers.show', $server));
 });
+
+test('the unreachable mail says how often it stopped answering since the last mail', function (int $outages, ?int $mailedHoursAgo, ?string $line) {
+    $server = reachabilityServer(['last_connected_at' => now()->subMinutes(3), 'unreachable_since' => now()->subMinutes(3)]);
+    $reason = 'The server took the connection but stopped answering. It may be overloaded or rebooting.';
+
+    $mail = (new ServerUnreachableNotification($server, $reason, $outages, $mailedHoursAgo === null ? null : now()->subHours($mailedHoursAgo)))->toMail(new User);
+
+    expect($mail->introLines)->toBe(array_values(array_filter([
+        'Coresmith has not been able to reach web-1 (192.0.2.10) over SSH since Oct 20, 2026 at 13:57 UTC.',
+        $line,
+        $reason,
+        'Its apps may still be serving. Coresmith checks every minute and emails again when it answers.',
+    ])));
+})->with([
+    'after outages that were not mailed' => [3, 4, 'It has stopped answering 3 times since the last email about it, on Oct 20, 2026 at 10:00 UTC.'],
+    'after two' => [2, 5, 'It has stopped answering 2 times since the last email about it, on Oct 20, 2026 at 09:00 UTC.'],
+    'only this outage since the last mail' => [1, 4, null],
+    'no mail before' => [2, null, null],
+]);
 
 test('the unreachable mail counts from the outage itself when the server never answered', function () {
     $server = reachabilityServer(['last_connected_at' => null, 'unreachable_since' => now()->subMinutes(3)]);
