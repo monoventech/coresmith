@@ -137,7 +137,7 @@ final class ApplicationController extends Controller
         $this->authorize('view', $application);
         $this->assertBelongsTo($server, $application);
 
-        if (CertificateCheck::domains($application) !== [] && $certificates->stale($application)) {
+        if ($server->unreachable_since === null && CertificateCheck::domains($application) !== [] && $certificates->stale($application)) {
             rescue(function () use ($server): void {
                 CheckCertificates::dispatch($server);
             }, report: true);

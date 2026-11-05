@@ -265,7 +265,7 @@ test('a stopped app is still checked, a server that cannot be reached is skipped
     expect(Cache::get(CertificateCheck::cacheKey($application)))->toBe($before);
 });
 
-test('a server that is not active or whose host key changed is not probed', function (array $attributes) {
+test('a server that is not active, not answering or whose host key changed is not probed', function (array $attributes) {
     $application = certificateApp();
     $application->server->forceFill($attributes)->save();
     $transport = (new FakeSSHTransport)->respondTo('@@cert', '');
@@ -275,6 +275,7 @@ test('a server that is not active or whose host key changed is not probed', func
     expect($transport->commands())->toBe([]);
 })->with([
     'still provisioning' => [['status' => ServerStatus::Provisioning]],
+    'not answering' => [['unreachable_since' => now()->subMinutes(5)]],
     'a changed host key' => [['pending_host_key_fingerprint' => 'SHA256:changed']],
 ]);
 
@@ -318,6 +319,10 @@ test('opening the app page queues a check only when needed', function (string $c
     Queue::fake();
     $application = certificateApp($case === 'no domains' ? ['domain' => null] : []);
 
+    if ($case === 'not answering') {
+        $application->server->forceFill(['unreachable_since' => now()->subMinutes(5)])->save();
+    }
+
     if ($case === 'fresh') {
         Cache::put(CertificateCheck::cacheKey($application), ['domains' => ['a.example.com' => ['expires_at' => now()->addDays(30)->toIso8601String(), 'checked_at' => now()->toIso8601String()]]], now()->addDays(3));
     }
@@ -331,6 +336,7 @@ test('opening the app page queues a check only when needed', function (string $c
     'stale' => ['stale', true],
     'fresh' => ['fresh', false],
     'no domains' => ['no domains', false],
+    'stale on a server that is not answering' => ['not answering', false],
 ]);
 
 test('the app page carries the states', function () {

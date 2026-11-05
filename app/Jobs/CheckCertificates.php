@@ -42,7 +42,7 @@ final class CheckCertificates implements ShouldBeUnique, ShouldQueue
     {
         $server = $this->server->fresh();
 
-        if ($server === null || $server->status !== ServerStatus::Active || $server->pending_host_key_fingerprint !== null) {
+        if ($server === null || $server->status !== ServerStatus::Active || $server->unreachable_since !== null || $server->pending_host_key_fingerprint !== null) {
             return;
         }
 
