@@ -11,6 +11,8 @@ use Sentry\Breadcrumb;
 use Sentry\Event;
 use Sentry\EventHint;
 use Sentry\ExceptionDataBag;
+use Sentry\Frame;
+use Sentry\Stacktrace;
 use Sentry\Tracing\Span;
 
 function scrubberEvent(array $request = []): Event
@@ -577,6 +579,29 @@ test('transactions are scrubbed like errors', function () {
         'url' => 'https://panel.example.com/callback?code=%5BFiltered%5D&state=%5BFiltered%5D',
         'method' => 'GET',
     ]);
+});
+
+test('every stack frame loses the arguments it was called with', function () {
+    $frame = fn(string $function): Frame => new Frame($function, 'app/Services/SSH/SSHConnection.php', 63, null, null, ['key' => '-----BEGIN OPENSSH PRIVATE KEY----- not-a-real-key', 'port' => 22]);
+    $event = scrubberEvent();
+    $event->setStacktrace(new Stacktrace([$frame('connect')]));
+    $event->setExceptions([
+        new ExceptionDataBag(new RuntimeException('outer'), new Stacktrace([$frame('outer'), $frame('load')])),
+        new ExceptionDataBag(new RuntimeException('inner'), new Stacktrace([$frame('inner')])),
+        new ExceptionDataBag(new RuntimeException('bare')),
+    ]);
+
+    SentryScrubber::beforeSend($event);
+
+    $frames = [
+        ...$event->getStacktrace()->getFrames(),
+        ...$event->getExceptions()[0]->getStacktrace()->getFrames(),
+        ...$event->getExceptions()[1]->getStacktrace()->getFrames(),
+    ];
+
+    expect($frames)->toHaveCount(4)
+        ->and(array_map(fn(Frame $frame): array => $frame->getVars(), $frames))->toBe([[], [], [], []])
+        ->and(array_map(fn(Frame $frame): ?string => $frame->getFunctionName(), $frames))->toBe(['connect', 'outer', 'load', 'inner']);
 });
 
 test('the scrubber never drops an event', function () {

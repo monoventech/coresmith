@@ -13,6 +13,7 @@ use Illuminate\Database\QueryException;
 use Sentry\Breadcrumb;
 use Sentry\Event;
 use Sentry\EventHint;
+use Sentry\Stacktrace;
 use Sentry\Tracing\Span;
 use Throwable;
 
@@ -74,6 +75,7 @@ final class SentryScrubber
         $event->setRequest(self::scrubRequest($event->getRequest()));
 
         self::scrubExceptions($event, $hint?->exception);
+        self::withoutArguments($event->getStacktrace());
 
         $transaction = $event->getTransaction();
 
@@ -121,8 +123,16 @@ final class SentryScrubber
                 : self::withoutBindings($exception->getValue(), $bindings);
 
             $exception->setValue(self::filterText($value));
+            self::withoutArguments($exception->getStacktrace());
 
             $original = $original?->getPrevious();
+        }
+    }
+
+    private static function withoutArguments(?Stacktrace $stacktrace): void
+    {
+        foreach ($stacktrace?->getFrames() ?? [] as $frame) {
+            $frame->setVars([]);
         }
     }
 

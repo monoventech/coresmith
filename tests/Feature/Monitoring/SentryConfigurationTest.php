@@ -8,6 +8,7 @@ use Illuminate\Support\Env;
 use Sentry\Breadcrumb;
 use Sentry\ClientBuilder;
 use Sentry\Event;
+use Sentry\Frame;
 use Sentry\Options;
 use Sentry\SentrySdk;
 use Sentry\Serializer\PayloadSerializer;
@@ -46,6 +47,15 @@ function sentryHub(TransportInterface $transport): Hub
     $builder->getOptions()->setTracesSampleRate(1.0);
 
     return new Hub($builder->getClient());
+}
+
+function sentryFailureLoading(string $privateKey): RuntimeException
+{
+    try {
+        throw new RuntimeException('Could not load the key');
+    } catch (RuntimeException $e) {
+        return $e;
+    }
 }
 
 function sentryConfigWith(array $environment): array
@@ -193,6 +203,25 @@ test('the sdk runs every scrubber hook before anything reaches its transport', f
         ->and($trace->getSpans()[0]->getDescription())->toBe('GET https://api.example.com/cb?code=%5BFiltered%5D failed')
         ->and($trace->getSpans()[0]->getData()['http.query'])->toBe('state=%5BFiltered%5D')
         ->and($trace->getRelease())->toBe(config('coresmith.version'));
+});
+
+test('stack frames reach the transport without the arguments they were called with', function () {
+    $transport = sentryTransport();
+    $hub = sentryHub($transport);
+    $ignored = ini_set('zend.exception_ignore_args', '0');
+
+    try {
+        $failure = sentryFailureLoading('-----BEGIN OPENSSH PRIVATE KEY----- not-a-real-key');
+    } finally {
+        ini_set('zend.exception_ignore_args', (string) $ignored);
+    }
+
+    $hub->captureException($failure);
+
+    $frames = collect($transport->sent[0]->getExceptions()[0]->getStacktrace()?->getFrames() ?? []);
+
+    expect($frames->contains(fn(Frame $frame): bool => $frame->getFunctionName() === 'sentryFailureLoading'))->toBeTrue()
+        ->and($frames->flatMap(fn(Frame $frame): array => $frame->getVars())->all())->toBe([]);
 });
 
 test('a failed query leaves no bound value in its event, its log breadcrumb or a later transaction', function () {
