@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Exceptions\InvalidRuntimeException;
+use App\Exceptions\PackageSourceFailed;
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
 use App\Services\Runtime\AsdfManager;
@@ -121,7 +122,7 @@ test('a runtime with no build packages refreshes no index', function () {
 });
 
 test('an index that cannot be refreshed stops the install before anything is built', function () {
-    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondTo('apt-get update -y', "E: Could not get lock /var/lib/apt/lists/lock\n", 100);
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondTo('apt-get update -y', "E: Write error - write (28: No space left on device)\n", 100);
     $connection = asdfConnection($transport);
 
     expect(fn() => (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5'))->toThrow(SSHCommandFailedException::class);
@@ -129,6 +130,82 @@ test('an index that cannot be refreshed stops the install before anything is bui
     expect(implode("\n", $transport->commands()))->not->toContain('apt-get install')
         ->and(implode("\n", $transport->commands()))->not->toContain('asdf install');
 });
+
+test('a locked package index is refreshed once the lock is free', function () {
+    Sleep::fake();
+    $lock = "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 2231 (apt.systemd.dai)\nE: Unable to lock directory /var/lib/apt/lists/\n";
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondToSequence('apt-get update -y', [[$lock, 100], [$lock, 100], ['', 0]]);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+
+    expect(substr_count(implode("\n", $transport->commands()), 'apt-get update -y'))->toBe(3)
+        ->and(implode("\n", $transport->commands()))->toContain('asdf install');
+    Sleep::assertSleptTimes(2);
+});
+
+test('an index that stays locked for five minutes stops the install', function () {
+    Sleep::fake();
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondTo('apt-get update -y', "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 2231 (apt-get)\n", 100);
+    $connection = asdfConnection($transport);
+
+    expect(fn() => (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5'))->toThrow(SSHCommandFailedException::class);
+
+    expect(AsdfManager::INDEX_LOCK_RETRIES)->toBe(30)
+        ->and(substr_count(implode("\n", $transport->commands()), 'apt-get update -y'))->toBe(31)
+        ->and(implode("\n", $transport->commands()))->not->toContain('apt-get install');
+    Sleep::assertSleptTimes(30);
+});
+
+test('a network blip while refreshing the index is tried again, twice at most', function (int $blips, int $updates, bool $installed) {
+    Sleep::fake();
+    $blip = "W: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble/InRelease  Temporary failure resolving 'archive.ubuntu.com'\nE: Some index files failed to download. They have been ignored, or old ones used instead.\n";
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondToSequence('apt-get update -y', [...array_fill(0, $blips, [$blip, 100]), ['', 0]]);
+    $connection = asdfConnection($transport);
+    $install = fn() => (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+
+    $installed ? $install() : expect($install)->toThrow(PackageSourceFailed::class);
+
+    expect(substr_count(implode("\n", $transport->commands()), 'apt-get update -y'))->toBe($updates)
+        ->and(str_contains(implode("\n", $transport->commands()), 'asdf install'))->toBe($installed);
+})->with([
+    'one blip' => [1, 2, true],
+    'two blips' => [2, 3, true],
+    'three blips' => [3, 3, false],
+]);
+
+test('a package source that fails is named in the reason', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondTo('apt-get update -y', "Err:5 https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release\n  404  Not Found [IP: 185.125.190.80 443]\nE: The repository 'https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release' does not have a Release file.\n", 100);
+    $connection = asdfConnection($transport);
+    $connection->server()->forceFill(['name' => 'web-1'])->save();
+
+    try {
+        (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+        $this->fail('The install went ahead.');
+    } catch (PackageSourceFailed $e) {
+        expect($e->getMessage())->toBe('Refreshing the package lists on web-1 failed at https://ppa.launchpadcontent.net/ondrej/php/ubuntu. Fix or remove that source, then deploy again.')
+            ->and($e->getPrevious())->toBeInstanceOf(SSHCommandFailedException::class)
+            ->and($e->getPrevious()->output())->toContain('does not have a Release file');
+    }
+
+    expect(substr_count(implode("\n", $transport->commands()), 'apt-get update -y'))->toBe(1)
+        ->and(implode("\n", $transport->commands()))->not->toContain('apt-get install');
+});
+
+test('a network blip while installing build packages is tried again', function (string $blip) {
+    Sleep::fake();
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0)->respondToSequence('apt-get install', [[$blip, 100], ['', 0]]);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+
+    expect(substr_count(implode("\n", $transport->commands()), 'apt-get install'))->toBe(2)
+        ->and($transport->budgetFor('apt-get install'))->toBe(1200);
+})->with([
+    'a name that does not resolve' => ["E: Failed to fetch http://ports.ubuntu.com/ubuntu-ports/pool/main/o/oniguruma/libonig-dev_6.9.9-1build1_arm64.deb  Temporary failure resolving 'ports.ubuntu.com'\n"],
+    'a mirror that does not answer' => ["Err:1 http://ports.ubuntu.com/ubuntu-ports noble/main arm64 libonig5 arm64 6.9.9-1build1\n  Could not connect to ports.ubuntu.com:80 (185.125.190.39), connection timed out\n"],
+    'a mirror that refuses' => ["Err:1 http://ports.ubuntu.com/ubuntu-ports noble/main arm64 libonig5 arm64 6.9.9-1build1\n  Unable to connect to ports.ubuntu.com:http:\n"],
+]);
 
 test('runtime installs run as the coresmith user, never root directly', function () {
     $transport = (new FakeSSHTransport)->queueResult("no\n", 0);

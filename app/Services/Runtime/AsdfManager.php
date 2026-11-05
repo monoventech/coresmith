@@ -9,11 +9,15 @@ declare(strict_types=1);
 namespace App\Services\Runtime;
 
 use App\Exceptions\InvalidRuntimeException;
+use App\Exceptions\PackageSourceFailed;
+use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
+use App\Services\Server\AptPackageManager;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 
 final class AsdfManager
 {
@@ -29,9 +33,13 @@ final class AsdfManager
 
     public const DOWNLOAD_RETRIES = 2;
 
+    public const INDEX_LOCK_RETRIES = 30;
+
     public const INSTALL_SECONDS = 1800;
 
-    private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'unable to download', 'SSL_ERROR_SYSCALL'];
+    private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'unable to download', 'SSL_ERROR_SYSCALL', 'Temporary failure resolving', 'Could not connect to', 'Unable to connect to'];
+
+    private const INDEX_LOCKED = 'Could not get lock';
 
     public static function assertValid(string $runtime, string $version): void
     {
@@ -66,8 +74,8 @@ final class AsdfManager
         if ($dependencies !== []) {
             $packages = PackageManagerFactory::for($server);
 
-            $connection->execute($packages->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
-            $connection->execute($packages->install($dependencies), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+            $this->refreshIndex($connection, $server, $packages->update());
+            $this->withDownloadRetries($connection, $packages->install($dependencies), SSHTransport::PACKAGE_SECONDS);
         }
 
         $this->withDownloadRetries($connection, $this->asCoresmith('asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);
@@ -85,6 +93,33 @@ final class AsdfManager
 
             if ($attempt >= self::DOWNLOAD_RETRIES || !$this->downloadFailed($result->output)) {
                 $result->throw();
+            }
+
+            Sleep::for(10)->seconds();
+        }
+    }
+
+    private function refreshIndex(SSHConnection $connection, Server $server, string $command): void
+    {
+        $locks = 0;
+        $blips = 0;
+
+        while (true) {
+            $result = $connection->execute($command, sudo: true, timeout: SSHTransport::PACKAGE_SECONDS);
+
+            if ($result->successful()) {
+                return;
+            }
+
+            $retry = Str::contains($result->output, self::INDEX_LOCKED)
+                ? $locks++ < self::INDEX_LOCK_RETRIES
+                : $this->downloadFailed($result->output) && $blips++ < self::DOWNLOAD_RETRIES;
+
+            if (!$retry) {
+                $failure = new SSHCommandFailedException($result->output, $result->exitCode);
+                $source = AptPackageManager::failedSource($result->output);
+
+                throw $source === null ? $failure : PackageSourceFailed::refreshing($server, $source, $failure);
             }
 
             Sleep::for(10)->seconds();

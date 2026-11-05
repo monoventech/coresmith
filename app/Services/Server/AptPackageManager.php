@@ -14,6 +14,17 @@ final class AptPackageManager implements PackageManager
 {
     private const NON_INTERACTIVE = 'DEBIAN_FRONTEND=noninteractive';
 
+    private const FAILED_SOURCE = '~^(?:[EW]: Failed to fetch|E: The repository \'|E: Release file for)\s*([a-z][a-z0-9+.-]*://[^\s\']+)~m';
+
+    public static function failedSource(string $output): ?string
+    {
+        if (preg_match(self::FAILED_SOURCE, $output, $match) !== 1) {
+            return null;
+        }
+
+        return preg_replace('~/dists/.*$~', '', $match[1]);
+    }
+
     public function update(): string
     {
         return self::NON_INTERACTIVE . ' apt-get update -y';
@@ -25,7 +36,7 @@ final class AptPackageManager implements PackageManager
             return 'true';
         }
 
-        return self::NON_INTERACTIVE . ' apt-get install -y --no-install-recommends ' . PackageList::escape($packages);
+        return self::NON_INTERACTIVE . ' apt-get install -y --no-install-recommends ' . PackageList::escape($packages) . ' -o DPkg::Lock::Timeout=300';
     }
 
     public function isInstalled(string $package): string

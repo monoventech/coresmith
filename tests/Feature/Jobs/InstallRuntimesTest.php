@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Exceptions\InvalidRuntimeException;
+use App\Exceptions\PackageSourceFailed;
 use App\Exceptions\RuntimeUnavailable;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\SSHCommandTimedOut;
@@ -124,6 +125,24 @@ test('a compile that fails ends the deploy with the build output, removes the re
         ->and($fresh->log)->toContain('configure: error: Package requirements (libxml-2.0 >= 2.9.0) were not met')
         ->and(implode("\n", $transport->commands()))->toContain('rm -rf /var/coresmith/apps/shop/releases/' . INSTALL_RELEASE)
         ->and(Cache::lock('deploy:' . $deployment->application_id, 10)->get())->toBeTrue();
+
+    Queue::assertNotPushed(DeployApplication::class);
+});
+
+test('a package source that fails is named in the reason and its output is in the log', function () {
+    Queue::fake();
+    $deployment = installingDeployment();
+    Cache::lock('deploy:' . $deployment->application_id, 3600, 'owner-1')->get();
+    $transport = installTransport()->respondTo('apt-get update', "Err:5 https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release\n  404  Not Found [IP: 185.125.190.80 443]\nE: The repository 'https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release' does not have a Release file.\n", 100);
+
+    expect(fn() => installRun($deployment, $transport, [['runtime' => 'php', 'version' => '8.5.10']]))->toThrow(PackageSourceFailed::class);
+
+    $fresh = $deployment->fresh();
+
+    expect($fresh->status)->toBe(DeploymentStatus::Failed)
+        ->and($fresh->failure_reason)->toBe('Refreshing the package lists on web-1 failed at https://ppa.launchpadcontent.net/ondrej/php/ubuntu. Fix or remove that source, then deploy again.')
+        ->and($fresh->log)->toContain("E: The repository 'https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble Release' does not have a Release file.")
+        ->and(implode("\n", $transport->commands()))->toContain('rm -rf /var/coresmith/apps/shop/releases/' . INSTALL_RELEASE);
 
     Queue::assertNotPushed(DeployApplication::class);
 });

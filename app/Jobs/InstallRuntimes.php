@@ -187,8 +187,10 @@ final class InstallRuntimes implements ShouldQueue
 
     private function abandon(SSHConnection $connection, DeploymentLog $log, Throwable $e): void
     {
-        if ($e instanceof SSHCommandFailedException) {
-            $log->append($this->deployment, implode("\n", array_slice(preg_split('/\R/', trim($e->output())) ?: [], -30)));
+        $failure = $e instanceof SSHCommandFailedException ? $e : $e->getPrevious();
+
+        if ($failure instanceof SSHCommandFailedException) {
+            $log->append($this->deployment, implode("\n", array_slice(preg_split('/\R/', trim($failure->output())) ?: [], -30)));
         }
 
         $this->removeRelease($connection, $this->deployment);
