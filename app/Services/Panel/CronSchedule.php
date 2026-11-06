@@ -89,13 +89,13 @@ final class CronSchedule
         if ($hour === '*') {
             return match (true) {
                 $minute === '*' || $minute === '*/1' => 'Every minute',
-                str_starts_with($minute, '*/') && self::number(substr($minute, 2)) => 'Every ' . (int) substr($minute, 2) . ' minutes',
+                str_starts_with($minute, '*/') && self::divides(substr($minute, 2), 60) => 'Every ' . (int) substr($minute, 2) . ' minutes',
                 self::number($minute) => (int) $minute === 0 ? 'Every hour' : 'Every hour at :' . self::padded((int) $minute),
                 default => null,
             };
         }
 
-        if (!self::number($minute) || !str_starts_with($hour, '*/') || !self::number(substr($hour, 2))) {
+        if (!self::number($minute) || !str_starts_with($hour, '*/') || !self::divides(substr($hour, 2), 24)) {
             return null;
         }
 
@@ -133,5 +133,10 @@ final class CronSchedule
     private static function number(string $field): bool
     {
         return $field !== '' && ctype_digit($field);
+    }
+
+    private static function divides(string $step, int $whole): bool
+    {
+        return self::number($step) && (int) $step > 0 && $whole % (int) $step === 0;
     }
 }

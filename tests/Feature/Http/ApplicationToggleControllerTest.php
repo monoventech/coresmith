@@ -279,3 +279,17 @@ test('the cron job limit only stops the scheduler', function () {
         ->put(toggleRouteUrl($application, 'maintenance_mode'), ['on' => true])
         ->assertSessionHas('success');
 });
+
+test('turning the scheduler on says when it runs, as the cron list does', function (array $attributes, string $message) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $application = toggleRouteApp($team, ['cron_jobs' => null, 'current_release' => '20261019-120000', ...$attributes]);
+
+    $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
+        ->put(toggleRouteUrl($application, 'scheduler'), ['on' => true])
+        ->assertSessionHas('success', $message);
+})->with([
+    'an app that is running' => [['power_state' => PowerState::Active], 'Saved. Scheduler is starting on web-1, no deployment needed.'],
+    'an app that is stopped' => [['power_state' => PowerState::Stopped], 'Saved. It runs once you start the app.'],
+    'an app with nothing live yet' => [['current_release' => null], 'Saved. It runs after the first deploy.'],
+]);

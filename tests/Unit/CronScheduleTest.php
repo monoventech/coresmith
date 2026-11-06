@@ -10,11 +10,15 @@ test('a schedule with one obvious sentence is said in words', function (string $
     ['* * * * *', 'Every minute'],
     ['*/1 * * * *', 'Every minute'],
     ['*/5 * * * *', 'Every 5 minutes'],
+    ['*/15 * * * *', 'Every 15 minutes'],
+    ['*/30 * * * *', 'Every 30 minutes'],
     ['0 * * * *', 'Every hour'],
     ['0 */1 * * *', 'Every hour'],
     ['15 * * * *', 'Every hour at :15'],
     ['5 * * * *', 'Every hour at :05'],
     ['0 */6 * * *', 'Every 6 hours'],
+    ['0 */8 * * *', 'Every 8 hours'],
+    ['0 */12 * * *', 'Every 12 hours'],
     ['30 */2 * * *', 'Every 2 hours at :30'],
     ['0 3 * * *', 'Daily at 3:00 AM UTC'],
     ['0 0 * * *', 'Daily at 12:00 AM UTC'],
@@ -35,7 +39,7 @@ test('a schedule with one obvious sentence is said in words', function (string $
 test('anything else is a custom schedule with no sentence', function (string $schedule) {
     expect(CronSchedule::sentence($schedule))->toBeNull()
         ->and(CronSchedule::phrase($schedule))->toBe('on a custom schedule');
-})->with(['15 9-17 * * 1-5', '0 0 1 1 *', '*/5 9-17 * * *', '0 3 1 * 1', '0,30 * * * *', '0 3 * * 6,0', '61 * * * *', 'every day']);
+})->with(['15 9-17 * * 1-5', '0 0 1 1 *', '*/5 9-17 * * *', '0 3 1 * 1', '0,30 * * * *', '0 3 * * 6,0', '61 * * * *', 'every day', '*/45 * * * *', '*/7 * * * *', '*/59 * * * *', '0 */5 * * *', '30 */7 * * *', '0 */16 * * *', '0 */23 * * *']);
 
 test('a sentence reads inside another one', function () {
     expect(CronSchedule::phrase('0 3 * * *'))->toBe('daily at 3:00 AM UTC')

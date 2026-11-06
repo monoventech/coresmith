@@ -17,7 +17,7 @@ use Illuminate\Validation\Validator;
 
 final class CronJobRequest extends FormRequest
 {
-    public const CONTROL = '/[\x00-\x08\x0B-\x1F\x7F\x{202A}-\x{202E}\x{2066}-\x{2069}]/u';
+    public const CONTROL = '/[\x00-\x08\x0B-\x1F\x7F-\x{9F}\x{061C}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}\x{2066}-\x{2069}\x{FEFF}]/u';
 
     public function authorize(): bool
     {

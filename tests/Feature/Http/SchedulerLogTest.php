@@ -95,6 +95,13 @@ test('the last lines come back without secrets or terminal codes, cut to a reada
     ])->and($transport->connected())->toBeFalse();
 });
 
+test('a secret split by a terminal code is still hidden', function () {
+    $application = schedulerLogApp(Team::factory()->create());
+
+    expect(app(SchedulerLogReader::class)->parse("auth: Bearer \e[1mabcdef0123456789\e[0m done\nconnected with supersecret\e[0mvalue1\n", $application))
+        ->toBe(['auth: Bearer [REDACTED] done', 'connected with [REDACTED:DB_PASSWORD]']);
+});
+
 test('an app with nothing live has no log to read', function () {
     $application = schedulerLogApp(Team::factory()->create(), ['current_release' => null]);
     $transport = new FakeSSHTransport;

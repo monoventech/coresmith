@@ -59,6 +59,8 @@ final class ApplicationToggleController extends Controller
             $toggle === SmartToggles::AUTO_DEPLOY && $on => "Auto deploy is on, {$application->repository_branch} deploys whenever it changes.",
             $toggle === SmartToggles::AUTO_DEPLOY => 'Auto deploy is off, deploy from this page when you are ready.',
             in_array($toggle, [SmartToggles::REVERB, SmartToggles::INERTIA_SSR], true) && $on => "{$label} starts with the next deploy.",
+            $toggle === SmartToggles::SCHEDULER && $on && $application->current_release === null => 'It runs after the first deploy.',
+            $toggle === SmartToggles::SCHEDULER && $on && $application->power_state === PowerState::Stopped => 'It runs once you start the app.',
             $on => "{$label} is starting on {$server->name}, no deployment needed.",
             default => "{$label} stopped. Nothing else was touched.",
         };

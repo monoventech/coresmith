@@ -24,7 +24,7 @@ final class SchedulerLogReader
 
     private const TERMINAL_CODE = '/\e\[[0-9;?]*[A-Za-z]/';
 
-    private const CONTROL = '/[\x{0}-\x{8}\x{A}-\x{1F}\x{7F}-\x{9F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u';
+    private const CONTROL = '/[\x{0}-\x{8}\x{B}-\x{1F}\x{7F}-\x{9F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u';
 
     public function __construct(private readonly AppShell $shell, private readonly LogSanitizer $sanitizer) {}
 
@@ -52,12 +52,10 @@ final class SchedulerLogReader
      */
     public function parse(string $output, Application $application): array
     {
-        $text = (string) mb_scrub($this->sanitizer->sanitize($output, $application), 'UTF-8');
+        $plain = (string) preg_replace(self::CONTROL, '', (string) preg_replace(self::TERMINAL_CODE, '', (string) mb_scrub($output, 'UTF-8')));
+        $text = $this->sanitizer->sanitize($plain, $application);
 
-        $lines = array_map(
-            fn(string $line): string => mb_substr((string) preg_replace(self::CONTROL, '', (string) preg_replace(self::TERMINAL_CODE, '', $line)), 0, self::LINE_LENGTH),
-            explode("\n", $text),
-        );
+        $lines = array_map(fn(string $line): string => mb_substr($line, 0, self::LINE_LENGTH), explode("\n", $text));
 
         if (end($lines) === '') {
             array_pop($lines);

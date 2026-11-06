@@ -104,7 +104,37 @@ test('a command with an invisible control or direction character is refused', fu
     $this->actingAs(cronRouteMember($team, TeamRole::Owner))
         ->post(cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => $command])
         ->assertSessionHasErrors(['command' => 'The command has an invisible control character in it. Retype that part and save again.']);
-})->with(['a bell' => "echo \x07done", 'an escape code' => "echo \e[31mred", 'a right-to-left override' => "echo \u{202E}txt.exe", 'bytes that are not UTF-8' => "echo \xff"]);
+})->with([
+    'a bell' => "echo \x07done",
+    'an escape code' => "echo \e[31mred",
+    'a right-to-left override' => "echo \u{202E}txt.exe",
+    'bytes that are not UTF-8' => "echo \xff",
+    'a C1 control' => "echo \u{0085}done",
+    'the last C1 control' => "echo \u{009F}done",
+    'a zero-width space' => "php artisan back\u{200B}up:run",
+    'a right-to-left mark' => "echo \u{200F}done",
+    'a word joiner' => "echo \u{2060}done",
+    'a byte order mark' => "php artisan\u{FEFF} backup:run",
+    'an arabic letter mark' => "echo \u{061C}done",
+]);
+
+test('a description with a zero-width or direction mark is refused', function (string $description) {
+    $team = Team::factory()->create();
+    $application = cronRouteApp($team);
+
+    $this->actingAs(cronRouteMember($team, TeamRole::Owner))
+        ->post(cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => $description])
+        ->assertSessionHasErrors(['description' => 'The description has an invisible control character in it. Retype it and save again.']);
+})->with(['a zero-width joiner' => "Night\u{200D}ly", 'a left-to-right mark' => "Night\u{200E}ly", 'a C1 control' => "Night\u{0090}ly"]);
+
+test('ordinary text beside those ranges is still accepted', function (string $command) {
+    $team = Team::factory()->create();
+    $application = cronRouteApp($team);
+
+    $this->actingAs(cronRouteMember($team, TeamRole::Owner))
+        ->post(cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => $command])
+        ->assertSessionHasNoErrors();
+})->with(['an accented letter' => 'echo café', 'a non-breaking space' => "echo a\u{00A0}b", 'a dash and quotes' => 'echo “done” – ok']);
 
 test('a lone carriage return becomes a new line too', function () {
     $team = Team::factory()->create();
@@ -459,3 +489,22 @@ test('an edit the list as saved now refuses says why and changes nothing', funct
 
     expect($application->fresh()->cron_jobs)->toBe($saved);
 });
+
+test('another team cannot change this app\'s cron jobs', function (string $verb, Closure $url, array $payload) {
+    $team = Team::factory()->create();
+    $application = cronRouteApp($team);
+    $stranger = cronRouteMember(Team::factory()->create(), TeamRole::Owner);
+
+    $response = $this->actingAs($stranger)->{$verb}($url($application), $payload);
+
+    expect($response->status())->toBeIn([403, 404])
+        ->and(array_column((array) $application->fresh()->cron_jobs, 'command'))->toBe(['php artisan schedule:run'])
+        ->and($application->fresh()->cron_pending_since)->toBeNull();
+
+    Queue::assertNothingPushed();
+})->with([
+    'adding a job' => ['post', fn(Application $application) => cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']],
+    'editing a job' => ['put', fn(Application $application) => cronRouteJob($application, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']), ['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run']],
+    'removing a job' => ['delete', fn(Application $application) => cronRouteJob($application, ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']), []],
+    'sending the jobs again' => ['post', fn(Application $application) => cronRouteSync($application), []],
+]);
