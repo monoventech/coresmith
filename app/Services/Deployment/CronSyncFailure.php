@@ -15,6 +15,7 @@ use App\Exceptions\SSHCommandTimedOut;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -30,7 +31,7 @@ final class CronSyncFailure
             $e instanceof HostKeyChangedException => "{$server} presented a different host key, so Coresmith stopped before changing anything. Review the key on the server page, then try again.",
             $e instanceof SSHAuthenticationException => "Coresmith couldn't sign in to {$server} over SSH. Check the server's SSH key, then try again.",
             $e instanceof SSHCommandFailedException => self::refused($e, $server),
-            $e instanceof SSHCommandTimedOut => "{$server} took too long to answer. Try again in a minute.",
+            $e instanceof SSHCommandTimedOut, $e instanceof MaxAttemptsExceededException => "{$server} took too long to answer. Try again in a minute.",
             $e instanceof LockTimeoutException => 'Another change to these jobs was still being written. Try again in a minute.',
             $e instanceof UnsafeNameException => "One of these jobs has a schedule cron can't read, so nothing was written. Fix that job, then try again.",
             default => "Couldn't reach {$server} over SSH. Check it's online, then try again.",

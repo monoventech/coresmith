@@ -215,6 +215,28 @@ final class CronJobs
         $this->change($application, fn(array $entries): array => [$this->withoutScheduler($entries), null]);
     }
 
+    /**
+     * @param  array<string, mixed>  $changes
+     */
+    public function ifUnchanged(Application $read, array $changes): bool
+    {
+        try {
+            return $this->locked($read, function () use ($read, $changes): bool {
+                $stored = Application::query()->whereKey($read->getKey())->first();
+
+                if ($stored === null || $stored->cron_jobs != $read->cron_jobs) {
+                    return false;
+                }
+
+                Application::query()->whereKey($read->getKey())->update($changes);
+
+                return true;
+            });
+        } catch (LockTimeoutException) {
+            return false;
+        }
+    }
+
     public function retry(Application $application): void
     {
         $application->forceFill(['cron_pending_since' => now(), 'cron_error' => null])->save();
@@ -309,13 +331,18 @@ final class CronJobs
         return array_values(array_filter($entries, fn(array $entry): bool => !$this->isScheduler($entry)));
     }
 
+    private function locked(Application $application, Closure $then): mixed
+    {
+        return Cache::lock('cron-jobs:' . $application->getKey(), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, $then);
+    }
+
     /**
      * @param  Closure(list<array{id: string, schedule: string, command: string, description: string|null}>): array{0: list<array{id: string, schedule: string, command: string, description: string|null}>|null, 1: mixed}  $edit
      */
     private function change(Application $application, Closure $edit): mixed
     {
         try {
-            return Cache::lock('cron-jobs:' . $application->getKey(), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, function () use ($application, $edit): mixed {
+            return $this->locked($application, function () use ($application, $edit): mixed {
                 $application->refresh();
 
                 [$entries, $result] = $edit($this->entries($application));

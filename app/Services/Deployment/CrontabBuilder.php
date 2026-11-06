@@ -11,9 +11,9 @@ namespace App\Services\Deployment;
 use App\Enums\PowerState;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
+use App\Services\Panel\CronJobs;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
-use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 
 final class CrontabBuilder
@@ -28,7 +28,9 @@ final class CrontabBuilder
 
     public const LOCK_WAIT_SECONDS = 60;
 
-    public function __construct(private readonly AppShell $shell) {}
+    public const COMMAND_SECONDS = 30;
+
+    public function __construct(private readonly AppShell $shell, private readonly CronJobs $cron) {}
 
     public static function assertSchedule(string $schedule): string
     {
@@ -94,18 +96,14 @@ final class CrontabBuilder
             && $this->scripts($application) !== [];
     }
 
-    public function settle(Application $application, CarbonInterface $readAt): void
+    public function settle(Application $application): void
     {
-        Application::query()
-            ->whereKey($application->getKey())
-            ->where(fn($query) => $query->whereNull('cron_pending_since')->orWhere('cron_pending_since', '<=', $readAt))
-            ->update(['cron_pending_since' => null, 'cron_error' => null]);
+        $this->cron->ifUnchanged($application, ['cron_pending_since' => null, 'cron_error' => null]);
     }
 
     public function write(SSHConnection $connection, Application $application): void
     {
         Cache::lock($this->lockKey($application), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, function () use ($connection, $application): void {
-            $readAt = now();
             $stored = $application->exists ? Application::query()->find($application->getKey()) : null;
 
             if ($stored !== null && $this->runs($stored)) {
@@ -115,7 +113,7 @@ final class CrontabBuilder
             }
 
             if ($stored !== null) {
-                $this->settle($stored, $readAt);
+                $this->settle($stored);
             }
         });
     }
@@ -140,16 +138,16 @@ final class CrontabBuilder
             'mkdir -p ' . escapeshellarg($stagedDirectory),
             'chown root:root ' . $root . ' ' . escapeshellarg($stagedDirectory),
             'chmod 700 ' . $root . ' ' . escapeshellarg($stagedDirectory),
-        ]), sudo: true)->throw();
+        ]), sudo: true, timeout: self::COMMAND_SECONDS)->throw();
 
         $staged = [];
 
         foreach ($scripts as $script => $content) {
             $staged[] = $target = $stagedDirectory . '/' . basename($script);
-            $connection->uploadContent($content, $target);
+            $connection->uploadContent($content, $target, self::COMMAND_SECONDS);
         }
 
-        $connection->uploadContent($this->build($application), $stagedFile);
+        $connection->uploadContent($this->build($application), $stagedFile, self::COMMAND_SECONDS);
 
         $quoted = implode(' ', array_map(escapeshellarg(...), $staged));
 
@@ -162,7 +160,7 @@ final class CrontabBuilder
             'mv -T ' . escapeshellarg($stagedDirectory) . ' ' . escapeshellarg($directory),
             'mv -f ' . escapeshellarg($stagedFile) . ' ' . escapeshellarg($file),
             $this->removeUserCrontab($application),
-        ]), sudo: true)->throw();
+        ]), sudo: true, timeout: self::COMMAND_SECONDS)->throw();
     }
 
     private function clear(SSHConnection $connection, Application $application): void
@@ -174,7 +172,7 @@ final class CrontabBuilder
             'rm -f ' . escapeshellarg($file) . ' ' . escapeshellarg($this->staged($file)),
             'rm -rf ' . escapeshellarg($directory) . ' ' . escapeshellarg($this->staged($directory)),
             $this->removeUserCrontab($application),
-        ]), sudo: true)->throw();
+        ]), sudo: true, timeout: self::COMMAND_SECONDS)->throw();
     }
 
     private function staged(string $path): string

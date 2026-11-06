@@ -11,10 +11,12 @@ namespace App\Jobs;
 use App\Models\Application;
 use App\Services\Deployment\CronSyncFailure;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Panel\CronJobs;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Throwable;
 
 final class SyncApplicationCron implements ShouldBeUniqueUntilProcessing, ShouldQueue
@@ -39,7 +41,7 @@ final class SyncApplicationCron implements ShouldBeUniqueUntilProcessing, Should
         return (string) $this->application->getKey();
     }
 
-    public function handle(SSHConnectionManager $connections, CrontabBuilder $crontab): void
+    public function handle(SSHConnectionManager $connections, CrontabBuilder $crontab, CronJobs $cron): void
     {
         $application = Application::query()->find($this->application->getKey());
 
@@ -48,7 +50,7 @@ final class SyncApplicationCron implements ShouldBeUniqueUntilProcessing, Should
         }
 
         if ($application->current_release === null) {
-            $crontab->settle($application, now());
+            $crontab->settle($application);
 
             return;
         }
@@ -56,15 +58,33 @@ final class SyncApplicationCron implements ShouldBeUniqueUntilProcessing, Should
         try {
             $crontab->write($connections->for($application->server), $application);
         } catch (Throwable $e) {
-            $reason = CronSyncFailure::reason($e, $application);
-
-            Application::query()->whereKey($application->getKey())->update(['cron_error' => $reason, 'cron_pending_since' => null]);
-
-            activity()->performedOn($application)->withProperties(['error' => $reason])->log(self::FAILED);
+            $this->record($cron, $application, CronSyncFailure::reason($e, $application));
 
             throw $e;
         } finally {
             $connections->disconnect($application->server);
         }
+    }
+
+    public function failed(Throwable $e): void
+    {
+        if (!$e instanceof MaxAttemptsExceededException) {
+            return;
+        }
+
+        $application = Application::query()->find($this->application->getKey());
+
+        if ($application === null) {
+            return;
+        }
+
+        $this->record(app(CronJobs::class), $this->application, CronSyncFailure::reason($e, $application));
+    }
+
+    private function record(CronJobs $cron, Application $read, string $reason): void
+    {
+        $cron->ifUnchanged($read, ['cron_error' => $reason, 'cron_pending_since' => null]);
+
+        activity()->performedOn($read)->withProperties(['error' => $reason])->log(self::FAILED);
     }
 }

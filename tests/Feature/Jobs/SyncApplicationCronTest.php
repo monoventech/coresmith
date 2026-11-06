@@ -11,9 +11,13 @@ use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\CronSyncFailure;
+use App\Services\Panel\CronJobs;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
+use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -117,4 +121,44 @@ test('one sync per app waits in the queue at a time, and it never retries on its
         ->and($job->queue)->toBe('server-tasks')
         ->and($job->tries)->toBe(1)
         ->and($job->timeout)->toBe(120);
+});
+
+test('a write the worker stopped for taking too long records why and offers to try again', function (Throwable $e) {
+    $application = cronSyncApp();
+
+    (new SyncApplicationCron($application))->failed($e);
+
+    expect($application->fresh())
+        ->cron_error->toBe('web-1 took too long to answer. Try again in a minute.')
+        ->cron_pending_since->toBeNull()
+        ->and(Activity::query()->where('description', SyncApplicationCron::FAILED)->sole()->properties['error'])->toBe('web-1 took too long to answer. Try again in a minute.');
+})->with([
+    'the worker timeout' => [fn() => new TimeoutExceededException('App\\Jobs\\SyncApplicationCron has timed out.')],
+    'too many attempts' => [fn() => new MaxAttemptsExceededException('App\\Jobs\\SyncApplicationCron has been attempted too many times.')],
+]);
+
+test('a failure the write already recorded is not recorded twice', function () {
+    $application = cronSyncApp(['cron_error' => 'web-1 refused the change.', 'cron_pending_since' => null]);
+
+    (new SyncApplicationCron($application))->failed(new RuntimeException('web-1 refused the change.'));
+
+    expect($application->fresh()->cron_error)->toBe('web-1 refused the change.')
+        ->and(Activity::query()->where('description', SyncApplicationCron::FAILED)->exists())->toBeFalse();
+});
+
+test('a failed write leaves a change saved while it ran on its way', function () {
+    Queue::fake();
+    $application = cronSyncApp();
+    $transport = (new FakeSSHTransport)
+        ->onCommand('mkdir -p', function () use ($application): void {
+            app(CronJobs::class)->add($application->fresh(), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']);
+        })
+        ->respondTo('mv -T', 'mv: cannot move', 1);
+
+    expect(fn() => cronSyncRun($application, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($application->fresh())
+        ->cron_pending_since->not->toBeNull()
+        ->cron_error->toBeNull()
+        ->and(Activity::query()->where('description', SyncApplicationCron::FAILED)->count())->toBe(1);
 });

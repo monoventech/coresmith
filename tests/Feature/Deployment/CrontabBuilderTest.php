@@ -6,12 +6,18 @@ use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsafeNameException;
+use App\Jobs\StartApplication;
+use App\Jobs\StopApplication;
+use App\Jobs\SyncApplicationCron;
+use App\Jobs\SyncApplicationProcesses;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Panel\CronJobs;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Symfony\Component\Process\Process;
 use Tests\Support\FakeSSHTransport;
 
@@ -395,14 +401,14 @@ test('an app with nothing live gets no cron file, since its jobs point at a rele
     expect($transport->uploads())->toBe([])->and($transport->commands())->toBe([cronRemoval()]);
 });
 
-test('a write clears what the page was waiting on unless a newer change came after it read the list', function (int $secondsFromNow, bool $cleared) {
+test('a write clears what the page was waiting on once the server has the list as saved now, whenever it was asked for', function (int $secondsFromNow) {
     $application = scheduledApp(['cron_pending_since' => now()->addSeconds($secondsFromNow), 'cron_error' => 'web-1 refused the change.']);
 
     app(CrontabBuilder::class)->write(cronConnection(new FakeSSHTransport), $application);
 
-    expect($application->fresh()->cron_pending_since === null)->toBe($cleared)
-        ->and($application->fresh()->cron_error === null)->toBe($cleared);
-})->with(['a change before the read' => [-30, true], 'a change after the read' => [60, false]]);
+    expect($application->fresh()->cron_pending_since)->toBeNull()
+        ->and($application->fresh()->cron_error)->toBeNull();
+})->with(['asked for before the read' => [-30], 'asked for again after the read' => [60]]);
 
 test('the lock is free again after a write the server refused', function () {
     $application = scheduledApp();
@@ -410,4 +416,66 @@ test('the lock is free again after a write the server refused', function () {
 
     expect(fn() => app(CrontabBuilder::class)->write(cronConnection($transport), $application))->toThrow(SSHCommandFailedException::class)
         ->and(Cache::lock(app(CrontabBuilder::class)->lockKey($application), 5)->get())->toBeTrue();
+});
+
+test('every command a cron write or removal sends gives up after the cron budget', function (string $user, array $needles) {
+    $transport = new FakeSSHTransport;
+    $connection = cronConnection($transport, $user);
+
+    app(CrontabBuilder::class)->write($connection, scheduledApp());
+    app(CrontabBuilder::class)->remove($connection, scheduledApp(['slug' => 'other', 'system_user' => 'coresmith-app-other']));
+
+    foreach ($needles as $needle) {
+        expect($transport->budgetFor($needle), $needle)->toBe(CrontabBuilder::COMMAND_SECONDS);
+    }
+})->with([
+    'signed in as root' => ['root', ['mkdir -p', 'mv -T', 'cron.d/coresmith-app-other']],
+    'signed in as a user with sudo' => ['coresmith', ['mkdir -p', 'mktemp', 'install -m 644', 'mv -T', 'cron.d/coresmith-app-other']],
+]);
+
+test('a cron write that stalls gives up inside the lock and inside every job that writes cron', function () {
+    $application = Application::factory()->make();
+
+    expect(CrontabBuilder::COMMAND_SECONDS)->toBeLessThan(CrontabBuilder::LOCK_SECONDS)
+        ->and(CrontabBuilder::LOCK_WAIT_SECONDS + CrontabBuilder::COMMAND_SECONDS)->toBeLessThan((new SyncApplicationCron($application))->timeout)
+        ->and((new SyncApplicationProcesses($application))->timeout - CrontabBuilder::LOCK_WAIT_SECONDS)->toBeGreaterThanOrEqual((new StopApplication($application))->timeout)
+        ->and((new SyncApplicationProcesses($application))->timeout - CrontabBuilder::LOCK_WAIT_SECONDS)->toBeGreaterThanOrEqual((new StartApplication($application))->timeout);
+});
+
+test('a change saved while the write was on the server is still on its way afterwards', function () {
+    Queue::fake();
+    $this->freezeTime();
+    $application = scheduledApp(['cron_pending_since' => now()]);
+    $transport = (new FakeSSHTransport)->onCommand('mv -T', function () use ($application): void {
+        app(CronJobs::class)->add($application->fresh(), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']);
+    });
+
+    app(CrontabBuilder::class)->write(cronConnection($transport), $application);
+
+    expect($application->fresh())
+        ->cron_pending_since->not->toBeNull()
+        ->cron_jobs->toHaveCount(2);
+});
+
+test('a change saved before the write read the list is settled by it, even in the same second', function () {
+    $this->freezeTime();
+    $application = scheduledApp(['cron_pending_since' => now(), 'cron_error' => 'web-1 refused the change.']);
+
+    app(CrontabBuilder::class)->write(cronConnection(new FakeSSHTransport), $application);
+
+    expect($application->fresh())
+        ->cron_pending_since->toBeNull()
+        ->cron_error->toBeNull();
+});
+
+test('a write for an app removed meanwhile clears its file and settles nothing', function () {
+    $application = scheduledApp(['cron_pending_since' => now()->subSeconds(5)]);
+    $application->delete();
+    $transport = new FakeSSHTransport;
+
+    app(CrontabBuilder::class)->write(cronConnection($transport), $application);
+
+    expect($transport->commands())->toContain(cronRemoval())
+        ->and($transport->uploads())->toBe([])
+        ->and(Application::withTrashed()->find($application->id)->cron_pending_since)->not->toBeNull();
 });
