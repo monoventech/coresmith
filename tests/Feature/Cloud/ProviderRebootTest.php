@@ -44,14 +44,72 @@ function rebootingServer(?Team $team = null): Server
     return Server::factory()->fromProvider($account)->create(['name' => 'outpost-02', 'status' => ServerStatus::Active]);
 }
 
-test('a provider server is rebooted through its provider', function () {
+test('a provider server is rebooted through its provider, and is recorded as accepted rather than back', function () {
     $server = rebootingServer();
 
     app()->call([new RebootServer($server), 'handle']);
 
     expect($this->api->calls('reboot'))->toBe([['reboot', ['4711']]])
         ->and($this->transport->commands())->toBe([])
-        ->and(Activity::query()->where('description', 'server_rebooted')->sole()->properties->toArray())->toBe(['via' => 'Hetzner Cloud']);
+        ->and(Activity::query()->where('description', 'server_reboot_requested')->sole()->properties->toArray())->toBe(['via' => 'Hetzner Cloud'])
+        ->and(Activity::query()->where('description', 'server_rebooted')->exists())->toBeFalse();
+});
+
+test('a reboot queued before other provider work began does not reach the provider during it', function (string $type, string $step, string $reason) {
+    $server = rebootingServer();
+    $job = new RebootServer($server);
+    CloudTask::start($server, $type, $step, ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+
+    app()->call([$job, 'handle']);
+
+    expect($this->api->calls('reboot'))->toBe([])
+        ->and($this->transport->commands())->toBe([])
+        ->and(Activity::query()->where('description', 'server_reboot_failed')->sole()->properties->toArray())->toBe(['reason' => $reason])
+        ->and(Activity::query()->whereIn('description', ['server_rebooted', 'server_reboot_requested'])->exists())->toBeFalse();
+})->with([
+    'a resize' => [CloudTask::RESIZE, 'power_off', "Coresmith is resizing outpost-02 at Hetzner Cloud. Reboot once it's back."],
+    'a destroy' => [CloudTask::DESTROY, 'delete', 'Coresmith is destroying outpost-02 at Hetzner Cloud.'],
+]);
+
+test('a reboot over SSH also waits for provider work that began after it was queued', function () {
+    $server = rebootingServer();
+    $server->forceFill(['provider_server_id' => null])->save();
+    $job = new RebootServer($server);
+    CloudTask::start($server, CloudTask::CREATE, 'boot');
+
+    app()->call([$job, 'handle']);
+
+    expect($this->transport->commands())->toBe([])
+        ->and(Activity::query()->where('description', 'server_reboot_failed')->sole()->properties->toArray())->toBe(['reason' => 'Coresmith is still creating outpost-02 at Hetzner Cloud.']);
+});
+
+test('a reboot after provider work finished goes ahead', function () {
+    $server = rebootingServer();
+    CloudTask::start($server, CloudTask::RESIZE, 'reconnect', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
+    CloudTask::finish($server);
+
+    app()->call([new RebootServer($server), 'handle']);
+
+    expect($this->api->calls('reboot'))->toBe([['reboot', ['4711']]]);
+});
+
+test('a token the provider refuses for a reboot marks the account', function () {
+    $this->api->failing('reboot', new CloudProviderException(CloudFailure::TokenRejected, CloudProviderType::Hetzner, null, 401));
+    $server = rebootingServer();
+
+    expect(fn() => app()->call([new RebootServer($server), 'handle']))->toThrow(CloudProviderException::class);
+
+    expect($server->cloudProvider->fresh()->token_failed_at)->not->toBeNull()
+        ->and(Activity::query()->where('description', 'server_reboot_failed')->exists())->toBeTrue();
+});
+
+test('a reboot the provider refuses for another reason leaves the account alone', function () {
+    $this->api->failing('reboot', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked'));
+    $server = rebootingServer();
+
+    expect(fn() => app()->call([new RebootServer($server), 'handle']))->toThrow(CloudProviderException::class);
+
+    expect($server->cloudProvider->fresh()->token_failed_at)->toBeNull();
 });
 
 test('a provider server that is not answering is still rebooted through its provider', function () {
@@ -94,7 +152,7 @@ test('a provider that refuses the reboot leaves a note in the activity', functio
 
     expect(Activity::query()->where('description', 'server_reboot_failed')->sole()->properties->toArray())
         ->toBe(['reason' => 'Hetzner Cloud refused the request. Hetzner Cloud said: locked.'])
-        ->and(Activity::query()->where('description', 'server_rebooted')->exists())->toBeFalse();
+        ->and(Activity::query()->whereIn('description', ['server_rebooted', 'server_reboot_requested'])->exists())->toBeFalse();
 });
 
 test('a reboot waits while the server is being resized', function () {

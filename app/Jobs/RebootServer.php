@@ -8,9 +8,11 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\CloudFailure;
 use App\Exceptions\CloudProviderException;
 use App\Models\Server;
 use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -37,6 +39,14 @@ final class RebootServer implements ShouldQueue
 
     public function handle(SSHConnectionManager $connections, CloudApiFactory $apis): void
     {
+        $refusal = CloudTask::refusal($this->server, 'Reboot');
+
+        if ($refusal !== null) {
+            activity()->performedOn($this->server)->withProperties(['reason' => $refusal])->log('server_reboot_failed');
+
+            return;
+        }
+
         if (self::viaProvider($this->server)) {
             $this->throughProvider($apis, $this->server->cloudProvider->type->label());
 
@@ -59,11 +69,15 @@ final class RebootServer implements ShouldQueue
         try {
             $apis->for($this->server->cloudProvider)->reboot((string) $this->server->provider_server_id);
         } catch (CloudProviderException $e) {
+            if ($e->failure === CloudFailure::TokenRejected) {
+                $this->server->cloudProvider->forceFill(['token_failed_at' => now()])->save();
+            }
+
             activity()->performedOn($this->server)->withProperties(['reason' => $e->getMessage()])->log('server_reboot_failed');
 
             throw $e;
         }
 
-        activity()->performedOn($this->server)->withProperties(['via' => $label])->log('server_rebooted');
+        activity()->performedOn($this->server)->withProperties(['via' => $label])->log('server_reboot_requested');
     }
 }

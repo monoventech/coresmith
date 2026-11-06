@@ -69,6 +69,8 @@ test('server events are described in plain words', function (string $description
     'resized' => ['server_resized', ['from' => 'cx22', 'to' => 'cx32', 'provider' => 'Hetzner Cloud'], 'web-1 resized from cx22 to cx32'],
     'resize failed' => ['server_resize_failed', ['from' => 'cx22', 'to' => 'cx32', 'reason' => 'Hetzner Cloud refused the request.'], 'Resizing web-1 failed'],
     'reboot failed' => ['server_reboot_failed', ['reason' => 'Hetzner Cloud refused the request.'], 'web-1 did not reboot. Hetzner Cloud refused the request.'],
+    'reboot accepted by the provider' => ['server_reboot_requested', ['via' => 'Hetzner Cloud'], 'Hetzner Cloud accepted a reboot of web-1'],
+    'reboot accepted by a provider it cannot name' => ['server_reboot_requested', [], 'Its provider accepted a reboot of web-1'],
     'removed apps cleared' => ['removed_apps_cleared', ['apps' => 3], 'Folders cleared on web-1 for 3 apps removed over 7 days ago'],
 ]);
 

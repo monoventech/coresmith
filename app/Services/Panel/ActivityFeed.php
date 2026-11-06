@@ -226,6 +226,7 @@ final class ActivityFeed
             'server_provisioned' => [$this->mono($server?->name), $this->text(' provisioned and hardened' . $this->took($properties['duration_seconds'] ?? null))],
             'server_renamed' => [$this->text('Server renamed to '), $this->mono($server?->name)],
             'server_rebooted' => [$this->mono($server?->name), $this->text(' rebooted, apps came back via systemd')],
+            'server_reboot_requested' => [$this->text(($properties['via'] ?? 'Its provider') . ' accepted a reboot of '), $this->mono($server?->name)],
             'server_reboot_failed' => [$this->mono($server?->name), $this->text(' did not reboot. ' . ($properties['reason'] ?? 'The provider did not answer.'))],
             'server_resized' => [$this->mono($server?->name), $this->text(' resized from ' . ($properties['from'] ?? 'its old size') . ' to ' . ($properties['to'] ?? 'a new size'))],
             'server_resize_failed' => [$this->text('Resizing '), $this->mono($server?->name), $this->text(' failed')],
