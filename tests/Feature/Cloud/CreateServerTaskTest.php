@@ -683,3 +683,78 @@ test('a line written while a leftover key was being removed is kept', function (
         ->toContain('phase 1 of 8, Operating system: started')
         ->toContain("couldn't remove the uploaded key from Hetzner Cloud, delete " . CreateServerTask::keyName($server) . ' there');
 });
+
+test('a creation that may exist at the provider is uncertain, and one the provider never made is not', function (Closure $arrange, bool $uncertain) {
+    $server = cloudCreating();
+    $arrange($this->api, $this);
+
+    cloudCreatingRun($server);
+
+    $this->travel(16)->minutes();
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server)->state)->toBe(CloudTask::FAILED)
+        ->and($server->fresh()->provider_server_id)->toBeNull()
+        ->and(CreateServerTask::uncertain($server->fresh()))->toBe($uncertain);
+})->with([
+    'three unanswered creates' => [fn(FakeCloudApi $api) => $api->failing('create', cloudCreatingFailure(CloudFailure::Unreachable), 3), true],
+    'an unanswered create, then a refusal' => [fn(FakeCloudApi $api) => $api->failing('create', cloudCreatingFailure(CloudFailure::Unreachable), 1)->failing('create', cloudCreatingFailure(CloudFailure::Refused, 'server name is already used', 409)), true],
+    'a refusal at the first try' => [fn(FakeCloudApi $api) => $api->failing('create', cloudCreatingFailure(CloudFailure::Refused, 'server type cx22 is not available in hel1', 422)), false],
+    'a provider that kept failing before any create' => [fn(FakeCloudApi $api) => $api->failing('findTagged', cloudCreatingFailure(CloudFailure::Unavailable, status: 503), 99), false],
+]);
+
+test('a creation still waiting on an unanswered create at its deadline is uncertain', function () {
+    $server = cloudCreating();
+    CloudTask::touch($server, ['uncertain' => 1]);
+    $this->travel(16)->minutes();
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server))
+        ->state->toBe(CloudTask::FAILED)
+        ->error->toBe("Coresmith couldn't get an answer from Hetzner Cloud after three tries. Check the Hetzner Cloud console for a server called outpost-02: if there is one, delete it there, then remove this server and provision it again.")
+        ->and(CreateServerTask::uncertain($server->fresh()))->toBeTrue();
+});
+
+test('trying again after three unanswered creates gets three more tries', function () {
+    $server = cloudCreating();
+    $this->api->failing('create', cloudCreatingFailure(CloudFailure::Unreachable), 5);
+
+    cloudCreatingRun($server);
+    CloudTask::resume($server->fresh());
+    cloudCreatingRun($server);
+
+    expect($this->api->calls('create'))->toHaveCount(6)
+        ->and(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE)
+        ->and($server->fresh()->provider_server_id)->toBe('4711');
+});
+
+test('a retry the provider refuses after earlier unanswered creates is still uncertain', function () {
+    $server = cloudCreating();
+    $this->api->failing('create', cloudCreatingFailure(CloudFailure::Unreachable), 3);
+
+    cloudCreatingRun($server);
+    CloudTask::resume($server->fresh());
+
+    expect(cloudCreatingTask($server)->data['uncertain'] ?? null)->toBe(0);
+
+    $this->api->failing('create', cloudCreatingFailure(CloudFailure::Refused, 'server name is already used', 409));
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server)->state)->toBe(CloudTask::FAILED)
+        ->and(CreateServerTask::uncertain($server->fresh()))->toBeTrue();
+});
+
+test('a creation adopted after an unanswered create is not uncertain when it fails later', function () {
+    $server = cloudCreating();
+    $this->api->failing('create', cloudCreatingFailure(CloudFailure::Unreachable))
+        ->tagged(null, cloudCreatingInstance(CloudInstanceState::Starting))
+        ->finds(null);
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server)->state)->toBe(CloudTask::FAILED)
+        ->and(cloudCreatingTask($server)->data['uncertain'] ?? null)->toBe(1)
+        ->and($server->fresh()->provider_server_id)->toBe('4711')
+        ->and(CreateServerTask::uncertain($server->fresh()))->toBeFalse();
+});

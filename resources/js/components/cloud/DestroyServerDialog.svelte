@@ -12,9 +12,16 @@
     let {
         server,
         provider,
+        uncertain = false,
         open = $bindable(false),
         ondetach
-    }: { server: { id: string; name: string }; provider: string; open?: boolean; ondetach: () => void } = $props()
+    }: {
+        server: { id: string; name: string }
+        provider: string
+        uncertain?: boolean
+        open?: boolean
+        ondetach: () => void
+    } = $props()
 
     let typed = $state('')
 
@@ -47,8 +54,9 @@
                 <Dialog.Header>
                     <Dialog.Title>Destroy {server.name}?</Dialog.Title>
                     <Dialog.Description
-                        >{provider} deletes the server and its disk. Everything on it is gone and can't be recovered, and
-                        billing for it stops.</Dialog.Description
+                        >{uncertain
+                            ? `Coresmith could not confirm whether ${provider} created ${server.name}. If it did, ${provider} deletes it and its disk, and billing for it stops. Either way, ${server.name} leaves the panel.`
+                            : `${provider} deletes the server and its disk. Everything on it is gone and can't be recovered, and billing for it stops.`}</Dialog.Description
                     >
                 </Dialog.Header>
                 <p class="mt-3 mb-0 text-[12.5px] text-muted-foreground">

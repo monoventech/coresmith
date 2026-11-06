@@ -22,6 +22,7 @@ use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\ResizeOptions;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Server\ProvisioningLog;
@@ -100,12 +101,16 @@ final class CloudServerController extends Controller
     {
         $account = $server->cloudProvider;
 
-        abort_if($account === null || blank($server->provider_server_id), 404);
+        abort_if($account === null || (blank($server->provider_server_id) && !CreateServerTask::uncertain($server)), 404);
 
         $label = $account->type->label();
 
         if (CloudTask::running($server)) {
             return back()->with('error', "Coresmith is already working on {$server->name}. Wait for that to finish first.");
+        }
+
+        if ($server->status === ServerStatus::Provisioning) {
+            return back()->with('error', "Coresmith is provisioning {$server->name}. Destroy it once provisioning finishes or fails.");
         }
 
         if ($this->deploying($server)) {

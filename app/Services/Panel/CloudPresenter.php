@@ -182,6 +182,7 @@ final class CloudPresenter
         $task = CloudTask::of($server);
         $failedCreate = $task !== null && $task->type === CloudTask::CREATE && $task->state === CloudTask::FAILED;
         $failedDestroy = $task !== null && $task->type === CloudTask::DESTROY && $task->state === CloudTask::FAILED;
+        $uncertain = CreateServerTask::uncertain($server);
 
         return [
             'provider' => $account->type->label(),
@@ -195,11 +196,12 @@ final class CloudPresenter
             'monthly' => Formats::money($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
             'console_url' => $account->type->consoleUrl($server->provider_server_id),
             'task' => $task === null ? null : $this->task($task, $account->type->label()),
+            'uncertain' => $uncertain,
             'can' => [
                 'retry' => ($failedCreate && $user->can('update', $server)) || ($failedDestroy && $user->can('delete', $server)),
-                'remove' => $failedCreate && $server->provider_server_id === null && $user->can('delete', $server),
+                'remove' => $failedCreate && $server->provider_server_id === null && !$uncertain && $user->can('delete', $server),
                 'detach' => $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
-                'destroy' => filled($server->provider_server_id) && $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
+                'destroy' => (filled($server->provider_server_id) || $uncertain) && $task?->state !== CloudTask::RUNNING && $user->can('delete', $server),
                 'resize' => $server->status === ServerStatus::Active && filled($server->provider_server_id) && $task?->state !== CloudTask::RUNNING && $user->can('update', $server),
                 'dismiss' => $task !== null && $task->type === CloudTask::RESIZE && $task->state === CloudTask::FAILED && $user->can('update', $server),
             ],

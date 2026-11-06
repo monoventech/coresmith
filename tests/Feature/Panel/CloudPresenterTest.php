@@ -146,6 +146,7 @@ test('the server block names where it runs and what it costs', function () {
         'image' => 'Ubuntu 24.04',
         'monthly' => '€4.35',
         'console_url' => 'https://console.hetzner.cloud/projects',
+        'uncertain' => false,
     ])->and($block['task']['type'])->toBe('create')
         ->and($block['task']['error'])->toBe('Hetzner Cloud refused the size.')
         ->and($block['task']['to'])->toBeNull();
@@ -312,3 +313,30 @@ test('each provider links to its console, at the instance when it can', function
     'a linode' => [CloudProviderType::Linode, '4711', 'https://cloud.linode.com/linodes/4711'],
     'linodes' => [CloudProviderType::Linode, null, 'https://cloud.linode.com/linodes'],
 ]);
+
+test('a creation Coresmith could not confirm is offered as a destroy, never a remove', function (int $uncertain, array $can, bool $flag) {
+    $team = Team::factory()->create();
+    $server = cloudPresenterServer(attributes: ['team_id' => $team->id, 'provider_server_id' => null]);
+    CloudTask::start($server, CloudTask::CREATE, 'create', ['uncertain' => $uncertain]);
+    CloudTask::fail($server, "Coresmith couldn't get an answer from Hetzner Cloud after three tries.");
+
+    $block = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Owner));
+
+    expect($block['can'])->toBe($can)
+        ->and($block['uncertain'])->toBe($flag);
+})->with([
+    'after an unanswered create' => [1, ['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true, 'resize' => false, 'dismiss' => false], true],
+    'after three' => [3, ['retry' => true, 'remove' => false, 'detach' => true, 'destroy' => true, 'resize' => false, 'dismiss' => false], true],
+    'when nothing went unanswered' => [0, ['retry' => true, 'remove' => true, 'detach' => true, 'destroy' => false, 'resize' => false, 'dismiss' => false], false],
+]);
+
+test('a creation still running is never shown as uncertain', function () {
+    $team = Team::factory()->create();
+    $server = cloudPresenterServer(attributes: ['team_id' => $team->id, 'provider_server_id' => null]);
+    CloudTask::start($server, CloudTask::CREATE, 'create', ['uncertain' => 1]);
+
+    $block = app(CloudPresenter::class)->server($server->fresh(), cloudPresenterMember($team, TeamRole::Owner));
+
+    expect($block['uncertain'])->toBeFalse()
+        ->and($block['can']['destroy'])->toBeFalse();
+});

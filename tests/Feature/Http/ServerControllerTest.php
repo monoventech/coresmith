@@ -603,3 +603,15 @@ test('retrying or starting over twice at once queues one run', function (string 
     'retrying' => ['servers.provisioning.retry', 'retryProvisioning', 'provisioning_retried'],
     'starting over' => ['servers.provisioning.restart', 'restartProvisioning', 'provisioning_restarted'],
 ]);
+
+test('detaching a creation Coresmith could not confirm says to check the provider for it', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud']);
+    $server = Server::factory()->fromProvider($account)->for($team)->create(['name' => 'lost-02', 'status' => ServerStatus::Creating, 'provider_server_id' => null]);
+    CloudTask::start($server, CloudTask::CREATE, 'create', ['uncertain' => 1]);
+    CloudTask::fail($server, "Coresmith couldn't get an answer from Hetzner Cloud after three tries.");
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->delete(route('servers.destroy', $server))
+        ->assertSessionHas('success', 'Removed. Coresmith could not confirm whether Hetzner Cloud created lost-02. Check your Hetzner Cloud account and delete it there if it exists.');
+});

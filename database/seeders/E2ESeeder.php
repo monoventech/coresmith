@@ -231,6 +231,10 @@ final class E2ESeeder extends Seeder
         CloudTask::advance($failed, 'ssh');
         CloudTask::fail($failed, "failed-create is running at 203.0.113.121, but Coresmith couldn't sign in over SSH within 10 minutes. The last error was: SSH authentication failed for root@203.0.113.121. Try again to keep waiting, or destroy it and provision another.");
 
+        $lost = $this->cloudServer($hetzner, 'lost-create', null);
+        CloudTask::start($lost, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)', 'uncertain' => 3]);
+        CloudTask::fail($lost, "Coresmith couldn't get an answer from Hetzner Cloud after three tries. Check the Hetzner Cloud console for a server called lost-create: if there is one, delete it there, then remove this server and provision it again.");
+
         $refused = $this->cloudServer($hetzner, 'refused-create', null);
         CloudTask::start($refused, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
         CloudTask::fail($refused, 'Hetzner Cloud refused the request. Hetzner Cloud said: server type cx22 is not available in hel1. Remove this server and provision it again with another size or region.');

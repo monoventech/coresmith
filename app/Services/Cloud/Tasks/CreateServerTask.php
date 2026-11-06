@@ -57,6 +57,17 @@ final class CreateServerTask implements CloudTaskHandler
         return 'coresmith-' . strtolower((string) $server->getKey());
     }
 
+    public static function uncertain(Server $server): bool
+    {
+        $task = CloudTask::of($server);
+
+        return $task !== null
+            && $task->type === CloudTask::CREATE
+            && $task->state === CloudTask::FAILED
+            && blank($server->provider_server_id)
+            && ((int) ($task->data['uncertain'] ?? 0) > 0 || ($task->data['unconfirmed'] ?? false) === true);
+    }
+
     public static function keyName(Server $server): string
     {
         return 'coresmith-' . $server->name . '-' . strtolower(substr((string) $server->getKey(), -6));

@@ -9,6 +9,8 @@ use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\ActivityFeed;
@@ -86,4 +88,16 @@ test("the browser seed has the panel's own host refused by the audit itself", fu
 
     expect($audit['state'])->toBe('done')
         ->and(array_column($audit['findings'], 'key'))->toBe(['panel_host']);
+});
+
+test('the browser seed has a creation Coresmith could not confirm, which the panel offers to destroy', function () {
+    e2eSeedRun();
+
+    $server = Server::query()->where('name', 'lost-create')->sole();
+    $task = CloudTask::of($server);
+
+    expect($server->provider_server_id)->toBeNull()
+        ->and($task->state)->toBe(CloudTask::FAILED)
+        ->and($task->data['uncertain'])->toBe(3)
+        ->and(CreateServerTask::uncertain($server))->toBeTrue();
 });

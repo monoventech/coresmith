@@ -636,3 +636,48 @@ test('only a failed resize can be dismissed', function (string $type, string $st
     'a failed destroy' => [CloudTask::DESTROY, CloudTask::FAILED, TeamRole::Owner, 404],
     'a failed resize, for a deployer' => [CloudTask::RESIZE, CloudTask::FAILED, TeamRole::Member, 403],
 ]);
+
+test('a creation Coresmith could not confirm can be destroyed, which looks for it by its tag', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account, ['name' => 'lost-02', 'provider_server_id' => null, 'status' => ServerStatus::Creating]);
+    CloudTask::start($server, CloudTask::CREATE, 'create', ['uncertain' => 3, 'key_id' => 'key-9']);
+    CloudTask::fail($server, "Coresmith couldn't get an answer from Hetzner Cloud after three tries.");
+
+    $this->actingAs($user)
+        ->from(route('servers.show', $server))
+        ->delete(route('servers.cloud.destroy', $server), ['confirm' => 'lost-02'])
+        ->assertSessionHas('success', 'Destroying lost-02 at Hetzner Cloud. It leaves the fleet once Hetzner Cloud confirms.');
+
+    expect(CloudTask::of($server->fresh()))
+        ->type->toBe(CloudTask::DESTROY)
+        ->step->toBe('delete')
+        ->data->toBe(['key_id' => 'key-9']);
+
+    Queue::assertPushed(RunCloudTask::class, 1);
+});
+
+test('a creation the provider refused has nothing to destroy', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account, ['name' => 'refused-02', 'provider_server_id' => null, 'status' => ServerStatus::Creating]);
+    CloudTask::start($server, CloudTask::CREATE, 'create', ['uncertain' => 0]);
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+
+    $this->actingAs($user)->delete(route('servers.cloud.destroy', $server), ['confirm' => 'refused-02'])->assertNotFound();
+
+    Queue::assertNothingPushed();
+});
+
+test('a server being provisioned is not destroyed until provisioning ends', function () {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account, ['status' => ServerStatus::Provisioning]);
+
+    $this->actingAs($user)
+        ->from(route('servers.show', $server))
+        ->delete(route('servers.cloud.destroy', $server), ['confirm' => 'outpost-02'])
+        ->assertRedirect(route('servers.show', $server))
+        ->assertSessionHas('error', 'Coresmith is provisioning outpost-02. Destroy it once provisioning finishes or fails.');
+
+    expect(CloudTask::of($server->fresh()))->toBeNull();
+
+    Queue::assertNothingPushed();
+});

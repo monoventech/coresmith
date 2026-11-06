@@ -109,6 +109,7 @@
 <DestroyServerDialog
     server={{ id: server.id, name: server.name }}
     provider={cloud.provider}
+    uncertain={cloud.uncertain}
     bind:open={destroying}
     ondetach={() => (detaching = true)}
 />
@@ -118,8 +119,9 @@
         <Dialog.Header>
             <Dialog.Title>Detach {server.name}?</Dialog.Title>
             <Dialog.Description
-                >Coresmith stops managing {server.name}. It keeps running at {cloud.provider}, and {cloud.provider} keeps
-                billing for it.</Dialog.Description
+                >{cloud.uncertain
+                    ? `Coresmith could not confirm whether ${cloud.provider} created ${server.name}. Check your ${cloud.provider} account and delete it there if it exists.`
+                    : `Coresmith stops managing ${server.name}. It keeps running at ${cloud.provider}, and ${cloud.provider} keeps billing for it.`}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>

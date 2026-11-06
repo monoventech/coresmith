@@ -93,7 +93,8 @@ test('an instance the provider already deleted still leaves the fleet', function
 
     destroyingRun($server);
 
-    expect(Server::query()->find($server->id))->toBeNull();
+    expect(Server::query()->find($server->id))->toBeNull()
+        ->and($this->api->calls('find'))->toBe([]);
 });
 
 test('a refusal says what to fix and keeps the server', function () {
@@ -135,5 +136,82 @@ test('a key left over from creating it is removed with it', function () {
     destroyingRun($server);
 
     expect($this->api->calls('deleteKey'))->toBe([['deleteKey', ['key-9']]])
+        ->and(Server::query()->find($server->id))->toBeNull();
+});
+
+function destroyingInstance(CloudInstanceState $state = CloudInstanceState::Deleting, string $id = '4711'): CloudInstance
+{
+    return new CloudInstance($id, $state, '203.0.113.9', 'cx22');
+}
+
+test('a destroy the provider accepted is only finished once the server is gone', function () {
+    $this->api->finds(destroyingInstance(), destroyingInstance(CloudInstanceState::Running), null);
+    $server = destroying();
+
+    destroyingRun($server);
+
+    expect($this->api->calls('destroy'))->toBe([['destroy', ['4711']]])
+        ->and($this->api->calls('find'))->toBe([['find', ['4711']], ['find', ['4711']], ['find', ['4711']]])
+        ->and(Server::query()->find($server->id))->toBeNull()
+        ->and(Activity::query()->where('description', 'server_destroyed')->count())->toBe(1);
+});
+
+test('a destroy is not finished while the provider still shows the server', function () {
+    $this->api->finds(destroyingInstance());
+    $server = destroying();
+
+    destroyingRun($server);
+
+    $task = CloudTask::of($server->fresh());
+
+    expect(Server::query()->find($server->id))->not->toBeNull()
+        ->and($task->state)->toBe(CloudTask::RUNNING)
+        ->and($task->data['requested'] ?? null)->toBeTrue()
+        ->and(Activity::query()->where('description', 'server_destroyed')->exists())->toBeFalse();
+
+    Queue::assertPushed(RunCloudTask::class, 1);
+});
+
+test('a server the provider keeps showing until the deadline is kept and reported', function () {
+    $this->api->finds(destroyingInstance());
+    $server = destroying();
+
+    destroyingRun($server);
+    $this->travel(11)->minutes();
+    destroyingRun($server);
+
+    $task = CloudTask::of($server->fresh());
+
+    expect($this->api->calls('destroy'))->toHaveCount(1)
+        ->and($task->state)->toBe(CloudTask::FAILED)
+        ->and($task->error)->toBe("Coresmith couldn't destroy outpost-02 at Hetzner Cloud within 10 minutes. It may still be running and billed: try again, or delete it in the Hetzner Cloud console and then detach it here.")
+        ->and(Server::query()->find($server->id))->not->toBeNull();
+});
+
+test('a server found by its tag is watched by its own id until it is gone', function () {
+    $this->api->tagged(destroyingInstance(CloudInstanceState::Running, '4799'))->finds(destroyingInstance(id: '4799'), null);
+    $server = destroying(['provider_server_id' => null]);
+
+    destroyingRun($server);
+
+    expect($this->api->calls('destroy'))->toBe([['destroy', ['4799']]])
+        ->and($this->api->calls('find'))->toBe([['find', ['4799']], ['find', ['4799']]])
+        ->and($this->api->calls('findTagged'))->toHaveCount(1)
+        ->and(Server::query()->find($server->id))->toBeNull();
+});
+
+test('trying a destroy again after it timed out asks the provider again', function () {
+    $this->api->finds(destroyingInstance());
+    $server = destroying();
+
+    destroyingRun($server);
+    $this->travel(11)->minutes();
+    destroyingRun($server);
+
+    $this->api->finds(null);
+    CloudTask::resume($server->fresh());
+    destroyingRun($server);
+
+    expect($this->api->calls('destroy'))->toHaveCount(2)
         ->and(Server::query()->find($server->id))->toBeNull();
 });

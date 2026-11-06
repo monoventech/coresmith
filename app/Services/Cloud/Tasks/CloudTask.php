@@ -120,13 +120,21 @@ final readonly class CloudTask
 
     public static function resume(Server $server): void
     {
-        if (self::of($server)?->state !== self::FAILED) {
+        $task = self::of($server);
+
+        if ($task?->state !== self::FAILED) {
             return;
         }
 
         $now = now()->toIso8601String();
+        $unanswered = (int) ($task->data['uncertain'] ?? 0) > 0;
 
-        self::change($server, ['state' => self::RUNNING, 'step_started_at' => $now, 'heartbeat_at' => $now, 'finished_at' => null, 'error' => null]);
+        self::change(
+            $server,
+            ['state' => self::RUNNING, 'step_started_at' => $now, 'heartbeat_at' => $now, 'finished_at' => null, 'error' => null],
+            $unanswered ? ['uncertain' => 0, 'unconfirmed' => true] : [],
+            ['requested'],
+        );
     }
 
     public static function clear(Server $server): void

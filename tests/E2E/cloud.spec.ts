@@ -208,6 +208,41 @@ test.describe('provisioning through a provider', () => {
         await expect(dialog(page)).toHaveCount(0)
     })
 
+    test('a creation Coresmith could not confirm offers to destroy it, and says to check the provider before detaching', async ({
+        page
+    }) => {
+        await gotoServer(page, 'lost-create')
+
+        const card = page.getByTestId('creation-card')
+
+        await expect(card.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
+
+        for (const opener of [
+            card.getByRole('button', { name: 'Destroy it' }),
+            page.getByRole('button', { name: 'Destroy', exact: true })
+        ]) {
+            await opener.click()
+
+            const destroy = page.getByRole('dialog', { name: 'Destroy lost-create?' })
+
+            await expect(destroy).toContainText(
+                'Coresmith could not confirm whether Hetzner Cloud created lost-create. If it did, Hetzner Cloud deletes it and its disk, and billing for it stops. Either way, lost-create leaves the panel.'
+            )
+
+            await destroy.getByRole('button', { name: 'detach it instead' }).click()
+
+            const detach = page.getByRole('dialog', { name: 'Detach lost-create?' })
+
+            await expect(detach).toContainText(
+                'Coresmith could not confirm whether Hetzner Cloud created lost-create. Check your Hetzner Cloud account and delete it there if it exists.'
+            )
+
+            await detach.getByRole('button', { name: 'Keep it' }).click()
+
+            await expect(dialog(page)).toHaveCount(0)
+        }
+    })
+
     test('trying again resumes the creation', async ({ page }, testInfo) => {
         await gotoServer(page, own(testInfo, 'retry'))
         await page.getByRole('button', { name: 'Try again' }).click()

@@ -24,6 +24,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Services\Billing\PlanGate;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
@@ -145,12 +146,15 @@ final class ServerController extends Controller
             return back()->with('error', "Coresmith is still working on {$server->name} at {$label}. Wait for it to finish or fail, then detach it.");
         }
 
+        $uncertain = CreateServerTask::uncertain($server);
+
         activity()->performedOn($server)->log('server_detached');
 
         $server->delete();
 
         return to_route('dashboard')->with('success', match (true) {
             $label === null => "Detached. {$server->name} was removed from the panel. The VM is untouched.",
+            $uncertain => "Removed. Coresmith could not confirm whether {$label} created {$server->name}. Check your {$label} account and delete it there if it exists.",
             $server->provider_server_id === null => "Removed. Nothing was created at {$label}.",
             default => "Detached. {$server->name} keeps running at {$label}, and {$label} keeps billing for it.",
         });
