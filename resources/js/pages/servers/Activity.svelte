@@ -20,6 +20,8 @@
     {#each activity as item, index (index)}
         <ActivityRow {item} last={index === activity.length - 1} />
     {:else}
-        <p class="py-3 text-[13.5px] text-muted-foreground">Nothing has happened on this server yet. Deploys, reboots and firewall changes show up here.</p>
+        <p class="py-3 text-[13.5px] text-muted-foreground">
+            Nothing has happened on this server yet. Deploys, reboots and firewall changes show up here.
+        </p>
     {/each}
 </div>

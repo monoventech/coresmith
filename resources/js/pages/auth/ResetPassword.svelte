@@ -20,7 +20,12 @@
 
 <AppHead title="Reset password" />
 
-<Form method="post" action={route('password.update')} transform={(data) => ({ ...data, token, email })} resetOnSuccess={['password', 'password_confirmation']}>
+<Form
+    method="post"
+    action={route('password.update')}
+    transform={(data) => ({ ...data, token, email })}
+    resetOnSuccess={['password', 'password_confirmation']}
+>
     {#snippet children({ errors, processing })}
         <div class="flex flex-col gap-4">
             <div>
@@ -30,7 +35,12 @@
             </div>
             <div>
                 <Label for="password" class="mb-1.5">New password</Label>
-                <PasswordInput id="password" name="password" autocomplete="new-password" aria-invalid={errors.password ? true : undefined} />
+                <PasswordInput
+                    id="password"
+                    name="password"
+                    autocomplete="new-password"
+                    aria-invalid={errors.password ? true : undefined}
+                />
                 <InputError message={errors.password} />
             </div>
             <div>
@@ -38,7 +48,9 @@
                 <PasswordInput id="password_confirmation" name="password_confirmation" autocomplete="new-password" />
                 <InputError message={errors.password_confirmation} />
             </div>
-            <Button type="submit" class="w-full" disabled={processing} data-test="reset-password-button">Save the new password</Button>
+            <Button type="submit" class="w-full" disabled={processing} data-test="reset-password-button"
+                >Save the new password</Button
+            >
         </div>
     {/snippet}
 </Form>

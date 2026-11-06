@@ -33,7 +33,9 @@
 <div class="flex max-w-165 flex-col gap-4">
     <div class="rounded-xl border border-border bg-card p-6" data-testid="password-card">
         <h3 class="type-h3 m-0 mb-1">Password</h3>
-        <p class="mb-4 text-[12.5px] text-muted-foreground">Use a long, random one. A password manager remembers it so you don't have to.</p>
+        <p class="mb-4 text-[12.5px] text-muted-foreground">
+            Use a long, random one. A password manager remembers it so you don't have to.
+        </p>
 
         <Form
             method="put"
@@ -57,12 +59,18 @@
                         </div>
                         <div>
                             <Label for="password_confirmation" class="mb-1.5">Confirm password</Label>
-                            <PasswordInput id="password_confirmation" name="password_confirmation" autocomplete="new-password" />
+                            <PasswordInput
+                                id="password_confirmation"
+                                name="password_confirmation"
+                                autocomplete="new-password"
+                            />
                             <FieldError message={errors.password_confirmation} />
                         </div>
                     </div>
                     <div>
-                        <Button type="submit" disabled={processing} data-test="update-password-button">Save password</Button>
+                        <Button type="submit" disabled={processing} data-test="update-password-button"
+                            >Save password</Button
+                        >
                     </div>
                 </div>
             {/snippet}
@@ -81,7 +89,8 @@
                     Sign-ins ask for a code from an authenticator app on your phone as well as your password.
                 </p>
                 {#if twoFactorAuth.hasSetupData()}
-                    <Button onclick={() => (showSetupModal = true)}><ShieldCheck class="size-4" />Continue setup</Button>
+                    <Button onclick={() => (showSetupModal = true)}><ShieldCheck class="size-4" />Continue setup</Button
+                    >
                 {:else}
                     <Form method="post" action={route('two-factor.enable')} onSuccess={() => (showSetupModal = true)}>
                         {#snippet children({ processing })}
@@ -90,11 +99,18 @@
                     </Form>
                 {/if}
             {:else}
-                <p class="mb-4 text-[12.5px] text-muted-foreground">Sign-ins ask for a code from your authenticator app. Keep the recovery codes somewhere safe.</p>
+                <p class="mb-4 text-[12.5px] text-muted-foreground">
+                    Sign-ins ask for a code from your authenticator app. Keep the recovery codes somewhere safe.
+                </p>
                 <div class="flex flex-col items-start gap-4">
                     <Form method="delete" action={route('two-factor.disable')}>
                         {#snippet children({ processing })}
-                            <Button variant="outline" class="text-destructive-strong" type="submit" disabled={processing}>Disable 2FA</Button>
+                            <Button
+                                variant="outline"
+                                class="text-destructive-strong"
+                                type="submit"
+                                disabled={processing}>Disable 2FA</Button
+                            >
                         {/snippet}
                     </Form>
                     <TwoFactorRecoveryCodes />

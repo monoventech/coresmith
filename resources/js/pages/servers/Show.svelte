@@ -42,7 +42,10 @@
 {#if server.provisioning}
     <ProvisioningPanel {server} />
 {:else if applications.length === 0}
-    <EmptyState title="Nothing deployed here yet." description="Point Coresmith at a repository and it builds, releases and serves it on this server, as its own Linux user.">
+    <EmptyState
+        title="Nothing deployed here yet."
+        description="Point Coresmith at a repository and it builds, releases and serves it on this server, as its own Linux user."
+    >
         {#snippet action()}
             {#if server.can.createApplication}
                 <Button href={route('servers.applications.create', server.id)}>Add an app</Button>
@@ -66,21 +69,35 @@
                     'focus-ring min-h-13 w-full items-center border-b border-border px-5.5 py-2 text-left text-[13.5px] text-foreground no-underline transition-colors duration-(--dur-fast) hover:bg-muted'
                 )}
             >
-                <span class="min-w-0 truncate"><span class="font-mono text-[14px] font-medium">{application.name}</span><span class="text-muted-foreground">{` · ${application.kind}`}</span></span>
+                <span class="min-w-0 truncate"
+                    ><span class="font-mono text-[14px] font-medium">{application.name}</span><span
+                        class="text-muted-foreground">{` · ${application.kind}`}</span
+                    ></span
+                >
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{application.runtime}</span>
-                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{application.user}</span>
+                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden"
+                    >{application.user}</span
+                >
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{application.ports}</span>
-                <span class={cn('inline-flex items-center gap-1.5 text-[12.5px] font-medium', toneText(application.state.tone))}>
+                <span
+                    class={cn(
+                        'inline-flex items-center gap-1.5 text-[12.5px] font-medium',
+                        toneText(application.state.tone)
+                    )}
+                >
                     <StateDot tone={application.state.tone} size="sm" />{application.state.label}
                 </span>
             </Link>
         {/each}
         <div class="flex flex-wrap items-center justify-between gap-3 px-5.5 py-3">
             <p class="m-0 text-[12.5px] text-muted-foreground">
-                Each app runs as its own Linux user with its own ports, env file and database credentials, {stackText}, one server, full isolation.
+                Each app runs as its own Linux user with its own ports, env file and database credentials, {stackText},
+                one server, full isolation.
             </p>
             {#if server.can.createApplication}
-                <Button size="sm" variant="outline" href={route('servers.applications.create', server.id)}>Add an app</Button>
+                <Button size="sm" variant="outline" href={route('servers.applications.create', server.id)}
+                    >Add an app</Button
+                >
             {/if}
         </div>
     </div>

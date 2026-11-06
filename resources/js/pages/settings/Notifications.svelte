@@ -11,7 +11,11 @@
 
     function flip(toggle: Toggle, on: boolean) {
         busy = { ...busy, [toggle.key]: true }
-        router.put(route('settings.notifications.update'), { key: toggle.key, on }, { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) })
+        router.put(
+            route('settings.notifications.update'),
+            { key: toggle.key, on },
+            { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) }
+        )
     }
 </script>
 
@@ -30,5 +34,7 @@
             testid="notification-{toggle.key}"
         />
     {/each}
-    <p class="m-0 py-3 text-[12.5px] text-muted-foreground">Sent to {email}. Failures always notify, that one can't be turned off.</p>
+    <p class="m-0 py-3 text-[12.5px] text-muted-foreground">
+        Sent to {email}. Failures always notify, that one can't be turned off.
+    </p>
 </div>

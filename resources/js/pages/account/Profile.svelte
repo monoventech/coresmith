@@ -28,23 +28,45 @@
             <div class="flex flex-col gap-4">
                 <div>
                     <Label for="name" class="mb-1.5">Name</Label>
-                    <Input id="name" name="name" value={user.name} required autocomplete="name" aria-invalid={errors.name ? true : undefined} />
+                    <Input
+                        id="name"
+                        name="name"
+                        value={user.name}
+                        required
+                        autocomplete="name"
+                        aria-invalid={errors.name ? true : undefined}
+                    />
                     <FieldError message={errors.name} />
                 </div>
 
                 <div>
                     <Label for="email" class="mb-1.5">Email address</Label>
-                    <Input id="email" type="email" name="email" value={user.email} required autocomplete="username" aria-invalid={errors.email ? true : undefined} />
+                    <Input
+                        id="email"
+                        type="email"
+                        name="email"
+                        value={user.email}
+                        required
+                        autocomplete="username"
+                        aria-invalid={errors.email ? true : undefined}
+                    />
                     <FieldError message={errors.email} />
                     {#if mustVerifyEmail && !user.email_verified_at}
                         <p class="mt-2 text-[12px] text-muted-foreground">
                             This address isn't verified yet.
-                            <Link href={route('verification.send')} method="post" as="button" class="focus-ring cursor-pointer rounded-sm bg-transparent p-0 text-[12px] font-medium text-primary-strong">
+                            <Link
+                                href={route('verification.send')}
+                                method="post"
+                                as="button"
+                                class="focus-ring cursor-pointer rounded-sm bg-transparent p-0 text-[12px] font-medium text-primary-strong"
+                            >
                                 Send the link again
                             </Link>
                         </p>
                         {#if status === 'verification-link-sent'}
-                            <p class="mt-1 text-[12px] font-medium text-success-strong">A new verification link is on its way.</p>
+                            <p class="mt-1 text-[12px] font-medium text-success-strong">
+                                A new verification link is on its way.
+                            </p>
                         {/if}
                     {/if}
                 </div>

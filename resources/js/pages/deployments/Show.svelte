@@ -52,7 +52,14 @@
         can
     }: {
         server: { id: string; name: string; href: string }
-        application: { id: string; name: string; href: string; releases_href: string; deploy_href: string; current_release: string | null }
+        application: {
+            id: string
+            name: string
+            href: string
+            releases_href: string
+            deploy_href: string
+            current_release: string | null
+        }
         deployment: Deployment
         deployment_links: { cancel: string }
         back: { label: string; href: string }
@@ -96,7 +103,9 @@
     const running = $derived(live.status === 'running' || live.status === 'pending')
     const lines = $derived(live.log === '' ? [] : live.log.split('\n'))
     const stopping = $derived(live.cancel_requested || cancelling)
-    const liveFailure = $derived(live.failed_worker ? `${live.failed_worker} did not start` : live.start_failed ? FAILURES.watch : FAILURES.swap)
+    const liveFailure = $derived(
+        live.failed_worker ? `${live.failed_worker} did not start` : live.start_failed ? FAILURES.watch : FAILURES.swap
+    )
 
     const elapsed = $derived.by(() => {
         if (!live.started_at) {
@@ -188,9 +197,13 @@
         }
 
         try {
-            echo.private(`deployments.${deployment.id}`).listen('.deployment.updated', (event: Deployment) => apply(event))
+            echo.private(`deployments.${deployment.id}`).listen('.deployment.updated', (event: Deployment) =>
+                apply(event)
+            )
 
-            const socket = (echo.connector as { pusher?: { connection?: { bind(event: string, handler: () => void): void } } }).pusher?.connection
+            const socket = (
+                echo.connector as { pusher?: { connection?: { bind(event: string, handler: () => void): void } } }
+            ).pusher?.connection
 
             socket?.bind('unavailable', () => ((downgraded = true), startPolling()))
             socket?.bind('failed', () => ((downgraded = true), startPolling()))
@@ -221,19 +234,30 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3 max-sm:gap-2.5">
             <h1 class="type-h1 m-0 max-sm:text-[24px]">
-                Deploying <MarkerUnderline markClass="max-sm:hidden"><span class="font-mono font-medium">{application.name}</span></MarkerUnderline>
+                Deploying <MarkerUnderline markClass="max-sm:hidden"
+                    ><span class="font-mono font-medium">{application.name}</span></MarkerUnderline
+                >
             </h1>
-            <Badge variant={live.state.tone} dot pulse={live.state.live} data-testid="deployment-status">{live.status === 'failed' ? 'Failed' : live.state.label}</Badge>
+            <Badge variant={live.state.tone} dot pulse={live.state.live} data-testid="deployment-status"
+                >{live.status === 'failed' ? 'Failed' : live.state.label}</Badge
+            >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:text-[12.5px]">
-            {#if live.release}<span>Release <span class="font-mono text-[13px] max-sm:text-[12px]">{live.release}</span></span>{:else}<span>Queued</span>{/if}
+            {#if live.release}<span
+                    >Release <span class="font-mono text-[13px] max-sm:text-[12px]">{live.release}</span></span
+                >{:else}<span>Queued</span>{/if}
             {#if live.branch}<span>· <span class="max-sm:hidden">branch</span> {live.branch}</span>{/if}
-            {#if live.commit}<span>· <span class="max-sm:hidden">commit</span> <span class="font-mono text-[13px] max-sm:text-[12px]">{live.commit}</span></span>{/if}
+            {#if live.commit}<span
+                    >· <span class="max-sm:hidden">commit</span>
+                    <span class="font-mono text-[13px] max-sm:text-[12px]">{live.commit}</span></span
+                >{/if}
             {#if elapsed}<span class="max-sm:hidden">· {elapsed} elapsed</span>{/if}
         </p>
     </div>
     {#if running && can.deploy && (live.cancellable || live.cancel_requested)}
-        <Button variant="outline" class="max-sm:hidden" disabled={stopping} onclick={cancel}>{stopping ? 'Cancelling…' : 'Cancel'}</Button>
+        <Button variant="outline" class="max-sm:hidden" disabled={stopping} onclick={cancel}
+            >{stopping ? 'Cancelling…' : 'Cancel'}</Button
+        >
     {:else if live.status === 'succeeded'}
         <Button variant="outline" href={application.releases_href} class="max-sm:hidden">View releases</Button>
     {:else if live.status === 'cancelled' && can.deploy}
@@ -254,18 +278,27 @@
         data-testid="failure-banner"
     >
         <OctagonAlert class="mt-0.5 size-4.5 shrink-0 text-destructive max-sm:size-4" />
-        <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal" data-testid="failure-reason">
+        <div
+            class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal"
+            data-testid="failure-reason"
+        >
             {#if live.reached_users}
                 <span class="font-semibold">{liveFailure}.</span>
-                {live.failure_reason ? ` ${live.failure_reason}` : ` releases/${live.release} is live, check its processes before pushing again.`}
+                {live.failure_reason
+                    ? ` ${live.failure_reason}`
+                    : ` releases/${live.release} is live, check its processes before pushing again.`}
             {:else}
-                <span class="font-semibold">{FAILURES[live.failed_step ?? live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span>
+                <span class="font-semibold"
+                    >{FAILURES[live.failed_step ?? live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span
+                >
                 {#if live.failure_reason}
                     {` ${live.failure_reason}`}
                 {:else if application.current_release}
                     <span class="max-sm:hidden">
-                        The symlink still points at <span class="font-mono text-[12.5px]">{application.current_release}</span>, users never saw an error page.
-                        Fix {FIXES[live.failed_step ?? live.failed_phase ?? ''] ?? 'it'} and push again, or retry.
+                        The symlink still points at <span class="font-mono text-[12.5px]"
+                            >{application.current_release}</span
+                        >, users never saw an error page. Fix {FIXES[live.failed_step ?? live.failed_phase ?? ''] ??
+                            'it'} and push again, or retry.
                     </span>
                     <span class="sm:hidden">The old release is still live, users saw no error page.</span>
                 {:else}
@@ -281,9 +314,17 @@
     >
         <CircleSlash class="mt-0.5 size-4.5 shrink-0 text-muted-foreground max-sm:size-4" />
         <div class="text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal">
-            <span class="font-semibold">{live.cancelled_by ? `${live.cancelled_by} cancelled this deploy, so nothing changed.` : 'This deploy was cancelled, so nothing changed.'}</span>
+            <span class="font-semibold"
+                >{live.cancelled_by
+                    ? `${live.cancelled_by} cancelled this deploy, so nothing changed.`
+                    : 'This deploy was cancelled, so nothing changed.'}</span
+            >
             {#if application.current_release}
-                <span>The symlink still points at <span class="font-mono text-[12.5px]">{application.current_release}</span>, users never saw a difference.</span>
+                <span
+                    >The symlink still points at <span class="font-mono text-[12.5px]"
+                        >{application.current_release}</span
+                    >, users never saw a difference.</span
+                >
             {:else}
                 <span>Nothing was live yet.</span>
             {/if}
@@ -292,16 +333,27 @@
 {/if}
 
 <div class="grid grid-cols-[300px_1fr] items-start gap-4 max-[900px]:grid-cols-1 max-sm:gap-3.5">
-    <div class="rounded-xl border border-border bg-card px-4.5 py-3.5 max-sm:px-4 max-sm:py-2.5" data-testid="phase-rail">
+    <div
+        class="rounded-xl border border-border bg-card px-4.5 py-3.5 max-sm:px-4 max-sm:py-2.5"
+        data-testid="phase-rail"
+    >
         {#each live.phases as phase (phase.key)}
             <div
-                class={cn('flex min-h-10.5 items-center gap-2.75 max-sm:min-h-9.5 max-sm:gap-2.5', (phase.state === 'pending' || phase.state === 'skipped') && 'text-muted-foreground')}
+                class={cn(
+                    'flex min-h-10.5 items-center gap-2.75 max-sm:min-h-9.5 max-sm:gap-2.5',
+                    (phase.state === 'pending' || phase.state === 'skipped') && 'text-muted-foreground'
+                )}
                 data-phase={phase.key}
                 data-state={phase.state}
             >
                 <PhaseIcon state={phase.state} />
                 <span class="flex-1 text-[13.5px] font-medium max-sm:text-[13px]">{phase.label}</span>
-                <span class={cn('font-mono text-[12px] max-sm:text-[11.5px]', phase.state === 'failed' ? 'text-destructive-strong' : 'text-muted-foreground')}>
+                <span
+                    class={cn(
+                        'font-mono text-[12px] max-sm:text-[11.5px]',
+                        phase.state === 'failed' ? 'text-destructive-strong' : 'text-muted-foreground'
+                    )}
+                >
                     {phase.state === 'failed' ? 'failed' : phase.state === 'cancelled' ? 'cancelled' : phase.duration}
                 </span>
             </div>
@@ -338,12 +390,18 @@
 </div>
 
 {#if running}
-    <p class="mt-3 text-[11.5px] leading-normal text-muted-foreground sm:hidden">The current release keeps serving traffic until the symlink swap.</p>
+    <p class="mt-3 text-[11.5px] leading-normal text-muted-foreground sm:hidden">
+        The current release keeps serving traffic until the symlink swap.
+    </p>
 {:else if live.status === 'succeeded'}
-    <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden">View releases</Button>
+    <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden"
+        >View releases</Button
+    >
 {:else if live.status === 'failed' && can.deploy}
     {#if live.reached_users}
-        <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden">Roll back</Button>
+        <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden"
+            >Roll back</Button
+        >
     {/if}
     <Button size="lg" disabled={retrying} onclick={retry} class="mt-2.5 w-full sm:hidden">Retry deploy</Button>
 {:else if live.status === 'cancelled' && can.deploy}
@@ -351,5 +409,9 @@
 {/if}
 
 <p class="sr-only" data-testid="log-transport">
-    {finished ? 'Finished' : streaming && realtimeConfigured() && !downgraded ? 'Streaming live' : `Refreshing every ${POLL_MS / 1000}s`}
+    {finished
+        ? 'Finished'
+        : streaming && realtimeConfigured() && !downgraded
+          ? 'Streaming live'
+          : `Refreshing every ${POLL_MS / 1000}s`}
 </p>

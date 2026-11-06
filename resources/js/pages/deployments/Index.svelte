@@ -37,7 +37,9 @@
 <div class="mb-6 flex flex-wrap items-end justify-between gap-6">
     <div>
         <h1 class="type-h1 m-0">Deployments</h1>
-        <p class="type-body-sm mt-1.5 text-muted-foreground">Every deploy across the fleet. The running one is pinned on top.</p>
+        <p class="type-body-sm mt-1.5 text-muted-foreground">
+            Every deploy across the fleet. The running one is pinned on top.
+        </p>
     </div>
 </div>
 
@@ -84,19 +86,35 @@
                 data-testid="deployment-row"
             >
                 <span class="truncate font-mono text-[13.5px] font-medium">{row.application}</span>
-                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{row.server}</span>
-                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{row.release ?? '—'}</span>
-                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{row.branch ?? '—'}</span>
-                <span class="text-muted-foreground max-[900px]:hidden" title={row.full ?? undefined}>{row.when ?? '—'}</span>
-                <span class="font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{row.duration ?? '—'}</span>
+                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden"
+                    >{row.server}</span
+                >
+                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden"
+                    >{row.release ?? '—'}</span
+                >
+                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden"
+                    >{row.branch ?? '—'}</span
+                >
+                <span class="text-muted-foreground max-[900px]:hidden" title={row.full ?? undefined}
+                    >{row.when ?? '—'}</span
+                >
+                <span class="font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden"
+                    >{row.duration ?? '—'}</span
+                >
                 <span class="flex items-center justify-end gap-2.5">
-                    <Badge variant={row.state.tone} dot={row.state.live || row.state.key === 'cancelling'} pulse={row.state.live}>{row.state.label}</Badge>
+                    <Badge
+                        variant={row.state.tone}
+                        dot={row.state.live || row.state.key === 'cancelling'}
+                        pulse={row.state.live}>{row.state.label}</Badge
+                    >
                     {#if row.state.live || row.state.key === 'cancelling'}
                         <span class="text-[12.5px] font-medium text-primary-strong">Watch</span>
                     {/if}
                 </span>
             </Link>
         {/each}
-        <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">A failed deploy never reaches users, the old release keeps serving until every phase passes.</p>
+        <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">
+            A failed deploy never reaches users, the old release keeps serving until every phase passes.
+        </p>
     </div>
 {/if}

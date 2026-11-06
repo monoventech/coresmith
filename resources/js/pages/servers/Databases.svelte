@@ -25,7 +25,11 @@
         href: string
     }
 
-    let { server, databases = [], can }: { server: ServerHeader; databases: DatabaseRow[]; can: { create: boolean } } = $props()
+    let {
+        server,
+        databases = [],
+        can
+    }: { server: ServerHeader; databases: DatabaseRow[]; can: { create: boolean } } = $props()
 
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
     const columns = 'grid grid-cols-[1.3fr_1fr_1fr_0.8fr_0.7fr] gap-3 max-sm:grid-cols-[1fr_auto]'
@@ -65,11 +69,23 @@
                 )}
             >
                 <span class="truncate font-mono text-[14px] font-medium">{database.name}</span>
-                <span class="text-[12.5px] text-muted-foreground max-sm:hidden">{ENGINES[database.type] ?? database.type}{database.is_external ? ' · existing server' : ''}</span>
-                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{database.db_user ?? '—'}</span>
+                <span class="text-[12.5px] text-muted-foreground max-sm:hidden"
+                    >{ENGINES[database.type] ?? database.type}{database.is_external ? ' · existing server' : ''}</span
+                >
+                <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden"
+                    >{database.db_user ?? '—'}</span
+                >
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{database.port}</span>
-                <span class={cn('inline-flex items-center gap-1.5 text-[12.5px] font-medium', database.status === 'active' ? 'text-success-strong' : 'text-muted-foreground')}>
-                    <StateDot tone={database.status === 'active' ? 'success' : 'default'} size="sm" />{database.status === 'active' ? 'Ready' : database.status}
+                <span
+                    class={cn(
+                        'inline-flex items-center gap-1.5 text-[12.5px] font-medium',
+                        database.status === 'active' ? 'text-success-strong' : 'text-muted-foreground'
+                    )}
+                >
+                    <StateDot
+                        tone={database.status === 'active' ? 'success' : 'default'}
+                        size="sm"
+                    />{database.status === 'active' ? 'Ready' : database.status}
                 </span>
             </Link>
         {/each}
@@ -80,7 +96,9 @@
                     : 'Databases listen on localhost only. Each one has its own credentials, never shared between apps.'}
             </p>
             {#if can.create && server.active}
-                <Button size="sm" variant="outline" href={route('servers.databases.create', server.id)}>Create a database</Button>
+                <Button size="sm" variant="outline" href={route('servers.databases.create', server.id)}
+                    >Create a database</Button
+                >
             {/if}
         </div>
     </div>

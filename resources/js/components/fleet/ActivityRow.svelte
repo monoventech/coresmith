@@ -9,9 +9,8 @@
 </script>
 
 {#snippet content()}
-    <span
-        class="w-13 flex-none font-mono text-[12px] text-muted-foreground"
-        title={new Date(item.at).toLocaleString()}>{item.time}</span
+    <span class="w-13 flex-none font-mono text-[12px] text-muted-foreground" title={new Date(item.at).toLocaleString()}
+        >{item.time}</span
     >
     <span class="flex-1 text-[13.5px]">
         {#each item.parts as part, index (index)}{#if part.mono}<span class="font-mono">{part.text}</span

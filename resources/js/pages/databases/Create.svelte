@@ -31,18 +31,41 @@
                 <div class="flex flex-col gap-4">
                     <div>
                         <Label for="type" class="mb-1.5">Engine</Label>
-                        <NativeSelect id="type" name="type" value="postgresql" options={[{ value: 'postgresql', label: 'PostgreSQL' }, { value: 'mysql', label: 'MySQL' }, { value: 'redis', label: 'Redis' }]} />
+                        <NativeSelect
+                            id="type"
+                            name="type"
+                            value="postgresql"
+                            options={[
+                                { value: 'postgresql', label: 'PostgreSQL' },
+                                { value: 'mysql', label: 'MySQL' },
+                                { value: 'redis', label: 'Redis' }
+                            ]}
+                        />
                         <FieldError message={errors.type} />
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <Label for="name" class="mb-1.5">Database name</Label>
-                            <Input id="name" name="name" required placeholder="shop_production" class="font-mono text-[13px]" aria-invalid={errors.name ? true : undefined} />
+                            <Input
+                                id="name"
+                                name="name"
+                                required
+                                placeholder="shop_production"
+                                class="font-mono text-[13px]"
+                                aria-invalid={errors.name ? true : undefined}
+                            />
                             <FieldError message={errors.name} />
                         </div>
                         <div>
                             <Label for="db_user" class="mb-1.5">User</Label>
-                            <Input id="db_user" name="db_user" required placeholder="shop_app" class="font-mono text-[13px]" aria-invalid={errors.db_user ? true : undefined} />
+                            <Input
+                                id="db_user"
+                                name="db_user"
+                                required
+                                placeholder="shop_app"
+                                class="font-mono text-[13px]"
+                                aria-invalid={errors.db_user ? true : undefined}
+                            />
                             <FieldError message={errors.db_user} />
                         </div>
                     </div>
@@ -72,7 +95,10 @@
             {#each [['Localhost only', 'never bound to a public interface'], ['Its own user', 'no shared credentials between apps'], ['Least privilege', 'standard grants unless you choose more'], ['Encrypted at rest', 'the password is vaulted after it is shown once']] as [name, desc], index (name)}
                 <li class="flex items-baseline gap-3 py-1.75">
                     <span class="w-4 flex-none font-mono text-[12px] text-primary-strong">{index + 1}</span>
-                    <span class="text-[13.5px]"><span class="font-medium">{name}</span><span class="text-muted-foreground">{`, ${desc}`}</span></span>
+                    <span class="text-[13.5px]"
+                        ><span class="font-medium">{name}</span><span class="text-muted-foreground">{`, ${desc}`}</span
+                        ></span
+                    >
                 </li>
             {/each}
         </ol>

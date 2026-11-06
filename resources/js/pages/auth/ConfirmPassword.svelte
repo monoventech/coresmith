@@ -22,10 +22,18 @@
         <div class="flex flex-col gap-4">
             <div>
                 <Label for="password" class="mb-1.5">Password</Label>
-                <PasswordInput id="password" name="password" required autocomplete="current-password" aria-invalid={errors.password ? true : undefined} />
+                <PasswordInput
+                    id="password"
+                    name="password"
+                    required
+                    autocomplete="current-password"
+                    aria-invalid={errors.password ? true : undefined}
+                />
                 <InputError message={errors.password} />
             </div>
-            <Button type="submit" class="w-full" disabled={processing} data-test="confirm-password-button">Confirm</Button>
+            <Button type="submit" class="w-full" disabled={processing} data-test="confirm-password-button"
+                >Confirm</Button
+            >
         </div>
     {/snippet}
 </Form>

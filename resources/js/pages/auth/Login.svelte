@@ -42,7 +42,9 @@
     </p>
 {:else if sso.start}
     <div class="mb-4 flex flex-col gap-4" data-testid="sso-entry">
-        <Button href={sso.start} variant="outline" class="w-full" data-test="sso-button">Continue with single sign-on</Button>
+        <Button href={sso.start} variant="outline" class="w-full" data-test="sso-button"
+            >Continue with single sign-on</Button
+        >
         <p class="m-0 flex items-center gap-3 text-[12px] text-muted-foreground">
             <span class="h-px flex-1 bg-border" aria-hidden="true"></span>
             or sign in with your password
@@ -76,7 +78,13 @@
                         <TextLink href={route('password.request')} class="text-[12.5px]">Forgot it?</TextLink>
                     {/if}
                 </div>
-                <PasswordInput id="password" name="password" required autocomplete="current-password" aria-invalid={errors.password ? true : undefined} />
+                <PasswordInput
+                    id="password"
+                    name="password"
+                    required
+                    autocomplete="current-password"
+                    aria-invalid={errors.password ? true : undefined}
+                />
                 <InputError message={errors.password} />
             </div>
 
@@ -89,7 +97,9 @@
 
             {#if !sso.start && sso.lookup}
                 <p class="m-0 text-[13px] text-muted-foreground">
-                    Signing in through your company? <TextLink href={route('sso')} data-test="sso-lookup-link">Use single sign-on</TextLink>
+                    Signing in through your company? <TextLink href={route('sso')} data-test="sso-lookup-link"
+                        >Use single sign-on</TextLink
+                    >
                 </p>
             {/if}
 

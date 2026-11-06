@@ -53,7 +53,9 @@
 
     $effect(() => {
         if (rollback && can.deploy) {
-            const match = releases.find((release) => release.release === rollback && !release.current && release.on_disk)
+            const match = releases.find(
+                (release) => release.release === rollback && !release.current && release.on_disk
+            )
 
             if (match) {
                 target = match
@@ -67,7 +69,11 @@
         }
 
         working = true
-        router.post(application.rollback_href, { release: target.release }, { preserveScroll: true, onFinish: () => ((working = false), (target = null)) })
+        router.post(
+            application.rollback_href,
+            { release: target.release },
+            { preserveScroll: true, onFinish: () => ((working = false), (target = null)) }
+        )
     }
 
     function deploy() {
@@ -84,8 +90,14 @@
 
 <div class="mb-2 flex flex-wrap items-end justify-between gap-6">
     <div class="min-w-0">
-        <h1 class="type-h1 m-0">{application ? 'Releases · ' : 'Releases'}{#if application}<span class="font-mono font-medium">{application.name}</span>{/if}</h1>
-        <p class="type-body-sm mt-1.5 text-muted-foreground">Every deploy is a timestamped directory. Rollback re-points the symlink, instant, no rebuild.</p>
+        <h1 class="type-h1 m-0">
+            {application ? 'Releases · ' : 'Releases'}{#if application}<span class="font-mono font-medium"
+                    >{application.name}</span
+                >{/if}
+        </h1>
+        <p class="type-body-sm mt-1.5 text-muted-foreground">
+            Every deploy is a timestamped directory. Rollback re-points the symlink, instant, no rebuild.
+        </p>
     </div>
     {#if application && can.deploy}
         <Button disabled={working} onclick={deploy}>Deploy</Button>
@@ -100,7 +112,9 @@
                 aria-current={each.current ? 'page' : undefined}
                 class={cn(
                     'focus-ring inline-flex h-8 items-center rounded-md border px-3 font-mono text-[12.5px] font-medium no-underline transition-colors duration-(--dur-fast)',
-                    each.current ? 'chip-selected text-foreground' : 'border-border bg-transparent text-muted-foreground'
+                    each.current
+                        ? 'chip-selected text-foreground'
+                        : 'border-border bg-transparent text-muted-foreground'
                 )}
             >
                 {each.name}
@@ -110,9 +124,13 @@
 {/if}
 
 {#if application?.rolled_back}
-    <div class="tint-success mt-4 flex items-center gap-2.5 rounded-xl border px-4.5 py-3 text-[13.5px]" data-testid="rolled-back">
+    <div
+        class="tint-success mt-4 flex items-center gap-2.5 rounded-xl border px-4.5 py-3 text-[13.5px]"
+        data-testid="rolled-back"
+    >
         <Undo2 class="size-4 shrink-0 text-success" />
-        Rolled back. <span class="font-mono text-[12.5px]">releases/{application.rolled_back}</span> is live, the newer release stays on disk.
+        Rolled back. <span class="font-mono text-[12.5px]">releases/{application.rolled_back}</span> is live, the newer release
+        stays on disk.
     </div>
 {/if}
 
@@ -138,31 +156,49 @@
         </div>
         {#each releases as release (release.id)}
             <div
-                class={cn(columns, 'min-h-13 items-center border-b border-border px-5.5 py-1.5 text-[13.5px]', release.current && 'row-current')}
+                class={cn(
+                    columns,
+                    'min-h-13 items-center border-b border-border px-5.5 py-1.5 text-[13.5px]',
+                    release.current && 'row-current'
+                )}
                 data-testid="release-row"
                 data-current={release.current}
             >
                 <span class="block min-w-0">
                     <span class="block truncate font-mono text-[13px]">{release.directory}</span>
                     {#if release.commit}
-                        <span class="mt-0.5 block text-[11.5px] text-muted-foreground">commit <span class="font-mono">{release.commit}</span>{#if release.author}{` by ${release.author}`}{/if}</span>
+                        <span class="mt-0.5 block text-[11.5px] text-muted-foreground"
+                            >commit <span class="font-mono">{release.commit}</span
+                            >{#if release.author}{` by ${release.author}`}{/if}</span
+                        >
                     {/if}
                 </span>
                 <span class="inline-flex items-center gap-2 max-[900px]:hidden">
                     <span class="font-mono text-[12.5px]">{release.tag ?? '—'}</span>
                     {#if release.tag}
-                        <span class={cn('text-[11px]', release.signed ? 'text-success-strong' : 'text-muted-foreground')}>{release.signed ? 'signed' : 'unsigned'}</span>
+                        <span
+                            class={cn('text-[11px]', release.signed ? 'text-success-strong' : 'text-muted-foreground')}
+                            >{release.signed ? 'signed' : 'unsigned'}</span
+                        >
                     {/if}
                 </span>
-                <span class="font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden">{release.branch ?? '—'}</span>
-                <span class="text-muted-foreground max-[900px]:hidden" title={release.full ?? undefined}>{release.when ?? '—'}</span>
+                <span class="font-mono text-[12.5px] text-muted-foreground max-[900px]:hidden"
+                    >{release.branch ?? '—'}</span
+                >
+                <span class="text-muted-foreground max-[900px]:hidden" title={release.full ?? undefined}
+                    >{release.when ?? '—'}</span
+                >
                 <span class="flex justify-end">
                     {#if release.current}
                         <span class="font-mono text-[12px] font-medium text-primary-strong">current →</span>
                     {:else if !release.on_disk}
                         <span class="text-[12px] text-muted-foreground">pruned</span>
                     {:else if can.deploy}
-                        <button type="button" class="focus-ring quick-action h-8! px-3! text-[12.5px]!" onclick={() => (target = release)}>Roll back to this</button>
+                        <button
+                            type="button"
+                            class="focus-ring quick-action h-8! px-3! text-[12.5px]!"
+                            onclick={() => (target = release)}>Roll back to this</button
+                        >
                     {/if}
                 </span>
             </div>
@@ -178,7 +214,8 @@
         <Dialog.Header>
             <Dialog.Title>Roll back to {target?.tag ?? target?.directory}?</Dialog.Title>
             <Dialog.Description>
-                The symlink re-points to {target?.directory}. It takes about a second, no rebuild, no downtime. Migrations already applied are not reversed.
+                The symlink re-points to {target?.directory}. It takes about a second, no rebuild, no downtime.
+                Migrations already applied are not reversed.
             </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>

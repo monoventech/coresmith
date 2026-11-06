@@ -29,10 +29,19 @@
         <div class="flex flex-col gap-4">
             <div>
                 <Label for="email" class="mb-1.5">Email address</Label>
-                <Input id="email" type="email" name="email" autocomplete="email" placeholder="you@example.com" aria-invalid={errors.email ? true : undefined} />
+                <Input
+                    id="email"
+                    type="email"
+                    name="email"
+                    autocomplete="email"
+                    placeholder="you@example.com"
+                    aria-invalid={errors.email ? true : undefined}
+                />
                 <InputError message={errors.email} />
             </div>
-            <Button type="submit" class="w-full" disabled={processing} data-test="email-password-reset-link-button">Send the reset link</Button>
+            <Button type="submit" class="w-full" disabled={processing} data-test="email-password-reset-link-button"
+                >Send the reset link</Button
+            >
             <p class="m-0 text-[13px] text-muted-foreground">
                 Remembered it? <TextLink href={route('login')}>Sign in</TextLink>
             </p>
