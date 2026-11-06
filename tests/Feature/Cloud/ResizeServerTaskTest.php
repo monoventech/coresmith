@@ -95,7 +95,7 @@ function resizingRunning(string $size): CloudInstance
 }
 
 test('a hetzner-style resize shuts down, changes, starts and signs back in', function () {
-    $api = resizingApi((new FakeCloudApi)->finds(resizingStopped('cx22'), resizingStopped('cx32'), resizingRunning('cx32')));
+    $api = resizingApi((new FakeCloudApi)->finds(resizingRunning('cx22'), resizingStopped('cx22'), resizingStopped('cx22'), resizingStopped('cx32'), resizingStopped('cx32'), resizingRunning('cx32')));
     $server = resizing();
     $by = CloudTask::of($server)->by;
 
@@ -104,7 +104,7 @@ test('a hetzner-style resize shuts down, changes, starts and signs back in', fun
     $server->refresh();
     $activity = Activity::query()->where('description', 'server_resized')->sole();
 
-    expect(resizingCalls($api))->toBe(['powerOff', 'find', 'resize', 'find', 'powerOn', 'find'])
+    expect(resizingCalls($api))->toBe(['find', 'powerOff', 'find', 'find', 'resize', 'find', 'find', 'powerOn', 'find'])
         ->and($api->calls('resize'))->toBe([['resize', ['4711', 'cx32']]])
         ->and($server->provider_size)->toBe('cx32')
         ->and((string) $server->provider_monthly_cost)->toBe('6.80')
@@ -119,29 +119,29 @@ test('a hetzner-style resize shuts down, changes, starts and signs back in', fun
 });
 
 test('the size is only changed once the server has shut down', function () {
-    $api = resizingApi((new FakeCloudApi)->finds(resizingRunning('cx22'), resizingStopped('cx22'), resizingStopped('cx32'), resizingRunning('cx32')));
+    $api = resizingApi((new FakeCloudApi)->finds(resizingRunning('cx22'), resizingRunning('cx22'), resizingStopped('cx22'), resizingStopped('cx22'), resizingStopped('cx32'), resizingStopped('cx32'), resizingRunning('cx32')));
     $server = resizing();
 
     resizingRun($server);
 
-    expect(resizingCalls($api))->toBe(['powerOff', 'find', 'find', 'resize', 'find', 'powerOn', 'find'])
+    expect(resizingCalls($api))->toBe(['find', 'powerOff', 'find', 'find', 'find', 'resize', 'find', 'find', 'powerOn', 'find'])
         ->and($server->fresh()->provider_size)->toBe('cx32');
 });
 
 test('a vultr-style resize lets the provider cycle the power', function () {
-    $api = resizingApi((new FakeCloudApi(CloudProviderType::Vultr, powerCycle: false))->finds(resizingRunning('cx22'), resizingRunning('cx32')));
+    $api = resizingApi((new FakeCloudApi(CloudProviderType::Vultr, powerCycle: false))->finds(resizingRunning('cx22'), resizingRunning('cx22'), resizingRunning('cx32')));
     $server = resizing('change', powerCycle: false);
 
     resizingRun($server);
 
-    expect(resizingCalls($api))->toBe(['resize', 'find', 'find'])
+    expect(resizingCalls($api))->toBe(['find', 'resize', 'find', 'find'])
         ->and($server->fresh()->provider_size)->toBe('cx32')
         ->and(CloudTask::of($server->fresh())->state)->toBe(CloudTask::DONE);
 });
 
 test('a refused size starts the server again and says nothing else changed', function () {
     $api = resizingApi((new FakeCloudApi)
-        ->finds(resizingStopped('cx22'))
+        ->finds(resizingRunning('cx22'), resizingStopped('cx22'))
         ->failing('resize', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'no capacity')));
     $server = resizing();
     $by = CloudTask::of($server)->by;
@@ -161,6 +161,7 @@ test('a refused size starts the server again and says nothing else changed', fun
 
 test('a refused size on a provider that keeps the power on fails without touching it', function () {
     $api = resizingApi((new FakeCloudApi(CloudProviderType::Vultr, powerCycle: false))
+        ->finds(resizingRunning('cx22'))
         ->failing('resize', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Vultr, 'plan unavailable')));
     $server = resizing('change', powerCycle: false);
 
@@ -171,7 +172,7 @@ test('a refused size on a provider that keeps the power on fails without touchin
 });
 
 test('a shutdown the provider refuses changes nothing', function () {
-    resizingApi((new FakeCloudApi)->failing('powerOff', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked')));
+    resizingApi((new FakeCloudApi)->finds(resizingRunning('cx22'))->failing('powerOff', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked')));
     $server = resizing();
 
     resizingRun($server);
@@ -188,25 +189,25 @@ test('a server that disappears while shutting down is reported', function () {
     expect(CloudTask::of($server->fresh())->error)->toBe('Hetzner Cloud says outpost-02 no longer exists.');
 });
 
-test('a server that will not shut down is started again and reported', function () {
+test('a server that will not shut down is left running and reported', function () {
     $api = resizingApi((new FakeCloudApi)->finds(resizingRunning('cx22')));
     $server = resizing('wait_off');
 
     $this->travel(301)->seconds();
     resizingRun($server);
 
-    expect($api->calls('powerOn'))->toBe([['powerOn', ['4711']]])
-        ->and(CloudTask::of($server->fresh())->error)->toBe("Hetzner Cloud didn't shut outpost-02 down within 5 minutes. outpost-02 was started again on cx22.");
+    expect($api->calls('powerOn'))->toBe([])
+        ->and(CloudTask::of($server->fresh())->error)->toBe("Hetzner Cloud didn't shut outpost-02 down within 5 minutes. outpost-02 is running on cx22.");
 });
 
 test('a server the provider will not start again is left for the console', function () {
-    resizingApi((new FakeCloudApi)->failing('powerOn', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked')));
+    resizingApi((new FakeCloudApi)->finds(resizingStopped('cx22'))->failing('powerOn', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked')));
     $server = resizing('wait_off');
 
     $this->travel(301)->seconds();
     resizingRun($server);
 
-    expect(CloudTask::of($server->fresh())->error)->toBe("Hetzner Cloud didn't shut outpost-02 down within 5 minutes. Coresmith couldn't start outpost-02 again, so start it from the Hetzner Cloud console.");
+    expect(CloudTask::of($server->fresh())->error)->toBe("Hetzner Cloud didn't shut outpost-02 down within 5 minutes. Coresmith couldn't start outpost-02 again, so it is off on cx22. Start it from the Hetzner Cloud console.");
 });
 
 test('a server that will not start again says to start it from the console', function () {
@@ -278,4 +279,193 @@ test('metrics wait while a resize runs', function () {
     app()->call([new CollectServerMetrics($server), 'handle']);
 
     expect($this->transport->commands())->toBe([]);
+});
+
+function resizingFailure(CloudFailure $failure, ?string $detail = null, ?int $status = null): CloudProviderException
+{
+    return new CloudProviderException($failure, CloudProviderType::Hetzner, $detail, $status);
+}
+
+test('a change the provider keeps failing is given up within its limit and the server started again', function () {
+    $unavailable = resizingFailure(CloudFailure::Unavailable, status: 503);
+    $api = resizingApi((new FakeCloudApi)->finds(resizingStopped('cx22'))->failing('resize', $unavailable, 99));
+    $server = resizing('change');
+
+    resizingRun($server);
+
+    expect(CloudTask::of($server->fresh())->state)->toBe(CloudTask::RUNNING);
+
+    $this->travel(301)->seconds();
+    resizingRun($server);
+
+    $task = CloudTask::of($server->fresh());
+
+    expect($api->calls('powerOn'))->toBe([['powerOn', ['4711']]])
+        ->and($task->state)->toBe(CloudTask::FAILED)
+        ->and($task->error)->toBe('Hetzner Cloud kept failing for 5 minutes when Coresmith asked it to resize outpost-02. The last error was: ' . rtrim($unavailable->getMessage(), '.') . '. outpost-02 was started again on cx22.')
+        ->and($server->fresh()->provider_size)->toBe('cx22');
+});
+
+test('a token refused between the shutdown and the change still tries to start the server', function () {
+    $refused = resizingFailure(CloudFailure::TokenRejected);
+    $api = resizingApi((new FakeCloudApi)->failing('find', $refused, 9)->failing('powerOn', $refused));
+    $server = resizing('change');
+
+    resizingRun($server);
+
+    $task = CloudTask::of($server->fresh());
+
+    expect($api->calls('resize'))->toBe([])
+        ->and($api->calls('powerOn'))->toBe([['powerOn', ['4711']]])
+        ->and($task->state)->toBe(CloudTask::FAILED)
+        ->and($task->error)->toBe($refused->getMessage() . " Coresmith couldn't start outpost-02 again, so start it from the Hetzner Cloud console.")
+        ->and($server->fresh()->cloudProvider->token_failed_at)->not->toBeNull();
+});
+
+test('a server the provider no longer has at the change is reported gone', function () {
+    $missing = resizingFailure(CloudFailure::NotFound, status: 404);
+    $api = resizingApi((new FakeCloudApi)->finds(resizingStopped('cx22'), null)->failing('resize', $missing));
+    $server = resizing('change');
+
+    resizingRun($server);
+
+    expect($api->calls('powerOn'))->toBe([])
+        ->and(CloudTask::of($server->fresh())->error)->toBe($missing->getMessage() . ' Hetzner Cloud says outpost-02 no longer exists.');
+});
+
+test('a server the provider will not start after the change is reported off on its new size', function (CloudFailure $failure, bool $tokenRefused) {
+    $refused = resizingFailure($failure, 'locked');
+    resizingApi((new FakeCloudApi)->finds(resizingStopped('cx32'))->failing('powerOn', $refused));
+    $server = resizing('power_on');
+
+    resizingRun($server);
+
+    expect(CloudTask::of($server->fresh()))
+        ->state->toBe(CloudTask::FAILED)
+        ->error->toBe($refused->getMessage() . ' outpost-02 is resized to cx32 but still off. Start it from the Hetzner Cloud console.')
+        ->and($server->fresh()->cloudProvider->token_failed_at !== null)->toBe($tokenRefused);
+})->with([
+    'a refusal' => [CloudFailure::Refused, false],
+    'a refused token' => [CloudFailure::TokenRejected, true],
+]);
+
+test('a start the provider keeps failing is reported off on its new size once its limit passes', function () {
+    $unavailable = resizingFailure(CloudFailure::Unavailable, status: 503);
+    resizingApi((new FakeCloudApi)->finds(resizingStopped('cx32'))->failing('powerOn', $unavailable, 99));
+    $server = resizing('power_on');
+
+    resizingRun($server);
+    $this->travel(301)->seconds();
+    resizingRun($server);
+
+    expect(CloudTask::of($server->fresh())->error)->toBe('Hetzner Cloud kept failing for 5 minutes when Coresmith asked it to start outpost-02 again. The last error was: ' . rtrim($unavailable->getMessage(), '.') . '. outpost-02 is resized to cx32 but still off. Start it from the Hetzner Cloud console.');
+});
+
+test('a resize whose answer was lost is not sent again once the provider shows the new size', function () {
+    $api = resizingApi((new FakeCloudApi)
+        ->finds(resizingStopped('cx22'), resizingStopped('cx32'), resizingStopped('cx32'), resizingStopped('cx32'), resizingRunning('cx32'))
+        ->failing('resize', resizingFailure(CloudFailure::Unavailable, status: 503)));
+    $server = resizing('change');
+
+    resizingRun($server);
+
+    expect($api->calls('resize'))->toHaveCount(1)
+        ->and(CloudTask::of($server->fresh())->state)->toBe(CloudTask::DONE)
+        ->and($server->fresh()->provider_size)->toBe('cx32');
+});
+
+test('a shutdown whose answer was lost is not sent again once the server is off', function () {
+    $api = resizingApi((new FakeCloudApi)
+        ->finds(resizingRunning('cx22'), resizingStopped('cx22'), resizingStopped('cx22'), resizingStopped('cx32'), resizingStopped('cx32'), resizingRunning('cx32'))
+        ->failing('powerOff', resizingFailure(CloudFailure::Unavailable, status: 503)));
+    $server = resizing();
+
+    resizingRun($server);
+
+    expect($api->calls('powerOff'))->toHaveCount(1)
+        ->and($api->calls('resize'))->toHaveCount(1)
+        ->and(CloudTask::of($server->fresh())->state)->toBe(CloudTask::DONE);
+});
+
+test('a start whose answer was lost is not sent again once the server is on', function () {
+    $api = resizingApi((new FakeCloudApi)
+        ->finds(resizingStopped('cx32'), resizingRunning('cx32'))
+        ->failing('powerOn', resizingFailure(CloudFailure::Unavailable, status: 503)));
+    $server = resizing('power_on');
+
+    resizingRun($server);
+
+    expect($api->calls('powerOn'))->toHaveCount(1)
+        ->and(CloudTask::of($server->fresh())->state)->toBe(CloudTask::DONE);
+});
+
+test('a resize the provider applied keeps its new size and price when a later step fails', function () {
+    resizingApi((new FakeCloudApi)->finds(resizingStopped('cx32'))->failing('powerOn', resizingFailure(CloudFailure::Refused, 'locked')));
+    $server = resizing('wait_change');
+
+    resizingRun($server);
+
+    $server->refresh();
+
+    expect(CloudTask::of($server)->state)->toBe(CloudTask::FAILED)
+        ->and($server->provider_size)->toBe('cx32')
+        ->and((string) $server->provider_monthly_cost)->toBe('6.80')
+        ->and($server->provider_currency)->toBe('EUR');
+});
+
+test('a server gone before a step writes to it is reported and nothing is sent', function (string $step, string $write) {
+    $api = resizingApi((new FakeCloudApi)->finds(null));
+    $server = resizing($step);
+
+    resizingRun($server);
+
+    expect($api->calls($write))->toBe([])
+        ->and(CloudTask::of($server->fresh())->error)->toBe('Hetzner Cloud says outpost-02 no longer exists.');
+})->with([
+    'the shutdown' => ['power_off', 'powerOff'],
+    'the change' => ['change', 'resize'],
+    'the start' => ['power_on', 'powerOn'],
+]);
+
+test('a change whose answer was lost moves on when the provider shows the new size at its deadline', function () {
+    $api = resizingApi((new FakeCloudApi)->finds(resizingStopped('cx22'))->failing('resize', resizingFailure(CloudFailure::Unavailable, status: 503), 99));
+    $server = resizing('change');
+
+    resizingRun($server);
+
+    $api->finds(resizingStopped('cx32'), resizingStopped('cx32'), resizingRunning('cx32'));
+    $this->travel(301)->seconds();
+    resizingRun($server);
+
+    expect(CloudTask::of($server->fresh())->state)->toBe(CloudTask::DONE)
+        ->and($api->calls('powerOn'))->toBe([])
+        ->and($server->fresh()->provider_size)->toBe('cx32');
+});
+
+test('a start whose answer was lost moves on when the provider shows it running at its deadline', function () {
+    $api = resizingApi((new FakeCloudApi)->finds(resizingStopped('cx32'))->failing('powerOn', resizingFailure(CloudFailure::Unavailable, status: 503), 99));
+    $server = resizing('power_on');
+
+    resizingRun($server);
+
+    $api->finds(resizingRunning('cx32'));
+    $this->travel(301)->seconds();
+    resizingRun($server);
+
+    expect(CloudTask::of($server->fresh())->state)->toBe(CloudTask::DONE);
+});
+
+test('a resize the provider only shows once its wait ran out keeps the new size and says where it was started', function () {
+    resizingApi((new FakeCloudApi)->finds(resizingStopped('cx32')));
+    $server = resizing('wait_change');
+
+    $this->travel(1201)->seconds();
+    CloudCatalog::put($server->cloudProvider, CloudCatalogs::hetzner(), 600);
+    resizingRun($server);
+
+    $server->refresh();
+
+    expect(CloudTask::of($server)->error)->toBe("Hetzner Cloud didn't finish resizing outpost-02 within 20 minutes. outpost-02 was started again on cx32.")
+        ->and($server->provider_size)->toBe('cx32')
+        ->and((string) $server->provider_monthly_cost)->toBe('6.80');
 });
