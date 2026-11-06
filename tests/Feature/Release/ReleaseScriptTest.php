@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Services\Updates\Version;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
@@ -40,11 +41,29 @@ test('without a version it prints how to use it', function () {
         ->and(releaseOutput($process))->toContain('Latest tag: none');
 });
 
-test('a version that is not semver is refused', function () {
-    $process = releaseScriptRun(releaseScriptSandbox(), ['1.0']);
+test('a version that is not semver is refused', function (string $version) {
+    $process = releaseScriptRun(releaseScriptSandbox(), [$version]);
 
     expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain("Version '1.0' is not valid semver. Use 1.0.2 or 1.0.2-beta.1.");
+        ->and(releaseOutput($process))->toContain("Version '{$version}' is not valid semver. Use 1.0.2 or 1.0.2-beta.1.");
+})->with(['1.0', '1.0.0-beta..1', '1.0.0-01']);
+
+test('a version too long for a tag every install reads is refused', function () {
+    $version = '1.0.0-' . str_repeat('a', 58);
+    $process = releaseScriptRun(releaseScriptSandbox(), [$version]);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain("Version '{$version}' is longer than 63 characters, so installs would refuse its tag. Use a shorter one.");
+});
+
+test('the release script takes exactly the versions every install accepts', function () {
+    preg_match('/^valid_version\(\) \{.*?^\}$/ms', releaseScriptBody(), $function);
+    $versions = ['1.0.0', '1.0.2-beta.1', '10.20.30-rc.1.x-7', '1.0.0-0', '1.0.0-0a', '1.0.0-00a', '1.0.0-a.b.c', '1.0.0-alpha-1', '1.0.0--', '1.0.0-beta..1', '1.0.0-01', '1.0.0-0.01', '01.0.0', '1.00.0', '1.0', '1.0.0-', '1.0.0-.', '1.0.0-a.', '1.0.0+build', 'v1.0.0', '1.0.0 ', "1.0.0\nx", '1.0.0-' . str_repeat('a', 57), '1.0.0-' . str_repeat('a', 58)];
+    $script = ($function[0] ?? '') . "\n" . 'for version in "$@"; do if valid_version "$version"; then printf 1; else printf 0; fi; done';
+    $process = new Process(['/bin/bash', '-c', $script, 'bash', ...$versions]);
+    $process->mustRun();
+
+    expect(str_split($process->getOutput()))->toBe(array_map(fn(string $version): string => Version::tryParse("v{$version}") === null ? '0' : '1', $versions));
 });
 
 test('a dirty tree is refused', function () {
@@ -98,6 +117,18 @@ test('on dev a bare version becomes the next beta', function () {
         ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe(releaseGit($sandbox, ['rev-parse', 'origin/main']))
         ->and(releaseLastCall($sandbox))->toMatch('#^gh release create v1\.0\.0-beta\.3 --repo monoven/coresmith --title v1\.0\.0-beta\.3 --notes-file \S+ --verify-tag --prerelease scripts/install\.sh$#')
         ->and(file_get_contents($sandbox['notes']))->toBe("Pre-release v1.0.0-beta.3.\n");
+});
+
+test('on dev a version the beta suffix would make too long is refused before anything is pushed', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseGit($sandbox, ['checkout', '--quiet', 'dev']);
+    $version = '1.0.' . str_repeat('9', 54);
+
+    $process = releaseScriptRun($sandbox, [$version], [], "y\n");
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain("Version '{$version}-beta.1' is longer than 63 characters, so installs would refuse its tag. Use a shorter one.")
+        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('');
 });
 
 test('an existing tag is refused', function () {

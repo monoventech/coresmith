@@ -247,12 +247,26 @@ confirm() {
     esac
 }
 
-validate() {
-    local semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+valid_version() {
+    local semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?$'
 
-    if ! [[ "$VERSION" =~ $semver ]]; then
-        fail "Version '${VERSION}' is not valid semver. Use 1.0.2 or 1.0.2-beta.1."
+    [[ "$1" =~ $semver ]] && [ "${#1}" -le 63 ]
+}
+
+require_valid_version() {
+    if valid_version "$VERSION"; then
+        return 0
     fi
+
+    if [ "${#VERSION}" -gt 63 ]; then
+        fail "Version '${VERSION}' is longer than 63 characters, so installs would refuse its tag. Use a shorter one."
+    fi
+
+    fail "Version '${VERSION}' is not valid semver. Use 1.0.2 or 1.0.2-beta.1."
+}
+
+validate() {
+    require_valid_version
 
     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
         fail "The working tree has changes. Commit them first, then release."
@@ -286,6 +300,7 @@ validate() {
     dev)
         if ! prerelease; then
             VERSION="${VERSION}-beta.$(next_beta "$VERSION")"
+            require_valid_version
             warn "On dev a release is a pre-release, so this one is v${VERSION}."
         fi
         ;;
