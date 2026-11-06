@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Cloud\Tasks;
 
 use App\Enums\CloudFailure;
+use App\Enums\CloudRefusal;
 use App\Enums\ServerStatus;
 use App\Exceptions\CloudProviderException;
 use App\Exceptions\HostKeyChangedException;
@@ -174,7 +175,11 @@ final class CreateServerTask implements CloudTaskHandler
     private function unconfirmed(Server $server, CloudTask $task, string $label, CloudProviderException $e): StepResult
     {
         if ($e->failure === CloudFailure::Refused) {
-            return StepResult::fail($e->getMessage() . ' Remove this server and provision it again with another size or region.');
+            return StepResult::fail($e->getMessage() . ' ' . match ($e->refusal) {
+                CloudRefusal::NameTaken => "Rename {$server->name} to a name no other {$label} server uses, then try again.",
+                CloudRefusal::LimitReached => "Ask {$label} to raise this account's limit, or delete servers you no longer need there, then try again.",
+                null => 'Remove this server and provision it again with another size or region.',
+            });
         }
 
         if (!$e->retryable()) {

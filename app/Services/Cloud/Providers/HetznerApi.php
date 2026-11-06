@@ -11,6 +11,7 @@ namespace App\Services\Cloud\Providers;
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Services\Cloud\CloudAccount;
 use App\Services\Cloud\CloudImage;
 use App\Services\Cloud\CloudInstance;
@@ -198,6 +199,15 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
             'protected', 'resource_limit_exceeded', 'uniqueness_error' => CloudFailure::Refused,
             'conflict' => CloudFailure::Busy,
             'token_readonly' => CloudFailure::Forbidden,
+            default => null,
+        };
+    }
+
+    protected function refusal(Response $response): ?CloudRefusal
+    {
+        return match (self::text($response->json('error.code'))) {
+            'uniqueness_error' => CloudRefusal::NameTaken,
+            'resource_limit_exceeded' => CloudRefusal::LimitReached,
             default => null,
         };
     }

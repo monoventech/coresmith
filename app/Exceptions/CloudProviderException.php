@@ -10,6 +10,7 @@ namespace App\Exceptions;
 
 use App\Enums\CloudFailure;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use RuntimeException;
 use Throwable;
 
@@ -22,6 +23,7 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
         public readonly ?int $status = null,
         ?Throwable $previous = null,
         public readonly ?int $retryAfter = null,
+        public readonly ?CloudRefusal $refusal = null,
     ) {
         parent::__construct($this->taskMessage(), 0, $previous);
     }

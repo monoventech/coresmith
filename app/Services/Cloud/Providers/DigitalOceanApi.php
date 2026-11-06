@@ -11,6 +11,7 @@ namespace App\Services\Cloud\Providers;
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Exceptions\CloudProviderException;
 use App\Services\Cloud\CloudAccount;
 use App\Services\Cloud\CloudImage;
@@ -188,6 +189,11 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
         return $response->status() === 422 && str_contains(strtolower((string) $this->message($response)), 'pending event')
             ? CloudFailure::Busy
             : null;
+    }
+
+    protected function refusal(Response $response): ?CloudRefusal
+    {
+        return str_contains(strtolower((string) $this->message($response)), 'droplet limit') ? CloudRefusal::LimitReached : null;
     }
 
     /**

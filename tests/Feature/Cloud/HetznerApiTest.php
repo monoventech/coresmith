@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Exceptions\CloudProviderException;
 use App\Services\Cloud\CloudInstance;
 use App\Services\Cloud\CloudPrice;
@@ -730,6 +731,19 @@ test('hetzner reads its documented error codes before the status', function (int
     'a lock' => [423, 'locked', CloudFailure::Busy],
     'a code it does not know' => [403, 'forbidden', CloudFailure::Forbidden],
     'a code that is not text' => [423, ['protected'], CloudFailure::Busy],
+]);
+
+test('hetzner says when a refusal is a name in use or a limit', function (int $status, string $code, ?CloudRefusal $refusal) {
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response(['error' => ['code' => $code, 'message' => 'said so', 'details' => (object) []]], $status)]);
+
+    expect(fn() => cloudHetzner()->create(cloudHetznerSpec()))->toThrow(function (CloudProviderException $e) use ($refusal) {
+        expect($e->failure)->toBe(CloudFailure::Refused)->and($e->refusal)->toBe($refusal);
+    });
+})->with([
+    'a name in use' => [409, 'uniqueness_error', CloudRefusal::NameTaken],
+    'a resource limit' => [403, 'resource_limit_exceeded', CloudRefusal::LimitReached],
+    'delete protection' => [423, 'protected', null],
+    'anything else' => [422, 'invalid_input', null],
 ]);
 
 test('hetzner sends the delete of a protected server once and says it was refused', function () {

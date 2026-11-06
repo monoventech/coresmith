@@ -10,6 +10,7 @@ namespace App\Services\Cloud\Providers;
 
 use App\Enums\CloudFailure;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Exceptions\CloudProviderException;
 use App\Services\Deployment\LogSanitizer;
 use Closure;
@@ -179,6 +180,11 @@ abstract class HttpCloudApi
     }
 
     protected function classify(Response $response): ?CloudFailure
+    {
+        return null;
+    }
+
+    protected function refusal(Response $response): ?CloudRefusal
     {
         return null;
     }
@@ -400,6 +406,7 @@ abstract class HttpCloudApi
             $this->detail($this->message($response)),
             $status,
             retryAfter: $failure->retryable() ? self::wait($response) : null,
+            refusal: $failure === CloudFailure::Refused ? $this->refusal($response) : null,
         );
     }
 }

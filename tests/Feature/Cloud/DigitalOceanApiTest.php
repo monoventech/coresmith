@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Exceptions\CloudProviderException;
 use App\Services\Cloud\CloudInstance;
 use App\Services\Cloud\CloudPrice;
@@ -1106,3 +1107,15 @@ test('digitalocean does not verify a token, or read a catalog, from an answer th
 
     Http::assertSentCount(1);
 })->with(['verify', 'regions', 'sizes', 'images']);
+
+test('digitalocean says when a refused create is the droplet limit', function (string $message, ?CloudRefusal $refusal) {
+    Http::fake(['api.digitalocean.com/v2/droplets' => Http::response(['id' => 'unprocessable_entity', 'message' => $message], 422)]);
+
+    expect(fn() => cloudDigitalOcean()->create(cloudDigitalOceanSpec()))->toThrow(function (CloudProviderException $e) use ($refusal) {
+        expect($e->failure)->toBe(CloudFailure::Refused)->and($e->refusal)->toBe($refusal);
+    });
+})->with([
+    'the droplet limit' => ['creating this/these droplet(s) will exceed your droplet limit', CloudRefusal::LimitReached],
+    'the droplet limit, in capitals' => ['Your DROPLET LIMIT is 10', CloudRefusal::LimitReached],
+    'anything else' => ['Region is not available', null],
+]);

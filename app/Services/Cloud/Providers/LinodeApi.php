@@ -11,6 +11,7 @@ namespace App\Services\Cloud\Providers;
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Exceptions\CloudProviderException;
 use App\Services\Cloud\CloudAccount;
 use App\Services\Cloud\CloudImage;
@@ -206,6 +207,13 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
             $response->status() === 400 && str_contains($reason, 'linode busy') => CloudFailure::Busy,
             default => null,
         };
+    }
+
+    protected function refusal(Response $response): ?CloudRefusal
+    {
+        return self::text($response->json('errors.0.field')) === 'label' && str_contains(strtolower((string) self::text($response->json('errors.0.reason'))), 'unique')
+            ? CloudRefusal::NameTaken
+            : null;
     }
 
     /**

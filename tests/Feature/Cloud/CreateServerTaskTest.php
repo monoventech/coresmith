@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Enums\ServerStatus;
 use App\Exceptions\CloudProviderException;
 use App\Jobs\AuditServer;
@@ -249,6 +250,23 @@ test('a refused create says what to do and removes the uploaded key', function (
     Sleep::assertNeverSlept();
     Queue::assertNothingPushed();
 });
+
+test('a create refused for a name in use or a limit says how to fix that', function (CloudRefusal $refusal, string $detail, string $advice) {
+    $server = cloudCreating();
+    $this->api->failing('create', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, $detail, 409, refusal: $refusal));
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server))
+        ->state->toBe(CloudTask::FAILED)
+        ->error->toBe("Hetzner Cloud refused the request. Hetzner Cloud said: {$detail}. {$advice}")
+        ->and($this->api->calls('create'))->toHaveCount(1)
+        ->and($this->api->calls('deleteKey'))->toBe([['deleteKey', ['key-1']]]);
+    Sleep::assertNeverSlept();
+})->with([
+    'a name in use' => [CloudRefusal::NameTaken, 'server name is already used', 'Rename outpost-02 to a name no other Hetzner Cloud server uses, then try again.'],
+    'a limit' => [CloudRefusal::LimitReached, 'server limit exceeded', "Ask Hetzner Cloud to raise this account's limit, or delete servers you no longer need there, then try again."],
+]);
 
 test('an unanswered create waits at least as long as the provider asked', function (int $retryAfter, int $waited) {
     $server = cloudCreating();

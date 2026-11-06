@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
+use App\Enums\CloudRefusal;
 use App\Exceptions\CloudProviderException;
 use App\Services\Cloud\CloudInstance;
 use App\Services\Cloud\CloudPrice;
@@ -1384,4 +1385,18 @@ test('linode does not mistake a lookup it cannot read for an instance that is no
     'a json object without the data' => ['{"unexpected":true}', ['Content-Type' => 'application/json']],
     'an html page' => ['<html><body>Gateway</body></html>', ['Content-Type' => 'text/html']],
     'nothing at all' => ['', []],
+]);
+
+test('linode says when a refused create is a label already in use', function (array $error, ?CloudRefusal $refusal) {
+    Http::fake(['api.linode.com/v4/linode/instances' => Http::response(['errors' => [$error]], 400)]);
+
+    expect(fn() => cloudLinode()->create(cloudLinodeSpec()))->toThrow(function (CloudProviderException $e) use ($refusal) {
+        expect($e->failure)->toBe(CloudFailure::Refused)->and($e->refusal)->toBe($refusal);
+    });
+})->with([
+    'a label in use' => [['field' => 'label', 'reason' => 'Label must be unique among your Linodes'], CloudRefusal::NameTaken],
+    'a label in use, in capitals' => [['field' => 'label', 'reason' => 'LABEL MUST BE UNIQUE'], CloudRefusal::NameTaken],
+    'a label it will not take for another reason' => [['field' => 'label', 'reason' => 'Label must be between 3 and 64 characters'], null],
+    'something else that must be unique' => [['field' => 'root_pass', 'reason' => 'Password must be unique'], null],
+    'no field' => [['reason' => 'Label must be unique among your Linodes'], null],
 ]);
