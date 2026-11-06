@@ -10,6 +10,7 @@ use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
 use App\Services\Billing\TrialHistory;
+use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Teams\AuditLog;
 use App\Services\Teams\TeamDeletion;
 use Database\Seeders\CloudE2ESeeder;
@@ -193,8 +194,9 @@ test('the cloud browser seed gives every browser an owner alone on a trial team 
             ->and($team->owner_id)->toBe($leaver->id)
             ->and(app(TeamBilling::class)->status($team)->state)->toBe(BillingState::Trialing)
             ->and(app(TeamDeletion::class)->refusal($team))->toBeNull()
-            ->and($team->servers()->orderBy('name')->pluck('name')->all())->toBe(["parting-{$code}-01", "parting-{$code}-02"])
+            ->and($team->servers()->orderBy('name')->pluck('name')->all())->toBe(["parting-{$code}-01", "parting-{$code}-02", "parting-{$code}-03"])
             ->and($team->servers()->whereNotNull('cloud_provider_id')->whereNotNull('provider_server_id')->count())->toBe(1)
+            ->and(CreateServerTask::uncertain($team->servers()->where('name', "parting-{$code}-03")->firstOrFail()))->toBeTrue()
             ->and(app(TrialHistory::class)->used($leaver->email))->toBeTrue()
             ->and(Hash::check(CloudE2ESeeder::PASSWORD, $leaver->password))->toBeTrue();
     }

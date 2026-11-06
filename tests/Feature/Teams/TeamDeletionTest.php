@@ -396,6 +396,7 @@ test('settings show the owner what deleting the team would do', function () {
     Server::factory()->for($team)->create(['cloud_provider_id' => $account->id, 'provider_server_id' => '1']);
     Server::factory()->for($team)->create(['cloud_provider_id' => $digitalOcean->id, 'provider_server_id' => '2']);
     Server::factory()->for($team)->create(['cloud_provider_id' => $account->id, 'provider_server_id' => null]);
+    Server::factory()->for($team)->create(['name' => 'web-09', 'cloud_provider_id' => $account->id, 'provider_server_id' => null, 'provider_task' => ['type' => CloudTask::CREATE, 'state' => CloudTask::FAILED, 'step' => 'create', 'data' => ['uncertain' => 1]]]);
     Server::factory()->for($team)->create();
     Server::factory()->for($team)->create(['deleted_at' => now()]);
 
@@ -403,9 +404,10 @@ test('settings show the owner what deleting the team would do', function () {
         ->get(route('settings.general'))
         ->assertInertia(fn($page) => $page->where('team_deletion', [
             'name' => 'Acme Labs',
-            'servers' => 4,
+            'servers' => 5,
             'provider_servers' => 2,
             'providers' => ['Hetzner Cloud', 'DigitalOcean'],
+            'unconfirmed' => [['name' => 'web-09', 'provider' => 'Hetzner Cloud']],
             'refusal' => null,
         ]));
 });

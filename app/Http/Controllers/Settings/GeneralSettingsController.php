@@ -16,6 +16,7 @@ use App\Models\InstanceSetting;
 use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\Team;
+use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Panel\PanelBackup;
 use App\Services\Panel\PanelUpdatesPresenter;
 use App\Services\Teams\AccountClosing;
@@ -81,7 +82,7 @@ final class GeneralSettingsController extends Controller
     }
 
     /**
-     * @return array{name: string, servers: int, provider_servers: int, providers: list<string>, refusal: string|null}|null
+     * @return array{name: string, servers: int, provider_servers: int, providers: list<string>, unconfirmed: list<array{name: string, provider: string}>, refusal: string|null}|null
      */
     private function teamDeletion(Request $request, ?Team $team, TeamDeletion $deletion): ?array
     {
@@ -97,6 +98,11 @@ final class GeneralSettingsController extends Controller
             'servers' => $servers->count(),
             'provider_servers' => $created->count(),
             'providers' => $created->map(fn(Server $server): ?string => $server->cloudProvider?->type->label())->filter()->unique()->values()->all(),
+            'unconfirmed' => $servers
+                ->filter(fn(Server $server): bool => $server->cloudProvider !== null && CreateServerTask::uncertain($server))
+                ->map(fn(Server $server): array => ['name' => $server->name, 'provider' => $server->cloudProvider->type->label()])
+                ->values()
+                ->all(),
             'refusal' => $deletion->refusal($team),
         ];
     }

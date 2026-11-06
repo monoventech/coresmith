@@ -24,6 +24,7 @@ use App\Models\TeamInvitation;
 use App\Models\TeamInvoice;
 use App\Models\User;
 use App\Services\Billing\TrialHistory;
+use App\Services\Cloud\Tasks\CloudTask;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -267,6 +268,10 @@ final class CloudE2ESeeder extends Seeder
         $account = CloudProvider::factory()->for($team)->create(['name' => 'Parting Hetzner', 'api_token' => 'parting-e2e-never-sent']);
         Server::factory()->for($team)->create(['name' => "parting-{$code}-01", 'status' => ServerStatus::Active]);
         Server::factory()->for($team)->create(['name' => "parting-{$code}-02", 'status' => ServerStatus::Active, 'cloud_provider_id' => $account->getKey(), 'provider_server_id' => "parting-{$code}"]);
+
+        $lost = Server::factory()->fromProvider($account)->creating()->create(['name' => "parting-{$code}-03", 'provider_server_id' => null, 'host_key_fingerprint' => null]);
+        CloudTask::start($lost, CloudTask::CREATE, 'create', ['uncertain' => 3]);
+        CloudTask::fail($lost, "Coresmith couldn't get an answer from Hetzner Cloud after three tries. Check the Hetzner Cloud console for a server called parting-{$code}-03: if there is one, delete it there, then remove this server and provision it again.");
     }
 
     private function invitations(Team $team, User $owner): void

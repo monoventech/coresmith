@@ -20,6 +20,7 @@
         servers: number
         provider_servers: number
         providers: string[]
+        unconfirmed: { name: string; provider: string }[]
         refusal: string | null
     }
 
@@ -386,6 +387,12 @@
                     {#if providerNote}
                         <p class="mt-3 text-[12.5px] text-muted-foreground">{providerNote}</p>
                     {/if}
+                    {#each teamDeletion.unconfirmed as server (server.name)}
+                        <p class="mt-3 text-[12.5px] text-muted-foreground">
+                            Coresmith could not confirm whether {server.provider} created {server.name}. Check your {server.provider}
+                            account and delete it there if it exists.
+                        </p>
+                    {/each}
                     <div class="mt-4">
                         <Label for="team-name" class="mb-1.5">Type {teamDeletion.name} to confirm</Label>
                         <Input
