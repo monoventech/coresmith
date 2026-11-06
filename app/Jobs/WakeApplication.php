@@ -19,6 +19,8 @@ final class WakeApplication implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 2;
 
     public int $timeout = 30;

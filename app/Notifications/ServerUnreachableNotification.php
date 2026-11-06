@@ -20,6 +20,8 @@ final class ServerUnreachableNotification extends Notification implements Should
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(
         public readonly Server $server,
         public readonly string $reason,

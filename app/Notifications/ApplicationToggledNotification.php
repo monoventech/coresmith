@@ -18,6 +18,8 @@ final class ApplicationToggledNotification extends Notification implements Shoul
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(
         public readonly Application $application,
         public readonly string $change,

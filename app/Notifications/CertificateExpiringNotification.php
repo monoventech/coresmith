@@ -19,6 +19,8 @@ final class CertificateExpiringNotification extends Notification implements Shou
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(
         public readonly Application $application,
         public readonly string $domain,

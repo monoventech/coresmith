@@ -19,6 +19,8 @@ final class PlanEndedNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(public readonly Team $team) {}
 
     /**

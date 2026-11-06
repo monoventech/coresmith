@@ -16,6 +16,8 @@ final class SyncStripeCustomerEmail implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 5;
 
     public function __construct(public readonly Team $team)

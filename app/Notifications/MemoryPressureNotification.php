@@ -18,6 +18,8 @@ final class MemoryPressureNotification extends Notification implements ShouldQue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(public readonly Server $server, public readonly int $percent) {}
 
     /**

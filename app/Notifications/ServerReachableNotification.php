@@ -18,6 +18,8 @@ final class ServerReachableNotification extends Notification implements ShouldQu
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(public readonly Server $server, public readonly string $downFor) {}
 
     /**

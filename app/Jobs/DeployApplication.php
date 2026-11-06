@@ -80,6 +80,8 @@ final class DeployApplication implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const TIMEOUT = 780;
 
     public const QUEUE = 'deployments';

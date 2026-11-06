@@ -38,6 +38,8 @@ final class InstallRuntimes implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const TIMEOUT = 2700;
 
     public const HANDOFF_MARGIN_SECONDS = 120;

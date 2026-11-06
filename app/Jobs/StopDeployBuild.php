@@ -20,6 +20,8 @@ final class StopDeployBuild implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     private const COMMAND_SECONDS = 25;
 
     public int $tries = 1;

@@ -23,6 +23,8 @@ final class SyncApplicationCron implements ShouldBeUniqueUntilProcessing, Should
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const FAILED = 'cron_sync_failed';
 
     public int $tries = 1;

@@ -21,6 +21,8 @@ final class PaymentFailedNotification extends Notification implements ShouldQueu
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(public readonly Team $team, public readonly ?Plan $plan, public readonly ?CarbonImmutable $nextAttempt) {}
 
     /**

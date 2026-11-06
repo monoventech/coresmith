@@ -22,6 +22,8 @@ final class CheckCertificates implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 1;
 
     public int $timeout = 600;

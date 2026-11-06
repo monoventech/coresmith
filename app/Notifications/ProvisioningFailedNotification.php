@@ -18,6 +18,8 @@ final class ProvisioningFailedNotification extends Notification implements Shoul
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(
         public readonly Server $server,
         public readonly int $phase,

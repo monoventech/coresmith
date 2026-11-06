@@ -21,6 +21,8 @@ final class ReadSchedulerLog implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const TTL_SECONDS = 120;
 
     public int $tries = 1;

@@ -18,6 +18,8 @@ final class CheckGitHubInstallation implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const THROTTLE_SECONDS = 60;
 
     public int $tries = 1;

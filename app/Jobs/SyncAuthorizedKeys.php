@@ -22,6 +22,8 @@ final class SyncAuthorizedKeys implements ShouldBeUniqueUntilProcessing, ShouldQ
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const LOCK_WAIT_SECONDS = 30;
 
     public int $tries = 3;

@@ -29,6 +29,8 @@ final class PostCommitStatus implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     private const DESCRIPTION_LIMIT = 140;
 
     private const LOCK_SECONDS = 60;

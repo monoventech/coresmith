@@ -34,6 +34,8 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const BUDGET_SECONDS = 90;
 
     public const MAX_STEPS = 25;

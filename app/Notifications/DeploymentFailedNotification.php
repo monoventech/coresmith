@@ -20,6 +20,8 @@ final class DeploymentFailedNotification extends Notification implements ShouldQ
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(public readonly Deployment $deployment) {}
 
     /**

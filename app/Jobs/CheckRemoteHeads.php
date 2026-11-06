@@ -34,6 +34,8 @@ final class CheckRemoteHeads implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const APPLICATIONS_PER_JOB = 5;
 
     private const KEY_SECONDS = 10;

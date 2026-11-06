@@ -36,6 +36,8 @@ final class RollbackApplication implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const RELEASE_PATTERN = '/^\d{8}-?\d{6}$/D';
 
     public const LOCK_SECONDS = 300;

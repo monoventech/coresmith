@@ -22,6 +22,8 @@ final class RebootServer implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public const COMMAND = 'systemd-run --on-active=5 --timer-property=AccuracySec=1s systemctl reboot';
 
     public int $tries = 1;

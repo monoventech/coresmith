@@ -20,6 +20,8 @@ final class PruneReleases implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 1;
 
     public int $timeout = 300;
