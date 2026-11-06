@@ -126,6 +126,7 @@ test.describe('setup before GitHub is connected', () => {
         await expect
             .poll(() => captured.action)
             .toMatch(/^https:\/\/github\.com\/settings\/apps\/new\?state=[A-Za-z0-9]{40}$/)
+        await expect(page).toHaveTitle('stub')
 
         const fields = new URLSearchParams(captured.body)
         const manifest = JSON.parse(fields.get('manifest') ?? '{}')
@@ -166,6 +167,7 @@ test.describe('setup before GitHub is connected', () => {
         await expect
             .poll(() => captured.action)
             .toMatch(/^https:\/\/github\.com\/organizations\/acme-labs\/settings\/apps\/new\?state=[A-Za-z0-9]{40}$/)
+        await expect(page).toHaveTitle('stub')
     })
 
     test('an app to install is connected through the panel as a real navigation', async ({ page }) => {
@@ -187,6 +189,7 @@ test.describe('setup before GitHub is connected', () => {
         await link.click()
 
         await expect.poll(() => captured.url).toBe(connect)
+        await expect(page).toHaveTitle('stub')
         expect(captured.navigation).toBe(true)
     })
 
