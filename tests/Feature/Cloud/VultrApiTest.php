@@ -108,19 +108,21 @@ test("vultr says when the key is refused for the panel's address", function () {
     Http::fake(['api.vultr.com/v2/account' => Http::response(CloudFixtures::json('vultr/error-acl'), 401)]);
 
     expect(fn() => cloudVultr()->verify())->toThrow(function (CloudProviderException $e) {
-        expect($e->failure)->toBe(CloudFailure::Forbidden)
+        $message = "Vultr refused requests from this panel's IP address. Vultr said: Unauthorized IP address: 198.51.100.7. Add the address to Access Control in Vultr's API settings, then try again.";
+
+        expect($e->failure)->toBe(CloudFailure::AddressRefused)
             ->and($e->status)->toBe(401)
             ->and($e->retryable())->toBeFalse()
             ->and($e->detail)->toBe('Unauthorized IP address: 198.51.100.7')
-            ->and($e->connectMessage())->toBe("Vultr accepted the token, but it isn't allowed to manage servers. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control.")
-            ->and($e->getMessage())->toBe("Vultr says this token isn't allowed to do that. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control. Then try again.");
+            ->and($e->connectMessage())->toBe($message)
+            ->and($e->getMessage())->toBe($message);
     });
 
     Http::assertSentCount(1);
 });
 
-test("vultr reads a refusal for the panel's address as forbidden wherever it comes", function (string $call, string $message) {
-    Http::fake(['api.vultr.com/v2/*' => Http::response(['error' => $message, 'status' => 401], 401)]);
+test("vultr reads a refusal for the panel's address as one wherever it comes", function (string $call, string $message, int $status) {
+    Http::fake(['api.vultr.com/v2/*' => Http::response(['error' => $message, 'status' => $status], $status)]);
     $attempt = match ($call) {
         'verify' => fn() => cloudVultr()->verify(),
         'regions' => fn() => cloudVultr()->regions(),
@@ -129,14 +131,15 @@ test("vultr reads a refusal for the panel's address as forbidden wherever it com
     };
 
     expect($attempt)->toThrow(function (CloudProviderException $e) {
-        expect($e->failure)->toBe(CloudFailure::Forbidden)
+        expect($e->failure)->toBe(CloudFailure::AddressRefused)
             ->and($e->retryable())->toBeFalse()
             ->and($e->getMessage())->not->toContain('Settings');
     });
 })->with(['verify', 'regions', 'create', 'destroy'])->with([
-    'as vultr words it' => ['Unauthorized IP address: 198.51.100.7'],
-    'in capitals' => ['UNAUTHORIZED IP ADDRESS: 198.51.100.7'],
-    'with more said' => ['Unauthorized IP address: 198.51.100.7. Add it to your access control list.'],
+    'as vultr words it' => ['Unauthorized IP address: 198.51.100.7', 401],
+    'in capitals' => ['UNAUTHORIZED IP ADDRESS: 198.51.100.7', 401],
+    'with more said' => ['Unauthorized IP address: 198.51.100.7. Add it to your access control list.', 401],
+    'as a 403' => ['Unauthorized IP address: 198.51.100.7', 403],
 ]);
 
 test('vultr keeps every other refusal what it was', function (int $status, mixed $message, CloudFailure $failure) {
@@ -1127,7 +1130,8 @@ test('vultr says a key without access cannot create', function () {
         expect($e->failure)->toBe(CloudFailure::Forbidden)
             ->and($e->retryable())->toBeFalse()
             ->and($e->detail)->toBe('Insufficient permissions.')
-            ->and($e->getMessage())->toContain("Allow this panel's IP address in Vultr's API access control.");
+            ->and($e->getMessage())->toContain('Give the Vultr user this API key belongs to permission to create and manage servers.')
+            ->and($e->getMessage())->not->toContain('IP address');
     });
 
     Http::assertSentCount(1);

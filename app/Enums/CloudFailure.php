@@ -18,12 +18,15 @@ enum CloudFailure: string
     case Refused = 'refused';
     case Unavailable = 'unavailable';
     case Unreachable = 'unreachable';
+    case NoToken = 'no_token';
+    case UnreadableToken = 'unreadable_token';
+    case AddressRefused = 'address_refused';
 
     public function retryable(): bool
     {
         return match ($this) {
             self::Busy, self::RateLimited, self::Unavailable, self::Unreachable => true,
-            self::TokenRejected, self::Forbidden, self::NotFound, self::Refused => false,
+            self::TokenRejected, self::Forbidden, self::NotFound, self::Refused, self::NoToken, self::UnreadableToken, self::AddressRefused => false,
         };
     }
 }

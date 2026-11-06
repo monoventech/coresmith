@@ -364,7 +364,7 @@ test('a refused token marks the account', function () {
         ->and(cloudTaskCalls())->toBe(['step one', 'failed one']);
 });
 
-test('an account with no token stored fails before anything is sent', function (Closure $spoil) {
+test('an account with no token stored fails before anything is sent, and is not marked refused', function (Closure $spoil, string $error) {
     Exceptions::fake();
     app()->instance(CloudApiFactory::class, new HttpCloudApiFactory);
     $server = cloudTaskServer();
@@ -374,17 +374,27 @@ test('an account with no token stored fails before anything is sent', function (
 
     expect(cloudTaskOf($server))
         ->state->toBe(CloudTask::FAILED)
-        ->error->toBe("Hetzner Cloud refused this account's token. Hetzner Cloud said: no token is stored. Replace it in Settings → Team, then try again.")
-        ->and($server->cloudProvider->fresh()->token_failed_at)->not->toBeNull()
+        ->error->toBe($error)
+        ->and($server->cloudProvider->fresh()->token_failed_at)->toBeNull()
         ->and(cloudTaskCalls())->toBe(['failed one'])
         ->and(cloudTaskHandler()->calls[0]['api'])->toBeNull();
     Http::assertNothingSent();
     Exceptions::assertNothingReported();
 })->with([
-    'no token' => [fn(CloudProvider $account) => $account->forceFill(['api_token' => null])->save()],
-    'a token sealed with another vault key' => [fn(CloudProvider $account) => DB::table('cloud_providers')
-        ->where('id', $account->getKey())
-        ->update(['api_token' => (new VaultEncryptor(base64_encode(str_repeat('k', 32))))->encrypt('the-account-token')])],
+    'no token' => [
+        fn(CloudProvider $account) => $account->forceFill(['api_token' => null])->save(),
+        'No token is stored for this Hetzner Cloud account. Replace the token in Settings → Team, then try again.',
+    ],
+    'a blank token' => [
+        fn(CloudProvider $account) => $account->forceFill(['api_token' => '   '])->save(),
+        'No token is stored for this Hetzner Cloud account. Replace the token in Settings → Team, then try again.',
+    ],
+    'a token sealed with another vault key' => [
+        fn(CloudProvider $account) => DB::table('cloud_providers')
+            ->where('id', $account->getKey())
+            ->update(['api_token' => (new VaultEncryptor(base64_encode(str_repeat('k', 32))))->encrypt('the-account-token')]),
+        "Coresmith couldn't read the token stored for this Hetzner Cloud account. Replace the token in Settings → Team, then try again.",
+    ],
 ]);
 
 test('an unexpected error fails the task and is reported', function () {

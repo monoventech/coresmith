@@ -185,8 +185,8 @@ final class VultrApi extends HttpCloudApi implements CloudApi
 
     protected function classify(Response $response): ?CloudFailure
     {
-        return $response->status() === 401 && str_contains(strtolower((string) $this->message($response)), 'unauthorized ip address')
-            ? CloudFailure::Forbidden
+        return in_array($response->status(), [401, 403], true) && str_contains(strtolower((string) $this->message($response)), 'unauthorized ip address')
+            ? CloudFailure::AddressRefused
             : null;
     }
 

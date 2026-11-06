@@ -1047,17 +1047,17 @@ test('the copy names the provider, its host and its own permission advice', func
 })->with([
     [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.', 'Then replace the token in Settings → Team.'],
     [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.', 'Then replace the token in Settings → Team.'],
-    [CloudProviderType::Vultr, 'Vultr', 'api.vultr.com', "Allow this panel's IP address in Vultr's API access control.", 'Then try again.'],
+    [CloudProviderType::Vultr, 'Vultr', 'api.vultr.com', 'Give the Vultr user this API key belongs to permission to create and manage servers.', 'Then try again.'],
     [CloudProviderType::Linode, 'Linode', 'api.linode.com', 'Give it read/write access to Linodes and read access to Images.', 'Then replace the token in Settings → Team.'],
 ]);
 
-test('a vultr key refused for the panel address is told to allow the address, never to replace the key', function () {
-    $e = new CloudProviderException(CloudFailure::Forbidden, CloudProviderType::Vultr, 'Unauthorized IP address: 198.51.100.7', 401);
+test('a vultr key without permission is told to give its user permission, never to replace the key', function () {
+    $e = new CloudProviderException(CloudFailure::Forbidden, CloudProviderType::Vultr, 'Insufficient permissions', 403);
 
-    expect($e->getMessage())->toBe("Vultr says this token isn't allowed to do that. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control. Then try again.")
+    expect($e->getMessage())->toBe("Vultr says this token isn't allowed to do that. Vultr said: Insufficient permissions. Give the Vultr user this API key belongs to permission to create and manage servers. Then try again.")
         ->and($e->getMessage())->not->toContain('Settings')
         ->and($e->getMessage())->not->toContain('replace')
-        ->and($e->connectMessage())->toBe("Vultr accepted the token, but it isn't allowed to manage servers. Vultr said: Unauthorized IP address: 198.51.100.7. Allow this panel's IP address in Vultr's API access control.");
+        ->and($e->connectMessage())->toBe("Vultr accepted the token, but it isn't allowed to manage servers. Vultr said: Insufficient permissions. Give the Vultr user this API key belongs to permission to create and manage servers.");
 });
 
 test('the other providers still tell a forbidden token to be replaced', function (CloudProviderType $provider) {
@@ -1088,16 +1088,32 @@ test('an unavailable provider with no status still says to wait', function () {
     expect(cloudBaseFailure(CloudFailure::Unavailable, null)->getMessage())->toBe('Hetzner Cloud had a problem answering. Try again in a minute.');
 });
 
-test('a missing token reads as a refused one', function () {
-    $e = CloudProviderException::noToken(CloudProviderType::Linode);
+test('a missing or unreadable token says so, and never that the provider refused it', function (Closure $make, CloudFailure $failure, string $message) {
+    $e = $make(CloudProviderType::Linode);
 
-    expect($e->failure)->toBe(CloudFailure::TokenRejected)
+    expect($e->failure)->toBe($failure)
         ->and($e->provider)->toBe(CloudProviderType::Linode)
-        ->and($e->detail)->toBe('no token is stored')
+        ->and($e->detail)->toBeNull()
         ->and($e->status)->toBeNull()
-        ->and($e->getMessage())->toBe("Linode refused this account's token. Linode said: no token is stored. Replace it in Settings → Team, then try again.")
+        ->and($e->retryable())->toBeFalse()
+        ->and($e->getMessage())->toBe($message)
+        ->and($e->connectMessage())->toBe($message)
+        ->and($e->getMessage())->not->toContain('refused')
         ->and($e->getPrevious())->toBeNull()
         ->and($e)->toBeInstanceOf(ExplainsFailure::class)->toBeInstanceOf(RuntimeException::class);
+})->with([
+    'none stored' => [fn(CloudProviderType $type) => CloudProviderException::noToken($type), CloudFailure::NoToken, 'No token is stored for this Linode account. Replace the token in Settings → Team, then try again.'],
+    'one it cannot read' => [fn(CloudProviderType $type) => CloudProviderException::unreadableToken($type), CloudFailure::UnreadableToken, "Coresmith couldn't read the token stored for this Linode account. Replace the token in Settings → Team, then try again."],
+]);
+
+test('a provider that refuses the panel address says to allow the address, never that the token cannot manage servers', function () {
+    $e = new CloudProviderException(CloudFailure::AddressRefused, CloudProviderType::Vultr, 'Unauthorized IP address: 198.51.100.7', 401);
+    $message = "Vultr refused requests from this panel's IP address. Vultr said: Unauthorized IP address: 198.51.100.7. Add the address to Access Control in Vultr's API settings, then try again.";
+
+    expect($e->getMessage())->toBe($message)
+        ->and($e->connectMessage())->toBe($message)
+        ->and($e->retryable())->toBeFalse()
+        ->and($e->getMessage())->not->toContain('token');
 });
 
 test('only the failures that can pass are worth trying again', function (CloudFailure $failure, bool $retryable) {
@@ -1112,6 +1128,9 @@ test('only the failures that can pass are worth trying again', function (CloudFa
     [CloudFailure::Refused, false],
     [CloudFailure::Unavailable, true],
     [CloudFailure::Unreachable, true],
+    [CloudFailure::NoToken, false],
+    [CloudFailure::UnreadableToken, false],
+    [CloudFailure::AddressRefused, false],
 ]);
 
 test('a provider price is kept to two decimals', function (float|int|string $monthly, string $expected) {

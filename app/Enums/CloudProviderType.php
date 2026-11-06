@@ -72,7 +72,7 @@ enum CloudProviderType: string
         return match ($this) {
             self::Hetzner => 'Generate a Read & Write token for the project.',
             self::DigitalOcean => 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.',
-            self::Vultr => "Allow this panel's IP address in Vultr's API access control.",
+            self::Vultr => 'Give the Vultr user this API key belongs to permission to create and manage servers.',
             self::Linode => 'Give it read/write access to Linodes and read access to Images.',
         };
     }

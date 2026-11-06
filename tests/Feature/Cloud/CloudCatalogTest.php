@@ -142,10 +142,10 @@ test('an account with no token stored cannot be used', function (?string $token)
     $account = cloudCatalogAccount(['type' => CloudProviderType::Linode->value, 'api_token' => $token]);
 
     expect(fn() => app(CloudApiFactory::class)->for($account))->toThrow(function (CloudProviderException $e) {
-        expect($e->failure)->toBe(CloudFailure::TokenRejected)
+        expect($e->failure)->toBe(CloudFailure::NoToken)
             ->and($e->provider)->toBe(CloudProviderType::Linode)
             ->and($e->retryable())->toBeFalse()
-            ->and($e->getMessage())->toContain('Linode');
+            ->and($e->getMessage())->toBe(CloudProviderException::noToken(CloudProviderType::Linode)->getMessage());
     });
     expect(fn() => app(CloudCatalog::class)->for($account))->toThrow(CloudProviderException::class)
         ->and(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse();
@@ -156,7 +156,7 @@ test('an account with no token stored cannot be used', function (?string $token)
     'a blank token' => ["  \n "],
 ]);
 
-test('an account whose token can no longer be read is treated as having none', function () {
+test('an account whose token can no longer be read says so', function () {
     $account = cloudCatalogAccount(['type' => CloudProviderType::Linode->value]);
     DB::table('cloud_providers')
         ->where('id', $account->getKey())
@@ -164,9 +164,9 @@ test('an account whose token can no longer be read is treated as having none', f
     $account = $account->fresh();
 
     expect(fn() => app(CloudApiFactory::class)->for($account))->toThrow(function (CloudProviderException $e) {
-        expect($e->failure)->toBe(CloudFailure::TokenRejected)
+        expect($e->failure)->toBe(CloudFailure::UnreadableToken)
             ->and($e->provider)->toBe(CloudProviderType::Linode)
-            ->and($e->getMessage())->toBe(CloudProviderException::noToken(CloudProviderType::Linode)->getMessage());
+            ->and($e->getMessage())->toBe(CloudProviderException::unreadableToken(CloudProviderType::Linode)->getMessage());
     });
     expect(fn() => app(CloudCatalog::class)->for($account))->toThrow(CloudProviderException::class)
         ->and(Cache::has(CloudCatalog::cacheKey($account)))->toBeFalse();

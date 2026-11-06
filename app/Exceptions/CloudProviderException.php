@@ -28,7 +28,12 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
 
     public static function noToken(CloudProviderType $provider): self
     {
-        return new self(CloudFailure::TokenRejected, $provider, 'no token is stored');
+        return new self(CloudFailure::NoToken, $provider);
+    }
+
+    public static function unreadableToken(CloudProviderType $provider): self
+    {
+        return new self(CloudFailure::UnreadableToken, $provider);
     }
 
     public function retryable(): bool
@@ -46,7 +51,8 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
             CloudFailure::Forbidden => "{$label} accepted the token, but it isn't allowed to manage servers.{$said} {$this->provider->permissionHint()}",
             CloudFailure::Busy => "{$label} is busy with another change.{$said} Try again in a minute.",
             CloudFailure::RateLimited => "{$label} is rate limiting this account.{$said} Wait a minute, then try again.",
-            CloudFailure::NotFound, CloudFailure::Refused, CloudFailure::Unavailable, CloudFailure::Unreachable => $this->taskMessage(),
+            CloudFailure::NotFound, CloudFailure::Refused, CloudFailure::Unavailable, CloudFailure::Unreachable,
+            CloudFailure::NoToken, CloudFailure::UnreadableToken, CloudFailure::AddressRefused => $this->taskMessage(),
         };
     }
 
@@ -65,6 +71,9 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
             CloudFailure::Refused => "{$label} refused the request.{$said}",
             CloudFailure::Unavailable => "{$label} had a problem answering" . ($this->status === null ? '' : " (HTTP {$this->status})") . '. Try again in a minute.',
             CloudFailure::Unreachable => "Coresmith couldn't reach {$label} at {$this->provider->apiHost()}. Check this panel can make outbound HTTPS requests, then try again.",
+            CloudFailure::NoToken => "No token is stored for this {$label} account. Replace the token in Settings → Team, then try again.",
+            CloudFailure::UnreadableToken => "Coresmith couldn't read the token stored for this {$label} account. Replace the token in Settings → Team, then try again.",
+            CloudFailure::AddressRefused => "{$label} refused requests from this panel's IP address.{$said} Add the address to Access Control in {$label}'s API settings, then try again.",
         };
     }
 

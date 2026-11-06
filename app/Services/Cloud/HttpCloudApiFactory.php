@@ -26,7 +26,7 @@ final class HttpCloudApiFactory implements CloudApiFactory
         try {
             $token = $account->api_token;
         } catch (VaultDecryptionException) {
-            $token = null;
+            throw CloudProviderException::unreadableToken($account->type);
         }
 
         if ($token === null || trim($token) === '') {
