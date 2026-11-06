@@ -8,16 +8,20 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Server;
 
+use App\Enums\CloudFailure;
 use App\Exceptions\CloudProviderException;
 use App\Models\Server;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\ResizeOptions;
+use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 final class ResizeCloudServerRequest extends FormRequest
 {
+    private ?string $unchecked = null;
+
     public function authorize(): bool
     {
         $server = $this->route('server');
@@ -32,8 +36,10 @@ final class ResizeCloudServerRequest extends FormRequest
      */
     public function rules(): array
     {
+        $offered = $this->offered();
+
         return [
-            'size' => ['required', 'string', Rule::in($this->offered())],
+            'size' => ['required', 'string', $this->unchecked === null ? Rule::in($offered) : fn(string $attribute, mixed $value, Closure $fail) => $fail($this->unchecked)],
         ];
     }
 
@@ -70,7 +76,13 @@ final class ResizeCloudServerRequest extends FormRequest
 
         try {
             [, $sizes] = app(ResizeOptions::class)->for($server);
-        } catch (CloudProviderException) {
+        } catch (CloudProviderException $e) {
+            if ($e->failure === CloudFailure::TokenRejected) {
+                $server->cloudProvider?->forceFill(['token_failed_at' => now()])->save();
+            }
+
+            $this->unchecked = "Coresmith couldn't check that size with {$e->provider->label()}. {$e->getMessage()}";
+
             return [];
         }
 

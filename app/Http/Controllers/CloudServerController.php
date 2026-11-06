@@ -177,7 +177,11 @@ final class CloudServerController extends Controller
         $account = $server->cloudProvider;
         $from = (string) $server->provider_size;
         $to = $request->size();
-        $cycle = $apis->for($account)->resizeNeedsPowerOff();
+        try {
+            $cycle = $apis->for($account)->resizeNeedsPowerOff();
+        } catch (CloudProviderException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         CloudTask::start($server, CloudTask::RESIZE, $cycle ? 'power_off' : 'change', ['from' => $from, 'to' => $to, 'power_cycle' => $cycle], $request->user());
         ProvisioningLog::append($server, "resizing {$server->name} from {$from} to {$to} at {$account->type->label()}");

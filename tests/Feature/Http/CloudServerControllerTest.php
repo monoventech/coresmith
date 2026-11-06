@@ -22,6 +22,7 @@ use App\Services\Cloud\CloudPrice;
 use App\Services\Cloud\CloudRegion;
 use App\Services\Cloud\CloudSize;
 use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\HttpCloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
 use Database\Seeders\Support\CloudCatalogs;
 use Illuminate\Support\Facades\Http;
@@ -564,6 +565,45 @@ test('a size that is not offered is refused', function (string $size) {
 
     Queue::assertNothingPushed();
 })->with(['an arm size' => 'cax11', 'the current size' => 'cx22', 'a size nobody sells' => 'cx99', 'nothing' => '']);
+
+test('a size the provider could not be asked about says what happened, not that the size cannot be used', function (CloudFailure $failure, ?int $status, string $error, bool $marked) {
+    $fake = cloudServerFake();
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    $fake->api->failing('regions', new CloudProviderException($failure, CloudProviderType::Hetzner, null, $status));
+
+    $this->actingAs($user)
+        ->from(route('servers.show', $server))
+        ->post(route('servers.cloud.resize', $server), ['size' => 'cx32'])
+        ->assertRedirect(route('servers.show', $server))
+        ->assertSessionHasErrors(['size' => $error]);
+
+    expect(CloudTask::of($server->fresh()))->toBeNull()
+        ->and($account->fresh()->token_failed_at !== null)->toBe($marked);
+
+    Queue::assertNothingPushed();
+})->with([
+    'no answer' => [CloudFailure::Unavailable, 503, "Coresmith couldn't check that size with Hetzner Cloud. Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.", false],
+    'a refused token' => [CloudFailure::TokenRejected, 401, "Coresmith couldn't check that size with Hetzner Cloud. Hetzner Cloud refused this account's token. Replace it in Settings → Team, then try again.", true],
+]);
+
+test('a resize whose token cannot be used says so instead of failing', function () {
+    app()->instance(CloudApiFactory::class, new HttpCloudApiFactory);
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudResizable($account);
+    $account->forceFill(['api_token' => null])->save();
+
+    $this->actingAs($user)
+        ->from(route('servers.show', $server))
+        ->post(route('servers.cloud.resize', $server), ['size' => 'cx32'])
+        ->assertRedirect(route('servers.show', $server))
+        ->assertSessionHas('error', 'No token is stored for this Hetzner Cloud account. Replace the token in Settings → Team, then try again.');
+
+    expect(CloudTask::of($server->fresh()))->toBeNull();
+
+    Http::assertNothingSent();
+    Queue::assertNothingPushed();
+});
 
 test('a deployer cannot resize', function () {
     cloudServerFake();
