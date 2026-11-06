@@ -145,7 +145,6 @@ test('the server block names where it runs and what it costs', function () {
         'size' => 'cx22',
         'image' => 'Ubuntu 24.04',
         'monthly' => '€4.35',
-        'console_url' => 'https://console.hetzner.cloud/projects',
         'uncertain' => false,
     ])->and($block['task']['type'])->toBe('create')
         ->and($block['task']['error'])->toBe('Hetzner Cloud refused the size.')
@@ -301,18 +300,6 @@ test('the provision page offers only the providers the team has not connected, a
         ->and($owner['can_connect'])->toBeTrue()
         ->and($member['can_connect'])->toBeFalse();
 });
-
-test('each provider links to its console, at the instance when it can', function (CloudProviderType $type, ?string $instance, string $url) {
-    expect($type->consoleUrl($instance))->toBe($url);
-})->with([
-    'hetzner' => [CloudProviderType::Hetzner, '4711', 'https://console.hetzner.cloud/projects'],
-    'a droplet' => [CloudProviderType::DigitalOcean, '4711', 'https://cloud.digitalocean.com/droplets/4711'],
-    'droplets' => [CloudProviderType::DigitalOcean, null, 'https://cloud.digitalocean.com/droplets'],
-    'a vultr instance' => [CloudProviderType::Vultr, 'a1b2', 'https://my.vultr.com/subs/?id=a1b2'],
-    'vultr' => [CloudProviderType::Vultr, null, 'https://my.vultr.com/'],
-    'a linode' => [CloudProviderType::Linode, '4711', 'https://cloud.linode.com/linodes/4711'],
-    'linodes' => [CloudProviderType::Linode, null, 'https://cloud.linode.com/linodes'],
-]);
 
 test('a creation Coresmith could not confirm is offered as a destroy, never a remove', function (int $uncertain, array $can, bool $flag) {
     $team = Team::factory()->create();

@@ -194,7 +194,6 @@ final class CloudPresenter
             'size' => $server->provider_size,
             'image' => is_string($task?->data['image_label'] ?? null) ? $task->data['image_label'] : $server->provider_image,
             'monthly' => Formats::money($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
-            'console_url' => $account->type->consoleUrl($server->provider_server_id),
             'task' => $task === null ? null : $this->task($task, $account->type->label()),
             'uncertain' => $uncertain,
             'can' => [

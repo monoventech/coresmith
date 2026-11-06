@@ -45,18 +45,6 @@ enum CloudProviderType: string
         };
     }
 
-    public function consoleUrl(?string $instanceId): string
-    {
-        $instance = $instanceId === null ? null : rawurlencode($instanceId);
-
-        return match ($this) {
-            self::Hetzner => 'https://console.hetzner.cloud/projects',
-            self::DigitalOcean => $instance === null ? 'https://cloud.digitalocean.com/droplets' : "https://cloud.digitalocean.com/droplets/{$instance}",
-            self::Vultr => $instance === null ? 'https://my.vultr.com/' : "https://my.vultr.com/subs/?id={$instance}",
-            self::Linode => $instance === null ? 'https://cloud.linode.com/linodes' : "https://cloud.linode.com/linodes/{$instance}",
-        };
-    }
-
     public function tokenHelp(): string
     {
         return match ($this) {
