@@ -266,6 +266,12 @@ final class E2ESeeder extends Seeder
         CloudTask::start($protected, CloudTask::DESTROY, 'delete');
         CloudTask::fail($protected, "Hetzner Cloud refused the request. Hetzner Cloud said: server is protected. Try again once that's fixed, or delete it in the Hetzner Cloud console and then detach it here.");
 
+        $this->destroying($hetzner, 'destroying-server', '4797', '203.0.113.138');
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->destroying($hetzner, "gone-{$code}", '48' . (50 + $index), '203.0.113.' . (160 + $index));
+        }
+
         foreach (array_values(self::PROJECTS) as $index => $code) {
             Server::factory()->fromProvider($hetzner)->create([
                 'name' => "resize-{$code}",
@@ -300,6 +306,24 @@ final class E2ESeeder extends Seeder
             CloudTask::advance($retry, 'boot');
             CloudTask::fail($retry, "Hetzner Cloud didn't finish starting retry-{$code} within 10 minutes. It may still be starting: try again to keep waiting, or destroy it.");
         }
+    }
+
+    private function destroying(CloudProvider $account, string $name, string $instance, string $ip): void
+    {
+        $server = Server::factory()->fromProvider($account)->create([
+            'name' => $name,
+            'environment' => 'Production',
+            'ip_address' => $ip,
+            'status' => ServerStatus::Active,
+            'provider_server_id' => $instance,
+            'provider_monthly_cost' => '3.79',
+            'provider_currency' => 'EUR',
+            'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 40],
+            'host_key_fingerprint' => null,
+        ]);
+
+        CloudTask::start($server, CloudTask::DESTROY, 'delete', ['requested' => true, 'instance' => $instance]);
+        ProvisioningLog::append($server, "destroying {$name} at Hetzner Cloud");
     }
 
     private function cloudServer(CloudProvider $account, string $name, ?string $instance, ?string $ip = null): Server
@@ -406,6 +430,10 @@ final class E2ESeeder extends Seeder
     {
         $stray = Team::factory()->create(['name' => 'Stray Works', 'slug' => 'stray', 'owner_id' => $owner->id]);
         $stray->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+        foreach (array_values(self::PROJECTS) as $code) {
+            CloudProvider::factory()->for($stray)->create(['name' => "Sandbox {$code}", 'api_token' => "hetzner-stray-{$code}-never-sent"]);
+        }
 
         Server::factory()->for($stray)->create([
             'name' => 'stray-01',

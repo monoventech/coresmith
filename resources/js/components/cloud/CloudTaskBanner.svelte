@@ -57,7 +57,9 @@
             <Button variant="outline" size="sm" class="max-sm:ml-7" disabled={working} onclick={retry}>Try again</Button
             >
         {/if}
-        <Button variant="ghost" size="sm" onclick={ondetach}>Detach</Button>
+        {#if cloud.can.detach}
+            <Button variant="ghost" size="sm" onclick={ondetach}>Detach</Button>
+        {/if}
     </div>
 {:else if cloud && resize?.state === 'running'}
     <div

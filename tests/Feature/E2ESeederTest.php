@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use App\Enums\Ability;
 use App\Enums\DeploymentStatus;
+use App\Enums\ServerStatus;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -100,4 +102,33 @@ test('the browser seed has a creation Coresmith could not confirm, which the pan
         ->and($task->state)->toBe(CloudTask::FAILED)
         ->and($task->data['uncertain'])->toBe(3)
         ->and(CreateServerTask::uncertain($server))->toBeTrue();
+});
+
+test('the browser seed has a destroy in progress, and one per browser project that a test finishes', function () {
+    e2eSeedRun();
+
+    $names = ['destroying-server', ...array_map(fn(string $code): string => "gone-{$code}", array_values(E2ESeeder::PROJECTS))];
+
+    foreach ($names as $name) {
+        $server = Server::query()->where('name', $name)->sole();
+        $task = CloudTask::of($server);
+
+        expect($server->status)->toBe(ServerStatus::Active)
+            ->and($server->provider_server_id)->not->toBeNull()
+            ->and($task->type)->toBe(CloudTask::DESTROY)
+            ->and($task->state)->toBe(CloudTask::RUNNING)
+            ->and($task->data['requested'] ?? null)->toBeTrue();
+    }
+
+    expect(Server::query()->whereIn('name', $names)->pluck('provider_server_id')->unique())->toHaveCount(count($names));
+});
+
+test('the browser seed gives every browser project its own provider account to rename', function () {
+    e2eSeedRun();
+
+    $stray = Team::query()->where('slug', 'stray')->sole();
+    $names = array_map(fn(string $code): string => "Sandbox {$code}", array_values(E2ESeeder::PROJECTS));
+
+    expect(CloudProvider::query()->where('team_id', $stray->id)->whereIn('name', $names)->count())->toBe(count($names))
+        ->and(CloudProvider::query()->where('team_id', $stray->id)->whereIn('name', $names)->whereHas('servers')->exists())->toBeFalse();
 });

@@ -7,7 +7,6 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
-    import type { CloudProviderType } from '@/lib/cloud'
     import { Form } from '@inertiajs/svelte'
     import { OctagonAlert } from '@lucide/svelte'
 
@@ -17,15 +16,14 @@
     let {
         server,
         provider,
-        type,
+        powerCycle,
         open = $bindable(false)
-    }: { server: { id: string; name: string }; provider: string; type: CloudProviderType; open?: boolean } = $props()
+    }: { server: { id: string; name: string }; provider: string; powerCycle: boolean; open?: boolean } = $props()
 
     let choices = $state<Choices | null>(null)
     let failure = $state<string | null>(null)
     let size = $state('')
-
-    const cycles = $derived(type === 'hetzner' || type === 'digitalocean')
+    let request = 0
     const options = $derived(
         (choices?.sizes ?? []).map((choice) => ({
             value: choice.id,
@@ -33,12 +31,24 @@
         }))
     )
 
-    $effect(() => {
-        if (!open) {
-            return
+    function unavailable(status: number | null): string {
+        if (status === 404) {
+            return `Coresmith can't resize ${server.name} right now. Reload the page to see why.`
         }
 
-        let cancelled = false
+        if (status === 419) {
+            return 'This page is out of date. Reload it, then try again.'
+        }
+
+        if (status === 429) {
+            return 'Too many requests for a moment. Wait a minute, then try again.'
+        }
+
+        return `Coresmith couldn't load the sizes from ${provider}. Try again in a minute.`
+    }
+
+    function load() {
+        const mine = ++request
 
         choices = null
         failure = null
@@ -46,9 +56,15 @@
         fetch(route('servers.cloud.sizes', server.id), {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         })
-            .then((response) => response.json())
-            .then((body: Choices | { error: string }) => {
-                if (cancelled) {
+            .then(async (response) => {
+                if (!response.ok) {
+                    return { error: unavailable(response.status) }
+                }
+
+                return (await response.json()) as Choices | { error: string }
+            })
+            .then((body) => {
+                if (mine !== request) {
                     return
                 }
 
@@ -60,13 +76,17 @@
                 }
             })
             .catch(() => {
-                if (!cancelled) {
-                    failure = `Coresmith couldn't load the sizes from ${provider}. Try again in a minute.`
+                if (mine === request) {
+                    failure = unavailable(null)
                 }
             })
+    }
 
-        return () => {
-            cancelled = true
+    $effect(() => {
+        if (open) {
+            load()
+        } else {
+            request++
         }
     })
 
@@ -87,7 +107,7 @@
                 <Dialog.Header>
                     <Dialog.Title>Resize {server.name}</Dialog.Title>
                     <Dialog.Description
-                        >{cycles
+                        >{powerCycle
                             ? `${server.name} shuts down, ${provider} moves it to the new size, and it starts again. Apps are offline for a few minutes.`
                             : `${provider} moves ${server.name} to the new size and starts it again. Apps are offline for a few minutes.`}</Dialog.Description
                     >
@@ -102,6 +122,10 @@
                             <OctagonAlert class="mt-0.5 size-4 shrink-0 text-destructive" />
                             <span>{failure}</span>
                         </div>
+                    {:else if choices && choices.sizes.length === 0}
+                        <p class="m-0 text-[12.5px] text-muted-foreground" role="status">
+                            {`${provider} has no other size ${server.name} can move to from ${choices.current.id}.`}
+                        </p>
                     {:else if choices}
                         <Label for="resize-size" class="mb-1.5">New size</Label>
                         <NativeSelect
@@ -121,9 +145,12 @@
                 </div>
 
                 <Dialog.Footer>
-                    {#if choices}
+                    {#if choices && choices.sizes.length > 0}
                         <Button variant="ghost" type="button" onclick={close}>Keep {choices.current.id}</Button>
                         <Button type="submit" disabled={processing || size === ''}>Resize to {size}</Button>
+                    {:else if failure}
+                        <Button variant="ghost" type="button" onclick={close}>Close</Button>
+                        <Button variant="outline" type="button" onclick={load}>Try again</Button>
                     {:else}
                         <Button variant="ghost" type="button" onclick={close}>Close</Button>
                     {/if}

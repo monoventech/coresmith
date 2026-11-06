@@ -58,7 +58,6 @@ test.describe('setup', () => {
             expect((await check.boundingBox())?.width).toBe(16)
         }
     })
-
 })
 
 test.describe('the first server in setup', () => {
@@ -69,7 +68,10 @@ test.describe('the first server in setup', () => {
     test('the first server can come from a provider or an existing vm', async ({ page }) => {
         await page.goto('/foundry/setup?step=1')
 
-        await expect(page.getByRole('button', { name: /^Provision through a provider/ })).toHaveAttribute('aria-pressed', 'true')
+        await expect(page.getByRole('button', { name: /^Provision through a provider/ })).toHaveAttribute(
+            'aria-pressed',
+            'true'
+        )
         await expect(page.getByLabel('Provider')).toBeVisible()
         await expect(page.getByLabel('API token')).toBeVisible()
 
@@ -96,6 +98,45 @@ test.describe('the first server in setup', () => {
         await expect(step).toContainText('Creating kiln-01 at Hetzner Cloud')
         await expect(step).toContainText('Step 3 of 4')
         await expect(step).toContainText('Provisioning starts by itself once Coresmith can sign in.')
+    })
+
+    test('a server being created moves on in setup without reloading the page', async ({ page }) => {
+        let moved = false
+
+        await page.clock.install()
+        await page.route(
+            (url) => url.pathname === '/kiln/setup',
+            async (route) => {
+                if (!moved || !route.request().headers()['x-inertia']) {
+                    return route.continue()
+                }
+
+                const response = await route.fetch()
+                const visit = await response.json()
+                const task = visit.props?.server?.cloud?.task
+
+                if (task) {
+                    task.position = 4
+                    task.steps = task.steps.map((entry: Record<string, unknown>, index: number) => ({
+                        ...entry,
+                        state: index < 3 ? 'done' : 'running'
+                    }))
+                }
+
+                await route.fulfill({ response, json: visit })
+            }
+        )
+        await page.goto('/kiln/setup?step=2')
+
+        const step = page.getByTestId('setup-step')
+
+        await expect(step).toContainText('Step 3 of 4')
+
+        moved = true
+        await page.clock.fastForward(3_500)
+
+        await expect(step).toContainText('Step 4 of 4')
+        await expect(page).toHaveURL(/\/kiln\/setup\?step=2$/)
     })
 })
 

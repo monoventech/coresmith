@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { DatabaseSync } from 'node:sqlite'
 import {
     asMember,
     backToMonoven,
@@ -13,6 +14,21 @@ import {
 
 function provider(page: Page) {
     return page.getByLabel('Provider')
+}
+
+function finishDestroy(name: string) {
+    const database = new DatabaseSync('database/e2e.sqlite')
+
+    try {
+        database.exec('PRAGMA busy_timeout = 5000')
+        database
+            .prepare(
+                "UPDATE servers SET deleted_at = datetime('now'), provider_task = json_set(provider_task, '$.state', 'done') WHERE name = ?"
+            )
+            .run(name)
+    } finally {
+        database.close()
+    }
 }
 
 test.describe('provider accounts', () => {
@@ -76,6 +92,27 @@ test.describe('provider accounts', () => {
         await expect(card).toContainText('No provider connected yet.')
     })
 
+    test('an account is renamed without its token being checked again', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'Sandbox', ' ')
+        const renamed = own(testInfo, 'Renamed', ' ')
+
+        await page.goto('/stray/settings/team')
+        await page
+            .getByTestId('cloud-account-row')
+            .filter({ hasText: name })
+            .getByRole('button', { name: 'Rename' })
+            .click()
+
+        await expect(dialog(page)).toContainText('The name is only for the panel, nothing changes at Hetzner Cloud.')
+
+        await dialog(page).getByLabel('Name').fill(renamed)
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+
+        await expect(toast(page)).toContainText('Saved.')
+        await expect(page.getByTestId('cloud-account-row').filter({ hasText: renamed })).toHaveCount(1)
+        await expect(page.getByTestId('cloud-account-row').filter({ hasText: name })).toHaveCount(0)
+    })
+
     test('a token is replaced only once the new one is checked', async ({ page }) => {
         await page.goto('/settings/team')
         await page
@@ -90,6 +127,15 @@ test.describe('provider accounts', () => {
     })
 })
 
+asMember('a deployer sees why a destroy failed but cannot detach the server', async ({ page }) => {
+    await gotoServer(page, 'destroy-failed')
+
+    const banner = page.getByTestId('cloud-task-banner')
+
+    await expect(banner).toContainText('server is protected')
+    await expect(banner.getByRole('button')).toHaveCount(0)
+})
+
 asMember('a deployer sees the accounts but cannot change them', async ({ page }) => {
     await page.goto('/settings/team')
 
@@ -98,6 +144,7 @@ asMember('a deployer sees the accounts but cannot change them', async ({ page })
     await expect(card).toContainText('Hetzner Cloud')
     await expect(card.getByRole('button', { name: 'Add a provider' })).toHaveCount(0)
     await expect(card.getByRole('button', { name: 'Replace token' })).toHaveCount(0)
+    await expect(card.getByRole('button', { name: 'Rename' })).toHaveCount(0)
     await expect(card.getByRole('button', { name: /^Remove / })).toHaveCount(0)
 })
 
@@ -139,6 +186,38 @@ test.describe('provisioning through a provider', () => {
         await expect(page.getByLabel('Size').locator('option')).toHaveCount(1)
         await expect(page.getByLabel('Size')).toHaveValue('cpx21')
         await expect(page.getByLabel('Size').locator('option')).toContainText('€8.49/mo')
+    })
+
+    test('a size with no price in the chosen region shows no price there, never its price elsewhere', async ({
+        page
+    }) => {
+        await page.route(
+            (url) => /\/servers\/create$/.test(url.pathname),
+            async (route) => {
+                if (!route.request().headers()['x-inertia']) {
+                    return route.continue()
+                }
+
+                const response = await route.fetch()
+                const visit = await response.json()
+
+                for (const size of visit.props?.catalog?.sizes ?? []) {
+                    if (size.id === 'cx22') {
+                        size.price = '€9.99'
+                        size.prices = { ...size.prices, fsn1: null }
+                    }
+                }
+
+                await route.fulfill({ response, json: visit })
+            }
+        )
+        await page.goto('/servers/create')
+        await provider(page).selectOption({ label: 'Hetzner Cloud' })
+
+        await expect(page.getByLabel('Size')).toHaveValue('cx22')
+        await expect(page.getByLabel('Size').locator('option[value="cx22"]')).not.toContainText('€')
+        await expect(page.getByRole('main')).toContainText('cx22 · 40 GB disk, billed by Hetzner Cloud.')
+        await expect(page.getByRole('main')).not.toContainText('€9.99')
     })
 
     test('a server is created at the provider and the page follows it', async ({ page }) => {
@@ -204,6 +283,22 @@ test.describe('provisioning through a provider', () => {
         )
 
         await dialog(page).getByRole('button', { name: 'Keep it' }).click()
+
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('detaching a creation the provider refused says nothing was created there', async ({ page }) => {
+        await gotoServer(page, 'refused-create')
+        await page.getByRole('button', { name: 'Detach', exact: true }).click()
+
+        const detach = page.getByRole('dialog', { name: 'Detach refused-create?' })
+
+        await expect(detach).toContainText(
+            'Nothing was created at Hetzner Cloud, so refused-create only leaves the panel.'
+        )
+        await expect(detach).not.toContainText('VM')
+
+        await detach.getByRole('button', { name: 'Keep it' }).click()
 
         await expect(dialog(page)).toHaveCount(0)
     })
@@ -287,6 +382,26 @@ test.describe('destroying a provider server', () => {
         await expect(dialog(page)).toHaveCount(0)
     })
 
+    test('a destroy that finishes while its page is open lands on the fleet with a confirmation', async ({
+        page
+    }, testInfo) => {
+        const name = own(testInfo, 'gone')
+
+        await page.clock.install()
+        await gotoServer(page, name)
+        await expect(page.getByTestId('cloud-task-banner')).toContainText(`Destroying ${name}`)
+
+        finishDestroy(name)
+        await page.clock.fastForward(65_000)
+
+        await expect(page).toHaveURL(/\/dashboard$/)
+        await expect(toast(page)).toContainText(
+            `Destroyed. ${name} was deleted at Hetzner Cloud, and billing for it stopped.`
+        )
+        await expect(page.getByTestId('server-card').getByRole('link', { name, exact: true })).toHaveCount(0)
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+    })
+
     test('a failed destroy says why and offers to try again or detach', async ({ page }) => {
         await gotoServer(page, 'destroy-failed')
 
@@ -330,6 +445,56 @@ test.describe('resizing and rebooting through the provider', () => {
         await expect(dialog(page)).toHaveCount(0)
     })
 
+    test('the resize dialog says when the sizes could not be loaded, and loads them on a second try', async ({
+        page
+    }) => {
+        let refuse = true
+
+        await page.route('**/servers/*/cloud/sizes', (route) =>
+            refuse ? route.fulfill({ status: 429, json: { message: 'Too Many Attempts.' } }) : route.continue()
+        )
+        await gotoServer(page, 'outpost-01')
+        await page.getByRole('button', { name: 'Resize', exact: true }).click()
+
+        await expect(dialog(page)).toContainText('Too many requests for a moment. Wait a minute, then try again.')
+
+        refuse = false
+        await dialog(page).getByRole('button', { name: 'Try again' }).click()
+
+        await expect(dialog(page).getByLabel('New size')).toBeVisible()
+    })
+
+    test('the resize dialog says when the server can no longer be resized', async ({ page }) => {
+        await page.route('**/servers/*/cloud/sizes', (route) =>
+            route.fulfill({ status: 404, json: { message: 'Not Found' } })
+        )
+        await gotoServer(page, 'outpost-01')
+        await page.getByRole('button', { name: 'Resize', exact: true }).click()
+
+        await expect(dialog(page)).toContainText(
+            "Coresmith can't resize outpost-01 right now. Reload the page to see why."
+        )
+
+        await dialog(page).getByRole('button', { name: 'Close' }).click()
+
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('the resize dialog says when no size fits', async ({ page }) => {
+        await page.route('**/servers/*/cloud/sizes', async (route) => {
+            const response = await route.fetch()
+
+            await route.fulfill({ response, json: { ...(await response.json()), sizes: [] } })
+        })
+        await gotoServer(page, 'outpost-01')
+        await page.getByRole('button', { name: 'Resize', exact: true }).click()
+
+        await expect(dialog(page)).toContainText(
+            'DigitalOcean has no other size outpost-01 can move to from s-1vcpu-2gb.'
+        )
+        await expect(dialog(page).getByRole('button', { name: /^Resize to/ })).toHaveCount(0)
+    })
+
     test('a provider server is rebooted from the header', async ({ page }) => {
         await gotoServer(page, 'outpost-01')
         await page.getByRole('button', { name: 'Reboot server' }).click()
@@ -368,5 +533,36 @@ test.describe('provider servers on a phone', () => {
             .boundingBox()
 
         expect(dismiss?.height ?? 0).toBeGreaterThanOrEqual(44)
+    })
+
+    test('the cloud providers card can be tapped', async ({ page }) => {
+        await page.goto('/settings/team')
+        await noSidewaysScroll(page)
+
+        const card = page.getByTestId('cloud-providers-card')
+        const row = card.getByTestId('cloud-account-row').filter({ hasText: 'Linode' })
+
+        for (const [label, control] of [
+            ['Add a provider', card.getByRole('button', { name: 'Add a provider' })],
+            ['Rename', row.getByRole('button', { name: 'Rename' })],
+            ['Replace token', row.getByRole('button', { name: 'Replace token' })],
+            ['Remove Linode', row.getByRole('button', { name: 'Remove Linode' })]
+        ] as const) {
+            const box = await control.boundingBox()
+
+            expect(box?.height ?? 0, label).toBeGreaterThanOrEqual(44)
+            expect(box?.width ?? 0, label).toBeGreaterThanOrEqual(44)
+        }
+    })
+
+    test('a failed creation can be tapped', async ({ page }) => {
+        await gotoServer(page, 'failed-create')
+        await noSidewaysScroll(page)
+
+        for (const name of ['Try again', 'Destroy it']) {
+            const box = await page.getByRole('button', { name, exact: true }).boundingBox()
+
+            expect(box?.height ?? 0, name).toBeGreaterThanOrEqual(44)
+        }
     })
 })

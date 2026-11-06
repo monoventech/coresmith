@@ -241,6 +241,16 @@ const PAGES: [string, Visit][] = [
         }
     ],
     ['Server whose resize failed', (page) => gotoServer(page, 'resize-failed')],
+    ['Server being destroyed', (page) => gotoServer(page, 'destroying-server')],
+    ['Server whose destroy failed', (page) => gotoServer(page, 'destroy-failed')],
+    [
+        'Remove a creation the provider refused',
+        async (page) => {
+            await gotoServer(page, 'refused-create')
+            await page.getByRole('button', { name: 'Remove', exact: true }).click()
+            await dialog(page).getByRole('button', { name: 'Keep it' }).waitFor()
+        }
+    ],
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],
@@ -295,6 +305,38 @@ const PAGES: [string, Visit][] = [
         }
     ],
     [
+        'Replace token dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page
+                .getByTestId('cloud-account-row')
+                .filter({ hasText: 'Linode' })
+                .getByRole('button', { name: 'Replace token' })
+                .click()
+            await dialog(page).getByLabel('API token').waitFor()
+        }
+    ],
+    [
+        'Rename account dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page
+                .getByTestId('cloud-account-row')
+                .filter({ hasText: 'Linode' })
+                .getByRole('button', { name: 'Rename' })
+                .click()
+            await dialog(page).getByLabel('Name').waitFor()
+        }
+    ],
+    [
+        'Remove account dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Remove DigitalOcean' }).click()
+            await dialog(page).getByRole('button', { name: 'Remove account' }).waitFor()
+        }
+    ],
+    [
         'Database backups to S3 dialog',
         async (page) => {
             await page.goto('/settings/team')
@@ -324,6 +366,7 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Git settings with a suspended GitHub installation', direct('/paused/settings/git')],
     ['Setup before GitHub is connected', direct('/acme/setup')],
     ['Setup with a provider to connect', direct('/foundry/setup?step=1')],
+    ['Setup while a server is being created', direct('/kiln/setup?step=2')],
     [
         'Setup for a member before GitHub is connected',
         async (page) => {

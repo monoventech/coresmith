@@ -24,6 +24,8 @@
     let replaceOpen = $state(false)
     let removing = $state<CloudAccountRow | null>(null)
     let removeOpen = $state(false)
+    let renaming = $state<CloudAccountRow | null>(null)
+    let renameOpen = $state(false)
     let working = $state(false)
 
     const type = $derived(cloud.types.find((option) => option.value === chosen) ?? cloud.types[0])
@@ -49,6 +51,11 @@
     function askReplace(account: CloudAccountRow) {
         replacing = account
         replaceOpen = true
+    }
+
+    function askRename(account: CloudAccountRow) {
+        renaming = account
+        renameOpen = true
     }
 
     function askRemove(account: CloudAccountRow) {
@@ -119,10 +126,11 @@
                             >{account.servers === 1 ? '1 server' : `${account.servers} servers`}</span
                         >
                         {#if cloud.can_manage}
+                            <Button variant="ghost" size="sm" onclick={() => askRename(account)}>Rename</Button>
                             <Button variant="ghost" size="sm" onclick={() => askReplace(account)}>Replace token</Button>
                             <button
                                 type="button"
-                                class="focus-ring inline-flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted"
+                                class="focus-ring inline-flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted max-sm:size-11"
                                 aria-label="Remove {account.name}"
                                 title="Remove {account.name}"
                                 onclick={() => askRemove(account)}
@@ -221,6 +229,45 @@
                             >Keep the current token</Button
                         >
                         <Button type="submit" disabled={processing}>Replace token</Button>
+                    </Dialog.Footer>
+                {/snippet}
+            </Form>
+        {/if}
+    </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={renameOpen}>
+    <Dialog.Content>
+        {#if renaming}
+            {@const account = renaming}
+            <Form
+                method="put"
+                action={route('cloud-providers.update', account.id)}
+                options={{ preserveScroll: true }}
+                onSuccess={() => (renameOpen = false)}
+            >
+                {#snippet children({ errors, processing })}
+                    <Dialog.Header>
+                        <Dialog.Title>Rename {account.name}</Dialog.Title>
+                        <Dialog.Description
+                            >The name is only for the panel, nothing changes at {account.provider}.</Dialog.Description
+                        >
+                    </Dialog.Header>
+                    <div class="mt-4">
+                        <Label for="cloud-rename" class="mb-1.5">Name</Label>
+                        <Input
+                            id="cloud-rename"
+                            name="name"
+                            value={account.name}
+                            required
+                            maxlength={60}
+                            aria-invalid={errors.name ? true : undefined}
+                        />
+                        <FieldError message={errors.name} />
+                    </div>
+                    <Dialog.Footer>
+                        <Button variant="ghost" type="button" onclick={() => (renameOpen = false)}>Cancel</Button>
+                        <Button type="submit" disabled={processing}>Save</Button>
                     </Dialog.Footer>
                 {/snippet}
             </Form>

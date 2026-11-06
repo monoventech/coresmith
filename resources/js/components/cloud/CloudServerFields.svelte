@@ -53,10 +53,10 @@
             catalog.defaults.image
         )
     )
-    const price = $derived(chosen === null ? null : (chosen.prices[region] ?? chosen.price))
+    const price = $derived(chosen === null ? null : (chosen.prices[region] ?? null))
 
     function priced(option: CloudSize): string {
-        const amount = option.prices[region] ?? option.price
+        const amount = option.prices[region] ?? null
 
         return amount === null ? option.label : `${option.label} · ${amount}/mo`
     }

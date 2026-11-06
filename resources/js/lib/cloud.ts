@@ -84,6 +84,7 @@ export type CloudServer = {
     image: string | null
     monthly: string | null
     task: CloudTask | null
+    power_cycle: boolean
     uncertain: boolean
     can: { retry: boolean; remove: boolean; detach: boolean; destroy: boolean; resize: boolean; dismiss: boolean }
 }

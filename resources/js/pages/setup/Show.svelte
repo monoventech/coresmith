@@ -99,6 +99,16 @@
         router.visit(route('setup.show', { step: index }), { preserveScroll: true })
     }
 
+    $effect(() => {
+        if (step !== 2 || (creation?.task?.state !== 'running' && provisioning?.status !== 'provisioning')) {
+            return
+        }
+
+        const timer = setInterval(() => router.reload({ only: ['server'] }), 3000)
+
+        return () => clearInterval(timer)
+    })
+
     function choose(value: string) {
         if (value !== choice) {
             picks = {}
