@@ -30,6 +30,19 @@ test.describe('checking a server before provisioning', () => {
         await expect(report.getByRole('button', { name: 'Proceed with provisioning' })).toBeDisabled()
     })
 
+    test("the panel's own host is refused without advice that would break the panel", async ({ page }) => {
+        await gotoServer(page, 'panel-host')
+
+        const report = page.getByTestId('audit-report')
+
+        await expect(report.getByTestId('audit-finding')).toHaveCount(1)
+        await expect(report).toContainText('This server runs the Coresmith panel itself')
+        await expect(report).toContainText('Add a different server for your apps.')
+        await expect(report).toContainText('1 blocker')
+        await expect(report).not.toContainText('Rename or remove')
+        await expect(report.getByRole('button', { name: 'Proceed with provisioning' })).toBeDisabled()
+    })
+
     test('a web server in the way is stopped after confirming, and the server is checked again', async ({
         page
     }, testInfo) => {

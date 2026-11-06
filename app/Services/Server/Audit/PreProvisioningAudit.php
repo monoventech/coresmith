@@ -44,6 +44,8 @@ final class PreProvisioningAudit
     ls -d /root/.nvm /root/.rbenv /root/.rvm /home/*/.nvm /home/*/.rbenv /home/*/.rvm 2>/dev/null
     echo '== docker'
     ps -C dockerd -o rss= 2>/dev/null | head -n 1
+    echo '== panel'
+    ls -d /opt/coresmith /etc/systemd/system/coresmith-horizon.service /etc/systemd/system/coresmith-reverb.service /etc/systemd/system/coresmith-scheduler.timer /etc/systemd/system/coresmith-update.path 2>/dev/null
     exit 0
     BASH;
 
@@ -61,6 +63,11 @@ final class PreProvisioningAudit
     public function report(string $output, Server $server): AuditReport
     {
         $sections = $this->sections($output);
+
+        if (($sections['panel'] ?? []) !== []) {
+            return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs the Coresmith panel itself', 'Add a different server for your apps.')]);
+        }
+
         $listeners = $this->ports->parse(implode("\n", $sections['ports'] ?? []));
         $services = array_map(fn(string $unit): string => Str::before($unit, '.service'), $sections['services'] ?? []);
         $ports = $this->portFindings($listeners, $services);

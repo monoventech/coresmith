@@ -14,6 +14,7 @@ The public repository (`monoven/coresmith`), its first release and the `get.core
 - At least 5GB of free disk (10GB or more recommended) and 2GB of RAM or more (it runs with less, slowly).
 - Ports 80 and 443 open to your users. The installer keeps your SSH port open.
 - For HTTPS on a name, a domain whose DNS points at the server. Without one the panel answers on the server's IP address.
+- Run the panel on a server of its own. Coresmith can't provision the server the panel runs on, so add other servers for your apps.
 
 ## Install
 

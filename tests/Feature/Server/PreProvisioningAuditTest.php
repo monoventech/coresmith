@@ -118,6 +118,38 @@ test('a coresmith user blocks a fresh server but not one Coresmith already start
         ->and(auditFinding(auditFindings($probe), 'app_users')['title'])->toBe('1 Coresmith app user exists');
 });
 
+test("the panel's own host is refused with one blocker and none of the advice that would break the panel", function (array $panel, array $server) {
+    $findings = auditFindings(auditProbe([
+        'ports' => ['LISTEN 0 4096 *:80 *:* users:(("caddy",pid=900,fd=7))', 'LISTEN 0 4096 *:443 *:* users:(("caddy",pid=900,fd=8))', 'LISTEN 0 4096 127.0.0.1:6001 0.0.0.0:* users:(("php",pid=950,fd=9))'],
+        'services' => ['caddy.service', 'coresmith-horizon.service', 'php8.5-fpm.service', 'redis-server.service'],
+        'users' => ['coresmith'],
+        'panel' => $panel,
+    ]), $server);
+
+    expect($findings)->toBe([[
+        'key' => 'panel_host',
+        'severity' => 'blocker',
+        'title' => 'This server runs the Coresmith panel itself',
+        'detail' => 'Add a different server for your apps.',
+        'fix' => null,
+    ]]);
+})->with([
+    'its directory' => [['/opt/coresmith'], []],
+    'only its units' => [['/etc/systemd/system/coresmith-horizon.service', '/etc/systemd/system/coresmith-scheduler.timer'], []],
+    'once provisioning has started' => [['/opt/coresmith', '/etc/systemd/system/coresmith-reverb.service'], ['provisioning_phase' => 3]],
+]);
+
+test('the probe looks for the panel on the host without changing anything', function () {
+    $transport = new FakeSSHTransport;
+    $transport->respondTo('base64 -d', auditProbe());
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'ssh_user' => 'root']);
+
+    app(PreProvisioningAudit::class)->run((new SSHConnection($server, $transport))->connect());
+
+    expect(base64_decode(explode("'", $transport->commands()[0])[1]))
+        ->toContain("echo '== panel'\nls -d /opt/coresmith /etc/systemd/system/coresmith-horizon.service /etc/systemd/system/coresmith-reverb.service /etc/systemd/system/coresmith-scheduler.timer /etc/systemd/system/coresmith-update.path 2>/dev/null\n");
+});
+
 test('disk and memory thresholds', function (string $disk, string $memory, ?string $diskSeverity, ?string $memorySeverity) {
     $findings = auditFindings(auditProbe(['disk' => [$disk], 'memory' => [$memory]]));
 

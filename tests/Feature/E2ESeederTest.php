@@ -78,3 +78,12 @@ test('the browser seed has a team whose github connection lost its app, with a r
         ->and(app(RepositoryCatalog::class)->cached($connection)['repositories'][0]['full_name'] ?? null)->toBe('stray-works/harbor')
         ->and(Cache::get(RepositoryCatalog::branchesKey($connection, '70000201')))->toBe(['main']);
 });
+
+test("the browser seed has the panel's own host refused by the audit itself", function () {
+    e2eSeedRun();
+
+    $audit = Server::query()->where('name', 'panel-host')->sole()->audit;
+
+    expect($audit['state'])->toBe('done')
+        ->and(array_column($audit['findings'], 'key'))->toBe(['panel_host']);
+});

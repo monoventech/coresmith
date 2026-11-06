@@ -35,6 +35,7 @@ use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
+use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\CertificateCheck;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\ServerReachability;
@@ -332,6 +333,8 @@ final class E2ESeeder extends Seeder
 
         $this->server('audit-server', '203.0.113.60', ServerStatus::Pending)->forceFill(['audit' => $done($blocked)])->save();
         $this->server('checking-server', '203.0.113.61', ServerStatus::Pending)->forceFill(['audit' => ['state' => 'running', 'started_at' => now()->addHours(5)->toIso8601String()]])->save();
+        $panelHost = $this->server('panel-host', '203.0.113.63', ServerStatus::Pending);
+        $panelHost->forceFill(['audit' => $done(app(PreProvisioningAudit::class)->report("== users\ncoresmith\n== panel\n/opt/coresmith\n/etc/systemd/system/coresmith-horizon.service\n", $panelHost)->toArray())])->save();
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $this->server("blocked-{$code}", '203.0.113.' . (70 + $index), ServerStatus::Pending)->forceFill(['audit' => $done($blocked)])->save();
