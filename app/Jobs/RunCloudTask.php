@@ -12,6 +12,9 @@ use App\Enums\CloudFailure;
 use App\Exceptions\CloudProviderException;
 use App\Models\CloudProvider;
 use App\Models\Server;
+use App\Notifications\CloudTaskFailedNotification;
+use App\Notifications\Preferences;
+use App\Notifications\TeamNotifier;
 use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
@@ -177,5 +180,11 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
         CloudTask::fail($server, (string) $result->reason);
         $fresh = $server->fresh() ?? $server;
         $handler->failed($fresh, CloudTask::of($fresh) ?? $task, $api, (string) $result->reason);
+
+        rescue(fn() => app(TeamNotifier::class)->send(
+            $fresh->team,
+            Preferences::PROVISIONING,
+            new CloudTaskFailedNotification($fresh, $task->type, (string) $result->reason),
+        ), report: true);
     }
 }

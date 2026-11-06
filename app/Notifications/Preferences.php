@@ -48,7 +48,7 @@ final class Preferences
         self::DEPLOY_FAILED => 'Email immediately when any phase fails',
         self::DISK_PRESSURE => 'Server disk warnings, at most once a day',
         self::SERVER_ALERTS => 'A server stops answering, runs out of memory, or a certificate is about to expire',
-        self::PROVISIONING => 'When a server is ready, or provisioning stops partway',
+        self::PROVISIONING => "When a server is ready, provisioning stops partway, or its provider can't create, resize or destroy it",
         self::TOGGLE_CHANGES => 'When someone stops, starts or puts an app into maintenance',
         self::WEEKLY_DIGEST => 'Deploys, rollbacks and warnings, every Monday',
     ];

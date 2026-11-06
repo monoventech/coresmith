@@ -246,6 +246,7 @@ test('a refused create says what to do and removes the uploaded key', function (
         ->provisioning_log->toContain("failed: {$reason}")
         ->and($activity->subject?->is($server))->toBeTrue()
         ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'step' => 'create', 'reason' => $reason])
+        ->and($activity->causer?->getKey())->toBe(cloudCreatingTask($server)->by)
         ->and(Activity::query()->where('description', 'server_created_at_provider')->exists())->toBeFalse();
     Sleep::assertNeverSlept();
     Queue::assertNothingPushed();

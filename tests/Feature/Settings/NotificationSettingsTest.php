@@ -50,7 +50,7 @@ test('the notifications page lists every preference with its state and whether i
                 ['key' => 'deploy_failed', 'label' => 'Deploy failed', 'description' => 'Email immediately when any phase fails', 'on' => true, 'locked' => true],
                 ['key' => 'disk_pressure', 'label' => 'Disk above 80%', 'description' => 'Server disk warnings, at most once a day', 'on' => false, 'locked' => false],
                 ['key' => 'server_alerts', 'label' => 'Server problems', 'description' => 'A server stops answering, runs out of memory, or a certificate is about to expire', 'on' => true, 'locked' => false],
-                ['key' => 'provisioning', 'label' => 'Provisioning', 'description' => 'When a server is ready, or provisioning stops partway', 'on' => true, 'locked' => false],
+                ['key' => 'provisioning', 'label' => 'Provisioning', 'description' => "When a server is ready, provisioning stops partway, or its provider can't create, resize or destroy it", 'on' => true, 'locked' => false],
                 ['key' => 'toggle_changes', 'label' => 'Toggle changes', 'description' => 'When someone stops, starts or puts an app into maintenance', 'on' => true, 'locked' => false],
                 ['key' => 'weekly_digest', 'label' => 'Weekly digest', 'description' => 'Deploys, rollbacks and warnings, every Monday', 'on' => false, 'locked' => false],
             ]));

@@ -288,7 +288,7 @@ final class ServerController extends Controller
             return back()->with('error', "A deploy is running on {$server->name}. Reboot once it finishes.");
         }
 
-        RebootServer::dispatch($server);
+        RebootServer::dispatch($server, request()->user());
 
         return back()->with('success', "Reboot scheduled. {$server->name} restarts in a few seconds, apps come back via systemd.");
     }

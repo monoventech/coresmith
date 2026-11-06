@@ -8,16 +8,19 @@ use App\Events\DeploymentFailed;
 use App\Jobs\DetectStaleDeployments;
 use App\Listeners\NotifyDeploymentFailed;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Notifications\ApplicationToggledNotification;
+use App\Notifications\CloudTaskFailedNotification;
 use App\Notifications\DeploymentFailedNotification;
 use App\Notifications\DiskPressureNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Notifications\WeeklyDigestNotification;
+use App\Services\Cloud\Tasks\CloudTask;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
@@ -219,4 +222,21 @@ test('the weekly digest counts in words that match the numbers', function (array
         ['deployed' => 12, 'failed' => 2, 'rollbacks' => 3, 'warnings' => 0],
         ['12 deploys went live and 2 failed without reaching anyone.', '3 rollbacks and 0 warnings.'],
     ],
+]);
+
+test('a failed provider task mail says what failed and why, and links to the server', function (string $type, string $subject) {
+    $server = Server::factory()->fromProvider(CloudProvider::factory()->create())->create(['name' => 'outpost-02']);
+    $notice = new CloudTaskFailedNotification($server, $type, 'Hetzner Cloud refused the request.');
+    $mail = $notice->toMail(new User);
+
+    expect($notice)->toBeInstanceOf(ShouldQueue::class)
+        ->and($notice->via(new User))->toBe(['mail'])
+        ->and($mail->subject)->toBe($subject)
+        ->and($mail->introLines)->toBe(['Hetzner Cloud refused the request.'])
+        ->and($mail->actionText)->toBe('Open outpost-02')
+        ->and($mail->actionUrl)->toBe(route('servers.show', $server));
+})->with([
+    'a creation' => [CloudTask::CREATE, 'Creating outpost-02 at Hetzner Cloud failed'],
+    'a destroy' => [CloudTask::DESTROY, 'Destroying outpost-02 at Hetzner Cloud failed'],
+    'a resize' => [CloudTask::RESIZE, 'Resizing outpost-02 at Hetzner Cloud failed'],
 ]);

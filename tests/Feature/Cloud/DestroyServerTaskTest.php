@@ -108,7 +108,8 @@ test('a refusal says what to fix and keeps the server', function () {
     expect(Server::query()->find($server->id))->not->toBeNull()
         ->and($task->state)->toBe(CloudTask::FAILED)
         ->and($task->error)->toBe("Hetzner Cloud refused the request. Hetzner Cloud said: server is protected. Try again once that's fixed, or delete it in the Hetzner Cloud console and then detach it here.")
-        ->and(Activity::query()->where('description', 'server_destroy_failed')->sole()->properties['reason'])->toBe($task->error);
+        ->and(Activity::query()->where('description', 'server_destroy_failed')->sole()->properties['reason'])->toBe($task->error)
+        ->and(Activity::query()->where('description', 'server_destroy_failed')->sole()->causer?->getKey())->toBe($task->by);
 });
 
 test('a provider that stays unreachable is reported with what is still billed', function () {

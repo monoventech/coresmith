@@ -11,6 +11,7 @@ namespace App\Jobs;
 use App\Enums\CloudFailure;
 use App\Exceptions\CloudProviderException;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\SSH\SSHConnectionManager;
@@ -27,7 +28,7 @@ final class RebootServer implements ShouldQueue
 
     public int $timeout = 60;
 
-    public function __construct(private readonly Server $server)
+    public function __construct(private readonly Server $server, private readonly ?User $by = null)
     {
         $this->onQueue('default');
     }
@@ -42,7 +43,7 @@ final class RebootServer implements ShouldQueue
         $refusal = CloudTask::refusal($this->server, 'Reboot');
 
         if ($refusal !== null) {
-            activity()->performedOn($this->server)->withProperties(['reason' => $refusal])->log('server_reboot_failed');
+            activity()->performedOn($this->server)->causedBy($this->by)->withProperties(['reason' => $refusal])->log('server_reboot_failed');
 
             return;
         }
@@ -61,7 +62,7 @@ final class RebootServer implements ShouldQueue
             $connections->disconnect($this->server);
         }
 
-        activity()->performedOn($this->server)->log('server_rebooted');
+        activity()->performedOn($this->server)->causedBy($this->by)->log('server_rebooted');
     }
 
     private function throughProvider(CloudApiFactory $apis, string $label): void
@@ -73,11 +74,11 @@ final class RebootServer implements ShouldQueue
                 $this->server->cloudProvider->forceFill(['token_failed_at' => now()])->save();
             }
 
-            activity()->performedOn($this->server)->withProperties(['reason' => $e->getMessage()])->log('server_reboot_failed');
+            activity()->performedOn($this->server)->causedBy($this->by)->withProperties(['reason' => $e->getMessage()])->log('server_reboot_failed');
 
             throw $e;
         }
 
-        activity()->performedOn($this->server)->withProperties(['via' => $label])->log('server_reboot_requested');
+        activity()->performedOn($this->server)->causedBy($this->by)->withProperties(['via' => $label])->log('server_reboot_requested');
     }
 }

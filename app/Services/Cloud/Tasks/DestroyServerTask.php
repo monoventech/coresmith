@@ -84,6 +84,7 @@ final class DestroyServerTask implements CloudTaskHandler
     {
         activity()
             ->performedOn($server)
+            ->causedBy($task->by === null ? null : User::query()->find($task->by))
             ->withProperties(['provider' => ($api?->type() ?? $server->cloudProvider?->type)?->label() ?? 'the provider', 'reason' => $reason])
             ->log('server_destroy_failed');
     }

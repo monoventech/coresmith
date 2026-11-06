@@ -663,7 +663,7 @@ test('provisioning is a preference of its own, on by default', function () {
     expect(Preferences::PROVISIONING)->toBe('provisioning')
         ->and(Preferences::DEFAULTS[Preferences::PROVISIONING])->toBeTrue()
         ->and(Preferences::LABELS[Preferences::PROVISIONING])->toBe('Provisioning')
-        ->and(Preferences::DESCRIPTIONS[Preferences::PROVISIONING])->toBe('When a server is ready, or provisioning stops partway')
+        ->and(Preferences::DESCRIPTIONS[Preferences::PROVISIONING])->toBe("When a server is ready, provisioning stops partway, or its provider can't create, resize or destroy it")
         ->and(array_keys(Preferences::DEFAULTS))->toBe(['deploy_failed', 'disk_pressure', 'server_alerts', 'provisioning', 'toggle_changes', 'weekly_digest']);
 });
 

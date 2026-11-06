@@ -55,6 +55,29 @@ test('a provider server is rebooted through its provider, and is recorded as acc
         ->and(Activity::query()->where('description', 'server_rebooted')->exists())->toBeFalse();
 });
 
+test('a reboot is recorded against the person who asked for it', function (Closure $meanwhile, ?string $instance, string $description) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+    $server = cloudRebootingServer($team);
+    $server->forceFill(['provider_server_id' => $instance])->save();
+
+    $this->actingAs($user->fresh())->post(route('servers.reboot', $server))->assertSessionHas('success');
+
+    $meanwhile($this->api, $server);
+    $this->app['auth']->forgetGuards();
+    $job = unserialize(serialize(Queue::pushed(RebootServer::class)->sole()));
+    rescue(fn() => app()->call([$job, 'handle']), report: false);
+
+    expect(Activity::query()->where('description', $description)->sole()->causer?->is($user))->toBeTrue();
+})->with([
+    'accepted by the provider' => [fn() => null, '4711', 'server_reboot_requested'],
+    'refused by the provider' => [fn(FakeCloudApi $api) => $api->failing('reboot', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked')), '4711', 'server_reboot_failed'],
+    'waiting for provider work' => [fn(FakeCloudApi $api, Server $server) => CloudTask::start($server, CloudTask::RESIZE, 'power_off', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]), '4711', 'server_reboot_failed'],
+    'over SSH' => [fn() => null, null, 'server_rebooted'],
+]);
+
 test('a reboot queued before other provider work began does not reach the provider during it', function (string $type, string $step, string $reason) {
     $server = cloudRebootingServer();
     $job = new RebootServer($server);

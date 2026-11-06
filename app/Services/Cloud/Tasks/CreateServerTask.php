@@ -127,6 +127,7 @@ final class CreateServerTask implements CloudTaskHandler
 
         activity()
             ->performedOn($server)
+            ->causedBy($task->by === null ? null : User::query()->find($task->by))
             ->withProperties(['provider' => self::label($server, $api), 'step' => $task->step, 'reason' => $reason])
             ->log('server_creation_failed');
 

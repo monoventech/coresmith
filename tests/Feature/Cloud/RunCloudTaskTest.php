@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use App\Enums\CloudFailure;
 use App\Enums\CloudProviderType;
+use App\Enums\TeamRole;
 use App\Exceptions\CloudProviderException;
 use App\Jobs\ResumeCloudTasks;
 use App\Jobs\RunCloudTask;
 use App\Models\CloudProvider;
 use App\Models\Server;
 use App\Models\User;
+use App\Notifications\CloudTaskFailedNotification;
 use App\Services\Cloud\Contracts\CloudApi;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\HttpCloudApiFactory;
@@ -31,6 +33,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 use Tests\Support\FakeCloudApiFactory;
@@ -371,6 +374,34 @@ test('a failure that says when to come back is waited out for that long', functi
     'what the provider asked' => [12, 12],
     'nothing asked' => [null, RunCloudTask::RETRY_SECONDS],
 ]);
+
+test('a task that fails emails the team members who want provisioning news', function () {
+    Notification::fake();
+    $server = cloudTaskServer();
+    $wanting = User::factory()->create();
+    $optedOut = User::factory()->create(['notification_preferences' => ['provisioning' => false]]);
+    $server->team->members()->attach($wanting, ['role' => TeamRole::Member->value]);
+    $server->team->members()->attach($optedOut, ['role' => TeamRole::Member->value]);
+    cloudTaskResults(StepResult::fail('Hetzner Cloud refused the request.'));
+
+    cloudTaskRun($server);
+
+    Notification::assertSentTo($wanting, CloudTaskFailedNotification::class, fn(CloudTaskFailedNotification $notice): bool => $notice->server->is($server)
+        && $notice->type === 'probe'
+        && $notice->reason === 'Hetzner Cloud refused the request.');
+    Notification::assertNotSentTo($optedOut, CloudTaskFailedNotification::class);
+});
+
+test('a task that finishes emails nobody', function () {
+    Notification::fake();
+    $server = cloudTaskServer();
+    $server->team->members()->attach(User::factory()->create(), ['role' => TeamRole::Member->value]);
+    cloudTaskResults(StepResult::done());
+
+    cloudTaskRun($server);
+
+    Notification::assertNothingSent();
+});
 
 test('a provider refusal fails the task in its own words', function () {
     Exceptions::fake();
