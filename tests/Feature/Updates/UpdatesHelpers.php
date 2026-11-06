@@ -6,6 +6,7 @@ use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\PanelBackup;
+use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseHealth;
 use App\Services\Updates\ReleaseLayout;
@@ -208,7 +209,7 @@ function updatesMachineKey(array $command): ?string
         $first === 'bun' && $second === 'run' && ($command[2] ?? '') === 'build' => 'bun-build',
         $first === 'setfacl' => 'setfacl',
         $first === 'systemctl' && $second === 'is-active' => 'is-active',
-        $first === 'systemctl' && $second === 'show' => 'main-pid',
+        $first === 'systemctl' && $second === 'show' => 'started',
         $first === 'gpg' => 'gpg',
         $first === 'gpgconf' => 'gpgconf',
         default => null,
@@ -219,7 +220,6 @@ function updatesMachine(array $failures = []): void
 {
     $registry = updatesRegistry();
     $registry->processes = [];
-    $registry->pidReads = [];
 
     Process::fake(['*' => function (PendingProcess $process) use ($failures) {
         $registry = updatesRegistry();
@@ -296,11 +296,8 @@ function updatesMachineEffect(?string $key, array $command, PendingProcess $proc
             file_put_contents("{$process->path}/public/build/manifest.json", '{}');
 
             break;
-        case 'main-pid':
-            $unit = (string) ($command[2] ?? '');
-            $registry->pidReads[$unit] = ($registry->pidReads[$unit] ?? 0) + 1;
-
-            return Process::result(output: (1000 + (($failures['main-pid'] ?? null) === 'stuck' ? 1 : $registry->pidReads[$unit])) . "\n");
+        case 'started':
+            return Process::result(output: PanelServices::now() + 1 . "\n");
     }
 
     return Process::result();

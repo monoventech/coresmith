@@ -119,6 +119,11 @@ final class UpdateStatus
         return $this->copy(['signature' => $signature]);
     }
 
+    public function withFailedStep(string $step): self
+    {
+        return $this->copy(['failedStep' => $step]);
+    }
+
     public function finished(string $state, ?string $message = null, ?string $failedStep = null): self
     {
         return $this->copy(['state' => $state, 'message' => $message, 'failedStep' => $failedStep, 'finishedAt' => CarbonImmutable::now()]);

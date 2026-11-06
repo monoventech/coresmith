@@ -38,11 +38,11 @@ function updatesFailure(Closure $attempt): UpdateFailed
     throw new RuntimeException('Expected the step to fail.');
 }
 
-function updatesSystemd(array $mainPids, array $inactive = []): stdClass
+function updatesSystemd(array $starts, array $inactive = []): stdClass
 {
     $reads = (object) ['count' => []];
 
-    Process::fake(['*' => function (PendingProcess $process) use ($mainPids, $inactive, $reads) {
+    Process::fake(['*' => function (PendingProcess $process) use ($starts, $inactive, $reads) {
         $command = (array) $process->command;
         $unit = (string) ($command[2] ?? '');
 
@@ -54,7 +54,7 @@ function updatesSystemd(array $mainPids, array $inactive = []): stdClass
 
         if (($command[1] ?? null) === 'show') {
             $reads->count[$unit] = ($reads->count[$unit] ?? 0) + 1;
-            $answers = $mainPids[$unit] ?? [0];
+            $answers = $starts[$unit] ?? [0];
             $answer = $answers[min($reads->count[$unit], count($answers)) - 1];
 
             return Process::result(output: "{$answer}\n");
@@ -143,7 +143,7 @@ test('a job that outlasts the drain timeout stops the update', function (int $ti
     $failed = updatesFailure(fn() => updatesServices()->drain($timeout));
 
     expect($failed->step)->toBe('drain')
-        ->and($failed->getMessage())->toBe("A queued job is still running after {$duration}, so Coresmith stopped before changing anything. Let it finish, then update again.");
+        ->and($failed->getMessage())->toBe("A queued job is still running after {$duration}, so Coresmith stopped before changing anything. Horizon finishes that job before it takes new ones, then restarts on its own. Let it finish, then update again.");
 
     Sleep::assertSleptTimes($timeout);
 })->with([
@@ -153,40 +153,79 @@ test('a job that outlasts the drain timeout stops the update', function (int $ti
     'minutes' => [300, '5 minutes'],
 ]);
 
-test('a restart is proved by a new main pid', function () {
-    updatesSystemd(['coresmith-horizon' => [100, 100, 100, 200]]);
+test('a restart is proved by a main process that started after the switch', function () {
+    updatesSystemd(['coresmith-reverb' => [100, 100, 200]]);
     Artisan::spy();
 
-    updatesServices()->restart(['coresmith-horizon'], 90);
+    updatesServices()->restart(['coresmith-reverb'], 90, since: 150);
 
     Sleep::assertSleptTimes(2);
+    Artisan::shouldHaveReceived('call')->with('reverb:restart')->once();
+    Artisan::shouldNotHaveReceived('call', ['horizon:terminate']);
+});
+
+test('a horizon master that started after the switch counts before horizon can see it', function () {
+    updatesFakeHorizon([]);
+    updatesSystemd(['coresmith-horizon' => [200]]);
+    Artisan::spy();
+
+    updatesServices()->restart(['coresmith-horizon'], 90, since: 150);
+
+    Sleep::assertNeverSlept();
     Artisan::shouldHaveReceived('call')->with('horizon:terminate')->once();
-    Artisan::shouldNotHaveReceived('call', ['reverb:restart']);
 });
 
-test('a main pid of zero is a unit that has not come back yet', function () {
-    updatesSystemd(['coresmith-horizon' => [100, 0, 0, 300]]);
+test('a horizon master from before the switch is asked again until it makes way', function () {
+    updatesSystemd(['coresmith-horizon' => [100, 100, 300]]);
     Artisan::spy();
 
-    updatesServices()->restart(['coresmith-horizon'], 90);
+    updatesServices()->restart(['coresmith-horizon'], 90, since: 150);
 
     Sleep::assertSleptTimes(2);
+    Artisan::shouldHaveReceived('call')->with('horizon:terminate')->times(3);
 });
 
-test('a new main pid on a unit that is not active is not a restart', function () {
-    updatesSystemd(['coresmith-horizon' => [100, 200]], inactive: ['coresmith-horizon']);
+test('a process that started at the moment of the switch is not a restart', function () {
+    updatesSystemd(['coresmith-reverb' => [150]]);
     Artisan::spy();
 
-    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-horizon'], 4));
+    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-reverb'], 2, since: 150));
 
     expect($failed->step)->toBe('restart');
+});
+
+test('a unit with no main process has not come back yet', function () {
+    updatesSystemd(['coresmith-reverb' => [0, 0, 300]]);
+    Artisan::spy();
+
+    updatesServices()->restart(['coresmith-reverb'], 90, since: 150);
+
+    Sleep::assertSleptTimes(2);
+});
+
+test('a process that started after the switch on a unit that is not active is not a restart', function () {
+    updatesSystemd(['coresmith-horizon' => [200]], inactive: ['coresmith-horizon']);
+    Artisan::spy();
+
+    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-horizon'], 4, since: 150));
+
+    expect($failed->step)->toBe('restart');
+});
+
+test('without a switch time a restart counts from when it was asked for', function () {
+    updatesSystemd(['coresmith-reverb' => [1, PanelServices::now() + 1_000_000]]);
+    Artisan::spy();
+
+    updatesServices()->restart(['coresmith-reverb'], 90);
+
+    Sleep::assertSleptTimes(1);
 });
 
 test('a unit that does not come back fails the restart with how to look', function () {
     updatesSystemd(['coresmith-horizon' => [100]]);
     Artisan::spy();
 
-    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-horizon'], 6));
+    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-horizon'], 6, since: 150));
 
     expect($failed->step)->toBe('restart')
         ->and($failed->getMessage())->toBe("coresmith-horizon didn't come back within 6 seconds. Inspect it with journalctl -u coresmith-horizon -n 50.");
@@ -195,37 +234,47 @@ test('a unit that does not come back fails the restart with how to look', functi
 });
 
 test('reverb is asked to restart only when it was running', function () {
-    updatesSystemd(['coresmith-reverb' => [500, 501]]);
+    updatesSystemd(['coresmith-reverb' => [100, 501]]);
     Artisan::spy();
 
-    updatesServices()->restart(['coresmith-reverb'], 90);
+    updatesServices()->restart(['coresmith-reverb'], 90, since: 150);
 
     Artisan::shouldHaveReceived('call')->with('reverb:restart')->once();
     Artisan::shouldNotHaveReceived('call', ['horizon:terminate']);
 });
 
 test('both units must come back before a restart is done', function () {
-    updatesSystemd(['coresmith-horizon' => [100, 200], 'coresmith-reverb' => [500, 500, 501]]);
+    updatesSystemd(['coresmith-horizon' => [200], 'coresmith-reverb' => [100, 100, 501]]);
     Artisan::spy();
 
-    updatesServices()->restart(['coresmith-horizon', 'coresmith-reverb'], 90);
+    updatesServices()->restart(['coresmith-horizon', 'coresmith-reverb'], 90, since: 150);
 
-    Sleep::assertSleptTimes(1);
+    Sleep::assertSleptTimes(2);
+    Artisan::shouldHaveReceived('call')->with('horizon:terminate')->once();
+    Artisan::shouldHaveReceived('call')->with('reverb:restart')->once();
 });
 
 test('the unit that did not come back is the one named', function () {
-    updatesSystemd(['coresmith-horizon' => [100, 200], 'coresmith-reverb' => [500]]);
+    updatesSystemd(['coresmith-horizon' => [200], 'coresmith-reverb' => [100]]);
     Artisan::spy();
 
-    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-horizon', 'coresmith-reverb'], 4));
+    $failed = updatesFailure(fn() => updatesServices()->restart(['coresmith-horizon', 'coresmith-reverb'], 4, since: 150));
 
     expect($failed->getMessage())->toBe("coresmith-reverb didn't come back within 4 seconds. Inspect it with journalctl -u coresmith-reverb -n 50.");
 });
 
-test('the main pid is read from systemd with a short timeout', function () {
+test('a main process start time is read from systemd with a short timeout', function () {
     updatesSystemd(['coresmith-horizon' => [4242]]);
 
-    expect(updatesServices()->mainPid('coresmith-horizon'))->toBe(4242);
+    expect(updatesServices()->startedAt('coresmith-horizon'))->toBe(4242);
 
-    Process::assertRan(fn(PendingProcess $process): bool => $process->command === ['systemctl', 'show', 'coresmith-horizon', '--property=MainPID', '--value'] && $process->timeout === 10);
+    Process::assertRan(fn(PendingProcess $process): bool => $process->command === ['systemctl', 'show', 'coresmith-horizon', '--property=ExecMainStartTimestampMonotonic', '--value'] && $process->timeout === 10);
+});
+
+test('the switch time is on the same clock as systemd, in microseconds', function () {
+    $before = intdiv(hrtime(true), 1000);
+    $now = PanelServices::now();
+
+    expect($now)->toBeGreaterThanOrEqual($before)
+        ->and($now)->toBeLessThanOrEqual(intdiv(hrtime(true), 1000));
 });

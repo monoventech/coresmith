@@ -11,6 +11,7 @@ use App\Models\Server;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\PanelUpdater;
+use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\UpdatePaths;
 use App\Services\Updates\UpdateRefused;
@@ -20,6 +21,7 @@ use App\Services\Updates\Version;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Spatie\Activitylog\Models\Activity;
@@ -127,7 +129,7 @@ test('a drain timeout aborts with nothing changed', function () {
 
     expect($status->state)->toBe(UpdateStatus::ABORTED)
         ->and($status->failedStep)->toBe('drain')
-        ->and($status->message)->toBe('A queued job is still running after 3 seconds, so Coresmith stopped before changing anything. Let it finish, then update again.')
+        ->and($status->message)->toBe('A queued job is still running after 3 seconds, so Coresmith stopped before changing anything. Horizon finishes that job before it takes new ones, then restarts on its own. Let it finish, then update again.')
         ->and(app(PanelServices::class)->isDown())->toBeFalse()
         ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce')
         ->and(updatesArchives())->toBe([])
@@ -170,7 +172,7 @@ test('a failed migration restores the database and keeps the old release', funct
         ->and(Activity::query()->where('description', 'panel_update_rolled_back')->sole()->properties['step'])->toBe('migrate');
 });
 
-test('a failure after the switch swaps back, restores and restarts', function (array $failures, array $settings, string $step) {
+test('a failure after the switch swaps back, restores and restarts', function (array $failures, array $settings, string $step, int $terminations) {
     updatesMachine($failures);
     config($settings);
 
@@ -184,30 +186,185 @@ test('a failure after the switch swaps back, restores and restarts', function (a
         ->and($status->failedStep)->toBe($step)
         ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce')
         ->and(updatesProbeNotes())->toBe(['before'])
-        ->and(array_count_values($this->commands)['horizon:terminate'] ?? 0)->toBe(3)
+        ->and(array_count_values($this->commands)['horizon:terminate'] ?? 0)->toBe($terminations)
         ->and(app(PanelServices::class)->isDown())->toBeFalse();
 })->with([
-    'a restart that never comes back' => [['main-pid' => fn(PendingProcess $process) => Process::result(output: (app(UpdateState::class)->status()?->step === 'rollback' ? 2000 + (updatesRegistry()->pidCounter = (updatesRegistry()->pidCounter ?? 0) + 1) : 1001) . "\n")], ['coresmith.updates.restart_timeout' => 4], 'restart'],
-    'a health check still serving the old release' => [[], ['coresmith.updates.health_timeout' => 4], 'health'],
+    'a restart that never comes back' => [['started' => fn(PendingProcess $process) => Process::result(output: (app(UpdateState::class)->status()?->step === 'rollback' ? PanelServices::now() + 1 : 1) . "\n")], ['coresmith.updates.restart_timeout' => 4], 'restart', 5],
+    'a health check still serving the old release' => [[], ['coresmith.updates.health_timeout' => 4], 'health', 3],
 ]);
 
-test('a rollback that cannot restore the database leaves the panel in maintenance and says what to do', function () {
+function updatesRestoreFails(): void
+{
     updatesMachine(['artisan:migrate' => function (PendingProcess $process) {
-        @unlink(app(UpdateState::class)->status()->markers['backup']);
+        $backup = app(UpdateState::class)->status()->markers['backup'];
+        copy($backup, "{$backup}.kept");
+        @unlink($backup);
 
         return Process::result(errorOutput: "Migration failed\n", exitCode: 1);
     }]);
+}
+
+test('a rollback that cannot restore the database leaves the panel in maintenance and says what to do', function () {
+    updatesRestoreFails();
 
     $status = updatesUpdater()->run(Version::parse('0.1.1'));
+    $app = app(UpdatePaths::class)->current();
+    $backup = $status->markers['backup'];
 
     expect($status->state)->toBe(UpdateStatus::FAILED)
         ->and($status->failedStep)->toBe('migrate')
         ->and(app(PanelServices::class)->isDown())->toBeTrue()
         ->and($status->message)->toContain('The rollback did not finish:')
-        ->and($status->message)->toContain('The panel is in maintenance mode.')
-        ->and($status->message)->toContain('Restore ' . $status->markers['backup'])
-        ->and($status->message)->toContain('sudo -u coresmith php artisan up')
+        ->and($status->message)->toContain(" The panel is in maintenance mode. Fix the problem above, then run cd {$app} && sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.")
+        ->and($status->message)->toContain(" To restore the backup by hand instead, run cd {$app} && sudo -u coresmith php artisan tinker --execute=\"app(App\\Services\\Panel\\PanelBackup::class)->restore('{$backup}')\", then cd {$app} && sudo -u coresmith php artisan up.")
         ->and(Activity::query()->where('description', 'panel_update_failed')->count())->toBe(1);
+});
+
+test('following the failure mail finishes the rollback once the problem is fixed', function () {
+    updatesRestoreFails();
+    $failed = updatesUpdater()->run(Version::parse('0.1.1'));
+    $backup = $failed->markers['backup'];
+
+    expect(updatesProbeNotes())->toBe(['before', 'migrated']);
+
+    rename("{$backup}.kept", $backup);
+    Artisan::call('coresmith:update', ['--recover' => true]);
+
+    $status = app(UpdateState::class)->status();
+
+    expect($status->id)->toBe($failed->id)
+        ->and($status->state)->toBe(UpdateStatus::ROLLED_BACK)
+        ->and($status->failedStep)->toBe('migrate')
+        ->and($status->message)->toBe('Running migrations failed: Migration failed. Coresmith rolled back to v0.1.0, and the panel is running as before.')
+        ->and(updatesProbeNotes())->toBe(['before'])
+        ->and(app(PanelServices::class)->isDown())->toBeFalse()
+        ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce');
+});
+
+test('a failed update whose panel is up again is never rolled back a second time', function () {
+    updatesRestoreFails();
+    $failed = updatesUpdater()->run(Version::parse('0.1.1'));
+    rename($failed->markers['backup'] . '.kept', $failed->markers['backup']);
+    app(PanelServices::class)->up();
+    DB::connection('csu_panel')->table('probe')->insert(['note' => 'written since']);
+
+    Artisan::call('coresmith:update', ['--recover' => true]);
+
+    expect(Artisan::output())->toContain('Nothing to recover.')
+        ->and(updatesProbeNotes())->toBe(['before', 'migrated', 'written since'])
+        ->and(app(UpdateState::class)->status()->state)->toBe(UpdateStatus::FAILED);
+});
+
+test('recovery that the owner did not ask for leaves a failed update alone', function () {
+    updatesRestoreFails();
+    $failed = updatesUpdater()->run(Version::parse('0.1.1'));
+    rename($failed->markers['backup'] . '.kept', $failed->markers['backup']);
+    $lock = app(UpdateState::class)->acquireLock();
+
+    try {
+        expect(updatesUpdater()->recover())->toBeNull();
+    } finally {
+        $lock?->release();
+    }
+
+    expect(app(UpdateState::class)->status()->state)->toBe(UpdateStatus::FAILED)
+        ->and(app(PanelServices::class)->isDown())->toBeTrue();
+});
+
+test('a rollback records the step that failed before it starts rolling back', function () {
+    $seen = (object) ['failed' => []];
+    updatesMachine([
+        'artisan:coresmith:health' => [1, "The database is unreachable\n"],
+        'started' => function (PendingProcess $process) use ($seen) {
+            $status = app(UpdateState::class)->status();
+
+            if ($status?->step === 'rollback') {
+                $seen->failed[] = $status->failedStep;
+            }
+
+            return Process::result(output: PanelServices::now() + 1 . "\n");
+        },
+    ]);
+    config(['coresmith.updates.health_timeout' => 4]);
+
+    updatesUpdater()->run(Version::parse('0.1.1'));
+
+    expect($seen->failed)->not->toBeEmpty()
+        ->and(array_unique($seen->failed))->toBe(['health']);
+});
+
+test('an update interrupted while rolling back keeps the step that failed', function () {
+    $status = updatesInterrupted(fn(string $archive): array => ['built' => '0.1.1-a1b2c3d', 'maintenance' => true, 'backup' => $archive, 'migrating' => true], 'rollback');
+    app(UpdateState::class)->save($status->withFailedStep('migrate'));
+    app(PanelServices::class)->down();
+
+    $recovered = updatesUpdater()->recover();
+
+    expect($recovered->state)->toBe(UpdateStatus::ROLLED_BACK)
+        ->and($recovered->failedStep)->toBe('migrate')
+        ->and($recovered->message)->toStartWith('The update was interrupted while rolling back. Coresmith rolled back to v0.1.0');
+});
+
+test('a service check that hangs before the drain is recorded as an aborted run', function () {
+    updatesMachine(['is-active' => fn(PendingProcess $process) => throw new RuntimeException('systemctl timed out')]);
+
+    $status = updatesUpdater()->run(Version::parse('0.1.1'));
+
+    expect($status->state)->toBe(UpdateStatus::ABORTED)
+        ->and($status->message)->toBe('systemctl timed out. Nothing changed.')
+        ->and(app(PanelServices::class)->isDown())->toBeFalse()
+        ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce')
+        ->and(updatesReleaseNames())->toBe(['0.1.0-8413dce']);
+});
+
+test('a rollback whose switch back fails stays in maintenance and says so', function () {
+    updatesMachine(['artisan:coresmith:health' => function (PendingProcess $process) {
+        @unlink(config('coresmith.updates.root') . '/releases/0.1.0-8413dce/' . Release::SENTINEL);
+
+        return Process::result(errorOutput: "The database is unreachable\n", exitCode: 1);
+    }]);
+    config(['coresmith.updates.health_timeout' => 4]);
+
+    $status = updatesUpdater()->run(Version::parse('0.1.1'));
+
+    expect($status->state)->toBe(UpdateStatus::FAILED)
+        ->and($status->failedStep)->toBe('health')
+        ->and($status->message)->toContain('The rollback did not finish: switching back failed:')
+        ->and($status->message)->toContain('The panel is in maintenance mode')
+        ->and($status->message)->not->toContain('To restore the backup by hand')
+        ->and(app(PanelServices::class)->isDown())->toBeTrue()
+        ->and(basename((string) readlink(config('coresmith.updates.root') . '/app')))->toBe('0.1.1-a1b2c3d');
+});
+
+test('a switch that fails is rolled back as one that happened', function () {
+    updatesMachine(['bun-build' => function (PendingProcess $process) {
+        @mkdir("{$process->path}/public/build", 0755, true);
+        file_put_contents("{$process->path}/public/build/manifest.json", '{}');
+
+        return Process::result();
+    }, 'artisan:migrate' => function (PendingProcess $process) {
+        @unlink(config('coresmith.updates.root') . '/releases/0.1.1-a1b2c3d/' . Release::SENTINEL);
+
+        return Process::result();
+    }]);
+
+    $status = updatesUpdater()->run(Version::parse('0.1.1'));
+
+    expect($status->state)->toBe(UpdateStatus::ROLLED_BACK)
+        ->and($status->failedStep)->toBe('switch')
+        ->and($status->markers['switched'])->toBeTrue()
+        ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce')
+        ->and(app(PanelServices::class)->isDown())->toBeFalse();
+});
+
+test('an update refuses to start when the running release cannot be read', function () {
+    file_put_contents(config('coresmith.updates.root') . '/releases/0.1.0-8413dce/' . Release::SENTINEL, 'not json');
+
+    expect(fn() => updatesUpdater()->run(Version::parse('0.1.1')))
+        ->toThrow(UpdateRefused::class, "Coresmith can't read the release " . config('coresmith.updates.root') . '/app points at, so it could not roll back a failed update. Run the installer for this version to repair it, then update.');
+
+    expect(app(UpdateState::class)->status())->toBeNull()
+        ->and(updatesReleaseNames())->toBe(['0.1.0-8413dce']);
 });
 
 test('an interrupted update is rolled back by the next run', function () {
@@ -288,7 +445,7 @@ test('refusals that leave nothing to record are thrown', function (Closure $setU
     'the wrong user' => [function () {
         config(['coresmith.updates.root' => '/']);
 
-        return posix_geteuid() === 0 ? 'release directories' : 'Run updates as root: sudo -u root php artisan coresmith:update';
+        return posix_geteuid() === 0 ? 'release directories' : 'Run updates as root: cd ' . app(UpdatePaths::class)->current() . ' && sudo -u root php artisan coresmith:update';
     }, ''],
     'no release directories' => [function (array $paths) {
         unlink("{$paths['root']}/app");

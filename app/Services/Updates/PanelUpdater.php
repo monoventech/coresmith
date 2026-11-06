@@ -18,12 +18,15 @@ use App\Services\Deployment\LogSanitizer;
 use App\Services\Panel\PanelBackup;
 use Closure;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
 final class PanelUpdater
 {
     public const TOOLS = ['git', 'composer', 'bun'];
+
+    private const UNFINISHED = '. The rollback did not finish: ';
 
     public function __construct(
         private readonly UpdatePaths $paths,
@@ -48,6 +51,10 @@ final class PanelUpdater
 
         if (!$this->layout->isManaged()) {
             throw new UpdateRefused("This install doesn't use release directories, so it can't update itself. Run the installer for the version you want instead.");
+        }
+
+        if ($this->layout->current() === null) {
+            throw new UpdateRefused("Coresmith can't read the release {$this->paths->current()} points at, so it could not roll back a failed update. Run the installer for this version to repair it, then update.");
         }
     }
 
@@ -118,9 +125,8 @@ final class PanelUpdater
                 return $this->abort($run, $e);
             }
 
-            $units = $this->services->active();
-
             try {
+                $units = $this->services->active();
                 $run->step('drain');
                 $this->services->down();
                 $run->mark('maintenance', true);
@@ -139,10 +145,11 @@ final class PanelUpdater
                 $run->mark('migrating', true);
                 $this->builder->migrate($release->path, $run);
                 $run->step('switch');
-                $this->layout->activate($release);
                 $run->mark('switched', true);
+                $switchedAt = PanelServices::now();
+                $this->layout->activate($release);
                 $run->step('restart');
-                $this->services->restart($units, (int) config('coresmith.updates.restart_timeout'));
+                $this->services->restart($units, (int) config('coresmith.updates.restart_timeout'), $switchedAt);
                 $run->step('health');
                 $this->health->check($release, (int) config('coresmith.updates.health_timeout'));
                 $run->mark('healthy', true);
@@ -156,9 +163,9 @@ final class PanelUpdater
         }
     }
 
-    public function recover(?Closure $listener = null): ?UpdateStatus
+    public function recover(?Closure $listener = null, bool $failed = false): ?UpdateStatus
     {
-        if (!$this->state->interrupted()) {
+        if (!$this->state->interrupted() && !($failed && $this->stuck($this->state->status()))) {
             return null;
         }
 
@@ -166,7 +173,13 @@ final class PanelUpdater
         $lock = $this->state->acquireLock() ?? throw new UpdateRefused($this->busy());
 
         try {
-            return $this->state->status()?->isRunning() === true ? $this->recoverHeld($listener) : null;
+            $status = $this->state->status();
+
+            return match (true) {
+                $status?->isRunning() === true => $this->recoverHeld($listener),
+                $failed && $this->stuck($status) => $this->retryRollback($status, $listener),
+                default => null,
+            };
         } finally {
             $lock->release();
         }
@@ -192,9 +205,7 @@ final class PanelUpdater
         }
 
         if ($status->markers['migrating'] === true || $status->markers['switched'] === true) {
-            $previous = $status->fromRelease === null ? null : $this->layout->find($status->fromRelease);
-
-            return $this->rollBack($run, $previous, $this->services->active(), new UpdateFailed($status->step, $interrupted));
+            return $this->rollBack($run, $this->previous($status), $this->services->active(), new UpdateFailed($status->failedStep ?? $status->step, $interrupted));
         }
 
         if ($status->markers['maintenance'] === true) {
@@ -205,7 +216,30 @@ final class PanelUpdater
             $this->discard($this->paths->releases() . '/' . $status->markers['built']);
         }
 
-        return $run->finish(UpdateStatus::ABORTED, "{$interrupted}. Nothing changed.", $status->step);
+        return $this->abort($run, new UpdateFailed($status->step, "{$interrupted}. Nothing changed."));
+    }
+
+    private function retryRollback(UpdateStatus $status, ?Closure $listener): UpdateStatus
+    {
+        $run = $this->state->begin($status);
+
+        if ($listener !== null) {
+            $run->listen($listener);
+        }
+
+        $reason = Str::before((string) $status->message, self::UNFINISHED);
+
+        return $this->rollBack($run, $this->previous($status), $this->services->active(), new UpdateFailed($status->failedStep ?? $status->step, $reason));
+    }
+
+    private function stuck(?UpdateStatus $status): bool
+    {
+        return $status?->state === UpdateStatus::FAILED && $this->services->isDown();
+    }
+
+    private function previous(UpdateStatus $status): ?Release
+    {
+        return $status->fromRelease === null ? null : $this->layout->find($status->fromRelease);
     }
 
     private function preflight(Version $target): void
@@ -280,7 +314,7 @@ final class PanelUpdater
         $owner = posix_getpwuid($uid);
         $name = is_array($owner) ? $owner['name'] : (string) $uid;
 
-        throw new UpdateRefused("Run updates as {$name}: sudo -u {$name} php artisan coresmith:update");
+        throw new UpdateRefused("Run updates as {$name}: cd {$this->paths->current()} && sudo -u {$name} php artisan coresmith:update");
     }
 
     private function backup(): string
@@ -303,13 +337,16 @@ final class PanelUpdater
         $problems = [];
         $restored = false;
         $restoreFailed = false;
+        $switchBackFailed = false;
 
+        $run->failing($failedStep);
         $run->step('rollback');
 
         if ($markers['switched'] === true) {
             try {
                 $this->layout->activate($previous ?? throw new RuntimeException('the previous release is gone'));
             } catch (Throwable $e) {
+                $switchBackFailed = true;
                 $problems[] = "switching back failed: {$e->getMessage()}";
             }
         }
@@ -332,7 +369,7 @@ final class PanelUpdater
             }
         }
 
-        if (!$restoreFailed) {
+        if (!$restoreFailed && !$switchBackFailed) {
             try {
                 $this->services->up();
             } catch (Throwable $e) {
@@ -350,12 +387,15 @@ final class PanelUpdater
             return $final;
         }
 
-        $message = "{$reason}. The rollback did not finish: " . implode('; ', array_map(fn(string $problem): string => $this->withoutPeriod($problem), $problems)) . '.';
+        $message = "{$reason}" . self::UNFINISHED . implode('; ', array_map(fn(string $problem): string => $this->withoutPeriod($problem), $problems)) . '.';
 
         if ($this->services->isDown()) {
-            $message .= $restoreFailed && $backup !== null
-                ? " The panel is in maintenance mode. Restore {$backup} with sudo -u coresmith php artisan tinker --execute=\"app(App\\Services\\Panel\\PanelBackup::class)->restore('{$backup}')\", then run sudo -u coresmith php artisan up."
-                : ' The panel is in maintenance mode. Fix the problem above, then run sudo -u coresmith php artisan up.';
+            $app = "cd {$this->paths->current()} &&";
+            $message .= " The panel is in maintenance mode. Fix the problem above, then run {$app} sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.";
+
+            if ($restoreFailed && $backup !== null) {
+                $message .= " To restore the backup by hand instead, run {$app} sudo -u coresmith php artisan tinker --execute=\"app(App\\Services\\Panel\\PanelBackup::class)->restore('{$backup}')\", then {$app} sudo -u coresmith php artisan up.";
+            }
         }
 
         $final = $run->finish(UpdateStatus::FAILED, $message, $failedStep);

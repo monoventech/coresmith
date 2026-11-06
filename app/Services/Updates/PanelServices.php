@@ -70,13 +70,18 @@ final class PanelServices
         }
 
         if ($this->anyAlive($pids)) {
-            throw new UpdateFailed('drain', 'A queued job is still running after ' . self::duration($timeout) . ', so Coresmith stopped before changing anything. Let it finish, then update again.');
+            throw new UpdateFailed('drain', 'A queued job is still running after ' . self::duration($timeout) . ', so Coresmith stopped before changing anything. Horizon finishes that job before it takes new ones, then restarts on its own. Let it finish, then update again.');
         }
     }
 
-    public function mainPid(string $unit): int
+    public static function now(): int
     {
-        $result = Process::timeout(10)->run(['systemctl', 'show', $unit, '--property=MainPID', '--value']);
+        return intdiv(hrtime(true), 1000);
+    }
+
+    public function startedAt(string $unit): int
+    {
+        $result = Process::timeout(10)->run(['systemctl', 'show', $unit, '--property=ExecMainStartTimestampMonotonic', '--value']);
 
         return $result->successful() ? (int) trim($result->output()) : 0;
     }
@@ -84,13 +89,9 @@ final class PanelServices
     /**
      * @param  list<string>  $units
      */
-    public function restart(array $units, int $timeout): void
+    public function restart(array $units, int $timeout, ?int $since = null): void
     {
-        $before = [];
-
-        foreach ($units as $unit) {
-            $before[$unit] = $this->mainPid($unit);
-        }
+        $since ??= self::now();
 
         if (in_array(self::HORIZON, $units, true)) {
             Artisan::call('horizon:terminate');
@@ -104,13 +105,17 @@ final class PanelServices
         $attempts = intdiv($timeout, 2);
 
         for ($attempt = 0; $attempt <= $attempts; $attempt++) {
-            $pending = array_values(array_filter($pending, fn(string $unit): bool => !$this->cameBack($unit, $before[$unit])));
+            $pending = array_values(array_filter($pending, fn(string $unit): bool => !$this->startedSince($unit, $since)));
 
             if ($pending === []) {
                 return;
             }
 
             if ($attempt < $attempts) {
+                if (in_array(self::HORIZON, $pending, true)) {
+                    Artisan::call('horizon:terminate');
+                }
+
                 Sleep::for(2)->seconds();
             }
         }
@@ -129,11 +134,9 @@ final class PanelServices
         return $minutes . ' ' . Str::plural('minute', $minutes);
     }
 
-    private function cameBack(string $unit, int $before): bool
+    private function startedSince(string $unit, int $since): bool
     {
-        $pid = $this->mainPid($unit);
-
-        return $pid !== 0 && $pid !== $before && $this->isActive($unit);
+        return $this->startedAt($unit) > $since && $this->isActive($unit);
     }
 
     private function isActive(string $unit): bool

@@ -43,6 +43,11 @@ final class UpdateRun
         $this->save($this->status->withMarker($key, $value));
     }
 
+    public function failing(string $step): void
+    {
+        $this->save($this->status->withFailedStep($step));
+    }
+
     public function release(string $name): void
     {
         $this->save($this->status->withRelease($name));

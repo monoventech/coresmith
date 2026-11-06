@@ -63,7 +63,7 @@ final class UpdateCommand extends Command
             }
 
             if ($this->option('recover')) {
-                $status = $updater->recover($listener);
+                $status = $updater->recover($listener, failed: true);
 
                 if ($status === null) {
                     $this->line('Nothing to recover.');

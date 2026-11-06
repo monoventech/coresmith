@@ -41,8 +41,8 @@ final class PanelUpdateFailedNotification extends Notification
                 ->line($message),
             UpdateStatus::FAILED => (new MailMessage)
                 ->subject('Coresmith needs attention after a failed update')
-                ->line("The update to v{$to} failed and the rollback didn't finish, so the panel may still be in maintenance mode.")
-                ->line('Recover it from the server: sudo -u coresmith php artisan coresmith:update --recover'),
+                ->line("The update to v{$to} failed and the rollback didn't finish.")
+                ->line($message),
             default => (new MailMessage)
                 ->subject("Tonight's update to v{$to} didn't run")
                 ->line($message),

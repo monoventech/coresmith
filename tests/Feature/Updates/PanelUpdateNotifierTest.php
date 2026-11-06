@@ -88,14 +88,23 @@ test('a rolled back update is emailed in plain words', function () {
         ->and((new PanelUpdateFailedNotification($status->toArray()))->via($this->owner))->toBe(['mail']);
 });
 
-test('a failed rollback is emailed with how to recover', function () {
-    $mail = (new PanelUpdateFailedNotification(updatesFinished(UpdateStatus::FAILED, 'x', 'migrate')->toArray()))->toMail($this->owner);
+test('a failed rollback is emailed with what went wrong and how to finish it', function () {
+    $message = 'Running migrations failed: x. The rollback did not finish: the backup is missing. The panel is in maintenance mode. Fix the problem above, then run cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.';
+    $mail = (new PanelUpdateFailedNotification(updatesFinished(UpdateStatus::FAILED, $message, 'migrate')->toArray()))->toMail($this->owner);
 
     expect($mail->subject)->toBe('Coresmith needs attention after a failed update')
-        ->and($mail->introLines)->toBe([
-            "The update to v0.1.1 failed and the rollback didn't finish, so the panel may still be in maintenance mode.",
-            'Recover it from the server: sudo -u coresmith php artisan coresmith:update --recover',
-        ]);
+        ->and($mail->introLines)->toBe(["The update to v0.1.1 failed and the rollback didn't finish.", $message]);
+});
+
+test('an interrupted automatic update that recovery stops before anything changed is emailed', function () {
+    Notification::fake();
+    $status = UpdateStatus::start(app(ReleaseLayout::class)->current(), Version::parse('0.1.1'), 'auto', null)->withStep('dependencies')->withMarker('built', '0.1.1-a1b2c3d');
+    app(UpdateState::class)->save($status);
+
+    $recovered = app(PanelUpdater::class)->recover();
+
+    expect($recovered->state)->toBe(UpdateStatus::ABORTED);
+    Notification::assertSentTo($this->owner, PanelUpdateFailedNotification::class);
 });
 
 test('an automatic update that did not run is emailed with why', function () {
