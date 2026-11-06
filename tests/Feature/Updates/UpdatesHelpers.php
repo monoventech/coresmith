@@ -298,6 +298,10 @@ function updatesMachineEffect(?string $key, array $command, PendingProcess $proc
             break;
         case 'started':
             return Process::result(output: PanelServices::now() + 1 . "\n");
+        case 'gpg':
+            return in_array('--show-keys', $command, true)
+                ? Process::result(output: "pub:-:255:22:2222222222222222:1700000000:::-:::scESC::::::23::0:\nfpr:::::::::2222222222222222222222222222222222222222:\n")
+                : Process::result();
     }
 
     return Process::result();

@@ -150,6 +150,8 @@ test('the schedule asks at four, and checks for interrupted updates every minute
     expect($auto->expression)->toBe('0 4 * * *')
         ->and($recover->expression)->toBe('* * * * *')
         ->and($recover->evenInMaintenanceMode)->toBeTrue()
+        ->and($recover->withoutOverlapping)->toBeTrue()
+        ->and($recover->expiresAt)->toBe(5)
         ->and($auto->filtersPass(app()))->toBeTrue()
         ->and($recover->filtersPass(app()))->toBeFalse();
 

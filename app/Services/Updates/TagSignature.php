@@ -50,12 +50,18 @@ final class TagSignature
         }
 
         try {
+            $trusted = [];
+
             foreach ($keys as $key) {
                 $import = Process::timeout(self::TIMEOUT)->run(['gpg', '--batch', '--quiet', '--homedir', $home, '--import', $key]);
+                $listed = $import->successful() ? Process::timeout(self::TIMEOUT)->run(['gpg', '--batch', '--homedir', $home, '--with-colons', '--show-keys', $key]) : $import;
 
-                if (!$import->successful()) {
-                    return new SignatureResult(ReleaseSignature::Invalid, "The release keys in {$this->paths->keys()} couldn't be read: " . $this->lastLine($import->errorOutput() . $import->output()));
+                if (!$listed->successful()) {
+                    return new SignatureResult(ReleaseSignature::Invalid, "The release keys in {$this->paths->keys()} couldn't be read: " . $this->lastLine($listed->errorOutput() . $listed->output()));
                 }
+
+                preg_match_all('/^fpr:+([0-9A-F]{40,64}):/m', $listed->output(), $fingerprints);
+                $trusted = [...$trusted, ...$fingerprints[1]];
             }
 
             $result = Process::path($repository)
@@ -63,14 +69,17 @@ final class TagSignature
                 ->timeout(self::TIMEOUT)
                 ->run(['git', 'verify-tag', '--raw', $tag]);
 
-            return $this->decide($tag, $result->output() . "\n" . $result->errorOutput(), $result->successful());
+            return $this->decide($tag, $result->output() . "\n" . $result->errorOutput(), $result->successful(), $trusted);
         } finally {
             Process::timeout(self::TIMEOUT)->run(['gpgconf', '--homedir', $home, '--kill', 'all']);
             File::deleteDirectory($home);
         }
     }
 
-    private function decide(string $tag, string $output, bool $succeeded): SignatureResult
+    /**
+     * @param  list<string>  $trusted
+     */
+    private function decide(string $tag, string $output, bool $succeeded, array $trusted): SignatureResult
     {
         $invalid = fn(string $message): SignatureResult => new SignatureResult(ReleaseSignature::Invalid, $message);
 
@@ -79,17 +88,22 @@ final class TagSignature
             $this->status($output, 'NO_PUBKEY') !== null, $this->status($output, 'ERRSIG') !== null => $invalid("{$tag} is signed with a key this install doesn't trust."),
             $this->status($output, 'BADSIG') !== null => $invalid("{$tag}'s signature doesn't match its contents. It may have been tampered with."),
             $this->status($output, 'EXPKEYSIG') !== null, $this->status($output, 'REVKEYSIG') !== null, $this->status($output, 'EXPSIG') !== null => $invalid("{$tag} is signed with a key that has expired or been revoked."),
-            $succeeded && $this->status($output, 'GOODSIG') !== null && ($valid = $this->status($output, 'VALIDSIG')) !== null => $this->verified($valid),
+            $succeeded && $this->status($output, 'GOODSIG') !== null && ($valid = $this->status($output, 'VALIDSIG')) !== null => $this->verified($tag, $valid, $trusted),
             default => $invalid("Coresmith couldn't verify {$tag}'s signature: " . $this->lastLine($output)),
         };
     }
 
     /**
      * @param  list<string>  $fields
+     * @param  list<string>  $trusted
      */
-    private function verified(array $fields): SignatureResult
+    private function verified(string $tag, array $fields, array $trusted): SignatureResult
     {
         $fingerprint = strtoupper($fields[9] ?? $fields[0] ?? '');
+
+        if (!in_array($fingerprint, $trusted, true)) {
+            return new SignatureResult(ReleaseSignature::Invalid, "{$tag} is signed with a key this install doesn't trust.");
+        }
         $groups = str_split($fingerprint, 4);
         $grouped = implode(' ', array_slice($groups, 0, 5)) . '  ' . implode(' ', array_slice($groups, 5));
 

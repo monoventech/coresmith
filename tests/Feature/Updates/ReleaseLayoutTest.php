@@ -106,25 +106,15 @@ test('an unreadable sentinel is not a sealed release', function () {
     expect(Release::fromDirectory("{$this->root}/releases/1.0.2-a1b2c3d"))->toBeNull();
 });
 
-test('releases are listed newest first and half-built ones are ignored', function () {
-    $this->travelTo('2026-10-01 00:00:00');
+test('a release is found by its name and half-built ones are ignored', function () {
     $a = updatesRelease($this->root, '1.0.0', 'aaaaaaa1111111');
-    $this->travelTo('2026-10-02 00:00:00');
-    $b = updatesInstall($this->root, '1.0.1', 'bbbbbbb2222222');
-    $this->travelTo('2026-10-03 00:00:00');
-    $c = updatesRelease($this->root, '1.0.2', 'ccccccc3333333');
     mkdir("{$this->root}/releases/1.0.3-ddddddd");
     mkdir("{$this->root}/releases/.incoming-01jbxyz");
 
-    expect(array_map(fn(Release $release): string => $release->name, updatesLayout()->releases()))->toBe([$c->name, $b->name, $a->name])
-        ->and(updatesLayout()->previous()->name)->toBe($c->name)
-        ->and(updatesLayout()->find($a->name)->name)->toBe($a->name)
+    expect(updatesLayout()->find($a->name)->name)->toBe($a->name)
         ->and(updatesLayout()->find('1.0.3-ddddddd'))->toBeNull()
+        ->and(updatesLayout()->find('.incoming-01jbxyz'))->toBeNull()
         ->and(updatesLayout()->find('../shared'))->toBeNull();
-
-    updatesLayout()->activate($c);
-
-    expect(updatesLayout()->previous()->name)->toBe($b->name);
 });
 
 test('a new release is built in an incoming directory of its own', function () {

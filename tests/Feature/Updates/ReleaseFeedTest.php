@@ -49,6 +49,14 @@ test('withdrawn versions and the minimum come from the environment', function ()
         ->assertJsonPath('minimum', '1.0.0');
 });
 
+test('an empty minimum in the environment is no minimum', function (string $minimum) {
+    config(['coresmith.release_feed.minimum' => $minimum]);
+
+    $this->getJson(route('release-feed'))
+        ->assertOk()
+        ->assertJsonPath('minimum', null);
+})->with(['empty' => [''], 'blank' => ['  ']]);
+
 test('a misconfigured feed answers 503 and is reported rather than served', function (array $settings) {
     Exceptions::fake();
     config($settings);

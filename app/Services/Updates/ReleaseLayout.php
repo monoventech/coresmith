@@ -58,39 +58,6 @@ final class ReleaseLayout
         return $path === null ? null : Release::fromDirectory($path);
     }
 
-    /**
-     * @return list<Release>
-     */
-    public function releases(): array
-    {
-        $releases = [];
-
-        foreach ($this->entries() as $name) {
-            $release = $this->find($name);
-
-            if ($release !== null) {
-                $releases[] = $release;
-            }
-        }
-
-        usort($releases, fn(Release $a, Release $b): int => ($b->builtAt?->getTimestamp() ?? 0) <=> ($a->builtAt?->getTimestamp() ?? 0));
-
-        return $releases;
-    }
-
-    public function previous(): ?Release
-    {
-        $current = $this->currentPath();
-
-        foreach ($this->releases() as $release) {
-            if ($release->path !== $current) {
-                return $release;
-            }
-        }
-
-        return null;
-    }
-
     public function incoming(): string
     {
         $releases = $this->paths->releases();

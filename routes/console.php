@@ -82,5 +82,5 @@ Schedule::command('coresmith:update --recover')
     ->everyMinute()
     ->evenInMaintenanceMode()
     ->name('coresmith:recover-update')
-    ->withoutOverlapping()
+    ->withoutOverlapping(5)
     ->when(fn(): bool => (bool) config('coresmith.updates.enabled') && app(UpdateState::class)->interrupted());

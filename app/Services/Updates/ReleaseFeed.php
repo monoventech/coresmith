@@ -24,11 +24,12 @@ final class ReleaseFeed
         }
 
         $entry = self::changelogEntry($this->changelog(), $version);
+        $minimum = trim((string) config('coresmith.release_feed.minimum'));
 
         return FeedDocument::fromArray([
             'schema' => FeedDocument::SCHEMA,
             'latest' => (string) $version,
-            'minimum' => config('coresmith.release_feed.minimum'),
+            'minimum' => $minimum === '' ? null : $minimum,
             'withdrawn' => array_values(array_filter(
                 array_map('trim', explode(',', (string) config('coresmith.release_feed.withdrawn', ''))),
                 fn(string $entry): bool => $entry !== '',

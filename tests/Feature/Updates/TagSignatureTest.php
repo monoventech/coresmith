@@ -20,12 +20,23 @@ afterEach(function () {
     updatesCleanUp();
 });
 
-function updatesFakeGpg(string $verifyOutput, int $verifyExit = 0, int $importExit = 0, string $importOutput = ''): stdClass
+function updatesFakeGpg(string $verifyOutput, int $verifyExit = 0, int $importExit = 0, string $importOutput = '', array $shipped = ['2222222222222222222222222222222222222222', '1111111111111111111111111111111111111111'], int $listExit = 0): stdClass
 {
-    $seen = (object) ['verify' => null, 'imports' => 0, 'killed' => []];
+    $seen = (object) ['verify' => null, 'imports' => 0, 'killed' => [], 'listed' => []];
 
-    Process::fake(['*' => function (PendingProcess $process) use ($seen, $verifyOutput, $verifyExit, $importExit, $importOutput) {
+    Process::fake(['*' => function (PendingProcess $process) use ($seen, $verifyOutput, $verifyExit, $importExit, $importOutput, $shipped, $listExit) {
         $command = (array) $process->command;
+
+        if (in_array('--show-keys', $command, true)) {
+            $seen->listed[] = $command;
+            $contents = trim((string) @file_get_contents((string) end($command)));
+            $listed = preg_match('/^[0-9A-F]{40,64}( [0-9A-F]{40,64})*$/', $contents) === 1 ? explode(' ', $contents) : $shipped;
+            $lines = array_map(fn(string $fingerprint): string => "fpr:::::::::{$fingerprint}:", $listed);
+
+            return $listExit === 0
+                ? Process::result(output: "pub:-:255:22:0123456789ABCDEF:1700000000:::-:::scESC::::::23::0:\n" . implode("\n", $lines) . "\n")
+                : Process::result(errorOutput: "gpg: no valid OpenPGP data found.\n", exitCode: $listExit);
+        }
 
         if (in_array('verify-tag', $command, true)) {
             $seen->verify = $process;
@@ -96,6 +107,46 @@ test('a good signature from a shipped key is verified', function () {
         ->and($seen->verify->path)->toBe('/srv/repo')
         ->and($seen->verify->environment)->toMatchArray(['GIT_CONFIG_NOSYSTEM' => '1', 'GIT_CONFIG_GLOBAL' => '/dev/null'])
         ->and($seen->killed)->toHaveCount(1);
+});
+
+test('a good signature from a key that is not one of the shipped keys is refused', function () {
+    file_put_contents("{$this->paths['keys']}/coresmith.asc", 'key');
+    $seen = updatesFakeGpg("[GNUPG:] GOODSIG 0123456789ABCDEF Someone\n[GNUPG:] VALIDSIG 3333333333333333333333333333333333333333 2026-10-18 1792310400 0 4 0 22 10 00 4444444444444444444444444444444444444444\n");
+
+    $result = app(TagSignature::class)->verify('/srv/repo', 'v1.0.2');
+
+    expect($result->status)->toBe(ReleaseSignature::Invalid)
+        ->and($result->message)->toBe("v1.0.2 is signed with a key this install doesn't trust.")
+        ->and($seen->listed)->toHaveCount(1)
+        ->and($seen->listed[0])->toContain('--with-colons')
+        ->and(end($seen->listed[0]))->toBe("{$this->paths['keys']}/coresmith.asc");
+});
+
+test('every shipped key file is trusted, not only the last one', function () {
+    file_put_contents("{$this->paths['keys']}/a.asc", '2222222222222222222222222222222222222222');
+    file_put_contents("{$this->paths['keys']}/b.asc", '5555555555555555555555555555555555555555');
+    updatesFakeGpg("[GNUPG:] GOODSIG 0123456789ABCDEF Coresmith\n[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-10-18 1792310400 0 4 0 22 10 00 2222222222222222222222222222222222222222\n");
+
+    expect(app(TagSignature::class)->verify('/srv/repo', 'v1.0.2')->status)->toBe(ReleaseSignature::Verified);
+});
+
+test('a signature from a version 5 key is matched by its longer fingerprint', function () {
+    $fingerprint = str_repeat('6', 64);
+    file_put_contents("{$this->paths['keys']}/coresmith.asc", $fingerprint);
+    updatesFakeGpg("[GNUPG:] GOODSIG 0123456789ABCDEF Coresmith\n[GNUPG:] VALIDSIG {$fingerprint} 2026-10-18 1792310400 0 5 0 22 10 00 {$fingerprint}\n");
+
+    expect(app(TagSignature::class)->verify('/srv/repo', 'v1.0.2'))
+        ->status->toBe(ReleaseSignature::Verified)
+        ->fingerprint->toBe($fingerprint);
+});
+
+test('shipped keys that cannot be listed make every tag invalid', function () {
+    file_put_contents("{$this->paths['keys']}/coresmith.asc", 'key');
+    updatesFakeGpg("[GNUPG:] GOODSIG 0123456789ABCDEF Coresmith\n[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-10-18 1792310400 0 4 0 22 10 00 2222222222222222222222222222222222222222\n", listExit: 2);
+
+    expect(app(TagSignature::class)->verify('/srv/repo', 'v1.0.2'))
+        ->status->toBe(ReleaseSignature::Invalid)
+        ->message->toBe("The release keys in {$this->paths['keys']} couldn't be read: gpg: no valid OpenPGP data found.");
 });
 
 test('the signing subkey stands in when gpg names no primary key', function () {
