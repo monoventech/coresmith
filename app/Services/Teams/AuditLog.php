@@ -48,11 +48,28 @@ final class AuditLog
     /**
      * @return iterable<int, list<string>>
      */
-    public function rows(Team $team, ?CarbonImmutable $since): iterable
+    /**
+     * @return Builder<Activity>
+     */
+    public function forTeam(Team $team): Builder
     {
         $applications = Application::withTrashed()->where('team_id', $team->getKey())->select('id');
 
-        $query = Activity::query()
+        return Activity::query()
+            ->where(fn(Builder $query) => $query
+                ->where(fn(Builder $query) => $query->where('subject_type', (new Team)->getMorphClass())->where('subject_id', $team->getKey()))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', Server::withTrashed()->where('team_id', $team->getKey())->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new WebhookEndpoint)->getMorphClass())->whereIn('subject_id', WebhookEndpoint::query()->whereIn('application_id', $applications)->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new CloudProvider)->getMorphClass())->whereIn('subject_id', CloudProvider::withTrashed()->where('team_id', $team->getKey())->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new SourceProvider)->getMorphClass())->whereIn('subject_id', SourceProvider::withTrashed()->where('team_id', $team->getKey())->select('id')))
+                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new GitHubApp)->getMorphClass())->where('properties->team_id', $team->getKey())));
+    }
+
+    public function rows(Team $team, ?CarbonImmutable $since): iterable
+    {
+        $query = $this->forTeam($team)
             ->with(['causer', 'subject' => fn(MorphTo $subject) => $subject->constrain([
                 Team::class => fn(Builder $query) => $query->withTrashed(),
                 Server::class => fn(Builder $query) => $query->withTrashed(),
@@ -62,15 +79,6 @@ final class AuditLog
                 SourceProvider::class => fn(Builder $query) => $query->withTrashed(),
                 WebhookEndpoint::class => fn(Builder $query) => $query->with(['application' => fn($application) => $application->withTrashed()]),
             ])])
-            ->where(fn(Builder $query) => $query
-                ->where(fn(Builder $query) => $query->where('subject_type', (new Team)->getMorphClass())->where('subject_id', $team->getKey()))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', Server::withTrashed()->where('team_id', $team->getKey())->select('id')))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new ManagedDatabase)->getMorphClass())->whereIn('subject_id', ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->select('id')))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new WebhookEndpoint)->getMorphClass())->whereIn('subject_id', WebhookEndpoint::query()->whereIn('application_id', $applications)->select('id')))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new CloudProvider)->getMorphClass())->whereIn('subject_id', CloudProvider::withTrashed()->where('team_id', $team->getKey())->select('id')))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new SourceProvider)->getMorphClass())->whereIn('subject_id', SourceProvider::withTrashed()->where('team_id', $team->getKey())->select('id')))
-                ->orWhere(fn(Builder $query) => $query->where('subject_type', (new GitHubApp)->getMorphClass())->where('properties->team_id', $team->getKey())))
             ->when($since !== null, fn(Builder $query) => $query->where('created_at', '>=', $since))
             ->orderBy('created_at')
             ->orderBy('id');
