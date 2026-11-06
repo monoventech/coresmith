@@ -9,6 +9,7 @@ use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\Process\Process;
 
 require_once __DIR__ . '/UpdatesHelpers.php';
 
@@ -157,6 +158,68 @@ test('a body of exactly 64 KB is read', function () {
     updatesFeed(substr($json, 0, -1) . str_repeat(' ', 65536 - strlen($json)) . '}');
 
     expect(app(UpdateChecker::class)->check()->ok())->toBeTrue();
+});
+
+test('a feed far over 64 KB is cut off without downloading it', function () {
+    $server = new Process([PHP_BINARY, '-r', <<<'PHP'
+        if (function_exists('pcntl_signal')) {
+            pcntl_signal(SIGPIPE, SIG_IGN);
+        }
+        $server = stream_socket_server('tcp://127.0.0.1:0') ?: exit(1);
+        echo 'port ', parse_url('tcp://' . stream_socket_get_name($server, false), PHP_URL_PORT), "\n";
+        $client = stream_socket_accept($server, 10) ?: exit(1);
+        while (($line = fgets($client)) !== false && trim($line) !== '') {
+        }
+        $total = 268435456;
+        fwrite($client, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {$total}\r\nConnection: close\r\n\r\n");
+        $sent = 0;
+        $chunk = str_repeat(' ', 65536);
+        while ($sent < $total && ($written = @fwrite($client, $chunk)) > 0) {
+            $sent += $written;
+            echo "sent {$sent}\n";
+        }
+        PHP]);
+    $server->setTimeout(60);
+    $server->start();
+
+    try {
+        $server->waitUntil(fn(string $type, string $output): bool => str_contains($server->getOutput(), "\n"));
+        preg_match('/^port (\d+)$/m', $server->getOutput(), $port);
+        Http::preventStrayRequests(false);
+        config(['coresmith.updates.check_url' => "http://127.0.0.1:{$port[1]}/v1/version"]);
+
+        $check = app(UpdateChecker::class)->check();
+        $server->wait();
+        preg_match_all('/^sent (\d+)$/m', $server->getOutput(), $sent);
+
+        expect($check->error)->toBe("The release feed at 127.0.0.1 sent something Coresmith doesn't understand: the answer is larger than 64 KB.")
+            ->and((int) end($sent[1]))->toBeLessThan(16 * 1024 * 1024);
+    } finally {
+        $server->stop(0);
+    }
+});
+
+test('a feed that redirects from https to http is not followed', function () {
+    Http::fake([
+        'https://get.coresmith.io/*' => Http::response('', 302, ['Location' => 'http://get.coresmith.io/v1/version']),
+        'http://get.coresmith.io/*' => Http::response(['latest' => '1.0.2']),
+    ]);
+
+    $check = app(UpdateChecker::class)->check();
+
+    expect($check->ok())->toBeFalse()
+        ->and($check->error)->toBe("The release feed at get.coresmith.io redirected to an address that isn't https, so Coresmith didn't follow it. Check the update check URL, then try again.");
+
+    Http::assertNotSent(fn(Request $request) => str_starts_with($request->url(), 'http://'));
+});
+
+test('a feed that redirects to another https address is followed', function () {
+    Http::fake([
+        'https://get.coresmith.io/*' => Http::response('', 302, ['Location' => 'https://feeds.coresmith.io/v1/version']),
+        'https://feeds.coresmith.io/*' => Http::response(['latest' => '1.0.2']),
+    ]);
+
+    expect((string) app(UpdateChecker::class)->check()->available(Version::current()))->toBe('1.0.2');
 });
 
 test('a check URL that is not http or https is refused before any request', function () {

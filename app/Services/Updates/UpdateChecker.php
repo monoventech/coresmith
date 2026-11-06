@@ -10,6 +10,7 @@ namespace App\Services\Updates;
 
 use App\Services\Deployment\LogSanitizer;
 use Carbon\CarbonImmutable;
+use GuzzleHttp\Exception\BadResponseException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use JsonException;
@@ -77,9 +78,13 @@ final class UpdateChecker
                 ->connectTimeout(5)
                 ->withUserAgent('Coresmith')
                 ->acceptJson()
-                ->withOptions(['allow_redirects' => ['max' => 3, 'protocols' => ['https', 'http']]])
+                ->withOptions(['stream' => true, 'allow_redirects' => ['max' => 3, 'protocols' => ['https']]])
                 ->get($url);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            if ($e->getPrevious() instanceof BadResponseException) {
+                throw new FeedUnavailable("The release feed at {$host} redirected to an address that isn't https, so Coresmith didn't follow it. Check the update check URL, then try again.");
+            }
+
             throw new FeedUnavailable("Coresmith couldn't reach the release feed at {$host}. Check this server can make outbound HTTPS requests, then try again.");
         }
 
