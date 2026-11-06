@@ -1169,3 +1169,56 @@ test('the installer workflow runs whenever a file the machine test depends on ch
 
     expect($on['push']['paths'])->toBe($on['pull_request']['paths']);
 });
+
+function installScriptGitRelease(string $base, string $version): void
+{
+    $env = ['GIT_CONFIG_GLOBAL' => '/dev/null', 'GIT_CONFIG_NOSYSTEM' => '1', 'GIT_AUTHOR_NAME' => 'Coresmith', 'GIT_AUTHOR_EMAIL' => 'test@coresmith.test', 'GIT_COMMITTER_NAME' => 'Coresmith', 'GIT_COMMITTER_EMAIL' => 'test@coresmith.test'];
+    file_put_contents("{$base}/VERSION", $version);
+
+    foreach ([['git', 'init', '--quiet'], ['git', 'add', 'VERSION'], ['git', 'commit', '--quiet', '-m', 'Release']] as $command) {
+        (new Process($command, $base, $env))->mustRun();
+    }
+}
+
+test('a sealed release records the version its name was checked with, never a second read', function () {
+    $base = installScriptScratch();
+    mkdir("{$base}/release");
+    installScriptGitRelease("{$base}/release", "1.2.3\n");
+    file_put_contents("{$base}/secret", 'root-only-secret');
+
+    $script = 'RELEASES_DIR=' . escapeshellarg($base) . '; RELEASE_DIR=""' . "\n"
+        . 'sudo() { if [ "$1" = "-u" ]; then shift 2; fi; "$@"; }' . "\n"
+        . installScriptFunctions('valid_release_name', 'name_release', 'write_release_sentinel') . "\n"
+        . 'name_release ' . escapeshellarg("{$base}/release") . "\n"
+        . 'rm ' . escapeshellarg("{$base}/release/VERSION") . '; ln -s ' . escapeshellarg("{$base}/secret") . ' ' . escapeshellarg("{$base}/release/VERSION") . "\n"
+        . 'write_release_sentinel ' . escapeshellarg("{$base}/release") . ' ""' . "\n";
+
+    $process = installScriptRun($script, env: ['GIT_CONFIG_GLOBAL' => '/dev/null', 'GIT_CONFIG_NOSYSTEM' => '1']);
+    $sentinel = (string) @file_get_contents("{$base}/release/.coresmith-release.json");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(json_decode($sentinel, true)['version'] ?? null)->toBe('1.2.3')
+        ->and($sentinel)->not->toContain('root-only-secret');
+});
+
+test('the installer reads a release VERSION as the panel user, never as root', function () {
+    $base = installScriptScratch();
+    installScriptGitRelease($base, "1.2.3\n");
+    $calls = escapeshellarg("{$base}/sudo.log");
+
+    $script = 'RELEASES_DIR=/releases; RELEASE_DIR=""' . "\n"
+        . "sudo() { printf '%s\\n' \"\$*\" >>{$calls}; if [ \"\$1\" = \"-u\" ]; then shift 2; fi; \"\$@\"; }\n"
+        . installScriptFunctions('valid_release_name', 'name_release') . "\n"
+        . 'name_release ' . escapeshellarg($base) . "\n";
+
+    $process = installScriptRun($script, env: ['GIT_CONFIG_GLOBAL' => '/dev/null', 'GIT_CONFIG_NOSYSTEM' => '1']);
+    $sudo = (string) @file_get_contents("{$base}/sudo.log");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($sudo)->toContain("-u coresmith cat {$base}/VERSION\n")
+        ->and(preg_match('#<\s*"\$[A-Za-z0-9_{}]*/VERSION"#', installScriptBody()))->toBe(0);
+});

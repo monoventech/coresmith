@@ -53,6 +53,7 @@ fi
 CORESMITH_BRANCH=""
 INSTALL_VERSION=""
 RELEASE_DIR=""
+RELEASE_VERSION=""
 PREVIOUS_RELEASE=""
 DOMAIN=""
 ACME_EMAIL=""
@@ -359,24 +360,24 @@ valid_release_name() {
 name_release() {
     local version commit name
 
-    version="$(tr -d '[:space:]' <"$1/VERSION" 2>/dev/null || true)"
+    version="$(sudo -u coresmith cat "$1/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
     commit="$(sudo -u coresmith git -C "$1" rev-parse HEAD 2>/dev/null || true)"
     commit="${commit:-0000000}"
     name="${version:-0.0.0}-${commit:0:7}"
 
     valid_release_name "$name" || return 1
     RELEASE_DIR="$RELEASES_DIR/$name"
+    RELEASE_VERSION="${version:-0.0.0}"
 }
 
 write_release_sentinel() {
-    local dir="$1" tag="${2:-}" version commit tag_json="null"
+    local dir="$1" tag="${2:-}" commit tag_json="null"
 
-    version="$(tr -d '[:space:]' <"$dir/VERSION" 2>/dev/null || true)"
     commit="$(sudo -u coresmith git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
     [ -z "$tag" ] || tag_json="\"${tag}\""
 
     sudo -u coresmith tee "$dir/.coresmith-release.json" >/dev/null <<JSON
-{"schema":1,"version":"${version:-0.0.0}","commit":"${commit}","tag":${tag_json},"signature":"unchecked","fingerprint":null,"built_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","built_by":"installer"}
+{"schema":1,"version":"${RELEASE_VERSION:-0.0.0}","commit":"${commit}","tag":${tag_json},"signature":"unchecked","fingerprint":null,"built_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","built_by":"installer"}
 JSON
 }
 
