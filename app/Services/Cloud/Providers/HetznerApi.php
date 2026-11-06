@@ -160,11 +160,6 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
         $this->postJson("/servers/{$this->segment($instanceId)}/actions/reboot");
     }
 
-    public function resizeNeedsPowerOff(): bool
-    {
-        return true;
-    }
-
     public function powerOff(string $instanceId): void
     {
         $this->postJson("/servers/{$this->segment($instanceId)}/actions/shutdown");

@@ -12,6 +12,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Cloud\HttpCloudApiFactory;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Panel\CloudPresenter;
 use Carbon\CarbonImmutable;
@@ -145,6 +146,7 @@ test('the server block names where it runs and what it costs', function () {
         'size' => 'cx22',
         'image' => 'Ubuntu 24.04',
         'monthly' => '€4.35',
+        'power_cycle' => true,
         'uncertain' => false,
     ])->and($block['task']['type'])->toBe('create')
         ->and($block['task']['error'])->toBe('Hetzner Cloud refused the size.')
@@ -327,3 +329,20 @@ test('a creation still running is never shown as uncertain', function () {
     expect($block['uncertain'])->toBeFalse()
         ->and($block['can']['destroy'])->toBeFalse();
 });
+
+test('the server block says whether a resize switches the server off, as the provider client does', function (CloudProviderType $type, bool $cycles) {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create(['type' => $type]);
+    $server = Server::factory()->fromProvider($account)->create(['status' => ServerStatus::Active]);
+
+    $block = app(CloudPresenter::class)->server($server, cloudPresenterMember($team, TeamRole::Owner));
+
+    expect($block['power_cycle'])->toBe($cycles)
+        ->and($type->resizeNeedsPowerOff())->toBe($cycles)
+        ->and((new HttpCloudApiFactory)->make($type, 'unused-token')->resizeNeedsPowerOff())->toBe($cycles);
+})->with([
+    [CloudProviderType::Hetzner, true],
+    [CloudProviderType::DigitalOcean, true],
+    [CloudProviderType::Vultr, false],
+    [CloudProviderType::Linode, false],
+]);

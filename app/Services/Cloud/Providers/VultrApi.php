@@ -153,11 +153,6 @@ final class VultrApi extends HttpCloudApi implements CloudApi
         $this->postJson("/instances/{$this->segment($instanceId)}/reboot");
     }
 
-    public function resizeNeedsPowerOff(): bool
-    {
-        return false;
-    }
-
     public function powerOff(string $instanceId): void
     {
         $this->postJson("/instances/{$this->segment($instanceId)}/halt");

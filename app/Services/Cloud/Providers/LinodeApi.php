@@ -157,11 +157,6 @@ final class LinodeApi extends HttpCloudApi implements CloudApi
         $this->postJson("/linode/instances/{$this->segment($instanceId)}/reboot");
     }
 
-    public function resizeNeedsPowerOff(): bool
-    {
-        return false;
-    }
-
     public function powerOff(string $instanceId): void
     {
         $this->postJson("/linode/instances/{$this->segment($instanceId)}/shutdown");

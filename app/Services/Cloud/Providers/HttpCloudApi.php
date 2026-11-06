@@ -57,6 +57,11 @@ abstract class HttpCloudApi
 
     abstract protected function message(Response $response): ?string;
 
+    public function resizeNeedsPowerOff(): bool
+    {
+        return $this->type()->resizeNeedsPowerOff();
+    }
+
     public static function publicIpv4(mixed $ip): ?string
     {
         if (!is_string($ip)) {

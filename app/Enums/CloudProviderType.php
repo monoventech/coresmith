@@ -65,6 +65,14 @@ enum CloudProviderType: string
         };
     }
 
+    public function resizeNeedsPowerOff(): bool
+    {
+        return match ($this) {
+            self::Hetzner, self::DigitalOcean => true,
+            self::Vultr, self::Linode => false,
+        };
+    }
+
     public function hasScopedTokens(): bool
     {
         return match ($this) {

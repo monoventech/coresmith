@@ -195,6 +195,7 @@ final class CloudPresenter
             'image' => is_string($task?->data['image_label'] ?? null) ? $task->data['image_label'] : $server->provider_image,
             'monthly' => Formats::money($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
             'task' => $task === null ? null : $this->task($task, $account->type->label()),
+            'power_cycle' => $account->type->resizeNeedsPowerOff(),
             'uncertain' => $uncertain,
             'can' => [
                 'retry' => ($failedCreate && $user->can('update', $server)) || ($failedDestroy && $user->can('delete', $server)),

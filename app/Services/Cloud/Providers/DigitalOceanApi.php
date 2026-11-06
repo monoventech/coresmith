@@ -154,11 +154,6 @@ final class DigitalOceanApi extends HttpCloudApi implements CloudApi
         $this->act($instanceId, ['type' => 'reboot']);
     }
 
-    public function resizeNeedsPowerOff(): bool
-    {
-        return true;
-    }
-
     public function powerOff(string $instanceId): void
     {
         $this->act($instanceId, ['type' => 'shutdown']);
