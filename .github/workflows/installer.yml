@@ -16,6 +16,11 @@ on:
       - 'app/Console/Commands/UninstallCommand.php'
       - 'app/Services/Install/**'
       - 'app/Services/Panel/PanelBackup.php'
+      - 'app/Http/Controllers/ReleaseProbeController.php'
+      - 'config/coresmith.php'
+      - 'bootstrap/app.php'
+      - 'routes/api.php'
+      - 'routes/console.php'
       - 'resources/release-keys/**'
       - 'tests/Machine/**'
   pull_request:
@@ -30,6 +35,11 @@ on:
       - 'app/Console/Commands/UninstallCommand.php'
       - 'app/Services/Install/**'
       - 'app/Services/Panel/PanelBackup.php'
+      - 'app/Http/Controllers/ReleaseProbeController.php'
+      - 'config/coresmith.php'
+      - 'bootstrap/app.php'
+      - 'routes/api.php'
+      - 'routes/console.php'
       - 'resources/release-keys/**'
       - 'tests/Machine/**'
   schedule:

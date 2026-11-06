@@ -53,6 +53,7 @@ fi
 CORESMITH_BRANCH=""
 INSTALL_VERSION=""
 RELEASE_DIR=""
+PREVIOUS_RELEASE=""
 DOMAIN=""
 ACME_EMAIL=""
 DB_DRIVER="sqlite"
@@ -315,6 +316,58 @@ interactive_prompts() {
     fi
 }
 
+refuse_link() {
+    local path
+
+    for path in "$@"; do
+        if [ -L "$path" ]; then
+            fatal "${path} is a symbolic link, so the installer stopped rather than follow it as root. Put the real file or directory back, then run the installer again."
+        fi
+    done
+}
+
+refuse_linked_layout() {
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$SHARED_DIR/.env" "$UPDATES_DIR" "$DATA_DIR/database.sqlite" "$SETUP_TOKEN_FILE"
+}
+
+trust_repository() {
+    git config --system --add safe.directory "$CORESMITH_REPO" 2>/dev/null || true
+    if [ -d "$CORESMITH_REPO/.git" ]; then
+        git config --system --add safe.directory "$CORESMITH_REPO/.git" 2>/dev/null || true
+    fi
+}
+
+require_release_ref() {
+    local ref="${CORESMITH_BRANCH:-v${INSTALL_VERSION:-$CORESMITH_VERSION}}" found=0
+
+    trust_repository
+    (cd / && sudo -u coresmith env GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code "$CORESMITH_REPO" "refs/heads/${ref}" "refs/tags/${ref}") >/dev/null 2>&1 || found=$?
+
+    case "$found" in
+    0) ;;
+    2) fatal "${CORESMITH_REPO} has no ${ref}, so nothing was changed. Pass --version <x.y.z> for a release it has, or --branch <name> for a branch." ;;
+    *) fatal "Could not reach ${CORESMITH_REPO}, so nothing was changed. Check the repository is reachable, then run the installer again." ;;
+    esac
+}
+
+valid_release_name() {
+    local pattern='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?-[0-9a-f]{7}$'
+
+    [[ "$1" =~ $pattern ]]
+}
+
+name_release() {
+    local version commit name
+
+    version="$(tr -d '[:space:]' <"$1/VERSION" 2>/dev/null || true)"
+    commit="$(sudo -u coresmith git -C "$1" rev-parse HEAD 2>/dev/null || true)"
+    commit="${commit:-0000000}"
+    name="${version:-0.0.0}-${commit:0:7}"
+
+    valid_release_name "$name" || return 1
+    RELEASE_DIR="$RELEASES_DIR/$name"
+}
+
 write_release_sentinel() {
     local dir="$1" tag="${2:-}" version commit tag_json="null"
 
@@ -330,6 +383,7 @@ JSON
 switch_release() {
     local tmp="$CORESMITH_ROOT/.app-$$"
 
+    PREVIOUS_RELEASE="$(readlink "$INSTALL_DIR" 2>/dev/null || true)"
     ln -sfn "$RELEASE_DIR" "$tmp"
     mv -Tf "$tmp" "$INSTALL_DIR"
     chown -h coresmith:coresmith "$INSTALL_DIR"
@@ -343,19 +397,39 @@ seal_and_switch_release() {
     switch_release
 }
 
+prune_releases() {
+    local entry name current="${RELEASE_DIR##*/}" previous="${PREVIOUS_RELEASE##*/}"
+
+    if [ -z "$previous" ] || [ "$previous" = "$current" ]; then
+        return 0
+    fi
+
+    for entry in "$RELEASES_DIR"/* "$RELEASES_DIR"/.[!.]*; do
+        name="${entry##*/}"
+
+        if [ -L "$entry" ] || [ ! -d "$entry" ] || [ "$name" = "$current" ] || [ "$name" = "$previous" ]; then
+            continue
+        fi
+
+        rm -rf "$entry"
+        log "Removed old release ${name}"
+    done
+}
+
 adopt_legacy_layout() {
     if [ ! -d "$INSTALL_DIR" ] || [ -L "$INSTALL_DIR" ]; then
         return 0
     fi
 
-    local version commit item
+    local item
 
+    require_release_ref
+    name_release "$INSTALL_DIR" ||
+        fatal "The install in ${INSTALL_DIR} has a VERSION Coresmith can't name a release after. Put a version like 1.2.3 in ${INSTALL_DIR}/VERSION, then run the installer again."
+
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR"
     mkdir -p "$RELEASES_DIR" "$SHARED_DIR"
     chown coresmith:coresmith "$RELEASES_DIR" "$SHARED_DIR"
-
-    version="$(tr -d '[:space:]' <"$INSTALL_DIR/VERSION" 2>/dev/null || true)"
-    commit="$(sudo -u coresmith git -C "$INSTALL_DIR" rev-parse --short=7 HEAD 2>/dev/null || true)"
-    RELEASE_DIR="$RELEASES_DIR/${version:-0.0.0}-${commit:-0000000}"
 
     if [ ! -f "$SHARED_DIR/.env" ] && [ -f "$INSTALL_DIR/.env" ]; then
         mv "$INSTALL_DIR/.env" "$SHARED_DIR/.env"
@@ -585,6 +659,7 @@ create_user_and_dirs() {
     id coresmith >/dev/null 2>&1 ||
         useradd --system --shell /bin/bash --home-dir /opt/coresmith --create-home coresmith
 
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"
     mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
         "$CONFIG_DIR"/env "$CONFIG_DIR"/deploy-keys /etc/caddy /var/log/caddy
 
@@ -608,12 +683,9 @@ install_coresmith_app() {
     log "Phase 4/8: installing the Coresmith application..."
 
     # Git refuses to clone a directory owned by another user unless it is marked safe.
-    git config --system --add safe.directory "$CORESMITH_REPO" 2>/dev/null || true
-    if [ -d "$CORESMITH_REPO/.git" ]; then
-        git config --system --add safe.directory "$CORESMITH_REPO/.git" 2>/dev/null || true
-    fi
+    trust_repository
 
-    local ref="${CORESMITH_BRANCH:-v${INSTALL_VERSION:-$CORESMITH_VERSION}}" incoming name
+    local ref="${CORESMITH_BRANCH:-v${INSTALL_VERSION:-$CORESMITH_VERSION}}" incoming
 
     incoming="$RELEASES_DIR/.incoming-$$"
     rm -rf "$incoming"
@@ -621,8 +693,10 @@ install_coresmith_app() {
     sudo -u coresmith git clone --quiet --depth 1 --branch "$ref" "$CORESMITH_REPO" "$incoming" ||
         fatal "Could not fetch ${ref} from ${CORESMITH_REPO}. Check the repository is reachable and has that release; to install a branch, pass --branch <name>."
 
-    name="$(tr -d '[:space:]' <"$incoming/VERSION" 2>/dev/null || printf '0.0.0')-$(sudo -u coresmith git -C "$incoming" rev-parse --short=7 HEAD)"
-    RELEASE_DIR="$RELEASES_DIR/$name"
+    name_release "$incoming" || {
+        rm -rf "$incoming"
+        fatal "The VERSION file in ${ref} isn't a version like 1.2.3, so Coresmith can't name the release. Install a release with --version <x.y.z>, or fix VERSION on that branch, then run the installer again."
+    }
 
     if [ -f "$RELEASE_DIR/.coresmith-release.json" ]; then
         rm -rf "$incoming"
@@ -678,7 +752,8 @@ ensure_env_secret() {
 update_env() {
     local key="$1" value="$2" file="$SHARED_DIR/.env" tmp
 
-    tmp="$(mktemp)"
+    refuse_link "$file"
+    tmp="$(mktemp "$SHARED_DIR/.env.XXXXXX")"
 
     # Values reach awk through the environment, so none of it is ever read as a pattern.
     KEY="$key" VALUE="$value" awk '
@@ -686,10 +761,12 @@ update_env() {
         index($0, key "=") == 1 { print key "=" value; replaced = 1; next }
         { print }
         END { if (!replaced) print key "=" value }
-    ' "$file" >"$tmp"
+    ' "$file" >"$tmp" || {
+        rm -f "$tmp"
+        return 1
+    }
 
-    cat "$tmp" >"$file"
-    rm -f "$tmp"
+    mv -f "$tmp" "$file"
 }
 
 configure_environment() {
@@ -711,6 +788,7 @@ configure_environment() {
     case "$DB_DRIVER" in
     sqlite)
         update_env DB_DATABASE "$DATA_DIR/database.sqlite"
+        refuse_link "$DATA_DIR/database.sqlite"
         touch "$DATA_DIR/database.sqlite"
         chown coresmith:coresmith "$DATA_DIR/database.sqlite"
         chmod 600 "$DATA_DIR/database.sqlite"
@@ -755,6 +833,7 @@ configure_environment() {
 
     [ -n "$ACME_EMAIL" ] && update_env ACME_EMAIL "$ACME_EMAIL"
 
+    refuse_link "$SHARED_DIR/.env"
     chown coresmith:coresmith "$SHARED_DIR/.env"
     chmod 600 "$SHARED_DIR/.env"
 
@@ -919,8 +998,8 @@ https:// {
 }
 SITECONF
 
-    setfacl -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"
-    setfacl -R -m u:caddy:rX "$RELEASE_DIR/public"
+    setfacl -P -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"
+    setfacl -R -P -m u:caddy:rX "$RELEASE_DIR/public"
 
     mkdir -p /var/log/caddy
     chown -R caddy:caddy /var/log/caddy
@@ -1154,8 +1233,13 @@ finalize() {
     wait_for_service coresmith-horizon "$horizon_pid" || healthy=false
     wait_for_service coresmith-reverb || healthy=false
 
+    if $healthy; then
+        prune_releases
+    fi
+
     local setup_token="" setup_output="" already_set_up=false
 
+    refuse_link "$SETUP_TOKEN_FILE"
     install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"
     setup_output="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:setup-token --force 2>&1)" || true
 
@@ -1210,6 +1294,7 @@ print_summary() {
 main() {
     parse_args "$@"
     preflight
+    refuse_linked_layout
     adopt_legacy_layout
     adopt_existing_install
     interactive_prompts

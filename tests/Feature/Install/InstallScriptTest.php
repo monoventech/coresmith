@@ -7,6 +7,7 @@ use App\Services\Git\DeployKeyManager;
 use App\Services\Install\SetupToken;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
+use App\Services\Updates\ReleaseLayout;
 use App\Services\VaultEncryptor;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Yaml\Yaml;
@@ -214,8 +215,7 @@ test('writing the environment survives a password full of shell metacharacters',
 
     file_put_contents($directory . '/.env', "APP_ENV=local\nDB_PASSWORD=\nKEEP=me\n");
 
-    preg_match('/^update_env\(\) \{.*?^\}$/ms', installScriptBody(), $matches);
-    $function = $matches[0] ?? '';
+    $function = installScriptFunctions('refuse_link', 'update_env');
 
     expect($function)->not->toBeEmpty();
 
@@ -429,8 +429,9 @@ test('caddy is validated as itself and restarted so the panel config is actually
 test('caddy can read what it serves without being able to read or change the rest of the panel', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('setfacl -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"')
-        ->and($body)->toContain('setfacl -R -m u:caddy:rX "$RELEASE_DIR/public"')
+    expect($body)->toContain('setfacl -P -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"')
+        ->and($body)->toContain('setfacl -R -P -m u:caddy:rX "$RELEASE_DIR/public"')
+        ->and(substr_count($body, 'setfacl '))->toBe(2)
         ->and($body)->not->toContain('setfacl -R -d')
         ->and($body)->not->toMatch('/usermod\s+-aG\s+coresmith\s+caddy/');
 });
@@ -476,7 +477,7 @@ function installScriptFunctions(string ...$names): string
 function runInstallScriptFunctions(string $directory, string $body): Process
 {
     $script = 'set -euo pipefail' . "\n" . 'SHARED_DIR=' . escapeshellarg($directory) . "\nlog() { :; }\n"
-        . installScriptFunctions('env_value', 'vault_key_is_valid', 'ensure_env_secret', 'update_env', 'adopt_existing_install', 'ensure_database_password')
+        . installScriptFunctions('env_value', 'vault_key_is_valid', 'refuse_link', 'ensure_env_secret', 'update_env', 'adopt_existing_install', 'ensure_database_password')
         . "\n" . $body;
 
     $process = new Process(['bash', '-c', $script]);
@@ -539,7 +540,7 @@ test('re-running the installer keeps the keys that existing data was encrypted w
         ->and($body)->toContain('ensure_env_secret REVERB_APP_KEY')
         ->and($body)->toContain('ensure_env_secret REVERB_APP_SECRET')
         ->and($body)->not->toContain('    update_env CORESMITH_VAULT_KEY "$(openssl rand')
-        ->and($body)->toContain("preflight\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
+        ->and($body)->toContain("preflight\n    refuse_linked_layout\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
 });
 
 test('the browser is given the reverb key so live updates use the socket', function () {
@@ -688,7 +689,7 @@ test('the installer lays out the paths the updater reads', function () {
         ->and($body)->toContain('update_env CORESMITH_UPDATES_ENABLED "true"')
         ->and($body)->toContain('update_env CORESMITH_REPOSITORY "$CORESMITH_REPO"')
         ->and($body)->toContain(Release::SENTINEL)
-        ->and($body)->toContain('rev-parse --short=7 HEAD')
+        ->and($body)->toContain('name="${version:-0.0.0}-${commit:0:7}"')
         ->and($body)->toContain('chmod 700 "$UPDATES_DIR"')
         ->and($config)->toContain("env('CORESMITH_ROOT', '/opt/coresmith')")
         ->and($config)->toContain("env('CORESMITH_UPDATE_STATE_PATH', '/var/lib/coresmith/updates')");
@@ -747,34 +748,58 @@ test('by default the installer installs the release it belongs to', function () 
         ->and(installScriptBody())->toContain('CORESMITH_BRANCH=""');
 });
 
-test('an install from before release directories is moved into them with its settings', function () {
+function installLegacyTree(string $version = "0.1.0\n"): array
+{
     $base = realpath(sys_get_temp_dir()) . '/csl-' . bin2hex(random_bytes(4));
     $app = "{$base}/root/app";
     mkdir("{$app}/storage/app", 0755, true);
     file_put_contents("{$base}/gitconfig", '');
-    file_put_contents("{$app}/VERSION", "0.1.0\n");
+    file_put_contents("{$app}/VERSION", $version);
     file_put_contents("{$app}/.env", "APP_KEY=base64:keep\n");
     file_put_contents("{$app}/storage/app/kept.txt", 'kept');
     $env = ['GIT_CONFIG_GLOBAL' => "{$base}/gitconfig", 'GIT_CONFIG_NOSYSTEM' => '1', 'GIT_AUTHOR_NAME' => 'Coresmith', 'GIT_AUTHOR_EMAIL' => 'test@coresmith.test', 'GIT_COMMITTER_NAME' => 'Coresmith', 'GIT_COMMITTER_EMAIL' => 'test@coresmith.test'];
 
-    foreach ([['git', 'init', '--quiet'], ['git', 'add', 'VERSION'], ['git', 'commit', '--quiet', '-m', 'Release']] as $command) {
+    foreach ([['git', 'init', '--quiet'], ['git', 'add', 'VERSION'], ['git', 'commit', '--quiet', '-m', 'Release'], ['git', 'tag', 'v0.1.0']] as $command) {
         (new Process($command, $app, $env))->mustRun();
     }
 
-    $sha = trim((new Process(['git', 'rev-parse', '--short=7', 'HEAD'], $app, $env))->mustRun()->getOutput());
-    $functions = installScriptFunctions('write_release_sentinel', 'switch_release', 'adopt_legacy_layout');
+    return [$base, $env, trim((new Process(['git', 'rev-parse', 'HEAD'], $app, $env))->mustRun()->getOutput())];
+}
+
+function installLegacyConvert(string $base, array $env, string $before = ''): Process
+{
+    $functions = installScriptFunctions('refuse_link', 'require_release_ref', 'valid_release_name', 'name_release', 'write_release_sentinel', 'switch_release', 'adopt_legacy_layout');
     $script = 'set -euo pipefail' . "\n"
         . 'CORESMITH_ROOT=' . escapeshellarg("{$base}/root") . "\n"
-        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; INSTALL_DIR="$CORESMITH_ROOT/app"; RELEASE_DIR=""' . "\n"
-        . "log() { printf '%s\\n' \"\$1\"; }\nsuccess() { :; }\nchown() { :; }\n"
+        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; INSTALL_DIR="$CORESMITH_ROOT/app"; RELEASE_DIR=""; PREVIOUS_RELEASE=""' . "\n"
+        . 'CORESMITH_REPO="$INSTALL_DIR"; CORESMITH_BRANCH=""; INSTALL_VERSION=""; CORESMITH_VERSION="0.1.0"' . "\n"
+        . "log() { printf '%s\\n' \"\$1\"; }\nsuccess() { :; }\nchown() { :; }\ntrust_repository() { :; }\n"
+        . "fatal() { printf '%s\\n' \"\$1\" >&2; exit 1; }\n"
         . 'sudo() { if [ "$1" = "-u" ]; then shift 2; fi; "$@"; }' . "\n"
         . 'mv() { if [ "$1" = "-Tf" ]; then shift; command mv -f "$@"; else command mv "$@"; fi; }' . "\n"
-        . "{$functions}\nadopt_legacy_layout\n";
+        . 'git() { if [ "${3:-}" = rev-parse ] && [ "${4:-}" = --short=7 ]; then command git -C "$2" rev-parse HEAD | cut -c1-9; else command git "$@"; fi; }' . "\n"
+        . "{$functions}\n{$before}\nadopt_legacy_layout\n";
 
     $process = new Process(['bash', '-c', $script], null, $env);
     $process->run();
 
-    $release = "{$base}/root/releases/0.1.0-{$sha}";
+    return $process;
+}
+
+function installLegacyKept(string $base): bool
+{
+    return is_dir("{$base}/root/app") && !is_link("{$base}/root/app")
+        && file_get_contents("{$base}/root/app/.env") === "APP_KEY=base64:keep\n"
+        && file_get_contents("{$base}/root/app/storage/app/kept.txt") === 'kept'
+        && !file_exists("{$base}/root/releases");
+}
+
+test('an install from before release directories is moved into them with its settings', function () {
+    [$base, $env, $commit] = installLegacyTree();
+
+    $process = installLegacyConvert($base, $env);
+
+    $release = "{$base}/root/releases/0.1.0-" . substr($commit, 0, 7);
     $sentinel = json_decode((string) @file_get_contents("{$release}/.coresmith-release.json"), true);
     $link = @readlink("{$base}/root/app");
 
@@ -788,8 +813,59 @@ test('an install from before release directories is moved into them with its set
             ->and($sentinel['built_by'] ?? null)->toBe('installer')
             ->and($sentinel['version'] ?? null)->toBe('0.1.0')
             ->and(is_array($sentinel) && array_key_exists('tag', $sentinel) && $sentinel['tag'] === null)->toBeTrue()
-            ->and(Release::fromDirectory($release)?->name)->toBe("0.1.0-{$sha}")
-            ->and($process->getOutput())->toContain("Moved the existing install into {$base}/root/releases/0.1.0-{$sha}; its settings and data are kept.");
+            ->and(Release::fromDirectory($release)?->name)->toBe('0.1.0-' . substr($commit, 0, 7))
+            ->and($process->getOutput())->toContain("Moved the existing install into {$release}; its settings and data are kept.");
+    } finally {
+        (new Process(['rm', '-rf', $base]))->run();
+    }
+});
+
+test('an old install is not converted while the release it would move to cannot be fetched', function (string $before, string $error) {
+    [$base, $env] = installLegacyTree();
+
+    $process = installLegacyConvert($base, $env, $before);
+
+    try {
+        expect($process->getExitCode())->toBe(1)
+            ->and($process->getErrorOutput())->toBe(str_replace('{base}', $base, $error) . "\n")
+            ->and(installLegacyKept($base))->toBeTrue()
+            ->and(file_exists("{$base}/root/shared"))->toBeFalse();
+    } finally {
+        (new Process(['rm', '-rf', $base]))->run();
+    }
+})->with([
+    'a release the repository does not have' => ['CORESMITH_VERSION="9.9.9"', '{base}/root/app has no v9.9.9, so nothing was changed. Pass --version <x.y.z> for a release it has, or --branch <name> for a branch.'],
+    'a branch the repository does not have' => ['CORESMITH_BRANCH="nightly"', '{base}/root/app has no nightly, so nothing was changed. Pass --version <x.y.z> for a release it has, or --branch <name> for a branch.'],
+    'a repository that cannot be reached' => ['CORESMITH_REPO=/nonexistent/coresmith.git', 'Could not reach /nonexistent/coresmith.git, so nothing was changed. Check the repository is reachable, then run the installer again.'],
+]);
+
+test('an old install whose VERSION cannot name a release is left where it is', function () {
+    [$base, $env] = installLegacyTree("../../x\n");
+
+    $process = installLegacyConvert($base, $env);
+
+    try {
+        expect($process->getExitCode())->toBe(1)
+            ->and($process->getErrorOutput())->toBe("The install in {$base}/root/app has a VERSION Coresmith can't name a release after. Put a version like 1.2.3 in {$base}/root/app/VERSION, then run the installer again.\n")
+            ->and(installLegacyKept($base))->toBeTrue()
+            ->and(glob("{$base}/x-*"))->toBe([]);
+    } finally {
+        (new Process(['rm', '-rf', $base]))->run();
+    }
+});
+
+test('an old install is not converted into a linked shared directory', function () {
+    [$base, $env] = installLegacyTree();
+    mkdir("{$base}/victim");
+    symlink("{$base}/victim", "{$base}/root/shared");
+
+    $process = installLegacyConvert($base, $env);
+
+    try {
+        expect($process->getExitCode())->toBe(1)
+            ->and($process->getErrorOutput())->toBe("{$base}/root/shared is a symbolic link, so the installer stopped rather than follow it as root. Put the real file or directory back, then run the installer again.\n")
+            ->and(installLegacyKept($base))->toBeTrue()
+            ->and(scandir("{$base}/victim"))->toBe(['.', '..']);
     } finally {
         (new Process(['rm', '-rf', $base]))->run();
     }
@@ -803,4 +879,293 @@ test('an install that already uses release directories is left as it is', functi
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($process->getOutput())->toBe("untouched\n");
+});
+
+function installScratch(): string
+{
+    $base = realpath(sys_get_temp_dir()) . '/csk-' . bin2hex(random_bytes(4));
+    mkdir($base, 0700, true);
+
+    return $base;
+}
+
+function installRun(string $script, ?string $input = null, ?array $env = null): Process
+{
+    $process = new Process(['bash', '-c', "set -euo pipefail\nfatal() { printf '%s\\n' \"\$1\" >&2; exit 1; }\nlog() { printf '%s\\n' \"\$1\"; }\nsuccess() { :; }\n{$script}"], null, $env, $input);
+    $process->run();
+
+    return $process;
+}
+
+test('a release is named after its version and the first seven characters of its commit', function (string $version, ?string $name) {
+    $base = installScratch();
+    file_put_contents("{$base}/VERSION", $version);
+    $env = ['GIT_CONFIG_GLOBAL' => '/dev/null', 'GIT_CONFIG_NOSYSTEM' => '1', 'GIT_AUTHOR_NAME' => 'Coresmith', 'GIT_AUTHOR_EMAIL' => 'test@coresmith.test', 'GIT_COMMITTER_NAME' => 'Coresmith', 'GIT_COMMITTER_EMAIL' => 'test@coresmith.test'];
+
+    foreach ([['git', 'init', '--quiet'], ['git', 'add', 'VERSION'], ['git', 'commit', '--quiet', '-m', 'Release']] as $command) {
+        (new Process($command, $base, $env))->mustRun();
+    }
+
+    $commit = trim((new Process(['git', 'rev-parse', 'HEAD'], $base, $env))->mustRun()->getOutput());
+    $script = 'RELEASES_DIR=/releases; RELEASE_DIR=""' . "\n"
+        . 'sudo() { if [ "$1" = "-u" ]; then shift 2; fi; "$@"; }' . "\n"
+        . installScriptFunctions('valid_release_name', 'name_release') . "\n"
+        . 'if name_release ' . escapeshellarg($base) . '; then printf "%s" "$RELEASE_DIR"; else printf "refused"; fi';
+    $process = new Process(['bash', '-c', $script], null, $env);
+    $process->run();
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getOutput())->toBe($name === null ? 'refused' : '/releases/' . str_replace('{commit}', substr($commit, 0, 7), $name));
+})->with([
+    'a release' => ['1.2.3', '1.2.3-{commit}'],
+    'a pre-release' => ['1.2.3-beta.1', '1.2.3-beta.1-{commit}'],
+    'a trailing newline' => ["1.2.3\n", '1.2.3-{commit}'],
+    'no version at all' => ['', '0.0.0-{commit}'],
+    'a path' => ['../../etc', null],
+    'two numbers' => ['1.2', null],
+    'a leading v' => ['v1.2.3', null],
+]);
+
+test('the installer accepts exactly the release names the updater can find', function () {
+    $names = ['1.2.3-abcdef0', '1.2.3-beta.1-abcdef0', '0.0.0-0000000', '10.20.30-rc.1.x-0123456', '1.2.3-abcdef', '1.2.3-abcdef01', '1.2.3-ABCDEF0', '01.2.3-abcdef0', '1.2-abcdef0', '1.2.3--abcdef0', '1.2.3-..-abcdef0', '../1.2.3-abcdef0', '1.2.3-abcdef0/..', "1.2.3-abcdef0\nx", '1.2.3-a_b-abcdef0', ' 1.2.3-abcdef0'];
+    $script = installScriptFunctions('valid_release_name') . "\n" . 'for name in "$@"; do if valid_release_name "$name"; then printf 1; else printf 0; fi; done';
+    $process = new Process(['bash', '-c', $script, 'bash', ...$names]);
+    $process->mustRun();
+
+    expect(str_split($process->getOutput()))->toBe(array_map(fn(string $name): string => preg_match(ReleaseLayout::NAME, $name) === 1 ? '1' : '0', $names));
+});
+
+test('a fetched release is named and checked before anything is removed or moved for it', function () {
+    $code = installScriptFunctions('install_coresmith_app');
+    $named = strpos($code, 'name_release "$incoming" || {');
+
+    expect($named)->not->toBeFalse()
+        ->and($named)->toBeLessThan(strpos($code, 'rm -rf "$RELEASE_DIR"'))
+        ->and($code)->not->toContain('--short=7')
+        ->and(installScriptBody())->not->toContain('--short=7');
+});
+
+test('a fetched release whose VERSION cannot name it is removed again before the install stops', function () {
+    $base = installScratch();
+    $env = ['GIT_CONFIG_GLOBAL' => '/dev/null', 'GIT_CONFIG_NOSYSTEM' => '1', 'GIT_AUTHOR_NAME' => 'Coresmith', 'GIT_AUTHOR_EMAIL' => 'test@coresmith.test', 'GIT_COMMITTER_NAME' => 'Coresmith', 'GIT_COMMITTER_EMAIL' => 'test@coresmith.test'];
+    mkdir("{$base}/origin");
+    mkdir("{$base}/releases");
+    file_put_contents("{$base}/origin/VERSION", "next\n");
+
+    foreach ([['git', 'init', '--quiet', '--initial-branch=main'], ['git', 'add', 'VERSION'], ['git', 'commit', '--quiet', '-m', 'Next']] as $command) {
+        (new Process($command, "{$base}/origin", $env))->mustRun();
+    }
+
+    $script = 'CORESMITH_REPO=' . escapeshellarg("file://{$base}/origin") . '; CORESMITH_BRANCH=main; INSTALL_VERSION=""; CORESMITH_VERSION=0.1.0; RELEASES_DIR=' . escapeshellarg("{$base}/releases") . '; SHARED_DIR=' . escapeshellarg("{$base}/shared") . '; RELEASE_DIR=""' . "\n"
+        . "trust_repository() { :; }\n" . 'sudo() { if [ "$1" = "-u" ]; then shift 2; fi; "$@"; }' . "\n"
+        . installScriptFunctions('valid_release_name', 'name_release', 'install_coresmith_app') . "\ninstall_coresmith_app\n";
+
+    $process = installRun($script, env: $env);
+    $left = scandir("{$base}/releases");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getErrorOutput())->toContain("The VERSION file in main isn't a version like 1.2.3, so Coresmith can't name the release. Install a release with --version <x.y.z>, or fix VERSION on that branch, then run the installer again.\n")
+        ->and($left)->toBe(['.', '..']);
+});
+
+function installLinkedLayout(string $base): string
+{
+    return 'CORESMITH_ROOT=' . escapeshellarg("{$base}/opt/coresmith") . '; DATA_DIR=' . escapeshellarg("{$base}/var/lib/coresmith") . '; APPS_DIR=' . escapeshellarg("{$base}/var/coresmith") . '; CONFIG_DIR=' . escapeshellarg("{$base}/etc/coresmith") . "\n"
+        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; UPDATES_DIR="$DATA_DIR/updates"; SETUP_TOKEN_FILE="$DATA_DIR/setup-token"' . "\n";
+}
+
+test('a link where the installer changes things as root stops it before anything changes', function (string $path) {
+    $base = installScratch();
+    mkdir("{$base}/victim");
+    @mkdir(dirname("{$base}/{$path}"), 0755, true);
+    symlink("{$base}/victim", "{$base}/{$path}");
+
+    $process = installRun(installLinkedLayout($base) . installScriptFunctions('refuse_link', 'refuse_linked_layout') . "\nrefuse_linked_layout\necho carried on\n");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getErrorOutput())->toBe("{$base}/{$path} is a symbolic link, so the installer stopped rather than follow it as root. Put the real file or directory back, then run the installer again.\n")
+        ->and($process->getOutput())->toBe('');
+})->with([
+    'releases' => ['opt/coresmith/releases'],
+    'shared' => ['opt/coresmith/shared'],
+    'the environment file' => ['opt/coresmith/shared/.env'],
+    'updates' => ['var/lib/coresmith/updates'],
+    'the database' => ['var/lib/coresmith/database.sqlite'],
+    'the setup token' => ['var/lib/coresmith/setup-token'],
+]);
+
+test('a layout without links carries on', function () {
+    $base = installScratch();
+    mkdir("{$base}/opt/coresmith/shared", 0755, true);
+    mkdir("{$base}/var/lib/coresmith/updates", 0755, true);
+    touch("{$base}/opt/coresmith/shared/.env");
+
+    $process = installRun(installLinkedLayout($base) . installScriptFunctions('refuse_link', 'refuse_linked_layout') . "\nrefuse_linked_layout\necho carried on\n");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("carried on\n");
+});
+
+test('creating the directories changes no owner or mode through a link', function () {
+    $base = installScratch();
+    mkdir("{$base}/victim");
+    mkdir("{$base}/var/lib/coresmith", 0755, true);
+    symlink("{$base}/victim", "{$base}/var/lib/coresmith/updates");
+    $calls = escapeshellarg("{$base}/calls.log");
+
+    $process = installRun(installLinkedLayout($base)
+        . "id() { return 0; }\nuseradd() { :; }\n"
+        . "mkdir() { printf 'mkdir %s\\n' \"\$*\" >>{$calls}; }\nchown() { printf 'chown %s\\n' \"\$*\" >>{$calls}; }\nchmod() { printf 'chmod %s\\n' \"\$*\" >>{$calls}; }\n"
+        . installScriptFunctions('refuse_link', 'create_user_and_dirs') . "\ncreate_user_and_dirs\n");
+    $made = @file_get_contents("{$base}/calls.log");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getErrorOutput())->toContain("{$base}/var/lib/coresmith/updates is a symbolic link")
+        ->and($made)->toBeFalse();
+});
+
+test('the environment is never written through a link', function () {
+    $base = installScratch();
+    mkdir("{$base}/shared");
+    file_put_contents("{$base}/victim", "SECRET=keep\n");
+    symlink("{$base}/victim", "{$base}/shared/.env");
+
+    $process = installRun('SHARED_DIR=' . escapeshellarg("{$base}/shared") . "\n" . installScriptFunctions('refuse_link', 'update_env') . "\nupdate_env APP_ENV production\n");
+    $victim = file_get_contents("{$base}/victim");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getErrorOutput())->toContain("{$base}/shared/.env is a symbolic link")
+        ->and($victim)->toBe("SECRET=keep\n");
+});
+
+test('the environment is replaced by a file written beside it, never rewritten in place', function () {
+    $base = installScratch();
+    mkdir("{$base}/shared");
+    file_put_contents("{$base}/shared/.env", "APP_ENV=local\nKEEP=me\n");
+    link("{$base}/shared/.env", "{$base}/before");
+
+    $moves = escapeshellarg("{$base}/moves.log");
+    $process = installRun('SHARED_DIR=' . escapeshellarg("{$base}/shared") . "\n" . "mv() { printf '%s\\n' \"\$*\" >>{$moves}; command mv \"\$@\"; }\n" . installScriptFunctions('refuse_link', 'update_env') . "\nupdate_env APP_ENV production\n");
+    $env = file_get_contents("{$base}/shared/.env");
+    $before = file_get_contents("{$base}/before");
+    $left = scandir("{$base}/shared");
+    $moved = file_get_contents("{$base}/moves.log");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($env)->toBe("APP_ENV=production\nKEEP=me\n")
+        ->and($before)->toBe("APP_ENV=local\nKEEP=me\n")
+        ->and($left)->toBe(['.', '..', '.env'])
+        ->and($moved)->toMatch('#^-f ' . preg_quote("{$base}/shared/.env.", '#') . '[A-Za-z0-9]{6} ' . preg_quote("{$base}/shared/.env", '#') . '\n$#');
+});
+
+test('root changes owners and modes only on paths it has just checked are not links', function () {
+    foreach ([
+        ['adopt_legacy_layout', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR"', 'chown coresmith:coresmith "$RELEASES_DIR" "$SHARED_DIR"'],
+        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"', 'chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"'],
+        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"', 'chmod 700 "$UPDATES_DIR"'],
+        ['configure_environment', 'refuse_link "$DATA_DIR/database.sqlite"', 'chown coresmith:coresmith "$DATA_DIR/database.sqlite"'],
+        ['configure_environment', 'refuse_link "$SHARED_DIR/.env"', 'chown coresmith:coresmith "$SHARED_DIR/.env"'],
+        ['finalize', 'refuse_link "$SETUP_TOKEN_FILE"', 'install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"'],
+    ] as [$function, $check, $change]) {
+        $code = installScriptFunctions($function);
+
+        expect($code)->toContain($check)
+            ->and($code)->toContain($change)
+            ->and(strpos($code, $check))->toBeLessThan(strpos($code, $change));
+    }
+});
+
+function installReleases(string $base): string
+{
+    foreach (['0.0.9-ddddddd', '0.1.0-aaaaaaa', '0.2.0-bbbbbbb', '0.3.0-ccccccc', '.incoming-4242'] as $name) {
+        mkdir("{$base}/releases/{$name}/public", 0755, true);
+    }
+
+    mkdir("{$base}/outside");
+    file_put_contents("{$base}/outside/kept.txt", 'kept');
+    file_put_contents("{$base}/releases/notes.txt", 'notes');
+    symlink("{$base}/outside", "{$base}/releases/outside");
+
+    return 'RELEASES_DIR=' . escapeshellarg("{$base}/releases") . "\n";
+}
+
+test('a run that switched releases removes every other release but the one it replaced', function () {
+    $base = installScratch();
+    $script = installReleases($base) . 'RELEASE_DIR="$RELEASES_DIR/0.3.0-ccccccc"; PREVIOUS_RELEASE="$RELEASES_DIR/0.2.0-bbbbbbb"' . "\n" . installScriptFunctions('prune_releases') . "\nprune_releases\n";
+
+    $process = installRun($script);
+    $left = scandir("{$base}/releases");
+    $outside = file_get_contents("{$base}/outside/kept.txt");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($left)->toBe(['.', '..', '0.2.0-bbbbbbb', '0.3.0-ccccccc', 'notes.txt', 'outside'])
+        ->and($outside)->toBe('kept')
+        ->and($process->getOutput())->toBe("Removed old release 0.0.9-ddddddd\nRemoved old release 0.1.0-aaaaaaa\nRemoved old release .incoming-4242\n");
+});
+
+test('a run that did not switch releases removes nothing', function (string $previous) {
+    $base = installScratch();
+    $script = installReleases($base) . 'RELEASE_DIR="$RELEASES_DIR/0.3.0-ccccccc"; PREVIOUS_RELEASE=' . $previous . "\n" . installScriptFunctions('prune_releases') . "\nprune_releases\n";
+
+    $process = installRun($script);
+    $left = scandir("{$base}/releases");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($left)->toBe(['.', '..', '.incoming-4242', '0.0.9-ddddddd', '0.1.0-aaaaaaa', '0.2.0-bbbbbbb', '0.3.0-ccccccc', 'notes.txt', 'outside']);
+})->with([
+    'the same release' => ['"$RELEASE_DIR"'],
+    'a first install' => ['""'],
+]);
+
+test('switching releases remembers the one it replaced', function () {
+    $base = installScratch();
+    mkdir("{$base}/releases/0.1.0-aaaaaaa", 0755, true);
+    mkdir("{$base}/releases/0.2.0-bbbbbbb", 0755, true);
+    $script = 'CORESMITH_ROOT=' . escapeshellarg($base) . '; INSTALL_DIR="$CORESMITH_ROOT/app"; RELEASES_DIR="$CORESMITH_ROOT/releases"; PREVIOUS_RELEASE=""' . "\n"
+        . "chown() { :; }\n" . 'mv() { if [ "$1" != "-Tf" ]; then command mv "$@"; elif shift && command mv --version >/dev/null 2>&1; then command mv -Tf "$@"; else command mv -hf "$@"; fi; }' . "\n"
+        . installScriptFunctions('switch_release') . "\n"
+        . 'RELEASE_DIR="$RELEASES_DIR/0.1.0-aaaaaaa"; switch_release; printf "[%s]" "$PREVIOUS_RELEASE"' . "\n"
+        . 'RELEASE_DIR="$RELEASES_DIR/0.2.0-bbbbbbb"; switch_release; printf "[%s]" "$PREVIOUS_RELEASE"' . "\n";
+
+    $process = installRun($script);
+    $link = readlink("{$base}/app");
+
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("[][{$base}/releases/0.1.0-aaaaaaa]")
+        ->and($link)->toBe("{$base}/releases/0.2.0-bbbbbbb");
+});
+
+test('old releases are removed only once the services are up on the new one', function () {
+    expect(installScriptFunctions('finalize'))->toContain("    wait_for_service coresmith-reverb || healthy=false\n\n    if \$healthy; then\n        prune_releases\n    fi\n");
+});
+
+test('the installer workflow runs whenever a file the machine test depends on changes', function () {
+    $on = Yaml::parseFile(base_path('.github/workflows/installer.yml'))['on'];
+
+    foreach (['config/coresmith.php', 'bootstrap/app.php', 'routes/api.php', 'routes/console.php', 'app/Http/Controllers/ReleaseProbeController.php'] as $path) {
+        expect(is_file(base_path($path)))->toBeTrue("{$path} does not exist")
+            ->and($on['push']['paths'])->toContain($path)
+            ->and($on['pull_request']['paths'])->toContain($path);
+    }
+
+    expect($on['push']['paths'])->toBe($on['pull_request']['paths']);
 });
