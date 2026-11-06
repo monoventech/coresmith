@@ -315,6 +315,41 @@ an_interrupted_update_recovers() {
     ok "an interrupted update recovers on its own"
 }
 
+rolled_back_to() {
+    [ "$(state .state)" = "rolled_back" ] && [ "$(release)" = "$1" ] && [ "$(answers /up)" = "200" ]
+}
+
+an_update_interrupted_past_the_switch_is_rolled_back() {
+    local now id previous version next backup count horizon
+
+    SCENARIO="an update interrupted past the switch is rolled back from the scheduler"
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    id="$(printf '01machine%017d' "$(($(date +%s) + 1))")"
+    previous="$(release)"
+    version="$(jq -r .version "$previous/.coresmith-release.json")"
+    next="$ROOT/releases/9.9.9-abcdef1"
+    horizon="$(systemctl show -p MainPID --value coresmith-horizon)"
+
+    backup="$(as_panel php artisan coresmith:backup | sed -n 's/^Backed up to \(.*\) ([^)]*)\.$/\1/p')"
+    [ -f "$backup" ] || fail "the backup wrote no archive"
+    count="$(migrations)"
+
+    sudo -u coresmith cp -a "$previous" "$next"
+    sudo -u coresmith sh -c 'jq ".version = \"9.9.9\"" "$1/.coresmith-release.json" >"$1/.coresmith-release.json.tmp" && mv -f "$1/.coresmith-release.json.tmp" "$1/.coresmith-release.json"' sh "$next"
+    sudo -u coresmith sqlite3 "$DATABASE" "insert into migrations (migration, batch) values ('2099_01_01_000000_machine_test_partial', 99)"
+    as_panel php artisan down >/dev/null
+    sudo -u coresmith ln -sfn "$next" "$ROOT/.app-machine"
+    sudo -u coresmith mv -Tf "$ROOT/.app-machine" "$APP"
+
+    write_as_panel "{\"schema\":1,\"id\":\"$id\",\"state\":\"running\",\"trigger\":\"cli\",\"requested_by\":null,\"from\":{\"version\":\"$version\",\"release\":\"$(basename "$previous")\"},\"to\":{\"version\":\"9.9.9\",\"release\":\"9.9.9-abcdef1\"},\"step\":\"restart\",\"failed_step\":null,\"message\":null,\"signature\":\"verified\",\"markers\":{\"built\":\"9.9.9-abcdef1\",\"maintenance\":true,\"backup\":\"$backup\",\"migrating\":true,\"switched\":true,\"healthy\":false},\"started_at\":\"$now\",\"updated_at\":\"$now\",\"finished_at\":null}" "$UPDATES/status.json"
+
+    wait_for 300 rolled_back_to "$previous" || fail "the update wasn't rolled back: the status is $(state .state), the panel runs $(release) and /up answers $(answers /up)"
+    [ "$(migrations)" = "$count" ] || fail "the database wasn't restored: $(migrations) migrations, $count before"
+    [ "$(systemctl show -p MainPID --value coresmith-horizon)" != "$horizon" ] || fail "Horizon wasn't restarted onto the release it was rolled back to"
+
+    ok "an update interrupted past the switch is rolled back from the scheduler"
+}
+
 the_uninstaller_leaves_the_machine_clean() {
     SCENARIO="the uninstaller leaves the machine clean"
 
@@ -344,6 +379,7 @@ main() {
     an_unsigned_release_is_refused
     the_panel_request_starts_the_service
     an_interrupted_update_recovers
+    an_update_interrupted_past_the_switch_is_rolled_back
     the_uninstaller_leaves_the_machine_clean
 }
 

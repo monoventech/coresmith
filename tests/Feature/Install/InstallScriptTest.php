@@ -351,6 +351,7 @@ test('the machine test checks each scenario it promises', function () {
         'an unsigned release is refused before anything changes',
         "the panel's request starts the update service",
         'an interrupted update recovers on its own',
+        'an update interrupted past the switch is rolled back from the scheduler',
         'the uninstaller leaves the machine clean',
     ] as $scenario) {
         expect($script)->toContain("ok \"{$scenario}\"");
