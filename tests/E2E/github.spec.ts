@@ -64,6 +64,7 @@ test.describe('creating a GitHub App from the panel', () => {
         await expect
             .poll(() => captured.action)
             .toMatch(/^https:\/\/github\.com\/organizations\/acme-labs\/settings\/apps\/new\?state=[A-Za-z0-9]{40}$/)
+        await expect(page).toHaveTitle('stub')
 
         const fields = new URLSearchParams(captured.body)
         const manifest = JSON.parse(fields.get('manifest') ?? '{}')
@@ -97,6 +98,7 @@ test.describe('creating a GitHub App from the panel', () => {
         await expect
             .poll(() => captured.action)
             .toMatch(/^https:\/\/github\.com\/settings\/apps\/new\?state=[A-Za-z0-9]{40}$/)
+        await expect(page).toHaveTitle('stub')
 
         const manifest = JSON.parse(new URLSearchParams(captured.body).get('manifest') ?? '{}')
 
@@ -160,6 +162,7 @@ test.describe('creating a GitHub App from the panel', () => {
         await page.getByRole('button', { name: 'Create on GitHub' }).click()
 
         await expect.poll(() => captured.body).not.toBe('')
+        await expect(page).toHaveTitle('stub')
 
         const manifest = JSON.parse(new URLSearchParams(captured.body).get('manifest') ?? '{}')
 
@@ -216,6 +219,7 @@ test.describe('a GitHub App registered but not installed', () => {
         await link.click()
 
         await expect.poll(() => captured.location).toMatch(/^https:\/\/github\.com\/login\/oauth\/authorize\?/)
+        await expect(page).toHaveTitle('stub')
         expect(captured.navigation).toBe(true)
     })
 

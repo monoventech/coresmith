@@ -181,6 +181,7 @@ test.describe('git settings', () => {
         await expect
             .poll(() => captured.redirect)
             .toMatch(/^https:\/\/github\.com\/apps\/coresmith-monoven\/installations\/new\?state=[A-Za-z0-9]{40}$/)
+        await expect(page).toHaveTitle('stub')
         expect(captured.navigation).toBe(true)
     })
 })
