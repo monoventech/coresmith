@@ -235,8 +235,9 @@ final class ServerController extends Controller
         $completed = (int) ($server->provisioning_phase ?? 0);
         $words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'];
 
-        $server->forceFill(['status' => ServerStatus::Provisioning, 'provisioning_error' => null])->save();
-        ProvisionServer::dispatch($server);
+        if (!ProvisionServer::again($server)) {
+            return back()->with('success', "Provisioning is already running on {$server->name}.");
+        }
 
         activity()->performedOn($server)->withProperties(['phase' => $completed + 1])->log('provisioning_retried');
 
@@ -251,8 +252,9 @@ final class ServerController extends Controller
 
         abort_unless($server->status === ServerStatus::Failed, 404);
 
-        $server->forceFill(['status' => ServerStatus::Provisioning, 'provisioning_error' => null, 'provisioning_log' => null])->save();
-        ProvisionServer::dispatch($server, fromScratch: true);
+        if (!ProvisionServer::again($server, fromScratch: true)) {
+            return back()->with('success', "Provisioning is already running on {$server->name}.");
+        }
 
         activity()->performedOn($server)->log('provisioning_restarted');
 

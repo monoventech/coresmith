@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Http\Controllers\ServerController;
 use App\Jobs\AuditServer;
 use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
@@ -16,6 +17,7 @@ use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Panel\ServerPresenter;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
+use Spatie\Activitylog\Models\Activity;
 
 function checkedServer(Team $team, array $findings = [], int $minutesAgo = 5): Server
 {
@@ -580,4 +582,24 @@ test('each new server key is labelled with its server, safely, whatever the name
 })->with([
     'a plain name' => ['Web 1', 'coresmith@web-1'],
     'a name with a line break' => ["edge\nssh-ed25519 AAAA attacker", 'coresmith@edge-ssh-ed25519-aaaa-attacker'],
+]);
+
+test('retrying or starting over twice at once queues one run', function (string $route, string $action, string $logged) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'outpost-02', 'status' => ServerStatus::Failed, 'provisioning_phase' => 2, 'provisioning_error' => 'Directories failed.']);
+    $stale = $server->fresh();
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route($route, $server))->assertSessionHas('success');
+
+    $second = app(ServerController::class)->{$action}($stale);
+
+    expect($second->getSession()?->get('success'))->toBe('Provisioning is already running on outpost-02.')
+        ->and(Activity::query()->where('description', $logged)->count())->toBe(1)
+        ->and($server->fresh()->status)->toBe(ServerStatus::Provisioning);
+
+    Queue::assertPushed(ProvisionServer::class, 1);
+})->with([
+    'retrying' => ['servers.provisioning.retry', 'retryProvisioning', 'provisioning_retried'],
+    'starting over' => ['servers.provisioning.restart', 'restartProvisioning', 'provisioning_restarted'],
 ]);

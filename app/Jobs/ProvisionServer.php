@@ -65,6 +65,25 @@ final class ProvisionServer implements ShouldQueue
         }
     }
 
+    public static function again(Server $server, bool $fromScratch = false): bool
+    {
+        if (!self::move($server, ServerStatus::Failed, ServerStatus::Provisioning)) {
+            return false;
+        }
+
+        $server->forceFill(['provisioning_error' => null, ...($fromScratch ? ['provisioning_log' => null] : [])])->save();
+
+        try {
+            self::dispatch($server, fromScratch: $fromScratch);
+        } catch (Throwable $e) {
+            self::move($server, ServerStatus::Provisioning, ServerStatus::Failed);
+
+            throw $e;
+        }
+
+        return true;
+    }
+
     public function handle(SSHConnectionManager $connections, OsDetector $detector): void
     {
         $connection = $connections->for($this->server);
