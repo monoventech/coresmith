@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\CloudFailure;
 use App\Enums\CloudProviderType;
 use App\Enums\TeamRole;
+use App\Events\FleetChanged;
 use App\Exceptions\CloudProviderException;
 use App\Jobs\ResumeCloudTasks;
 use App\Jobs\RunCloudTask;
@@ -25,12 +26,14 @@ use App\Services\Cloud\Tasks\StepResult;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
-use Carbon\CarbonInterval;
+use Illuminate\Bus\UniqueLock;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -143,9 +146,29 @@ function cloudTaskFailure(CloudFailure $failure, ?string $detail = null, ?int $s
     return new CloudProviderException($failure, CloudProviderType::Hetzner, $detail, $status);
 }
 
-function cloudTaskSlept(int $seconds): Closure
+function cloudTaskDrive(Server $server, int $jobs = 10): void
 {
-    return fn(CarbonInterval $duration): bool => (int) $duration->totalSeconds === $seconds;
+    $job = new RunCloudTask($server);
+
+    for ($run = 0; $run < $jobs; $run++) {
+        $queued = Queue::pushed(RunCloudTask::class)->count();
+        (new UniqueLock(app(Repository::class)))->release($job);
+
+        $job->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+
+        $pushed = Queue::pushed(RunCloudTask::class);
+
+        if ($pushed->count() === $queued) {
+            return;
+        }
+
+        $job = $pushed->last();
+    }
+}
+
+function cloudTaskDelays(): array
+{
+    return Queue::pushed(RunCloudTask::class)->map(fn(RunCloudTask $job): mixed => $job->delay)->values()->all();
 }
 
 test('a task runs its steps in one go until it finishes', function () {
@@ -164,114 +187,31 @@ test('a task runs its steps in one go until it finishes', function () {
     Sleep::assertNeverSlept();
 });
 
-test('a short wait sleeps and carries on', function () {
+test('a wait queues the task again that much later, and the worker never sleeps', function (int $seconds, int $delay) {
+    Queue::fake([RunCloudTask::class]);
     $server = cloudTaskServer();
-    cloudTaskResults(StepResult::wait(5, ['polls' => 1]), StepResult::done());
+    cloudTaskResults(StepResult::wait($seconds, ['polls' => 1]), StepResult::done());
 
     cloudTaskRun($server);
 
-    Sleep::assertSlept(fn($d) => (int) $d->totalSeconds === 5, 1);
-    Sleep::assertSleptTimes(1);
-    expect(cloudTaskCalls())->toBe(['step one', 'step one', 'finished one'])
-        ->and(cloudTaskOf($server))
-        ->state->toBe(CloudTask::DONE)
-        ->data->toBe(['polls' => 1]);
-});
-
-test('a wait past the budget re-queues the task with that delay', function () {
-    Queue::fake();
-    $this->freezeTime();
-    $server = cloudTaskServer();
-    cloudTaskResults(StepResult::wait(95, ['polls' => 1]));
-
-    cloudTaskRun($server);
-
-    Queue::assertPushed(RunCloudTask::class, 1);
-    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay->equalTo(now()->addSeconds(95)));
     Sleep::assertNeverSlept();
-    expect(cloudTaskOf($server))
+    Queue::assertPushed(RunCloudTask::class, 1);
+    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay === $delay);
+    expect(cloudTaskCalls())->toBe(['step one'])
+        ->and(cloudTaskOf($server))
         ->state->toBe(CloudTask::RUNNING)
         ->step->toBe('one')
         ->data->toBe(['polls' => 1]);
-});
-
-test('waits in one job share a ninety second budget', function (array $waits, array $slept, int $delay) {
-    Queue::fake();
-    $this->freezeTime();
-    $server = cloudTaskServer();
-    cloudTaskResults(...array_map(StepResult::wait(...), $waits));
 
     cloudTaskRun($server);
 
-    Sleep::assertSequence(array_map(fn(int $seconds): Sleep => Sleep::for($seconds)->seconds(), $slept));
-    Queue::assertPushed(RunCloudTask::class, 1);
-    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->delay->equalTo(now()->addSeconds($delay)));
-    expect(cloudTaskOf($server)->state)->toBe(CloudTask::RUNNING);
+    expect(cloudTaskCalls())->toBe(['step one', 'step one', 'finished one'])
+        ->and(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
 })->with([
-    'two waits that add up past it' => [[50, 50], [50], 50],
-    'a wait that fills it exactly' => [[90, 1], [90], 1],
-]);
-
-test('steps that use up the budget hand the task to a fresh job at the next wait', function () {
-    Queue::fake();
-    $this->freezeTime();
-    $server = cloudTaskServer();
-    cloudTaskResults(function (): StepResult {
-        $this->travel(91)->seconds();
-
-        return StepResult::wait(5);
-    });
-
-    cloudTaskRun($server);
-
-    Sleep::assertNeverSlept();
-    Queue::assertPushed(RunCloudTask::class, 1);
-    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->delay->equalTo(now()->addSeconds(5)));
-    expect(cloudTaskOf($server)->state)->toBe(CloudTask::RUNNING);
-});
-
-test('steps that leave room in the budget still sleep in the job', function () {
-    Queue::fake();
-    $this->freezeTime();
-    $server = cloudTaskServer();
-    cloudTaskResults(function (): StepResult {
-        $this->travel(85)->seconds();
-
-        return StepResult::wait(5);
-    }, StepResult::done());
-
-    cloudTaskRun($server);
-
-    Sleep::assertSlept(cloudTaskSlept(5), 1);
-    Queue::assertNothingPushed();
-    expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
-});
-
-test('a wait that would end past the budget hands the task to a fresh job instead of sleeping', function (int $spent, int $wait, bool $sleeps) {
-    Queue::fake();
-    $this->freezeTime();
-    $server = cloudTaskServer();
-    cloudTaskResults(function () use ($spent, $wait): StepResult {
-        $this->travel($spent)->seconds();
-
-        return StepResult::wait($wait);
-    }, StepResult::done());
-
-    cloudTaskRun($server);
-
-    if ($sleeps) {
-        Sleep::assertSlept(cloudTaskSlept($wait), 1);
-        Queue::assertNothingPushed();
-        expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
-    } else {
-        Sleep::assertNeverSlept();
-        Queue::assertPushed(RunCloudTask::class, 1);
-        Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->delay->equalTo(now()->addSeconds($wait)));
-        expect(cloudTaskOf($server)->state)->toBe(CloudTask::RUNNING);
-    }
-})->with([
-    'a minute after a minute of steps' => [60, 60, false],
-    'a minute after half a minute of steps' => [30, 60, true],
+    'no time at all' => [0, 1],
+    'a second' => [1, 1],
+    'a poll' => [5, 5],
+    'longer than a minute' => [95, 95],
 ]);
 
 test('steps that use up the budget hand the task to a fresh job before the next step', function (int $seconds, array $calls, string $state) {
@@ -294,7 +234,7 @@ test('steps that use up the budget hand the task to a fresh job before the next 
 
     if ($state === CloudTask::RUNNING) {
         Queue::assertPushed(RunCloudTask::class, 1);
-        Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay->equalTo(now()->addSeconds(5)));
+        Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay === RunCloudTask::HANDOVER_SECONDS);
     } else {
         Queue::assertNothingPushed();
     }
@@ -316,19 +256,19 @@ test('a task that keeps stepping hands over to a fresh job', function () {
         ->state->toBe(CloudTask::RUNNING)
         ->step->toBe('step-25');
     Queue::assertPushed(RunCloudTask::class, 1);
-    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay->equalTo(now()->addSeconds(5)));
+    Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay === RunCloudTask::HANDOVER_SECONDS);
     Sleep::assertNeverSlept();
 });
 
 test('a provider hiccup waits and is remembered', function () {
+    Queue::fake([RunCloudTask::class]);
     $server = cloudTaskServer();
     cloudTaskResults(cloudTaskFailure(CloudFailure::Unavailable, status: 503), StepResult::done());
 
-    cloudTaskRun($server);
+    cloudTaskDrive($server);
 
-    Sleep::assertSlept(cloudTaskSlept(30), 1);
-    Sleep::assertSleptTimes(1);
-    expect(cloudTaskOf($server))
+    expect(cloudTaskDelays())->toBe([30])
+        ->and(cloudTaskOf($server))
         ->state->toBe(CloudTask::DONE)
         ->error->toBeNull()
         ->data->toBe(['last_error' => 'Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.'])
@@ -336,10 +276,11 @@ test('a provider hiccup waits and is remembered', function () {
 });
 
 test('a hiccup in one step is forgotten once the task moves on', function () {
+    Queue::fake([RunCloudTask::class]);
     $server = cloudTaskServer();
     cloudTaskResults(cloudTaskFailure(CloudFailure::Unavailable, status: 503), StepResult::next('two', ['key_id' => 'key-1']), StepResult::done());
 
-    cloudTaskRun($server);
+    cloudTaskDrive($server);
 
     expect(cloudTaskCalls())->toBe(['step one', 'step one', 'step two', 'finished two'])
         ->and(cloudTaskHandler()->calls[1]['task']->data)->toBe(['last_error' => 'Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.'])
@@ -348,28 +289,29 @@ test('a hiccup in one step is forgotten once the task moves on', function () {
 });
 
 test('every failure that can pass is waited out', function (CloudFailure $failure) {
+    Queue::fake([RunCloudTask::class]);
     $server = cloudTaskServer();
     $hiccup = cloudTaskFailure($failure);
     cloudTaskResults($hiccup, StepResult::done());
 
-    cloudTaskRun($server);
+    cloudTaskDrive($server);
 
-    Sleep::assertSlept(cloudTaskSlept(RunCloudTask::RETRY_SECONDS), 1);
-    expect(cloudTaskOf($server))
+    expect(cloudTaskDelays())->toBe([RunCloudTask::RETRY_SECONDS])
+        ->and(cloudTaskOf($server))
         ->state->toBe(CloudTask::DONE)
         ->data->toBe(['last_error' => $hiccup->getMessage()])
         ->and($server->cloudProvider->fresh()->token_failed_at)->toBeNull();
 })->with([CloudFailure::Busy, CloudFailure::RateLimited, CloudFailure::Unreachable]);
 
 test('a failure that says when to come back is waited out for that long', function (?int $retryAfter, int $waited) {
+    Queue::fake([RunCloudTask::class]);
     $server = cloudTaskServer();
     cloudTaskResults(new CloudProviderException(CloudFailure::RateLimited, CloudProviderType::Hetzner, null, 429, retryAfter: $retryAfter), StepResult::done());
 
-    cloudTaskRun($server);
+    cloudTaskDrive($server);
 
-    Sleep::assertSlept(cloudTaskSlept($waited), 1);
-    Sleep::assertSleptTimes(1);
-    expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
+    expect(cloudTaskDelays())->toBe([$waited])
+        ->and(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
 })->with([
     'what the provider asked' => [12, 12],
     'nothing asked' => [null, RunCloudTask::RETRY_SECONDS],
@@ -671,19 +613,29 @@ test('one task runs per server', function () {
 });
 
 test('a task that stops running between two steps of one job stops the loop', function (Closure $stop) {
+    Queue::fake([RunCloudTask::class]);
     $server = cloudTaskServer();
+    $stopped = false;
     $left = null;
-    cloudTaskResults(StepResult::wait(5), StepResult::done());
-    Sleep::whenFakingSleep(function () use ($server, $stop, &$left): void {
-        $stop(Server::withTrashed()->findOrFail($server->getKey()));
+    cloudTaskResults(StepResult::next('two'), StepResult::done());
+    Event::listen(FleetChanged::class, function () use ($server, $stop, &$stopped, &$left): void {
+        $current = Server::withTrashed()->findOrFail($server->getKey());
+
+        if ($stopped || CloudTask::of($current)?->step !== 'two') {
+            return;
+        }
+
+        $stopped = true;
+        $stop($current);
         $left = Server::withTrashed()->findOrFail($server->getKey())->provider_task;
     });
 
     cloudTaskRun($server);
 
-    expect(cloudTaskCalls())->toBe(['step one'])
+    expect($stopped)->toBeTrue()
+        ->and(cloudTaskCalls())->toBe(['step one'])
         ->and(Server::withTrashed()->findOrFail($server->getKey())->provider_task)->toBe($left);
-    Sleep::assertSleptTimes(1);
+    Queue::assertNothingPushed();
 })->with([
     'failed elsewhere' => [fn(Server $server) => CloudTask::fail($server, 'Stopped elsewhere.')],
     'cleared' => [fn(Server $server) => CloudTask::clear($server)],

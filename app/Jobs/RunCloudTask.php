@@ -26,7 +26,6 @@ use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
-use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
@@ -73,7 +72,6 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public function handle(CloudApiFactory $apis, CloudTaskHandlers $handlers, LogSanitizer $sanitizer): void
     {
-        $waited = 0;
         $began = now();
 
         for ($steps = 0; $steps < self::MAX_STEPS; $steps++) {
@@ -107,7 +105,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 CloudTask::advance($server, (string) $result->step, $result->data);
 
                 if ($began->diffInSeconds(now()) > self::BUDGET_SECONDS) {
-                    self::dispatch($server)->delay(now()->addSeconds(self::HANDOVER_SECONDS));
+                    self::dispatch($server)->delay(self::HANDOVER_SECONDS);
 
                     return;
                 }
@@ -117,17 +115,9 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
             if ($result->kind === 'wait') {
                 CloudTask::touch($server, $result->data);
+                self::dispatch($server)->delay(max(1, $result->seconds));
 
-                if ($waited + $result->seconds > self::BUDGET_SECONDS || $began->diffInSeconds(now()) + $result->seconds > self::BUDGET_SECONDS) {
-                    self::dispatch($server)->delay(now()->addSeconds($result->seconds));
-
-                    return;
-                }
-
-                $waited += $result->seconds;
-                Sleep::for($result->seconds)->seconds();
-
-                continue;
+                return;
             }
 
             $this->conclude($server, $task, $handler, $api, $result);
@@ -135,7 +125,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
             return;
         }
 
-        self::dispatch($this->server)->delay(now()->addSeconds(self::HANDOVER_SECONDS));
+        self::dispatch($this->server)->delay(self::HANDOVER_SECONDS);
     }
 
     /**

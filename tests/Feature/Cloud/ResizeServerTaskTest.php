@@ -21,6 +21,8 @@ use App\Services\Cloud\Tasks\CloudTaskHandlers;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\SSHConnectionManager;
 use Database\Seeders\Support\CloudCatalogs;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
@@ -74,9 +76,24 @@ function cloudResizing(string $step = 'power_off', bool $powerCycle = true, bool
     return $server->fresh();
 }
 
-function cloudResizingRun(Server $server): void
+function cloudResizingRun(Server $server, int $jobs = 40): void
 {
-    (new RunCloudTask($server))->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+    $job = new RunCloudTask($server);
+
+    for ($run = 0; $run < $jobs; $run++) {
+        $queued = Queue::pushed(RunCloudTask::class)->count();
+        (new UniqueLock(app(Repository::class)))->release($job);
+
+        $job->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+
+        $pushed = Queue::pushed(RunCloudTask::class);
+
+        if ($pushed->count() === $queued) {
+            return;
+        }
+
+        $job = $pushed->last();
+    }
 }
 
 function cloudResizingCalls(FakeCloudApi $api): array

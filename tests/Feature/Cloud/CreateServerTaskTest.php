@@ -25,10 +25,10 @@ use App\Services\Deployment\LogSanitizer;
 use App\Services\Server\ProvisioningLog;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnectionManager;
-use Carbon\CarbonInterval;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Sleep;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeCloudApi;
 use Tests\Support\FakeCloudApiFactory;
@@ -77,11 +77,34 @@ function cloudCreatingAt(string $step, ?string $ip = null, array $data = []): Se
     return $server;
 }
 
-function cloudCreatingRun(Server|RunCloudTask $server): void
+function cloudCreatingRun(Server|RunCloudTask $server, int $jobs = 40): void
 {
     $job = $server instanceof RunCloudTask ? $server : new RunCloudTask($server);
 
-    $job->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+    for ($run = 0; $run < $jobs; $run++) {
+        $queued = Queue::pushed(RunCloudTask::class)->count();
+        (new UniqueLock(app(Repository::class)))->release($job);
+
+        $job->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+
+        $pushed = Queue::pushed(RunCloudTask::class);
+
+        if ($pushed->count() === $queued) {
+            return;
+        }
+
+        $job = $pushed->last();
+    }
+}
+
+function cloudCreatingWaits(): array
+{
+    return Queue::pushed(RunCloudTask::class)->map(fn(RunCloudTask $job): mixed => $job->delay)->values()->all();
+}
+
+function cloudCreatingWaited(int $seconds): int
+{
+    return count(array_filter(cloudCreatingWaits(), fn(mixed $delay): bool => $delay === $seconds));
 }
 
 function cloudCreatingTask(Server $server): ?CloudTask
@@ -97,11 +120,6 @@ function cloudCreatingInstance(CloudInstanceState $state = CloudInstanceState::R
 function cloudCreatingFailure(CloudFailure $failure, ?string $detail = null, ?int $status = null): CloudProviderException
 {
     return new CloudProviderException($failure, CloudProviderType::Hetzner, $detail, $status);
-}
-
-function cloudCreatingSlept(int $seconds): Closure
-{
-    return fn(CarbonInterval $duration): bool => (int) $duration->totalSeconds === $seconds;
 }
 
 test('a new server is created once, booted, reached and handed to the audit', function () {
@@ -150,13 +168,13 @@ test('a new server is created once, booted, reached and handed to the audit', fu
         ->and($this->transport->connected())->toBeFalse()
         ->and([CreateServerTask::STEPS, CreateServerTask::POLL_SECONDS, CreateServerTask::SETTLE_SECONDS, CreateServerTask::UNCERTAIN_LIMIT])->toBe([['create', 'boot', 'ssh', 'settle'], 5, 10, 2])
         ->and(app(CloudTaskHandlers::class)->for(CloudTask::CREATE))->toBeInstanceOf(CreateServerTask::class);
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 1);
-    Sleep::assertSleptTimes(1);
+    expect(cloudCreatingWaited(CreateServerTask::POLL_SECONDS))->toBe(1);
+    expect(cloudCreatingWaits())->toHaveCount(1);
     Queue::assertPushed(AuditServer::class, 1);
     Queue::assertPushed(AuditServer::class, fn(AuditServer $job): bool => (fn() => $this->provisionAfter)->call($job) === true
         && (fn() => $this->server)->call($job)->is($server));
     Queue::assertNotPushed(ProvisionServer::class);
-    Queue::assertNotPushed(RunCloudTask::class);
+    Queue::assertPushed(RunCloudTask::class, 1);
 });
 
 test("an earlier attempt's server is adopted instead of creating a second one", function () {
@@ -194,8 +212,8 @@ test('a create whose answer was lost is found by its tag instead of created twic
         ->provisioning_log->toContain('found Hetzner Cloud server 4711 from an earlier attempt, using it')
         ->provisioning_log->not->toContain('accepted it as server')
         ->and(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE);
-    Sleep::assertSlept(cloudCreatingSlept(15), 1);
-    Sleep::assertSleptTimes(1);
+    expect(cloudCreatingWaited(15))->toBe(1);
+    expect(cloudCreatingWaits())->toHaveCount(1);
 });
 
 test('after three unanswered creates it stops and says where to look', function () {
@@ -220,9 +238,9 @@ test('after three unanswered creates it stops and says where to look', function 
         ->status->toBe(ServerStatus::Creating)
         ->provider_server_id->toBeNull()
         ->provisioning_log->toContain("failed: {$reason}");
-    Sleep::assertSlept(cloudCreatingSlept(15), 2);
-    Sleep::assertSleptTimes(2);
-    Queue::assertNothingPushed();
+    expect(cloudCreatingWaited(15))->toBe(2);
+    expect(cloudCreatingWaits())->toHaveCount(2);
+    Queue::assertNotPushed(AuditServer::class);
 });
 
 test('a refused create says what to do and removes the uploaded key', function () {
@@ -248,7 +266,7 @@ test('a refused create says what to do and removes the uploaded key', function (
         ->and($activity->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'step' => 'create', 'reason' => $reason])
         ->and($activity->causer?->getKey())->toBe(cloudCreatingTask($server)->by)
         ->and(Activity::query()->where('description', 'server_created_at_provider')->exists())->toBeFalse();
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
     Queue::assertNothingPushed();
 });
 
@@ -263,7 +281,7 @@ test('a create refused for a name in use or a limit says how to fix that', funct
         ->error->toBe("Hetzner Cloud refused the request. Hetzner Cloud said: {$detail}. {$advice}")
         ->and($this->api->calls('create'))->toHaveCount(1)
         ->and($this->api->calls('deleteKey'))->toBe([['deleteKey', ['key-1']]]);
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 })->with([
     'a name in use' => [CloudRefusal::NameTaken, 'server name is already used', 'Rename outpost-02 to a name no other Hetzner Cloud server uses, then try again.'],
     'a limit' => [CloudRefusal::LimitReached, 'server limit exceeded', "Ask Hetzner Cloud to raise this account's limit, or delete servers you no longer need there, then try again."],
@@ -275,7 +293,7 @@ test('an unanswered create waits at least as long as the provider asked', functi
 
     cloudCreatingRun($server);
 
-    Sleep::assertSlept(cloudCreatingSlept($waited), 1);
+    expect(cloudCreatingWaited($waited))->toBe(1);
     expect($this->api->calls('create'))->toHaveCount(2)
         ->and(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE);
 })->with([
@@ -294,7 +312,7 @@ test('a create the provider will not take for another reason fails in its own wo
         ->state->toBe(CloudTask::FAILED)
         ->error->toBe($refusal->getMessage())
         ->and($this->api->calls('create'))->toHaveCount(1);
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 });
 
 test('a provider that takes keys inline gets the public key in the request', function () {
@@ -327,7 +345,7 @@ test('a server that vanished while booting fails clearly', function () {
         ->error->toBe('Hetzner Cloud says server 4711 no longer exists. Remove this server and provision it again.')
         ->and($this->api->calls('find'))->toHaveCount(2)
         ->and($server->fresh()->status)->toBe(ServerStatus::Creating);
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 1);
+    expect(cloudCreatingWaited(CreateServerTask::POLL_SECONDS))->toBe(1);
 });
 
 test('a server the provider does not list yet right after it was created is waited for', function () {
@@ -338,8 +356,8 @@ test('a server the provider does not list yet right after it was created is wait
 
     expect(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE)
         ->and($server->fresh()->ip_address)->toBe('203.0.113.40');
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 1);
-    Sleep::assertSleptTimes(1);
+    expect(cloudCreatingWaited(CreateServerTask::POLL_SECONDS))->toBe(1);
+    expect(cloudCreatingWaits())->toHaveCount(1);
 });
 
 test('booting past its deadline fails with the boot copy', function () {
@@ -368,8 +386,8 @@ test('ssh is tried again until the key works', function () {
         ->host_key_fingerprint->toBe(HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY))
         ->provisioning_log->toContain('signed in over SSH, waiting for first-boot setup to finish')
         ->and($this->transport->connected())->toBeFalse();
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 3);
-    Sleep::assertSleptTimes(3);
+    expect(cloudCreatingWaited(CreateServerTask::POLL_SECONDS))->toBe(3);
+    expect(cloudCreatingWaits())->toHaveCount(3);
 });
 
 test('a connection kept from before the server had an address is not reused', function () {
@@ -380,14 +398,14 @@ test('a connection kept from before the server had an address is not reused', fu
 
     expect(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE)
         ->and($server->fresh()->ip_address)->toBe('203.0.113.40');
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 });
 
 test('a failed ssh attempt keeps a short, cleaned copy of what went wrong', function () {
     $server = cloudCreatingAt('ssh', '203.0.113.40');
     $this->transport->refuseConnections(message: 'Cannot connect to 203.0.113.40:22 as Bearer sk-live-abcdef0123456789 here. ' . str_repeat('Connection refused. ', 20));
 
-    cloudCreatingRun($server);
+    cloudCreatingRun($server, jobs: 1);
 
     $error = cloudCreatingTask($server)->data['last_error'];
 
@@ -398,7 +416,7 @@ test('a failed ssh attempt keeps a short, cleaned copy of what went wrong', func
         ->and($error)->not->toContain('sk-live-abcdef0123456789')
         ->and(mb_strlen($error))->toBeLessThanOrEqual(160)
         ->and($error)->toEndWith('...');
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::POLL_SECONDS), 18);
+    expect(cloudCreatingWaits())->toBe([CreateServerTask::POLL_SECONDS]);
     Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey());
 });
 
@@ -430,7 +448,7 @@ test('a changed host key while starting stops creation', function () {
         ->host_key_fingerprint->toBe('SHA256:pinned-before-it-started')
         ->pending_host_key_fingerprint->toBe(HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY))
         ->and($this->transport->connected())->toBeFalse();
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 });
 
 test('ssh past its deadline says where the server is and what went wrong last', function (array $data, string $error) {
@@ -469,8 +487,8 @@ test('first-boot setup is waited for', function () {
         ->and(array_count_values($this->transport->commands())[CreateServerTask::SETTLE_PROBE])->toBe(3)
         ->and($this->transport->budgetFor('cloud-init status'))->toBe(15)
         ->and($this->transport->budgetFor('true'))->toBe(15);
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::SETTLE_SECONDS), 2);
-    Sleep::assertSleptTimes(2);
+    expect(cloudCreatingWaited(CreateServerTask::SETTLE_SECONDS))->toBe(2);
+    expect(cloudCreatingWaits())->toHaveCount(2);
 });
 
 test('first-boot setup counts as finished once cloud-init and apt are both quiet', function (string $output, bool $waits) {
@@ -480,7 +498,7 @@ test('first-boot setup counts as finished once cloud-init and apt are both quiet
     cloudCreatingRun($server);
 
     expect(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE);
-    Sleep::assertSleptTimes($waits ? 1 : 0);
+    expect(cloudCreatingWaits())->toHaveCount($waits ? 1 : 0);
 })->with([
     'cloud-init running' => ["status: running\napt: idle", true],
     'cloud-init not started' => ["status: not started\napt: idle", true],
@@ -499,8 +517,8 @@ test('first-boot setup that cannot be checked is checked again', function () {
 
     expect(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE)
         ->and($this->transport->connected())->toBeFalse();
-    Sleep::assertSlept(cloudCreatingSlept(CreateServerTask::SETTLE_SECONDS), 1);
-    Sleep::assertSleptTimes(1);
+    expect(cloudCreatingWaited(CreateServerTask::SETTLE_SECONDS))->toBe(1);
+    expect(cloudCreatingWaits())->toHaveCount(1);
 });
 
 test('a changed host key while first-boot setup runs stops creation at once', function () {
@@ -518,7 +536,7 @@ test('a changed host key while first-boot setup runs stops creation at once', fu
         ->host_key_fingerprint->toBe('SHA256:pinned-before-it-started')
         ->and($this->transport->commands())->toBe([])
         ->and($this->transport->connected())->toBeFalse();
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 });
 
 test('a server that stops taking the key while first-boot setup runs stops creation at once', function () {
@@ -532,7 +550,7 @@ test('a server that stops taking the key while first-boot setup runs stops creat
         ->step->toBe('settle')
         ->error->toBe("outpost-02 refused Coresmith's SSH key after accepting it once. Check ~/.ssh/authorized_keys for root on it from the Hetzner Cloud console, then try again.")
         ->and($this->transport->commands())->toBe([]);
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 });
 
 test('first-boot setup that never finishes is not a failure', function () {
@@ -640,7 +658,7 @@ test('a create past its deadline says why it stopped', function (array $data, ?i
         ->and($this->api->calls('findTagged'))->toHaveCount(1)
         ->and($this->api->calls('uploadKey'))->toBe([])
         ->and($this->api->calls('create'))->toBe([]);
-    Sleep::assertNeverSlept();
+    expect(cloudCreatingWaits())->toBe([]);
 })->with([
     'before anything was sent' => [
         [],

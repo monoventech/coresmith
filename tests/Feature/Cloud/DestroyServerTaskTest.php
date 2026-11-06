@@ -17,6 +17,8 @@ use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Cloud\Tasks\CloudTaskHandlers;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Deployment\LogSanitizer;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
@@ -46,9 +48,24 @@ function cloudDestroying(array $attributes = [], array $data = []): Server
     return $server;
 }
 
-function cloudDestroyingRun(Server $server): void
+function cloudDestroyingRun(Server $server, int $jobs = 40): void
 {
-    (new RunCloudTask($server))->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+    $job = new RunCloudTask($server);
+
+    for ($run = 0; $run < $jobs; $run++) {
+        $queued = Queue::pushed(RunCloudTask::class)->count();
+        (new UniqueLock(app(Repository::class)))->release($job);
+
+        $job->handle(app(CloudApiFactory::class), app(CloudTaskHandlers::class), app(LogSanitizer::class));
+
+        $pushed = Queue::pushed(RunCloudTask::class);
+
+        if ($pushed->count() === $queued) {
+            return;
+        }
+
+        $job = $pushed->last();
+    }
 }
 
 test('destroying deletes the instance and removes the server once the provider confirms', function () {
@@ -161,7 +178,7 @@ test('a destroy is not finished while the provider still shows the server', func
     $this->api->finds(cloudDestroyingInstance());
     $server = cloudDestroying();
 
-    cloudDestroyingRun($server);
+    cloudDestroyingRun($server, jobs: 1);
 
     $task = CloudTask::of($server->fresh());
 
