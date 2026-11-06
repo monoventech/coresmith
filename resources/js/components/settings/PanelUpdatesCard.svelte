@@ -42,7 +42,9 @@
         }
 
         if (run.state === 'starting') {
-            return 'Starting the update.'
+            return run.stalled
+                ? "The update service took the request but didn't start the update. Cancel the request, then try again or run the update from the shell."
+                : 'Starting the update.'
         }
 
         return `${run.label} · step ${run.number} of ${run.total}`
@@ -152,7 +154,7 @@
                     </div>
                     <div class="mt-0.5 text-[12.5px] text-muted-foreground" role="status">{progress}</div>
                 </div>
-                {#if run.state === 'requested'}
+                {#if run.state === 'requested' || (run.state === 'starting' && run.stalled)}
                     <Button variant="ghost" size="sm" onclick={cancel}>Cancel request</Button>
                 {/if}
             </div>
