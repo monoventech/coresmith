@@ -227,12 +227,12 @@ test('steps that use up the budget hand the task to a fresh job at the next wait
     expect(cloudTaskOf($server)->state)->toBe(CloudTask::RUNNING);
 });
 
-test('steps that stay inside the budget still sleep in the job', function () {
+test('steps that leave room in the budget still sleep in the job', function () {
     Queue::fake();
     $this->freezeTime();
     $server = cloudTaskServer();
     cloudTaskResults(function (): StepResult {
-        $this->travel(90)->seconds();
+        $this->travel(85)->seconds();
 
         return StepResult::wait(5);
     }, StepResult::done());
@@ -243,6 +243,33 @@ test('steps that stay inside the budget still sleep in the job', function () {
     Queue::assertNothingPushed();
     expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
 });
+
+test('a wait that would end past the budget hands the task to a fresh job instead of sleeping', function (int $spent, int $wait, bool $sleeps) {
+    Queue::fake();
+    $this->freezeTime();
+    $server = cloudTaskServer();
+    cloudTaskResults(function () use ($spent, $wait): StepResult {
+        $this->travel($spent)->seconds();
+
+        return StepResult::wait($wait);
+    }, StepResult::done());
+
+    cloudTaskRun($server);
+
+    if ($sleeps) {
+        Sleep::assertSlept(cloudTaskSlept($wait), 1);
+        Queue::assertNothingPushed();
+        expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
+    } else {
+        Sleep::assertNeverSlept();
+        Queue::assertPushed(RunCloudTask::class, 1);
+        Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->delay->equalTo(now()->addSeconds($wait)));
+        expect(cloudTaskOf($server)->state)->toBe(CloudTask::RUNNING);
+    }
+})->with([
+    'a minute after a minute of steps' => [60, 60, false],
+    'a minute after half a minute of steps' => [30, 60, true],
+]);
 
 test('steps that use up the budget hand the task to a fresh job before the next step', function (int $seconds, array $calls, string $state) {
     Queue::fake();

@@ -115,7 +115,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
             if ($result->kind === 'wait') {
                 CloudTask::touch($server, $result->data);
 
-                if ($waited + $result->seconds > self::BUDGET_SECONDS || $began->diffInSeconds(now()) > self::BUDGET_SECONDS) {
+                if ($waited + $result->seconds > self::BUDGET_SECONDS || $began->diffInSeconds(now()) + $result->seconds > self::BUDGET_SECONDS) {
                     self::dispatch($server)->delay(now()->addSeconds($result->seconds));
 
                     return;
