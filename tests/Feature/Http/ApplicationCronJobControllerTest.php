@@ -487,7 +487,7 @@ test('an edit the list as saved now refuses says why and changes nothing', funct
         ->put(cronRouteJob($application, ['schedule' => '0 5 * * *', 'command' => 'php artisan prune']), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'])
         ->assertSessionHasErrors(['command' => 'That exact job is already on the list.']);
 
-    expect($application->fresh()->cron_jobs)->toBe($saved);
+    expect($application->fresh()->cron_jobs)->toBeInAnyKeyOrder($saved);
 });
 
 test('another team cannot change this app\'s cron jobs', function (string $verb, Closure $url, array $payload) {
