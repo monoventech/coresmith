@@ -38,6 +38,8 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public const RETRY_SECONDS = 30;
 
+    public const HANDOVER_SECONDS = 5;
+
     public const NO_ACCOUNT = 'The provider account this server was created with is no longer connected. Connect it again in Settings → Team, then try again.';
 
     public const NO_HANDLER = 'Coresmith could not continue this task after an update. Start it again.';
@@ -101,6 +103,12 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
             if ($result->kind === 'next') {
                 CloudTask::advance($server, (string) $result->step, $result->data);
 
+                if ($began->diffInSeconds(now()) > self::BUDGET_SECONDS) {
+                    self::dispatch($server)->delay(now()->addSeconds(self::HANDOVER_SECONDS));
+
+                    return;
+                }
+
                 continue;
             }
 
@@ -124,7 +132,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
             return;
         }
 
-        self::dispatch($this->server)->delay(now()->addSeconds(5));
+        self::dispatch($this->server)->delay(now()->addSeconds(self::HANDOVER_SECONDS));
     }
 
     /**

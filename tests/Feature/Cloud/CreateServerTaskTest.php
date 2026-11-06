@@ -502,6 +502,38 @@ test('first-boot setup that cannot be checked is checked again', function () {
     Sleep::assertSleptTimes(1);
 });
 
+test('a changed host key while first-boot setup runs stops creation at once', function () {
+    $server = cloudCreatingAt('settle', '203.0.113.40');
+    $server->forceFill(['host_key_fingerprint' => 'SHA256:pinned-before-it-started'])->save();
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server))
+        ->state->toBe(CloudTask::FAILED)
+        ->step->toBe('settle')
+        ->error->toBe('outpost-02 presented a different SSH host key while it was starting. Review it on this page before trying again.')
+        ->and($server->fresh())
+        ->status->toBe(ServerStatus::Creating)
+        ->host_key_fingerprint->toBe('SHA256:pinned-before-it-started')
+        ->and($this->transport->commands())->toBe([])
+        ->and($this->transport->connected())->toBeFalse();
+    Sleep::assertNeverSlept();
+});
+
+test('a server that stops taking the key while first-boot setup runs stops creation at once', function () {
+    $server = cloudCreatingAt('settle', '203.0.113.40');
+    $this->transport->failLogin();
+
+    cloudCreatingRun($server);
+
+    expect(cloudCreatingTask($server))
+        ->state->toBe(CloudTask::FAILED)
+        ->step->toBe('settle')
+        ->error->toBe("outpost-02 refused Coresmith's SSH key after accepting it once. Check ~/.ssh/authorized_keys for root on it from the Hetzner Cloud console, then try again.")
+        ->and($this->transport->commands())->toBe([]);
+    Sleep::assertNeverSlept();
+});
+
 test('first-boot setup that never finishes is not a failure', function () {
     $server = cloudCreatingAt('settle', '203.0.113.40');
     $this->transport->respondTo('cloud-init status', "status: running\napt: busy");

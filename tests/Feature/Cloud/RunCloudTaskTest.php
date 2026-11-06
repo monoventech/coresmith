@@ -244,6 +244,35 @@ test('steps that stay inside the budget still sleep in the job', function () {
     expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
 });
 
+test('steps that use up the budget hand the task to a fresh job before the next step', function (int $seconds, array $calls, string $state) {
+    Queue::fake();
+    $this->freezeTime();
+    $server = cloudTaskServer();
+    cloudTaskResults(function () use ($seconds): StepResult {
+        $this->travel($seconds)->seconds();
+
+        return StepResult::next('two');
+    }, StepResult::done());
+
+    cloudTaskRun($server);
+
+    expect(cloudTaskCalls())->toBe($calls)
+        ->and(cloudTaskOf($server))
+        ->state->toBe($state)
+        ->step->toBe('two');
+    Sleep::assertNeverSlept();
+
+    if ($state === CloudTask::RUNNING) {
+        Queue::assertPushed(RunCloudTask::class, 1);
+        Queue::assertPushed(RunCloudTask::class, fn(RunCloudTask $job): bool => $job->uniqueId() === (string) $server->getKey() && $job->delay->equalTo(now()->addSeconds(5)));
+    } else {
+        Queue::assertNothingPushed();
+    }
+})->with([
+    'past it' => [91, ['step one'], CloudTask::RUNNING],
+    'right at it' => [90, ['step one', 'step two', 'finished two'], CloudTask::DONE],
+]);
+
 test('a task that keeps stepping hands over to a fresh job', function () {
     Queue::fake();
     $this->freezeTime();

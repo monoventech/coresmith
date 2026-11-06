@@ -13,6 +13,7 @@ use App\Enums\CloudRefusal;
 use App\Enums\ServerStatus;
 use App\Exceptions\CloudProviderException;
 use App\Exceptions\HostKeyChangedException;
+use App\Exceptions\SSHAuthenticationException;
 use App\Jobs\AuditServer;
 use App\Models\Server;
 use App\Models\User;
@@ -80,7 +81,7 @@ final class CreateServerTask implements CloudTaskHandler
             'create' => $this->create($server, $task, $api),
             'boot' => $this->boot($server, $task, $api),
             'ssh' => $this->ssh($server),
-            'settle' => $this->settle($server),
+            'settle' => $this->settle($server, $api),
         };
     }
 
@@ -259,7 +260,7 @@ final class CreateServerTask implements CloudTaskHandler
             $this->connections->disconnect($server);
             $this->connections->for($server)->execute('true', timeout: self::SSH_SECONDS)->throw();
         } catch (HostKeyChangedException) {
-            return StepResult::fail("{$server->name} presented a different SSH host key while it was starting. Review it on this page before trying again.");
+            return StepResult::fail(self::hostKeyChanged($server));
         } catch (Throwable $e) {
             return StepResult::wait(self::POLL_SECONDS, ['last_error' => self::cut($this->sanitizer->sanitize($e->getMessage()))]);
         } finally {
@@ -272,11 +273,15 @@ final class CreateServerTask implements CloudTaskHandler
         return StepResult::next('settle');
     }
 
-    private function settle(Server $server): StepResult
+    private function settle(Server $server, CloudApi $api): StepResult
     {
         try {
             $this->connections->disconnect($server);
             $output = $this->connections->for($server)->execute(self::SETTLE_PROBE, timeout: self::SSH_SECONDS)->output;
+        } catch (HostKeyChangedException) {
+            return StepResult::fail(self::hostKeyChanged($server));
+        } catch (SSHAuthenticationException) {
+            return StepResult::fail("{$server->name} refused Coresmith's SSH key after accepting it once. Check ~/.ssh/authorized_keys for {$server->ssh_user} on it from the {$api->type()->label()} console, then try again.");
         } catch (Throwable) {
             return StepResult::wait(self::SETTLE_SECONDS);
         } finally {
@@ -367,6 +372,11 @@ final class CreateServerTask implements CloudTaskHandler
         }
 
         return $error === '' ? '' : " The last error was: {$error}";
+    }
+
+    private static function hostKeyChanged(Server $server): string
+    {
+        return "{$server->name} presented a different SSH host key while it was starting. Review it on this page before trying again.";
     }
 
     private static function unanswered(Server $server, string $label): string
