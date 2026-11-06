@@ -28,6 +28,15 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Billing with no card on file', direct('/no-card/settings/billing')],
     ['Team settings after the plan ended', direct('/ended-business/settings/team')],
     ['Billing on a lapsed team', direct('/expired/settings/billing')],
+    ['General settings on a team its owner can delete', direct('/trial/settings')],
+    [
+        'Delete team dialog',
+        async (page) => {
+            await page.goto('/trial/settings')
+            await page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' }).click()
+            await expect(page.getByRole('dialog').getByLabel('Type Forge Trial to confirm')).toBeVisible()
+        }
+    ],
     [
         'Database backups to S3 dialog on Business',
         async (page) => {

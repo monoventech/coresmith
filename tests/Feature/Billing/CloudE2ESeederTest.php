@@ -9,8 +9,11 @@ use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
+use App\Services\Billing\TrialHistory;
 use App\Services\Teams\AuditLog;
+use App\Services\Teams\TeamDeletion;
 use Database\Seeders\CloudE2ESeeder;
+use Illuminate\Support\Facades\Hash;
 use Tests\Support\CloudBilling;
 
 test('the cloud browser seed has a team on an older price', function () {
@@ -174,4 +177,38 @@ test('the cloud browser seed has an emailed invitation to monoven for every brow
             ->and($invitation?->link_offered)->toBeFalse()
             ->and(User::findByEmail("joiner-{$code}@cloud.test"))->toBeNull();
     }
+});
+
+test('the cloud browser seed gives every browser an owner alone on a trial team it can delete', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    foreach (CloudE2ESeeder::PROJECTS as $code) {
+        $leaver = User::query()->where('email', CloudE2ESeeder::leaverEmail($code))->firstOrFail();
+        $team = Team::query()->where('slug', "parting-{$code}")->firstOrFail();
+
+        expect($leaver->teams()->pluck('teams.id')->all())->toBe([$team->id])
+            ->and($leaver->current_team_id)->toBe($team->id)
+            ->and($team->owner_id)->toBe($leaver->id)
+            ->and(app(TeamBilling::class)->status($team)->state)->toBe(BillingState::Trialing)
+            ->and(app(TeamDeletion::class)->refusal($team))->toBeNull()
+            ->and($team->servers()->orderBy('name')->pluck('name')->all())->toBe(["parting-{$code}-01", "parting-{$code}-02"])
+            ->and($team->servers()->whereNotNull('cloud_provider_id')->whereNotNull('provider_server_id')->count())->toBe(1)
+            ->and(app(TrialHistory::class)->used($leaver->email))->toBeTrue()
+            ->and(Hash::check(CloudE2ESeeder::PASSWORD, $leaver->password))->toBeTrue();
+    }
+});
+
+test('the cloud browser seed has a team whose plan renews, one with other members and one its owner can delete', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $refusal = fn(string $slug): ?string => app(TeamDeletion::class)->refusal(Team::query()->where('slug', $slug)->firstOrFail());
+
+    expect($refusal('monoven'))->toBe('End the plan from Billing first, then delete the team.')
+        ->and($refusal('expired'))->toBe('Remove the other members first, so nobody loses access by surprise.')
+        ->and($refusal('trial'))->toBeNull()
+        ->and(Team::query()->where('slug', 'trial')->firstOrFail()->servers()->count())->toBe(1);
 });

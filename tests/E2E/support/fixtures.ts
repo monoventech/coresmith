@@ -16,6 +16,13 @@ export const asCloudMember = base.extend({
     storageState: 'tests/E2E/.auth/cloud-member.json'
 })
 
+export const asCloudLeaver = base.extend({
+    // eslint-disable-next-line no-empty-pattern
+    storageState: async ({}, use, testInfo) => {
+        await use(`tests/E2E/.auth/cloud-${own(testInfo, 'leaver')}.json`)
+    }
+})
+
 export { expect }
 
 export const PASSWORD = 'password-for-e2e'

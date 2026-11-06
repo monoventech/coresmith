@@ -14,6 +14,7 @@ use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\BackupDestination;
+use App\Models\CloudProvider;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Subscription;
@@ -22,8 +23,10 @@ use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
 use App\Models\TeamInvoice;
 use App\Models\User;
+use App\Services\Billing\TrialHistory;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 final class CloudE2ESeeder extends Seeder
 {
@@ -36,6 +39,11 @@ final class CloudE2ESeeder extends Seeder
     public const PASSWORD = 'password-for-e2e';
 
     public const PROJECTS = E2ESeeder::PROJECTS;
+
+    public static function leaverEmail(string $code): string
+    {
+        return "leaver-{$code}@cloud.test";
+    }
 
     public static function invitationToken(string $code): string
     {
@@ -71,6 +79,7 @@ final class CloudE2ESeeder extends Seeder
             $this->planChangeTeams($tenant->owner, $code);
             $this->vaultTeam($tenant->owner, $code);
             $this->leftoverTeam($tenant->owner, $code);
+            $this->partingTeam($code);
         }
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
@@ -244,6 +253,20 @@ final class CloudE2ESeeder extends Seeder
             ]);
             $subscription->items()->update(['stripe_id' => "si_e2e_{$prefix}_{$code}"]);
         }
+    }
+
+    private function partingTeam(string $code): void
+    {
+        $leaver = User::factory()->create(['name' => 'Morgan Leaver', 'email' => self::leaverEmail($code), 'password' => Hash::make(self::PASSWORD)]);
+        $team = Team::factory()->create(['name' => "Parting {$code}", 'slug' => "parting-{$code}", 'owner_id' => $leaver->getKey()]);
+        $team->forceFill(['trial_ends_at' => now()->addDays(9)])->save();
+        $team->members()->attach($leaver, ['role' => TeamRole::Owner->value]);
+        $leaver->forceFill(['current_team_id' => $team->getKey()])->save();
+        app(TrialHistory::class)->claim(self::leaverEmail($code), $team);
+
+        $account = CloudProvider::factory()->for($team)->create(['name' => 'Parting Hetzner', 'api_token' => 'parting-e2e-never-sent']);
+        Server::factory()->for($team)->create(['name' => "parting-{$code}-01", 'status' => ServerStatus::Active]);
+        Server::factory()->for($team)->create(['name' => "parting-{$code}-02", 'status' => ServerStatus::Active, 'cloud_provider_id' => $account->getKey(), 'provider_server_id' => "parting-{$code}"]);
     }
 
     private function invitations(Team $team, User $owner): void
