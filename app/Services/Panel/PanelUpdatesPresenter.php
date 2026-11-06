@@ -15,6 +15,7 @@ use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\TagSignature;
 use App\Services\Updates\UpdateCheck;
 use App\Services\Updates\UpdateChecker;
+use App\Services\Updates\UpdateRequest;
 use App\Services\Updates\UpdateState;
 use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
@@ -26,6 +27,8 @@ final class PanelUpdatesPresenter
     public const LOG_LINES = 12;
 
     public const STALL_SECONDS = 30;
+
+    public const START_STALL_SECONDS = 300;
 
     private const ACTIVE = ['requested', 'starting', 'running'];
 
@@ -102,6 +105,11 @@ final class PanelUpdatesPresenter
         ];
     }
 
+    public static function stalled(UpdateRequest $request, bool $taken): bool
+    {
+        return $request->requestedAt->diffInSeconds(CarbonImmutable::now(), true) > ($taken ? self::START_STALL_SECONDS : self::STALL_SECONDS);
+    }
+
     public function available(): ?Version
     {
         return $this->checker->latest()?->available(Version::current());
@@ -127,7 +135,7 @@ final class PanelUpdatesPresenter
                 'from' => (string) Version::current(),
                 'to' => $request->to === null ? null : (string) $request->to,
                 'started' => Formats::when($request->requestedAt),
-                'stalled' => !$taken && $request->requestedAt->diffInSeconds(CarbonImmutable::now(), true) > self::STALL_SECONDS,
+                'stalled' => self::stalled($request, $taken),
             ];
         }
 

@@ -77,6 +77,40 @@ test('a recovery request recovers', function () {
         ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce');
 });
 
+test('a request waits untaken while another update holds the lock', function () {
+    app(UpdateState::class)->request(new UpdateRequest(Version::parse('0.1.1'), 'panel', $this->owner->id, now()->toImmutable()));
+    rename(app(UpdatePaths::class)->requestFile(), app(UpdatePaths::class)->takenRequestFile());
+    $lock = app(UpdateState::class)->acquireLock();
+
+    try {
+        $this->artisan('coresmith:update', ['--requested' => true])
+            ->expectsOutputToContain('Another update is running.')
+            ->assertExitCode(1);
+    } finally {
+        $lock->release();
+    }
+
+    expect(is_file(app(UpdatePaths::class)->takenRequestFile()))->toBeTrue()
+        ->and(app(UpdateState::class)->status())->toBeNull();
+});
+
+test('a panel request refused before it starts is recorded as aborted', function () {
+    app(UpdateState::class)->request(new UpdateRequest(Version::parse('0.1.1'), 'panel', $this->owner->id, now()->toImmutable()));
+    unlink("{$this->paths['root']}/app");
+    mkdir("{$this->paths['root']}/app");
+
+    $this->artisan('coresmith:update', ['--requested' => true])->assertExitCode(1);
+
+    expect(app(UpdateState::class)->status())
+        ->state->toBe(UpdateStatus::ABORTED)
+        ->trigger->toBe('panel')
+        ->requestedBy->toBe($this->owner->id)
+        ->toVersion->toBe('0.1.1')
+        ->failedStep->toBe('preflight')
+        ->message->toBe("This install doesn't use release directories, so it can't update itself. Run the installer for the version you want instead.")
+        ->and(is_file(app(UpdatePaths::class)->requestFile()))->toBeFalse();
+});
+
 test('a request for a version that is not newer is refused before anything is built', function () {
     app(UpdateState::class)->request(new UpdateRequest(Version::parse('0.1.0'), 'panel', $this->owner->id, now()->toImmutable()));
 

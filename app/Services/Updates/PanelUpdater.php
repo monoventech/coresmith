@@ -78,10 +78,29 @@ final class PanelUpdater
         return $check->available($current);
     }
 
-    public function run(Version $target, string $trigger = 'cli', ?string $requestedBy = null, ?Closure $listener = null): UpdateStatus
+    public function runRequest(UpdateRequest $request, UpdateLock $lock, ?Closure $listener = null): UpdateStatus
+    {
+        $target = $request->to ?? throw new RuntimeException('A recovery request has no version to update to.');
+
+        try {
+            $this->assertCanUpdate();
+        } catch (UpdateRefused $e) {
+            $run = $this->state->begin(UpdateStatus::start($this->layout->current(), $target, $request->trigger, $request->requestedBy));
+
+            if ($listener !== null) {
+                $run->listen($listener);
+            }
+
+            return $this->abort($run, new UpdateFailed('preflight', $e->getMessage()));
+        }
+
+        return $this->run($target, $request->trigger, $request->requestedBy, $listener, $lock);
+    }
+
+    public function run(Version $target, string $trigger = 'cli', ?string $requestedBy = null, ?Closure $listener = null, ?UpdateLock $held = null): UpdateStatus
     {
         $this->assertCanUpdate();
-        $lock = $this->state->acquireLock() ?? throw new UpdateRefused($this->busy());
+        $lock = $held ?? $this->state->acquireLock() ?? throw new UpdateRefused($this->busy());
 
         try {
             if ($this->state->status()?->isRunning() === true) {
@@ -163,14 +182,16 @@ final class PanelUpdater
         }
     }
 
-    public function recover(?Closure $listener = null, bool $failed = false): ?UpdateStatus
+    public function recover(?Closure $listener = null, bool $failed = false, ?UpdateLock $held = null): ?UpdateStatus
     {
-        if (!$this->state->interrupted() && !($failed && $this->stuck($this->state->status()))) {
+        $interrupted = $held === null ? $this->state->interrupted() : $this->state->status()?->isRunning() === true;
+
+        if (!$interrupted && !($failed && $this->stuck($this->state->status()))) {
             return null;
         }
 
         $this->assertOwner();
-        $lock = $this->state->acquireLock() ?? throw new UpdateRefused($this->busy());
+        $lock = $held ?? $this->state->acquireLock() ?? throw new UpdateRefused($this->busy());
 
         try {
             $status = $this->state->status();
@@ -303,7 +324,7 @@ final class PanelUpdater
         }
     }
 
-    private function assertOwner(): void
+    public function assertOwner(): void
     {
         $uid = @fileowner($this->paths->root());
 

@@ -9,11 +9,14 @@ declare(strict_types=1);
 namespace App\Services\Updates;
 
 use App\Services\Deployment\LogSanitizer;
+use Illuminate\Support\Sleep;
 use RuntimeException;
 
 final class UpdateState
 {
     public const KEEP_RUNS = 20;
+
+    public const LOCK_ATTEMPTS = 10;
 
     private const RUN_ID = '/^[0-9a-z]{26}$/D';
 
@@ -46,10 +49,14 @@ final class UpdateState
 
         @chmod($this->paths->lockFile(), 0600);
 
-        if (!flock($handle, LOCK_EX | LOCK_NB)) {
-            fclose($handle);
+        for ($attempt = 1; !flock($handle, LOCK_EX | LOCK_NB); $attempt++) {
+            if ($attempt >= self::LOCK_ATTEMPTS) {
+                fclose($handle);
 
-            return null;
+                return null;
+            }
+
+            Sleep::for(50)->milliseconds();
         }
 
         ftruncate($handle, 0);
@@ -71,7 +78,7 @@ final class UpdateState
             return false;
         }
 
-        $free = flock($handle, LOCK_EX | LOCK_NB);
+        $free = flock($handle, LOCK_SH | LOCK_NB);
 
         if ($free) {
             flock($handle, LOCK_UN);
@@ -183,6 +190,11 @@ final class UpdateState
     public function cancelRequest(): bool
     {
         return is_file($this->paths->requestFile()) && @unlink($this->paths->requestFile());
+    }
+
+    public function clearTakenRequest(): bool
+    {
+        return is_file($this->paths->takenRequestFile()) && @unlink($this->paths->takenRequestFile());
     }
 
     public function takeRequest(): ?UpdateRequest

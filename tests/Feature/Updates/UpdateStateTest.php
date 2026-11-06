@@ -8,6 +8,7 @@ use App\Services\Updates\UpdateRequest;
 use App\Services\Updates\UpdateState;
 use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
+use Illuminate\Support\Sleep;
 
 require_once __DIR__ . '/UpdatesHelpers.php';
 
@@ -63,6 +64,51 @@ test('only one process holds the update lock', function () {
     expect($again)->not->toBeNull();
 
     $again->release();
+});
+
+function updatesProbeLock(): mixed
+{
+    if (!is_dir(app(UpdatePaths::class)->state())) {
+        mkdir(app(UpdatePaths::class)->state(), 0700, true);
+    }
+
+    $probe = fopen(app(UpdatePaths::class)->lockFile(), 'c');
+    flock($probe, LOCK_SH);
+
+    return $probe;
+}
+
+test('a look at the lock never stops an update from taking it', function () {
+    $probe = updatesProbeLock();
+    Sleep::whenFakingSleep(function () use ($probe): void {
+        flock($probe, LOCK_UN);
+    });
+
+    $lock = updatesState()->acquireLock();
+
+    expect($lock)->not->toBeNull();
+    Sleep::assertSleptTimes(1);
+
+    $lock->release();
+    fclose($probe);
+});
+
+test('an update gives up on a lock that stays taken', function () {
+    $held = updatesState()->acquireLock();
+
+    expect(updatesState()->acquireLock())->toBeNull()
+        ->and(UpdateState::LOCK_ATTEMPTS)->toBe(10);
+    Sleep::assertSleptTimes(9);
+
+    $held->release();
+});
+
+test('two looks at the lock never read each other as an update', function () {
+    $probe = updatesProbeLock();
+
+    expect(updatesState()->isLocked())->toBeFalse();
+
+    fclose($probe);
 });
 
 test('a status survives a round trip and is written atomically and privately', function () {

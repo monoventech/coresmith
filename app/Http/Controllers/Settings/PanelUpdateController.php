@@ -78,7 +78,10 @@ final class PanelUpdateController extends Controller
     {
         $this->guard($request);
 
-        return $state->cancelRequest()
+        $pending = $state->pendingRequest();
+        $stalled = $pending !== null && $state->requestTaken() && PanelUpdatesPresenter::stalled($pending, true);
+
+        return $state->cancelRequest() || ($stalled && $state->clearTakenRequest())
             ? back()->with('success', 'Request cancelled.')
             : back()->with('error', "The update has already started, so it can't be cancelled.");
     }

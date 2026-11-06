@@ -18,6 +18,7 @@ use App\Services\Updates\UpdateState;
 use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Console\Command;
 
 final class UpdateCommand extends Command
@@ -45,21 +46,7 @@ final class UpdateCommand extends Command
             }
 
             if ($this->option('requested')) {
-                $request = $state->takeRequest();
-
-                if ($request === null) {
-                    $this->line('No update was requested.');
-
-                    return self::SUCCESS;
-                }
-
-                if ($request->to === null) {
-                    $status = $updater->recover($listener);
-
-                    return $status === null ? self::SUCCESS : $this->report($status, $paths, recovering: true);
-                }
-
-                return $this->report($updater->run($request->to, $request->trigger, $request->requestedBy, $listener), $paths);
+                return $this->requested($updater, $state, $paths, $listener);
             }
 
             if ($this->option('recover')) {
@@ -97,6 +84,32 @@ final class UpdateCommand extends Command
             $this->error($e->getMessage());
 
             return self::FAILURE;
+        }
+    }
+
+    private function requested(PanelUpdater $updater, UpdateState $state, UpdatePaths $paths, Closure $listener): int
+    {
+        $updater->assertOwner();
+        $lock = $state->acquireLock() ?? throw new UpdateRefused('Another update is running. The request waits until you cancel it on the General settings tab.');
+
+        try {
+            $request = $state->takeRequest();
+
+            if ($request === null) {
+                $this->line('No update was requested.');
+
+                return self::SUCCESS;
+            }
+
+            if ($request->to === null) {
+                $status = $updater->recover($listener, held: $lock);
+
+                return $status === null ? self::SUCCESS : $this->report($status, $paths, recovering: true);
+            }
+
+            return $this->report($updater->runRequest($request, $lock, $listener), $paths);
+        } finally {
+            $lock->release();
         }
     }
 

@@ -346,6 +346,32 @@ test('a request the update service has not taken for half a minute is stalled', 
         ->assertJsonPath('run.stalled', false);
 });
 
+test('a request the update service took but never began is stalled after five minutes', function () {
+    $this->travelTo('2026-11-01 04:00:00');
+    app(UpdateState::class)->request(new UpdateRequest(Version::parse('0.1.1'), 'panel', null, CarbonImmutable::now()));
+    rename(app(UpdatePaths::class)->requestFile(), app(UpdatePaths::class)->takenRequestFile());
+
+    $this->travelTo('2026-11-01 04:05:00');
+
+    $this->actingAs($this->owner)->getJson(route('settings.updates.status'))
+        ->assertJsonPath('run.state', 'starting')
+        ->assertJsonPath('run.stalled', false);
+
+    $this->actingAs($this->owner)->delete(route('settings.updates.cancel'))
+        ->assertSessionHas('error', "The update has already started, so it can't be cancelled.");
+
+    $this->travelTo('2026-11-01 04:05:01');
+
+    $this->actingAs($this->owner)->getJson(route('settings.updates.status'))
+        ->assertJsonPath('run.stalled', true);
+
+    $this->actingAs($this->owner)->delete(route('settings.updates.cancel'))
+        ->assertSessionHas('success', 'Request cancelled.');
+
+    expect(app(UpdateState::class)->pendingRequest())->toBeNull()
+        ->and(is_file(app(UpdatePaths::class)->takenRequestFile()))->toBeFalse();
+});
+
 test('the log of a run is read in full, and an unknown run is not found', function () {
     $status = updatesRunning();
     app(UpdateState::class)->appendLog($status->id, 'Fetching the release');
