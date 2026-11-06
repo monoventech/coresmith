@@ -14,6 +14,7 @@ use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
 use App\Http\Controllers\Settings\SourceProviderController;
 use App\Http\Controllers\Settings\SourceRepositoryController;
+use App\Http\Controllers\Settings\TeamDeletionController;
 use App\Http\Controllers\Settings\TeamDomainController;
 use App\Http\Controllers\Settings\TeamUrlController;
 use App\Http\Controllers\TeamController;
@@ -46,6 +47,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('settings.updates.log');
 
     Route::get('settings/team', [TeamController::class, 'index'])->name('teams.index');
+    Route::delete('settings/team', [TeamDeletionController::class, 'destroy'])
+        ->middleware(['cloud', 'password.confirm', 'throttle:6,1,team-delete'])
+        ->name('teams.destroy');
     Route::put('settings/team/url', [TeamUrlController::class, 'update'])->name('settings.team-url.update');
     Route::post('settings/team/domain', [TeamDomainController::class, 'store'])->name('settings.team-domain.store');
     Route::post('settings/team/domain/verify', [TeamDomainController::class, 'verify'])

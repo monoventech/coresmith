@@ -94,6 +94,11 @@ final class TeamUrls
         return $this->pathUrl($team, $request) . '/dashboard';
     }
 
+    public function withoutTeam(string $path, ?Request $request = null): string
+    {
+        return $this->root($request) . '/' . ltrim($path, '/');
+    }
+
     public function billing(Team $team): string
     {
         return $this->pathUrl($team) . '/settings/billing';

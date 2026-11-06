@@ -13,9 +13,13 @@ use App\Enums\TeamRole;
 use App\Http\Controllers\Controller;
 use App\Jobs\BackUpPanel;
 use App\Models\InstanceSetting;
+use App\Models\Server;
 use App\Models\SshKey;
+use App\Models\Team;
 use App\Services\Panel\PanelBackup;
 use App\Services\Panel\PanelUpdatesPresenter;
+use App\Services\Teams\AccountClosing;
+use App\Services\Teams\TeamDeletion;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
@@ -36,7 +40,7 @@ final class GeneralSettingsController extends Controller
         return back()->with('success', 'Backing up. The database and environment are archived, the last ' . PanelBackup::KEEP . ' are kept.');
     }
 
-    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates): Response
+    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion): Response
     {
         $cloud = Edition::current()->isCloud();
         $installed = $cloud ? null : InstanceSetting::get('installed_at');
@@ -58,7 +62,8 @@ final class GeneralSettingsController extends Controller
                 ],
                 'keep' => PanelBackup::KEEP,
             ],
-            'owns_team' => $request->user()->ownedTeams()->exists(),
+            'account' => ['refusal' => $closing->refusal($request->user())],
+            'team_deletion' => $this->teamDeletion($request, $this->currentTeam(), $deletion),
             'timezones' => DateTimeZone::listIdentifiers(),
             'keys' => $request->user()->sshKeys()->latest()->get()->map(fn(SshKey $key): array => [
                 'id' => $key->id,
@@ -73,6 +78,27 @@ final class GeneralSettingsController extends Controller
                 'reachServers' => $request->user()->teams->contains(fn($team): bool => in_array($team->pivot->role, [TeamRole::Owner->value, TeamRole::Admin->value], true)),
             ],
         ]);
+    }
+
+    /**
+     * @return array{name: string, servers: int, provider_servers: int, providers: list<string>, refusal: string|null}|null
+     */
+    private function teamDeletion(Request $request, ?Team $team, TeamDeletion $deletion): ?array
+    {
+        if (!Edition::current()->isCloud() || $team === null || !$request->user()->can('delete', $team)) {
+            return null;
+        }
+
+        $servers = $team->servers()->with('cloudProvider')->oldest()->orderBy('id')->get();
+        $created = $servers->filter(fn(Server $server): bool => $server->cloud_provider_id !== null && $server->provider_server_id !== null);
+
+        return [
+            'name' => $team->name,
+            'servers' => $servers->count(),
+            'provider_servers' => $created->count(),
+            'providers' => $created->map(fn(Server $server): ?string => $server->cloudProvider?->type->label())->filter()->unique()->values()->all(),
+            'refusal' => $deletion->refusal($team),
+        ];
     }
 
     public function update(Request $request): RedirectResponse

@@ -35,6 +35,8 @@ final class EnforcePlan
         'api-tokens.destroy',
         'ssh-keys.destroy',
         'teams.members.destroy',
+        'teams.destroy',
+        'start.store',
         'teams.invitations.destroy',
         'invitations.accept',
         'source-providers.destroy',

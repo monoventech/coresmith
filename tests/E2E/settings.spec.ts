@@ -166,16 +166,16 @@ test.describe('general settings', () => {
         await expect(dialog(page)).toContainText("That isn't an OpenSSH public key.")
     })
 
-    test('an owner of a team is told to hand it over before deleting the account', async ({ page }) => {
+    test('the last owner of a team is told what has to happen before the account can close', async ({ page }) => {
         await gotoSettings(page, 'General')
 
-        await expect(page.getByRole('main')).toContainText('Hand the teams you own to someone else first.')
+        const closing = page.getByTestId('close-account')
 
-        await page.getByRole('button', { name: 'Delete your account' }).click()
-        await expect(dialog(page)).toContainText('Delete your account?')
-        await dialog(page).getByRole('button', { name: 'Keep my account' }).click()
-
-        await expect(dialog(page)).toHaveCount(0)
+        await expect(closing).toContainText(
+            'Make someone else an owner of Foundry first. To remove the panel instead, run coresmith:uninstall on its server.'
+        )
+        await expect(closing.getByRole('button', { name: 'Close your account' })).toBeDisabled()
+        await expect(page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' })).toHaveCount(0)
     })
 })
 
@@ -191,6 +191,20 @@ asMember.describe('ssh keys as a deployer', () => {
 
         await keys.getByRole('button', { name: 'Add key' }).click()
         await expect(dialog(page)).toContainText("It's installed once you're an owner or admin of a team.")
+    })
+
+    asMember('a deployer can open the dialog that closes the account and keep the account', async ({ page }) => {
+        await gotoSettings(page, 'General')
+
+        const closing = page.getByTestId('close-account')
+
+        await expect(closing).toContainText('Your teams keep running without you.')
+
+        await closing.getByRole('button', { name: 'Close your account' }).click()
+        await expect(dialog(page)).toContainText('Close your account?')
+        await dialog(page).getByRole('button', { name: 'Keep my account' }).click()
+
+        await expect(dialog(page)).toHaveCount(0)
     })
 })
 

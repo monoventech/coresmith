@@ -23,7 +23,7 @@ test('billing requires authentication', function () {
     $this->get(route('settings.billing'))->assertRedirect(route('login'));
 });
 
-test('a user who owns a team cannot delete their account until they hand it over', function () {
+test('the last owner of a team cannot close their account until someone else owns it', function () {
     $user = User::factory()->create();
     Team::factory()->create(['name' => 'Monoven', 'owner_id' => $user->id]);
 
@@ -31,7 +31,7 @@ test('a user who owns a team cannot delete their account until they hand it over
         ->from(route('profile.edit'))
         ->delete(route('profile.destroy'), ['password' => 'password'])
         ->assertRedirect(route('profile.edit'))
-        ->assertSessionHasErrors(['password' => 'Hand Monoven to another owner before deleting your account.']);
+        ->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first. To remove the panel instead, run coresmith:uninstall on its server.']);
 
     expect(User::find($user->id))->not->toBeNull();
 

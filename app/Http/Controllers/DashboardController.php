@@ -9,21 +9,27 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\Ability;
+use App\Enums\Edition;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class DashboardController extends Controller
 {
-    public function __invoke(Request $request, ActivityFeed $feed, DeploymentPhases $phases): Response
+    public function __invoke(Request $request, ActivityFeed $feed, DeploymentPhases $phases): Response|RedirectResponse
     {
         $user = $request->user();
         $team = $this->currentTeam();
+
+        if ($team === null && Edition::current()->isCloud()) {
+            return to_route('start.show');
+        }
 
         if ($team === null) {
             return Inertia::render('Dashboard', [

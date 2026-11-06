@@ -8,6 +8,7 @@ use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Deployment;
+use App\Services\Teams\AccountClosing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -47,20 +48,21 @@ class ProfileController extends Controller
     /**
      * Delete the user's profile.
      */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, AccountClosing $closing): RedirectResponse
     {
         $user = $request->user();
-        $owned = $user->ownedTeams()->first();
+        $refusal = $closing->refusal($user);
 
-        if ($owned !== null) {
-            return back()->withErrors(['password' => "Hand {$owned->name} to another owner before deleting your account."]);
+        if ($refusal !== null) {
+            return back()->withErrors(['password' => $refusal]);
         }
 
         $servers = SyncAuthorizedKeys::activeServersOf($user->teams()->pluck('teams.id'));
 
         Auth::logout();
 
-        DB::transaction(function () use ($user): void {
+        DB::transaction(function () use ($user, $closing): void {
+            $closing->handOver($user);
             Deployment::query()->where('triggered_by', $user->getKey())->update(['triggered_by' => null]);
             $user->tokens()->delete();
             $user->sshKeys()->delete();

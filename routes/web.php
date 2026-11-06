@@ -15,6 +15,7 @@ use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\NoTeamController;
 use App\Http\Controllers\ReleasesController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
@@ -37,6 +38,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'latest'])->name('releases.index');
     Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
+    Route::get('start', [NoTeamController::class, 'show'])->middleware('cloud')->name('start.show');
+    Route::post('start', [NoTeamController::class, 'store'])
+        ->middleware(['cloud', 'throttle:6,1,team-start'])
+        ->name('start.store');
 
     Route::get('servers', fn() => to_route('dashboard'))->name('servers.index');
     Route::post('servers/cloud', [CloudServerController::class, 'store'])

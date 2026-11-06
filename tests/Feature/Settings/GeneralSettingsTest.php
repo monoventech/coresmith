@@ -93,7 +93,7 @@ test('an unconfigured instance falls back to the application defaults', function
             ->where('instance.notification_email', null)
             ->where('can.manageInstance', false)
             ->where('can.reachServers', false)
-            ->where('owns_team', false));
+            ->where('account.refusal', null));
 });
 
 test('the last backup is described by when it ran, its size and whether it verifies', function () {
@@ -118,13 +118,13 @@ test('a backup from an earlier day is dated and a corrupt one is not verified', 
             ->where('backups.last.verified', false));
 });
 
-test('a user who owns a team is told so', function () {
+test('the last owner of a team is told what has to happen before their account can close', function () {
     $user = generalSettingsUser(TeamRole::Member);
-    Team::factory()->create(['owner_id' => $user->id]);
+    $team = Team::factory()->create(['owner_id' => $user->id]);
 
     $this->actingAs($user)
         ->get(route('settings.general'))
-        ->assertInertia(fn($page) => $page->where('owns_team', true));
+        ->assertInertia(fn($page) => $page->where('account.refusal', "Make someone else an owner of {$team->name} first. To remove the panel instead, run coresmith:uninstall on its server."));
 });
 
 test('the users ssh keys are listed newest first with their type', function () {
