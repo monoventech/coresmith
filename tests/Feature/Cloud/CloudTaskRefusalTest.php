@@ -12,13 +12,13 @@ beforeEach(function () {
     Http::preventStrayRequests();
 });
 
-function refusalServer(): Server
+function cloudRefusalServer(): Server
 {
     return Server::factory()->fromProvider(CloudProvider::factory()->create())->create(['name' => 'outpost-02', 'status' => ServerStatus::Active]);
 }
 
 test('a running provider task says what Coresmith is busy with', function (string $type, string $step, string $message) {
-    $server = refusalServer();
+    $server = cloudRefusalServer();
     CloudTask::start($server, $type, $step);
 
     expect(CloudTask::refusal($server->fresh(), 'Deploy'))->toBe($message);
@@ -29,7 +29,7 @@ test('a running provider task says what Coresmith is busy with', function (strin
 ]);
 
 test('a provider task that stopped, or none at all, refuses nothing', function (?string $ending) {
-    $server = refusalServer();
+    $server = cloudRefusalServer();
 
     if ($ending !== null) {
         CloudTask::start($server, CloudTask::RESIZE, 'change');

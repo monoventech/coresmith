@@ -389,7 +389,7 @@ test('another team cannot roll back, and a rollback through another server is a 
     Queue::assertNothingPushed();
 });
 
-function screenBusy(Server $server, string $type = CloudTask::RESIZE): void
+function cloudScreenBusy(Server $server, string $type = CloudTask::RESIZE): void
 {
     $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
     CloudTask::start($server, $type, $type === CloudTask::RESIZE ? 'power_off' : 'delete', $type === CloudTask::RESIZE ? ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true] : []);
@@ -399,7 +399,7 @@ test('a deploy waits while the server is being resized', function (string $type,
     Queue::fake();
     $team = Team::factory()->create();
     $application = screenApp($team);
-    screenBusy($application->server, $type);
+    cloudScreenBusy($application->server, $type);
 
     $this->actingAs(screenMember($team))
         ->post(route('servers.applications.deploy', [$application->server_id, $application]))
@@ -417,7 +417,7 @@ test('a rollback waits while the server is being resized', function () {
     Queue::fake();
     $team = Team::factory()->create();
     $application = screenApp($team);
-    screenBusy($application->server);
+    cloudScreenBusy($application->server);
 
     $this->actingAs(screenMember($team))
         ->post(route('servers.applications.rollback', [$application->server_id, $application]))

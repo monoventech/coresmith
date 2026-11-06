@@ -242,7 +242,7 @@ test('the endpoint is rate limited', function () {
         ->toContain('throttle:30,1,webhook-deploy');
 });
 
-function webhookBusy(Server $server, string $type = CloudTask::RESIZE): void
+function cloudWebhookBusy(Server $server, string $type = CloudTask::RESIZE): void
 {
     $server->forceFill(['cloud_provider_id' => CloudProvider::factory()->for($server->team)->create()->getKey(), 'provider_server_id' => '4711'])->save();
     CloudTask::start($server, $type, $type === CloudTask::RESIZE ? 'power_off' : 'delete', $type === CloudTask::RESIZE ? ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true] : []);
@@ -252,7 +252,7 @@ test('a push while the server is being resized is refused and can be delivered a
     Queue::fake();
     $endpoint = endpointFor();
     $server = $endpoint->application->server;
-    webhookBusy($server);
+    cloudWebhookBusy($server);
     $payload = ['ref' => 'refs/heads/main', 'after' => str_repeat('a', 40)];
     $headers = ['X-GitHub-Event' => 'push', 'X-GitHub-Delivery' => 'push-during-resize'];
 

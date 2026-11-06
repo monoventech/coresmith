@@ -356,7 +356,7 @@ test('an application killed for memory in the last day needs attention', functio
     expect((new FleetSnapshot($team))->attention())->toBe([]);
 });
 
-function fleetCreating(Team $team, bool $failed, array $attributes = []): Server
+function cloudFleetCreating(Team $team, bool $failed, array $attributes = []): Server
 {
     $server = Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->creating()->create(['name' => 'outpost-02', ...$attributes]);
     CloudTask::start($server, CloudTask::CREATE, 'create');
@@ -370,7 +370,7 @@ function fleetCreating(Team $team, bool $failed, array $attributes = []): Server
 
 test('a server at its provider reads as being created, or as failed once its creation fails', function (bool $failed, array $attributes, string $key, string $label, string $tone) {
     $team = Team::factory()->create();
-    $server = fleetCreating($team, $failed, $attributes);
+    $server = cloudFleetCreating($team, $failed, $attributes);
 
     expect((new FleetSnapshot($team))->state($server))->toBe(['key' => $key, 'label' => $label, 'tone' => $tone]);
 })->with([
@@ -409,8 +409,8 @@ test('a failed creation needs attention first', function () {
     $team = Team::factory()->create();
     $full = fleetServer($team, ['name' => 'full-disk', 'created_at' => now()->subWeek()]);
     fleetMetric($full, 91.4);
-    $failed = fleetCreating($team, true);
-    fleetCreating($team, false, ['name' => 'outpost-03']);
+    $failed = cloudFleetCreating($team, true);
+    cloudFleetCreating($team, false, ['name' => 'outpost-03']);
 
     expect((new FleetSnapshot($team))->attention())->toBe([
         ['severity' => 'critical', 'subject' => 'outpost-02', 'summary' => 'creation failed', 'href' => route('servers.show', $failed)],
@@ -418,7 +418,7 @@ test('a failed creation needs attention first', function () {
     ]);
 });
 
-function fleetDestroying(Team $team, bool $failed, array $attributes = []): Server
+function cloudFleetDestroying(Team $team, bool $failed, array $attributes = []): Server
 {
     $server = Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->create(['name' => 'outpost-04', 'status' => ServerStatus::Active, ...$attributes]);
     CloudTask::start($server, CloudTask::DESTROY, 'delete');
@@ -432,8 +432,8 @@ function fleetDestroying(Team $team, bool $failed, array $attributes = []): Serv
 
 test('a server being destroyed reads so, and a failed destroy needs attention', function () {
     $team = Team::factory()->create();
-    $running = fleetDestroying($team, false);
-    $failed = fleetDestroying($team, true, ['name' => 'outpost-05']);
+    $running = cloudFleetDestroying($team, false);
+    $failed = cloudFleetDestroying($team, true, ['name' => 'outpost-05']);
     $fleet = new FleetSnapshot($team);
 
     expect($fleet->state($running))->toBe(['key' => 'destroying', 'label' => 'Destroying', 'tone' => 'default'])
@@ -441,7 +441,7 @@ test('a server being destroyed reads so, and a failed destroy needs attention', 
         ->and($fleet->attention())->toContain(['severity' => 'critical', 'subject' => 'outpost-05', 'summary' => 'destroy failed', 'href' => route('servers.show', $failed)]);
 });
 
-function fleetResizing(Team $team, bool $failed, array $attributes = []): Server
+function cloudFleetResizing(Team $team, bool $failed, array $attributes = []): Server
 {
     $server = Server::factory()->fromProvider(CloudProvider::factory()->for($team)->create())->create(['name' => 'outpost-06', 'status' => ServerStatus::Active, ...$attributes]);
     CloudTask::start($server, CloudTask::RESIZE, 'change', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
@@ -455,8 +455,8 @@ function fleetResizing(Team $team, bool $failed, array $attributes = []): Server
 
 test('a server being resized reads so, and a failed resize is a warning', function () {
     $team = Team::factory()->create();
-    $running = fleetResizing($team, false);
-    $failed = fleetResizing($team, true, ['name' => 'outpost-07']);
+    $running = cloudFleetResizing($team, false);
+    $failed = cloudFleetResizing($team, true, ['name' => 'outpost-07']);
     fleetRunning($running);
     $fleet = new FleetSnapshot($team);
 

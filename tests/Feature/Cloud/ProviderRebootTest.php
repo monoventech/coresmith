@@ -37,7 +37,7 @@ afterEach(function () {
     SSHConnectionManager::createTransportUsing(null);
 });
 
-function rebootingServer(?Team $team = null): Server
+function cloudRebootingServer(?Team $team = null): Server
 {
     $account = CloudProvider::factory()->for($team ?? Team::factory()->create())->create();
 
@@ -45,7 +45,7 @@ function rebootingServer(?Team $team = null): Server
 }
 
 test('a provider server is rebooted through its provider, and is recorded as accepted rather than back', function () {
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
 
     app()->call([new RebootServer($server), 'handle']);
 
@@ -56,7 +56,7 @@ test('a provider server is rebooted through its provider, and is recorded as acc
 });
 
 test('a reboot queued before other provider work began does not reach the provider during it', function (string $type, string $step, string $reason) {
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
     $job = new RebootServer($server);
     CloudTask::start($server, $type, $step, ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
 
@@ -72,7 +72,7 @@ test('a reboot queued before other provider work began does not reach the provid
 ]);
 
 test('a reboot over SSH also waits for provider work that began after it was queued', function () {
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
     $server->forceFill(['provider_server_id' => null])->save();
     $job = new RebootServer($server);
     CloudTask::start($server, CloudTask::CREATE, 'boot');
@@ -84,7 +84,7 @@ test('a reboot over SSH also waits for provider work that began after it was que
 });
 
 test('a reboot after provider work finished goes ahead', function () {
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
     CloudTask::start($server, CloudTask::RESIZE, 'reconnect', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
     CloudTask::finish($server);
 
@@ -95,7 +95,7 @@ test('a reboot after provider work finished goes ahead', function () {
 
 test('a token the provider refuses for a reboot marks the account', function () {
     $this->api->failing('reboot', new CloudProviderException(CloudFailure::TokenRejected, CloudProviderType::Hetzner, null, 401));
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
 
     expect(fn() => app()->call([new RebootServer($server), 'handle']))->toThrow(CloudProviderException::class);
 
@@ -105,7 +105,7 @@ test('a token the provider refuses for a reboot marks the account', function () 
 
 test('a reboot the provider refuses for another reason leaves the account alone', function () {
     $this->api->failing('reboot', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked'));
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
 
     expect(fn() => app()->call([new RebootServer($server), 'handle']))->toThrow(CloudProviderException::class);
 
@@ -117,7 +117,7 @@ test('a provider server that is not answering is still rebooted through its prov
     $team = Team::factory()->create();
     $user = User::factory()->create();
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
-    $server = rebootingServer($team);
+    $server = cloudRebootingServer($team);
     $server->forceFill(['unreachable_since' => now()->subMinutes(5), 'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.'])->save();
 
     expect(app(ServerPresenter::class)->header($server->fresh(), $user->fresh())['unreachable']['can_reboot'])->toBeTrue();
@@ -135,7 +135,7 @@ test('a provider server that is not answering is still rebooted through its prov
 });
 
 test('a provider server whose instance is unknown is rebooted over SSH', function () {
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
     $server->forceFill(['provider_server_id' => null])->save();
 
     app()->call([new RebootServer($server), 'handle']);
@@ -146,7 +146,7 @@ test('a provider server whose instance is unknown is rebooted over SSH', functio
 
 test('a provider that refuses the reboot leaves a note in the activity', function () {
     $this->api->failing('reboot', new CloudProviderException(CloudFailure::Refused, CloudProviderType::Hetzner, 'locked'));
-    $server = rebootingServer();
+    $server = cloudRebootingServer();
 
     expect(fn() => app()->call([new RebootServer($server), 'handle']))->toThrow(CloudProviderException::class);
 
@@ -160,7 +160,7 @@ test('a reboot waits while the server is being resized', function () {
     $team = Team::factory()->create();
     $user = User::factory()->create();
     $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
-    $server = rebootingServer($team);
+    $server = cloudRebootingServer($team);
     CloudTask::start($server, CloudTask::RESIZE, 'power_off', ['from' => 'cx22', 'to' => 'cx32', 'power_cycle' => true]);
 
     $this->actingAs($user->fresh())
