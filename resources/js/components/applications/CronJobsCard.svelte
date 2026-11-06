@@ -210,10 +210,12 @@
     {/if}
 
     {#if open}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
             bind:this={panel}
             id="scheduler-log"
-            class="terminal mt-2 h-40 overflow-y-auto px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
+            class="terminal focus-ring mt-2 h-40 overflow-y-auto px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
+            tabindex="0"
             role="log"
             aria-live="polite"
             aria-label="Scheduler log"

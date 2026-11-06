@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\Ability;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
+use App\Jobs\ReadSchedulerLog;
 use App\Models\Application;
 use App\Models\CloudProvider;
 use App\Models\Server;
@@ -16,6 +17,8 @@ use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Panel\ActivityFeed;
+use App\Services\Panel\CronJobs;
+use App\Services\Server\SchedulerLogReader;
 use Database\Seeders\E2ESeeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -131,4 +134,19 @@ test('the browser seed gives every browser project its own provider account to r
 
     expect(CloudProvider::query()->where('team_id', $stray->id)->whereIn('name', $names)->count())->toBe(count($names))
         ->and(CloudProvider::query()->where('team_id', $stray->id)->whereIn('name', $names)->whereHas('servers')->exists())->toBeFalse();
+});
+
+test('the browser seed has a scheduler log to show, one that could not be read, and an app at its cron job limit', function () {
+    e2eSeedRun();
+
+    $log = Cache::get(ReadSchedulerLog::cacheKey(Application::query()->where('name', 'cron-jobs')->sole()));
+    $unread = Cache::get(ReadSchedulerLog::cacheKey(Application::query()->where('name', 'cron-paused')->sole()));
+
+    expect($log['lines'])->toHaveCount(SchedulerLogReader::LINES)
+        ->and($log['error'])->toBeNull()
+        ->and(collect($log['lines'])->contains(fn(string $line): bool => mb_strlen($line) === SchedulerLogReader::LINE_LENGTH))->toBeTrue()
+        ->and(collect($log['lines'])->contains(fn(string $line): bool => str_contains($line, "\t")))->toBeTrue()
+        ->and(end($log['lines']))->toBe('[2026-11-06 09:00:00] Running [prune] .... DONE')
+        ->and($unread)->toMatchArray(['lines' => [], 'error' => "Couldn't read the scheduler log on bench-01."])
+        ->and(Application::query()->where('name', 'cron-full')->sole()->cron_jobs)->toHaveCount(CronJobs::MAX_ENTRIES);
 });

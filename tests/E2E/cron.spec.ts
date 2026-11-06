@@ -112,20 +112,47 @@ test.describe('cron jobs on the app page', () => {
         )
     })
 
-    test('the scheduler log is read when asked for', async ({ page }) => {
+    test('the scheduler log shows its newest lines and scrolls back from the keyboard', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'cron-jobs')
 
         await cronCard(page).getByRole('button', { name: 'Show output' }).click()
 
         const log = page.getByTestId('scheduler-log')
+        const newest = log.getByText('[2026-11-06 09:00:00] Running [prune] .... DONE')
+        const first = log.getByText('[2026-11-06 08:11:00] Running [schedule:run] first line')
+        const long = log.getByText(/^\[2026-11-06 08:58:00\] prices:sync/)
 
         await expect(log).toHaveAttribute('role', 'log')
-        await expect(log).toContainText(
-            /reading the scheduler log|Nothing in the scheduler log yet|Couldn't read the scheduler log/
-        )
+        await expect(newest).toBeAttached()
+        await log.scrollIntoViewIfNeeded()
+        await expect(newest).toBeInViewport()
+        await expect(first).not.toBeInViewport()
+        await expect(log).toContainText('Running [report:weekly]\tqueued')
+        expect((await long.boundingBox())?.height ?? 0).toBeGreaterThan(30)
+
+        await log.focus()
+        await expect(log).toBeFocused()
+        await page.keyboard.press('Home')
+
+        await expect(first).toBeInViewport()
 
         await cronCard(page).getByRole('button', { name: 'Hide output' }).click()
         await expect(log).toHaveCount(0)
+    })
+
+    test('a scheduler log that could not be read says so', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'cron-paused')
+
+        await cronCard(page).getByRole('button', { name: 'Show output' }).click()
+
+        await expect(page.getByTestId('scheduler-log')).toHaveText("Couldn't read the scheduler log on bench-01.")
+    })
+
+    test('an app at its cron job limit says so and offers no way to add another', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'cron-full')
+
+        await expect(cronCard(page)).toContainText('20 of 20 jobs. Remove one to add another.')
+        await expect(cronCard(page).getByRole('button', { name: 'Add cron job' })).toBeDisabled()
     })
 
     test('cron jobs that did not reach the server say why and can be sent again', async ({ page }, testInfo) => {
@@ -228,6 +255,34 @@ test.describe('changing cron jobs', () => {
         await expect(dialog(page)).toHaveCount(0)
         await expect(cronRow(page, command)).toBeVisible()
         await removeJob(page, command)
+    })
+
+    test('removing a job another tab already removed says the list changed and saves nothing', async ({
+        page
+    }, testInfo) => {
+        const command = `echo ${tag(testInfo, 'stale')}`
+        const app = own(testInfo, 'cron')
+
+        await gotoApplication(page, 'bench-01', app)
+        await addJob(page, command)
+
+        await cronCard(page)
+            .getByRole('button', { name: `Remove ${command}` })
+            .click()
+        await expect(dialog(page)).toContainText('Remove this cron job?')
+
+        const other = await page.context().newPage()
+
+        await gotoApplication(other, 'bench-01', app)
+        await removeJob(other, command)
+        await other.close()
+
+        await dialog(page).getByRole('button', { name: 'Remove the job' }).click()
+
+        await expect(toast(page)).toContainText(
+            'That cron job changed since this page loaded, so nothing was saved. Check the list and try again.'
+        )
+        await expect(cronRow(page, command)).toHaveCount(0)
     })
 
     test('a custom expression is kept as written', async ({ page }, testInfo) => {

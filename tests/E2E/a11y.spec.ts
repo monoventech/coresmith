@@ -46,6 +46,37 @@ const PAGES: [string, Visit][] = [
     ],
     ['Application whose cron jobs are paused', (page) => gotoApplication(page, 'bench-01', 'cron-paused')],
     [
+        'Application whose cron jobs are being written',
+        async (page) => {
+            await page.route('**/applications/**', async (route) => {
+                if (route.request().headers()['x-inertia'] === undefined) {
+                    await route.continue()
+
+                    return
+                }
+
+                const response = await route.fetch()
+                const body = await response.json()
+
+                if (body.props?.cron) {
+                    body.props.cron = { ...body.props.cron, state: 'applying' }
+                }
+
+                await route.fulfill({ response, json: body })
+            })
+            await gotoApplication(page, 'bench-01', 'cron-jobs')
+
+            if ((page.viewportSize()?.width ?? 0) >= 640) {
+                await page.getByTestId('cron-status').getByText('Writing the cron file on bench-01').waitFor()
+            }
+        }
+    ],
+    ['Application whose cron jobs are still waiting', (page) => gotoApplication(page, 'bench-01', 'cron-waiting')],
+    [
+        'Application whose cron jobs start with the first deploy',
+        (page) => gotoApplication(page, 'bench-01', 'cron-new')
+    ],
+    [
         'Adding a cron job',
         async (page) => {
             await gotoApplication(page, 'bench-01', 'cron-jobs')
@@ -76,7 +107,7 @@ const PAGES: [string, Visit][] = [
 
             if ((page.viewportSize()?.width ?? 0) >= 640) {
                 await page.getByTestId('cron-jobs').getByRole('button', { name: 'Show output' }).click()
-                await page.getByTestId('scheduler-log').waitFor()
+                await page.getByTestId('scheduler-log').getByText('Running [prune] .... DONE').waitFor()
             }
         }
     ],

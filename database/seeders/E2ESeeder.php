@@ -16,6 +16,7 @@ use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Jobs\InstallRuntimes;
+use App\Jobs\ReadSchedulerLog;
 use App\Models\Application;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
@@ -33,11 +34,13 @@ use App\Services\Cloud\CloudCatalog;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
+use App\Services\Panel\CronJobs;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\CertificateCheck;
 use App\Services\Server\ProvisioningLog;
+use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
 use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\UpdatePaths;
@@ -667,15 +670,27 @@ final class E2ESeeder extends Seeder
         $scheduler = ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'];
         $unreachable = "Couldn't reach bench-01 over SSH. Check it's online, then try again.";
 
-        $this->succeeded($this->application('cron-jobs', 8500, ['cron_jobs' => [
+        $cronJobs = $this->application('cron-jobs', 8500, ['cron_jobs' => [
             $scheduler,
             ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run', 'description' => 'Nightly backup'],
             ['schedule' => '30 8 * * 1', 'command' => 'php artisan report:weekly'],
             ['schedule' => '15 9-17 * * 1-5', 'command' => "php artisan prices:sync\nphp artisan cache:clear --tags=prices", 'description' => 'Price sync'],
-        ]]), 4 * 60, 'v1.2.0');
+        ]]);
+        $this->succeeded($cronJobs, 4 * 60, 'v1.2.0');
+        $this->schedulerLog($cronJobs, [
+            '[2026-11-06 08:11:00] Running [schedule:run] first line',
+            ...array_map(fn(int $minute): string => sprintf('[2026-11-06 08:%02d:00] Running [inspire] .... 4ms DONE', $minute + 12), range(0, 44)),
+            "[2026-11-06 08:57:00] Running [report:weekly]\tqueued",
+            '[2026-11-06 08:58:00] ' . str_repeat('prices:sync updated a long list of products without pausing ', 7),
+            '[2026-11-06 08:59:00] Running [backup:run] .... 1s DONE',
+            '[2026-11-06 09:00:00] Running [prune] .... DONE',
+        ]);
 
         $this->succeeded($this->application('cron-failed', 8510, ['cron_jobs' => [$scheduler], 'cron_error' => $unreachable]), 4 * 60, 'v1.0.0');
-        $this->succeeded($this->application('cron-paused', 8520, ['cron_jobs' => [$scheduler], 'power_state' => PowerState::Stopped]), 26 * 60, 'v1.0.0');
+        $cronPaused = $this->application('cron-paused', 8520, ['cron_jobs' => [$scheduler], 'power_state' => PowerState::Stopped]);
+        $this->succeeded($cronPaused, 26 * 60, 'v1.0.0');
+        Cache::put(ReadSchedulerLog::cacheKey($cronPaused), ['lines' => [], 'error' => "Couldn't read the scheduler log on bench-01.", 'read_at' => now()->subDay()->timestamp], now()->addYear());
+        $this->succeeded($this->application('cron-full', 8550, ['cron_jobs' => array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, CronJobs::MAX_ENTRIES - 1))]), 4 * 60, 'v1.0.0');
         $this->application('cron-new', 8530, ['cron_jobs' => [$scheduler]]);
         $this->succeeded($this->application('cron-waiting', 8540, ['cron_jobs' => [$scheduler], 'cron_pending_since' => now()->subMinutes(10)]), 4 * 60, 'v1.0.0');
 
@@ -684,6 +699,16 @@ final class E2ESeeder extends Seeder
             $this->succeeded($this->application("cron-toggle-{$code}", 8610 + $index * 30, ['cron_jobs' => [$scheduler]]), 3 * 60, 'v1.0.0');
             $this->succeeded($this->application("cron-failed-{$code}", 8620 + $index * 30, ['cron_jobs' => [$scheduler], 'cron_error' => $unreachable]), 3 * 60, 'v1.0.0');
         }
+    }
+
+    /**
+     * @param  list<string>  $lines
+     */
+    private function schedulerLog(Application $application, array $lines): void
+    {
+        $lines = array_map(fn(string $line): string => mb_substr($line, 0, SchedulerLogReader::LINE_LENGTH), $lines);
+
+        Cache::put(ReadSchedulerLog::cacheKey($application), ['lines' => array_slice($lines, -SchedulerLogReader::LINES), 'error' => null, 'read_at' => now()->subDay()->timestamp], now()->addYear());
     }
 
     /**
