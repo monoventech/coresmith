@@ -184,7 +184,7 @@ final class CreateServerTask implements CloudTaskHandler
         $uncertain = (int) ($task->data['uncertain'] ?? 0) + 1;
 
         if ($uncertain <= self::UNCERTAIN_LIMIT) {
-            return StepResult::wait(self::UNCERTAIN_SECONDS, ['uncertain' => $uncertain]);
+            return StepResult::wait(max(self::UNCERTAIN_SECONDS, $e->retryAfter ?? 0), ['uncertain' => $uncertain]);
         }
 
         CloudTask::touch($server, ['uncertain' => $uncertain]);

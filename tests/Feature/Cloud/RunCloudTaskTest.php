@@ -302,6 +302,20 @@ test('every failure that can pass is waited out', function (CloudFailure $failur
         ->and($server->cloudProvider->fresh()->token_failed_at)->toBeNull();
 })->with([CloudFailure::Busy, CloudFailure::RateLimited, CloudFailure::Unreachable]);
 
+test('a failure that says when to come back is waited out for that long', function (?int $retryAfter, int $waited) {
+    $server = cloudTaskServer();
+    cloudTaskResults(new CloudProviderException(CloudFailure::RateLimited, CloudProviderType::Hetzner, null, 429, retryAfter: $retryAfter), StepResult::done());
+
+    cloudTaskRun($server);
+
+    Sleep::assertSlept(cloudTaskSlept($waited), 1);
+    Sleep::assertSleptTimes(1);
+    expect(cloudTaskOf($server)->state)->toBe(CloudTask::DONE);
+})->with([
+    'what the provider asked' => [12, 12],
+    'nothing asked' => [null, RunCloudTask::RETRY_SECONDS],
+]);
+
 test('a provider refusal fails the task in its own words', function () {
     Exceptions::fake();
     $server = cloudTaskServer();

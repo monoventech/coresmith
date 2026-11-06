@@ -250,6 +250,20 @@ test('a refused create says what to do and removes the uploaded key', function (
     Queue::assertNothingPushed();
 });
 
+test('an unanswered create waits at least as long as the provider asked', function (int $retryAfter, int $waited) {
+    $server = cloudCreating();
+    $this->api->failing('create', new CloudProviderException(CloudFailure::RateLimited, CloudProviderType::Hetzner, null, 429, retryAfter: $retryAfter));
+
+    cloudCreatingRun($server);
+
+    Sleep::assertSlept(cloudCreatingSlept($waited), 1);
+    expect($this->api->calls('create'))->toHaveCount(2)
+        ->and(cloudCreatingTask($server)->state)->toBe(CloudTask::DONE);
+})->with([
+    'longer than its own pause' => [45, 45],
+    'shorter than its own pause' => [3, 15],
+]);
+
 test('a create the provider will not take for another reason fails in its own words', function () {
     $server = cloudCreating();
     $refusal = cloudCreatingFailure(CloudFailure::Forbidden);

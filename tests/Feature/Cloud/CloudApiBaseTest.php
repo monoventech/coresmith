@@ -402,6 +402,103 @@ test('reads wait half a second between attempts and give up after three', functi
     Sleep::assertSlept(fn(CarbonInterval $duration): bool => (int) $duration->totalMilliseconds === 500, 2);
 });
 
+test('a rate limit that asks for a short wait is waited out within the read', function (string $header, Closure $value, int $milliseconds) {
+    $this->freezeTime();
+    Http::fakeSequence('api.hetzner.cloud/v1/servers')
+        ->push(['error' => ['message' => 'slow down']], 429, [$header => $value(now()->getTimestamp())])
+        ->push(['servers' => []]);
+
+    expect(cloudBaseApi()->probe()->json('servers'))->toBe([]);
+
+    Http::assertSentCount(2);
+    Sleep::assertSleptTimes(1);
+    Sleep::assertSlept(fn(CarbonInterval $duration): bool => (int) $duration->totalMilliseconds === $milliseconds, 1);
+})->with([
+    'nothing to wait' => ['Retry-After', fn(int $now): string => '0', 1000],
+    'a second' => ['Retry-After', fn(int $now): string => '1', 1000],
+    'two seconds' => ['Retry-After', fn(int $now): string => ' 2 ', 2000],
+    'when the limit resets' => ['RateLimit-Reset', fn(int $now): string => (string) ($now + 2), 2000],
+    'a reset that has passed' => ['RateLimit-Reset', fn(int $now): string => (string) ($now - 5), 1000],
+]);
+
+test('a rate limit that asks for a longer wait is left to the task, with the wait it asked for', function (string $header, Closure $value, int $seconds) {
+    $this->freezeTime();
+    Http::fakeSequence('api.hetzner.cloud/v1/servers')
+        ->push(['error' => ['message' => 'slow down']], 429, [$header => $value(now()->getTimestamp())])
+        ->push(['servers' => []]);
+
+    expect(fn() => cloudBaseApi()->probe())->toThrow(function (CloudProviderException $e) use ($seconds) {
+        expect($e->failure)->toBe(CloudFailure::RateLimited)->and($e->retryAfter)->toBe($seconds);
+    });
+
+    Http::assertSentCount(1);
+    Sleep::assertNeverSlept();
+})->with([
+    'seconds to wait' => ['Retry-After', fn(int $now): string => '20', 20],
+    'a date to wait until' => ['Retry-After', fn(int $now): string => gmdate('D, d M Y H:i:s \G\M\T', $now + 45), 45],
+    'when the limit resets' => ['RateLimit-Reset', fn(int $now): string => (string) ($now + 12), 12],
+    'when the limit resets, as linode names it' => ['X-RateLimit-Reset', fn(int $now): string => (string) ($now + 30), 30],
+    'seconds until the limit resets' => ['RateLimit-Reset', fn(int $now): string => '15', 15],
+    'longer than a minute' => ['Retry-After', fn(int $now): string => '3600', 60],
+    'a reset an hour away' => ['RateLimit-Reset', fn(int $now): string => (string) ($now + 3600), 60],
+]);
+
+test('the wait a rate limit asks for comes before when its limit resets', function () {
+    $this->freezeTime();
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response([], 429, ['Retry-After' => '20', 'RateLimit-Reset' => (string) (now()->getTimestamp() + 50)])]);
+
+    expect(fn() => cloudBaseApi()->probe())->toThrow(fn(CloudProviderException $e) => expect($e->retryAfter)->toBe(20));
+});
+
+test('a rate limit whose wait cannot be read is tried again half a second apart as before', function () {
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response([], 429, ['Retry-After' => 'soon', 'RateLimit-Reset' => 'later'])]);
+
+    expect(fn() => cloudBaseApi()->probe())->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::RateLimited)->and($e->retryAfter)->toBeNull();
+    });
+
+    Http::assertSentCount(3);
+    Sleep::assertSlept(fn(CarbonInterval $duration): bool => (int) $duration->totalMilliseconds === 500, 2);
+});
+
+test('a write that is rate limited is sent once and carries the wait it was asked for', function () {
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response([], 429, ['Retry-After' => '7'])]);
+
+    expect(fn() => cloudBaseApi()->write())->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::RateLimited)->and($e->retryAfter)->toBe(7);
+    });
+
+    Http::assertSentCount(1);
+});
+
+test('a server error that says when to come back is left to the task with that wait', function () {
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response([], 503, ['Retry-After' => '30'])]);
+
+    expect(fn() => cloudBaseApi()->probe())->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)->and($e->retryAfter)->toBe(30);
+    });
+
+    Http::assertSentCount(1);
+});
+
+test('a server error is not read as a rate limit, whatever rate limit headers it carries', function () {
+    $this->freezeTime();
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response([], 503, ['RateLimit-Reset' => (string) (now()->getTimestamp() + 50)])]);
+
+    expect(fn() => cloudBaseApi()->probe())->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Unavailable)->and($e->retryAfter)->toBeNull();
+    });
+
+    Http::assertSentCount(3);
+    Sleep::assertSlept(fn(CarbonInterval $duration): bool => (int) $duration->totalMilliseconds === 500, 2);
+});
+
+test('a refusal carries no wait, whatever headers it has', function () {
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response(['error' => ['message' => 'no']], 422, ['Retry-After' => '20'])]);
+
+    expect(fn() => cloudBaseApi()->probe())->toThrow(fn(CloudProviderException $e) => expect($e->retryAfter)->toBeNull());
+});
+
 test('a read that cannot connect is tried three times and a write once', function () {
     $attempts = 0;
     Http::fake(function ($request) use (&$attempts) {

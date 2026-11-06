@@ -144,7 +144,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 $account->forceFill(['token_failed_at' => now()])->save();
             }
 
-            return [$api, $e->retryable() && !$expired ? StepResult::wait(self::RETRY_SECONDS, ['last_error' => $e->getMessage()]) : StepResult::fail($e->getMessage())];
+            return [$api, $e->retryable() && !$expired ? StepResult::wait($e->retryAfter ?? self::RETRY_SECONDS, ['last_error' => $e->getMessage()]) : StepResult::fail($e->getMessage())];
         } catch (Throwable $e) {
             report($e);
 

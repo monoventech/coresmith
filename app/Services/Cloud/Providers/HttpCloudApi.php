@@ -13,6 +13,7 @@ use App\Enums\CloudProviderType;
 use App\Exceptions\CloudProviderException;
 use App\Services\Deployment\LogSanitizer;
 use Closure;
+use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -33,11 +34,17 @@ abstract class HttpCloudApi
 
     public const MAX_PAGES = 20;
 
+    public const MAX_WAIT_SECONDS = 60;
+
     protected const ID_PATTERN = '/\A[1-9]\d*\z/D';
 
     private const READ_ATTEMPTS = 3;
 
     private const READ_PAUSE_MILLISECONDS = 500;
+
+    private const MAX_READ_PAUSE_SECONDS = 2;
+
+    private const EPOCH_SECONDS = 1_000_000_000;
 
     private const RETRYABLE_STATUSES = [423, 429, 500, 502, 503, 504];
 
@@ -282,7 +289,7 @@ abstract class HttpCloudApi
     {
         return $this->request()
             ->withHeaders($headers)
-            ->retry(self::READ_ATTEMPTS, self::READ_PAUSE_MILLISECONDS, fn(?Throwable $e): bool => $this->worthRetrying($e), throw: false);
+            ->retry(self::READ_ATTEMPTS, fn(int $attempt, Throwable $e): int => self::pause($e), fn(?Throwable $e): bool => $this->worthRetrying($e), throw: false);
     }
 
     private function worthRetrying(?Throwable $e): bool
@@ -290,7 +297,41 @@ abstract class HttpCloudApi
         return $e instanceof ConnectionException
             || ($e instanceof RequestException
                 && in_array($e->response->status(), self::RETRYABLE_STATUSES, true)
-                && ($this->classify($e->response)?->retryable() ?? true));
+                && ($this->classify($e->response)?->retryable() ?? true)
+                && (self::wait($e->response) ?? 0) <= self::MAX_READ_PAUSE_SECONDS);
+    }
+
+    private static function pause(Throwable $e): int
+    {
+        $wait = $e instanceof RequestException ? self::wait($e->response) : null;
+
+        return max(self::READ_PAUSE_MILLISECONDS, ($wait ?? 0) * 1000);
+    }
+
+    private static function wait(Response $response): ?int
+    {
+        $seconds = self::seconds($response->header('Retry-After'), false);
+
+        if ($seconds === null && $response->status() === 429) {
+            $seconds = self::seconds($response->header('RateLimit-Reset'), true) ?? self::seconds($response->header('X-RateLimit-Reset'), true);
+        }
+
+        return $seconds === null ? null : min(self::MAX_WAIT_SECONDS, max(1, $seconds));
+    }
+
+    private static function seconds(string $value, bool $orEpoch): ?int
+    {
+        $value = trim($value);
+
+        if (preg_match('/\A\d{1,12}\z/D', $value) === 1) {
+            $number = (int) $value;
+
+            return $orEpoch && $number >= self::EPOCH_SECONDS ? $number - now()->getTimestamp() : $number;
+        }
+
+        $at = $orEpoch || $value === '' ? false : DateTimeImmutable::createFromFormat(DATE_RFC7231, $value, new DateTimeZone('UTC'));
+
+        return $at === false ? null : $at->getTimestamp() - now()->getTimestamp();
     }
 
     /**
@@ -353,6 +394,12 @@ abstract class HttpCloudApi
             default => CloudFailure::Refused,
         };
 
-        return new CloudProviderException($failure, $this->type(), $this->detail($this->message($response)), $status);
+        return new CloudProviderException(
+            $failure,
+            $this->type(),
+            $this->detail($this->message($response)),
+            $status,
+            retryAfter: $failure->retryable() ? self::wait($response) : null,
+        );
     }
 }

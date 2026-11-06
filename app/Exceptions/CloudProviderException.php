@@ -21,6 +21,7 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
         public readonly ?string $detail = null,
         public readonly ?int $status = null,
         ?Throwable $previous = null,
+        public readonly ?int $retryAfter = null,
     ) {
         parent::__construct($this->taskMessage(), 0, $previous);
     }
