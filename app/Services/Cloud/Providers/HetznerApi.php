@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Cloud\Providers;
 
+use App\Enums\CloudFailure;
 use App\Enums\CloudInstanceState;
 use App\Enums\CloudProviderType;
 use App\Services\Cloud\CloudAccount;
@@ -189,6 +190,16 @@ final class HetznerApi extends HttpCloudApi implements CloudApi
     protected function message(Response $response): ?string
     {
         return self::text($response->json('error.message'));
+    }
+
+    protected function classify(Response $response): ?CloudFailure
+    {
+        return match (self::text($response->json('error.code'))) {
+            'protected', 'resource_limit_exceeded', 'uniqueness_error' => CloudFailure::Refused,
+            'conflict' => CloudFailure::Busy,
+            'token_readonly' => CloudFailure::Forbidden,
+            default => null,
+        };
     }
 
     /**

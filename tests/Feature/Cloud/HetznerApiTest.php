@@ -711,6 +711,49 @@ test('hetzner treats a locked server as busy', function () {
     Http::assertSentCount(1);
 });
 
+test('hetzner reads its documented error codes before the status', function (int $status, mixed $code, CloudFailure $failure) {
+    Http::fake(['api.hetzner.cloud/v1/servers' => Http::response(['error' => ['code' => $code, 'message' => 'said so', 'details' => (object) []]], $status)]);
+
+    expect(fn() => cloudHetzner()->create(cloudHetznerSpec()))->toThrow(function (CloudProviderException $e) use ($status, $failure) {
+        expect($e->failure)->toBe($failure)
+            ->and($e->status)->toBe($status)
+            ->and($e->detail)->toBe('said so');
+    });
+
+    Http::assertSentCount(1);
+})->with([
+    'delete protection' => [423, 'protected', CloudFailure::Refused],
+    'a resource limit' => [403, 'resource_limit_exceeded', CloudFailure::Refused],
+    'a name already in use' => [409, 'uniqueness_error', CloudFailure::Refused],
+    'a change made meanwhile' => [409, 'conflict', CloudFailure::Busy],
+    'a read-only token' => [403, 'token_readonly', CloudFailure::Forbidden],
+    'a lock' => [423, 'locked', CloudFailure::Busy],
+    'a code it does not know' => [403, 'forbidden', CloudFailure::Forbidden],
+    'a code that is not text' => [423, ['protected'], CloudFailure::Busy],
+]);
+
+test('hetzner sends the delete of a protected server once and says it was refused', function () {
+    Http::fake(['api.hetzner.cloud/v1/servers/4711' => Http::response(['error' => ['code' => 'protected', 'message' => 'server is protected', 'details' => (object) []]], 423)]);
+
+    expect(fn() => cloudHetzner()->destroy('4711'))->toThrow(function (CloudProviderException $e) {
+        expect($e->failure)->toBe(CloudFailure::Refused)
+            ->and($e->retryable())->toBeFalse()
+            ->and($e->getMessage())->toBe('Hetzner Cloud refused the request. Hetzner Cloud said: server is protected.');
+    });
+
+    Http::assertSentCount(1);
+});
+
+test('hetzner still tries a locked server again within the read', function () {
+    Http::fakeSequence('api.hetzner.cloud/v1/servers/4711')
+        ->push(CloudFixtures::json('hetzner/error-locked'), 423)
+        ->push(CloudFixtures::json('hetzner/server-running'));
+
+    expect(cloudHetzner()->find('4711')?->id)->toBe('4711');
+
+    Http::assertSentCount(2);
+});
+
 test('hetzner passes on why a size cannot be created where it was asked for', function () {
     Http::fake(['api.hetzner.cloud/v1/servers' => Http::response(CloudFixtures::json('hetzner/error-unavailable'), 422)]);
 

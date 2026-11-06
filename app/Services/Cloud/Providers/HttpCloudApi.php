@@ -282,13 +282,15 @@ abstract class HttpCloudApi
     {
         return $this->request()
             ->withHeaders($headers)
-            ->retry(self::READ_ATTEMPTS, self::READ_PAUSE_MILLISECONDS, fn(?Throwable $e): bool => self::worthRetrying($e), throw: false);
+            ->retry(self::READ_ATTEMPTS, self::READ_PAUSE_MILLISECONDS, fn(?Throwable $e): bool => $this->worthRetrying($e), throw: false);
     }
 
-    private static function worthRetrying(?Throwable $e): bool
+    private function worthRetrying(?Throwable $e): bool
     {
         return $e instanceof ConnectionException
-            || ($e instanceof RequestException && in_array($e->response->status(), self::RETRYABLE_STATUSES, true));
+            || ($e instanceof RequestException
+                && in_array($e->response->status(), self::RETRYABLE_STATUSES, true)
+                && ($this->classify($e->response)?->retryable() ?? true));
     }
 
     /**
