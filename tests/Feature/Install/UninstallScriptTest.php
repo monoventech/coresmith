@@ -56,7 +56,7 @@ function uninstallerTree(): string
     return $base;
 }
 
-function runUninstaller(string $base, array $arguments, ?string $input = null): Process
+function runUninstaller(string $base, array $arguments, ?string $input = null, string $stubs = '', ?Closure $rewrite = null): Process
 {
     preg_match('/^set -Eeuo pipefail\n(.*?)^if \[ -t 1 \]/ms', uninstallerBody(), $settings);
     preg_match_all('/^[a-z0-9_]+\(\) \{\n.*?^\}$/ms', uninstallerBody(), $functions);
@@ -70,9 +70,10 @@ function runUninstaller(string $base, array $arguments, ?string $input = null): 
         . "git() { printf 'git %s\\n' \"\$*\" >>{$calls}; }\n"
         . "userdel() { printf 'userdel %s\\n' \"\$*\" >>{$calls}; }\n"
         . "id() { if [ \"\$1\" = \"-u\" ]; then printf '0\\n'; fi; }\n"
+        . $stubs . "\n"
         . implode("\n", $functions[0]) . "\nmain \"\$@\"\n";
 
-    $process = new Process(['bash', '-c', $script, 'uninstall.sh', ...$arguments], null, null, $input);
+    $process = new Process(['bash', '-c', $rewrite === null ? $script : $rewrite($script), 'uninstall.sh', ...$arguments], null, null, $input);
     $process->run();
 
     return $process;
@@ -285,6 +286,7 @@ test('nothing is removed until uninstall is typed', function () {
     $process = runUninstaller($base, [], "yes\n");
 
     expect($process->getExitCode())->toBe(1)
+        ->and($process->getOutput())->toContain("This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith, its logs and the coresmith user.\nA copy of its .env, backups and database is saved under {$base}/root first.\n")
         ->and($process->getOutput())->toContain('Type uninstall to remove Coresmith from this server:')
         ->and($process->getErrorOutput())->toContain('Nothing was removed.')
         ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
@@ -318,4 +320,56 @@ test('a coresmith user that cannot be removed is reported, not fatal', function 
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($process->getOutput())->toBe("Couldn't remove the coresmith user: userdel: user coresmith is currently used by process 42.\ncarried on\n");
+});
+
+test('the question says the coresmith user stays while apps deployed here use it', function () {
+    $base = uninstallerTree();
+    mkdir("{$base}/var/coresmith/apps/shop");
+
+    $process = runUninstaller($base, [], "no\n");
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getOutput())->toContain("This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith and its logs.\n")
+        ->and($process->getOutput())->toContain("Apps deployed here (shop) keep running, with {$base}/var/coresmith, {$base}/etc/coresmith and the coresmith user.\n")
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue();
+});
+
+test('with --purge the question promises no copy', function () {
+    $base = uninstallerTree();
+
+    $process = runUninstaller($base, ['--purge'], "no\n");
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getOutput())->toContain('its logs and the coresmith user.')
+        ->and($process->getOutput())->not->toContain('A copy of its');
+});
+
+test('saying no gives the panel back anything a root run left in its storage', function () {
+    $base = uninstallerTree();
+    $calls = escapeshellarg("{$base}/calls.log");
+    $uid = posix_geteuid();
+
+    $process = runUninstaller($base, [], "no\n", "chown() { printf 'chown %s\\n' \"\$*\" >>{$calls}; }", fn(string $script): string => str_replace(' -uid 0 ', " -uid {$uid} ", $script));
+    $storage = "{$base}/opt/coresmith/shared/storage";
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getErrorOutput())->toContain('Nothing was removed.')
+        ->and(uninstallerCalls($base))->toBe([
+            "chown -h coresmith:coresmith {$storage}",
+            "chown -h coresmith:coresmith {$storage}/app",
+            "chown -h coresmith:coresmith {$storage}/app/private",
+            "chown -h coresmith:coresmith {$storage}/app/private/backups",
+            "chown -h coresmith:coresmith {$storage}/app/private/backups/panel-20261101.sql.gz",
+        ])
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue();
+});
+
+test('only files root owns are given back to the panel', function () {
+    $base = uninstallerTree();
+    $calls = escapeshellarg("{$base}/calls.log");
+
+    $process = runUninstaller($base, [], "no\n", "chown() { printf 'chown %s\\n' \"\$*\" >>{$calls}; }");
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(uninstallerCalls($base))->toBe([]);
 });

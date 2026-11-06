@@ -116,6 +116,18 @@ read_install() {
     done
 }
 
+give_storage_back() {
+    local path
+
+    if [ ! -d "$SHARED_DIR/storage" ] || ! id coresmith >/dev/null 2>&1; then
+        return 0
+    fi
+
+    find "$SHARED_DIR/storage" -uid 0 -print0 2>/dev/null | while IFS= read -r -d '' path; do
+        chown -h coresmith:coresmith "$path" || true
+    done || true
+}
+
 confirm() {
     local answer=""
 
@@ -123,16 +135,22 @@ confirm() {
         return 0
     fi
 
-    printf 'This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s and the coresmith user.\n' "$CORESMITH_ROOT" "$DATA_DIR"
-
     if [ -n "$APPS" ]; then
-        printf 'Apps deployed here (%s) keep running, with %s and %s.\n' "$APPS" "$APPS_DIR" "$CONFIG_DIR"
+        printf 'This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s and its logs.\n' "$CORESMITH_ROOT" "$DATA_DIR"
+        printf 'Apps deployed here (%s) keep running, with %s, %s and the coresmith user.\n' "$APPS" "$APPS_DIR" "$CONFIG_DIR"
+    else
+        printf 'This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s, its logs and the coresmith user.\n' "$CORESMITH_ROOT" "$DATA_DIR"
+    fi
+
+    if ! $PURGE; then
+        printf 'A copy of its .env, backups and database is saved under %s first.\n' "$SAVE_ROOT"
     fi
 
     printf 'Type uninstall to remove Coresmith from this server: '
     read -r answer || true
 
     if [ "$answer" != "uninstall" ]; then
+        give_storage_back
         fatal "Nothing was removed."
     fi
 }

@@ -353,7 +353,7 @@ an_update_interrupted_past_the_switch_is_rolled_back() {
 the_uninstaller_leaves_the_machine_clean() {
     SCENARIO="the uninstaller leaves the machine clean"
 
-    (cd "$APP" && printf '%s\n' "$HOST" | php artisan coresmith:uninstall) || fail "the uninstaller exited $?"
+    (cd "$APP" && printf 'uninstall\n' | php artisan coresmith:uninstall) || fail "the uninstaller exited $?"
 
     [ -z "$(systemctl list-unit-files 'coresmith-*' --no-legend 2>/dev/null)" ] || fail "units are left: $(systemctl list-unit-files 'coresmith-*' --no-legend)"
 

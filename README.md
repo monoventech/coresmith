@@ -83,7 +83,7 @@ From the shell:
 
     cd /opt/coresmith/app && sudo php artisan coresmith:uninstall
 
-It asks you to type the panel's host to confirm, saves the `.env`, the backups and, on SQLite, a copy of the database under `/root`, then removes the panel's services, files, Caddy site and user. Apps deployed on the same machine keep running.
+It asks you to type `uninstall` to confirm, saves the `.env`, the backups and, on SQLite, a copy of the database under `/root`, then removes the panel's services, files, Caddy site and user. If apps are deployed on the same machine, they keep running and the `coresmith` user stays for them.
 
 ## Development
 

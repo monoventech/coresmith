@@ -35,44 +35,23 @@ test('the uninstall command hands nothing over without root', function () {
     expect($handOff->replacements)->toBe([]);
 });
 
-test('the uninstall command says what it removes and wants the panel host typed', function () {
-    config(['app.url' => 'https://panel.example.test']);
-    $handOff = uninstallHandOff();
-
-    $this->artisan('coresmith:uninstall')
-        ->expectsOutput('This removes the Coresmith panel from this server:')
-        ->expectsOutput("  - /opt/coresmith, /var/lib/coresmith, the panel's logs and the coresmith user")
-        ->expectsOutput('A copy of its .env, backups and SQLite database is saved under /root first. Apps deployed on this machine keep running.')
-        ->expectsQuestion('Type panel.example.test to remove Coresmith from this server', 'panel.example')
-        ->expectsOutput('Nothing was removed.')
-        ->assertExitCode(1);
-
-    expect($handOff->replacements)->toBe([]);
-});
-
-test('the panel host hands this process over to the uninstaller', function () {
-    config(['app.url' => 'https://panel.example.test']);
+test('root hands this process to the uninstaller, which asks its own question', function () {
     $handOff = uninstallHandOff();
     $script = base_path('scripts/uninstall.sh');
 
     $this->artisan('coresmith:uninstall')
-        ->expectsQuestion('Type panel.example.test to remove Coresmith from this server', 'panel.example.test')
-        ->expectsOutput("Coresmith couldn't start the uninstaller: the test kept its own process. Run sudo bash {$script} --yes instead.")
+        ->doesntExpectOutputToContain('This removes')
+        ->doesntExpectOutputToContain('the coresmith user')
+        ->expectsOutput("Coresmith couldn't start the uninstaller: the test kept its own process. Run sudo bash {$script} instead.")
         ->assertExitCode(1);
 
-    expect($handOff->replacements)->toBe([['program' => '/bin/bash', 'arguments' => [$script, '--yes']]])
+    expect($handOff->replacements)->toBe([['program' => '/bin/bash', 'arguments' => [$script]]])
         ->and(is_executable($script))->toBeTrue();
 });
 
-test('without a panel address the word uninstall confirms', function () {
-    config(['app.url' => '']);
-    $handOff = uninstallHandOff();
-
-    $this->artisan('coresmith:uninstall')
-        ->expectsQuestion('Type uninstall to remove Coresmith from this server', 'uninstall')
-        ->assertExitCode(1);
-
-    expect($handOff->replacements)->toHaveCount(1);
+test('the machine test and the readme answer the question the uninstaller asks', function () {
+    expect((string) file_get_contents(base_path('tests/Machine/updates.sh')))->toContain("printf 'uninstall\\n' | php artisan coresmith:uninstall")
+        ->and((string) file_get_contents(base_path('README.md')))->toContain('It asks you to type `uninstall` to confirm,');
 });
 
 test('the native hand-off replaces the process it runs in', function () {

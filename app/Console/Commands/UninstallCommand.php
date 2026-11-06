@@ -25,25 +25,10 @@ final class UninstallCommand extends Command
             return self::FAILURE;
         }
 
-        $host = parse_url((string) config('app.url'), PHP_URL_HOST);
-        $confirmation = is_string($host) && $host !== '' ? $host : 'uninstall';
         $script = base_path('scripts/uninstall.sh');
+        $reason = $handOff->replaceWith('/bin/bash', [$script]);
 
-        $this->line('This removes the Coresmith panel from this server:');
-        $this->line('  - its services, its Caddy site, PHP-FPM pool and fail2ban jail');
-        $this->line("  - /opt/coresmith, /var/lib/coresmith, the panel's logs and the coresmith user");
-        $this->line('A copy of its .env, backups and SQLite database is saved under /root first. Apps deployed on this machine keep running.');
-        $this->newLine();
-
-        if ($this->ask("Type {$confirmation} to remove Coresmith from this server") !== $confirmation) {
-            $this->error('Nothing was removed.');
-
-            return self::FAILURE;
-        }
-
-        $reason = $handOff->replaceWith('/bin/bash', [$script, '--yes']);
-
-        $this->error("Coresmith couldn't start the uninstaller: {$reason}. Run sudo bash {$script} --yes instead.");
+        $this->error("Coresmith couldn't start the uninstaller: {$reason}. Run sudo bash {$script} instead.");
 
         return self::FAILURE;
     }
