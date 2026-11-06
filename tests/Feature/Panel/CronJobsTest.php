@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\PowerState;
+use App\Exceptions\CronListRefused;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
 use App\Services\Panel\CronJobs;
+use Illuminate\Cache\Lock;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
 
@@ -194,7 +198,7 @@ test('an app holds at most 20 jobs', function () {
     $jobs = array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, 19));
     $application = cronJobsApp(['cron_jobs' => $jobs]);
 
-    expect(fn() => cronJobsService()->add($application, ['schedule' => '0 3 * * *', 'command' => 'true', 'description' => null]))->toThrow(InvalidArgumentException::class)
+    expect(fn() => cronJobsService()->add($application, ['schedule' => '0 3 * * *', 'command' => 'true', 'description' => null]))->toThrow(CronListRefused::class, 'This app already has 20 cron jobs. Remove one, or run several commands from one job.')
         ->and($application->fresh()->cron_jobs)->toHaveCount(20);
 
     Queue::assertNothingPushed();
@@ -276,4 +280,80 @@ test('the card says when jobs are paused or wait for the first deploy', function
 
     expect(cronJobsService()->describe($application)['note'])->toBe('undeployed')
         ->and(cronJobsService()->describe($application)['live'])->toBeFalse();
+});
+
+test('a change made from a stale copy of the app keeps a change saved since', function (?array $start, Closure $change, array $commands) {
+    $application = cronJobsApp($start === null ? [] : ['cron_jobs' => $start]);
+    $stale = Application::query()->findOrFail($application->id);
+
+    cronJobsService()->add($application->fresh(), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']);
+
+    $change($stale);
+
+    expect(array_column((array) $application->fresh()->cron_jobs, 'command'))->toBe($commands);
+})->with([
+    'another add' => [null, fn(Application $stale) => cronJobsService()->add($stale, ['schedule' => '0 4 * * *', 'command' => 'php artisan report:send']), ['php artisan schedule:run', 'php artisan backup:run', 'php artisan report:send']],
+    'an edit' => [null, fn(Application $stale) => cronJobsService()->update($stale, CronJobs::id(['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']), ['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run']), ['php artisan schedule:run', 'php artisan backup:run']],
+    'a remove' => [null, fn(Application $stale) => cronJobsService()->remove($stale, CronJobs::id(['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'])), ['php artisan backup:run']],
+    'the scheduler turned off' => [null, fn(Application $stale) => cronJobsService()->disableScheduler($stale), ['php artisan backup:run']],
+    'the scheduler turned on' => [[['schedule' => '0 5 * * *', 'command' => 'php artisan prune']], fn(Application $stale) => cronJobsService()->enableScheduler($stale), ['php artisan prune', 'php artisan backup:run', 'php artisan schedule:run']],
+]);
+
+test('the limit and duplicates are checked against the list as saved now, not a stale copy', function (array $start, array $added, array $entry, string $message) {
+    $application = cronJobsApp(['cron_jobs' => $start]);
+    $stale = Application::query()->findOrFail($application->id);
+
+    cronJobsService()->add($application->fresh(), $added);
+
+    expect(fn() => cronJobsService()->add($stale, $entry))->toThrow(CronListRefused::class, $message);
+    expect($application->fresh()->cron_jobs)->toHaveCount(count($start) + 1);
+})->with([
+    'the limit' => [
+        array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan job:{$minute}"], range(0, 18)),
+        ['schedule' => '30 * * * *', 'command' => 'php artisan job:30'],
+        ['schedule' => '31 * * * *', 'command' => 'php artisan job:31'],
+        'This app already has 20 cron jobs. Remove one, or run several commands from one job.',
+    ],
+    'the same job twice' => [
+        [],
+        ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'],
+        ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'],
+        'That exact job is already on the list.',
+    ],
+    'a second scheduler' => [
+        [],
+        ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
+        ['schedule' => '*/5 * * * *', 'command' => 'php artisan schedule:run'],
+        'The Laravel scheduler is already on the list. Edit that job instead.',
+    ],
+]);
+
+test('the scheduler is not turned on past the limit', function () {
+    $application = cronJobsApp(['cron_jobs' => array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan job:{$minute}"], range(0, 19))]);
+
+    expect(fn() => cronJobsService()->enableScheduler($application))->toThrow(CronListRefused::class, 'This app already has 20 cron jobs. Remove one, then turn the scheduler on.');
+    expect($application->fresh()->cron_jobs)->toHaveCount(20);
+});
+
+test('an edit from a stale copy cannot make a job added since appear twice', function () {
+    $application = cronJobsApp(['cron_jobs' => [['schedule' => '0 5 * * *', 'command' => 'php artisan prune']]]);
+    $stale = Application::query()->findOrFail($application->id);
+
+    cronJobsService()->add($application->fresh(), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']);
+
+    expect(fn() => cronJobsService()->update($stale, CronJobs::id(['schedule' => '0 5 * * *', 'command' => 'php artisan prune']), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']))
+        ->toThrow(CronListRefused::class, 'That exact job is already on the list.');
+    expect(array_column((array) $application->fresh()->cron_jobs, 'command'))->toBe(['php artisan prune', 'php artisan backup:run']);
+});
+
+test('a change that cannot get the list to itself says to try again and changes nothing', function () {
+    $application = cronJobsApp();
+    $lock = Mockery::mock(Lock::class);
+    $lock->shouldReceive('block')->andThrow(new LockTimeoutException);
+    Cache::shouldReceive('lock')->with('cron-jobs:' . $application->id, Mockery::any())->andReturn($lock);
+
+    expect(fn() => cronJobsService()->add($application, ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']))
+        ->toThrow(CronListRefused::class, 'Another change to these cron jobs is still being saved. Try again in a moment.');
+    expect(cronJobsLogged())->toBe(0);
+    Queue::assertNothingPushed();
 });

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\PowerState;
 use App\Enums\TeamRole;
+use App\Http\Requests\Application\CronJobRequest;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
 use App\Models\Server;
@@ -408,4 +409,53 @@ test('try again sends the jobs to the server again', function () {
         ->and($application->fresh()->cron_pending_since)->not->toBeNull();
 
     Queue::assertPushed(SyncApplicationCron::class, 1);
+});
+
+test('two saves from the same stale page keep both', function () {
+    $team = Team::factory()->create();
+    $application = cronRouteApp($team);
+    $this->app->afterResolving(CronJobRequest::class, function () use ($application): void {
+        Application::query()->whereKey($application->id)->update(['cron_jobs' => json_encode([
+            ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
+            ['schedule' => '0 4 * * *', 'command' => 'php artisan report:send'],
+        ])]);
+    });
+
+    $this->actingAs(cronRouteMember($team, TeamRole::Admin))
+        ->post(cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'])
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success');
+
+    expect(array_column((array) $application->fresh()->cron_jobs, 'command'))->toBe(['php artisan schedule:run', 'php artisan report:send', 'php artisan backup:run']);
+});
+
+test('a save the list as saved now refuses says why and changes nothing', function () {
+    $team = Team::factory()->create();
+    $application = cronRouteApp($team);
+    $full = array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan job:{$minute}"], range(0, 19));
+    $this->app->afterResolving(CronJobRequest::class, function () use ($application, $full): void {
+        Application::query()->whereKey($application->id)->update(['cron_jobs' => json_encode($full)]);
+    });
+
+    $this->actingAs(cronRouteMember($team, TeamRole::Admin))
+        ->post(cronRouteStore($application), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'])
+        ->assertSessionHasErrors(['command' => 'This app already has 20 cron jobs. Remove one, or run several commands from one job.']);
+
+    expect($application->fresh()->cron_jobs)->toHaveCount(20);
+    Queue::assertNothingPushed();
+});
+
+test('an edit the list as saved now refuses says why and changes nothing', function () {
+    $team = Team::factory()->create();
+    $application = cronRouteApp($team, ['cron_jobs' => [['schedule' => '0 5 * * *', 'command' => 'php artisan prune']]]);
+    $saved = [['schedule' => '0 5 * * *', 'command' => 'php artisan prune'], ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']];
+    $this->app->afterResolving(CronJobRequest::class, function () use ($application, $saved): void {
+        Application::query()->whereKey($application->id)->update(['cron_jobs' => json_encode($saved)]);
+    });
+
+    $this->actingAs(cronRouteMember($team, TeamRole::Admin))
+        ->put(cronRouteJob($application, ['schedule' => '0 5 * * *', 'command' => 'php artisan prune']), ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'])
+        ->assertSessionHasErrors(['command' => 'That exact job is already on the list.']);
+
+    expect($application->fresh()->cron_jobs)->toBe($saved);
 });

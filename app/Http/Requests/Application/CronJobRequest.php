@@ -126,16 +126,10 @@ final class CronJobRequest extends FormRequest
 
         $cron = app(CronJobs::class);
         $editing = $this->route('cronJob');
-        $entries = $cron->entries($application);
-        $others = collect($entries)->reject(fn(array $entry): bool => $entry['id'] === $editing);
-        $schedule = $this->input('schedule');
-        $command = $this->input('command');
 
-        return match (true) {
-            $editing === null && count($entries) >= CronJobs::MAX_ENTRIES => 'This app already has ' . CronJobs::MAX_ENTRIES . ' cron jobs. Remove one, or run several commands from one job.',
-            $others->contains(fn(array $entry): bool => $entry['schedule'] === $schedule && $entry['command'] === $command) => 'That exact job is already on the list.',
-            $cron->isScheduler(['command' => $command]) && $others->contains(fn(array $entry): bool => $cron->isScheduler($entry)) => 'The Laravel scheduler is already on the list. Edit that job instead.',
-            default => null,
-        };
+        return $cron->problem($cron->entries($application), is_string($editing) ? $editing : null, [
+            'schedule' => $this->input('schedule'),
+            'command' => $this->input('command'),
+        ]);
     }
 }

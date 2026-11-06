@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\PowerState;
+use App\Exceptions\CronListRefused;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Panel\CronJobs;
@@ -46,7 +47,11 @@ final class ApplicationToggleController extends Controller
             return back()->with('error', $problem);
         }
 
-        $toggles->apply($application, $toggle, $on);
+        try {
+            $toggles->apply($application, $toggle, $on);
+        } catch (CronListRefused $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         $message = match (true) {
             $toggle === SmartToggles::MAINTENANCE && $on => 'Maintenance page is on. Visitors see it now, your processes keep running.',

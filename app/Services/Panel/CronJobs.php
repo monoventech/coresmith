@@ -9,10 +9,13 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\PowerState;
+use App\Exceptions\CronListRefused;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
 use App\Services\Deployment\LogSanitizer;
-use InvalidArgumentException;
+use Closure;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 
 final class CronJobs
 {
@@ -31,6 +34,10 @@ final class CronJobs
     private const SUMMARY_LENGTH = 80;
 
     private const LOGGED_LENGTH = 300;
+
+    private const LOCK_SECONDS = 10;
+
+    private const LOCK_WAIT_SECONDS = 5;
 
     public function __construct(private readonly LogSanitizer $sanitizer = new LogSanitizer) {}
 
@@ -94,20 +101,37 @@ final class CronJobs
     }
 
     /**
+     * @param  list<array{id: string, schedule: string, command: string, description: string|null}>  $entries
+     * @param  array<string, mixed>  $entry
+     */
+    public function problem(array $entries, ?string $editing, array $entry): ?string
+    {
+        $others = collect($entries)->reject(fn(array $other): bool => $other['id'] === $editing);
+        $schedule = (string) ($entry['schedule'] ?? '');
+        $command = (string) ($entry['command'] ?? '');
+
+        return match (true) {
+            $editing === null && count($entries) >= self::MAX_ENTRIES => 'This app already has ' . self::MAX_ENTRIES . ' cron jobs. Remove one, or run several commands from one job.',
+            $others->contains(fn(array $other): bool => $other['schedule'] === $schedule && $other['command'] === $command) => 'That exact job is already on the list.',
+            $this->isScheduler($entry) && $others->contains(fn(array $other): bool => $this->isScheduler($other)) => 'The Laravel scheduler is already on the list. Edit that job instead.',
+            default => null,
+        };
+    }
+
+    /**
      * @param  array<string, mixed>  $entry
      * @return array{id: string, schedule: string, command: string, description: string|null}
      */
     public function add(Application $application, array $entry): array
     {
-        $entries = $this->entries($application);
-
-        if (count($entries) >= self::MAX_ENTRIES) {
-            throw new InvalidArgumentException("{$application->name} already has " . self::MAX_ENTRIES . ' cron jobs.');
-        }
-
         $added = self::normalized($entry);
 
-        $this->commit($application, [...$entries, $added]);
+        $this->change($application, function (array $entries) use ($added): array {
+            $this->refuse($entries, null, $added);
+
+            return [[...$entries, $added], null];
+        });
+
         $this->log($application, self::ADDED, $added);
 
         return $added;
@@ -119,26 +143,33 @@ final class CronJobs
      */
     public function update(Application $application, string $id, array $entry): ?array
     {
-        $entries = $this->entries($application);
-        $index = array_search($id, array_column($entries, 'id'), true);
-
-        if ($index === false) {
-            return null;
-        }
-
         $updated = self::normalized($entry);
+        $from = null;
 
-        if ($updated['id'] === $id) {
-            return $entries[$index];
+        $result = $this->change($application, function (array $entries) use ($id, $updated, &$from): array {
+            $index = array_search($id, array_column($entries, 'id'), true);
+
+            if ($index === false) {
+                return [null, null];
+            }
+
+            if ($updated['id'] === $id) {
+                return [null, $entries[$index]];
+            }
+
+            $this->refuse($entries, $id, $updated);
+
+            $from = $entries[$index]['schedule'];
+            $entries[$index] = $updated;
+
+            return [$entries, $updated];
+        });
+
+        if ($from !== null) {
+            $this->log($application, self::UPDATED, $updated, $from);
         }
 
-        $from = $entries[$index]['schedule'];
-        $entries[$index] = $updated;
-
-        $this->commit($application, $entries);
-        $this->log($application, self::UPDATED, $updated, $from);
-
-        return $updated;
+        return $result;
     }
 
     /**
@@ -146,33 +177,42 @@ final class CronJobs
      */
     public function remove(Application $application, string $id): ?array
     {
-        $entries = $this->entries($application);
-        $index = array_search($id, array_column($entries, 'id'), true);
+        $removed = $this->change($application, function (array $entries) use ($id): array {
+            $index = array_search($id, array_column($entries, 'id'), true);
 
-        if ($index === false) {
-            return null;
+            if ($index === false) {
+                return [null, null];
+            }
+
+            $removed = $entries[$index];
+            unset($entries[$index]);
+
+            return [array_values($entries), $removed];
+        });
+
+        if ($removed !== null) {
+            $this->log($application, self::REMOVED, $removed);
         }
-
-        $removed = $entries[$index];
-        unset($entries[$index]);
-
-        $this->commit($application, array_values($entries));
-        $this->log($application, self::REMOVED, $removed);
 
         return $removed;
     }
 
     public function enableScheduler(Application $application): void
     {
-        $this->commit($application, [
-            ...$this->withoutScheduler($application),
-            self::normalized(['schedule' => '* * * * *', 'command' => SmartToggles::SCHEDULE_COMMAND]),
-        ]);
+        $this->change($application, function (array $entries): array {
+            $others = $this->withoutScheduler($entries);
+
+            if (count($others) >= self::MAX_ENTRIES) {
+                throw new CronListRefused('This app already has ' . self::MAX_ENTRIES . ' cron jobs. Remove one, then turn the scheduler on.');
+            }
+
+            return [[...$others, self::normalized(['schedule' => '* * * * *', 'command' => SmartToggles::SCHEDULE_COMMAND])], null];
+        });
     }
 
     public function disableScheduler(Application $application): void
     {
-        $this->commit($application, $this->withoutScheduler($application));
+        $this->change($application, fn(array $entries): array => [$this->withoutScheduler($entries), null]);
     }
 
     public function retry(Application $application): void
@@ -261,11 +301,47 @@ final class CronJobs
     }
 
     /**
+     * @param  list<array{id: string, schedule: string, command: string, description: string|null}>  $entries
      * @return list<array{id: string, schedule: string, command: string, description: string|null}>
      */
-    private function withoutScheduler(Application $application): array
+    private function withoutScheduler(array $entries): array
     {
-        return array_values(array_filter($this->entries($application), fn(array $entry): bool => !$this->isScheduler($entry)));
+        return array_values(array_filter($entries, fn(array $entry): bool => !$this->isScheduler($entry)));
+    }
+
+    /**
+     * @param  Closure(list<array{id: string, schedule: string, command: string, description: string|null}>): array{0: list<array{id: string, schedule: string, command: string, description: string|null}>|null, 1: mixed}  $edit
+     */
+    private function change(Application $application, Closure $edit): mixed
+    {
+        try {
+            return Cache::lock('cron-jobs:' . $application->getKey(), self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, function () use ($application, $edit): mixed {
+                $application->refresh();
+
+                [$entries, $result] = $edit($this->entries($application));
+
+                if ($entries !== null) {
+                    $this->commit($application, $entries);
+                }
+
+                return $result;
+            });
+        } catch (LockTimeoutException) {
+            throw new CronListRefused('Another change to these cron jobs is still being saved. Try again in a moment.');
+        }
+    }
+
+    /**
+     * @param  list<array{id: string, schedule: string, command: string, description: string|null}>  $entries
+     * @param  array<string, mixed>  $entry
+     */
+    private function refuse(array $entries, ?string $editing, array $entry): void
+    {
+        $problem = $this->problem($entries, $editing, $entry);
+
+        if ($problem !== null) {
+            throw new CronListRefused($problem);
+        }
     }
 
     /**

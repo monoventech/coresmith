@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\PowerState;
+use App\Exceptions\CronListRefused;
 use App\Http\Requests\Application\CronJobRequest;
 use App\Models\Application;
 use App\Models\Server;
@@ -26,7 +27,11 @@ final class ApplicationCronJobController extends Controller
 
         $had = $cron->hasScheduler($application);
 
-        $cron->add($application, $request->entry());
+        try {
+            $cron->add($application, $request->entry());
+        } catch (CronListRefused $e) {
+            return back()->withErrors(['command' => $e->getMessage()])->withInput();
+        }
 
         return back()->with('success', $this->saved($server, $application, $toggles, $had, $cron->hasScheduler($application)));
     }
@@ -36,7 +41,12 @@ final class ApplicationCronJobController extends Controller
         abort_unless($application->server_id === $server->id, 404);
 
         $had = $cron->hasScheduler($application);
-        $updated = $cron->update($application, $cronJob, $request->entry());
+
+        try {
+            $updated = $cron->update($application, $cronJob, $request->entry());
+        } catch (CronListRefused $e) {
+            return back()->withErrors(['command' => $e->getMessage()])->withInput();
+        }
 
         if ($updated === null) {
             return back()->with('error', self::STALE);
@@ -54,7 +64,11 @@ final class ApplicationCronJobController extends Controller
         $this->authorize('update', $application);
         abort_unless($application->server_id === $server->id, 404);
 
-        $removed = $cron->remove($application, $cronJob);
+        try {
+            $removed = $cron->remove($application, $cronJob);
+        } catch (CronListRefused $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         if ($removed === null) {
             return back()->with('error', self::STALE);

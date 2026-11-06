@@ -12,6 +12,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Notifications\ApplicationToggledNotification;
+use App\Services\Panel\SmartToggles;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
@@ -228,6 +229,23 @@ test('the scheduler cannot be turned on when the app already has 20 cron jobs', 
     $team = Team::factory()->create();
     $jobs = array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, 19));
     $application = toggleRouteApp($team, ['cron_jobs' => $jobs]);
+
+    $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
+        ->put(toggleRouteUrl($application, 'scheduler'), ['on' => true])
+        ->assertSessionHas('error', 'This app already has 20 cron jobs. Remove one, then turn the scheduler on.');
+
+    expect($application->fresh()->cron_jobs)->toHaveCount(20);
+
+    Queue::assertNothingPushed();
+});
+
+test('the scheduler is refused when the list as saved now is full, even if the page loaded before', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $application = toggleRouteApp($team, ['cron_jobs' => null]);
+    $this->app->afterResolving(SmartToggles::class, function () use ($application): void {
+        Application::query()->whereKey($application->id)->update(['cron_jobs' => json_encode(array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, 19)))]);
+    });
 
     $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
         ->put(toggleRouteUrl($application, 'scheduler'), ['on' => true])
