@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Cloud\Tasks;
 
+use App\Events\FleetChanged;
 use App\Models\Server;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -85,6 +86,8 @@ final readonly class CloudTask
             'data' => $data,
         ]])->save();
 
+        FleetChanged::forServer($server);
+
         $at = CarbonImmutable::parse($now);
 
         return new self($type, self::RUNNING, $step, $data, null, $userId, $at, $at, $at);
@@ -140,6 +143,8 @@ final readonly class CloudTask
     public static function clear(Server $server): void
     {
         $server->forceFill(['provider_task' => null])->save();
+
+        FleetChanged::forServer($server);
     }
 
     public static function running(Server $server, ?string $type = null): bool
@@ -194,6 +199,10 @@ final readonly class CloudTask
         $kept = array_diff_key(is_array($task['data'] ?? null) ? $task['data'] : [], array_flip($forget));
 
         $server->forceFill(['provider_task' => array_replace($task, $changes, ['data' => array_replace($kept, $data)])])->save();
+
+        if (array_key_exists('step', $changes) || array_key_exists('state', $changes)) {
+            FleetChanged::forServer($server);
+        }
     }
 
     private static function time(mixed $value): ?CarbonImmutable

@@ -16,11 +16,14 @@ use App\Events\ServerProvisioningFailed;
 use App\Jobs\CollectServerMetrics;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Cloud\Tasks\DestroyServerTask;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Panel\Realtime;
 use App\Services\Runtime\AsdfManager;
@@ -40,6 +43,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use phpseclib3\Exception\UnableToConnectException;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Support\FakeCloudApi;
 use Tests\Support\FakeSSHTransport;
 
 function fleetTeam(): array
@@ -636,4 +640,38 @@ test('an expiring certificate pings the team once its row is written', function 
     }
 
     expect($seen)->toBe([[$application->team_id, 'application', $application->id, true]]);
+});
+
+test('a provider task tells the fleet when it starts, moves on, ends, is tried again or is dismissed, and not on a heartbeat', function () {
+    Event::fake([FleetChanged::class]);
+    $server = Server::factory()->fromProvider(CloudProvider::factory()->create())->create();
+    $pings = fn(): int => Event::dispatched(FleetChanged::class, fn(FleetChanged $event): bool => $event->kind === 'server' && $event->subjectId === $server->getKey())->count();
+
+    CloudTask::start($server, CloudTask::RESIZE, 'power_off');
+    $started = $pings();
+    CloudTask::touch($server, ['polls' => 1]);
+    $touched = $pings();
+    CloudTask::advance($server, 'wait_off');
+    $advanced = $pings();
+    CloudTask::fail($server, 'Hetzner Cloud refused the request.');
+    $failed = $pings();
+    CloudTask::resume($server);
+    $resumed = $pings();
+    CloudTask::finish($server);
+    $finished = $pings();
+    CloudTask::clear($server);
+
+    expect([$started, $touched, $advanced, $failed, $resumed, $finished, $pings()])->toBe([1, 1, 2, 3, 4, 5, 6]);
+});
+
+test('a destroyed server tells the fleet once it is gone', function () {
+    Event::fake([FleetChanged::class]);
+    $server = Server::factory()->fromProvider(CloudProvider::factory()->create())->create();
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+    $before = Event::dispatched(FleetChanged::class)->count();
+
+    app(DestroyServerTask::class)->finished($server, CloudTask::of($server), new FakeCloudApi);
+
+    expect(Server::query()->find($server->getKey()))->toBeNull()
+        ->and(Event::dispatched(FleetChanged::class, fn(FleetChanged $event): bool => $event->subjectId === $server->getKey())->count() - $before)->toBe(1);
 });

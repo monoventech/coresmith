@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Cloud\Tasks;
 
 use App\Enums\CloudFailure;
+use App\Events\FleetChanged;
 use App\Exceptions\CloudProviderException;
 use App\Models\Server;
 use App\Models\User;
@@ -78,6 +79,8 @@ final class DestroyServerTask implements CloudTaskHandler
             ->log('server_destroyed');
 
         $server->delete();
+
+        FleetChanged::forServer($server);
     }
 
     public function failed(Server $server, CloudTask $task, ?CloudApi $api, string $reason): void
