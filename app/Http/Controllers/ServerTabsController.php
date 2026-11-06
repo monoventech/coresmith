@@ -12,6 +12,7 @@ use App\Models\Server;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\FirewallConfigurator;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,8 +42,12 @@ final class ServerTabsController extends Controller
         'Automatic OS security patches',
     ];
 
-    public function hardening(Request $request, Server $server, ServerPresenter $presenter): Response
+    public function hardening(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
     {
+        if ($server->trashed()) {
+            return $this->destroyedServer($server);
+        }
+
         $this->authorize('view', $server);
 
         return Inertia::render('servers/Hardening', [
@@ -76,8 +81,12 @@ final class ServerTabsController extends Controller
         ]);
     }
 
-    public function activity(Request $request, Server $server, ServerPresenter $presenter, ActivityFeed $feed): Response
+    public function activity(Request $request, Server $server, ServerPresenter $presenter, ActivityFeed $feed): Response|RedirectResponse
     {
+        if ($server->trashed()) {
+            return $this->destroyedServer($server);
+        }
+
         $this->authorize('view', $server);
 
         return Inertia::render('servers/Activity', [

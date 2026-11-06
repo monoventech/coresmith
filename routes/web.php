@@ -55,7 +55,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.cloud.resize');
     Route::delete('servers/{server}/cloud/task', [CloudServerController::class, 'dismiss'])
         ->name('servers.cloud.dismiss');
-    Route::resource('servers', ServerController::class)->except(['index', 'edit']);
+    Route::resource('servers', ServerController::class)->except(['index', 'edit'])->withTrashed(['show']);
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->name('servers.test-connection');
     Route::post('servers/{server}/provision', [ServerController::class, 'provision'])
@@ -75,8 +75,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.prune-releases');
 
     Route::get('servers/{server}/hardening', [ServerTabsController::class, 'hardening'])
+        ->withTrashed()
         ->name('servers.hardening');
     Route::get('servers/{server}/activity', [ServerTabsController::class, 'activity'])
+        ->withTrashed()
         ->name('servers.activity');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
@@ -126,7 +128,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:30,1,scheduler-log')
         ->name('servers.applications.cron-jobs.log');
 
-    Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update']);
+    Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update'])->withTrashed(['index']);
     Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
         ->name('servers.databases.backup');
 

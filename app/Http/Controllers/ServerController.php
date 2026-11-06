@@ -96,8 +96,12 @@ final class ServerController extends Controller
         return to_route('servers.show', $server)->with('success', $added);
     }
 
-    public function show(Request $request, Server $server, ServerPresenter $presenter): Response
+    public function show(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
     {
+        if ($server->trashed()) {
+            return $this->destroyedServer($server);
+        }
+
         $this->authorize('view', $server);
 
         $running = Deployment::query()

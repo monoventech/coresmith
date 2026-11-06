@@ -25,8 +25,12 @@ use Inertia\Response;
 
 final class DatabaseController extends Controller
 {
-    public function index(Request $request, Server $server, ServerPresenter $presenter): Response
+    public function index(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
     {
+        if ($server->trashed()) {
+            return $this->destroyedServer($server);
+        }
+
         $this->authorize('view', $server);
 
         return Inertia::render('servers/Databases', [

@@ -721,3 +721,43 @@ test('a server being provisioned is not destroyed until provisioning ends', func
 
     Queue::assertNothingPushed();
 });
+
+test('once a destroy has finished, the server pages send the person to the fleet with a confirmation', function (string $route) {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+    CloudTask::finish($server);
+    $server->delete();
+
+    $this->actingAs($user)
+        ->get(route($route, $server))
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('success', 'Destroyed. outpost-02 was deleted at Hetzner Cloud, and billing for it stopped.');
+})->with(['servers.show', 'servers.hardening', 'servers.activity', 'servers.databases.index']);
+
+test('a server that left the panel any other way is still not found', function (Closure $leave) {
+    [, $user, $account] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    $leave($server);
+    $server->delete();
+
+    $this->actingAs($user)->get(route('servers.show', $server))->assertNotFound();
+})->with([
+    'detached' => [fn(Server $server) => null],
+    'a destroy that did not finish' => [fn(Server $server) => CloudTask::start($server, CloudTask::DESTROY, 'delete')],
+    'a finished resize' => [fn(Server $server) => CloudTask::finish(tap($server, fn(Server $s) => CloudTask::start($s, CloudTask::RESIZE, 'reconnect')))],
+]);
+
+test('a destroyed server is not announced to someone outside its team', function () {
+    [, , $account] = cloudServerAdmin();
+    [, $stranger] = cloudServerAdmin();
+    $server = cloudDestroyable($account);
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+    CloudTask::finish($server);
+    $server->delete();
+
+    $response = $this->actingAs($stranger)->get(route('servers.show', $server));
+
+    expect($response->status())->toBeIn([403, 404])
+        ->and(session('success'))->toBeNull();
+});
