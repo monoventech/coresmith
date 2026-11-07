@@ -306,7 +306,7 @@ test('a panel on PostgreSQL is told its database stays on its server', function 
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
         ->and($process->getOutput())->toContain('Its PostgreSQL database coresmith is still on its database server. Drop it if you no longer need it.')
-        ->and(uninstallerCalls($base))->toContain('git config --system --fixed-value --unset-all safe.directory https://github.com/monoven/coresmith.git');
+        ->and(uninstallerCalls($base))->toContain('git config --system --fixed-value --unset-all safe.directory https://github.com/monoventech/coresmith.git');
 });
 
 test('a coresmith user that cannot be removed is reported, not fatal', function () {

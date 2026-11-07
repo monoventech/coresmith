@@ -21,7 +21,7 @@ FAIL2BAN_JAIL="/etc/fail2ban/jail.d/coresmith.conf"
 FAIL2BAN_FILTER="/etc/fail2ban/filter.d/coresmith-login.conf"
 LOGS="/var/log/coresmith-*.log"
 SAVE_ROOT="/root"
-DEFAULT_REPOSITORY="https://github.com/monoven/coresmith.git"
+DEFAULT_REPOSITORY="https://github.com/monoventech/coresmith.git"
 UNITS="coresmith-update.path coresmith-update.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service"
 
 YES=false

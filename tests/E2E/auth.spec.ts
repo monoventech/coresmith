@@ -143,11 +143,11 @@ asGuest.describe('signing in', () => {
 
         await expect(page.getByRole('link', { name: 'Self-host it' })).toHaveAttribute(
             'href',
-            'https://github.com/monoven/coresmith#self-hosting'
+            'https://github.com/monoventech/coresmith#self-hosting'
         )
         await expect(page.getByRole('link', { name: 'Browse on GitHub' })).toHaveAttribute(
             'href',
-            'https://github.com/monoven/coresmith'
+            'https://github.com/monoventech/coresmith'
         )
     })
 })

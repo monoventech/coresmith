@@ -71,7 +71,7 @@ test('a rolled back update fails with the log and where to report it', function 
     $this->artisan('coresmith:update', ['--force' => true])
         ->expectsOutput('Running migrations failed: SQLSTATE[23000]: Integrity constraint violation. Coresmith rolled back to v0.1.0, and the panel is running as before.')
         ->expectsOutputToContain('Log: ' . app(UpdatePaths::class)->runs() . '/')
-        ->expectsOutput('Report it at https://github.com/monoven/coresmith/issues if it keeps happening.')
+        ->expectsOutput('Report it at https://github.com/monoventech/coresmith/issues if it keeps happening.')
         ->assertExitCode(1);
 });
 

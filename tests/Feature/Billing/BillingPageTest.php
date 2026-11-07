@@ -248,7 +248,7 @@ test('moving to self-host knows when cloud stops', function () {
     billingPageSubscribed(Plan::Pro)->for($paying, 'owner')->create(['renews_at' => CarbonImmutable::parse('2026-11-01')]);
     $trying = Team::factory()->owned()->create(['trial_ends_at' => CarbonImmutable::parse('2026-10-25')]);
     $lapsed = Team::factory()->trialEnded()->owned()->create();
-    $guide = 'https://github.com/monoven/coresmith#self-hosting';
+    $guide = 'https://github.com/monoventech/coresmith#self-hosting';
 
     expect(billingPagePlan($paying)['self_hosting'])->toBe(['has_subscription' => true, 'ends_on' => 'Nov 1', 'trial_ends_on' => null, 'guide' => $guide])
         ->and(billingPagePlan($trying)['self_hosting'])->toBe(['has_subscription' => false, 'ends_on' => null, 'trial_ends_on' => 'Oct 25', 'guide' => $guide])

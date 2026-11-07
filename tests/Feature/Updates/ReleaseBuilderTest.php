@@ -172,7 +172,7 @@ test('a tag whose VERSION disagrees with its name is refused', function () {
     $failed = updatesBuildFailure(fn() => app(ReleaseBuilder::class)->fetch(Version::parse('0.1.1'), app(ReleaseLayout::class)->incoming(), updatesRun()));
 
     expect($failed->step)->toBe('fetch')
-        ->and($failed->getMessage())->toBe('The v0.1.1 tag says it is version 0.1.0. That release is broken; report it at https://github.com/monoven/coresmith/issues. Nothing changed.');
+        ->and($failed->getMessage())->toBe('The v0.1.1 tag says it is version 0.1.0. That release is broken; report it at https://github.com/monoventech/coresmith/issues. Nothing changed.');
 });
 
 test('an invalid signature stops the update before checkout', function () {

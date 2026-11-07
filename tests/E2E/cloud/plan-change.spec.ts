@@ -64,7 +64,7 @@ test.describe('changing the plan on coresmith cloud', () => {
         await expect(dialog(page).getByTestId('plan-consequences')).toContainText('Coresmith Cloud stops on')
         await expect(dialog(page).getByRole('link', { name: 'Read how to self-host' })).toHaveAttribute(
             'href',
-            'https://github.com/monoven/coresmith#self-hosting'
+            'https://github.com/monoventech/coresmith#self-hosting'
         )
 
         await dialog(page).getByRole('button', { name: 'End Cloud plan' }).click()

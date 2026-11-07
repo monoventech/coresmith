@@ -26,7 +26,7 @@ final class BillingPresenter
 
     private const BRANDS = ['visa' => 'Visa', 'mastercard' => 'Mastercard', 'amex' => 'American Express', 'discover' => 'Discover'];
 
-    private const SELF_HOSTING_URL = 'https://github.com/monoven/coresmith#self-hosting';
+    private const SELF_HOSTING_URL = 'https://github.com/monoventech/coresmith#self-hosting';
 
     public function __construct(private readonly TeamBilling $billing, private readonly PlanChangeGuard $guard) {}
 

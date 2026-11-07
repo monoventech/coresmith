@@ -4,15 +4,11 @@ Coresmith is a source-available panel for running your own servers. It provision
 
 > **Licence:** Elastic License v2 (ELv2). See [LICENSE](LICENSE). Self-hosting is free with every feature; offering Coresmith to others as a hosted service is not allowed.
 
-## Before the first release
-
-The public repository (`monoven/coresmith`), its first release and the `get.coresmith.io` address are not live yet, and releases are not signed until the release key exists. The steps below are how installing works once they are. Until then, install a branch from a clone with `--branch`, as the installer's own tests do.
-
 ## Requirements
 
 - A Linux server with systemd and root access (`sudo`). Ubuntu 22.04 and 24.04 are tested; the installer also accepts Debian 11 and 12, Rocky Linux and AlmaLinux 8 and 9, Fedora and Amazon Linux.
 - At least 5GB of free disk (10GB or more recommended) and 2GB of RAM or more (it runs with less, slowly).
-- Ports 80 and 443 open to your users. The installer keeps your SSH port open.
+- Ports 80 and 443 open to your users. The installer opens them. If a firewall is already on, it leaves that firewall's SSH rules as they are; if it turns ufw on itself, it keeps your SSH port open.
 - For HTTPS on a name, a domain whose DNS points at the server. Without one the panel answers on the server's IP address.
 - Run the panel on a server of its own. Coresmith can't provision the server the panel runs on, so add other servers for your apps.
 
@@ -20,12 +16,16 @@ The public repository (`monoven/coresmith`), its first release and the `get.core
 
 Download the installer and its signature from the latest release, check the signature, then run it as root:
 
-    curl -fsSLO https://github.com/monoven/coresmith/releases/latest/download/install.sh
-    curl -fsSLO https://github.com/monoven/coresmith/releases/latest/download/install.sh.asc
+    curl -fsSLO https://github.com/monoventech/coresmith/releases/latest/download/install.sh
+    curl -fsSLO https://github.com/monoventech/coresmith/releases/latest/download/install.sh.asc
     gpg --verify install.sh.asc install.sh
     sudo bash install.sh --domain panel.example.com --email you@example.com
 
-Import the release key from this repository's `resources/release-keys/` folder before `gpg --verify`. Once `get.coresmith.io` is live, `curl -fsSL https://get.coresmith.io/install | sudo bash` runs the same installer in one line.
+Import the release key before `gpg --verify`. It is in this repository's `resources/release-keys/` folder and at `https://get.coresmith.io/release-key.asc`, and its fingerprint is:
+
+    10AD 393D 01B6 2CA5 524F  AEAB AF8B BF43 12DD D022
+
+`curl -fsSL https://get.coresmith.io/install | sudo bash` runs the same installer in one line.
 
 The installer adds Caddy, PHP, Redis, Git, SQLite, Node.js, Bun and fail2ban, creates a `coresmith` user, installs the release, configures the firewall and starts the services.
 

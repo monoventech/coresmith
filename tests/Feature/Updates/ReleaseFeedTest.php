@@ -34,7 +34,7 @@ test('the feed advertises the running version in the contract shape', function (
         ->assertOk()
         ->assertExactJson([
             'schema' => 1, 'latest' => '1.0.2', 'minimum' => null, 'withdrawn' => [],
-            'changelog_url' => 'https://github.com/monoven/coresmith/releases/tag/v1.0.2',
+            'changelog_url' => 'https://github.com/monoventech/coresmith/releases/tag/v1.0.2',
             'summary' => null, 'released_at' => null, 'channel' => 'stable',
         ])
         ->assertHeader('Cache-Control', 'max-age=300, public');
