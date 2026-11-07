@@ -28,6 +28,8 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Billing with no card on file', direct('/no-card/settings/billing')],
     ['Team settings after the plan ended', direct('/ended-business/settings/team')],
     ['Billing on a lapsed team', direct('/expired/settings/billing')],
+    ['Billing on a free plan', direct('/free/settings/billing')],
+    ['Fleet on a free plan that is ending', direct('/free-soon/dashboard')],
     ['General settings on a team its owner can delete', direct('/trial/settings')],
     [
         'Delete team dialog',

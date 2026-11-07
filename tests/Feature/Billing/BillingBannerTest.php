@@ -38,6 +38,35 @@ test('a trial about to end counts down', function (string $ends, string $title) 
     'today' => ['2026-10-18 18:00:00', 'Your trial ends today.'],
 ]);
 
+test('a free plan about to end counts down, and one with time to spare stays quiet', function () {
+    $ending = Team::factory()->owned()->free(Plan::Business, CarbonImmutable::parse('2026-10-20 23:59:59'))->create();
+    $spare = Team::factory()->owned()->free(Plan::Business, CarbonImmutable::parse('2026-11-20 23:59:59'))->create();
+    $forever = Team::factory()->owned()->free(Plan::Business)->create();
+    $deployer = CloudBilling::member($ending, TeamRole::Member);
+
+    expect(billingBannerSummary($ending)['banner'])->toBe([
+        'tone' => 'warning',
+        'title' => 'Your free plan ends in 2 days.',
+        'body' => 'After Oct 20 this team becomes read-only. Choose a plan to keep making changes.',
+        'action' => 'Choose a plan',
+    ])->and(billingBannerSummary($ending, $deployer)['banner'])->toMatchArray([
+        'body' => 'After Oct 20 this team becomes read-only. Ask an owner to choose a plan.',
+        'action' => null,
+    ])->and(billingBannerSummary($ending)['state'])->toBe('free')
+        ->and(billingBannerSummary($spare)['banner'])->toBeNull()
+        ->and(billingBannerSummary($forever)['banner'])->toBeNull();
+});
+
+test('a free plan that ended says so in the banner', function () {
+    $team = Team::factory()->owned()->free(Plan::Pro, CarbonImmutable::parse('2026-10-10 23:59:59'))->create();
+
+    expect(billingBannerSummary($team)['banner'])->toMatchArray([
+        'tone' => 'destructive',
+        'title' => "This team's free plan has ended, so it is read-only.",
+        'action' => 'Choose a plan',
+    ]);
+});
+
 test('the countdown says what happens after the trial', function () {
     $team = Team::factory()->owned()->create(['trial_ends_at' => CarbonImmutable::parse('2026-10-20 12:00:00')]);
     $deployer = CloudBilling::member($team, TeamRole::Member);

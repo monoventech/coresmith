@@ -57,6 +57,16 @@ test('billing on cloud says what the team is on', function () {
         ->and($hint($trial))->toBe('trial · 9 days left');
 });
 
+test('billing on cloud says when a team is free', function () {
+    config(['coresmith.edition' => 'cloud']);
+    $forever = Team::factory()->free(Plan::Business)->owned()->create();
+    $until = Team::factory()->free(Plan::Pro, now()->addMonths(2)->endOfDay())->owned()->create();
+    $hint = fn(Team $team): string => collect(paletteCommands(User::query()->findOrFail($team->owner_id), $team))->firstWhere('label', 'Billing')['hint'];
+
+    expect($hint($forever))->toBe('Business · free')
+        ->and($hint($until))->toBe('Pro · free until ' . now()->addMonths(2)->format(now()->addMonths(2)->year === now()->year ? 'M j' : 'M j, Y'));
+});
+
 test('billing on cloud shows what the team pays when stripe has said', function () {
     config(['coresmith.edition' => 'cloud']);
     $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();

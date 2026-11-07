@@ -180,3 +180,58 @@ test('days left count calendar days', function (string $ends, int $days) {
     'tomorrow morning' => ['2026-10-19 09:00:00', 1],
     'tonight' => ['2026-10-18 18:00:00', 0],
 ]);
+
+test('a free plan works like its plan with nothing to pay', function () {
+    CloudBilling::enable();
+
+    $status = teamBillingStatus(Team::factory()->onTrial(5)->free(Plan::Business)->create());
+
+    expect($status->state)->toBe(BillingState::Free)
+        ->and($status->plan)->toBe(Plan::Business)
+        ->and($status->readOnly())->toBeFalse()
+        ->and($status->endsAt)->toBeNull()
+        ->and($status->serverLimit())->toBeNull()
+        ->and($status->allows(PlanFeature::SingleSignOn))->toBeTrue();
+});
+
+test('a free plan with a last day keeps its plan limits until then', function () {
+    CloudBilling::enable();
+
+    $status = teamBillingStatus(Team::factory()->free(Plan::Starter, now()->addDays(3))->create());
+
+    expect($status->state)->toBe(BillingState::Free)
+        ->and($status->plan)->toBe(Plan::Starter)
+        ->and($status->serverLimit())->toBe(3)
+        ->and($status->allows(PlanFeature::TeamRoles))->toBeFalse()
+        ->and($status->endsAt?->toDateString())->toBe(now()->addDays(3)->toDateString());
+});
+
+test('a running stripe plan comes before a free plan', function () {
+    CloudBilling::enable();
+
+    $status = teamBillingStatus(Team::factory()->subscribed(Plan::Pro)->free(Plan::Business)->create());
+
+    expect($status->state)->toBe(BillingState::Active)
+        ->and($status->plan)->toBe(Plan::Pro);
+});
+
+test('a free plan that ended is read-only and says so', function () {
+    CloudBilling::enable();
+
+    $status = teamBillingStatus(Team::factory()->trialEnded(20)->free(Plan::Pro, now()->subDays(2))->create());
+
+    expect($status->state)->toBe(BillingState::ReadOnly)
+        ->and($status->reason)->toBe(ReadOnlyReason::FreePlanEnded)
+        ->and($status->plan)->toBeNull()
+        ->and($status->endsAt?->toDateString())->toBe(now()->subDays(2)->toDateString())
+        ->and($status->reason->title())->toBe("This team's free plan has ended, so it is read-only.");
+});
+
+test('a trial still running outlasts a free plan that ended', function () {
+    CloudBilling::enable();
+
+    $status = teamBillingStatus(Team::factory()->onTrial(4)->free(Plan::Pro, now()->subDay())->create());
+
+    expect($status->state)->toBe(BillingState::Trialing)
+        ->and($status->plan)->toBe(Plan::Trial);
+});

@@ -7,18 +7,19 @@
     let { note }: { note: string } = $props()
 
     const billing = $derived(page.props.billing)
+    const free = $derived(billing?.state === 'free')
     const action = $derived(billing?.read_only ? billing.banner?.action : 'Change plan')
 </script>
 
 <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="plan-note">
     {note}
-    {#if billing?.can_manage}
+    {#if billing?.can_manage && !free}
         <Link
             href={billing.href}
             class="focus-ring rounded-sm font-medium text-primary-strong no-underline underline-offset-4 hover:underline"
             >{action}</Link
         >
-    {:else if !billing?.read_only}
+    {:else if !billing?.read_only && !free}
         Ask an owner to change the plan.
     {/if}
 </p>
