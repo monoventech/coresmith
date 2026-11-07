@@ -131,7 +131,7 @@ final class PanelBackup
 
         match ($driver) {
             'sqlite' => $this->restoreSqlite($phar, (string) $config['database']),
-            'pgsql', 'mysql', 'mariadb' => $this->restoreExternal($phar, $driver, $config),
+            'pgsql', 'mysql', 'mariadb' => $this->restoreExternal($phar, $driver, $config, $archive),
             default => throw new RuntimeException('Backups support SQLite, PostgreSQL and MySQL panels.'),
         };
     }
@@ -163,7 +163,7 @@ final class PanelBackup
     /**
      * @param  array<string, mixed>  $config
      */
-    private function restoreExternal(PharData $phar, string $driver, array $config): void
+    private function restoreExternal(PharData $phar, string $driver, array $config, string $archive): void
     {
         $work = storage_path('app/private/restore-' . Str::random(12));
         File::ensureDirectoryExists($work, 0700);
@@ -172,19 +172,44 @@ final class PanelBackup
             $phar->extractTo($work, 'database.sql', true);
             $file = $work . '/database.sql';
             $database = (string) $config['database'];
+
+            if ($driver === 'pgsql') {
+                $this->load(['psql', '--quiet', '--single-transaction', '--set=ON_ERROR_STOP=1', '--command=DROP OWNED BY CURRENT_USER', '--file=' . $file, '--host=' . $config['host'], '--port=' . $config['port'], '--username=' . $config['username'], $database], ['PGPASSWORD' => (string) $config['password']]);
+
+                return;
+            }
+
             $quoted = '`' . str_replace('`', '``', $database) . '`';
+            $client = ['mysql', '--host=' . $config['host'], '--port=' . $config['port'], '--user=' . $config['username']];
+            $environment = ['MYSQL_PWD' => (string) $config['password']];
+            $dump = filesize($file) > 0 ? fopen($file, 'rb') : false;
 
-            [$command, $environment] = $driver === 'pgsql'
-                ? [['psql', '--quiet', '--single-transaction', '--set=ON_ERROR_STOP=1', '--command=DROP OWNED BY CURRENT_USER', '--file=' . $file, '--host=' . $config['host'], '--port=' . $config['port'], '--username=' . $config['username'], $database], ['PGPASSWORD' => (string) $config['password']]]
-                : [['mysql', '--host=' . $config['host'], '--port=' . $config['port'], '--user=' . $config['username'], $database, "--execute=DROP DATABASE IF EXISTS {$quoted}; CREATE DATABASE {$quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; USE {$quoted}; source {$file}"], ['MYSQL_PWD' => (string) $config['password']]];
+            if ($dump === false) {
+                throw new RuntimeException("The database in the backup at {$archive} is empty or can't be read, so nothing was restored.");
+            }
 
-            $result = Process::env($environment)->timeout(1800)->run($command);
-
-            if ($result->failed()) {
-                throw new RuntimeException('Restoring the database failed: ' . trim($result->errorOutput()));
+            try {
+                $this->load([...$client, "--execute=DROP DATABASE IF EXISTS {$quoted}; CREATE DATABASE {$quoted} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"], $environment);
+                $this->load([...$client, $database], $environment, $dump);
+            } finally {
+                fclose($dump);
             }
         } finally {
             File::deleteDirectory($work);
+        }
+    }
+
+    /**
+     * @param  list<string>  $command
+     * @param  array<string, string>  $environment
+     * @param  resource|null  $input
+     */
+    private function load(array $command, array $environment, $input = null): void
+    {
+        $result = Process::env($environment)->timeout(1800)->input($input)->run($command);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Restoring the database failed: ' . trim($result->errorOutput()));
         }
     }
 

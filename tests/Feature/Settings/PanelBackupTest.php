@@ -350,22 +350,60 @@ test('a postgres backup is restored in one transaction, over whatever the migrat
     expect(glob(storage_path('app/private/restore-*')))->toBe([]);
 });
 
-test('a mysql backup is recreated and restored with its password in the environment', function () {
+test('a mysql backup recreates the database, then loads the dump through standard input, with the password in the environment', function () {
     $archive = backupExternalArchive('mysql', '--result-file=');
-    Process::fake();
+    $loaded = [];
+    Process::fake(function (PendingProcess $process) use (&$loaded) {
+        $loaded[] = is_resource($process->input) ? stream_get_contents($process->input) : $process->input;
+
+        return Process::result();
+    });
 
     app(PanelBackup::class)->restore($archive);
 
-    Process::assertRan(function (PendingProcess $process): bool {
-        $execute = (string) backupRestoreArgument($process, '--execute=');
+    Process::assertRanTimes(fn(PendingProcess $process): bool => $process->command[0] === 'mysql', 2);
+    Process::assertRan(fn(PendingProcess $process): bool => $process->command === [
+        'mysql',
+        '--host=db.internal',
+        '--port=3306',
+        '--user=coresmith',
+        '--execute=DROP DATABASE IF EXISTS `coresmith_panel`; CREATE DATABASE `coresmith_panel` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
+    ] && $process->environment === ['MYSQL_PWD' => 's3cret-pass'] && $process->timeout === 1800);
+    Process::assertRan(fn(PendingProcess $process): bool => $process->command === ['mysql', '--host=db.internal', '--port=3306', '--user=coresmith', 'coresmith_panel']
+        && $process->environment === ['MYSQL_PWD' => 's3cret-pass']
+        && $process->timeout === 1800);
 
-        return $process->command === ['mysql', '--host=db.internal', '--port=3306', '--user=coresmith', 'coresmith_panel', $execute]
-            && preg_match('#^--execute=DROP DATABASE IF EXISTS `coresmith_panel`; CREATE DATABASE `coresmith_panel` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; USE `coresmith_panel`; source ' . preg_quote(storage_path('app/private'), '#') . '/restore-[A-Za-z0-9]+/database\.sql$#', $execute) === 1
-            && $process->environment === ['MYSQL_PWD' => 's3cret-pass']
-            && $process->timeout === 1800;
+    Process::assertNotRan(fn(PendingProcess $process): bool => str_contains(implode(' ', $process->command), 'source '));
+
+    expect($loaded[1])->toBe('-- dump')
+        ->and(glob(storage_path('app/private/restore-*')))->toBe([]);
+});
+
+test('a mysql database that cannot be recreated is not loaded into', function () {
+    $archive = backupExternalArchive('mysql', '--result-file=');
+    Process::fake(fn() => Process::result(errorOutput: "ERROR 1044 (42000): Access denied for user 'coresmith'\n", exitCode: 1));
+
+    expect(fn() => app(PanelBackup::class)->restore($archive))->toThrow(RuntimeException::class, "Restoring the database failed: ERROR 1044 (42000): Access denied for user 'coresmith'");
+
+    Process::assertRanTimes(fn(PendingProcess $process): bool => $process->command[0] === 'mysql', 1);
+});
+
+test('an empty mysql dump is refused before the database is dropped', function () {
+    backupUseExternalDatabase('mysql');
+    Process::fake(function (PendingProcess $process) {
+        $target = backupRestoreArgument($process, '--result-file=');
+
+        if ($target !== null) {
+            file_put_contents(substr($target, strlen('--result-file=')), '');
+        }
+
+        return Process::result();
     });
+    $archive = app(PanelBackup::class)->run()['path'];
 
-    expect(glob(storage_path('app/private/restore-*')))->toBe([]);
+    expect(fn() => app(PanelBackup::class)->restore($archive))->toThrow(RuntimeException::class, 'is empty or can\'t be read, so nothing was restored.');
+
+    Process::assertNotRan(fn(PendingProcess $process): bool => $process->command[0] === 'mysql');
 });
 
 test('a restore that fails says so and leaves nothing behind', function () {
