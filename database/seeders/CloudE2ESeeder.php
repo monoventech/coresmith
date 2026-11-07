@@ -74,6 +74,7 @@ final class CloudE2ESeeder extends Seeder
         $this->businessTeam($tenant->owner);
         $this->oldPriceTeam($tenant->owner);
         $this->noCardTeam($tenant->owner);
+        $this->cardDueTeam($tenant->owner);
         $this->endedBusinessTeam($tenant->owner);
 
         foreach (self::PROJECTS as $code) {
@@ -207,6 +208,14 @@ final class CloudE2ESeeder extends Seeder
         $team->forceFill(['stripe_id' => 'cus_e2e_no_card'])->save();
 
         Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->status('past_due')->create();
+    }
+
+    private function cardDueTeam(User $owner): void
+    {
+        $team = $this->ownedTeam($owner, 'Card Due', 'card-due');
+        $team->forceFill(['stripe_id' => 'cus_e2e_card_due', 'pending_checkout_id' => 'cs_e2e_card_due'])->save();
+
+        Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create();
     }
 
     private function endedBusinessTeam(User $owner): void

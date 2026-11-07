@@ -173,12 +173,12 @@ final class StripeWebhookController extends WebhookController
             $this->storeCreated($team, $data, ['created' => $payload['created'] ?? null, 'data' => ['object' => $data]]);
         }
 
-        if ($team->pending_checkout_id !== null && $team->pending_checkout_id === ($session['id'] ?? null)) {
-            $team->forceFill(['pending_checkout_id' => null])->save();
-        }
-
         if (is_string($subscription?->default_payment_method)) {
             $team->updateDefaultPaymentMethod($subscription->default_payment_method);
+        }
+
+        if ($team->pending_checkout_id !== null && $team->pending_checkout_id === ($session['id'] ?? null)) {
+            $team->forceFill(['pending_checkout_id' => null])->save();
         }
 
         return $this->successMethod();

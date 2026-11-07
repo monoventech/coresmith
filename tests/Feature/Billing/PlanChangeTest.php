@@ -438,7 +438,10 @@ test('self-hosted has no billing routes', function () {
 test('returning from checkout', function () {
     $waiting = Team::factory()->onTrial()->owned()->create();
     $paid = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $cardDue = Team::factory()->subscribed(Plan::Pro)->owned()->create();
+    $cardDue->forceFill(['pending_checkout_id' => 'cs_card_due'])->save();
     $timeout = 'Stripe has not confirmed the plan yet. Refresh in a minute.';
+    $cardTimeout = "You're on Pro. Refresh in a minute to see the card.";
     $checkout = function (Team $team, array $query): mixed {
         $props = null;
 
@@ -459,7 +462,12 @@ test('returning from checkout', function () {
         'status' => 'success',
         'awaiting' => false,
         'message' => "You're on Pro.",
-        'timeout_message' => $timeout,
+        'timeout_message' => $cardTimeout,
+    ])->and($checkout($cardDue, ['checkout' => 'success']))->toBe([
+        'status' => 'success',
+        'awaiting' => true,
+        'message' => "You're on Pro.",
+        'timeout_message' => $cardTimeout,
     ])->and($checkout($waiting, ['checkout' => 'cancelled']))->toBe([
         'status' => 'cancelled',
         'awaiting' => false,

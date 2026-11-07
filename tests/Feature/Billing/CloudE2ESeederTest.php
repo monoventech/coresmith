@@ -28,6 +28,18 @@ test('the cloud browser seed has a team on an older price', function () {
         ->and(app(TeamBilling::class)->status($team)->plan)->toBe(Plan::Pro);
 });
 
+test('the cloud browser seed has a team whose plan arrived before its card', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $team = Team::query()->where('slug', 'card-due')->firstOrFail();
+
+    expect(app(TeamBilling::class)->status($team)->plan)->toBe(Plan::Pro)
+        ->and($team->pending_checkout_id)->toBe('cs_e2e_card_due')
+        ->and($team->pm_last_four)->toBeNull();
+});
+
 test('the cloud browser seed has a paying team and a team on its trial', function () {
     CloudBilling::enable();
 
@@ -48,7 +60,7 @@ test('the cloud browser seed has a paying team and a team on its trial', functio
         ->and($trying->trialDaysLeft())->toBe(9)
         ->and($trial->servers()->pluck('name')->all())->toBe(['forge-trial-01'])
         ->and($owner->teams()->pluck('slug')->reject(fn(string $slug): bool => str_contains($slug, '-'))->sort()->values()->all())->toBe(['atelier', 'ending', 'expired', 'fleet', 'monoven', 'overdue', 'solo', 'trial'])
-        ->and($owner->teams()->count())->toBe(11 + 6 * count(CloudE2ESeeder::PROJECTS))
+        ->and($owner->teams()->count())->toBe(12 + 6 * count(CloudE2ESeeder::PROJECTS))
         ->and($owner->current_team_id)->toBe($monoven->id);
 });
 

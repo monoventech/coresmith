@@ -129,4 +129,20 @@ test.describe('changing the plan on coresmith cloud', () => {
             'Stripe has not confirmed the plan yet. Refresh in a minute.'
         )
     })
+
+    test('a plan that arrives before its card keeps checking for the card', async ({ page }) => {
+        await page.clock.install()
+        await page.goto('/card-due/settings/billing?checkout=success')
+
+        await expect(page.getByTestId('checkout-status')).toHaveText("You're on Pro.")
+        await expect(page.getByTestId('payment-card')).toContainText(
+            'No card shown here yet. Add or update it at Stripe.'
+        )
+
+        await page.clock.runFor(61_000)
+
+        await expect(page.getByTestId('checkout-status')).toHaveText(
+            "You're on Pro. Refresh in a minute to see the card."
+        )
+    })
 })

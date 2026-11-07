@@ -116,7 +116,7 @@ final class BillingPresenter
                 'trial_ends_on' => $trial ? $this->dayOrNull($status->trialEndsAt) : null,
                 'guide' => self::SELF_HOSTING_URL,
             ],
-            'checkout' => $this->checkout($status, $subscribed, $checkout),
+            'checkout' => $this->checkout($team, $status, $subscribed, $checkout),
         ];
     }
 
@@ -175,23 +175,23 @@ final class BillingPresenter
     /**
      * @return array{status: string, awaiting: bool, message: string, timeout_message: string}|null
      */
-    private function checkout(BillingStatus $status, bool $subscribed, ?string $checkout): ?array
+    private function checkout(Team $team, BillingStatus $status, bool $subscribed, ?string $checkout): ?array
     {
         if (!in_array($checkout, ['success', 'cancelled'], true)) {
             return null;
         }
 
-        $awaiting = $checkout === 'success' && !$subscribed;
+        $onPlan = "You're on {$status->plan?->label()}.";
 
         return [
             'status' => $checkout,
-            'awaiting' => $awaiting,
+            'awaiting' => $checkout === 'success' && (!$subscribed || $team->pending_checkout_id !== null),
             'message' => match (true) {
                 $checkout === 'cancelled' => 'Checkout was cancelled, so nothing was charged.',
-                $awaiting => 'Checkout finished. The plan appears here as soon as Stripe confirms it.',
-                default => "You're on {$status->plan?->label()}.",
+                !$subscribed => 'Checkout finished. The plan appears here as soon as Stripe confirms it.',
+                default => $onPlan,
             },
-            'timeout_message' => 'Stripe has not confirmed the plan yet. Refresh in a minute.',
+            'timeout_message' => $subscribed ? "{$onPlan} Refresh in a minute to see the card." : 'Stripe has not confirmed the plan yet. Refresh in a minute.',
         ];
     }
 

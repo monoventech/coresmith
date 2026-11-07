@@ -664,6 +664,45 @@ test('a completed checkout stays pending until its subscription can be read', fu
         ->and($team->subscriptions()->count())->toBe(1);
 });
 
+test('a completed checkout stays pending until its card is stored', function () {
+    $team = Team::factory()->onTrial()->owned()->create(['stripe_id' => 'cus_1']);
+    $team->forceFill(['pending_checkout_id' => 'cs_1'])->save();
+    $stripeUp = false;
+
+    FakeStripe::fake([
+        FakeStripe::url('subscriptions/sub_1*') => Http::response(FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro', 'active', ['default_payment_method' => 'pm_1'])),
+        FakeStripe::url('customers/cus_1*') => function (Request $request) use (&$stripeUp) {
+            if ($request->method() === 'POST' && !$stripeUp) {
+                return FakeStripe::error('api_error', "Something went wrong on Stripe's end.", 500);
+            }
+
+            return Http::response(FakeStripe::customer('cus_1', $request->method() === 'POST' ? ['invoice_settings' => ['default_payment_method' => 'pm_1']] : []));
+        },
+        FakeStripe::url('payment_methods/pm_1/attach') => Http::response(array_replace(FakeStripe::paymentMethod('pm_1'), ['customer' => 'cus_1'])),
+        FakeStripe::url('payment_methods/pm_1*') => Http::response(FakeStripe::paymentMethod('pm_1')),
+    ]);
+
+    $event = FakeStripe::event('checkout.session.completed', FakeStripe::checkoutSession('cs_1', 'https://checkout.stripe.com/c/pay/cs_1', [
+        'status' => 'complete',
+        'customer' => 'cus_1',
+        'subscription' => 'sub_1',
+    ]));
+
+    stripeWebhook($event)->assertServerError();
+
+    expect($team->fresh()->pending_checkout_id)->toBe('cs_1')
+        ->and($team->fresh()->pm_last_four)->toBeNull()
+        ->and(StripeEvent::query()->count())->toBe(0);
+
+    $stripeUp = true;
+
+    stripeWebhook($event)->assertOk();
+
+    expect($team->fresh()->pending_checkout_id)->toBeNull()
+        ->and($team->fresh()->pm_last_four)->toBe('4242')
+        ->and($team->subscriptions()->count())->toBe(1);
+});
+
 test('a completed checkout leaves a subscription it already knows to its own events', function () {
     $team = Team::factory()->onTrial()->owned()->create(['stripe_id' => 'cus_1']);
     $now = now()->getTimestamp();
