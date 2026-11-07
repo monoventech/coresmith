@@ -3,6 +3,9 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        @if (($sentry = \App\Support\Sentry\BrowserSentry::settings()) !== null)
+            <meta name="coresmith-sentry" content="{{ json_encode($sentry) }}">
+        @endif
 
         <link rel="icon" href="/favicon.ico" sizes="any">
         <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -10,7 +13,7 @@
 
         @fonts
 
-        @routes
+        @routes(nonce: \Illuminate\Support\Facades\Vite::cspNonce())
         @vite(['resources/css/app.css', 'resources/js/app.ts'])
         <x-inertia::head>
             <title>{{ config('app.name', 'Laravel') }}</title>

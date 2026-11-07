@@ -2,7 +2,7 @@ import inertia from '@inertiajs/vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import laravel from 'laravel-vite-plugin'
-import { bunny } from 'laravel-vite-plugin/fonts'
+import { local } from 'laravel-vite-plugin/fonts'
 import path from 'path'
 import { defineConfig } from 'vite'
 
@@ -12,8 +12,20 @@ export default defineConfig({
             input: ['resources/css/app.css', 'resources/js/app.ts'],
             refresh: true,
             fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600]
+                local('Hanken Grotesk', {
+                    optimizedFallbacks: false,
+                    variants: [
+                        { src: 'resources/fonts/HankenGrotesk-400.woff2', weight: 400, style: 'normal' },
+                        { src: 'resources/fonts/HankenGrotesk-500.woff2', weight: 500, style: 'normal' },
+                        { src: 'resources/fonts/HankenGrotesk-600.woff2', weight: 600, style: 'normal' }
+                    ]
+                }),
+                local('JetBrains Mono', {
+                    optimizedFallbacks: false,
+                    variants: [
+                        { src: 'resources/fonts/JetBrainsMono-400.woff2', weight: 400, style: 'normal' },
+                        { src: 'resources/fonts/JetBrainsMono-500.woff2', weight: 500, style: 'normal' }
+                    ]
                 })
             ]
         }),
@@ -23,7 +35,7 @@ export default defineConfig({
     ],
     resolve: {
         alias: {
-            '@': path.resolve(__dirname, './resources/js')
+            '@': path.resolve(import.meta.dirname, './resources/js')
         }
     }
 })

@@ -1,23 +1,26 @@
 <script lang="ts">
-    import type { LinkComponentBaseProps, Method } from '@inertiajs/core';
-    import { Link } from '@inertiajs/svelte';
-    import type { Snippet } from 'svelte';
+    import { cn } from '@/lib/utils'
+    import type { LinkComponentBaseProps, Method } from '@inertiajs/core'
+    import { Link } from '@inertiajs/svelte'
+    import type { Snippet } from 'svelte'
 
     let {
         href,
         tabindex,
         method,
         as,
+        class: className,
         children,
         ...rest
     }: {
-        href: LinkComponentBaseProps['href'];
-        tabindex?: number;
-        method?: Method;
-        as?: keyof HTMLElementTagNameMap;
-        children?: Snippet;
-        [key: string]: unknown;
-    } = $props();
+        href: LinkComponentBaseProps['href']
+        tabindex?: number
+        method?: Method
+        as?: keyof HTMLElementTagNameMap
+        class?: string
+        children?: Snippet
+        [key: string]: unknown
+    } = $props()
 </script>
 
 <Link
@@ -25,7 +28,10 @@
     {tabindex}
     {method}
     {as}
-    class="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+    class={cn(
+        'focus-ring cursor-pointer rounded-sm bg-transparent p-0 font-medium text-primary-strong no-underline underline-offset-4 hover:underline',
+        className
+    )}
     {...rest}
 >
     {@render children?.()}

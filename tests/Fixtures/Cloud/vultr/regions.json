@@ -1,0 +1,26 @@
+{
+    "regions": [
+        {
+            "id": "ams",
+            "city": "Amsterdam",
+            "country": "NL",
+            "continent": "Europe",
+            "options": ["ddos_protection", "block_storage_storage_opt", "load_balancers", "kubernetes"]
+        },
+        {
+            "id": "ewr",
+            "city": "New Jersey",
+            "country": "US",
+            "continent": "North America",
+            "options": ["ddos_protection", "block_storage_storage_opt", "load_balancers", "kubernetes"]
+        },
+        {
+            "id": "fra",
+            "city": "Frankfurt",
+            "country": "DE",
+            "continent": "Europe",
+            "options": ["ddos_protection", "block_storage_storage_opt", "load_balancers", "kubernetes"]
+        }
+    ],
+    "meta": { "total": 3, "links": { "next": "", "prev": "" } }
+}

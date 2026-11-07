@@ -48,8 +48,9 @@ class TwoFactorChallengeTest extends TestCase
 
         $this->get(route('two-factor.login'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('auth/TwoFactorChallenge'),
+            ->assertInertia(
+                fn(Assert $page) => $page
+                    ->component('auth/TwoFactorChallenge'),
             );
     }
 }

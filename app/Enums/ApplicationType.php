@@ -1,0 +1,28 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+namespace App\Enums;
+
+enum ApplicationType: string
+{
+    case Php = 'php';
+    case Js = 'js';
+    case Ruby = 'ruby';
+    case Static = 'static';
+
+    /**
+     * @return array<string, string>
+     */
+    public function defaultEnvironment(): array
+    {
+        return match ($this) {
+            self::Ruby => ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production'],
+            default => [],
+        };
+    }
+}

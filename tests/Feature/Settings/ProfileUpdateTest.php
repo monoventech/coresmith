@@ -3,7 +3,9 @@
 namespace Tests\Feature\Settings;
 
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class ProfileUpdateTest extends TestCase
@@ -59,6 +61,42 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect(route('profile.edit'));
 
         $this->assertNotNull($user->refresh()->email_verified_at);
+    }
+
+    public function test_an_email_changed_with_capitals_still_signs_in_and_can_be_reset()
+    {
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'ada@example.com']);
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), ['name' => $user->name, 'email' => ' Ada.Lovelace@Example.com '])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('ada.lovelace@example.com', $user->refresh()->email);
+
+        $this->post(route('logout'));
+        $this->post(route('login.store'), ['email' => 'Ada.Lovelace@Example.com', 'password' => 'password']);
+
+        $this->assertAuthenticatedAs($user);
+
+        $this->post(route('logout'));
+        $this->post(route('password.email'), ['email' => 'Ada.Lovelace@Example.com'])->assertSessionHasNoErrors();
+
+        Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_an_email_another_account_holds_in_another_case_is_refused()
+    {
+        User::factory()->create(['email' => 'ada@example.com']);
+        $user = User::factory()->create(['email' => 'grace@example.com']);
+
+        $this->actingAs($user)
+            ->from(route('profile.edit'))
+            ->patch(route('profile.update'), ['name' => $user->name, 'email' => 'ADA@Example.com'])
+            ->assertRedirect(route('profile.edit'))
+            ->assertSessionHasErrors('email');
+
+        $this->assertSame('grace@example.com', $user->refresh()->email);
     }
 
     public function test_user_can_delete_their_account()

@@ -1,56 +1,53 @@
 <script lang="ts">
-    import AlertError from '@/components/AlertError.svelte'
-    import InputError from '@/components/InputError.svelte'
+    import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
-    import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+    import * as Dialog from '@/components/ui/dialog'
     import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
     import { Spinner } from '@/components/ui/spinner'
-    import { createTwoFactorAuth } from '@/lib/two-factor-auth.svelte'
+    import { twoFactorAuthState } from '@/lib/twoFactorAuth.svelte'
     import { Form } from '@inertiajs/svelte'
-    import { Check, Copy, ScanLine } from 'lucide-svelte'
     import { tick } from 'svelte'
 
-    interface Props {
+    type FormErrors = Record<string, string>
+
+    let {
+        isOpen = $bindable(false),
+        requiresConfirmation,
+        twoFactorEnabled
+    }: {
         isOpen?: boolean
         requiresConfirmation: boolean
         twoFactorEnabled: boolean
-    }
+    } = $props()
 
-    let { isOpen = $bindable(false), requiresConfirmation, twoFactorEnabled }: Props = $props()
+    const twoFactorAuth = twoFactorAuthState()
 
-    const twoFactorAuth = createTwoFactorAuth()
-
-    let showVerificationStep = $state(false)
+    let verifying = $state(false)
     let code = $state('')
     let copied = $state(false)
-    let pinInputContainer = $state<HTMLDivElement>()
+    let otp = $state<HTMLDivElement>()
 
-    const modalConfig = $derived(
+    const title = $derived(
         twoFactorEnabled
-            ? {
-                  title: 'Two-Factor Authentication Enabled',
-                  description: 'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
-                  buttonText: 'Close',
-              }
-            : showVerificationStep
-              ? {
-                    title: 'Verify Authentication Code',
-                    description: 'Enter the 6-digit code from your authenticator app',
-                    buttonText: 'Continue',
-                }
-              : {
-                    title: 'Enable Two-Factor Authentication',
-                    description: 'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
-                    buttonText: 'Continue',
-                },
+            ? 'Two-factor authentication is on'
+            : verifying
+              ? 'Enter the code from your app'
+              : 'Turn on two-factor authentication'
     )
 
-    const handleModalNextStep = async () => {
-        if (requiresConfirmation) {
-            showVerificationStep = true
+    const description = $derived(
+        twoFactorEnabled
+            ? 'Sign-ins now ask for a code from your authenticator app as well as your password.'
+            : verifying
+              ? 'Type the six-digit code your authenticator app shows for this panel.'
+              : 'Scan the code with an authenticator app, or type the setup key in by hand.'
+    )
 
+    async function next() {
+        if (requiresConfirmation && !twoFactorEnabled) {
+            verifying = true
             await tick()
-            pinInputContainer?.querySelector('input')?.focus()
+            otp?.querySelector('input')?.focus()
 
             return
         }
@@ -59,157 +56,118 @@
         isOpen = false
     }
 
-    const resetModalState = () => {
-        if (twoFactorEnabled) {
-            twoFactorAuth.clearSetupData()
+    async function copyKey() {
+        const key = twoFactorAuth.state.manualSetupKey
+
+        if (!key) {
+            return
         }
 
-        showVerificationStep = false
-        code = ''
-    }
-
-    const copyToClipboard = async (text: string) => {
         try {
-            await navigator.clipboard.writeText(text)
+            await navigator.clipboard.writeText(key)
             copied = true
             setTimeout(() => (copied = false), 2000)
         } catch {
-            // Clipboard API not available
+            copied = false
         }
     }
 
     $effect(() => {
         if (!isOpen) {
-            resetModalState()
+            if (twoFactorEnabled) {
+                twoFactorAuth.clearSetupData()
+            }
+
+            verifying = false
+            code = ''
+
             return
         }
 
-        if (!twoFactorAuth.qrCodeSvg) {
-            twoFactorAuth.fetchSetupData()
+        if (!twoFactorAuth.state.qrCodeSvg) {
+            void twoFactorAuth.fetchSetupData()
         }
     })
 </script>
 
-<Dialog open={isOpen} onOpenChange={(open) => (isOpen = open)}>
-    <DialogContent class="sm:max-w-md">
-        <DialogHeader class="flex items-center justify-center">
-            <div class="mb-3 w-auto rounded-full border border-border bg-card p-0.5 shadow-sm">
-                <div class="relative overflow-hidden rounded-full border border-border bg-muted p-2.5">
-                    <div class="absolute inset-0 grid grid-cols-5 opacity-50">
-                        {#each Array.from({ length: 5 }, (_, i) => i) as index (index)}
-                            <div class="border-r border-border last:border-r-0"></div>
-                        {/each}
-                    </div>
-                    <div class="absolute inset-0 grid grid-rows-5 opacity-50">
-                        {#each Array.from({ length: 5 }, (_, i) => i) as index (index)}
-                            <div class="border-b border-border last:border-b-0"></div>
-                        {/each}
-                    </div>
-                    <ScanLine class="relative z-20 size-6 text-foreground" />
+<Dialog.Root bind:open={isOpen}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title>{title}</Dialog.Title>
+            <Dialog.Description>{description}</Dialog.Description>
+        </Dialog.Header>
+
+        {#if twoFactorAuth.state.errors.length > 0}
+            <p class="tint-destructive mt-4 rounded-md border px-3.5 py-2.5 text-[13px]" role="alert">
+                The setup details couldn't be loaded. Close this and try again.
+            </p>
+            <Dialog.Footer>
+                <Button variant="ghost" onclick={() => (isOpen = false)}>Close</Button>
+            </Dialog.Footer>
+        {:else if !verifying}
+            <div class="mt-4 flex flex-col items-center gap-4">
+                <!-- monoven-allow: a QR code needs true white behind true black or scanners fail -->
+                <div
+                    class="flex size-44 items-center justify-center rounded-md bg-white p-2.5 [&_svg]:size-full"
+                    data-testid="two-factor-qr"
+                >
+                    {#if twoFactorAuth.state.qrCodeSvg}
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                        {@html twoFactorAuth.state.qrCodeSvg}
+                    {:else}
+                        <Spinner class="size-5 text-muted-foreground" />
+                    {/if}
+                </div>
+                <div class="flex w-full items-center gap-2">
+                    <code
+                        class="min-w-0 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-[12.5px]"
+                        data-testid="two-factor-key"
+                    >
+                        {twoFactorAuth.state.manualSetupKey ?? 'Loading the setup key…'}
+                    </code>
+                    <Button variant="outline" size="sm" disabled={!twoFactorAuth.state.manualSetupKey} onclick={copyKey}
+                        >{copied ? 'Copied' : 'Copy'}</Button
+                    >
                 </div>
             </div>
-            <DialogTitle>{modalConfig.title}</DialogTitle>
-            <DialogDescription class="text-center">
-                {modalConfig.description}
-            </DialogDescription>
-        </DialogHeader>
-
-        <div class="relative flex w-auto flex-col items-center justify-center space-y-5">
-            {#if !showVerificationStep}
-                {#if twoFactorAuth.errors.length}
-                    <AlertError errors={twoFactorAuth.errors} />
-                {:else}
-                    <div class="relative mx-auto flex max-w-md items-center overflow-hidden">
-                        <div class="relative mx-auto aspect-square w-64 overflow-hidden rounded-lg border border-border">
-                            {#if !twoFactorAuth.qrCodeSvg}
-                                <div
-                                    class="absolute inset-0 z-10 flex aspect-square h-auto w-full animate-pulse items-center justify-center bg-background"
-                                >
-                                    <Spinner class="size-6" />
-                                </div>
-                            {:else}
-                                <div class="relative z-10 overflow-hidden border p-5">
-                                    <div class="aspect-square w-full justify-center rounded-lg bg-white p-2 [&_svg]:size-full">
-                                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                                        {@html twoFactorAuth.qrCodeSvg}
-                                    </div>
-                                </div>
-                            {/if}
-                        </div>
-                    </div>
-
-                    <div class="flex w-full items-center space-x-5">
-                        <Button class="w-full" onclick={handleModalNextStep}>
-                            {modalConfig.buttonText}
-                        </Button>
-                    </div>
-
-                    <div class="relative flex w-full items-center justify-center">
-                        <div class="absolute inset-0 top-1/2 h-px w-full bg-border"></div>
-                        <span class="relative bg-card px-2 py-1">or, enter the code manually</span>
-                    </div>
-
-                    <div class="flex w-full items-center justify-center space-x-2">
-                        <div class="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
-                            {#if !twoFactorAuth.manualSetupKey}
-                                <div class="flex h-full w-full items-center justify-center bg-muted p-3">
-                                    <Spinner />
-                                </div>
-                            {:else}
-                                <input
-                                    type="text"
-                                    readonly
-                                    value={twoFactorAuth.manualSetupKey}
-                                    class="h-full w-full bg-background p-3 text-foreground"
-                                />
-                                <button
-                                    onclick={() => copyToClipboard(twoFactorAuth.manualSetupKey || '')}
-                                    class="relative block h-auto border-l border-border px-3 hover:bg-muted"
-                                >
-                                    {#if copied}
-                                        <Check class="w-4 text-green-500" />
-                                    {:else}
-                                        <Copy class="w-4" />
-                                    {/if}
-                                </button>
-                            {/if}
-                        </div>
-                    </div>
+            <Dialog.Footer>
+                {#if !twoFactorEnabled}
+                    <Button variant="ghost" onclick={() => (isOpen = false)}>Cancel</Button>
                 {/if}
-            {:else}
-                <Form method="post" action={route('two-factor.confirm')} resetOnError onFinish={() => (code = '')} onSuccess={() => (isOpen = false)}>
-                    {#snippet children({ errors: formErrors, processing }: { errors: Record<string, string>; processing: boolean })}
-                        <input type="hidden" name="code" value={code} />
-                        <div bind:this={pinInputContainer} class="relative w-full space-y-3">
-                            <div class="flex w-full flex-col items-center justify-center space-y-3 py-2">
-                                <InputOTP bind:value={code} maxlength={6} disabled={processing} autofocus>
-                                    {#snippet children({ cells })}
-                                        <InputOTPGroup>
-                                            {#each cells as cell, index (index)}
-                                                <InputOTPSlot {cell} />
-                                            {/each}
-                                        </InputOTPGroup>
-                                    {/snippet}
-                                </InputOTP>
-                                <InputError message={formErrors['confirmTwoFactorAuthentication.code'] || formErrors.code} />
-                            </div>
-
-                            <div class="flex w-full items-center space-x-5">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    class="w-auto flex-1"
-                                    onclick={() => (showVerificationStep = false)}
-                                    disabled={processing}
-                                >
-                                    Back
-                                </Button>
-                                <Button type="submit" class="w-auto flex-1" disabled={processing || code.length < 6}>Confirm</Button>
-                            </div>
-                        </div>
-                    {/snippet}
-                </Form>
-            {/if}
-        </div>
-    </DialogContent>
-</Dialog>
+                <Button disabled={!twoFactorAuth.hasSetupData()} onclick={next}
+                    >{twoFactorEnabled ? 'Done' : 'Continue'}</Button
+                >
+            </Dialog.Footer>
+        {:else}
+            <Form
+                method="post"
+                action={route('two-factor.confirm')}
+                resetOnError
+                onFinish={() => (code = '')}
+                onSuccess={() => (isOpen = false)}
+            >
+                {#snippet children({ errors, processing }: { errors: FormErrors; processing: boolean })}
+                    <input type="hidden" name="code" value={code} />
+                    <div bind:this={otp} class="mt-4 flex flex-col items-center gap-2">
+                        <InputOTP bind:value={code} maxlength={6} disabled={processing} autofocus>
+                            {#snippet children({ cells })}
+                                <InputOTPGroup>
+                                    {#each cells as cell, index (index)}
+                                        <InputOTPSlot {cell} />
+                                    {/each}
+                                </InputOTPGroup>
+                            {/snippet}
+                        </InputOTP>
+                        <FieldError message={errors['confirmTwoFactorAuthentication.code'] ?? errors.code} />
+                    </div>
+                    <Dialog.Footer>
+                        <Button type="button" variant="ghost" disabled={processing} onclick={() => (verifying = false)}
+                            >Back</Button
+                        >
+                        <Button type="submit" disabled={processing || code.length < 6}>Turn it on</Button>
+                    </Dialog.Footer>
+                {/snippet}
+            </Form>
+        {/if}
+    </Dialog.Content>
+</Dialog.Root>

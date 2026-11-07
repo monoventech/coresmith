@@ -1,16 +1,20 @@
-import type { FlashToast } from '@/types/ui'
+import { notify, splitMessage } from '@/lib/toast.svelte'
 import { router } from '@inertiajs/svelte'
-import { toast } from 'svelte-sonner'
 
 export function initializeFlashToast(): void {
     router.on('flash', (event) => {
-        const flash = (event as CustomEvent).detail?.flash
-        const data = flash?.toast as FlashToast | undefined
+        const { success, error } = event.detail.flash
 
-        if (!data) {
+        if (error) {
+            const { title, description } = splitMessage(error)
+            notify(title, description, 'destructive')
+
             return
         }
 
-        toast[data.type](data.message)
+        if (success) {
+            const { title, description } = splitMessage(success)
+            notify(title, description, 'success')
+        }
     })
 }

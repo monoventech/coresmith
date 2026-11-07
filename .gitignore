@@ -28,3 +28,15 @@ yarn-error.log
 /.vscode
 /.zed
 /.claude
+/MONOVEN_DESIGN.md
+/brand.md
+
+/database/e2e.sqlite
+/tests/E2E/.auth
+/playwright-report
+/test-results
+/database/e2e-install.sqlite
+/database/demo.sqlite
+/.env.demo
+/storage/app/e2e-setup-token
+/database/e2e-cloud.sqlite

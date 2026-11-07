@@ -14,16 +14,18 @@ export type CurrentUrlState = {
     ) => TIfTrue | TIfFalse
 }
 
-export function currentUrlState(): CurrentUrlState {
-    const currentUrl = $derived.by(() => {
-        const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+function toPathname(value: string): string {
+    const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
 
-        try {
-            return new URL(page.url, origin).pathname
-        } catch {
-            return page.url
-        }
-    })
+    try {
+        return new URL(value, origin).pathname
+    } catch {
+        return value
+    }
+}
+
+export function currentUrlState(): CurrentUrlState {
+    const currentUrl = $derived.by(() => toPathname(page.url))
 
     function isCurrentUrl(urlToCheck: NonNullable<LinkComponentBaseProps['href']>, current: string): boolean {
         const resolved = toUrl(urlToCheck)
@@ -32,7 +34,7 @@ export function currentUrlState(): CurrentUrlState {
             return false
         }
 
-        return current === resolved
+        return toPathname(current) === toPathname(resolved)
     }
 
     function isCurrentOrParentUrl(urlToCheck: NonNullable<LinkComponentBaseProps['href']>, current: string): boolean {
@@ -42,7 +44,7 @@ export function currentUrlState(): CurrentUrlState {
             return false
         }
 
-        return current.startsWith(resolved)
+        return toPathname(current).startsWith(toPathname(resolved))
     }
 
     function whenCurrentUrl<TIfTrue, TIfFalse>(

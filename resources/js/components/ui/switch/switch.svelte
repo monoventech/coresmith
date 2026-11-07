@@ -6,16 +6,21 @@
 		ref = $bindable(null),
 		class: className,
 		checked = $bindable(false),
+		busy = false,
 		...restProps
-	}: WithoutChildrenOrChild<SwitchPrimitive.RootProps> = $props();
+	}: WithoutChildrenOrChild<SwitchPrimitive.RootProps> & {
+		busy?: boolean;
+	} = $props();
 </script>
 
 <SwitchPrimitive.Root
 	bind:ref
 	bind:checked
 	data-slot="switch"
+	aria-busy={busy || undefined}
 	class={cn(
-		"data-[state=checked]:bg-primary data-[state=unchecked]:bg-input focus-visible:border-ring focus-visible:ring-ring/50 dark:data-[state=unchecked]:bg-input/80 shadow-xs peer inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent outline-none transition-all focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+		"focus-ring relative inline-block h-6 w-10 shrink-0 cursor-pointer rounded-md border border-border p-0 transition-colors duration-(--dur-fast) ease-(--ease-out-soft) data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted data-disabled:cursor-not-allowed data-disabled:opacity-50",
+		busy && "data-[state=checked]:bg-track-busy data-[state=unchecked]:bg-track-busy",
 		className
 	)}
 	{...restProps}
@@ -23,7 +28,8 @@
 	<SwitchPrimitive.Thumb
 		data-slot="switch-thumb"
 		class={cn(
-			"bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground pointer-events-none block size-4 rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0"
+			"pointer-events-none absolute top-0.5 block size-4.5 rounded-[6px] transition-[left] duration-(--dur-fast) ease-(--ease-out-soft) data-[state=checked]:left-4.5 data-[state=checked]:bg-primary-foreground data-[state=unchecked]:left-0.5 data-[state=unchecked]:bg-muted-foreground",
+			busy && "data-[state=checked]:left-2.5 data-[state=unchecked]:left-2.5"
 		)}
 	/>
 </SwitchPrimitive.Root>

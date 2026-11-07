@@ -1,3 +1,4 @@
+import type { BillingSummary } from '@/lib/billing'
 import type { Auth } from '@/types/auth'
 import type { route as routeFn } from 'ziggy-js'
 
@@ -23,8 +24,14 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string
             auth: Auth
-            sidebarOpen: boolean
+            edition: 'self-hosted' | 'cloud'
+            billing: BillingSummary | null
             [key: string]: unknown
+        }
+        flashDataType: {
+            success?: string
+            error?: string
+            plainTextToken?: string
         }
     }
 }

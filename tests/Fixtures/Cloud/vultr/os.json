@@ -1,0 +1,9 @@
+{
+    "os": [
+        { "id": 2284, "name": "Ubuntu 24.04 LTS x64", "arch": "x64", "family": "ubuntu" },
+        { "id": 1743, "name": "Ubuntu 22.04 LTS x64", "arch": "x64", "family": "ubuntu" },
+        { "id": 2136, "name": "Debian 12 x64 (bookworm)", "arch": "x64", "family": "debian" },
+        { "id": 2514, "name": "Windows 2025 Standard x64", "arch": "x64", "family": "windows" }
+    ],
+    "meta": { "total": 4, "links": { "next": "", "prev": "" } }
+}

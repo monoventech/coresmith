@@ -19,8 +19,9 @@ class PasswordConfirmationTest extends TestCase
 
         $response->assertOk();
 
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('auth/ConfirmPassword'),
+        $response->assertInertia(
+            fn(Assert $page) => $page
+                ->component('auth/ConfirmPassword'),
         );
     }
 

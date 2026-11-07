@@ -4,23 +4,25 @@
 	import { type VariantProps, tv } from "tailwind-variants";
 
 	export const buttonVariants = tv({
-		base: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium outline-none transition-all focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+		base: "focus-ring inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent font-sans text-[14px] leading-none font-medium no-underline select-none transition-[color,background-color,border-color,transform] duration-(--dur-fast) ease-(--ease-out-soft) active:not-disabled:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 cursor-pointer",
 		variants: {
 			variant: {
-				default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
-				destructive:
-					"bg-destructive shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60 text-white",
-				outline:
-					"bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 border",
-				secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
-				ghost: "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-				link: "text-primary underline-offset-4 hover:underline",
+				default: "bg-primary text-primary-foreground hover:not-disabled:bg-primary-hover",
+				secondary: "bg-secondary text-secondary-foreground hover:not-disabled:bg-secondary-hover",
+				outline: "border-border bg-transparent text-foreground hover:not-disabled:bg-muted",
+				ghost: "bg-transparent text-foreground hover:not-disabled:bg-accent",
+				destructive: "bg-destructive text-destructive-foreground hover:not-disabled:bg-destructive-hover",
+				link: "h-auto! bg-transparent p-0! text-primary-strong underline-offset-4 hover:underline",
 			},
 			size: {
-				default: "h-9 px-4 py-2 has-[>svg]:px-3",
-				sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-				lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-				icon: "size-9",
+				default: "h-10 px-4 max-sm:h-11",
+				xs: "h-8 px-2.5 text-[12px]",
+				sm: "h-9 px-3 max-sm:h-11",
+				lg: "h-11 px-6",
+				icon: "size-10 max-sm:size-11",
+				"icon-xs": "size-8 max-sm:size-11",
+				"icon-sm": "size-9 max-sm:size-11",
+				"icon-lg": "size-11",
 			},
 		},
 		defaultVariants: {
@@ -40,6 +42,8 @@
 </script>
 
 <script lang="ts">
+	import { Link } from "@inertiajs/svelte";
+
 	let {
 		class: className,
 		variant = "default",
@@ -51,9 +55,24 @@
 		children,
 		...restProps
 	}: ButtonProps = $props();
+
+	const internal = $derived(
+		typeof href === "string" && !restProps.target && !restProps.download && (href.startsWith("/") || (typeof window !== "undefined" && href.startsWith(window.location.origin)))
+	);
+
+	const linkProps = $derived(restProps as Record<string, unknown>);
 </script>
 
-{#if href}
+{#if href && internal && !disabled}
+	<Link
+		data-slot="button"
+		class={cn(buttonVariants({ variant, size }), className)}
+		{href}
+		{...linkProps}
+	>
+		{@render children?.()}
+	</Link>
+{:else if href}
 	<a
 		bind:this={ref}
 		data-slot="button"

@@ -13,9 +13,13 @@ return new class extends Migration
         $connections = ['sqlite', 'sqlite_queue', 'sqlite_cache'];
 
         foreach ($connections as $connection) {
+            if ($connection === 'sqlite' && config('database.default') !== 'sqlite') {
+                continue;
+            }
+
             $database = config("database.connections.{$connection}.database");
 
-            if ($database && $database !== ':memory:' && ! file_exists($database)) {
+            if ($database && $database !== ':memory:' && !file_exists($database)) {
                 touch($database);
             }
 

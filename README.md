@@ -1,68 +1,96 @@
-# 🚀 Laravel + Svelte Starter Kit
+# Coresmith
 
-Welcome to the **Laravel + Svelte Starter Kit**! This project is your launchpad for building modern, lightning-fast web apps with the power of [Laravel](https://laravel.com), the magic of [Svelte](https://svelte.dev), and the flexibility of [Inertia](https://inertiajs.com). Whether you're a backend wizard or a frontend artist, this starter kit is designed to make your development experience smooth and productive! The starter kit is also designed to be on par with the official [Laravel Starter Kits](https://laravel.com/docs/starter-kits), providing a solid foundation for your next project.
+Coresmith is a source-available panel for running your own servers. It provisions Linux servers over SSH, deploys web apps (PHP, JavaScript and TypeScript, Ruby) from Git, and manages their databases, certificates, firewalls, processes and cron jobs, all without Docker. Run it yourself for free, or use Coresmith Cloud.
 
----
+> **Licence:** Elastic License v2 (ELv2). See [LICENSE](LICENSE). Self-hosting is free with every feature; offering Coresmith to others as a hosted service is not allowed.
 
-## ✨ What’s Inside?
+## Requirements
 
-- **[Laravel 13](https://laravel.com)**: The backend framework you know and love.
-- **[Svelte 5](https://svelte.dev)**: The next-gen frontend framework for reactive, fast UIs.
-- **TypeScript**: Type-safe code for fewer bugs and more confidence.
-- **Tailwind CSS**: Utility-first styling for rapid prototyping and beautiful designs.
-- **[Inertia 3](https://inertiajs.com)**: Effortless single-page app experience with classic server-side routing.
-- **[shadcn-svelte](https://shadcn-svelte.com)**: A delightful component library for Svelte, ready to use and customize.
+- A Linux server with systemd and root access (`sudo`). Ubuntu 22.04 and 24.04 are tested; the installer also accepts Debian 11 and 12, Rocky Linux and AlmaLinux 8 and 9, Fedora and Amazon Linux.
+- At least 5GB of free disk (10GB or more recommended) and 2GB of RAM or more (it runs with less, slowly).
+- Ports 80 and 443 open to your users. The installer opens them. If a firewall is already on, it leaves that firewall's SSH rules as they are; if it turns ufw on itself, it keeps your SSH port open.
+- For HTTPS on a name, a domain whose DNS points at the server. Without one the panel answers on the server's IP address.
+- Run the panel on a server of its own. Coresmith can't provision the server the panel runs on, so add other servers for your apps.
 
----
+## Install
 
-## ⚡ Quick Start
+Download the installer and its signature from the latest release, check the signature, then run it as root:
 
-First, ensure you have [PHP, Composer and the Laravel Installer](https://php.new) installed.
+    curl -fsSLO https://github.com/monoventech/coresmith/releases/latest/download/install.sh
+    curl -fsSLO https://github.com/monoventech/coresmith/releases/latest/download/install.sh.asc
+    gpg --verify install.sh.asc install.sh
+    sudo bash install.sh --domain panel.example.com --email you@example.com
 
-Ready to blast off? Spin up a new project in seconds:
+Import the release key before `gpg --verify`. It is in this repository's `resources/release-keys/` folder and at `https://get.coresmith.io/release-key.asc`, and its fingerprint is:
 
-```bash
-laravel new larasvelte --using=oseughu/svelte-starter-kit
-```
+    10AD 393D 01B6 2CA5 524F  AEAB AF8B BF43 12DD D022
 
-Want to try the **WorkOS integration branch**? Use:
+`curl -fsSL https://get.coresmith.io/install | sudo bash` runs the same installer in one line.
 
-```bash
-laravel new larasvelte --using=oseughu/svelte-starter-kit:dev-workos
-```
+The installer adds Caddy, PHP, Redis, Git, SQLite, Node.js, Bun and fail2ban, creates a `coresmith` user, installs the release, configures the firewall and starts the services.
 
-Want to use **Laravel Wayfinder** instead of **Ziggy** for defining routes and actions on your frontend? Use:
+| Option | What it does |
+| --- | --- |
+| `--domain <domain>` | Domain for the panel. Default: the server's IP address. |
+| `--email <email>` | Email for Let's Encrypt certificates. |
+| `--db <sqlite\|pgsql\|mysql>` | Database driver. Default: `sqlite`. |
+| `--db-host`, `--db-port`, `--db-name`, `--db-user`, `--db-password` | Connection details for PostgreSQL or MySQL. |
+| `--version <x.y.z>` | Install this release. Default: the release the installer belongs to. |
+| `--branch <branch>` | Install a branch instead of a release, for development and CI. |
+| `--unattended` | Never prompt; use the defaults. |
+| `--verbose` | Show every command's output. |
+| `--help` | Print the options and change nothing. |
 
-```bash
-laravel new larasvelte --using=oseughu/svelte-starter-kit:dev-wayfinder
-```
+### Finish setup
 
-Just replace `larasvelte` with your dream project name!
+The installer ends with a one-time link, `https://<your panel>/install?token=<token>`. Open it to create the owner account. It works once; after the owner exists it is cleared from the server. If you lose it, issue a new token on the server and put it after `/install?token=`:
 
----
+    cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:setup-token --force
 
-## 🛠️ Features
+The panel then walks you through connecting GitHub and adding your first server.
 
-- **SSR**: Opt into fully featured Server Side Rendering.
-- **Authentication**: Out-of-the-box Laravel auth, with optional WorkOS integration for enterprise SSO.
-- **Component Library**: Build beautiful UIs fast with shadcn-svelte.
-- **Hot Reloading**: Instant feedback with Vite.
-- **TypeScript Support**: Write robust, maintainable code.
+## Running it
 
----
+    systemctl status caddy coresmith-horizon coresmith-reverb
+    tail -f /var/log/coresmith-horizon.log
+    cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:health
 
-## 🤝 Contributing
+| Path | What lives there |
+| --- | --- |
+| `/opt/coresmith/app` | The release that is serving (a link into `/opt/coresmith/releases`) |
+| `/opt/coresmith/shared` | The `.env` and `storage/`, kept across releases |
+| `/var/lib/coresmith` | The SQLite database, when you chose SQLite, and update state |
+| `/var/log/coresmith-*.log` | The panel's service logs |
 
-I love contributions! If you have ideas, improvements, or bug fixes, please open an issue or send me a PR. Let's build something awesome together!
+**Backups.** Every night at 04:00 the panel backs up its own database and `.env` to `/opt/coresmith/shared/storage/app/private/backups`, keeping the latest 14. Settings, General, Backups has **Back up now**. Your apps' databases are separate: **Back up now** on a database's page dumps it on its server, and a team can send every MySQL and PostgreSQL database to its own S3 bucket each night from Settings, Team (on Coresmith Cloud, that is part of Business).
 
----
+## Email
 
-## 📄 License
+The panel emails invitations, password resets and alerts. Set `MAIL_MAILER` and the other `MAIL_*` settings in `/opt/coresmith/shared/.env`, for example `MAIL_MAILER=smtp` with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` and `MAIL_FROM_ADDRESS`, then load them:
 
-This starter kit is open-sourced software licensed under the MIT license.  
-Feel free to use, remix, and share!
+    cd /opt/coresmith/app && sudo -u coresmith php artisan config:cache && sudo -u coresmith php artisan horizon:terminate
 
----
+Until then nothing reaches anyone: inviting someone without an account gives you a link to copy and send them yourself.
 
-Happy coding! 🎉  
-Questions, feedback, or memes? Open an issue or join the discussion!
+## Updating
+
+Settings, General, **Panel updates** shows the version you run and any newer release with its notes. **Update now** builds the new release beside the running one, checks its signature, backs up, migrates, switches over and checks the panel is healthy; if any step fails it puts the previous release back on its own. Turn on **Install patch updates automatically** to have patch releases installed at 04:00.
+
+From the shell:
+
+    cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:update
+
+## Removing Coresmith
+
+    cd /opt/coresmith/app && sudo php artisan coresmith:uninstall
+
+It asks you to type `uninstall` to confirm, saves the `.env`, the backups and, on SQLite, a copy of the database under `/root`, then removes the panel's services, files, Caddy site and user. If apps are deployed on the same machine, they keep running and the `coresmith` user stays for them.
+
+## Development
+
+    composer install
+    bun install
+    php artisan migrate:all --fresh
+    composer dev
+
+`composer dev` starts maildev, the Laravel server, the queue listener and Vite. See [CONTRIBUTING.md](CONTRIBUTING.md) for the checks every change passes before it is committed.

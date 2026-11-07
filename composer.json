@@ -1,35 +1,45 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "oseughu/larasvelte",
+    "name": "monoventech/coresmith",
     "type": "project",
-    "description": "An opinionated laravel starter kit built with bun, sqlite, svelte 5, inertia 2 and shadcn-svelte",
+    "description": "Coresmith — self-hostable server management and deployment platform",
     "keywords": [
+        "coresmith",
+        "deployment",
+        "server-management",
         "laravel",
-        "framework"
+        "svelte"
     ],
-    "license": "MIT",
+    "license": "Elastic-2.0",
     "require": {
         "php": "^8.3",
-        "inertiajs/inertia-laravel": "^3.0",
-        "laravel/fortify": "^1.34",
-        "laravel/framework": "^13.7",
-        "laravel/nightwatch": "^1.13.1",
-        "laravel/sanctum": "^4.2.0",
-        "laravel/telescope": "^5.11.2",
-        "laravel/tinker": "^3.0",
+        "aws/aws-sdk-php": "^3.402",
+        "inertiajs/inertia-laravel": "^3.5.1",
+        "laravel/cashier": "^16.8",
+        "laravel/fortify": "^1.40",
+        "laravel/framework": "^13.34",
+        "laravel/horizon": "^5.50",
+        "laravel/reverb": "^1.12",
+        "laravel/sanctum": "^4.3.3",
+        "laravel/tinker": "^3.0.2",
+        "phpseclib/phpseclib": "^3.0.57",
+        "pragmarx/google2fa-laravel": "^3.0.1",
         "resend/resend-php": "^0.15.2",
-        "tightenco/ziggy": "^2.5.3"
+        "sentry/sentry-laravel": "^4.28",
+        "spatie/laravel-activitylog": "^5.1.1",
+        "tightenco/ziggy": "^2.6.4",
+        "valorin/pwned-validator": "^1.3.9"
     },
     "require-dev": {
-        "fakerphp/faker": "^1.24",
-        "laravel/pail": "^1.2.5",
-        "laravel/pao": "^1.0.6",
-        "laravel/pint": "^1.27",
-        "laravel/sail": "^1.53",
-        "mockery/mockery": "^1.6",
-        "nunomaduro/collision": "^8.9.3",
-        "pestphp/pest": "^4.0",
-        "phpunit/phpunit": "^12.5.23"
+        "fakerphp/faker": "^1.24.1",
+        "laravel/pail": "^1.2.7",
+        "laravel/pao": "^1.1.5",
+        "laravel/pint": "^1.32.1",
+        "laravel/sail": "^1.68",
+        "mockery/mockery": "^1.6.15",
+        "nunomaduro/collision": "^8.9.5",
+        "pestphp/pest": "^4.7.8",
+        "phpunit/phpunit": "^12.5.33"
     },
     "autoload": {
         "psr-4": {
@@ -51,13 +61,12 @@
         "post-install-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
             "@php artisan app:setup --ansi",
-            "bun i && bun run build:ssr",
+            "bun i && bun run build",
             "@php artisan migrate:all --ansi"
         ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
-            "ncu -u",
-            "bun i && bun run build:ssr",
+            "bun i && bun run build",
             "@php artisan migrate:all --ansi"
         ],
         "post-root-package-install": [
@@ -65,7 +74,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -k -c \"#22c55e,#3b82f6,#a855f7,#f43f5e\" \"maildev\" \"php artisan serve\" \"php artisan queue:listen --queue=default\" \"bun run dev\" --names=mailer,server,queue,vite"
+            "bunx concurrently -k -c \"#22c55e,#3b82f6,#a855f7,#f43f5e\" \"maildev\" \"php artisan serve\" \"php artisan queue:listen --queue=default\" \"bun run dev\" --names=mailer,server,queue,vite"
         ],
         "test": [
             "@php artisan config:clear --ansi",
@@ -82,22 +91,17 @@
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
             "@php artisan migrate --force",
-            "npm install",
-            "npm run build"
-        ],
-        "dev:ssr": [
-            "npm run build:ssr",
-            "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"php artisan inertia:start-ssr\" --names=server,queue,logs,ssr --kill-others"
+            "bun install",
+            "bun run build"
         ],
         "lint:check": [
             "pint --parallel --test"
         ],
         "ci:check": [
             "Composer\\Config::disableProcessTimeout",
-            "npm run lint:check",
-            "npm run format:check",
-            "npm run types:check",
+            "bun run lint:check",
+            "bun run format:check",
+            "bun run types:check",
             "@test"
         ],
         "post-create-project-cmd": [

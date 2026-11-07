@@ -1,0 +1,43 @@
+{
+    "plans": [
+        {
+            "id": "vc2-1c-1gb",
+            "vcpu_count": 1,
+            "ram": 1024,
+            "disk": 25,
+            "disk_count": 1,
+            "bandwidth": 1024,
+            "monthly_cost": 5,
+            "hourly_cost": 0.007,
+            "type": "vc2",
+            "locations": ["ams", "ewr", "fra"]
+        },
+        {
+            "id": "vc2-1c-2gb",
+            "vcpu_count": 1,
+            "ram": 2048,
+            "disk": 55,
+            "disk_count": 1,
+            "bandwidth": 2048,
+            "monthly_cost": 10,
+            "hourly_cost": 0.015,
+            "type": "vc2",
+            "locations": ["ams", "ewr", "fra"]
+        },
+        {
+            "id": "vcg-a100-1c-6g-4vram",
+            "vcpu_count": 1,
+            "ram": 6144,
+            "disk": 70,
+            "disk_count": 1,
+            "bandwidth": 1024,
+            "monthly_cost": 43,
+            "hourly_cost": 0.059,
+            "type": "vcg",
+            "locations": ["ewr"],
+            "gpu_vram_gb": 4,
+            "gpu_type": "NVIDIA_A100"
+        }
+    ],
+    "meta": { "total": 5, "links": { "next": "bmV4dF9fdmMyLTJjLTRnYg==", "prev": "" } }
+}

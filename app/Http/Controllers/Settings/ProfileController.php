@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\Edition;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Jobs\SyncAuthorizedKeys;
+use App\Models\Deployment;
+use App\Services\Teams\AccountClosing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,8 +23,8 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
-        return Inertia::render('settings/Profile', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+        return Inertia::render('account/Profile', [
+            'mustVerifyEmail' => Edition::current()->isCloud(),
             'status' => $request->session()->get('status'),
         ]);
     }
@@ -38,21 +42,34 @@ class ProfileController extends Controller
 
         $request->user()->save();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
-
-        return to_route('profile.edit');
+        return to_route('profile.edit')->with('success', 'Saved.');
     }
 
     /**
      * Delete the user's profile.
      */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, AccountClosing $closing): RedirectResponse
     {
         $user = $request->user();
+        $refusal = $closing->refusal($user);
+
+        if ($refusal !== null) {
+            return back()->withErrors(['password' => $refusal]);
+        }
+
+        $servers = SyncAuthorizedKeys::activeServersOf($user->teams()->pluck('teams.id'));
 
         Auth::logout();
 
-        $user->delete();
+        DB::transaction(function () use ($user, $closing): void {
+            $closing->handOver($user);
+            Deployment::query()->where('triggered_by', $user->getKey())->update(['triggered_by' => null]);
+            $user->tokens()->delete();
+            $user->sshKeys()->delete();
+            $user->delete();
+        });
+
+        SyncAuthorizedKeys::dispatchForServers($servers);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

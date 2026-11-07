@@ -1,0 +1,29 @@
+{
+    "plans": [
+        {
+            "id": "vc2-2c-4gb",
+            "vcpu_count": 2,
+            "ram": 4096,
+            "disk": 80,
+            "disk_count": 1,
+            "bandwidth": 3072,
+            "monthly_cost": 20,
+            "hourly_cost": 0.03,
+            "type": "vc2",
+            "locations": ["ams", "ewr", "fra"]
+        },
+        {
+            "id": "vhf-1c-2gb",
+            "vcpu_count": 1,
+            "ram": 2048,
+            "disk": 64,
+            "disk_count": 1,
+            "bandwidth": 3072,
+            "monthly_cost": 12,
+            "hourly_cost": 0.018,
+            "type": "vhf",
+            "locations": ["ewr", "fra"]
+        }
+    ],
+    "meta": { "total": 5, "links": { "next": "", "prev": "cHJldl9fdmMyLTFjLTFnYg==" } }
+}

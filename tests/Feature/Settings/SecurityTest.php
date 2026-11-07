@@ -27,10 +27,11 @@ class SecurityTest extends TestCase
         $this->actingAs($user)
             ->withSession(['auth.password_confirmed_at' => time()])
             ->get(route('security.edit'))
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('settings/Security')
-                ->where('canManageTwoFactor', true)
-                ->where('twoFactorEnabled', false),
+            ->assertInertia(
+                fn(Assert $page) => $page
+                    ->component('account/Security')
+                    ->where('canManageTwoFactor', true)
+                    ->where('twoFactorEnabled', false),
             );
     }
 
@@ -65,8 +66,9 @@ class SecurityTest extends TestCase
         $this->actingAs($user)
             ->get(route('security.edit'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('settings/Security'),
+            ->assertInertia(
+                fn(Assert $page) => $page
+                    ->component('account/Security'),
             );
     }
 
@@ -81,11 +83,12 @@ class SecurityTest extends TestCase
         $this->actingAs($user)
             ->get(route('security.edit'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('settings/Security')
-                ->where('canManageTwoFactor', false)
-                ->missing('twoFactorEnabled')
-                ->missing('requiresConfirmation'),
+            ->assertInertia(
+                fn(Assert $page) => $page
+                    ->component('account/Security')
+                    ->where('canManageTwoFactor', false)
+                    ->missing('twoFactorEnabled')
+                    ->missing('requiresConfirmation'),
             );
     }
 

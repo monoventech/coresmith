@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -76,6 +77,26 @@ class PasswordResetTest extends TestCase
                 ->assertRedirect(route('login'));
 
             return true;
+        });
+    }
+
+    public function test_a_reset_link_never_resets_an_account_whose_address_differs_only_by_an_accent(): void
+    {
+        Notification::fake();
+        $jose = User::factory()->create(['email' => 'jose@acme.com']);
+        $other = User::factory()->create(['email' => 'jose@acmé.com']);
+
+        $this->post(route('password.email'), ['email' => 'jose@acmé.com']);
+
+        Notification::assertSentTo($other, ResetPassword::class, function (ResetPassword $notification) use ($jose): bool {
+            $this->post(route('password.update'), [
+                'token' => $notification->token,
+                'email' => 'jose@acme.com',
+                'password' => 'a-new-password',
+                'password_confirmation' => 'a-new-password',
+            ])->assertSessionHasErrors('email');
+
+            return Hash::check('password', (string) $jose->fresh()->password);
         });
     }
 

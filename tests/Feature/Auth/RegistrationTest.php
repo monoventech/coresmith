@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -35,5 +36,20 @@ class RegistrationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_an_address_another_account_holds_in_another_case_is_refused()
+    {
+        User::factory()->create(['email' => 'ada@example.com']);
+
+        $this->post(route('register.store'), [
+            'name' => 'Ada Again',
+            'email' => 'ADA@Example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+        $this->assertSame(1, User::query()->count());
     }
 }

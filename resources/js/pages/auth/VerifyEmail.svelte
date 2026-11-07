@@ -1,39 +1,31 @@
 <script module lang="ts">
     export const layout = {
-        title: 'Verify email',
-        description: 'Please verify your email address by clicking on the link we just emailed to you.'
+        title: 'Check your inbox',
+        mark: 'inbox',
+        description: 'We emailed you a verification link. Open it to finish setting up your account.'
     }
 </script>
 
 <script lang="ts">
+    import { Form } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import TextLink from '@/components/TextLink.svelte'
     import { Button } from '@/components/ui/button'
-    import { Spinner } from '@/components/ui/spinner'
-    import { Form } from '@inertiajs/svelte'
 
-    let {
-        status = ''
-    }: {
-        status?: string
-    } = $props()
+    let { status = '' }: { status?: string } = $props()
 </script>
 
 <AppHead title="Email verification" />
 
 {#if status === 'verification-link-sent'}
-    <div class="mb-4 text-center text-sm font-medium text-green-600">
-        A new verification link has been sent to the email address you provided during registration.
-    </div>
+    <p class="tint-success mb-4 rounded-md border px-3.5 py-2.5 text-[13px]">A new verification link is on its way.</p>
 {/if}
 
-<Form method="post" action={route('verification.send')} class="space-y-6 text-center">
+<Form method="post" action={route('verification.send')}>
     {#snippet children({ processing })}
-        <Button type="submit" disabled={processing} variant="secondary">
-            {#if processing}<Spinner />{/if}
-            Resend verification email
-        </Button>
-
-        <TextLink href={route('logout')} as="button" class="mx-auto block text-sm">Log out</TextLink>
+        <div class="flex flex-wrap items-center gap-4">
+            <Button type="submit" disabled={processing} variant="outline">Send the link again</Button>
+            <TextLink href={route('logout')} method="post" as="button" class="text-[13px]">Sign out</TextLink>
+        </div>
     {/snippet}
 </Form>

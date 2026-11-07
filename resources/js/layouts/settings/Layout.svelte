@@ -1,61 +1,49 @@
 <script lang="ts">
-    import Heading from '@/components/Heading.svelte'
-    import { Button } from '@/components/ui/button'
-    import { Separator } from '@/components/ui/separator'
-    import { currentUrlState } from '@/lib/currentUrl.svelte'
-    import type { NavItem } from '@/types'
-    import { Link } from '@inertiajs/svelte'
+    import PageTabs from '@/components/PageTabs.svelte'
+    import type { PanelProps } from '@/lib/panel'
+    import { appPath } from '@/lib/panel'
+    import { page } from '@inertiajs/svelte'
     import type { Snippet } from 'svelte'
 
-    let {
-        children
-    }: {
-        children?: Snippet
-    } = $props()
+    let { children }: { children?: Snippet } = $props()
 
-    const sidebarNavItems: NavItem[] = [
+    const path = $derived(appPath(page.url, (page.props.panel as PanelProps | null)?.base))
+
+    const tabs = $derived([
+        { label: 'General', href: route('settings.general'), current: path === '/settings' },
         {
-            title: 'Profile',
-            href: route('profile.edit')
+            label: 'Team',
+            href: route('teams.index'),
+            current: path.startsWith('/settings/team') || path.startsWith('/teams')
         },
+        { label: 'Git', href: route('source-providers.index'), current: path.startsWith('/settings/git') },
         {
-            title: 'Security',
-            href: route('security.edit')
+            label: 'Notifications',
+            href: route('settings.notifications'),
+            current: path.startsWith('/settings/notifications')
         },
-        {
-            title: 'Appearance',
-            href: route('appearance.edit')
+        { label: 'API tokens', href: route('api-tokens.index'), current: path.startsWith('/settings/api-tokens') },
+        ...(page.props.edition === 'cloud'
+            ? [{ label: 'Billing', href: route('settings.billing'), current: path.startsWith('/settings/billing') }]
+            : [])
+    ])
+
+    const description = $derived.by(() => {
+        if (path.startsWith('/settings/git')) {
+            return 'GitHub App with fine-grained, per-repository permissions, not OAuth.'
         }
-    ]
 
-    const url = currentUrlState()
+        if (path.startsWith('/settings/billing')) {
+            return 'Coresmith Cloud plans are billed monthly, per team. Self-hosting is free under ELv2, every feature included.'
+        }
+
+        return 'Panel, team and notification preferences for this Coresmith installation.'
+    })
 </script>
 
-<div class="px-4 py-6">
-    <Heading title="Settings" description="Manage your profile and account settings" />
-
-    <div class="flex flex-col lg:flex-row lg:space-x-12">
-        <aside class="w-full max-w-xl lg:w-48">
-            <nav class="flex flex-col space-y-1 space-x-0" aria-label="Settings">
-                {#each sidebarNavItems as item (item.href)}
-                    <Link href={item.href}>
-                        <Button
-                            variant="ghost"
-                            class="w-full justify-start {url.isCurrentUrl(item.href, url.currentUrl) ? 'bg-muted' : ''}"
-                        >
-                            {item.title}
-                        </Button>
-                    </Link>
-                {/each}
-            </nav>
-        </aside>
-
-        <Separator class="my-6 lg:hidden" />
-
-        <div class="flex-1 md:max-w-2xl">
-            <section class="max-w-xl space-y-12">
-                {@render children?.()}
-            </section>
-        </div>
-    </div>
+<h1 class="type-h1 m-0">Settings</h1>
+<p class="type-body-sm mt-1.5 text-muted-foreground">{description}</p>
+<div class="mt-5.5 mb-9">
+    <PageTabs {tabs} label="Settings" />
 </div>
+{@render children?.()}

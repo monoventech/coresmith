@@ -1,5 +1,9 @@
 <?php
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Sleep;
+use Tests\TestCase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -11,8 +15,9 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
-    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
+    ->beforeEach(fn() => Sleep::fake())
     ->in('Feature');
 
 /*
@@ -28,6 +33,26 @@ pest()->extend(Tests\TestCase::class)
 
 expect()->extend('toBeOne', function () {
     return $this->toBe(1);
+});
+
+expect()->extend('toBeInAnyKeyOrder', function (array $expected) {
+    $sorted = function (mixed $value) use (&$sorted): mixed {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        $value = array_map($sorted, $value);
+
+        if (!array_is_list($value)) {
+            ksort($value, SORT_STRING);
+        }
+
+        return $value;
+    };
+
+    expect($sorted($this->value))->toBe($sorted($expected));
+
+    return $this;
 });
 
 /*

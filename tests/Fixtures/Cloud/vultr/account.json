@@ -1,0 +1,23 @@
+{
+    "account": {
+        "name": "Monoven Ltd",
+        "email": "ops@monoven.io",
+        "acls": [
+            "manage_users",
+            "subscriptions_view",
+            "subscriptions",
+            "billing",
+            "support",
+            "provisioning",
+            "dns",
+            "abuse",
+            "upgrade",
+            "firewall",
+            "alerts"
+        ],
+        "balance": -50.12,
+        "pending_charges": 12.4,
+        "last_payment_date": "2026-10-01T08:00:00+00:00",
+        "last_payment_amount": -50
+    }
+}

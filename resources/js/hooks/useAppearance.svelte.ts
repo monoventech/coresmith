@@ -20,7 +20,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
 export function updateTheme(value: Appearance) {
     // Only run in browser environment
-    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+        return
+    }
 
     if (value === 'system') {
         const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -32,7 +34,9 @@ export function updateTheme(value: Appearance) {
 
 const handleSystemThemeChange = () => {
     // Only run in browser environment
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined') {
+        return
+    }
 
     const currentAppearance = localStorage.getItem('appearance') as Appearance | null
     updateTheme(currentAppearance || 'system')
@@ -40,7 +44,9 @@ const handleSystemThemeChange = () => {
 
 export function initializeTheme() {
     // Only run in browser environment
-    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+        return
+    }
 
     const savedAppearance = localStorage.getItem('appearance') as Appearance | null
     updateTheme(savedAppearance || 'system')
@@ -64,6 +70,7 @@ export function useAppearance() {
         // Make sure appearance state matches localStorage
         if (typeof localStorage !== 'undefined') {
             const currentAppearance = localStorage.getItem('appearance') as Appearance | null
+
             if (currentAppearance) {
                 appearance = currentAppearance
             }
@@ -77,9 +84,11 @@ export function useAppearance() {
 
     function updateAppearance(value: Appearance) {
         appearance = value
+
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('appearance', value)
         }
+
         updateTheme(value)
     }
 

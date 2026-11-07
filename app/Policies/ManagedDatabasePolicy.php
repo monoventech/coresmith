@@ -1,0 +1,56 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+namespace App\Policies;
+
+use App\Enums\Ability;
+use App\Models\ManagedDatabase;
+use App\Models\User;
+
+final class ManagedDatabasePolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return $user->teams()->exists();
+    }
+
+    public function view(User $user, ManagedDatabase $managedDatabase): bool
+    {
+        return $user->hasTeamAbility($managedDatabase->team, Ability::ViewDatabase);
+    }
+
+    public function create(User $user): bool
+    {
+        return $user->hasAbilityInAnyTeam(Ability::CreateDatabase);
+    }
+
+    public function update(User $user, ManagedDatabase $managedDatabase): bool
+    {
+        return $user->hasTeamAbility($managedDatabase->team, Ability::ViewDatabase);
+    }
+
+    public function delete(User $user, ManagedDatabase $managedDatabase): bool
+    {
+        return $user->hasTeamAbility($managedDatabase->team, Ability::DeleteDatabase);
+    }
+
+    public function backup(User $user, ManagedDatabase $managedDatabase): bool
+    {
+        return $user->hasTeamAbility($managedDatabase->team, Ability::BackupDatabase);
+    }
+
+    public function restore(User $user, ManagedDatabase $managedDatabase): bool
+    {
+        return $user->hasTeamAbility($managedDatabase->team, Ability::RestoreDatabase);
+    }
+
+    public function viewCredentials(User $user, ManagedDatabase $managedDatabase): bool
+    {
+        return $user->hasTeamAbility($managedDatabase->team, Ability::ViewDatabaseCredentials);
+    }
+}

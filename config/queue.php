@@ -38,8 +38,8 @@ return [
             'driver' => 'database',
             'table' => 'jobs',
             'queue' => 'default',
-            'retry_after' => 90,
-            'connection' => 'sqlite_queue',
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 3000),
+            'connection' => env('DB_QUEUE_CONNECTION', 'sqlite_queue'),
         ],
 
         'beanstalkd' => [
@@ -66,7 +66,7 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 3000),
             'block_for' => null,
             'after_commit' => false,
         ],
@@ -84,7 +84,7 @@ return [
     */
 
     'batching' => [
-        'database' => 'sqlite_queue',
+        'database' => env('DB_QUEUE_CONNECTION', 'sqlite_queue'),
         'table' => 'job_batches',
     ],
 
@@ -103,7 +103,7 @@ return [
 
     'failed' => [
         'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
-        'database' => 'sqlite_queue',
+        'database' => env('DB_QUEUE_CONNECTION', 'sqlite_queue'),
         'table' => 'failed_jobs',
     ],
 ];

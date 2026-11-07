@@ -1,16 +1,16 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte';
+    import type { Snippet } from 'svelte'
 
     let {
         title = '',
-        children,
+        children
     }: {
-        title?: string;
-        children?: Snippet;
-    } = $props();
+        title?: string
+        children?: Snippet
+    } = $props()
 
-    const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
-    const fullTitle = $derived(title ? `${title} - ${appName}` : appName);
+    const appName = import.meta.env.VITE_APP_NAME || 'Laravel'
+    const fullTitle = $derived(title ? `${title} - ${appName}` : appName)
 </script>
 
 <svelte:head>

@@ -1,0 +1,11 @@
+{
+    "ssh_keys": [
+        {
+            "id": "3b8066a7-b438-455a-9688-44afc9a3597f",
+            "date_created": "2026-10-10T09:00:00+00:00",
+            "name": "laptop",
+            "ssh_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBoM6eEh29z9GyfaiV/OH8xLRwdtOyw0trj85BenDW4 someone@laptop"
+        }
+    ],
+    "meta": { "total": 1, "links": { "next": "", "prev": "" } }
+}

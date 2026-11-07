@@ -1,0 +1,488 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\DatabaseType;
+use App\Enums\TeamRole;
+use App\Jobs\BackupDatabase;
+use App\Jobs\CreateDatabase;
+use App\Models\ManagedDatabase;
+use App\Models\Server;
+use App\Models\SshKey;
+use App\Models\Team;
+use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
+use Illuminate\Support\Facades\Queue;
+
+function joined(Team $team, TeamRole $role): User
+{
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => $role->value]);
+
+    return $user->fresh();
+}
+
+function databasePayload(array $overrides = []): array
+{
+    return array_merge([
+        'type' => DatabaseType::Mysql->value,
+        'name' => 'shop_production',
+        'db_user' => 'shop_user',
+        'privilege_level' => 'standard',
+    ], $overrides);
+}
+
+test('a member cannot create a database', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(joined($team, TeamRole::Member))
+        ->post(route('servers.databases.store', $server), databasePayload())
+        ->assertForbidden();
+
+    Queue::assertNothingPushed();
+    expect(ManagedDatabase::count())->toBe(0);
+});
+
+test('an admin creating a database queues the work with the right default port', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('servers.databases.store', $server), databasePayload(['type' => 'postgresql']))
+        ->assertRedirect();
+
+    expect(ManagedDatabase::first()->port)->toBe(5432);
+    Queue::assertPushed(CreateDatabase::class);
+});
+
+test('a database name carrying sql metacharacters is rejected at the http layer', function (string $name) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('servers.databases.store', $server), databasePayload(['name' => $name]))
+        ->assertSessionHasErrors('name');
+})->with(['shop`; DROP DATABASE mysql; --', "shop'; --", 'shop-production', 'shop production']);
+
+test('a database user carrying sql metacharacters is rejected', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('servers.databases.store', $server), databasePayload(['db_user' => "evil'@'%"]))
+        ->assertSessionHasErrors('db_user');
+});
+
+test('a database name, user or extension ending in a newline is refused, even when the request is not trimmed', function (array $payload, string $field) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->withoutMiddleware(TrimStrings::class)
+        ->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('servers.databases.store', $server), databasePayload($payload))
+        ->assertSessionHasErrors($field);
+
+    Queue::assertNothingPushed();
+})->with([
+    'a name' => [['name' => "shop_production\n"], 'name'],
+    'a user' => [['db_user' => "shop_user\n"], 'db_user'],
+    'an extension' => [['type' => 'postgresql', 'extensions' => ["pgcrypto\n"]], 'extensions.0'],
+]);
+
+test('a member cannot back up or delete a database', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create();
+    $member = joined($team, TeamRole::Member);
+
+    $this->actingAs($member)->post(route('servers.databases.backup', [$server, $database]))->assertForbidden();
+    $this->actingAs($member)->delete(route('servers.databases.destroy', [$server, $database]))->assertForbidden();
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin can back up a database', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('servers.databases.backup', [$server, $database]))
+        ->assertRedirect();
+
+    Queue::assertPushed(BackupDatabase::class);
+});
+
+test('a database from another server returns 404', function () {
+    $team = Team::factory()->create();
+    $serverA = Server::factory()->for($team)->create();
+    $serverB = Server::factory()->for($team)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($serverB)->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->get(route('servers.databases.show', [$serverA, $database]))
+        ->assertNotFound();
+});
+
+test('the database password is never sent to the browser', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['db_password' => 'hunter2-secret']);
+
+    $response = $this->actingAs(joined($team, TeamRole::Admin))
+        ->get(route('servers.databases.show', [$server, $database]));
+
+    expect($response->getContent())->not->toContain('hunter2-secret');
+});
+
+test('a user can add an ssh key and it is fingerprinted', function () {
+    $user = User::factory()->create();
+    $key = 'ssh-ed25519 ' . base64_encode('fake-key-material') . ' me@laptop';
+
+    $this->actingAs($user)->post(route('ssh-keys.store'), ['name' => 'Laptop', 'public_key' => $key])->assertRedirect();
+
+    expect($user->sshKeys()->count())->toBe(1)
+        ->and($user->sshKeys()->first()->fingerprint)->toStartWith('SHA256:');
+});
+
+test('a malformed ssh key is rejected', function (string $key) {
+    $this->actingAs(User::factory()->create())
+        ->post(route('ssh-keys.store'), ['name' => 'Bad', 'public_key' => $key])
+        ->assertSessionHasErrors('public_key');
+})->with(['not a key', 'ssh-ed25519', '-----BEGIN OPENSSH PRIVATE KEY-----']);
+
+test('a user cannot delete another users ssh key', function () {
+    $mine = User::factory()->create();
+    $key = SshKey::factory()->for(User::factory()->create())->create();
+
+    $this->actingAs($mine)->delete(route('ssh-keys.destroy', $key))->assertForbidden();
+
+    expect(SshKey::find($key->id))->not->toBeNull();
+});
+
+test('a member cannot manage team members', function () {
+    $team = Team::factory()->create();
+    $outsiderAccount = User::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Member))
+        ->post(route('teams.members.store', $team), ['email' => $outsiderAccount->email, 'role' => 'member'])
+        ->assertForbidden();
+});
+
+test('an admin can add a member', function () {
+    $team = Team::factory()->create();
+    $newcomer = User::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => 'member'])
+        ->assertRedirect();
+
+    expect($team->members()->whereKey($newcomer->getKey())->exists())->toBeTrue();
+});
+
+test('a member cannot change or remove a team member', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+    $deployer = joined($team, TeamRole::Member);
+
+    $this->actingAs($deployer)->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])->assertForbidden();
+    $this->actingAs($deployer)->delete(route('teams.members.destroy', [$team, $owner]))->assertForbidden();
+
+    expect($team->members()->count())->toBe(2)
+        ->and($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner');
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin cannot grant the owner role', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $newcomer = User::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => 'owner'])
+        ->assertSessionHasErrors(['role' => 'Only an owner can grant the owner role. Ask an owner of this team to do it.'])
+        ->assertSessionDoesntHaveErrors('email');
+
+    expect($team->members()->count())->toBe(1)
+        ->and($team->members()->whereKey($newcomer->getKey())->exists())->toBeFalse();
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin cannot make someone an owner by changing their role', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $deployer = joined($team, TeamRole::Member);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->put(route('teams.members.update', [$team, $deployer]), ['role' => 'owner'])
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can grant the owner role. Ask an owner of this team to do it.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->whereKey($deployer->getKey())->first()->pivot->role)->toBe('member');
+
+    Queue::assertNothingPushed();
+});
+
+test('an owner can grant the owner role', function () {
+    $team = Team::factory()->create();
+    $newcomer = User::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Owner))
+        ->post(route('teams.members.store', $team), ['email' => $newcomer->email, 'role' => 'owner'])
+        ->assertRedirect();
+
+    expect($team->members()->whereKey($newcomer->getKey())->first()->pivot->role)->toBe('owner');
+});
+
+test('the last owner cannot be demoted', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+
+    $this->actingAs($owner)
+        ->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])
+        ->assertRedirect()
+        ->assertSessionHas('error', 'A team must keep at least one owner. Make someone else an owner first.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner');
+
+    Queue::assertNothingPushed();
+});
+
+test('the last owner cannot be removed', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+
+    $this->actingAs($owner)
+        ->delete(route('teams.members.destroy', [$team, $owner]))
+        ->assertRedirect()
+        ->assertSessionHas('error', 'A team must keep at least one owner. Make someone else an owner first.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->count())->toBe(1);
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin cannot change an owners role', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Owner);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->put(route('teams.members.update', [$team, $owner]), ['role' => 'member'])
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->count())->toBe(3)
+        ->and($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner');
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin cannot remove an owner', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Owner);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->delete(route('teams.members.destroy', [$team, $owner]))
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.')
+        ->assertSessionMissing('success');
+
+    expect($team->members()->count())->toBe(3)
+        ->and($team->members()->whereKey($owner->getKey())->exists())->toBeTrue();
+
+    Queue::assertNothingPushed();
+});
+
+test('an admin is told to ask an owner even when the owner is the only one', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $owner = joined($team, TeamRole::Owner);
+    $admin = joined($team, TeamRole::Admin);
+
+    $this->actingAs($admin)
+        ->put(route('teams.members.update', [$team, $owner]), ['role' => 'admin'])
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.');
+
+    $this->actingAs($admin)
+        ->delete(route('teams.members.destroy', [$team, $owner]))
+        ->assertRedirect()
+        ->assertSessionHas('error', 'Only an owner can change or remove an owner. Ask an owner of this team to do it.');
+
+    expect($team->members()->count())->toBe(2)
+        ->and($team->members()->whereKey($owner->getKey())->first()->pivot->role)->toBe('owner');
+
+    Queue::assertNothingPushed();
+});
+
+test('an owner can be demoted once another owner exists', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    $second = joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->put(route('teams.members.update', [$team, $second]), ['role' => 'admin'])
+        ->assertRedirect();
+
+    expect($team->members()->whereKey($second->getKey())->first()->pivot->role)->toBe('admin');
+});
+
+test('an owner can demote themselves once another owner exists', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->put(route('teams.members.update', [$team, $first]), ['role' => 'admin'])
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Role updated.');
+
+    expect($team->members()->whereKey($first->getKey())->first()->pivot->role)->toBe('admin');
+});
+
+test('an owner can remove another owner while one remains', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    $second = joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->delete(route('teams.members.destroy', [$team, $second]))
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Member removed.');
+
+    expect($team->members()->whereKey($second->getKey())->exists())->toBeFalse()
+        ->and($team->members()->whereKey($first->getKey())->exists())->toBeTrue();
+});
+
+test('an owner can remove themselves once another owner exists', function () {
+    $team = Team::factory()->create();
+    $first = joined($team, TeamRole::Owner);
+    $second = joined($team, TeamRole::Owner);
+
+    $this->actingAs($first)
+        ->delete(route('teams.members.destroy', [$team, $first]))
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Member removed.');
+
+    expect($team->members()->whereKey($first->getKey())->exists())->toBeFalse()
+        ->and($team->members()->whereKey($second->getKey())->first()->pivot->role)->toBe('owner');
+});
+
+test('adding someone twice is refused', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $existing = joined($team, TeamRole::Member);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('teams.members.store', $team), ['email' => $existing->email, 'role' => 'admin'])
+        ->assertSessionHasErrors(['email' => 'That person is already on this team.'])
+        ->assertSessionDoesntHaveErrors('role');
+
+    expect($team->members()->count())->toBe(2)
+        ->and($team->members()->whereKey($existing->getKey())->first()->pivot->role)->toBe('member');
+
+    Queue::assertNothingPushed();
+});
+
+test('an invitation refused for two reasons says both', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->active()->create();
+    $existing = joined($team, TeamRole::Member);
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->post(route('teams.members.store', $team), ['email' => $existing->email, 'role' => 'owner'])
+        ->assertSessionHasErrors([
+            'email' => 'That person is already on this team.',
+            'role' => 'Only an owner can grant the owner role. Ask an owner of this team to do it.',
+        ]);
+
+    expect($team->members()->whereKey($existing->getKey())->first()->pivot->role)->toBe('member');
+
+    Queue::assertNothingPushed();
+});
+
+test('the team page lists members with their roles', function () {
+    $team = Team::factory()->create(['name' => 'Monoven']);
+    $owner = joined($team, TeamRole::Owner);
+    joined($team, TeamRole::Member);
+
+    $this->actingAs($owner)
+        ->get(route('teams.show', $team))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('settings/Team')
+            ->where('team.name', 'Monoven')
+            ->has('members', 2)
+            ->where('can.manageMembers', true)
+            ->where('can.grantOwner', true));
+});
+
+test('an admin sees member management but cannot grant owner', function () {
+    $team = Team::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Admin))
+        ->get(route('teams.show', $team))
+        ->assertInertia(fn($page) => $page
+            ->where('can.manageMembers', true)
+            ->where('can.grantOwner', false));
+});
+
+test('a member sees the roster but no management controls', function () {
+    $team = Team::factory()->create();
+
+    $this->actingAs(joined($team, TeamRole::Member))
+        ->get(route('teams.show', $team))
+        ->assertInertia(fn($page) => $page->where('can.manageMembers', false));
+});
+
+test('another teams page cannot be opened', function () {
+    $outsider = joined(Team::factory()->create(), TeamRole::Owner);
+
+    $this->actingAs($outsider)
+        ->get(route('teams.show', Team::factory()->create()))
+        ->assertForbidden();
+});
+
+test('the team index resolves the users own team', function () {
+    $team = Team::factory()->create(['name' => 'Monoven']);
+
+    $this->actingAs(joined($team, TeamRole::Owner))
+        ->get(route('teams.index'))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('team.name', 'Monoven'));
+});
+
+test('a user with no team gets a not found rather than an error', function () {
+    $this->actingAs(User::factory()->create())
+        ->get(route('teams.index'))
+        ->assertNotFound();
+});
