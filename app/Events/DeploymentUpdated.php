@@ -21,6 +21,8 @@ final class DeploymentUpdated implements ShouldBroadcast
 {
     use Dispatchable, SerializesModels;
 
+    private const HEADER_BYTES = 1_000;
+
     public function __construct(public readonly Deployment $deployment) {}
 
     /**
@@ -41,11 +43,29 @@ final class DeploymentUpdated implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
-        return DeploymentController::present($this->deployment, app(DeploymentPhases::class));
+        $payload = DeploymentController::present($this->deployment, app(DeploymentPhases::class));
+
+        if ($this->requestBytes($payload) + self::HEADER_BYTES > (int) config('reverb.servers.reverb.max_request_size', 10_000)) {
+            $payload['log'] = null;
+        }
+
+        return $payload;
     }
 
     public function broadcastWhen(): bool
     {
         return Realtime::available();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function requestBytes(array $payload): int
+    {
+        return strlen((string) json_encode([
+            'name' => $this->broadcastAs(),
+            'data' => (string) json_encode($payload),
+            'channels' => array_map(fn(PrivateChannel $channel): string => $channel->name, $this->broadcastOn()),
+        ]));
     }
 }

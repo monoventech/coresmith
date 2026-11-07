@@ -89,6 +89,8 @@
         health: 'the health check'
     }
 
+    type Pushed = Omit<Deployment, 'log'> & { log: string | null }
+
     let pushed = $state<Deployment | null>(null)
     let downgraded = $state(false)
     let terminal = $state<HTMLDivElement | null>(null)
@@ -134,13 +136,30 @@
         }
     }
 
-    function apply(next: Deployment) {
-        pushed = next
+    function refresh(only: string[]) {
+        router.reload({ only, onSuccess: () => ((pushed = null), void followOutput()) })
+    }
+
+    function apply(next: Pushed) {
+        pushed = { ...next, log: next.log ?? live.log }
         void followOutput()
 
         if (['succeeded', 'failed', 'cancelled'].includes(next.status)) {
             stopPolling()
-            router.reload({ only: ['application'] })
+
+            if (next.log === null) {
+                refresh(['deployment', 'application'])
+            } else {
+                router.reload({ only: ['application'] })
+            }
+
+            return
+        }
+
+        if (next.log === null && !poller) {
+            downgraded = true
+            refresh(['deployment'])
+            startPolling()
         }
     }
 
@@ -149,9 +168,7 @@
             return
         }
 
-        poller = setInterval(() => {
-            router.reload({ only: ['deployment', 'application'], onSuccess: () => void followOutput() })
-        }, POLL_MS)
+        poller = setInterval(() => refresh(['deployment', 'application']), POLL_MS)
     }
 
     function stopPolling() {
@@ -197,9 +214,7 @@
         }
 
         try {
-            echo.private(`deployments.${deployment.id}`).listen('.deployment.updated', (event: Deployment) =>
-                apply(event)
-            )
+            echo.private(`deployments.${deployment.id}`).listen('.deployment.updated', (event: Pushed) => apply(event))
 
             const socket = (
                 echo.connector as { pusher?: { connection?: { bind(event: string, handler: () => void): void } } }

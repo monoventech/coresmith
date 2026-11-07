@@ -60,7 +60,7 @@ async function streamDeploys(page: Page) {
     })
 
     return {
-        async push(change: (deployment: Pushed) => Pushed) {
+        async push(change: (deployment: Pushed) => Record<string, unknown>) {
             await expect
                 .poll(() => channel !== null && shown !== null && channel === `private-deployments.${shown.id}`)
                 .toBe(true)
@@ -152,6 +152,25 @@ test.describe('a deploy', () => {
         await expect(rail.locator('[data-phase="migrate"]')).toHaveAttribute('data-state', 'running')
         await expect(page.getByLabel('Deployment output')).toContainText('migrate: running migrations')
         await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
+    })
+
+    test('a log too long for the socket is fetched instead, and keeps coming every few seconds', async ({ page }) => {
+        const stream = await streamDeploys(page)
+
+        await page.goto('/dashboard')
+        await page.getByTestId('live-deploy').click()
+
+        const output = page.getByLabel('Deployment output')
+
+        await stream.push((deployment) => ({ ...deployment, log: `${deployment.log}\n[12:00:00] build: compiling assets` }))
+        await expect(output).toContainText('build: compiling assets')
+        await expect(page.getByTestId('log-transport')).toHaveText('Streaming live')
+
+        await stream.push((deployment) => ({ ...deployment, log: null }))
+
+        await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
+        await expect(output).toContainText('migrate: running migrations')
+        await expect(output).not.toContainText('build: compiling assets')
     })
 
     test('a failed deploy says which phase failed and that nothing changed', async ({ page }) => {

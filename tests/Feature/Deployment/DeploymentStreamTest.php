@@ -56,6 +56,45 @@ test('the broadcast payload carries the log and status the page needs', function
         ->and($payload)->not->toHaveKey('application');
 });
 
+function deploymentStreamRunning(int $lines): Deployment
+{
+    $deployment = deploymentFor(Team::factory()->create());
+    $deployment->forceFill([
+        'status' => DeploymentStatus::Running,
+        'log' => implode("\n", array_fill(0, $lines, '[00:11:37] deps: npm warn deprecated "inflight@1.0.6": This module is not supported')),
+        'started_at' => now(),
+    ])->save();
+
+    return $deployment->fresh();
+}
+
+function deploymentStreamRequestBytes(Deployment $deployment, array $payload): int
+{
+    return strlen((string) json_encode([
+        'name' => 'deployment.updated',
+        'data' => json_encode($payload),
+        'channels' => ['private-deployments.' . $deployment->getKey()],
+    ]));
+}
+
+test('every update fits the socket server with room for its headers, however long the log grows', function (int $lines) {
+    $deployment = deploymentStreamRunning($lines);
+
+    $payload = (new DeploymentUpdated($deployment))->broadcastWith();
+
+    expect(deploymentStreamRequestBytes($deployment, $payload) + 1_000)->toBeLessThanOrEqual((int) config('reverb.servers.reverb.max_request_size'));
+})->with([1, 40, 70, 85, 100, 400]);
+
+test('a log too long for the socket stays behind and the page fetches it', function () {
+    $deployment = deploymentStreamRunning(400);
+
+    $payload = (new DeploymentUpdated($deployment))->broadcastWith();
+
+    expect($payload['log'])->toBeNull()
+        ->and($payload['status'])->toBe('running')
+        ->and($payload['id'])->toBe($deployment->getKey());
+});
+
 test('a member of the team may listen to the deployment channel', function () {
     $team = Team::factory()->create();
     $deployment = deploymentFor($team);
