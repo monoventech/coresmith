@@ -60,6 +60,7 @@ test('ended trials and paying teams are not reminded', function () {
     $ended = Team::factory()->trialEnded()->owned()->create();
     $paying = Team::factory()->subscribed(Plan::Pro)->owned()->create(['trial_ends_at' => now()->addDays(3)]);
     $reminded = Team::factory()->onTrial(2)->owned()->create(['trial_reminded_at' => now()->subDays(5)]);
+    $free = Team::factory()->onTrial(3)->free(Plan::Business)->owned()->create();
     $checkedOut = Team::factory()->onTrial(4)->owned()->create(['stripe_id' => 'cus_checked_out']);
     Subscription::factory()->for($checkedOut, 'owner')->plan(Plan::Pro)->trialing(now()->addDays(4))->create();
 
@@ -70,6 +71,7 @@ test('ended trials and paying teams are not reminded', function () {
     expect($ended->fresh()->trial_reminded_at)->toBeNull()
         ->and($paying->fresh()->trial_reminded_at)->toBeNull()
         ->and($checkedOut->fresh()->trial_reminded_at)->toBeNull()
+        ->and($free->fresh()->trial_reminded_at)->toBeNull()
         ->and($reminded->fresh()->trial_reminded_at?->toDateString())->toBe('2026-10-13');
 });
 

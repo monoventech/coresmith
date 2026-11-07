@@ -21,6 +21,8 @@ function billingPrivacyTeam(): Team
         'trial_ends_at' => now()->addDays(9),
         'trial_reminded_at' => now(),
         'pending_checkout_id' => 'cs_private_checkout',
+        'free_plan' => Plan::Business,
+        'free_until' => now()->addDays(30),
     ])->save();
 
     $team->subscription('default')->forceFill(['stripe_id' => 'sub_private_subscription', 'unit_amount' => 1900, 'currency' => 'usd'])->save();
@@ -62,7 +64,7 @@ function billingPrivacyExpectNothingPrivate(array $props): void
     $keys = billingPrivacyKeys($props);
     $values = array_filter(Arr::flatten($props), 'is_string');
 
-    foreach (['stripe_id', 'pm_type', 'pm_last_four', 'pm_expires', 'trial_ends_at', 'trial_reminded_at', 'pending_checkout_id', 'subscriptions', 'unit_amount'] as $column) {
+    foreach (['stripe_id', 'pm_type', 'pm_last_four', 'pm_expires', 'trial_ends_at', 'trial_reminded_at', 'pending_checkout_id', 'free_plan', 'free_until', 'subscriptions', 'unit_amount'] as $column) {
         expect($keys)->not->toContain($column);
     }
 
@@ -137,6 +139,6 @@ test('a team turned into an array holds nothing about billing', function () {
 
     $team->load(['subscriptions', 'billingInvoices', 'backupDestination']);
 
-    expect($team->toArray())->not->toHaveKeys(['stripe_id', 'pm_type', 'pm_last_four', 'pm_expires', 'trial_ends_at', 'trial_reminded_at', 'pending_checkout_id', 'subscriptions', 'billing_invoices', 'backup_destination'])
+    expect($team->toArray())->not->toHaveKeys(['stripe_id', 'pm_type', 'pm_last_four', 'pm_expires', 'trial_ends_at', 'trial_reminded_at', 'pending_checkout_id', 'free_plan', 'free_until', 'subscriptions', 'billing_invoices', 'backup_destination'])
         ->and($team->toArray())->toHaveKeys(['id', 'name', 'slug', 'owner_id']);
 });

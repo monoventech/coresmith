@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\Plan;
 use App\Enums\TeamRole;
 use App\Services\Teams\TeamSlug;
 use Database\Factories\TeamFactory;
@@ -42,6 +43,8 @@ class Team extends Model
         'trial_ends_at',
         'trial_reminded_at',
         'pending_checkout_id',
+        'free_plan',
+        'free_until',
         'subscriptions',
         'billingInvoices',
         'backupDestination',
@@ -146,6 +149,8 @@ class Team extends Model
         return [
             'trial_ends_at' => 'datetime',
             'trial_reminded_at' => 'datetime',
+            'free_plan' => Plan::class,
+            'free_until' => 'datetime',
         ];
     }
 }

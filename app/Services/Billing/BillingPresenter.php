@@ -82,6 +82,7 @@ final class BillingPresenter
             'payment_note' => match (true) {
                 !$canManage => 'Only an owner can see and change the payment method.',
                 $card => '',
+                $status->state === BillingState::Free => 'No card needed while the plan is free.',
                 $team->stripe_id !== null => 'No card shown here yet. Add or update it at Stripe.',
                 default => 'No card yet. You add one when you choose a plan.',
             },
@@ -97,6 +98,7 @@ final class BillingPresenter
             'invoices_note' => match (true) {
                 !$canManage => 'Only an owner can see invoices.',
                 $count > 0 => null,
+                $status->state === BillingState::Free => "No invoices. This team's plan is free of charge.",
                 $trial => 'No invoices yet. The first one arrives when the trial ends and a plan starts.',
                 default => 'No invoices yet. The first one arrives when you choose a plan.',
             },
@@ -105,7 +107,7 @@ final class BillingPresenter
                 'key' => $option->value,
                 'label' => $option->label(),
                 'summary' => $option->summary($status->plan === $option ? $this->paid($team) : null),
-                'current' => $status->plan === $option,
+                'current' => $status->plan === $option && $status->state !== BillingState::Free,
                 'available' => $option->checkoutPrice() !== null,
                 'blockers' => $canManage ? $this->guard->blockers($team, $option) : [],
                 'notes' => $canManage ? $this->guard->notes($team, $option) : [],
@@ -134,6 +136,7 @@ final class BillingPresenter
                 default => "trial · {$days} days left",
             },
             $status->state === BillingState::Trialing => "{$label} · first charge {$this->day($status->trialEndsAt)}",
+            $status->state === BillingState::Free => $status->endsAt === null ? "{$label} · free" : "{$label} · free until {$this->day($status->endsAt)}",
             default => "{$label} · {$this->price($team, $status->plan)} / month",
         };
     }
@@ -149,6 +152,7 @@ final class BillingPresenter
 
         [$label, $badge, $line] = match (true) {
             $status->state === BillingState::Active => [$plan?->label(), ['label' => 'Active', 'tone' => 'accent'], "{$price} per month · renews {$this->day($status->renewsAt)}"],
+            $status->state === BillingState::Free => [$plan?->label(), ['label' => 'Free', 'tone' => 'success'], $status->endsAt === null ? 'Free of charge' : "Free until {$this->day($status->endsAt)}"],
             $status->state === BillingState::Trialing && $plan === Plan::Trial => ['Trial', ['label' => 'Trial', 'tone' => 'accent'], 'Pro features on 1 server · trial ends ' . $this->day($status->trialEndsAt)],
             $status->state === BillingState::Trialing => [$plan?->label(), ['label' => 'Trial', 'tone' => 'accent'], "{$price} per month · first charge {$this->day($status->trialEndsAt)}"],
             $status->state === BillingState::PastDue => [$plan?->label(), ['label' => 'Payment failed', 'tone' => 'destructive'], "{$price} per month · payment failed"],
@@ -156,6 +160,7 @@ final class BillingPresenter
             $status->reason === ReadOnlyReason::TrialEnded => ['Trial', $read, "Trial ended {$this->day($status->trialEndsAt)} · this team is read-only"],
             $status->reason === ReadOnlyReason::PlanEnded => ['No plan', $read, "Ended {$this->day($status->endsAt)} · this team is read-only"],
             $status->reason === ReadOnlyReason::PaymentFailed => ['No plan', $read, 'Payments failed · this team is read-only'],
+            $status->reason === ReadOnlyReason::FreePlanEnded => ['No plan', $read, "Free plan ended {$this->day($status->endsAt)} · this team is read-only"],
             default => ['No plan', $read, 'No plan yet · this team is read-only'],
         };
 
@@ -164,7 +169,7 @@ final class BillingPresenter
             'label' => (string) $label,
             'badge' => $badge,
             'line' => $line,
-            'amount' => $plan === null || $plan === Plan::Trial ? '$0' : $price,
+            'amount' => $plan === null || $plan === Plan::Trial || $status->state === BillingState::Free ? '$0' : $price,
             'usage' => $this->usage($team, $status),
             'note' => $status->state === BillingState::Ending
                 ? "The plan stays active until {$this->day($status->endsAt)}. After that this team is read-only, and its servers and apps keep running."
@@ -195,9 +200,10 @@ final class BillingPresenter
         ];
     }
 
-    private function primary(BillingStatus $status): string
+    private function primary(BillingStatus $status): ?string
     {
         return match (true) {
+            $status->state === BillingState::Free => $status->endsAt === null ? null : 'choose',
             $status->state === BillingState::Ending => 'keep',
             $status->readOnly(), $status->plan === Plan::Trial => 'choose',
             default => 'change',
@@ -279,6 +285,16 @@ final class BillingPresenter
             return $this->bannerOf('warning', $title, "After {$this->date($status->trialEndsAt)} this team becomes read-only. " . ($canManage ? 'Choose a plan to keep making changes.' : 'Ask an owner to choose a plan.'), $canManage ? 'Choose a plan' : null);
         }
 
+        if ($status->state === BillingState::Free && $status->endsAt !== null && ($days = $this->daysLeft($status->endsAt)) <= self::WARN_DAYS) {
+            $title = match ($days) {
+                0 => 'Your free plan ends today.',
+                1 => 'Your free plan ends tomorrow.',
+                default => "Your free plan ends in {$days} days.",
+            };
+
+            return $this->bannerOf('warning', $title, "After {$this->date($status->endsAt)} this team becomes read-only. " . ($canManage ? 'Choose a plan to keep making changes.' : 'Ask an owner to choose a plan.'), $canManage ? 'Choose a plan' : null);
+        }
+
         if ($status->state === BillingState::PastDue) {
             $next = $team->billingInvoices()->where('status', 'open')->whereNotNull('next_attempt_at')->latest('next_attempt_at')->value('next_attempt_at');
             $retry = $next === null ? '' : 'Stripe tries again on ' . $this->date(CarbonImmutable::parse($next)) . '. ';
@@ -299,6 +315,11 @@ final class BillingPresenter
         }
 
         return null;
+    }
+
+    private function daysLeft(CarbonImmutable $moment): int
+    {
+        return max(0, (int) CarbonImmutable::today()->diffInDays($moment->startOfDay(), false));
     }
 
     /**

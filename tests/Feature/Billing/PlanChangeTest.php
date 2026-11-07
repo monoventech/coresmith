@@ -435,6 +435,30 @@ test('self-hosted has no billing routes', function () {
     Http::assertNothingSent();
 });
 
+test('a free plan with no last day has nothing to choose', function () {
+    $team = Team::factory()->free(Plan::Business)->owned()->create();
+
+    $this->actingAs(planChangeOwner($team))->put(route('settings.billing.plan.update'), ['plan' => 'pro'])
+        ->assertSessionHasErrors(['plan' => "This team's plan is free with no last day, so there is nothing to choose."]);
+
+    Http::assertNothingSent();
+});
+
+test('a free plan with a last day can choose any plan, starting when it ends', function () {
+    $until = CarbonImmutable::parse('2026-11-30 23:59:59');
+    $team = Team::factory()->free(Plan::Pro, $until)->owned()->create();
+    planChangeCheckout();
+
+    $this->actingAs(planChangeOwner($team))->put(route('settings.billing.plan.update'), ['plan' => 'pro'])
+        ->assertRedirect('https://checkout.stripe.com/c/pay/cs_acme');
+
+    $session = planChangeSent('POST', 'checkout/sessions');
+
+    expect($session['line_items'][0]['price'])->toBe('price_test_pro')
+        ->and((int) $session['subscription_data']['trial_end'])->toBe($until->getTimestamp())
+        ->and($team->fresh()->pending_checkout_id)->toBe('cs_acme');
+});
+
 test('returning from checkout', function () {
     $waiting = Team::factory()->onTrial()->owned()->create();
     $paid = Team::factory()->subscribed(Plan::Pro)->owned()->create();

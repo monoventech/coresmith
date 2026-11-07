@@ -94,6 +94,7 @@ test('every read-only reason says why', function () {
         "This team's trial has ended, so it is read-only.",
         "This team's plan has ended, so it is read-only.",
         "This team's payments failed, so it is read-only.",
+        "This team's free plan has ended, so it is read-only.",
     ]);
 });
 

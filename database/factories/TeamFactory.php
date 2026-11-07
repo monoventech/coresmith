@@ -13,6 +13,7 @@ use App\Enums\TeamRole;
 use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -48,6 +49,11 @@ class TeamFactory extends Factory
     public function trialEnded(int $daysAgo = 1): static
     {
         return $this->state(['trial_ends_at' => now()->subDays($daysAgo)]);
+    }
+
+    public function free(Plan $plan, ?DateTimeInterface $until = null): static
+    {
+        return $this->state(['free_plan' => $plan, 'free_until' => $until]);
     }
 
     public function subscribed(Plan $plan, string $status = 'active'): static

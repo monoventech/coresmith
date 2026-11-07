@@ -20,7 +20,7 @@ export type BillingBannerProps = {
 export type BillingSummary = {
     plan: string | null
     label: string | null
-    state: 'trialing' | 'active' | 'past_due' | 'ending' | 'read_only'
+    state: 'trialing' | 'active' | 'free' | 'past_due' | 'ending' | 'read_only'
     read_only: boolean
     can_manage: boolean
     href: string
