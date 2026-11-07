@@ -16,6 +16,10 @@ test('php gets the headers for every library php-build configures, and sodium an
         ->and(BuildDependencies::for('php', 'almalinux'))->toContain('bzip2-devel', 'libtidy-devel', 'libxslt-devel', 'libsodium-devel', 'gmp-devel');
 });
 
+test('php gets bzip2 itself, since php-build unpacks a .tar.bz2 and a minimal image has no bzip2', function (string $os) {
+    expect(BuildDependencies::for('php', $os))->toContain('bzip2');
+})->with(['ubuntu', 'debian', 'rocky', 'almalinux', 'fedora', 'amzn']);
+
 test('ruby gets a rust compiler, so it is built with yjit', function () {
     expect(BuildDependencies::for('ruby', 'ubuntu'))->toContain('rustc')
         ->and(BuildDependencies::for('ruby', 'debian'))->toContain('rustc')
