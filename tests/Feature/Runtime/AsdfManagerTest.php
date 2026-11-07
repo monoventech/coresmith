@@ -207,6 +207,28 @@ test('a network blip while installing build packages is tried again', function (
     'a mirror that refuses' => ["Err:1 http://ports.ubuntu.com/ubuntu-ports noble/main arm64 libonig5 arm64 6.9.9-1build1\n  Unable to connect to ports.ubuntu.com:http:\n"],
 ]);
 
+test('php is built with the postgresql drivers and phpredis, which php-build leaves out', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'php', '8.5.5');
+
+    $commands = $transport->commands();
+    $install = $commands[asdfStep($commands, 'asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"')];
+
+    expect($install)->toContain("PHP_BUILD_CONFIGURE_OPTS='--with-pgsql --with-pdo-pgsql'")
+        ->and($install)->toContain("PHP_BUILD_INSTALL_EXTENSION='redis'");
+});
+
+test('other runtimes are built without the php build settings', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'nodejs', '24.15.0');
+
+    expect(implode("\n", $transport->commands()))->not->toContain('PHP_BUILD_');
+});
+
 test('runtime installs run as the coresmith user, never root directly', function () {
     $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
     $connection = asdfConnection($transport);

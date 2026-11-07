@@ -37,6 +37,13 @@ final class AsdfManager
 
     public const INSTALL_SECONDS = 1800;
 
+    private const BUILD_ENVIRONMENT = [
+        'php' => [
+            'PHP_BUILD_CONFIGURE_OPTS' => '--with-pgsql --with-pdo-pgsql',
+            'PHP_BUILD_INSTALL_EXTENSION' => 'redis',
+        ],
+    ];
+
     private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'unable to download', 'SSL_ERROR_SYSCALL', 'Temporary failure resolving', 'Could not connect to', 'Unable to connect to'];
 
     private const INDEX_LOCKED = 'Could not get lock';
@@ -79,7 +86,7 @@ final class AsdfManager
         }
 
         $this->withDownloadRetries($connection, $this->asCoresmith('asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);
-        $this->withDownloadRetries($connection, $this->asdfCommand('install', $runtime, $version), self::INSTALL_SECONDS);
+        $this->withDownloadRetries($connection, $this->asdfCommand('install', $runtime, $version, self::BUILD_ENVIRONMENT[$runtime] ?? []), self::INSTALL_SECONDS);
     }
 
     public function withDownloadRetries(SSHConnection $connection, string $command, int $timeout): void
@@ -144,9 +151,13 @@ final class AsdfManager
         $connection->execute($this->asdfCommand('uninstall', $runtime, $version), sudo: true)->throw();
     }
 
-    private function asdfCommand(string $action, string $runtime, string $version): string
+    /**
+     * @param  array<string, string>  $env
+     */
+    private function asdfCommand(string $action, string $runtime, string $version, array $env = []): string
     {
         return $this->asCoresmith("asdf {$action} \"\$CORESMITH_RUNTIME\" \"\$CORESMITH_VERSION\"", [
+            ...$env,
             'CORESMITH_RUNTIME' => $runtime,
             'CORESMITH_VERSION' => $version,
         ]);
