@@ -9,6 +9,28 @@ use Illuminate\Database\MySqlConnection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+test('rolling the activity log migration back drops its table, so migrate:reset leaves nothing behind', function () {
+    $path = tempnam(sys_get_temp_dir(), 'activity-log-');
+    $previous = DB::getDefaultConnection();
+    config(['database.connections.portable_schema_probe' => ['driver' => 'sqlite', 'database' => $path, 'prefix' => '', 'foreign_key_constraints' => true]]);
+    DB::setDefaultConnection('portable_schema_probe');
+    $migration = require database_path('migrations/2026_05_28_082634_create_activity_log_table.php');
+
+    try {
+        $migration->up();
+        $created = Schema::hasTable('activity_log');
+        $migration->down();
+        $dropped = !Schema::hasTable('activity_log');
+    } finally {
+        DB::setDefaultConnection($previous);
+        DB::purge('portable_schema_probe');
+        unlink($path);
+    }
+
+    expect($created)->toBeTrue()
+        ->and($dropped)->toBeTrue();
+});
+
 test('morph keys hold ulids', function (string $table, string $column) {
     expect(Schema::getColumnType($table, $column))->toBe('varchar');
 })->with([
