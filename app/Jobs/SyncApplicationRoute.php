@@ -24,21 +24,27 @@ final class SyncApplicationRoute implements ShouldQueue
 
     public int $timeout = 120;
 
-    public function __construct(private readonly Application $application)
+    public function __construct(private readonly Application $application, public readonly bool $unroute = false)
     {
         $this->onQueue('server-tasks');
     }
 
     public function handle(SSHConnectionManager $connections, CaddyApiClient $caddy): void
     {
-        if ($this->application->allDomains() === []) {
+        $routed = $this->application->allDomains() !== [];
+
+        if (!$routed && !$this->unroute) {
             return;
         }
 
         $connection = $connections->for($this->application->server);
 
         try {
-            $caddy->putSite($connection, $this->application);
+            if ($routed) {
+                $caddy->putSite($connection, $this->application);
+            } else {
+                $caddy->removeSite($connection, $this->application);
+            }
         } finally {
             $connections->disconnect($this->application->server);
         }

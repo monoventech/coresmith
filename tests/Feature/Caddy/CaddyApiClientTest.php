@@ -186,6 +186,36 @@ test('syncing a route puts the site and persists, and a domainless app touches n
     }
 });
 
+test('a route for an app whose domains were all removed is taken down', function () {
+    $transport = new FakeSSHTransport;
+    $app = routableApp(['slug' => 'unrouted', 'domain' => null]);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        app()->call([new SyncApplicationRoute($app, unroute: true), 'handle']);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect(implode("\n", $transport->commands()))->toContain("-X DELETE 'http://localhost:2019/id/app-{$app->id}'")
+        ->toContain('mv -f ' . CaddyApiClient::STAGED_CONFIG_FILE);
+});
+
+test('taking down a route caddy never had is not an error', function () {
+    $transport = (new FakeSSHTransport)->respondTo("-X DELETE 'http://localhost:2019/id/", 'curl: (22) The requested URL returned error: 404', 22);
+    $app = routableApp(['slug' => 'never-routed', 'domain' => null]);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        app()->call([new SyncApplicationRoute($app, unroute: true), 'handle']);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect(caddyCalls($transport, '-X DELETE'))->toBe(1)
+        ->and(implode("\n", $transport->commands()))->not->toContain('mv -f ' . CaddyApiClient::STAGED_CONFIG_FILE);
+});
+
 test('an invalid route is never pushed to caddy', function () {
     $transport = new FakeSSHTransport;
     $app = routableApp(['domain' => null]);

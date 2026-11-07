@@ -19,6 +19,7 @@ use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\CheckCertificates;
 use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
+use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -224,8 +225,14 @@ final class ApplicationController extends Controller
 
         $application->update($request->validated());
 
-        foreach (array_diff($application->allDomains(), $before) as $domain) {
+        $domains = $application->allDomains();
+
+        foreach (array_diff($domains, $before) as $domain) {
             activity()->performedOn($application)->withProperties(['domain' => $domain])->log('domain_added');
+        }
+
+        if ($domains !== $before && $application->current_release !== null) {
+            SyncApplicationRoute::dispatch($application, unroute: $domains === []);
         }
 
         return back()->with('success', 'Saved.');

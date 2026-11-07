@@ -69,7 +69,16 @@ final class CaddyApiClient
 
     public function removeSite(SSHConnection $connection, Application $application): void
     {
-        $this->request($connection, 'DELETE', '/id/' . CaddyRouteBuilder::routeId($application));
+        try {
+            $this->request($connection, 'DELETE', '/id/' . CaddyRouteBuilder::routeId($application));
+        } catch (SSHCommandFailedException $e) {
+            if ($this->missing($e)) {
+                return;
+            }
+
+            throw $e;
+        }
+
         $this->persistConfig($connection);
     }
 
@@ -90,12 +99,17 @@ final class CaddyApiClient
 
             return true;
         } catch (SSHCommandFailedException $e) {
-            if (str_contains($e->output(), 'returned error: 404')) {
+            if ($this->missing($e)) {
                 return false;
             }
 
             throw $e;
         }
+    }
+
+    private function missing(SSHCommandFailedException $e): bool
+    {
+        return str_contains($e->output(), 'returned error: 404');
     }
 
     private function run(SSHConnection $connection, string $command, bool $retry = true): SSHResult

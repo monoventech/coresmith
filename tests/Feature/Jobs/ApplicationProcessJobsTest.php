@@ -357,6 +357,16 @@ test('detaching removes the app cron file, its scripts and any old user crontab,
         ->and($stopped)->toBeLessThan($removed);
 });
 
+test('detaching an app whose first deploy never reached caddy still finishes', function () {
+    $application = processJobsApp(['domain' => 'shop.example.com']);
+    $application->delete();
+    $transport = (new FakeSSHTransport)->respondTo("-X DELETE 'http://localhost:2019/id/", 'curl: (22) The requested URL returned error: 404', 22);
+
+    processJobsRun(new DetachApplication($application), $transport);
+
+    expect($transport->commands())->toContain("systemctl disable --now 'coresmith-app-shop-fpm' || true");
+});
+
 test('detaching an application without a domain never calls caddy', function () {
     $application = processJobsApp(['domain' => null, 'additional_domains' => null]);
     $transport = new FakeSSHTransport;

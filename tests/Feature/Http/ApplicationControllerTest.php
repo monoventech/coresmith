@@ -10,6 +10,7 @@ use App\Enums\TeamRole;
 use App\Jobs\DeployApplication;
 use App\Jobs\ReservePortBlock;
 use App\Jobs\RollbackApplication;
+use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
@@ -447,6 +448,58 @@ test('an update may send only the fields that changed', function () {
     expect($fresh->domain)->toBe('shop.example.com')
         ->and($fresh->app_size)->toBe('large')
         ->and($fresh->web_directory)->toBe('/dist');
+});
+
+test('a domain added to a live app is routed at once', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['domain' => 'shop.example.com', 'additional_domains' => [], 'current_release' => '20261107-000713']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['additional_domains' => ['www.shop.example.com']])
+        ->assertRedirect();
+
+    Queue::assertPushed(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => !$job->unroute);
+});
+
+test('removing a live app\'s last domain takes its route down', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['domain' => 'shop.example.com', 'additional_domains' => [], 'current_release' => '20261107-000713']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['domain' => null])
+        ->assertRedirect();
+
+    Queue::assertPushed(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => $job->unroute);
+});
+
+test('a domain on an app that has never deployed waits for its first deploy', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['domain' => null, 'current_release' => null]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['domain' => 'shop.example.com'])
+        ->assertRedirect();
+
+    Queue::assertNotPushed(SyncApplicationRoute::class);
+});
+
+test('saving settings that leave the domains as they were does not touch the route', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['domain' => 'shop.example.com', 'current_release' => '20261107-000713']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['app_size' => 'large', 'domain' => 'shop.example.com'])
+        ->assertRedirect();
+
+    Queue::assertNotPushed(SyncApplicationRoute::class);
 });
 
 test('a name sent to the update endpoint is ignored, so the app keeps its name, slug and linux user', function () {
