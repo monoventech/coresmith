@@ -156,10 +156,16 @@ final class ProvisionServer implements ShouldQueue
 
     private function installBasePackages(SSHConnection $connection): void
     {
-        $packages = PackageManagerFactory::for($this->server->fresh());
+        $server = $this->server->fresh();
+        $packages = PackageManagerFactory::for($server);
+        $repositories = BasePackages::repositories($server);
+
+        if ($repositories !== null) {
+            $connection->execute($repositories, sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        }
 
         $connection->execute($packages->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
-        $connection->execute($packages->install(BasePackages::for($this->server->fresh())), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        $connection->execute($packages->install(BasePackages::for($server)), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
     }
 
     private function phase(int $number, Closure $work): void

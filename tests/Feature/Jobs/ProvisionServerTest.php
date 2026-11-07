@@ -72,6 +72,31 @@ test('phase 2 installs base packages through the abstraction', function () {
         ->and($commands)->toContain("'build-essential'");
 });
 
+test('a rocky or almalinux server gets epel and crb before its base packages, since htop, ncdu and libzip-devel live there', function (string $os) {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => $os, 'provisioning_phase' => 1]);
+    $transport = new FakeSSHTransport;
+
+    rescue(fn() => provision($server, $transport), report: false);
+
+    $commands = $transport->commands();
+    $repositories = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'dnf install -y epel-release dnf-plugins-core && crb enable')));
+    $base = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, "'htop'")));
+
+    expect($repositories)->toBeInt()
+        ->and($base)->toBeInt()
+        ->and($repositories)->toBeLessThan($base);
+})->with(['rocky', 'almalinux']);
+
+test('a server whose own repositories carry every base package is not given epel', function (string $os) {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => $os, 'provisioning_phase' => 1]);
+    $transport = new FakeSSHTransport;
+
+    rescue(fn() => provision($server, $transport), report: false);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('epel-release')
+        ->and(implode("\n", $transport->commands()))->toContain("'htop'");
+})->with(['ubuntu', 'debian', 'fedora']);
+
 test('every implemented phase is recorded', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
 

@@ -81,6 +81,14 @@ final class BasePackages
         'redis',
     ];
 
+    public static function repositories(Server $server): ?string
+    {
+        return match ($server->os_name) {
+            'rocky', 'almalinux' => 'dnf install -y epel-release dnf-plugins-core && crb enable',
+            default => null,
+        };
+    }
+
     /**
      * @return list<string>
      */
