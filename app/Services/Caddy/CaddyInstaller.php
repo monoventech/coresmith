@@ -56,6 +56,7 @@ final class CaddyInstaller
                 (new AptPackageManager)->install(['debian-keyring', 'debian-archive-keyring', 'apt-transport-https', 'curl', 'gnupg']),
                 "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg",
                 "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list",
+                "printf 'Package: caddy\\nPin: origin dl.cloudsmith.io\\nPin-Priority: 1001\\n' > /etc/apt/preferences.d/caddy",
             ],
             'rocky', 'almalinux', 'fedora', 'amzn' => [
                 "dnf install -y 'dnf-command(copr)' || true",

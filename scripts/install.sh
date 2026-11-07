@@ -623,10 +623,18 @@ install_database_engine() {
 
 # ── Phase 2: Caddy ───────────────────────────────────────────────────────────
 
+caddy_new_enough() {
+    local major minor
+
+    read -r major minor <<<"$(caddy version 2>/dev/null | head -1 | sed -E 's/^v?([0-9]+)\.([0-9]+).*/\1 \2/')"
+    [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+    [ "$major" -gt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -ge 8 ]; }
+}
+
 install_caddy() {
     log "Phase 2/8: installing Caddy..."
 
-    if command -v caddy >/dev/null 2>&1; then
+    if command -v caddy >/dev/null 2>&1 && caddy_new_enough; then
         success "Caddy already present: $(caddy version | head -1)"
         return 0
     fi
@@ -635,9 +643,10 @@ install_caddy() {
     apt)
         run apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' |
-            gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+            gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
             >/etc/apt/sources.list.d/caddy-stable.list
+        printf 'Package: caddy\nPin: origin dl.cloudsmith.io\nPin-Priority: 1001\n' >/etc/apt/preferences.d/caddy
         run apt-get update -qq
         run apt-get install -y -qq caddy
         ;;
@@ -649,6 +658,7 @@ install_caddy() {
     esac
 
     command -v caddy >/dev/null 2>&1 || fatal "Caddy did not install. Check $LOG_FILE."
+    caddy_new_enough || fatal "Caddy $(caddy version | head -1) is too old: Coresmith needs 2.8 or newer. Check $LOG_FILE for where apt found it."
     success "Caddy installed: $(caddy version | head -1)"
 }
 

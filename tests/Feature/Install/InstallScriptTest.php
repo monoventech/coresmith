@@ -218,6 +218,42 @@ test('a firewalld that is not running is left alone and the installer says what 
         ->and($output)->toContain('Open 80 and 443, and keep 2222 open, before exposing this host.');
 });
 
+test('caddy comes from its own repository, even where an ubuntu pro mirror ranks its older build higher', function () {
+    $body = installScriptBody();
+    $pin = strpos($body, 'Package: caddy\\nPin: origin dl.cloudsmith.io\\nPin-Priority: 1001');
+    $install = strpos($body, 'run apt-get install -y -qq caddy');
+
+    expect($pin)->toBeInt()
+        ->and($install)->toBeInt()
+        ->and($pin)->toBeLessThan($install);
+});
+
+test('only a caddy new enough for the panel config counts as already installed', function (string $version, bool $enough) {
+    preg_match('/^caddy_new_enough\(\) \{\n.*?^\}$/ms', installScriptBody(), $function);
+    $bin = sys_get_temp_dir() . '/install-caddy-' . bin2hex(random_bytes(4));
+    mkdir($bin);
+    file_put_contents($bin . '/caddy', "#!/bin/sh\nprintf '%s\\n' " . escapeshellarg($version) . "\n");
+    chmod($bin . '/caddy', 0755);
+
+    $process = new Process(['bash', '-c', $function[0] . "\ncaddy_new_enough && echo enough || echo old\n"], null, ['PATH' => $bin . ':/usr/bin:/bin']);
+    $process->run();
+
+    unlink($bin . '/caddy');
+    rmdir($bin);
+
+    expect(trim($process->getOutput()))->toBe($enough ? 'enough' : 'old');
+})->with([
+    'the ubuntu pro build' => ['2.6.2', false],
+    'one release short' => ['v2.7.6 h1:Bzqu0f5uTGAnCGn6YQOzzK6MdyNtF4F3KR5y1DmamUs=', false],
+    'the first with permission' => ['v2.8.0 h1:abc=', true],
+    'a current release' => ['v2.11.9 h1:abc=', true],
+    'a future major' => ['v3.0.0', true],
+]);
+
+test('a caddy still too old after installing stops the install with the version it found', function () {
+    expect(installScriptBody())->toContain('is too old: Coresmith needs 2.8 or newer');
+});
+
 test('the deploy key directory the deployment code expects is created', function () {
     expect(installScriptBody())->toContain('deploy-keys')
         ->and(DeployKeyManager::KEY_DIR)->toBe('/etc/coresmith/deploy-keys');

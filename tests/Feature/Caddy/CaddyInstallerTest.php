@@ -43,6 +43,20 @@ test('caddy owns the folder its access log goes in, so a package that leaves it 
         ->and($owned)->toBeLessThan($restart);
 });
 
+test('a managed server gets caddy from its own repository, even where an ubuntu pro mirror ranks its older build higher', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyInstall($transport);
+
+    $commands = $transport->commands();
+    $pin = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'Package: caddy\\nPin: origin dl.cloudsmith.io\\nPin-Priority: 1001')));
+    $install = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, "install -y --no-install-recommends 'caddy'")));
+
+    expect($pin)->toBeInt()
+        ->and($install)->toBeInt()
+        ->and($pin)->toBeLessThan($install);
+});
+
 test('caddy starts from the config the panel keeps, so app routes come back after a reboot', function () {
     $transport = new FakeSSHTransport;
 
