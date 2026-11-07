@@ -38,7 +38,7 @@ final class FirewalldFirewallManager implements FirewallManager
 
     public function denyIncomingByDefault(): string
     {
-        return 'firewall-cmd --permanent --set-default-zone=public && firewall-cmd --reload';
+        return 'systemctl enable --now firewalld && firewall-cmd --set-default-zone=public';
     }
 
     public function status(): string

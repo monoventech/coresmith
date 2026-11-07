@@ -42,6 +42,14 @@ test('firewalld builds the expected rules', function () {
         ->and($firewalld->allowFrom('203.0.113.5', 6379))->toContain('203.0.113.5');
 });
 
+test('firewalld is running before it is given the default zone, which it only takes as a command of its own', function () {
+    $command = (new FirewalldFirewallManager)->denyIncomingByDefault();
+
+    expect($command)->toStartWith('systemctl enable --now firewalld && ')
+        ->and($command)->toContain('firewall-cmd --set-default-zone=public')
+        ->and($command)->not->toContain('--permanent');
+});
+
 test('a port below the valid range is rejected', function () {
     (new UfwFirewallManager)->allow(0);
 })->throws(InvalidArgumentException::class);
