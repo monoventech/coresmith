@@ -1141,19 +1141,24 @@ UNIT
 
 configure_firewall() {
     if command -v ufw >/dev/null 2>&1; then
-        run ufw allow "${SSH_PORT}/tcp" || true
-        run ufw allow 80/tcp || true
-        run ufw allow 443/tcp || true
-        run ufw --force enable || true
-        success "Firewall configured (ufw), SSH kept open on ${SSH_PORT}"
-    elif command -v firewall-cmd >/dev/null 2>&1; then
-        run firewall-cmd --permanent --add-port="${SSH_PORT}/tcp" || true
+        if ufw status 2>/dev/null | grep -q '^Status: active'; then
+            run ufw allow 80/tcp || true
+            run ufw allow 443/tcp || true
+            success "Firewall (ufw) was already on: opened 80 and 443 and left its SSH rules as they were"
+        else
+            run ufw allow "${SSH_PORT}/tcp" || true
+            run ufw allow 80/tcp || true
+            run ufw allow 443/tcp || true
+            run ufw --force enable || true
+            success "Firewall configured (ufw), SSH kept open on ${SSH_PORT}"
+        fi
+    elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
         run firewall-cmd --permanent --add-service=http || true
         run firewall-cmd --permanent --add-service=https || true
         run firewall-cmd --reload || true
-        success "Firewall configured (firewalld), SSH kept open on ${SSH_PORT}"
+        success "Firewall (firewalld) was already on: opened 80 and 443 and left its SSH rules as they were"
     else
-        warn "No firewall found. Open 80 and 443, and keep ${SSH_PORT} open, before exposing this host."
+        warn "No firewall is running. Open 80 and 443, and keep ${SSH_PORT} open, before exposing this host."
     fi
 }
 

@@ -162,8 +162,60 @@ test('the firewall keeps the detected ssh port open rather than assuming 22', fu
     $body = installScriptBody();
 
     expect($body)->toContain('ufw allow "${SSH_PORT}/tcp"')
-        ->and($body)->toContain('firewall-cmd --permanent --add-port="${SSH_PORT}/tcp"')
         ->and($body)->toContain("awk '/sshd/ {print \$4}'");
+});
+
+/**
+ * @param  array<string, string>  $fakes
+ * @return array{0: list<string>, 1: string}
+ */
+function installFirewallRun(array $fakes): array
+{
+    preg_match('/^configure_firewall\(\) \{\n.*?^\}$/ms', installScriptBody(), $function);
+    $bin = sys_get_temp_dir() . '/install-firewall-' . bin2hex(random_bytes(4));
+    mkdir($bin);
+    $log = $bin . '/calls';
+
+    foreach ($fakes as $command => $answer) {
+        file_put_contents("{$bin}/{$command}", "#!/bin/sh\nprintf '%s\\n' \"\$*\" >> " . escapeshellarg($log) . "\n{$answer}\n");
+        chmod("{$bin}/{$command}", 0755);
+    }
+
+    $process = new Process(['bash', '-c', $function[0] . "\nrun() { \"\$@\"; }\nsuccess() { printf '%s\\n' \"\$1\"; }\nwarn() { printf '%s\\n' \"\$1\"; }\nSSH_PORT=2222\nconfigure_firewall\n"], null, ['PATH' => $bin . ':/usr/bin:/bin']);
+    $process->run();
+    $calls = is_file($log) ? file($log, FILE_IGNORE_NEW_LINES) : [];
+
+    array_map(unlink(...), glob($bin . '/*') ?: []);
+    rmdir($bin);
+
+    return [$calls, trim($process->getOutput() . $process->getErrorOutput())];
+}
+
+test('a ufw firewall that is already on keeps its own ssh rules, and only the web ports are opened', function () {
+    [$calls, $output] = installFirewallRun(['ufw' => "[ \"\$1\" = status ] && printf 'Status: active\\n\\n22/tcp ALLOW IN 192.168.0.0/24\\n'\nexit 0"]);
+
+    expect($calls)->toBe(['status', 'allow 80/tcp', 'allow 443/tcp'])
+        ->and($output)->toContain('left its SSH rules as they were');
+});
+
+test('a ufw firewall that was off is turned on with ssh kept open, so the install locks nobody out', function () {
+    [$calls] = installFirewallRun(['ufw' => "[ \"\$1\" = status ] && printf 'Status: inactive\\n'\nexit 0"]);
+
+    expect($calls)->toBe(['status', 'allow 2222/tcp', 'allow 80/tcp', 'allow 443/tcp', '--force enable']);
+});
+
+test('a running firewalld keeps its own ssh rules, and only the web services are opened', function () {
+    [$calls, $output] = installFirewallRun(['firewall-cmd' => 'exit 0']);
+
+    expect($calls)->toBe(['--state', '--permanent --add-service=http', '--permanent --add-service=https', '--reload'])
+        ->and($output)->toContain('left its SSH rules as they were');
+});
+
+test('a firewalld that is not running is left alone and the installer says what to open', function () {
+    [$calls, $output] = installFirewallRun(['firewall-cmd' => '[ "$1" = --state ] && exit 252' . "\nexit 0"]);
+
+    expect($calls)->toBe(['--state'])
+        ->and($output)->toContain('Open 80 and 443, and keep 2222 open, before exposing this host.');
 });
 
 test('the deploy key directory the deployment code expects is created', function () {
