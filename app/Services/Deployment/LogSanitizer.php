@@ -18,6 +18,8 @@ final class LogSanitizer
 
     public const CREDENTIAL_SHAPE = '/^(?=\S*\d)(?=\S*[A-Za-z])\S{24,}\z/';
 
+    private const TERMINAL_CODES = '/\e(?:\[[0-?]*[ -\/]*[@-~]|\][^\a\e]*(?:\a|\e\\\\)|[@-Z\\\\-_])/';
+
     private const PATTERNS = [
         '/([A-Za-z0-9_.]*(?:password|secret|token|credential|api_?key|access_key|private_key|auth)\s*=\s*)[^\s&"\']+/i' => '${1}[REDACTED]',
         '/Bearer\s+[A-Za-z0-9\-._~+\/]+=*/i' => 'Bearer [REDACTED]',
@@ -33,6 +35,7 @@ final class LogSanitizer
 
     public function sanitize(string $output, ?Application $application = null): string
     {
+        $output = (string) preg_replace(self::TERMINAL_CODES, '', $output);
         $output = $this->redactEnvironmentValues($output, $application);
         $output = $this->redactCredentialsInUrls($output);
 

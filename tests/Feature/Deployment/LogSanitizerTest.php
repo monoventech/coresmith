@@ -6,6 +6,16 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\Deployment\LogSanitizer;
 
+test('terminal colour and cursor codes are dropped, so a log reads as plain text', function () {
+    $line = "  laravel/tinker \e[90m....\e[39m \e[32;1mDONE\e[39;22m\n\e]0;composer\x07done\e[2K\e[1G";
+
+    expect((new LogSanitizer)->sanitize($line))->toBe("  laravel/tinker .... DONE\ndone");
+});
+
+test('text that only looks like a colour code, with no escape before it, is kept', function () {
+    expect((new LogSanitizer)->sanitize('cells[90m] and [0m stay'))->toBe('cells[90m] and [0m stay');
+});
+
 test('values from the application environment are redacted by name', function () {
     $application = Application::factory()->create([
         'env_variables' => "APP_KEY=base64:sup3rs3cr3tvalue\nDB_PASSWORD=hunter2long\n",
