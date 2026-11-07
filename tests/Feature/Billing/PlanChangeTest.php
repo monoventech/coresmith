@@ -435,6 +435,20 @@ test('self-hosted has no billing routes', function () {
     Http::assertNothingSent();
 });
 
+test('a trial or free plan with under two days left still reaches checkout with the two days stripe needs', function (Closure $team) {
+    $team = $team();
+    planChangeCheckout();
+
+    $this->actingAs(planChangeOwner($team))->put(route('settings.billing.plan.update'), ['plan' => 'pro'])
+        ->assertRedirect('https://checkout.stripe.com/c/pay/cs_acme');
+
+    expect((int) planChangeSent('POST', 'checkout/sessions')['subscription_data']['trial_end'])
+        ->toBe(CarbonImmutable::parse('2026-10-20 12:00:10')->getTimestamp());
+})->with([
+    'a trial ending tomorrow' => [fn() => Team::factory()->owned()->create(['trial_ends_at' => now()->addHours(30)])],
+    'a free plan ending tonight' => [fn() => Team::factory()->free(Plan::Pro, now()->addHours(5))->owned()->create()],
+]);
+
 test('a free plan with no last day has nothing to choose', function () {
     $team = Team::factory()->free(Plan::Business)->owned()->create();
 
