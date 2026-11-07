@@ -30,6 +30,19 @@ test('the config and the unit override are written as root, so a sudo user can i
         ->toContain('sudo systemctl restart caddy');
 });
 
+test('caddy owns the folder its access log goes in, so a package that leaves it to root does not stop caddy starting', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyInstall($transport);
+
+    $commands = $transport->commands();
+    $owned = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'chown caddy:caddy ' . dirname(MetricsCollector::ACCESS_LOG))));
+    $restart = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'systemctl restart caddy')));
+
+    expect($owned)->toBeInt()
+        ->and($owned)->toBeLessThan($restart);
+});
+
 test('caddy starts from the config the panel keeps, so app routes come back after a reboot', function () {
     $transport = new FakeSSHTransport;
 

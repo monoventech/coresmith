@@ -67,7 +67,9 @@ final class CaddyInstaller
 
     private function writeConfig(SSHConnection $connection): void
     {
-        $connection->execute('mkdir -p /etc/caddy /var/log/caddy ' . dirname(self::SERVICE_DROP_IN), sudo: true)->throw();
+        $logs = dirname(MetricsCollector::ACCESS_LOG);
+
+        $connection->execute('mkdir -p /etc/caddy ' . $logs . ' ' . dirname(self::SERVICE_DROP_IN) . ' && chown caddy:caddy ' . $logs, sudo: true)->throw();
 
         $current = $connection->execute('cat ' . self::CONFIG_FILE . ' 2>/dev/null || true', sudo: true)->output;
 
