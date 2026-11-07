@@ -72,14 +72,14 @@ test('phase 2 installs base packages through the abstraction', function () {
         ->and($commands)->toContain("'build-essential'");
 });
 
-test('a rocky or almalinux server gets epel and crb before its base packages, since htop, ncdu and libzip-devel live there', function (string $os) {
+test('a rocky or almalinux server gets epel and crb turned on before its base packages, even where epel-release came installed but off', function (string $os) {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => $os, 'provisioning_phase' => 1]);
     $transport = new FakeSSHTransport;
 
     rescue(fn() => provision($server, $transport), report: false);
 
     $commands = $transport->commands();
-    $repositories = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'dnf install -y epel-release dnf-plugins-core && crb enable')));
+    $repositories = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'dnf install -y epel-release dnf-plugins-core && dnf config-manager --set-enabled epel && crb enable')));
     $base = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, "'htop'")));
 
     expect($repositories)->toBeInt()

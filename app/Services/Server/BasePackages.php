@@ -84,7 +84,7 @@ final class BasePackages
     public static function repositories(Server $server): ?string
     {
         return match ($server->os_name) {
-            'rocky', 'almalinux' => 'dnf install -y epel-release dnf-plugins-core && crb enable',
+            'rocky', 'almalinux' => 'dnf install -y epel-release dnf-plugins-core && dnf config-manager --set-enabled epel && crb enable',
             default => null,
         };
     }
