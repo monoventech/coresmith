@@ -87,6 +87,7 @@ class Server extends Model
             'installed_runtimes' => 'array',
             'meta' => 'array',
             'audit' => 'array',
+            'takeover' => 'array',
             'audit_logging_enabled' => 'boolean',
             'last_connected_at' => 'datetime',
             'unreachable_since' => 'datetime',

@@ -17,6 +17,7 @@ use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\Team;
 use App\Services\Cloud\Tasks\CreateServerTask;
+use App\Services\Moves\MovePresenter;
 use App\Services\Panel\PanelBackup;
 use App\Services\Panel\PanelUpdatesPresenter;
 use App\Services\Teams\AccountClosing;
@@ -41,7 +42,7 @@ final class GeneralSettingsController extends Controller
         return back()->with('success', 'Backing up. The database and environment are archived, the last ' . PanelBackup::KEEP . ' are kept.');
     }
 
-    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion): Response
+    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion, MovePresenter $moves): Response
     {
         $cloud = Edition::current()->isCloud();
         $installed = $cloud ? null : InstanceSetting::get('installed_at');
@@ -74,6 +75,7 @@ final class GeneralSettingsController extends Controller
                 'added' => $key->created_at?->format('M Y'),
             ])->values(),
             'updates' => $updates->present($request->user()),
+            'moves' => $moves->forUser($request->user()),
             'can' => [
                 'manageInstance' => $this->managesInstance($request),
                 'reachServers' => $request->user()->teams->contains(fn($team): bool => in_array($team->pivot->role, [TeamRole::Owner->value, TeamRole::Admin->value], true)),

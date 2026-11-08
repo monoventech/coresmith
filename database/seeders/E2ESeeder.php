@@ -34,6 +34,8 @@ use App\Services\Cloud\CloudCatalog;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Git\GitHub\RepositoryCatalog;
+use App\Services\Moves\MoveCodes;
+use App\Services\Moves\MoveFile;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
@@ -42,6 +44,7 @@ use App\Services\Server\CertificateCheck;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
+use App\Services\SSH\KeyPairGenerator;
 use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\UpdatePaths;
 use Carbon\CarbonImmutable;
@@ -107,6 +110,8 @@ final class E2ESeeder extends Seeder
 
         $this->team->members()->attach(User::factory()->create(['name' => 'Sam Okafor', 'email' => self::SIGNOUT_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
         $this->team->members()->attach(User::factory()->create(['name' => 'Rowan Hale', 'email' => self::ROLE_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
+
+        $this->movers();
 
         $this->bench = $this->server('bench-01', '198.51.100.40', ServerStatus::Active);
 
@@ -611,6 +616,77 @@ final class E2ESeeder extends Seeder
             'html_url' => "https://github.com/apps/coresmith-{$login}",
             'created_by' => $owner->id,
         ]);
+    }
+
+    public static function moverEmail(string $code): string
+    {
+        return "mover-{$code}@coresmith.test";
+    }
+
+    private function movers(): void
+    {
+        $codes = app(MoveCodes::class);
+        $password = Hash::make(self::PASSWORD);
+
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $mover = User::factory()->create(['name' => 'Jordan Mover', 'email' => self::moverEmail($code), 'password' => $password]);
+            $landed = Team::factory()->create(['name' => "Landed {$code}", 'slug' => "landed-{$code}", 'owner_id' => $mover->getKey()]);
+            $landed->members()->attach($mover, ['role' => TeamRole::Owner->value]);
+            $mover->forceFill(['current_team_id' => $landed->getKey()])->save();
+
+            $ip = '192.0.2.' . (220 + $index);
+            $cloud = (new KeyPairGenerator)->generate('coresmith-cloud');
+            Server::factory()->for($landed)->create([
+                'name' => "landed-{$code}-01",
+                'ip_address' => $ip,
+                'ssh_private_key' => $cloud->privateKey,
+                'ssh_public_key' => $cloud->publicKey,
+                'status' => ServerStatus::Moving,
+                'os_name' => 'ubuntu',
+                'os_version' => '24.04',
+                'provisioning_phase' => 8,
+                'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', "landed-{$code}", true)), 0, 43),
+                'takeover' => ['state' => 'failed', 'error' => "Coresmith couldn't reach landed-{$code}-01 at {$ip}:22. Check it's on and reachable, then try again.", 'attempts' => 1, 'cloud_key' => $cloud->publicKey],
+            ]);
+
+            $move = $codes->create($mover);
+            $move->forceFill(['file' => app(MoveFile::class)->seal($this->arrivals($code, $index), $codes->read($codes->text($move)))])->save();
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function arrivals(string $code, int $index): array
+    {
+        $key = (new KeyPairGenerator)->generate('coresmith-cloud');
+
+        return [
+            'id' => (string) Str::uuid(),
+            'made_at' => now()->toIso8601String(),
+            'from' => 'https://app.coresmith.io',
+            'team' => ['name' => "Arrivals {$code}", 'slug' => "arrivals-{$code}"],
+            'members' => [['email' => "teammate-{$code}@coresmith.test", 'role' => TeamRole::Member->value]],
+            'cloud_providers' => [],
+            'servers' => [[
+                'ref' => 's1', 'cloud_provider' => null, 'name' => "arrivals-{$code}-01", 'ip_address' => '192.0.2.' . (200 + $index), 'ssh_port' => 22, 'ssh_user' => 'root',
+                'ssh_private_key' => $key->privateKey, 'ssh_public_key' => $key->publicKey, 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', "arrivals-{$code}", true)), 0, 43),
+                'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => [], 'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 80],
+                'audit_logging_enabled' => false, 'environment' => 'Production', 'region' => 'fsn1',
+            ]],
+            'source_providers' => [['ref' => 'gh', 'type' => SourceProviderType::GitHubApp->value, 'name' => 'Arrivals on GitHub', 'custom_host' => null]],
+            'applications' => [[
+                'ref' => 'a1', 'server' => 's1', 'source_provider' => 'gh', 'name' => 'storefront', 'slug' => "arrivals-{$code}-storefront", 'type' => ApplicationType::Php->value,
+                'framework' => 'laravel', 'repository_url' => 'https://github.com/arrivals/storefront', 'repository_id' => '9001', 'system_user' => "coresmith-app-arr{$code}",
+                'base_port' => 8100, 'php_version' => '8.5.5', 'status' => ApplicationStatus::Active->value,
+            ]],
+            'webhook_endpoints' => [],
+            'databases' => [[
+                'server' => 's1', 'type' => 'mysql', 'name' => 'storefront', 'db_user' => 'storefront', 'db_password' => Str::random(24), 'host' => '127.0.0.1', 'port' => 3306,
+                'status' => 'active', 'privilege_level' => 'full', 'extensions' => [], 'is_external' => false,
+            ]],
+            'backup_destination' => null,
+        ];
     }
 
     private function server(string $name, string $ip, ServerStatus $status): Server

@@ -8,6 +8,7 @@
     import EmptyState from '@/components/EmptyState.svelte'
     import ProvisioningPanel from '@/components/servers/ProvisioningPanel.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
+    import ServerMovePanel from '@/components/servers/ServerMovePanel.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
     import type { EntityState } from '@/lib/fleet'
@@ -38,6 +39,10 @@
 <AppHead title={server.name} />
 
 <ServerHeaderView {server} />
+
+{#if server.move}
+    <ServerMovePanel move={server.move} server={server.id} />
+{/if}
 
 {#if server.provisioning}
     <ProvisioningPanel {server} />

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
+use App\Enums\ServerStatus;
 use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\UnsafeNameException;
 use App\Jobs\IdleAppSleeper;
@@ -124,6 +125,23 @@ test('an app idle past its timeout is put to sleep', function () {
     });
 
     expect($app->fresh()->power_state)->toBe(PowerState::Sleeping);
+});
+
+test('an idle app on a server that is moving between panels is left alone', function () {
+    $app = cronApp([
+        'power_state' => PowerState::Active,
+        'idle_timeout_minutes' => 30,
+        'last_request_at' => now()->subMinutes(45),
+    ]);
+    $app->server->forceFill(['status' => ServerStatus::Moving])->save();
+    $transport = new FakeSSHTransport;
+
+    withTransport($transport, function (): void {
+        (new IdleAppSleeper)->handle(app(SSHConnectionManager::class), processes());
+    });
+
+    expect($app->fresh()->power_state)->toBe(PowerState::Active)
+        ->and($transport->connected())->toBeFalse();
 });
 
 test('an app inside its idle window keeps running', function () {

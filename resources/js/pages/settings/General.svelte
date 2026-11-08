@@ -10,7 +10,9 @@
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
     import { Textarea } from '@/components/ui/textarea'
+    import MoveTeamCard from '@/components/settings/MoveTeamCard.svelte'
     import PanelUpdatesCard from '@/components/settings/PanelUpdatesCard.svelte'
+    import type { Moves } from '@/lib/moves'
     import type { PanelUpdates } from '@/lib/panelUpdates.svelte'
     import { cn } from '@/lib/utils'
 
@@ -32,6 +34,7 @@
         timezones = [],
         keys = [],
         updates,
+        moves = null,
         can
     }: {
         instance: {
@@ -47,6 +50,7 @@
         timezones: string[]
         keys: Key[]
         updates: PanelUpdates
+        moves?: Moves | null
         can: { manageInstance: boolean; reachServers: boolean }
     } = $props()
 
@@ -141,6 +145,10 @@
             {/if}
         {/if}
     </div>
+
+    {#if moves}
+        <MoveTeamCard {moves} />
+    {/if}
 
     <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="ssh-keys-card">
         <div class="mb-1 flex items-center justify-between">

@@ -8,6 +8,7 @@ use App\Enums\ServerStatus;
 use App\Jobs\ReadSchedulerLog;
 use App\Models\Application;
 use App\Models\CloudProvider;
+use App\Models\MoveCode;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -16,6 +17,7 @@ use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\RepositoryCatalog;
+use App\Services\Moves\MoveFile;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\CronJobs;
 use App\Services\Server\SchedulerLogReader;
@@ -149,4 +151,21 @@ test('the browser seed has a scheduler log to show, one that could not be read, 
         ->and(end($log['lines']))->toBe('[2026-11-06 09:00:00] Running [prune] .... DONE')
         ->and($unread)->toMatchArray(['lines' => [], 'error' => "Couldn't read the scheduler log on bench-01."])
         ->and(Application::query()->where('name', 'cron-full')->sole()->cron_jobs)->toHaveCount(CronJobs::MAX_ENTRIES);
+});
+
+test('the browser seed gives every browser an owner with a move file to import and a server whose move stopped', function () {
+    e2eSeedRun();
+
+    foreach (E2ESeeder::PROJECTS as $code) {
+        $mover = User::query()->where('email', E2ESeeder::moverEmail($code))->firstOrFail();
+        $move = MoveCode::query()->where('user_id', $mover->id)->firstOrFail();
+        $landed = Team::query()->where('slug', "landed-{$code}")->firstOrFail();
+        $server = $landed->servers()->firstOrFail();
+
+        expect($mover->managesInstance())->toBeTrue()
+            ->and($mover->current_team_id)->toBe($landed->id)
+            ->and(app(MoveFile::class)->open((string) $move->file, $move)['team'])->toBe(['name' => "Arrivals {$code}", 'slug' => "arrivals-{$code}"])
+            ->and($server->status)->toBe(ServerStatus::Moving)
+            ->and($server->takeover['state'])->toBe('failed');
+    }
 });

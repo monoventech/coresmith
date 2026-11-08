@@ -25,7 +25,7 @@ What you get over running the panel yourself:
 - **One server fewer.** A self-hosted panel needs a server of its own, because Coresmith can't manage the server it runs on. On Cloud, every server you add is for your apps.
 - **No upkeep.** We install each release, back up the panel and keep its certificates and email working, so invitations, password resets and alerts arrive from the first day.
 - **GitHub straight away.** Connect your repositories through Coresmith's GitHub App, with no App of your own to create.
-- **Your servers stay yours.** If a plan ends, your servers and apps keep running and the team turns read-only until you choose a plan.
+- **Your servers stay yours.** If a plan ends, your servers and apps keep running and the team turns read-only until you choose a plan. You can also move the team to your own panel at any time, servers and all, without setting them up again (see [Moving a team from Coresmith Cloud](#moving-a-team-from-coresmith-cloud)).
 
 | Plan | Price | Includes |
 | --- | --- | --- |
@@ -93,6 +93,17 @@ The installer ends with a one-time link, `https://<your panel>/install?token=<to
 ### 4. Connect GitHub and add a server
 
 The panel's **Finish setup** list walks you through the rest: connect GitHub (the panel first creates its own GitHub App, which you confirm on GitHub), add a server, provision it and make your first deploy.
+
+### Moving a team from Coresmith Cloud
+
+Bring a Coresmith Cloud team, with its servers, apps and databases, to your own panel without setting the servers up again. Their apps keep serving the whole time.
+
+1. On your panel, open Settings, General and press **Create a move code**. Copy the code; it works for 24 hours.
+2. In Coresmith Cloud, open Billing, **Move to self-host**, paste the code into **Move code** and press **Download move file**. Coresmith Cloud stops managing the team, and a paid plan ends when its month does. **Cancel the move** there puts everything back.
+3. On your panel, upload the file under **Move file**, check what moves and press **Move team**. Your panel takes over each server with a key of its own and removes Coresmith Cloud's.
+4. Connect GitHub on your panel: apps that used Coresmith Cloud's GitHub App move onto it once it can see their repositories. Teammates get an invitation, and deploy webhooks need their new address at your git host.
+
+Only your panel can open the move file. Deploy history, metrics, the activity log, API tokens and single sign-on stay behind.
 
 ### Running it
 

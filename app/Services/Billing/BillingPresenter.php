@@ -118,6 +118,12 @@ final class BillingPresenter
                 'trial_ends_on' => $trial ? $this->dayOrNull($status->trialEndsAt) : null,
                 'guide' => self::SELF_HOSTING_URL,
             ],
+            'move' => $team->moving_at === null ? null : [
+                'to' => (string) $team->moving_to,
+                'since' => $team->moving_at->setTimezone((string) config('app.timezone', 'UTC'))->format('M j'),
+                'file' => $canManage ? route('settings.billing.move.file') : null,
+                'can_cancel' => $canManage,
+            ],
             'checkout' => $this->checkout($team, $status, $subscribed, $checkout),
         ];
     }
@@ -274,6 +280,15 @@ final class BillingPresenter
      */
     private function banner(Team $team, BillingStatus $status, bool $canManage): ?array
     {
+        if ($team->moving_at !== null) {
+            return $this->bannerOf(
+                'warning',
+                'This team is moving to your own panel.',
+                'Coresmith Cloud has stopped managing its servers, and they keep running. ' . ($canManage ? "Upload the move file on {$team->moving_to} to finish." : 'Ask an owner if it should stay here.'),
+                $canManage ? 'See the move' : null,
+            );
+        }
+
         if ($status->state === BillingState::Trialing && $status->plan === Plan::Trial && $status->trialEndsAt !== null && ($status->trialDaysLeft() ?? self::WARN_DAYS + 1) <= self::WARN_DAYS) {
             $days = (int) $status->trialDaysLeft();
             $title = match ($days) {

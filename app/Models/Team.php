@@ -45,6 +45,7 @@ class Team extends Model
         'pending_checkout_id',
         'free_plan',
         'free_until',
+        'move_file',
         'subscriptions',
         'billingInvoices',
         'backupDestination',
@@ -151,6 +152,7 @@ class Team extends Model
             'trial_reminded_at' => 'datetime',
             'free_plan' => Plan::class,
             'free_until' => 'datetime',
+            'moving_at' => 'datetime',
         ];
     }
 }
