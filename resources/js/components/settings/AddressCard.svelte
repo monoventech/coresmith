@@ -15,6 +15,7 @@
 
     const running = $derived(address.change?.state === 'running')
     const failed = $derived(address.change?.state === 'failed' ? address.change : null)
+    const changeable = $derived(canManage && address.managed && !(running || failed))
     const moved = $derived(
         address.change?.state === 'done' && address.change.to === address.host ? address.change : null
     )
@@ -84,7 +85,7 @@
             class="focus-ring min-w-0 flex-1 truncate rounded-sm font-mono text-[12.5px] text-foreground no-underline"
             >{address.host}</a
         >
-        {#if canManage && address.managed && !running && !failed}
+        {#if changeable}
             <Button variant="outline" size="sm" onclick={() => change()}>Change</Button>
         {/if}
     </div>
