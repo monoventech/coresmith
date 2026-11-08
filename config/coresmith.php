@@ -81,6 +81,12 @@ return [
 
     'live' => [
         'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
+        'socket' => [
+            'key' => (string) env('VITE_REVERB_APP_KEY', ''),
+            'host' => (string) env('VITE_REVERB_HOST', ''),
+            'port' => (int) env('VITE_REVERB_PORT', 443),
+            'scheme' => (string) env('VITE_REVERB_SCHEME', 'https'),
+        ],
     ],
 
     'runtimes' => [
