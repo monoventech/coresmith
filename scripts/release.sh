@@ -350,10 +350,22 @@ validate() {
     resolve_repository
 }
 
-collect_commits() {
-    local candidates commit omitted full
+shipped_commits() {
+    git log --format=%B "${REMOTE}/main" | grep -oE 'cherry picked from commit [0-9a-f]{40}' | awk '{ print $5 }' || true
+}
 
-    candidates="$(git rev-list --reverse --no-merges --cherry-pick --right-only "${REMOTE}/main...${REMOTE}/dev")"
+collect_commits() {
+    local candidates="" shipped commit omitted full
+
+    shipped="$(shipped_commits)"
+
+    while IFS= read -r commit; do
+        if [ -n "$commit" ] && ! printf '%s\n' "$shipped" | grep -qxF "$commit"; then
+            candidates="${candidates}${commit}"$'\n'
+        fi
+    done < <(git rev-list --reverse --no-merges --cherry-pick --right-only "${REMOTE}/main...${REMOTE}/dev")
+
+    candidates="${candidates%$'\n'}"
 
     if [ -z "$candidates" ]; then
         fail "Nothing to release: everything on ${REMOTE}/dev is already on main."
@@ -594,7 +606,7 @@ open_pull_request() {
             done <<<"$OMITTED"
         fi
 
-        printf '\nMerge it with a merge commit, not a squash or rebase: the next release compares main with dev commit by commit to see what has shipped. Then run ./scripts/release.sh publish %s.\n' "$VERSION"
+        printf '\nMerge it with any method: the next release reads the history on main, including the cherry-pick notes a squash keeps, to tell what has shipped. Then run ./scripts/release.sh publish %s.\n' "$VERSION"
     } >"$body"
 
     set -- gh pr create --repo "$REPO" --base main --head "$RELEASE_BRANCH" --title "Release v${VERSION}" --body-file "$body"
@@ -607,7 +619,7 @@ open_pull_request() {
     fi
 
     success "Opened ${url}"
-    log "Review it, merge it with a merge commit, then run ./scripts/release.sh publish ${VERSION}."
+    log "Review it, merge it, then run ./scripts/release.sh publish ${VERSION}."
 }
 
 prepare() {
@@ -695,16 +707,12 @@ publish() {
 
     case "$state" in
     MERGED) ;;
-    OPEN) fail "${url} isn't merged yet. Merge it with a merge commit, then publish." ;;
+    OPEN) fail "${url} isn't merged yet. Merge it, then publish." ;;
     *) fail "${url} was closed without merging. Open a new one with ./scripts/release.sh ${VERSION}." ;;
     esac
 
     if [ -z "$commit" ] || ! git merge-base --is-ancestor "$commit" "${REMOTE}/main" 2>/dev/null; then
         fail "${REMOTE}/main doesn't have the merge of ${url} yet. Try again in a moment."
-    fi
-
-    if [ "$(git rev-list --parents -n 1 "$commit" | awk '{ print NF - 1 }')" -lt 2 ]; then
-        fail "${url} was squashed or rebased into main. A release needs a merge commit, because the next release compares main with dev commit by commit to see what has shipped. Revert it on main with a pull request, then merge the release again with a merge commit."
     fi
 
     merged="$(git show "${commit}:VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
