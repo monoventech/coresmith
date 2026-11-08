@@ -80,11 +80,15 @@ final class ChangeAddress implements ShouldBeUnique, ShouldQueue
             Artisan::call('config:cache');
         }
 
-        $site->write([$this->host], [$from => $this->host]);
-        $caddy->reload();
-
         AddressChange::finish();
         activity()->withProperties(['from' => $from, 'to' => $this->host])->log('address_changed');
+
+        try {
+            $site->write([$this->host], [$from => $this->host]);
+            $caddy->reload();
+        } catch (RuntimeException $unredirected) {
+            report($unredirected);
+        }
 
         Artisan::call('horizon:terminate');
         Artisan::call('reverb:restart');

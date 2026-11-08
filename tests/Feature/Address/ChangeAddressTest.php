@@ -20,6 +20,9 @@ final class ChangeAddressCaddy implements CaddyAdmin
     /** @var list<string> */
     public array $loaded = [];
 
+    /** @var list<?string> */
+    public array $states = [];
+
     public function __construct(private readonly string $site, private int $refusals = 0) {}
 
     public function reload(): void
@@ -31,6 +34,7 @@ final class ChangeAddressCaddy implements CaddyAdmin
         }
 
         $this->loaded[] = (string) file_get_contents($this->site);
+        $this->states[] = AddressChange::current()['state'] ?? null;
     }
 }
 
@@ -101,6 +105,14 @@ test('the new address goes live once its certificate is served, and the old one 
         ->and(file_get_contents("{$directory}/.env"))->toBe("APP_URL=https://coresmith.example.com\nVITE_REVERB_HOST=coresmith.example.com\n")
         ->and(AddressChange::current())->toMatchArray(['state' => 'done', 'from' => '192.168.0.248', 'to' => 'coresmith.example.com', 'error' => null])
         ->and(Activity::query()->where('description', 'address_changed')->sole()->properties->all())->toBe(['from' => '192.168.0.248', 'to' => 'coresmith.example.com']);
+});
+
+test('the change counts as done while the old address still serves coresmith, so an open page can see it', function () {
+    [, $caddy] = changeAddressMachine();
+
+    changeAddressTo('coresmith.example.com');
+
+    expect($caddy->states)->toBe(['running', 'done']);
 });
 
 test('the background services restart so they pick the new address up', function () {
