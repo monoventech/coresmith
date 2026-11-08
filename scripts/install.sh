@@ -11,7 +11,7 @@
 #   sudo ./install.sh [OPTIONS]
 #
 # Options:
-#   --domain <domain>          Domain for the panel (default: server IP)
+#   --domain <domain>          Domain for Coresmith (default: server IP)
 #   --email <email>            Email for Let's Encrypt certificates
 #   --db <sqlite|pgsql|mysql>  Database driver (default: sqlite)
 #   --db-host <host>           Database host (pgsql/mysql)
@@ -242,7 +242,7 @@ preflight() {
     local public_ip
     public_ip="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
     if [ -n "$public_ip" ] && [ "$public_ip" != "$SERVER_IP" ]; then
-        log "Reachable from the internet as ${public_ip}, through NAT. Without --domain the panel answers on ${SERVER_IP}; point a domain at ${public_ip} to use it from outside."
+        log "Reachable from the internet as ${public_ip}, through NAT. Without --domain Coresmith answers on ${SERVER_IP}; point a domain at ${public_ip} to use it from outside."
     fi
 
     if command -v ss >/dev/null 2>&1; then
@@ -286,7 +286,7 @@ interactive_prompts() {
     banner
 
     if [ -z "$DOMAIN" ]; then
-        printf 'Domain for the panel, or Enter to use %s%s%s: ' "$BOLD" "$SERVER_IP" "$NC"
+        printf 'Domain for Coresmith, or Enter to use %s%s%s: ' "$BOLD" "$SERVER_IP" "$NC"
         read -r DOMAIN
     fi
 
@@ -867,7 +867,7 @@ configure_environment() {
 # ── Phase 6: Caddy configuration ─────────────────────────────────────────────
 
 configure_caddy() {
-    log "Phase 6/8: configuring Caddy for the panel..."
+    log "Phase 6/8: configuring Caddy for Coresmith..."
 
     local fpm_sock="/run/php/coresmith-panel-fpm.sock"
     mkdir -p /run/php
@@ -1114,7 +1114,7 @@ UNIT
 
     cat >/etc/systemd/system/coresmith-update.service <<UNIT
 [Unit]
-Description=Coresmith update, started from the panel
+Description=Coresmith update, started from Settings
 After=network-online.target redis-server.service
 Wants=network-online.target
 
@@ -1133,7 +1133,7 @@ UNIT
 
     cat >/etc/systemd/system/coresmith-update.path <<UNIT
 [Unit]
-Description=Start a Coresmith update when the panel asks for one
+Description=Start a Coresmith update when Coresmith asks for one
 
 [Path]
 PathExists=${UPDATES_DIR}/request.json
@@ -1196,7 +1196,7 @@ F2BJAIL
 
     run systemctl enable --now fail2ban || true
     run systemctl restart fail2ban || true
-    success "fail2ban is watching panel logins"
+    success "fail2ban is watching Coresmith sign-ins"
 }
 
 wait_for_service() {
@@ -1291,7 +1291,7 @@ print_summary() {
         printf '  %sThis link works once. After the owner account exists it is%s\n' "$YELLOW" "$NC"
         printf '  %scleared from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
     elif [ "$already_set_up" = "true" ]; then
-        printf '  The panel is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
+        printf '  Coresmith is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
 
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"
@@ -1301,7 +1301,7 @@ print_summary() {
     printf '    Update:  cd %s && sudo -u coresmith php artisan coresmith:update\n\n' "$INSTALL_DIR"
 
     if [ "$healthy" != "true" ]; then
-        warn "Some services did not start. The panel may be unreachable until they do."
+        warn "Some services did not start. Coresmith may be unreachable until they do."
     fi
 }
 

@@ -37,7 +37,7 @@ test('a move file sealed to another code is refused', function () {
     $file = app(MoveFile::class)->seal(['team' => ['name' => 'Acme']], $codes->read($codes->text($other)));
 
     expect(moveFileRefusal(fn() => app(MoveFile::class)->open($file, $mine->fresh())))
-        ->toBe("This move file was made for a different move code. Paste this panel's code in Coresmith Cloud and download the file again.");
+        ->toBe('This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.');
 });
 
 test('a move file whose sealed part was changed is refused', function () {
@@ -57,7 +57,7 @@ test('a move file from a newer coresmith asks for an update', function () {
     $file = (string) json_encode(['format' => 2, 'coresmith' => '0.9.0', 'code' => $code->id, 'sealed' => base64_encode('x')]);
 
     expect(moveFileRefusal(fn() => app(MoveFile::class)->open($file, $code->fresh())))
-        ->toBe('This move file comes from Coresmith 0.9.0, which is newer than this panel. Update this panel, then upload the file again.');
+        ->toBe('This move file comes from Coresmith 0.9.0, which is newer than this one. Update Coresmith, then upload the file again.');
 });
 
 test('a file that is not a move file is refused', function (string $file) {

@@ -103,7 +103,7 @@ test.describe('provider accounts', () => {
             .getByRole('button', { name: 'Rename' })
             .click()
 
-        await expect(dialog(page)).toContainText('The name is only for the panel, nothing changes at Hetzner Cloud.')
+        await expect(dialog(page)).toContainText('The name is only for Coresmith, nothing changes at Hetzner Cloud.')
 
         await dialog(page).getByLabel('Name').fill(renamed)
         await dialog(page).getByRole('button', { name: 'Save' }).click()
@@ -294,7 +294,7 @@ test.describe('provisioning through a provider', () => {
         const detach = page.getByRole('dialog', { name: 'Detach refused-create?' })
 
         await expect(detach).toContainText(
-            'Nothing was created at Hetzner Cloud, so refused-create only leaves the panel.'
+            'Nothing was created at Hetzner Cloud, so refused-create only leaves Coresmith.'
         )
         await expect(detach).not.toContainText('VM')
 
@@ -321,7 +321,7 @@ test.describe('provisioning through a provider', () => {
             const destroy = page.getByRole('dialog', { name: 'Destroy lost-create?' })
 
             await expect(destroy).toContainText(
-                'Coresmith could not confirm whether Hetzner Cloud created lost-create. If it did, Hetzner Cloud deletes it and its disk, and billing for it stops. Either way, lost-create leaves the panel.'
+                'Coresmith could not confirm whether Hetzner Cloud created lost-create. If it did, Hetzner Cloud deletes it and its disk, and billing for it stops. Either way, lost-create leaves Coresmith.'
             )
 
             await destroy.getByRole('button', { name: 'detach it instead' }).click()

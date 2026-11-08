@@ -206,7 +206,7 @@ test('a connection made through an app the panel no longer has is a bad gateway 
 
     $this->actingAs($user)->getJson(repositoryPickerPath($provider))
         ->assertStatus(502)
-        ->assertExactJson(['message' => 'GitHub did not send the repository list. This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.']);
+        ->assertExactJson(['message' => 'GitHub did not send the repository list. This GitHub connection was made through an app Coresmith no longer has. Connect GitHub again from Settings, Git.']);
 
     Http::assertNothingSent();
 });
@@ -282,7 +282,7 @@ test('a branch list for a connection whose app is gone names the branch list and
 
     $this->actingAs($user)->getJson(repositoryPickerPath($provider, '70000001'))
         ->assertStatus(502)
-        ->assertExactJson(['message' => 'GitHub did not send the branch list. This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.']);
+        ->assertExactJson(['message' => 'GitHub did not send the branch list. This GitHub connection was made through an app Coresmith no longer has. Connect GitHub again from Settings, Git.']);
 
     Http::assertNothingSent();
 });

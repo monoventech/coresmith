@@ -99,7 +99,7 @@
                 <Button variant="ghost" href={route('profile.edit')} onclick={() => (open = false)}>Your account</Button
                 >
                 <Button variant="outline" href={route('settings.general')} onclick={() => (open = false)}
-                    >Panel settings</Button
+                    >Settings</Button
                 >
             </div>
         </div>

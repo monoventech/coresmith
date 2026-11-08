@@ -51,7 +51,7 @@ final class ServerReachability
         return match (true) {
             $e instanceof SSHAuthenticationException => "The server refused Coresmith's key for {$server->ssh_user}. Check the key is still in ~/.ssh/authorized_keys.",
             $e instanceof SSHCommandTimedOut, $e instanceof ConnectionClosedException, self::isPreBannerFailure($e) => 'The server took the connection but stopped answering. It may be overloaded or rebooting.',
-            default => "The connection to port {$server->ssh_port} was refused or timed out. Check the server is running and its firewall allows SSH from this panel.",
+            default => "The connection to port {$server->ssh_port} was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.",
         };
     }
 

@@ -8,9 +8,9 @@ test.describe('coresmith cloud', () => {
             'Coresmith Cloud · updates are managed for you'
         )
         await expect(page.getByTestId('panel-card')).toHaveCount(0)
-        await expect(page.getByLabel('Panel name')).toHaveCount(0)
+        await expect(page.getByLabel('Installation name')).toHaveCount(0)
         await expect(page.getByTestId('backups-card')).toContainText(
-            'The panel is backed up every night by Coresmith Cloud.'
+            'Coresmith Cloud backs itself up every night.'
         )
         await expect(page.getByTestId('backups-card').getByRole('button', { name: 'Back up now' })).toHaveCount(0)
     })

@@ -380,7 +380,7 @@ test('a connection whose app is gone is said plainly, with nothing to try again'
             'source_provider_id' => $connection->id,
             'repository_id' => '70000001',
         ]))
-        ->assertSessionHasErrors(['source_provider_id' => 'That GitHub connection was made through an app this panel no longer has. Pick another one, or connect GitHub again in Git settings.'])
+        ->assertSessionHasErrors(['source_provider_id' => 'That GitHub connection was made through an app Coresmith no longer has. Pick another one, or connect GitHub again in Git settings.'])
         ->assertSessionDoesntHaveErrors('repository_id');
 
     expect(Application::query()->count())->toBe(0);

@@ -55,7 +55,7 @@
                     <Dialog.Title>Destroy {server.name}?</Dialog.Title>
                     <Dialog.Description
                         >{uncertain
-                            ? `Coresmith could not confirm whether ${provider} created ${server.name}. If it did, ${provider} deletes it and its disk, and billing for it stops. Either way, ${server.name} leaves the panel.`
+                            ? `Coresmith could not confirm whether ${provider} created ${server.name}. If it did, ${provider} deletes it and its disk, and billing for it stops. Either way, ${server.name} leaves Coresmith.`
                             : `${provider} deletes the server and its disk. Everything on it is gone and can't be recovered, and billing for it stops.`}</Dialog.Description
                     >
                 </Dialog.Header>

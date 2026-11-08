@@ -151,7 +151,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
         } catch (Throwable $e) {
             report($e);
 
-            return [$api, StepResult::fail('Coresmith stopped with an unexpected error: ' . rtrim(Str::limit($sanitizer->sanitize($e->getMessage()), 200), '. ') . ". Try again, and if it keeps happening check the panel's logs.")];
+            return [$api, StepResult::fail('Coresmith stopped with an unexpected error: ' . rtrim(Str::limit($sanitizer->sanitize($e->getMessage()), 200), '. ') . ". Try again, and if it keeps happening check Coresmith's logs.")];
         }
     }
 

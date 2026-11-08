@@ -138,7 +138,7 @@ test.describe('custom domains', () => {
         await dialog(page).getByLabel('Domain').fill('not a domain')
         await dialog(page).getByRole('button', { name: 'Add domain' }).click()
 
-        await expect(dialog(page)).toContainText("That doesn't look like a domain. Try panel.example.com.")
+        await expect(dialog(page)).toContainText("That doesn't look like a domain. Try deploy.example.com.")
     })
 })
 

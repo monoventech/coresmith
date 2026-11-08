@@ -110,8 +110,8 @@ test('the email for auto deploy does not say no deployment was needed, other tog
 
     Notification::assertSentTo($teammate, ApplicationToggledNotification::class, fn(ApplicationToggledNotification $notification): bool => $notification->toMail($teammate)->introLines === [$line]);
 })->with([
-    'auto deploy' => ['auto_deploy', 'Ada Lovelace made the change from the panel.'],
-    'maintenance page' => ['maintenance_mode', 'Ada Lovelace made the change from the panel. No deployment was needed.'],
+    'auto deploy' => ['auto_deploy', 'Ada Lovelace made the change in Coresmith.'],
+    'maintenance page' => ['maintenance_mode', 'Ada Lovelace made the change in Coresmith. No deployment was needed.'],
 ]);
 
 test('a member cannot change auto deploy', function () {

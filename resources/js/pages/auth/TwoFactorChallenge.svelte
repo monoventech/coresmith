@@ -21,7 +21,7 @@
             : {
                   title: 'Enter your code',
                   mark: 'code',
-                  description: 'Open your authenticator app and type the six-digit code for this panel.',
+                  description: 'Open your authenticator app and type the six-digit code for Coresmith.',
                   toggle: 'Use a recovery code instead'
               }
     )

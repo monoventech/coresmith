@@ -33,7 +33,7 @@ final class StoreApplicationRequest extends FormRequest
 
     private const CONNECTION_SUSPENDED = 'GitHub has suspended this installation. Unsuspend it on GitHub to deploy again.';
 
-    private const APP_GONE = 'That GitHub connection was made through an app this panel no longer has. Pick another one, or connect GitHub again in Git settings.';
+    private const APP_GONE = 'That GitHub connection was made through an app Coresmith no longer has. Pick another one, or connect GitHub again in Git settings.';
 
     private const REPOSITORY_NOT_PICKED = 'Pick a repository from the list.';
 

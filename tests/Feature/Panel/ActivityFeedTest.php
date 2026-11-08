@@ -50,7 +50,7 @@ test('server events are described in plain words', function (string $description
     expect(feedSentence($row))->toBe($sentence)
         ->and($row['href'])->toBe(route('servers.show', $server));
 })->with([
-    'added' => ['server_added', [], 'web-1 added to the panel, waiting for its key'],
+    'added' => ['server_added', [], 'web-1 added to Coresmith, waiting for its key'],
     'provisioned' => ['server_provisioned', ['duration_seconds' => 372], 'web-1 provisioned and hardened in 6m 12s'],
     'provisioned without a duration' => ['server_provisioned', [], 'web-1 provisioned and hardened'],
     'renamed' => ['server_renamed', [], 'Server renamed to web-1'],
@@ -353,10 +353,10 @@ test('panel updates appear in every team\'s activity and lead to settings', func
     $rows = app(ActivityFeed::class)->forTeam($team);
 
     expect(array_map(feedSentence(...), $rows))->toBe([
-        'Panel update to v0.1.4 failed and needs attention',
-        'Panel update to v0.1.3 failed while running migrations, rolled back to v0.1.2',
-        'Panel updated to v0.1.2, backup taken, health check passed',
-        'Auto-update applied, panel v0.1.1, backup taken, health check passed',
+        'Coresmith update to v0.1.4 failed and needs attention',
+        'Coresmith update to v0.1.3 failed while running migrations, rolled back to v0.1.2',
+        'Coresmith updated to v0.1.2, backup taken, health check passed',
+        'Auto-update applied, Coresmith v0.1.1, backup taken, health check passed',
     ])
         ->and(array_unique(array_column($rows, 'href')))->toBe([route('settings.general')])
         ->and(app(ActivityFeed::class)->forTeam($other))->toHaveCount(4)

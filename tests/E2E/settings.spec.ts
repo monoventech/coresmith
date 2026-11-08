@@ -96,7 +96,7 @@ test.describe('general settings', () => {
 
         const panel = page.getByTestId('panel-card')
 
-        await expect(panel.getByLabel('Panel name')).toHaveValue('Coresmith')
+        await expect(panel.getByLabel('Installation name')).toHaveValue('Coresmith')
         await expect(panel.getByLabel('Timezone')).toBeVisible()
     })
 
@@ -172,7 +172,7 @@ test.describe('general settings', () => {
         const closing = page.getByTestId('close-account')
 
         await expect(closing).toContainText(
-            'Make someone else an owner of Foundry first. To remove the panel instead, run coresmith:uninstall on its server.'
+            'Make someone else an owner of Foundry first. To remove Coresmith instead, run coresmith:uninstall on its server.'
         )
         await expect(closing.getByRole('button', { name: 'Close your account' })).toBeDisabled()
         await expect(page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' })).toHaveCount(0)

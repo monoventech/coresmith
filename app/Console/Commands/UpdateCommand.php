@@ -27,10 +27,10 @@ final class UpdateCommand extends Command
         {--to= : Update to this version rather than the newest one}
         {--force : Update without asking first}
         {--recover : Finish or undo an update that was interrupted}
-        {--requested : Run the update the panel asked for}
+        {--requested : Run the update Coresmith asked for}
         {--auto : Ask for the nightly patch update when the owner turned them on}';
 
-    protected $description = 'Update this panel to a newer Coresmith release, with a backup and automatic rollback';
+    protected $description = 'Update Coresmith to a newer release, with a backup and automatic rollback';
 
     public function handle(PanelUpdater $updater, UpdatePaths $paths, UpdateState $state, UpdateChecker $checker): int
     {

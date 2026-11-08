@@ -242,7 +242,7 @@ test.describe('the account dialog', () => {
     test('it leads to the panel settings', async ({ page }) => {
         await page.goto('/dashboard')
         await page.getByRole('button', { name: 'Account' }).click()
-        await dialog(page).getByRole('link', { name: 'Panel settings' }).click()
+        await dialog(page).getByRole('link', { name: 'Settings' }).click()
 
         await page.waitForURL(/\/settings$/)
         await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()

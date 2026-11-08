@@ -57,7 +57,7 @@ final class PlanRefusal extends RuntimeException
 
     public static function moving(bool $canManage): self
     {
-        return new self('This team is moving to your own panel, so Coresmith Cloud no longer changes it. ' . ($canManage ? 'Cancel the move in Billing settings to make changes here again.' : 'Ask an owner if it should stay here.'), 'moving', 409);
+        return new self('This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer changes it. ' . ($canManage ? 'Cancel the move in Billing settings to make changes here again.' : 'Ask an owner if it should stay here.'), 'moving', 409);
     }
 
     public static function inactive(): self

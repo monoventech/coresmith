@@ -108,7 +108,7 @@ test("vultr says when the key is refused for the panel's address", function () {
     Http::fake(['api.vultr.com/v2/account' => Http::response(CloudFixtures::json('vultr/error-acl'), 401)]);
 
     expect(fn() => cloudVultr()->verify())->toThrow(function (CloudProviderException $e) {
-        $message = "Vultr refused requests from this panel's IP address. Vultr said: Unauthorized IP address: 198.51.100.7. Add the address to Access Control in Vultr's API settings, then try again.";
+        $message = "Vultr refused requests from Coresmith's IP address. Vultr said: Unauthorized IP address: 198.51.100.7. Add the address to Access Control in Vultr's API settings, then try again.";
 
         expect($e->failure)->toBe(CloudFailure::AddressRefused)
             ->and($e->status)->toBe(401)

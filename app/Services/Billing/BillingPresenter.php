@@ -283,7 +283,7 @@ final class BillingPresenter
         if ($team->moving_at !== null) {
             return $this->bannerOf(
                 'warning',
-                'This team is moving to your own panel.',
+                'This team is moving to self-hosted Coresmith.',
                 'Coresmith Cloud has stopped managing its servers, and they keep running. ' . ($canManage ? "Upload the move file on {$team->moving_to} to finish." : 'Ask an owner if it should stay here.'),
                 $canManage ? 'See the move' : null,
             );

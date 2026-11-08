@@ -36,7 +36,7 @@ final class PlanChanges
         $refusal = match (true) {
             $status->state === BillingState::Free && $status->endsAt === null => "This team's plan is free with no last day, so there is nothing to choose.",
             $status->plan === $plan && $status->state !== BillingState::Free => "The team is already on {$plan->label()}. Choose a different plan.",
-            $price === null => "{$plan->label()} is not available on this panel yet. Choose another plan.",
+            $price === null => "{$plan->label()} is not available here yet. Choose another plan.",
             $status->state === BillingState::PastDue, in_array($subscription?->stripe_status, self::PAYMENT_FAILED, true) => 'The last payment failed. Update the payment method first, then change the plan.',
             $status->state === BillingState::Ending => 'This plan is ending. Keep it first, then change it.',
             default => $this->guard->blockers($team, $plan)[0]['message'] ?? null,

@@ -12,7 +12,7 @@ asGuest.describe('signing in', () => {
     asGuest('the sign in page carries the wordmark, the form and the Monoven mark', async ({ page }) => {
         await page.goto('/login')
 
-        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to your panel' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Coresmith' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Coresmith home' })).toBeVisible()
         await expect(page.getByLabel('Email address')).toBeVisible()
         await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
@@ -30,7 +30,7 @@ asGuest.describe('signing in', () => {
         page.on('pageerror', (error) => problems.push(error.message))
 
         await page.goto('/login')
-        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to your panel' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Coresmith' })).toBeVisible()
 
         expect(problems).toEqual([])
     })
@@ -122,7 +122,7 @@ asGuest.describe('signing in', () => {
         await expect(
             page.getByRole('heading', { level: 1, name: 'Server management without the complexity.' })
         ).toBeVisible()
-        await page.getByRole('link', { name: 'Open the panel' }).click()
+        await page.getByRole('link', { name: 'Open Coresmith' }).click()
 
         await expect(page).toHaveURL(/\/login$/)
     })

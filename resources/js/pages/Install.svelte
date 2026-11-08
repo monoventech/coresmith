@@ -43,7 +43,7 @@
                     <div class="rounded-xl border border-border bg-card p-6">
                         <h3 class="type-h3 m-0 mb-1">You</h3>
                         <p class="mb-4 text-[12.5px] text-muted-foreground">
-                            The owner can provision and delete servers, and hand the panel to someone else later.
+                            The owner can provision and delete servers, and hand Coresmith to someone else later.
                         </p>
                         <div class="flex flex-col gap-4">
                             <div>
@@ -96,7 +96,7 @@
                     </div>
 
                     <div class="rounded-xl border border-border bg-card p-6">
-                        <h3 class="type-h3 m-0 mb-1">This panel</h3>
+                        <h3 class="type-h3 m-0 mb-1">This installation</h3>
                         <p class="mb-4 text-[12.5px] text-muted-foreground">
                             You can change all of this later in Settings.
                         </p>

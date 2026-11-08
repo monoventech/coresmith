@@ -176,7 +176,7 @@ test('three refused collections in a row make a server unreachable, once', funct
 
     reachabilityCollect($server, $transport);
 
-    $reason = 'The connection to port 22 was refused or timed out. Check the server is running and its firewall allows SSH from this panel.';
+    $reason = 'The connection to port 22 was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.';
     $unreachable = Activity::query()->where('description', 'server_unreachable')->sole();
 
     expect($server->fresh()->unreachable_since?->toDateTimeString())->toBe('2026-10-20 14:00:00')
@@ -527,7 +527,7 @@ test('each kind of failure says what to check', function (FakeSSHTransport $tran
 })->with([
     'a refused connection' => [
         fn() => (new FakeSSHTransport)->refuseConnections(),
-        'The connection to port 2222 was refused or timed out. Check the server is running and its firewall allows SSH from this panel.',
+        'The connection to port 2222 was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.',
     ],
     'a refused key' => [
         fn() => (new FakeSSHTransport)->failLogin(),

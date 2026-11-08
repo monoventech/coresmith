@@ -191,7 +191,7 @@ test('a github connection with no app credentials fails loudly instead of clone 
 
     client(provider(SourceProviderType::GitHubApp, ['github_app_id' => null, 'token_expires_at' => now()->subHour()]))
         ->listRepositories();
-})->throws(GitProviderException::class, 'made through an app this panel no longer has');
+})->throws(GitProviderException::class, 'made through an app Coresmith no longer has');
 
 test('a github connection whose app key cannot be read fails with a provider exception before any request', function () {
     Http::fake();

@@ -144,8 +144,8 @@ final class TakeOverServer implements ShouldQueue
 
         return match (true) {
             $e instanceof HostKeyChangedException => "{$name} showed a different host key than Coresmith Cloud recorded, so nothing was changed. Check it's the right server, accept or reject the new key, then try again.",
-            $e instanceof SSHAuthenticationException && $added => "{$name} didn't accept this panel's new key, so the move put its keys back as they were. Try again.",
-            $e instanceof SSHAuthenticationException => "Coresmith Cloud's key no longer opens {$name}, so the move can't take it over. Add the server to this panel again instead.",
+            $e instanceof SSHAuthenticationException && $added => "{$name} didn't accept Coresmith's new key, so the move put its keys back as they were. Try again.",
+            $e instanceof SSHAuthenticationException => "Coresmith Cloud's key no longer opens {$name}, so the move can't take it over. Add the server here again instead.",
             $e instanceof UnableToConnectException, $e instanceof ConnectionClosedException, $e instanceof ServerHasNoAddress => "Coresmith couldn't reach {$name} at {$server->ip_address}:{$server->ssh_port}. Check it's on and reachable, then try again.",
             default => "Taking over {$name} stopped: {$e->getMessage()} Try again.",
         };

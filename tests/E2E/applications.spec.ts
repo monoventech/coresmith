@@ -778,7 +778,7 @@ test.describe('adding an application from GitHub', () => {
                 status: 502,
                 json: {
                     message:
-                        'GitHub did not send the repository list. This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.'
+                        'GitHub did not send the repository list. This GitHub connection was made through an app Coresmith no longer has. Connect GitHub again from Settings, Git.'
                 }
             })
         })
@@ -789,7 +789,7 @@ test.describe('adding an application from GitHub', () => {
         answer()
 
         await expect(page.getByRole('main')).toContainText(
-            'GitHub did not send the repository list. This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.'
+            'GitHub did not send the repository list. This GitHub connection was made through an app Coresmith no longer has. Connect GitHub again from Settings, Git.'
         )
         await expect(page.getByRole('listbox', { name: /repositories/i })).toHaveCount(0)
 
@@ -1050,7 +1050,7 @@ test.describe('adding an application from GitHub', () => {
 
                 await expect(page.getByLabel('Source', { exact: true })).toHaveAttribute('aria-invalid', 'true')
                 await expect(source.getByRole('alert')).toHaveText(
-                    'That GitHub connection was made through an app this panel no longer has. Pick another one, or connect GitHub again in Git settings.'
+                    'That GitHub connection was made through an app Coresmith no longer has. Pick another one, or connect GitHub again in Git settings.'
                 )
                 await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
                 expect(await blockingViolations(page)).toEqual([])

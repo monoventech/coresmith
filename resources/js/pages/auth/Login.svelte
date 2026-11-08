@@ -1,6 +1,6 @@
 <script module lang="ts">
     export const layout = {
-        title: 'Sign in to your panel',
+        title: 'Sign in to Coresmith',
         mark: 'panel',
         description: 'Use the email and password you set up for this Coresmith installation.'
     }

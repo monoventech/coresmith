@@ -82,7 +82,7 @@ test('a new key the server will not accept is taken out again and coresmith clou
 
     expect($moved->status)->toBe(ServerStatus::Moving)
         ->and($moved->takeover['state'])->toBe('failed')
-        ->and($moved->takeover['error'])->toBe("web-01 didn't accept this panel's new key, so the move put its keys back as they were. Try again.")
+        ->and($moved->takeover['error'])->toBe("web-01 didn't accept Coresmith's new key, so the move put its keys back as they were. Try again.")
         ->and($moved->ssh_public_key)->toBe($server->ssh_public_key)
         ->and(implode("\n", $transport->commands()))->toContain("blob='{$added}'")
         ->and(implode("\n", $transport->commands()))->not->toContain("blob='" . FakeSSHTransport::keyBlob($server->ssh_public_key) . "'");
@@ -94,7 +94,7 @@ test('coresmith cloud\'s key no longer opening the server is said plainly', func
 
     $moved = takeOverServerRun($server, $transport);
 
-    expect($moved->takeover['error'])->toBe("Coresmith Cloud's key no longer opens web-01, so the move can't take it over. Add the server to this panel again instead.")
+    expect($moved->takeover['error'])->toBe("Coresmith Cloud's key no longer opens web-01, so the move can't take it over. Add the server here again instead.")
         ->and($transport->commands())->toBe([]);
 });
 

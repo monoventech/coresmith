@@ -178,7 +178,7 @@ test('a provider that cannot be reached is unreachable', function () {
         $this->fail('no exception');
     } catch (CloudProviderException $e) {
         expect($e->failure)->toBe(CloudFailure::Unreachable)
-            ->and($e->getMessage())->toBe("Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check this panel can make outbound HTTPS requests, then try again.")
+            ->and($e->getMessage())->toBe("Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check Coresmith can make outbound HTTPS requests, then try again.")
             ->and($e->getPrevious())->toBeInstanceOf(ConnectionException::class)
             ->and($e->getPrevious()->getPrevious())->toBeNull();
     }
@@ -1034,7 +1034,7 @@ test('every failure has its own copy for tasks and for token forms', function (C
     'rate limited' => [CloudFailure::RateLimited, 429, 'Hetzner Cloud is rate limiting this account. Hetzner Cloud said: server is locked. Coresmith tries again shortly.', 'Hetzner Cloud is rate limiting this account. Hetzner Cloud said: server is locked. Wait a minute, then try again.'],
     'refused' => [CloudFailure::Refused, 422, 'Hetzner Cloud refused the request. Hetzner Cloud said: server is locked.', 'Hetzner Cloud refused the request. Hetzner Cloud said: server is locked.'],
     'unavailable' => [CloudFailure::Unavailable, 503, 'Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.', 'Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.'],
-    'unreachable' => [CloudFailure::Unreachable, null, "Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check this panel can make outbound HTTPS requests, then try again.", "Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check this panel can make outbound HTTPS requests, then try again."],
+    'unreachable' => [CloudFailure::Unreachable, null, "Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check Coresmith can make outbound HTTPS requests, then try again.", "Coresmith couldn't reach Hetzner Cloud at api.hetzner.cloud. Check Coresmith can make outbound HTTPS requests, then try again."],
 ]);
 
 test('the copy names the provider, its host and its own permission advice', function (CloudProviderType $provider, string $label, string $host, string $hint, string $next) {
@@ -1043,7 +1043,7 @@ test('the copy names the provider, its host and its own permission advice', func
 
     expect($forbidden->getMessage())->toBe("{$label} says this token isn't allowed to do that. {$label} said: denied. {$hint} {$next}")
         ->and($forbidden->connectMessage())->toBe("{$label} accepted the token, but it isn't allowed to manage servers. {$label} said: denied. {$hint}")
-        ->and($unreachable->getMessage())->toBe("Coresmith couldn't reach {$label} at {$host}. Check this panel can make outbound HTTPS requests, then try again.");
+        ->and($unreachable->getMessage())->toBe("Coresmith couldn't reach {$label} at {$host}. Check Coresmith can make outbound HTTPS requests, then try again.");
 })->with([
     [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.', 'Then replace the token in Settings → Team.'],
     [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.', 'Then replace the token in Settings → Team.'],
@@ -1108,7 +1108,7 @@ test('a missing or unreadable token says so, and never that the provider refused
 
 test('a provider that refuses the panel address says to allow the address, never that the token cannot manage servers', function () {
     $e = new CloudProviderException(CloudFailure::AddressRefused, CloudProviderType::Vultr, 'Unauthorized IP address: 198.51.100.7', 401);
-    $message = "Vultr refused requests from this panel's IP address. Vultr said: Unauthorized IP address: 198.51.100.7. Add the address to Access Control in Vultr's API settings, then try again.";
+    $message = "Vultr refused requests from Coresmith's IP address. Vultr said: Unauthorized IP address: 198.51.100.7. Add the address to Access Control in Vultr's API settings, then try again.";
 
     expect($e->getMessage())->toBe($message)
         ->and($e->connectMessage())->toBe($message)

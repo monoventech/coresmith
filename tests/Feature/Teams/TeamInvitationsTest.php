@@ -502,7 +502,7 @@ test('a panel that cannot send email offers the link instead of sending it', fun
     $owner = teamInvitationsMember($team);
 
     teamInvitationsSend($owner, $team, 'new@example.com')
-        ->assertSessionHas('success', 'Invitation created. This panel cannot send email yet, so copy the link below and send it to new@example.com yourself.');
+        ->assertSessionHas('success', 'Invitation created. Coresmith cannot send email yet, so copy the link below and send it to new@example.com yourself.');
 
     $invitation = TeamInvitation::query()->sole();
     $token = teamInvitationsCopied();
@@ -649,7 +649,7 @@ test('an account made from a copied link does not let another team add it at onc
     $this->post(route('logout'));
 
     teamInvitationsSend($secondOwner, $second, 'cto@victim.example')
-        ->assertSessionHas('success', 'Invitation created. This panel cannot send email yet, so copy the link below and send it to cto@victim.example yourself.');
+        ->assertSessionHas('success', 'Invitation created. Coresmith cannot send email yet, so copy the link below and send it to cto@victim.example yourself.');
 
     expect($second->members()->whereKey($squat->id)->exists())->toBeFalse()
         ->and(TeamInvitation::query()->where('team_id', $second->id)->sole()->email)->toBe('cto@victim.example');

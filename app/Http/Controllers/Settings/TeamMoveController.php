@@ -20,12 +20,12 @@ final class TeamMoveController extends Controller
     public function store(Request $request, TeamMove $moves): RedirectResponse
     {
         $team = $this->billingTeam();
-        $paste = 'Paste the move code from Settings, General on your panel.';
+        $paste = 'Paste the move code from Settings, General on your self-hosted Coresmith.';
         $validated = $request->validate(['code' => ['required', 'string', 'max:4000']], ['code.required' => $paste, 'code.string' => $paste, 'code.max' => $paste]);
 
         $moves->start($team, $request->user(), $validated['code']);
 
-        return back()->with('success', 'Saved. Coresmith Cloud has paused this team. Upload the move file on your panel to finish.');
+        return back()->with('success', 'Saved. Coresmith Cloud has paused this team. Upload the move file on your self-hosted Coresmith to finish.');
     }
 
     public function show(): Response

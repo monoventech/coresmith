@@ -217,7 +217,7 @@ test('a repointed webhook reports no delivery until a new one arrives, whatever 
         ->assertSessionHas('success', 'Saved. On GitHub, check the app\'s webhook is active and sends push events.');
 
     expect(Cache::get($key))->toMatchArray(['repointed_at' => now()->getTimestamp(), 'received_at' => null, 'event' => null, 'delivery_id' => null, 'latest' => null])
-        ->and(githubAppSettingsWebhook($owner)['sentence'])->toBe('No delivery from GitHub has reached this panel yet.');
+        ->and(githubAppSettingsWebhook($owner)['sentence'])->toBe('No delivery from GitHub has reached Coresmith yet.');
 
     $this->travelTo(CarbonImmutable::parse('2026-10-18 14:20:00'));
     CheckGitHubWebhooks::dispatchSync();
@@ -227,7 +227,7 @@ test('a repointed webhook reports no delivery until a new one arrives, whatever 
         ->and(githubAppSettingsWebhook($owner))->toBe([
             'app_name' => 'Coresmith Monoven',
             'instant' => false,
-            'sentence' => 'No delivery from GitHub has reached this panel yet.',
+            'sentence' => 'No delivery from GitHub has reached Coresmith yet.',
             'sync_href' => null,
         ]);
 });
@@ -270,7 +270,7 @@ test('a delivery received after the repoint shows as healthy', function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-18 14:10:00'));
     CheckGitHubWebhooks::dispatchSync();
 
-    expect(githubAppSettingsWebhook($owner))->toMatchArray(['instant' => true, 'sentence' => 'GitHub reached this panel 3 minutes ago.']);
+    expect(githubAppSettingsWebhook($owner))->toMatchArray(['instant' => true, 'sentence' => 'GitHub reached Coresmith 3 minutes ago.']);
 });
 
 test('removing an app with no live installation forgets its secrets', function () {
@@ -397,7 +397,7 @@ test('an app whose webhook already points here is not offered a repoint', functi
         ->assertInertia(fn($page) => $page->where('github.webhook', [[
             'app_name' => 'Coresmith Monoven',
             'instant' => false,
-            'sentence' => 'No delivery from GitHub has reached this panel yet.',
+            'sentence' => 'No delivery from GitHub has reached Coresmith yet.',
             'sync_href' => null,
         ]]));
 });
@@ -409,7 +409,7 @@ test('a panel that moved is told to point the webhook here', function () {
     $this->actingAs($owner)
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page
-            ->where('github.webhook.0.sentence', 'This panel\'s address changed after the GitHub app was created. Point its webhook here.')
+            ->where('github.webhook.0.sentence', 'Coresmith\'s address changed after the GitHub app was created. Point its webhook here.')
             ->where('github.webhook.0.sync_href', route('github-apps.webhook', $app)));
 });
 
@@ -426,7 +426,7 @@ test('an app github reached says pushes arrive as they happen', function () {
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page
             ->where('github.webhook.0.instant', true)
-            ->where('github.webhook.0.sentence', 'GitHub reached this panel 3 minutes ago.'));
+            ->where('github.webhook.0.sentence', 'GitHub reached Coresmith 3 minutes ago.'));
 });
 
 test('a member reads the webhook sentence but is not offered a repoint', function () {
@@ -456,7 +456,7 @@ test('the environment app\'s webhook is explained once the team uses it and is n
         ->assertInertia(fn($page) => $page->where('github.webhook', [[
             'app_name' => 'Coresmith',
             'instant' => false,
-            'sentence' => 'No delivery from GitHub has reached this panel yet.',
+            'sentence' => 'No delivery from GitHub has reached Coresmith yet.',
             'sync_href' => null,
         ]]));
 });

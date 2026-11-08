@@ -96,7 +96,7 @@ test.describe('the fleet', () => {
 
         const update = page
             .getByRole('region', { name: 'Recent activity' })
-            .getByRole('link', { name: /Auto-update applied, panel v0\.1\.1, backup taken, health check passed/ })
+            .getByRole('link', { name: /Auto-update applied, Coresmith v0\.1\.1, backup taken, health check passed/ })
 
         await expect(update).toBeVisible()
         await update.click()

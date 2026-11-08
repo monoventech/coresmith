@@ -36,7 +36,7 @@ test.describe('checking a server before provisioning', () => {
         const report = page.getByTestId('audit-report')
 
         await expect(report.getByTestId('audit-finding')).toHaveCount(1)
-        await expect(report).toContainText('This server runs the Coresmith panel itself')
+        await expect(report).toContainText('This server runs Coresmith itself')
         await expect(report).toContainText('Add a different server for your apps.')
         await expect(report).toContainText('1 blocker')
         await expect(report).not.toContainText('Rename or remove')

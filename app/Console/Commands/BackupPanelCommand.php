@@ -17,7 +17,7 @@ final class BackupPanelCommand extends Command
 {
     protected $signature = 'coresmith:backup';
 
-    protected $description = 'Back up the panel database and environment, keeping the last fourteen';
+    protected $description = 'Back up the Coresmith database and environment, keeping the last fourteen';
 
     public function handle(PanelBackup $backups): int
     {

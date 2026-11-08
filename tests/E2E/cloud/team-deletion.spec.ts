@@ -45,7 +45,7 @@ asCloudLeaver.describe('deleting a team on coresmith cloud', () => {
                 'Its 3 servers are detached and keep running as-is. Deploys stop until you add them to another team.'
             )
             await expect(dialog).toContainText(
-                'One of them was created at Hetzner Cloud, so it keeps running and billing there until you destroy it at Hetzner Cloud, or from the panel before you delete the team.'
+                'One of them was created at Hetzner Cloud, so it keeps running and billing there until you destroy it at Hetzner Cloud, or from Coresmith before you delete the team.'
             )
             await expect(dialog).toContainText(
                 `Coresmith could not confirm whether Hetzner Cloud created ${own(testInfo, 'parting')}-03. Check your Hetzner Cloud account and delete it there if it exists.`

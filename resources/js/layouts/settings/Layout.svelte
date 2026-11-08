@@ -37,7 +37,7 @@
             return 'Coresmith Cloud plans are billed monthly, per team. Self-hosting is free under ELv2, every feature included.'
         }
 
-        return 'Panel, team and notification preferences for this Coresmith installation.'
+        return 'Installation, team and notification preferences for Coresmith.'
     })
 </script>
 

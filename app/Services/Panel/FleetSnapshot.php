@@ -96,7 +96,7 @@ final class FleetSnapshot
 
         return match (true) {
             $server->pending_host_key_fingerprint !== null => ['key' => 'host_key', 'label' => 'Host key changed', 'tone' => 'destructive'],
-            $server->status === ServerStatus::Moving && $this->team->moving_at !== null => ['key' => 'moving_away', 'label' => 'Moving to your panel', 'tone' => 'default'],
+            $server->status === ServerStatus::Moving && $this->team->moving_at !== null => ['key' => 'moving_away', 'label' => 'Moving to self-hosted Coresmith', 'tone' => 'default'],
             $server->status === ServerStatus::Moving && ($server->takeover['state'] ?? null) === 'failed' => ['key' => 'move_failed', 'label' => 'Move failed', 'tone' => 'destructive'],
             $server->status === ServerStatus::Moving => ['key' => 'moving', 'label' => 'Moving here', 'tone' => 'accent'],
             $server->status === ServerStatus::Creating && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'creation_failed', 'label' => 'Creation failed', 'tone' => 'destructive'],
