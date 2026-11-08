@@ -1237,7 +1237,7 @@ print_summary() {
     printf '%s%s║        Coresmith installed successfully!         ║%s\n' "$BOLD" "$GREEN" "$NC"
     printf '%s%s╚══════════════════════════════════════════════════╝%s\n\n' "$BOLD" "$GREEN" "$NC"
 
-    printf '  %sPanel:%s        %s\n' "$BOLD" "$NC" "$PANEL_URL"
+    printf '  %sAddress:%s      %s\n' "$BOLD" "$NC" "$PANEL_URL"
     printf '  %sDatabase:%s     %s\n' "$BOLD" "$NC" "$DB_DRIVER"
     printf '  %sInstalled in:%s %s\n' "$BOLD" "$NC" "$RELEASE_DIR"
     printf '  %sData in:%s      %s\n\n' "$BOLD" "$NC" "$DATA_DIR"

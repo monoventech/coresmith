@@ -533,6 +533,14 @@ test('an address change runs in its own service that may write only the caddy si
         ->and($body)->toContain('chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"');
 });
 
+test('the summary names the address coresmith answers on, lined up with the rest', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain("printf '  %sAddress:%s      %s\\n' \"\$BOLD\" \"\$NC\" \"\$PANEL_URL\"")
+        ->and($body)->toContain("printf '  %sDatabase:%s     %s\\n'")
+        ->and($body)->not->toContain('Panel:');
+});
+
 test('the address requests the installer watches are where coresmith writes them', function () {
     $body = installScriptBody();
 
