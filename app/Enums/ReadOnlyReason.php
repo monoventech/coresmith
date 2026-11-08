@@ -14,6 +14,7 @@ enum ReadOnlyReason: string
     case TrialEnded = 'trial_ended';
     case PlanEnded = 'plan_ended';
     case PaymentFailed = 'payment_failed';
+    case FreePlanEnded = 'free_plan_ended';
 
     public function title(): string
     {
@@ -22,6 +23,7 @@ enum ReadOnlyReason: string
             self::TrialEnded => "This team's trial has ended, so it is read-only.",
             self::PlanEnded => "This team's plan has ended, so it is read-only.",
             self::PaymentFailed => "This team's payments failed, so it is read-only.",
+            self::FreePlanEnded => "This team's free plan has ended, so it is read-only.",
         };
     }
 }

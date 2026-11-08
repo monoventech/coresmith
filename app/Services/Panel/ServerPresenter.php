@@ -66,7 +66,13 @@ final class ServerPresenter
                 'observed' => $server->pending_host_key_fingerprint,
                 'changed_at' => $server->host_key_changed_at?->toIso8601String(),
             ],
-            'provisioning' => $server->status === ServerStatus::Active ? null : $this->provisioning($server),
+            'provisioning' => in_array($server->status, [ServerStatus::Active, ServerStatus::Moving], true) ? null : $this->provisioning($server),
+            'move' => $server->status !== ServerStatus::Moving ? null : [
+                'away' => $server->team?->moving_at !== null,
+                'state' => (string) ($server->takeover['state'] ?? 'waiting'),
+                'error' => $server->takeover['error'] ?? null,
+                'can_retry' => $server->team?->moving_at === null && ($server->takeover['state'] ?? null) === 'failed' && $user->can('update', $server),
+            ],
             'cloud' => $this->cloud->server($server, $user),
             'tabs' => [
                 'apps' => route('servers.show', $server),

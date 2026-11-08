@@ -20,7 +20,7 @@ export type BillingBannerProps = {
 export type BillingSummary = {
     plan: string | null
     label: string | null
-    state: 'trialing' | 'active' | 'past_due' | 'ending' | 'read_only'
+    state: 'trialing' | 'active' | 'free' | 'past_due' | 'ending' | 'read_only'
     read_only: boolean
     can_manage: boolean
     href: string
@@ -86,5 +86,13 @@ export type BillingPage = {
     receipts_to: string | null
     plans: PlanOption[]
     self_hosting: SelfHosting
+    move: TeamMove | null
     checkout: CheckoutStatus | null
+}
+
+export type TeamMove = {
+    to: string
+    since: string
+    file: string | null
+    can_cancel: boolean
 }

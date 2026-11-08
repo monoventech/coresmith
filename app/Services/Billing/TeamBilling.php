@@ -41,14 +41,27 @@ final class TeamBilling
             };
         }
 
+        $free = $team->free_plan;
+        $freeUntil = $this->moment($team->free_until);
+
+        if ($free instanceof Plan && ($freeUntil === null || $freeUntil->isFuture())) {
+            return new BillingStatus(BillingState::Free, $free, endsAt: $freeUntil);
+        }
+
         if ($team->onGenericTrial()) {
             return new BillingStatus(BillingState::Trialing, Plan::Trial, trialEndsAt: $this->moment($team->trial_ends_at));
         }
 
-        if ($subscription !== null) {
+        $freeEnded = $free instanceof Plan ? $freeUntil : null;
+
+        if ($subscription !== null && ($freeEnded === null || $subscription->ends_at === null || !$freeEnded->greaterThan($subscription->ends_at))) {
             return in_array($subscription->stripe_status, self::PAYMENT_FAILED, true)
                 ? new BillingStatus(BillingState::ReadOnly, null, ReadOnlyReason::PaymentFailed)
                 : new BillingStatus(BillingState::ReadOnly, null, ReadOnlyReason::PlanEnded, endsAt: $this->moment($subscription->ends_at));
+        }
+
+        if ($freeEnded !== null) {
+            return new BillingStatus(BillingState::ReadOnly, null, ReadOnlyReason::FreePlanEnded, endsAt: $freeEnded);
         }
 
         if ($team->trial_ends_at !== null && $team->trial_ends_at->isPast()) {

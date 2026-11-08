@@ -37,6 +37,8 @@ test('without a version it prints how to use it', function () {
 
     expect($process->getExitCode())->toBe(1)
         ->and(releaseOutput($process))->toContain('./scripts/release.sh 1.0.2')
+        ->and(releaseOutput($process))->toContain('./scripts/release.sh publish 1.0.2')
+        ->and(releaseOutput($process))->toContain('--omit <commit>')
         ->and(releaseOutput($process))->toContain('Current version: 0.1.0')
         ->and(releaseOutput($process))->toContain('Latest tag: none');
 });
@@ -66,6 +68,18 @@ test('the release script takes exactly the versions every install accepts', func
     expect(str_split($process->getOutput()))->toBe(array_map(fn(string $version): string => Version::tryParse("v{$version}") === null ? '0' : '1', $versions));
 });
 
+test('options that only fit preparing a stable release are refused elsewhere', function (array $arguments, string $message) {
+    $process = releaseScriptRun(releaseScriptSandbox(), $arguments);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain($message);
+})->with([
+    'publishing a pre-release' => [['publish', '1.0.0-beta.1', '--yes'], 'A pre-release is published as it is cut. Run ./scripts/release.sh 1.0.0-beta.1.'],
+    'omitting from a pre-release' => [['1.0.0-beta.1', '--omit', 'HEAD', '--yes'], '--omit and --skip-gates are for preparing a stable release.'],
+    'skipping gates while publishing' => [['publish', '1.0.0', '--skip-gates', '--yes'], '--omit and --skip-gates are for preparing a stable release.'],
+    'omitting nothing' => [['1.0.0', '--omit'], '--omit needs a commit.'],
+]);
+
 test('a dirty tree is refused', function () {
     $sandbox = releaseScriptSandbox();
     file_put_contents("{$sandbox['clone']}/VERSION", "9.9.9\n");
@@ -83,52 +97,15 @@ test('gh must be signed in', function () {
         ->and(releaseOutput($process))->toContain('gh is not signed in. Run gh auth login, then release.');
 });
 
-test('a pre-release from main is refused', function () {
-    $process = releaseScriptRun(releaseScriptSandbox(), ['1.0.0-beta.1', '--yes']);
-
-    expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain("Pre-releases can't be released from main. Switch to dev.");
-});
-
-test('a stable release from another branch is refused', function () {
+test('a detached HEAD is refused', function () {
     $sandbox = releaseScriptSandbox();
-    releaseGit($sandbox, ['checkout', '--quiet', '-b', 'feature/x']);
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+    releaseGit($sandbox, ['checkout', '--quiet', '--detach']);
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain("Stable releases come from main. On 'feature/x', use a pre-release such as 1.0.0-beta.1.");
-});
-
-test('on dev a bare version becomes the next beta', function () {
-    $sandbox = releaseScriptSandbox();
-    releaseGit($sandbox, ['checkout', '--quiet', 'dev']);
-    releaseTag($sandbox, 'v1.0.0-beta.1');
-    releaseTag($sandbox, 'v1.0.0-beta.2');
-
-    $process = releaseScriptRun($sandbox, ['1.0.0'], [], "y\n");
-
-    expect($process->getExitCode())->toBe(0, releaseOutput($process))
-        ->and(releaseOutput($process))->toContain('On dev a release is a pre-release, so this one is v1.0.0-beta.3.')
-        ->and(releaseOutput($process))->toContain('Continue? [y/N]')
-        ->and(releaseOrigin($sandbox, ['tag', '--list', 'v1.0.0-beta.3']))->toBe('v1.0.0-beta.3')
-        ->and(releaseOrigin($sandbox, ['show', 'dev:VERSION']))->toBe('1.0.0-beta.3')
-        ->and(releaseOrigin($sandbox, ['log', '-1', '--format=%s', 'dev']))->toBe('chore(release): v1.0.0-beta.3')
-        ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe(releaseGit($sandbox, ['rev-parse', 'origin/main']))
-        ->and(releaseLastCall($sandbox))->toMatch('#^gh release create v1\.0\.0-beta\.3 --repo monoven/coresmith --title v1\.0\.0-beta\.3 --notes-file \S+ --verify-tag --prerelease scripts/install\.sh$#')
-        ->and(file_get_contents($sandbox['notes']))->toBe("Pre-release v1.0.0-beta.3.\n");
-});
-
-test('on dev a version the beta suffix would make too long is refused before anything is pushed', function () {
-    $sandbox = releaseScriptSandbox();
-    releaseGit($sandbox, ['checkout', '--quiet', 'dev']);
-    $version = '1.0.' . str_repeat('9', 54);
-
-    $process = releaseScriptRun($sandbox, [$version], [], "y\n");
-
-    expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain("Version '{$version}-beta.1' is longer than 63 characters, so installs would refuse its tag. Use a shorter one.")
-        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('');
+        ->and(releaseOutput($process))->toContain('HEAD is detached. Check out a branch, then release.');
 });
 
 test('an existing tag is refused', function () {
@@ -141,6 +118,34 @@ test('an existing tag is refused', function () {
         ->and(releaseOutput($process))->toContain('Tag v1.0.0 already exists.');
 });
 
+test('an existing release branch is refused', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+    releaseGit($sandbox, ['push', '--quiet', 'origin', 'main:refs/heads/release/v1.0.0']);
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('release/v1.0.0 already exists. Merge or close its pull request and delete the branch, then release.');
+});
+
+test('local dev must match the remote before a release', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: unpushed', push: false);
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('Local dev differs from origin/dev. Pull or push it, then release.');
+});
+
+test('a release with nothing new is refused', function () {
+    $process = releaseScriptRun(releaseScriptSandbox(), ['1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('Nothing to release: everything on origin/dev is already on main.');
+});
+
 test('a no at the prompt changes nothing', function () {
     $sandbox = releaseScriptSandbox();
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
@@ -149,66 +154,27 @@ test('a no at the prompt changes nothing', function () {
     $process = releaseScriptRun($sandbox, ['1.0.0', '--unsigned'], [], "n\n");
 
     expect($process->getExitCode())->toBe(0)
+        ->and(releaseOutput($process))->toContain('Continue? [y/N]')
         ->and(releaseOutput($process))->toContain('Aborted.')
         ->and(releaseCalls($sandbox))->toBe(['gh auth status'])
         ->and(releaseRefs($sandbox))->toBe($before);
 });
 
-test('a stable release without a signing key needs --unsigned', function () {
-    $sandbox = releaseScriptSandbox();
-    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
-
-    $refused = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
-
-    expect($refused->getExitCode())->toBe(1)
-        ->and(releaseOutput($refused))->toContain('No signing key is configured. Set one with git config user.signingkey <id>, or pass --unsigned to release v1.0.0 without a signature. Updaters will report it as unchecked.');
-
-    $released = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
-
-    expect($released->getExitCode())->toBe(0, releaseOutput($released))
-        ->and(releaseOutput($released))->toContain('v1.0.0 will be unsigned. Updaters will report it as unchecked.')
-        ->and(releaseOrigin($sandbox, ['tag', '--list', 'v1.0.0']))->toBe('v1.0.0');
-});
-
-test('an SSH signing key counts as no key', function () {
-    $sandbox = releaseScriptSandbox();
-    releaseGit($sandbox, ['config', 'gpg.format', 'ssh']);
-    releaseGit($sandbox, ['config', 'user.signingkey', "{$sandbox['base']}/id_ed25519.pub"]);
-    releaseGit($sandbox, ['config', 'tag.gpgSign', 'true']);
-    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
-
-    $refused = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
-
-    expect($refused->getExitCode())->toBe(1)
-        ->and(releaseOutput($refused))->toContain('No signing key is configured.');
-
-    $released = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
-
-    expect($released->getExitCode())->toBe(0, releaseOutput($released))
-        ->and(releaseOrigin($sandbox, ['cat-file', '-p', 'v1.0.0']))->not->toContain('SIGNATURE');
-});
-
-test('a detached HEAD is refused', function () {
-    $sandbox = releaseScriptSandbox();
-    releaseGit($sandbox, ['checkout', '--quiet', '--detach']);
-
-    $process = releaseScriptRun($sandbox, ['1.0.0-beta.1', '--yes']);
-
-    expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain('HEAD is detached. Check out main or dev, then release.');
-});
-
-test('a stable release merges dev, runs every gate, bumps, tags and publishes', function () {
+test('preparing a stable release picks dev onto main, runs every gate, bumps and opens a pull request', function () {
     $sandbox = releaseScriptSandbox();
     releaseTag($sandbox, 'v0.1.0');
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
     releaseCommit($sandbox, 'dev', 'fix: keep log colours');
+    $main = releaseOrigin($sandbox, ['rev-parse', 'main']);
+    $dev = releaseOrigin($sandbox, ['rev-parse', 'dev']);
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
 
     expect($process->getExitCode())->toBe(0, releaseOutput($process));
 
     $calls = array_values(array_filter(releaseCalls($sandbox), fn(string $line) => $line !== 'gh auth status'));
+    $changelog = releaseOrigin($sandbox, ['show', 'release/v1.0.0:CHANGELOG.md']);
+    $body = (string) file_get_contents($sandbox['body']);
 
     expect(array_slice($calls, 0, -1))->toBe([
         'pint --test',
@@ -222,28 +188,58 @@ test('a stable release merges dev, runs every gate, bumps, tags and publishes', 
         'bun run e2e:install-refresh',
         'bun run test:e2e',
         'bun run build',
-    ])->and(end($calls))->toMatch('#^gh release create v1\.0\.0 --repo monoven/coresmith --title v1\.0\.0 --notes-file \S+ --verify-tag --latest scripts/install\.sh$#');
-
-    $parents = explode(' ', releaseOrigin($sandbox, ['rev-list', '--parents', '-n', '1', 'main^']));
-    $changelog = releaseOrigin($sandbox, ['show', 'main:CHANGELOG.md']);
-
-    expect(releaseOrigin($sandbox, ['log', '-1', '--format=%s', 'main']))->toBe('chore(release): v1.0.0')
-        ->and($parents)->toHaveCount(3)
-        ->and(releaseOrigin($sandbox, ['log', '-1', '--format=%s', 'main^']))->toBe('chore(release): merge dev into main for v1.0.0')
-        ->and(releaseOrigin($sandbox, ['rev-parse', 'v1.0.0^{commit}']))->toBe(releaseOrigin($sandbox, ['rev-parse', 'main']))
-        ->and(releaseOrigin($sandbox, ['cat-file', '-t', 'v1.0.0']))->toBe('tag')
-        ->and(releaseOrigin($sandbox, ['show', 'main:VERSION']))->toBe('1.0.0')
-        ->and(releaseOrigin($sandbox, ['show', 'main:scripts/install.sh']))->toContain("\nreadonly CORESMITH_VERSION=\"1.0.0\"\n")
-        ->and(releaseOrigin($sandbox, ['ls-tree', 'main', 'scripts/install.sh']))->toStartWith('100755 ')
+    ])->and(end($calls))->toMatch('#^gh pr create --repo monoven/coresmith --base main --head release/v1\.0\.0 --title Release v1\.0\.0 --body-file \S+$#')
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe($main)
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'dev']))->toBe($dev)
+        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('v0.1.0')
+        ->and(releaseGitProcess($sandbox, ['merge-base', '--is-ancestor', 'main', 'release/v1.0.0'], $sandbox['origin'])->isSuccessful())->toBeTrue()
+        ->and(explode("\n", releaseOrigin($sandbox, ['log', '--format=%s', 'main..release/v1.0.0'])))->toBe(['chore(release): v1.0.0', 'fix: keep log colours', 'feat: deploy faster'])
+        ->and(releaseOrigin($sandbox, ['log', '-1', '--format=%b', 'release/v1.0.0~1']))->toContain("(cherry picked from commit {$dev})")
+        ->and(releaseOrigin($sandbox, ['show', 'release/v1.0.0:VERSION']))->toBe('1.0.0')
+        ->and(releaseOrigin($sandbox, ['show', 'release/v1.0.0:scripts/install.sh']))->toContain("\nreadonly CORESMITH_VERSION=\"1.0.0\"\n")
+        ->and(releaseOrigin($sandbox, ['ls-tree', 'release/v1.0.0', 'scripts/install.sh']))->toStartWith('100755 ')
         ->and($changelog)->toMatch('/^# Changelog\n\n## v1\.0\.0 \(\d{4}-\d{2}-\d{2}\)\n\n### Added/')
         ->and($changelog)->toContain("### Added\n- feat: deploy faster")
         ->and($changelog)->toContain("### Fixed\n- fix: keep log colours")
         ->and($changelog)->not->toContain('chore')
         ->and($changelog)->not->toContain('—')
+        ->and($body)->toStartWith("### Added\n- feat: deploy faster\n\n### Fixed\n- fix: keep log colours\n")
+        ->and($body)->toContain('Merge it with a merge commit')
+        ->and($body)->toContain('./scripts/release.sh publish 1.0.0')
+        ->and($body)->not->toContain('—')
+        ->and(releaseOutput($process))->toContain('Picked 2 commits from dev.')
+        ->and(releaseOutput($process))->toContain('Opened https://github.com/monoven/coresmith/pull/1')
         ->and(releaseOutput($process))->not->toContain('—')
-        ->and(file_get_contents($sandbox['notes']))->toBe("### Added\n- feat: deploy faster\n\n### Fixed\n- fix: keep log colours\n")
+        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'refs/heads/release/v1.0.0'])->isSuccessful())->toBeFalse()
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('')
         ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main');
+});
+
+test('publishing tags the merge commit and creates the GitHub release', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseTag($sandbox, 'v0.1.0');
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+    releaseCommit($sandbox, 'dev', 'fix: keep log colours');
+
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    $merge = releaseMergePr($sandbox, '1.0.0');
+    file_put_contents($sandbox['log'], '');
+
+    $process = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned']);
+    $calls = releaseCalls($sandbox);
+
+    expect($process->getExitCode())->toBe(0, releaseOutput($process))
+        ->and($calls)->toHaveCount(3)
+        ->and($calls[1])->toStartWith('gh pr list --repo monoven/coresmith --head release/v1.0.0 --state all ')
+        ->and(end($calls))->toMatch('#^gh release create v1\.0\.0 --repo monoven/coresmith --title v1\.0\.0 --notes-file \S+ --verify-tag --latest \S+/install\.sh$#')
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'v1.0.0^{commit}']))->toBe($merge)
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe($merge)
+        ->and(releaseOrigin($sandbox, ['cat-file', '-t', 'v1.0.0']))->toBe('tag')
+        ->and(file_get_contents($sandbox['notes']))->toBe("### Added\n- feat: deploy faster\n\n### Fixed\n- fix: keep log colours\n")
+        ->and(releaseGit($sandbox, ['hash-object', $sandbox['installer']]))->toBe(releaseOrigin($sandbox, ['rev-parse', 'v1.0.0:scripts/install.sh']))
+        ->and(releaseOutput($process))->toContain('Published https://github.com/monoven/coresmith/releases/tag/v1.0.0')
+        ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
 });
 
 test('the first stable release says so in the changelog', function () {
@@ -253,85 +249,147 @@ test('the first stable release says so in the changelog', function () {
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
 
     expect($process->getExitCode())->toBe(0, releaseOutput($process))
-        ->and(releaseOrigin($sandbox, ['show', 'main:CHANGELOG.md']))->toMatch('/^# Changelog\n\n## v1\.0\.0 \(\d{4}-\d{2}-\d{2}\)\n\nInitial release\.$/')
-        ->and(file_get_contents($sandbox['notes']))->toBe("Initial release.\n");
+        ->and(releaseOrigin($sandbox, ['show', 'release/v1.0.0:CHANGELOG.md']))->toMatch('/^# Changelog\n\n## v1\.0\.0 \(\d{4}-\d{2}-\d{2}\)\n\nInitial release\.$/')
+        ->and(file_get_contents($sandbox['body']))->toStartWith("Initial release.\n");
 });
 
-test('the changelog starts from the previous stable release, not a beta', function () {
+test('the next release offers only what main lacks, and a pre-release never lands on dev or main', function () {
     $sandbox = releaseScriptSandbox();
     releaseCommit($sandbox, 'dev', 'feat: one');
 
-    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+    expect(releaseShip($sandbox, '1.0.0')->getExitCode())->toBe(0);
 
-    releaseGit($sandbox, ['checkout', '--quiet', 'dev']);
     releaseCommit($sandbox, 'dev', 'fix: two');
+    $dev = releaseOrigin($sandbox, ['rev-parse', 'dev']);
+    $main = releaseOrigin($sandbox, ['rev-parse', 'main']);
 
     $beta = releaseScriptRun($sandbox, ['1.0.1-beta.1', '--yes']);
 
-    expect($beta->getExitCode())->toBe(0, releaseOutput($beta));
+    expect($beta->getExitCode())->toBe(0, releaseOutput($beta))
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'dev']))->toBe($dev)
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe($main)
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'v1.0.1-beta.1^{commit}^']))->toBe($dev);
 
     releaseCommit($sandbox, 'dev', 'feat: three');
-    releaseGit($sandbox, ['checkout', '--quiet', 'main']);
 
     $stable = releaseScriptRun($sandbox, ['1.0.1', '--yes', '--unsigned']);
 
     expect($stable->getExitCode())->toBe(0, releaseOutput($stable));
 
-    $changelog = releaseOrigin($sandbox, ['show', 'main:CHANGELOG.md']);
+    $changelog = releaseOrigin($sandbox, ['show', 'release/v1.0.1:CHANGELOG.md']);
     $entry = substr($changelog, strpos($changelog, '## v1.0.1 ('), strpos($changelog, '## v1.0.0 (') - strpos($changelog, '## v1.0.1 ('));
 
-    expect($changelog)->toStartWith("# Changelog\n\n## v1.0.1 (")
+    expect(explode("\n", releaseOrigin($sandbox, ['log', '--format=%s', 'main..release/v1.0.1'])))->toBe(['chore(release): v1.0.1', 'feat: three', 'fix: two'])
+        ->and($changelog)->toStartWith("# Changelog\n\n## v1.0.1 (")
         ->and($entry)->toContain("### Added\n- feat: three")
         ->and($entry)->toContain("### Fixed\n- fix: two")
         ->and($entry)->not->toContain('feat: one')
         ->and($entry)->not->toContain('chore(release)')
         ->and($changelog)->toContain('Initial release.')
-        ->and(releaseOrigin($sandbox, ['show', 'main:VERSION']))->toBe('1.0.1')
-        ->and(releaseOrigin($sandbox, ['show', 'main:scripts/install.sh']))->toContain("\nreadonly CORESMITH_VERSION=\"1.0.1\"\n")
-        ->and(releaseOrigin($sandbox, ['rev-parse', 'v1.0.1^{commit}']))->toBe(releaseOrigin($sandbox, ['rev-parse', 'main']));
+        ->and(releaseOrigin($sandbox, ['show', 'release/v1.0.1:VERSION']))->toBe('1.0.1')
+        ->and(releaseOrigin($sandbox, ['show', 'release/v1.0.1:scripts/install.sh']))->toContain("\nreadonly CORESMITH_VERSION=\"1.0.1\"\n");
 });
 
-test('a merge from dev that conflicts beyond the version files is refused', function () {
+test('a release leaves out the commits it is told to, and the next one offers them again', function () {
     $sandbox = releaseScriptSandbox();
-    releaseCommit($sandbox, 'main', 'docs: main readme', 'README.md', "main\n");
-    releaseCommit($sandbox, 'dev', 'docs: dev readme', 'README.md', "dev\n");
-    $main = releaseGit($sandbox, ['rev-parse', 'main']);
+    releaseCommit($sandbox, 'dev', 'feat: ready');
+    releaseCommit($sandbox, 'dev', 'feat: not ready yet');
+    $later = releaseGit($sandbox, ['rev-parse', 'origin/dev']);
+    $short = releaseGit($sandbox, ['log', '-1', '--format=%h %s', $later]);
+    releaseCommit($sandbox, 'dev', 'fix: also ready');
 
-    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--omit', substr($later, 0, 9), '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(0, releaseOutput($process))
+        ->and(explode("\n", releaseOrigin($sandbox, ['log', '--format=%s', 'main..release/v1.0.0'])))->toBe(['chore(release): v1.0.0', 'fix: also ready', 'feat: ready'])
+        ->and(file_get_contents($sandbox['body']))->toContain("### Left out for a later release\n- {$short}\n")
+        ->and(releaseOutput($process))->toContain('Picked 2 commits from dev and left out 1.');
+
+    releaseMergePr($sandbox, '1.0.0');
+
+    expect(releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    $next = releaseScriptRun($sandbox, ['1.0.1', '--yes', '--unsigned']);
+
+    expect($next->getExitCode())->toBe(0, releaseOutput($next))
+        ->and(explode("\n", releaseOrigin($sandbox, ['log', '--format=%s', 'main..release/v1.0.1'])))->toBe(['chore(release): v1.0.1', 'feat: not ready yet'])
+        ->and(file_get_contents($sandbox['body']))->not->toContain('Left out');
+});
+
+test('an omitted commit must be one dev would release', function (string $omit) {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--omit', $omit, '--yes', '--unsigned']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain('The merge from dev conflicts. Resolve it on main, then release.')
+        ->and(releaseOutput($process))->toContain("{$omit} isn't one of the commits origin/dev would release.");
+})->with(['nothere', 'main']);
+
+test('leaving out everything is refused', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: not ready yet');
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--omit', 'origin/dev', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('Nothing is left to release once those commits are left out.');
+});
+
+test('a commit that builds on a left-out one stops the release and says so', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: start the page', 'page.txt', "one\n");
+    $base = releaseGit($sandbox, ['rev-parse', 'origin/dev']);
+    releaseCommit($sandbox, 'dev', 'feat: finish the page', 'page.txt', "two\n");
+    $before = releaseRefs($sandbox);
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--omit', $base, '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain(releaseGit($sandbox, ['log', '-1', '--format=%h %s', 'origin/dev']) . " doesn't apply on main without the commits left out of this release. Leave it out too, or keep what it builds on.")
         ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
-        ->and(releaseGit($sandbox, ['rev-parse', 'main']))->toBe($main)
-        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])->isSuccessful())->toBeFalse()
+        ->and(releaseRefs($sandbox))->toBe($before)
+        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'refs/heads/release/v1.0.0'])->isSuccessful())->toBeFalse()
+        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'CHERRY_PICK_HEAD'])->isSuccessful())->toBeFalse()
+        ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main')
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
 });
 
-test('local dev must match the remote before a stable release', function () {
+test('a commit that conflicts with main stops the release', function () {
     $sandbox = releaseScriptSandbox();
-    releaseCommit($sandbox, 'dev', 'feat: unpushed', push: false);
+    releaseCommit($sandbox, 'main', 'docs: main readme', 'README.md', "main\n");
+    releaseCommit($sandbox, 'dev', 'docs: dev readme', 'README.md', "dev\n");
+    $before = releaseRefs($sandbox);
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain('Local dev differs from origin/dev. Pull or push it, then release.');
+        ->and(releaseOutput($process))->toContain(releaseGit($sandbox, ['log', '-1', '--format=%h %s', 'origin/dev']) . " doesn't apply on main. Merge main into dev with a pull request, then release.")
+        ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
+        ->and(releaseRefs($sandbox))->toBe($before)
+        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'CHERRY_PICK_HEAD'])->isSuccessful())->toBeFalse()
+        ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
 });
 
-test('a stable release with nothing new is refused', function () {
+test('a commit that only clashes with the version line takes dev\'s side and is bumped', function () {
     $sandbox = releaseScriptSandbox();
-    releaseTag($sandbox, 'v1.0.0');
+    $installer = (string) file_get_contents("{$sandbox['clone']}/scripts/install.sh");
+    releaseCommit($sandbox, 'main', 'chore(release): v0.2.0', 'scripts/install.sh', str_replace('readonly CORESMITH_VERSION="0.1.0"', 'readonly CORESMITH_VERSION="0.2.0"', $installer));
+    releaseCommit($sandbox, 'dev', 'feat: install from the next repository', 'scripts/install.sh', str_replace('monoventech/coresmith.git}"', 'monoventech/coresmith-next.git}"', $installer));
 
-    $process = releaseScriptRun($sandbox, ['1.0.1', '--yes', '--unsigned']);
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
+    $released = releaseOrigin($sandbox, ['show', 'release/v1.0.0:scripts/install.sh']);
 
-    expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain('Nothing to release: main has no commits since v1.0.0.');
+    expect($process->getExitCode())->toBe(0, releaseOutput($process))
+        ->and($released)->toContain("\nreadonly CORESMITH_VERSION=\"1.0.0\"\n")
+        ->and($released)->toContain('monoventech/coresmith-next.git}"')
+        ->and(releaseOrigin($sandbox, ['ls-tree', 'release/v1.0.0', 'scripts/install.sh']))->toStartWith('100755 ');
 });
 
 test('a failing gate leaves nothing behind', function () {
     $sandbox = releaseScriptSandbox();
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
     $before = releaseRefs($sandbox);
-    $main = releaseGit($sandbox, ['rev-parse', 'main']);
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'], ['STUB_FAIL_PHP' => '1', 'STUB_FAIL_MATCH' => 'artisan test']);
 
@@ -339,20 +397,18 @@ test('a failing gate leaves nothing behind', function () {
         ->and(releaseOutput($process))->toContain('php artisan test failed. Fix it on dev, then release.')
         ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
         ->and(releaseCalls($sandbox))->not->toContain('bun run e2e:refresh')
-        ->and(releaseGit($sandbox, ['rev-parse', 'main']))->toBe($main)
-        ->and(releaseGit($sandbox, ['tag', '--list', 'v1.0.0']))->toBe('')
+        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'refs/heads/release/v1.0.0'])->isSuccessful())->toBeFalse()
         ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main')
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('')
         ->and(releaseRefs($sandbox))->toBe($before);
 });
 
-test('a rejected push leaves nothing behind and never pushes main without its tag', function () {
+test('a rejected push leaves nothing behind', function () {
     $sandbox = releaseScriptSandbox();
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
-    file_put_contents("{$sandbox['origin']}/hooks/update", "#!/bin/sh\ncase \"\$1\" in refs/tags/*) exit 1 ;; esac\nexit 0\n");
+    file_put_contents("{$sandbox['origin']}/hooks/update", "#!/bin/sh\ncase \"\$1\" in refs/heads/release/*) exit 1 ;; esac\nexit 0\n");
     chmod("{$sandbox['origin']}/hooks/update", 0755);
     $before = releaseRefs($sandbox);
-    $main = releaseGit($sandbox, ['rev-parse', 'main']);
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
 
@@ -360,23 +416,115 @@ test('a rejected push leaves nothing behind and never pushes main without its ta
         ->and(releaseOutput($process))->toContain('origin refused the push.')
         ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
         ->and(releaseRefs($sandbox))->toBe($before)
-        ->and(releaseGit($sandbox, ['rev-parse', 'main']))->toBe($main)
-        ->and(releaseGit($sandbox, ['tag', '--list', 'v1.0.0']))->toBe('')
+        ->and(array_filter(releaseCalls($sandbox), fn(string $line) => str_starts_with($line, 'gh pr create')))->toBe([])
+        ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'refs/heads/release/v1.0.0'])->isSuccessful())->toBeFalse()
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
+});
+
+test('a pull request that is not opened keeps the pushed branch and says how to finish', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'], ['STUB_FAIL_GH' => '1', 'STUB_FAIL_MATCH' => 'pr create']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain("release/v1.0.0 is pushed, but the pull request wasn't opened. Open it with:")
+        ->and(releaseOutput($process))->toContain('  gh pr create --repo monoven/coresmith --base main --head release/v1.0.0 --title Release\ v1.0.0 --body-file ')
+        ->and(releaseOutput($process))->not->toContain('Nothing was pushed')
+        ->and(releaseOrigin($sandbox, ['log', '-1', '--format=%s', 'release/v1.0.0']))->toBe('chore(release): v1.0.0')
+        ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main');
+
+    preg_match('#--body-file (\S+)#', releaseOutput($process), $body);
+
+    expect(is_file($body[1]))->toBeTrue();
+
+    File::deleteDirectory(dirname($body[1]));
+});
+
+test('publishing needs the release pull request merged', function (?string $state, string $message) {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    if ($state !== null) {
+        releasePrState($sandbox, $state);
+    }
+
+    $process = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain($message)
+        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('');
+})->with([
+    'no pull request' => [null, "There's no pull request for release/v1.0.0. Open one with ./scripts/release.sh 1.0.0."],
+    'still open' => ['OPEN', "https://github.com/monoven/coresmith/pull/1 isn't merged yet. Merge it with a merge commit, then publish."],
+    'closed' => ['CLOSED', 'https://github.com/monoven/coresmith/pull/1 was closed without merging. Open a new one with ./scripts/release.sh 1.0.0.'],
+]);
+
+test('publishing refuses a squashed release pull request', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    releaseMergePr($sandbox, '1.0.0', squash: true);
+
+    $process = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('https://github.com/monoven/coresmith/pull/1 was squashed or rebased into main. A release needs a merge commit, because the next release compares main with dev commit by commit to see what has shipped.')
+        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('');
+});
+
+test('publishing checks main has the version being published', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    releaseMergePr($sandbox, '1.0.0');
+
+    $process = releaseScriptRun($sandbox, ['publish', '1.0.1', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('https://github.com/monoven/coresmith/pull/1 put VERSION 1.0.0 on main, not 1.0.1.');
+});
+
+test('a rejected tag push leaves no tag behind', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    releaseMergePr($sandbox, '1.0.0');
+    file_put_contents("{$sandbox['origin']}/hooks/update", "#!/bin/sh\ncase \"\$1\" in refs/tags/*) exit 1 ;; esac\nexit 0\n");
+    chmod("{$sandbox['origin']}/hooks/update", 0755);
+
+    $process = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain('origin refused the push.')
+        ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
+        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('')
+        ->and(releaseGit($sandbox, ['tag', '--list']))->toBe('');
 });
 
 test('a failed github release keeps the pushed tag and says how to finish', function () {
     $sandbox = releaseScriptSandbox();
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
 
-    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'], ['STUB_FAIL_GH' => '1', 'STUB_FAIL_MATCH' => 'release create']);
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    releaseMergePr($sandbox, '1.0.0');
+
+    $process = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned'], ['STUB_FAIL_GH' => '1', 'STUB_FAIL_MATCH' => 'release create']);
 
     expect($process->getExitCode())->toBe(1)
         ->and(releaseOutput($process))->toContain("v1.0.0 is pushed, but the GitHub release wasn't created. Finish it with:")
-        ->and(releaseOutput($process))->toMatch('#  gh release create v1\.0\.0 --repo monoven/coresmith --title v1\.0\.0 --notes-file (\S+) --verify-tag --latest scripts/install\.sh#')
+        ->and(releaseOutput($process))->toMatch('#  gh release create v1\.0\.0 --repo monoven/coresmith --title v1\.0\.0 --notes-file (\S+) --verify-tag --latest \S+/install\.sh#')
         ->and(releaseOutput($process))->not->toContain('Nothing was pushed')
-        ->and(releaseOrigin($sandbox, ['tag', '--list', 'v1.0.0']))->toBe('v1.0.0')
-        ->and(releaseOrigin($sandbox, ['log', '-1', '--format=%s', 'main']))->toBe('chore(release): v1.0.0');
+        ->and(releaseOrigin($sandbox, ['tag', '--list', 'v1.0.0']))->toBe('v1.0.0');
 
     preg_match('#--notes-file (\S+)#', releaseOutput($process), $notes);
 
@@ -388,13 +536,14 @@ test('a failed github release keeps the pushed tag and says how to finish', func
 test('a build that changes other tracked files is refused', function () {
     $sandbox = releaseScriptSandbox();
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
-    $main = releaseGit($sandbox, ['rev-parse', 'main']);
+    $before = releaseRefs($sandbox);
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'], ['STUB_BUILD_EDITS' => 'VERSION']);
 
     expect($process->getExitCode())->toBe(1)
         ->and(releaseOutput($process))->toContain('The build changed tracked files: VERSION. Commit them on dev first.')
-        ->and(releaseGit($sandbox, ['rev-parse', 'main']))->toBe($main)
+        ->and(releaseRefs($sandbox))->toBe($before)
+        ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main')
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
 });
 
@@ -412,11 +561,100 @@ test('a build rewrites nothing, so nothing is put back afterwards', function () 
     }
 });
 
+test('--skip-gates skips the gates when the release is exactly dev', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: one');
+
+    expect(releaseShip($sandbox, '1.0.0')->getExitCode())->toBe(0);
+
+    releaseCommit($sandbox, 'dev', 'feat: two');
+    file_put_contents($sandbox['log'], '');
+
+    $process = releaseScriptRun($sandbox, ['1.0.1', '--skip-gates', '--yes', '--unsigned']);
+    $calls = array_values(array_filter(releaseCalls($sandbox), fn(string $line) => $line !== 'gh auth status'));
+
+    expect($process->getExitCode())->toBe(0, releaseOutput($process))
+        ->and(releaseOutput($process))->toContain("Skipping the gates: v1.0.1 is exactly origin/dev, so dev's bun run ci covers it.")
+        ->and($calls[0])->toBe('bun run build')
+        ->and(end($calls))->toStartWith('gh pr create ');
+});
+
+test('--skip-gates is refused when the release is not exactly dev', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: ready');
+    releaseCommit($sandbox, 'dev', 'feat: not ready yet');
+    $before = releaseRefs($sandbox);
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--omit', 'origin/dev', '--skip-gates', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain("--skip-gates needs the release to be exactly origin/dev, and this one isn't. Run the gates.")
+        ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
+        ->and(releaseRefs($sandbox))->toBe($before);
+});
+
+test('a pre-release is tagged on top of dev without touching dev or main', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+    $dev = releaseOrigin($sandbox, ['rev-parse', 'dev']);
+    $main = releaseOrigin($sandbox, ['rev-parse', 'main']);
+
+    $process = releaseScriptRun($sandbox, ['1.0.0-beta.1'], [], "y\n");
+
+    expect($process->getExitCode())->toBe(0, releaseOutput($process))
+        ->and(releaseOutput($process))->toContain('Continue? [y/N]')
+        ->and(releaseOutput($process))->toContain('No signing key is configured, so v1.0.0-beta.1 is tagged without a signature.')
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'dev']))->toBe($dev)
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe($main)
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'v1.0.0-beta.1^{commit}^']))->toBe($dev)
+        ->and(releaseOrigin($sandbox, ['show', 'v1.0.0-beta.1:VERSION']))->toBe('1.0.0-beta.1')
+        ->and(releaseOrigin($sandbox, ['log', '-1', '--format=%s', 'v1.0.0-beta.1']))->toBe('chore(release): v1.0.0-beta.1')
+        ->and(releaseOrigin($sandbox, ['branch', '--list', 'release/*']))->toBe('')
+        ->and(releaseLastCall($sandbox))->toMatch('#^gh release create v1\.0\.0-beta\.1 --repo monoven/coresmith --title v1\.0\.0-beta\.1 --notes-file \S+ --verify-tag --prerelease \S+/install\.sh$#')
+        ->and(file_get_contents($sandbox['notes']))->toBe("Pre-release v1.0.0-beta.1.\n")
+        ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main')
+        ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('');
+});
+
+test('a stable release without a signing key needs --unsigned', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    $refused = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
+
+    expect($refused->getExitCode())->toBe(1)
+        ->and(releaseOutput($refused))->toContain('No signing key is configured. Set one with git config user.signingkey <id>, or pass --unsigned to release v1.0.0 without a signature. Updaters will report it as unchecked.')
+        ->and(releaseOrigin($sandbox, ['branch', '--list', 'release/*']))->toBe('');
+
+    $published = releaseShip($sandbox, '1.0.0');
+
+    expect($published->getExitCode())->toBe(0, releaseOutput($published))
+        ->and(releaseOutput($published))->toContain('v1.0.0 will be unsigned. Updaters will report it as unchecked.')
+        ->and(releaseOrigin($sandbox, ['tag', '--list', 'v1.0.0']))->toBe('v1.0.0');
+});
+
+test('an SSH signing key counts as no key', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseGit($sandbox, ['config', 'gpg.format', 'ssh']);
+    releaseGit($sandbox, ['config', 'user.signingkey', "{$sandbox['base']}/id_ed25519.pub"]);
+    releaseGit($sandbox, ['config', 'tag.gpgSign', 'true']);
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+
+    $refused = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
+
+    expect($refused->getExitCode())->toBe(1)
+        ->and(releaseOutput($refused))->toContain('No signing key is configured.');
+
+    $published = releaseShip($sandbox, '1.0.0');
+
+    expect($published->getExitCode())->toBe(0, releaseOutput($published))
+        ->and(releaseOrigin($sandbox, ['cat-file', '-p', 'v1.0.0']))->not->toContain('SIGNATURE');
+});
+
 test('the GitHub repository is read from the remote address', function (string $url) {
     $sandbox = releaseScriptSandbox();
     file_put_contents($sandbox['gitconfig'], "[url \"{$sandbox['origin']}\"]\n\tinsteadOf = {$url}\n");
     releaseGit($sandbox, ['remote', 'set-url', 'origin', $url]);
-    releaseGit($sandbox, ['checkout', '--quiet', 'dev']);
 
     $process = releaseScriptRun($sandbox, ['1.0.0-beta.1', '--yes'], ['CORESMITH_RELEASE_REPO' => false]);
 
@@ -437,7 +675,7 @@ test('a remote that is not on GitHub needs the repository named', function () {
         ->and(releaseOutput($process))->toContain("Set CORESMITH_RELEASE_REPO to owner/name: origin doesn't point at GitHub.");
 });
 
-test('with a signing key every tag is signed and the installer signature is attached', function () {
+test('with a signing key the tag is signed and the installer signature is attached', function () {
     if (!releaseHasGpg()) {
         $this->markTestSkipped('gpg is not installed on this machine; CI installs it.');
     }
@@ -447,12 +685,13 @@ test('with a signing key every tag is signed and the installer signature is atta
     releaseGit($sandbox, ['config', 'user.signingkey', $key]);
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
 
-    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
+    $process = releaseShip($sandbox, '1.0.0', ['--yes'], ['--yes']);
 
     expect($process->getExitCode())->toBe(0, releaseOutput($process))
         ->and(releaseGitProcess($sandbox, ['verify-tag', 'v1.0.0'], $sandbox['origin'])->isSuccessful())->toBeTrue()
-        ->and(releaseLastCall($sandbox))->toMatch('# scripts/install\.sh \S+/install\.sh\.asc$#')
-        ->and(releaseGpg($sandbox, ['--verify', $sandbox['asset'], "{$sandbox['clone']}/scripts/install.sh"])->isSuccessful())->toBeTrue();
+        ->and(releaseLastCall($sandbox))->toMatch('# \S+/install\.sh \S+/install\.sh\.asc$#')
+        ->and(releaseGpg($sandbox, ['--verify', $sandbox['asset'], $sandbox['installer']])->isSuccessful())->toBeTrue()
+        ->and(releaseGit($sandbox, ['hash-object', $sandbox['installer']]))->toBe(releaseOrigin($sandbox, ['rev-parse', 'v1.0.0:scripts/install.sh']));
 });
 
 test('a signing key is checked against the release keys the panel ships', function () {
@@ -462,32 +701,30 @@ test('a signing key is checked against the release keys the panel ships', functi
 
     $sandbox = releaseScriptSandbox();
     $signing = releaseGpgKey($sandbox, 'Release Key');
-    releaseShipKey($sandbox, 'main', releaseGpgKey($sandbox, 'Other Key'), 'other');
+    releaseShipKey($sandbox, 'dev', releaseGpgKey($sandbox, 'Other Key'), 'other');
     releaseGit($sandbox, ['config', 'user.signingkey', $signing]);
-    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
 
     $refused = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
 
     expect($refused->getExitCode())->toBe(1)
         ->and(releaseOutput($refused))->toContain("Your signing key isn't one of resources/release-keys, so every updater would reject v1.0.0.");
 
-    releaseShipKey($sandbox, 'main', $signing, 'release');
+    releaseShipKey($sandbox, 'dev', $signing, 'release');
 
-    $released = releaseScriptRun($sandbox, ['1.0.0', '--yes']);
+    $published = releaseShip($sandbox, '1.0.0', ['--yes'], ['--yes']);
 
-    expect($released->getExitCode())->toBe(0, releaseOutput($released))
+    expect($published->getExitCode())->toBe(0, releaseOutput($published))
         ->and(releaseGitProcess($sandbox, ['verify-tag', 'v1.0.0'], $sandbox['origin'])->isSuccessful())->toBeTrue();
 });
 
-test('a release that ships keys must be signed', function (string $branch, array $arguments, bool $configured) {
+test('a release that ships keys must be signed', function (array $arguments, bool $configured) {
     if (!releaseHasGpg()) {
         $this->markTestSkipped('gpg is not installed on this machine; CI installs it.');
     }
 
     $sandbox = releaseScriptSandbox();
     $key = releaseGpgKey($sandbox, 'Release Key');
-    releaseShipKey($sandbox, $branch, $key, 'release');
-    releaseGit($sandbox, ['checkout', '--quiet', $branch]);
+    releaseShipKey($sandbox, 'dev', $key, 'release');
 
     if ($configured) {
         releaseGit($sandbox, ['config', 'user.signingkey', $key]);
@@ -498,9 +735,9 @@ test('a release that ships keys must be signed', function (string $branch, array
     expect($process->getExitCode())->toBe(1)
         ->and(releaseOutput($process))->toContain('This release ships release keys, so every updater requires a signature. Configure the signing key, then release.');
 })->with([
-    'no key' => ['main', ['1.0.0', '--yes'], false],
-    '--unsigned with a key' => ['main', ['1.0.0', '--yes', '--unsigned'], true],
-    'a pre-release with no key' => ['dev', ['1.0.0-rc.1', '--yes'], false],
+    'no key' => [['1.0.0', '--yes'], false],
+    '--unsigned with a key' => [['1.0.0', '--yes', '--unsigned'], true],
+    'a pre-release with no key' => [['1.0.0-rc.1', '--yes'], false],
 ]);
 
 test('--unsigned wins over a configured key while no release key ships', function () {
@@ -512,12 +749,12 @@ test('--unsigned wins over a configured key while no release key ships', functio
     releaseGit($sandbox, ['config', 'user.signingkey', releaseGpgKey($sandbox, 'Release Key')]);
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
 
-    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
+    $process = releaseShip($sandbox, '1.0.0');
 
     expect($process->getExitCode())->toBe(0, releaseOutput($process))
         ->and(releaseOutput($process))->toContain('v1.0.0 will be unsigned.')
         ->and(releaseOrigin($sandbox, ['cat-file', '-p', 'v1.0.0']))->not->toContain('BEGIN PGP SIGNATURE')
-        ->and(releaseLastCall($sandbox))->toEndWith(' scripts/install.sh')
+        ->and(releaseLastCall($sandbox))->toEndWith('/install.sh')
         ->and(is_file($sandbox['asset']))->toBeFalse();
 });
 

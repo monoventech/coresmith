@@ -13,6 +13,7 @@ enum BillingState: string
     case Unlimited = 'unlimited';
     case Trialing = 'trialing';
     case Active = 'active';
+    case Free = 'free';
     case PastDue = 'past_due';
     case Ending = 'ending';
     case ReadOnly = 'read_only';

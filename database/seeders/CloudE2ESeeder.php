@@ -75,6 +75,7 @@ final class CloudE2ESeeder extends Seeder
         $this->oldPriceTeam($tenant->owner);
         $this->noCardTeam($tenant->owner);
         $this->cardDueTeam($tenant->owner);
+        $this->freeTeams($tenant->owner);
         $this->endedBusinessTeam($tenant->owner);
 
         foreach (self::PROJECTS as $code) {
@@ -82,9 +83,29 @@ final class CloudE2ESeeder extends Seeder
             $this->vaultTeam($tenant->owner, $code);
             $this->leftoverTeam($tenant->owner, $code);
             $this->partingTeam($code);
+            $this->moveTeams($tenant->owner, $code);
         }
 
+        $this->movingTeam($tenant->owner, 'Moved Away', 'moved-away');
+
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
+    }
+
+    private function moveTeams(User $owner, string $code): void
+    {
+        $team = $this->ownedTeam($owner, "Move {$code}", "move-{$code}");
+        $team->forceFill(['trial_ends_at' => now()->addDays(9)])->save();
+        $server = Server::factory()->for($team)->active()->create(['name' => "move-{$code}-01", 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', "move-{$code}", true)), 0, 43)]);
+        Application::factory()->for($team)->for($server)->create(['name' => "move-{$code}-site", 'slug' => "move-{$code}-site", 'system_user' => "coresmith-app-mv{$code}"]);
+
+        $this->movingTeam($owner, "Moving {$code}", "moving-{$code}");
+    }
+
+    private function movingTeam(User $owner, string $name, string $slug): void
+    {
+        $team = $this->ownedTeam($owner, $name, $slug);
+        $team->forceFill(['trial_ends_at' => now()->addDays(9), 'moving_at' => now()->subHour(), 'moving_to' => 'https://panel.example.com', 'move_file' => '{"format":1}'])->save();
+        Server::factory()->for($team)->create(['name' => "{$slug}-01", 'status' => ServerStatus::Moving, 'os_name' => 'ubuntu', 'os_version' => '24.04', 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $slug, true)), 0, 43)]);
     }
 
     private function trialTeam(User $owner): void
@@ -216,6 +237,12 @@ final class CloudE2ESeeder extends Seeder
         $team->forceFill(['stripe_id' => 'cus_e2e_card_due', 'pending_checkout_id' => 'cs_e2e_card_due'])->save();
 
         Subscription::factory()->for($team, 'owner')->plan(Plan::Pro)->create();
+    }
+
+    private function freeTeams(User $owner): void
+    {
+        $this->ownedTeam($owner, 'Free Forever', 'free')->forceFill(['free_plan' => Plan::Business])->save();
+        $this->ownedTeam($owner, 'Free For Now', 'free-soon')->forceFill(['free_plan' => Plan::Starter, 'free_until' => now()->addDays(2)->endOfDay()])->save();
     }
 
     private function endedBusinessTeam(User $owner): void

@@ -16,6 +16,7 @@ enum ServerStatus: string
     case Failed = 'failed';
     case Disconnected = 'disconnected';
     case Creating = 'creating';
+    case Moving = 'moving';
 
     /**
      * @return list<self>

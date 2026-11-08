@@ -6,6 +6,8 @@
     import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
+    import { Input } from '@/components/ui/input'
+    import { Label } from '@/components/ui/label'
     import * as RadioGroup from '@/components/ui/radio-group'
     import type { PlanOption, SelfHosting } from '@/lib/billing'
     import { cn } from '@/lib/utils'
@@ -28,17 +30,21 @@
 
     let error = $state<string | undefined>(undefined)
     let processing = $state(false)
+    let code = $state('')
 
     const plan = $derived(plans.find((option) => option.key === selected) ?? null)
     const selfHosted = $derived(selected === SELF_HOSTED)
+    const moving = $derived(selfHosted && code.trim() !== '')
     const action = $derived(
-        selfHosted
-            ? selfHosting.has_subscription
-                ? 'End Cloud plan'
-                : null
-            : selfHosting.has_subscription
-              ? 'Save'
-              : 'Continue to Stripe'
+        moving
+            ? 'Download move file'
+            : selfHosted
+              ? selfHosting.has_subscription
+                  ? 'End Cloud plan'
+                  : null
+              : selfHosting.has_subscription
+                ? 'Save'
+                : 'Continue to Stripe'
     )
     const blocked = $derived(
         selfHosted ? false : plan === null || plan.current || !plan.available || plan.blockers.length > 0
@@ -47,6 +53,7 @@
     $effect(() => {
         if (open) {
             error = undefined
+            code = ''
         }
     })
 
@@ -62,6 +69,25 @@
             onSuccess: () => (open = false),
             onError: (errors: Record<string, string>) => (error = errors.plan),
             onFinish: () => (processing = false)
+        }
+
+        if (moving) {
+            router.post(
+                route('settings.billing.move.store'),
+                { code: code.trim() },
+                {
+                    preserveScroll: true,
+                    onStart: () => (processing = true),
+                    onSuccess: () => {
+                        open = false
+                        window.location.assign(route('settings.billing.move.file'))
+                    },
+                    onError: (errors: Record<string, string>) => (error = errors.code),
+                    onFinish: () => (processing = false)
+                }
+            )
+
+            return
         }
 
         if (selfHosted) {
@@ -137,13 +163,13 @@
                             {selfHosting.ends_on
                                 ? `Coresmith Cloud stops on ${selfHosting.ends_on}, when this period ends.`
                                 : 'Coresmith Cloud stops when this period ends.'}
-                            Install Coresmith on your own server and add your servers there; they keep running the whole time.
+                            Your servers and apps keep running.
                         </p>
                     {:else}
                         <p class="m-0">
                             There is nothing to cancel.
                             {#if selfHosting.trial_ends_on}The trial ends on its own on {selfHosting.trial_ends_on}.{/if}
-                            To run Coresmith yourself, install it on your own server and add your servers there.
+                            To run Coresmith yourself, install it on your own server.
                         </p>
                     {/if}
                     <a
@@ -153,6 +179,20 @@
                         class="focus-ring mt-1.5 inline-block rounded-sm font-medium text-primary-strong no-underline underline-offset-4 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
                         >Read how to self-host</a
                     >
+                    <div class="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
+                        <Label for="move-code">Move code</Label>
+                        <p class="m-0 text-muted-foreground" id="move-code-hint">
+                            To bring this team's servers and apps along, create a move code in Settings, General on your
+                            own panel and paste it here. Downloading the move file pauses this team on Coresmith Cloud.
+                        </p>
+                        <Input
+                            id="move-code"
+                            bind:value={code}
+                            aria-describedby="move-code-hint"
+                            autocomplete="off"
+                            spellcheck={false}
+                        />
+                    </div>
                 </div>
             {:else if plan}
                 {#each plan.blockers as blocker (blocker.message)}
@@ -181,7 +221,7 @@
             {#if action}
                 <Button
                     type="button"
-                    variant={selfHosted ? 'destructive' : 'default'}
+                    variant={selfHosted && !moving ? 'destructive' : 'default'}
                     disabled={blocked || processing}
                     onclick={submit}>{action}</Button
                 >

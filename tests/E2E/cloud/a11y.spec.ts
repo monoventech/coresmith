@@ -28,6 +28,18 @@ const OTHER_TEAM_PAGES: [string, Visit][] = [
     ['Billing with no card on file', direct('/no-card/settings/billing')],
     ['Team settings after the plan ended', direct('/ended-business/settings/team')],
     ['Billing on a lapsed team', direct('/expired/settings/billing')],
+    ['Billing on a free plan', direct('/free/settings/billing')],
+    ['Billing on a team that is moving', direct('/moved-away/settings/billing')],
+    ['Fleet on a team that is moving', direct('/moved-away/dashboard')],
+    [
+        'Move to self-host with a move code',
+        async (page) => {
+            await page.goto('/trial/settings/billing')
+            await page.getByRole('button', { name: 'Move to self-host' }).click()
+            await expect(page.getByRole('dialog').getByLabel('Move code')).toBeVisible()
+        }
+    ],
+    ['Fleet on a free plan that is ending', direct('/free-soon/dashboard')],
     ['General settings on a team its owner can delete', direct('/trial/settings')],
     [
         'Delete team dialog',

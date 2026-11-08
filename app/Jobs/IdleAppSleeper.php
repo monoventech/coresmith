@@ -9,11 +9,13 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\PowerState;
+use App\Enums\ServerStatus;
 use App\Models\Application;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Process\ProcessManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 
 final class IdleAppSleeper implements ShouldQueue
@@ -35,6 +37,7 @@ final class IdleAppSleeper implements ShouldQueue
             ->where('power_state', PowerState::Active->value)
             ->where('idle_timeout_minutes', '>', 0)
             ->whereNotNull('last_request_at')
+            ->whereDoesntHave('server', fn(Builder $server): Builder => $server->where('status', ServerStatus::Moving->value))
             ->get()
             ->filter(fn(Application $application): bool => $application->last_request_at
                 ->addMinutes((int) $application->idle_timeout_minutes)

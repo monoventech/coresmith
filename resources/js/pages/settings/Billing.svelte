@@ -36,6 +36,7 @@
         receipts_to = null,
         plans = [],
         self_hosting,
+        move = null,
         checkout = null
     }: BillingPage = $props()
 
@@ -90,6 +91,14 @@
             { preserveScroll: true, onStart: () => (working = true), onFinish: () => (working = false) }
         )
     }
+
+    function cancelMove() {
+        router.delete(route('settings.billing.move.destroy'), {
+            preserveScroll: true,
+            onStart: () => (working = true),
+            onFinish: () => (working = false)
+        })
+    }
 </script>
 
 <AppHead title="Billing" />
@@ -105,6 +114,26 @@
     >
         {awaiting && timedOut ? checkout.timeout_message : checkout.message}
     </p>
+{/if}
+
+{#if move}
+    <div class="mb-4 rounded-xl border border-border bg-card px-5.5 py-5" data-testid="move-card">
+        <h3 class="type-h3 m-0">Moving to your own panel</h3>
+        <p class="mt-1 mb-0 text-[12.5px] text-muted-foreground">
+            Since {move.since}, Coresmith Cloud has stopped managing this team's servers, and they keep running. Upload
+            the move file on {move.to} to finish, or cancel the move to keep the team here.
+        </p>
+        {#if move.file || move.can_cancel}
+            <div class="mt-4 flex flex-wrap gap-2.5">
+                {#if move.file}
+                    <Button size="sm" href={move.file} download>Download move file</Button>
+                {/if}
+                {#if move.can_cancel}
+                    <Button variant="ghost" size="sm" disabled={working} onclick={cancelMove}>Cancel the move</Button>
+                {/if}
+            </div>
+        {/if}
+    </div>
 {/if}
 
 <div class="grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">

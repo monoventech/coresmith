@@ -21,6 +21,7 @@ use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\ServerTabsController;
+use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
@@ -67,6 +68,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.provision');
     Route::post('servers/{server}/provisioning/retry', [ServerController::class, 'retryProvisioning'])
         ->name('servers.provisioning.retry');
+    Route::post('servers/{server}/takeover', [ServerTakeoverController::class, 'store'])
+        ->middleware('throttle:10,1,server-takeover')
+        ->name('servers.takeover.store');
     Route::post('servers/{server}/provisioning/restart', [ServerController::class, 'restartProvisioning'])
         ->name('servers.provisioning.restart');
     Route::post('servers/{server}/audit', [ServerController::class, 'audit'])

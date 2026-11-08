@@ -34,7 +34,8 @@ final class PlanChanges
         $price = $plan->checkoutPrice();
 
         $refusal = match (true) {
-            $status->plan === $plan => "The team is already on {$plan->label()}. Choose a different plan.",
+            $status->state === BillingState::Free && $status->endsAt === null => "This team's plan is free with no last day, so there is nothing to choose.",
+            $status->plan === $plan && $status->state !== BillingState::Free => "The team is already on {$plan->label()}. Choose a different plan.",
             $price === null => "{$plan->label()} is not available on this panel yet. Choose another plan.",
             $status->state === BillingState::PastDue, in_array($subscription?->stripe_status, self::PAYMENT_FAILED, true) => 'The last payment failed. Update the payment method first, then change the plan.',
             $status->state === BillingState::Ending => 'This plan is ending. Keep it first, then change it.',
@@ -55,13 +56,19 @@ final class PlanChanges
             return null;
         }
 
-        $checkout = $this->stripe($team, 'checkout', function () use ($team, $price) {
+        $checkout = $this->stripe($team, 'checkout', function () use ($team, $price, $status) {
             $this->closePendingCheckout($team);
 
             $builder = $team->newSubscription('default', $price)->withMetadata(['team_id' => $team->getKey()]);
 
-            if ($team->onGenericTrial()) {
-                $builder->trialUntil($team->trial_ends_at);
+            $trialEnd = match (true) {
+                $status->state === BillingState::Free => $status->endsAt,
+                $team->onGenericTrial() => CarbonImmutable::instance($team->trial_ends_at),
+                default => null,
+            };
+
+            if ($trialEnd !== null) {
+                $builder->trialUntil($trialEnd);
             }
 
             return $builder->checkout([

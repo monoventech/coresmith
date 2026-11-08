@@ -345,7 +345,22 @@ test('the refusal says why and who can fix it', function (ReadOnlyReason $reason
     'plan ended, deployer' => [ReadOnlyReason::PlanEnded, false, "This team's plan has ended, so it is read-only. Servers and apps keep running. Ask an owner to choose a plan."],
     'payment failed, owner' => [ReadOnlyReason::PaymentFailed, true, "This team's payments failed, so it is read-only. Servers and apps keep running. Update the payment method in Billing settings to make changes again."],
     'payment failed, deployer' => [ReadOnlyReason::PaymentFailed, false, "This team's payments failed, so it is read-only. Servers and apps keep running. Ask an owner to update the payment method."],
+    'free plan ended, owner' => [ReadOnlyReason::FreePlanEnded, true, "This team's free plan has ended, so it is read-only. Servers and apps keep running. Choose a plan in Billing settings to make changes again."],
+    'free plan ended, deployer' => [ReadOnlyReason::FreePlanEnded, false, "This team's free plan has ended, so it is read-only. Servers and apps keep running. Ask an owner to choose a plan."],
 ]);
+
+test('a free team can change things and one whose free plan ended cannot', function () {
+    $free = Team::factory()->owned()->free(Plan::Pro)->create();
+    $ended = Team::factory()->owned()->free(Plan::Pro, now()->subDay())->create();
+
+    $this->actingAs(User::query()->findOrFail($free->owner_id))->post(route('api-tokens.store'), ['name' => 'ci', 'abilities' => [Ability::DeployApplication->value]])
+        ->assertSessionMissing('error');
+    $this->actingAs(User::query()->findOrFail($ended->owner_id))->post(route('api-tokens.store'), ['name' => 'ci', 'abilities' => [Ability::DeployApplication->value]])
+        ->assertSessionHas('error', "This team's free plan has ended, so it is read-only. Servers and apps keep running. Choose a plan in Billing settings to make changes again.");
+
+    expect(ApiToken::query()->where('team_id', $free->id)->count())->toBe(1)
+        ->and(ApiToken::query()->where('team_id', $ended->id)->count())->toBe(0);
+});
 
 test('a deployer is told to ask an owner', function () {
     $team = readOnlyTeam();

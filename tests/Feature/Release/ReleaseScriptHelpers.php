@@ -26,8 +26,9 @@ if [ "$*" = "run build" ]; then
 fi
 SH;
 
-const RELEASE_GH_CREATE = <<<'SH'
-if [ "$1 $2" = "release create" ]; then
+const RELEASE_GH = <<<'SH'
+case "$1 $2" in
+"release create")
     previous=""
     for argument in "$@"; do
         if [ "$previous" = "--notes-file" ]; then
@@ -35,10 +36,27 @@ if [ "$1 $2" = "release create" ]; then
         fi
         case "$argument" in
         *.asc) cp "$argument" "$STUB_ASSET" ;;
+        */install.sh) cp "$argument" "$STUB_INSTALLER" ;;
         esac
         previous="$argument"
     done
-fi
+    ;;
+"pr create")
+    previous=""
+    for argument in "$@"; do
+        if [ "$previous" = "--body-file" ]; then
+            cp "$argument" "$STUB_PR_BODY"
+        fi
+        previous="$argument"
+    done
+    printf 'https://github.com/monoven/coresmith/pull/1\n'
+    ;;
+"pr list")
+    if [ -f "$STUB_PR_VIEW" ]; then
+        cat "$STUB_PR_VIEW"
+    fi
+    ;;
+esac
 SH;
 
 function releaseScriptBody(): string
@@ -76,6 +94,9 @@ function releaseScriptEnvironment(array $sandbox): array
         'STUB_LOG' => $sandbox['log'],
         'STUB_NOTES' => $sandbox['notes'],
         'STUB_ASSET' => $sandbox['asset'],
+        'STUB_INSTALLER' => $sandbox['installer'],
+        'STUB_PR_BODY' => $sandbox['body'],
+        'STUB_PR_VIEW' => $sandbox['pr'],
     ];
 }
 
@@ -116,6 +137,9 @@ function releaseScriptSandbox(): array
         'log' => "{$base}/calls.log",
         'notes' => "{$base}/notes.md",
         'asset' => "{$base}/install.sh.asc",
+        'installer' => "{$base}/install.sh",
+        'body' => "{$base}/pull-request.md",
+        'pr' => "{$base}/pull-request.state",
     ];
 
     releaseScriptSandboxes()->bases[] = $sandbox;
@@ -129,7 +153,7 @@ function releaseScriptSandbox(): array
 
     releaseScriptStub("{$sandbox['bin']}/bun", 'bun', RELEASE_BUN_BUILD);
     releaseScriptStub("{$sandbox['bin']}/php", 'php');
-    releaseScriptStub("{$sandbox['bin']}/gh", 'gh', RELEASE_GH_CREATE);
+    releaseScriptStub("{$sandbox['bin']}/gh", 'gh', RELEASE_GH);
 
     $files = [
         'VERSION' => "0.1.0\n",
@@ -212,6 +236,47 @@ function releaseCommit(array $sandbox, string $branch, string $subject, ?string 
     }
 
     releaseGit($sandbox, ['checkout', '--quiet', $start]);
+}
+
+function releasePrState(array $sandbox, string $state, string $merge = ''): void
+{
+    file_put_contents($sandbox['pr'], "{$state}|{$merge}|https://github.com/monoven/coresmith/pull/1\n");
+}
+
+function releaseMergePr(array $sandbox, string $version, bool $squash = false): string
+{
+    $start = releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']);
+
+    releaseGit($sandbox, ['fetch', '--quiet', 'origin']);
+    releaseGit($sandbox, ['checkout', '--quiet', '-B', 'merge-pull-request', 'origin/main']);
+
+    if ($squash) {
+        releaseGit($sandbox, ['merge', '--quiet', '--squash', "origin/release/v{$version}"]);
+        releaseGit($sandbox, ['commit', '--quiet', '-m', "Release v{$version} (#1)"]);
+    } else {
+        releaseGit($sandbox, ['merge', '--quiet', '--no-ff', '-m', "Merge pull request #1 from monoven/release/v{$version}", "origin/release/v{$version}"]);
+    }
+
+    releaseGit($sandbox, ['push', '--quiet', 'origin', 'HEAD:main']);
+    $merge = releaseGit($sandbox, ['rev-parse', 'HEAD']);
+    releaseGit($sandbox, ['checkout', '--quiet', $start]);
+    releaseGit($sandbox, ['branch', '--quiet', '-D', 'merge-pull-request']);
+    releasePrState($sandbox, 'MERGED', $merge);
+
+    return $merge;
+}
+
+function releaseShip(array $sandbox, string $version, array $prepare = ['--yes', '--unsigned'], array $publish = ['--yes', '--unsigned']): Process
+{
+    $prepared = releaseScriptRun($sandbox, [$version, ...$prepare]);
+
+    if (!$prepared->isSuccessful()) {
+        throw new RuntimeException("Preparing v{$version} failed: " . releaseOutput($prepared));
+    }
+
+    releaseMergePr($sandbox, $version);
+
+    return releaseScriptRun($sandbox, ['publish', $version, ...$publish]);
 }
 
 function releaseTag(array $sandbox, string $tag, string $ref = 'HEAD'): void

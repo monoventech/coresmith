@@ -132,7 +132,41 @@ test('a read-only team is told why and offered a plan', function (Closure $build
     'trial ended' => [fn(Team $team) => $team->forceFill(['trial_ends_at' => CarbonImmutable::parse('2026-10-01')])->save(), 'Trial', 'Trial ended Oct 1 · this team is read-only'],
     'plan ended' => [fn(Team $team) => billingPageSubscribed(Plan::Pro)->ended(CarbonImmutable::parse('2026-10-01'))->for($team, 'owner')->create(), 'No plan', 'Ended Oct 1 · this team is read-only'],
     'payment failed' => [fn(Team $team) => billingPageSubscribed(Plan::Pro)->status('unpaid')->for($team, 'owner')->create(), 'No plan', 'Payments failed · this team is read-only'],
+    'free plan ended' => [fn(Team $team) => $team->forceFill(['free_plan' => Plan::Pro, 'free_until' => CarbonImmutable::parse('2026-10-05 23:59:59')])->save(), 'No plan', 'Free plan ended Oct 5 · this team is read-only'],
 ]);
+
+test('a free plan says so and offers nothing to buy', function () {
+    $team = Team::factory()->owned()->free(Plan::Business)->create();
+
+    $page = billingPagePlan($team);
+
+    expect($page['plan'])->toMatchArray([
+        'key' => 'business',
+        'label' => 'Business',
+        'badge' => ['label' => 'Free', 'tone' => 'success'],
+        'line' => 'Free of charge',
+        'amount' => '$0',
+        'usage' => '0 servers',
+        'note' => null,
+        'primary' => null,
+        'self_host' => true,
+    ])->and($page['payment_note'])->toBe('No card needed while the plan is free.')
+        ->and($page['invoices_note'])->toBe("No invoices. This team's plan is free of charge.");
+});
+
+test('a free plan with a last day says when it ends and offers a plan', function () {
+    $team = Team::factory()->owned()->free(Plan::Starter, CarbonImmutable::parse('2026-11-30 23:59:59'))->create();
+
+    expect(billingPagePlan($team)['plan'])->toMatchArray([
+        'key' => 'starter',
+        'label' => 'Starter',
+        'badge' => ['label' => 'Free', 'tone' => 'success'],
+        'line' => 'Free until Nov 30',
+        'amount' => '$0',
+        'usage' => '0 of 3 servers',
+        'primary' => 'choose',
+    ]);
+});
 
 test('the card and invoices are shown to owners', function () {
     $team = Team::factory()->subscribed(Plan::Pro)->owned()->create();
