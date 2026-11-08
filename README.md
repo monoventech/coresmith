@@ -25,7 +25,7 @@ What you get over running the panel yourself:
 - **One server fewer.** A self-hosted panel needs a server of its own, because Coresmith can't manage the server it runs on. On Cloud, every server you add is for your apps.
 - **No upkeep.** We install each release, back up the panel and keep its certificates and email working, so invitations, password resets and alerts arrive from the first day.
 - **GitHub straight away.** Connect your repositories through Coresmith's GitHub App, with no App of your own to create.
-- **Your servers stay yours.** If a plan ends, your servers and apps keep running and the team turns read-only until you choose a plan. To move to self-hosting, install Coresmith on a server of yours and add your servers there; they keep running the whole time.
+- **Your servers stay yours.** If a plan ends, your servers and apps keep running and the team turns read-only until you choose a plan.
 
 | Plan | Price | Includes |
 | --- | --- | --- |
