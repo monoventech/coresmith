@@ -374,7 +374,7 @@ test('a commit that conflicts with main stops the release', function () {
 test('a commit that only clashes with the version line takes dev\'s side and is bumped', function () {
     $sandbox = releaseScriptSandbox();
     $installer = (string) file_get_contents("{$sandbox['clone']}/scripts/install.sh");
-    releaseCommit($sandbox, 'main', 'chore(release): v0.2.0', 'scripts/install.sh', str_replace('readonly CORESMITH_VERSION="0.1.0"', 'readonly CORESMITH_VERSION="0.2.0"', $installer));
+    releaseCommit($sandbox, 'main', 'chore(release): v9.9.9', 'scripts/install.sh', (string) preg_replace('/^readonly CORESMITH_VERSION=".*"$/m', 'readonly CORESMITH_VERSION="9.9.9"', $installer));
     releaseCommit($sandbox, 'dev', 'feat: install from the next repository', 'scripts/install.sh', str_replace('monoventech/coresmith.git}"', 'monoventech/coresmith-next.git}"', $installer));
 
     $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
