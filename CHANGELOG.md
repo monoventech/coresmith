@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1 (2026-11-08)
+
+### Fixed
+- fix: say Coresmith instead of panel everywhere people read it (#5)
+- fix: a squash-merged release still knows what it shipped (#4)
+
 ## v0.2.0 (2026-11-08)
 
 ### Added
