@@ -121,7 +121,7 @@ async function rolledBack(page: Page) {
         {
             failed_step: 'migrate',
             message:
-                'Running migrations failed: UNIQUE constraint failed: users.email. Coresmith rolled back to v0.1.0, and the panel is running as before.'
+                'Running migrations failed: UNIQUE constraint failed: users.email. Coresmith rolled back to v0.1.0 and is running as before.'
         },
         ['Running migrations', 'SQLSTATE[23000]: UNIQUE constraint failed: users.email', 'Rolling back']
     )
@@ -248,7 +248,7 @@ test.describe('panel updates', () => {
             {
                 failed_step: 'migrate',
                 message:
-                    'Running migrations failed: x. The rollback did not finish: the backup is missing. The panel is in maintenance mode.'
+                    'Running migrations failed: x. The rollback did not finish: the backup is missing. Coresmith is in maintenance mode.'
             },
             ['Running migrations', 'Rolling back']
         )

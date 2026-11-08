@@ -37,7 +37,7 @@ final class PanelUpdateFailedNotification extends Notification
         $mail = match ($this->status['state'] ?? null) {
             UpdateStatus::ROLLED_BACK => (new MailMessage)
                 ->subject("Coresmith couldn't update to v{$to}")
-                ->line('The update failed while ' . lcfirst($step) . ", so Coresmith rolled back to v{$from}. The panel is running as before.")
+                ->line('The update failed while ' . lcfirst($step) . ", so Coresmith rolled back to v{$from} and is running as before.")
                 ->line($message),
             UpdateStatus::FAILED => (new MailMessage)
                 ->subject('Coresmith needs attention after a failed update')

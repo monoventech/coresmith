@@ -192,7 +192,7 @@
         <form onsubmit={saveName}>
             <Dialog.Header>
                 <Dialog.Title>Rename server</Dialog.Title>
-                <Dialog.Description>The name is only for the panel, nothing on the server changes.</Dialog.Description>
+                <Dialog.Description>The name is only for Coresmith, nothing on the server changes.</Dialog.Description>
             </Dialog.Header>
             <div class="mt-4">
                 <Input bind:value={name} aria-label="Server name" required maxlength={255} />
@@ -233,7 +233,7 @@
                     : server.cloud?.instance
                       ? `Coresmith stops managing ${server.name}. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
                       : server.cloud
-                        ? `Nothing was created at ${server.cloud.provider}, so ${server.name} only leaves the panel.`
+                        ? `Nothing was created at ${server.cloud.provider}, so ${server.name} only leaves Coresmith.`
                         : 'Coresmith stops managing this server. The VM itself, and everything on it, is untouched.'}</Dialog.Description
             >
         </Dialog.Header>

@@ -35,11 +35,11 @@ final class TeamDomains
     public function refusal(string $hostname, Team $team): ?string
     {
         if ($hostname === $this->urls->mainHost()) {
-            return 'That is the address of this panel itself.';
+            return 'That is the address of Coresmith itself.';
         }
 
         if (!SafeName::isDomain($hostname) || str_starts_with($hostname, '*.') || !str_contains($hostname, '.')) {
-            return "That doesn't look like a domain. Try panel.example.com.";
+            return "That doesn't look like a domain. Try deploy.example.com.";
         }
 
         $tenant = $this->urls->tenantDomain();

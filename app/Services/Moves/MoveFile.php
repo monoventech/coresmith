@@ -44,11 +44,11 @@ final class MoveFile
 
         if ($header['format'] > self::FORMAT) {
             $version = is_string($header['coresmith'] ?? null) ? $header['coresmith'] : 'a newer version';
-            $this->refuse("This move file comes from Coresmith {$version}, which is newer than this panel. Update this panel, then upload the file again.");
+            $this->refuse("This move file comes from Coresmith {$version}, which is newer than this one. Update Coresmith, then upload the file again.");
         }
 
         if (!hash_equals((string) $code->id, $header['code'])) {
-            $this->refuse("This move file was made for a different move code. Paste this panel's code in Coresmith Cloud and download the file again.");
+            $this->refuse('This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.');
         }
 
         if ($code->imported_at !== null || $code->secret_key === null) {

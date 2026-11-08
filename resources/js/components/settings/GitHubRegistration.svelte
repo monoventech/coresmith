@@ -28,7 +28,7 @@
 
     const name = $derived(edited ?? registration.name)
     const reachability = $derived(registration.reachability)
-    const host = $derived(reachability.host === '' ? 'this panel' : reachability.host)
+    const host = $derived(reachability.host === '' ? 'Coresmith' : reachability.host)
     const organizationValid = $derived(ORGANIZATION_PATTERN.test(organization))
     const nameValid = $derived(APP_NAME_PATTERN.test(name))
     const organizationError = $derived(
@@ -61,7 +61,7 @@
             <h3 class="type-h3 m-0">Create the GitHub App</h3>
         </div>
         <p class="mb-4 text-[12.5px] text-muted-foreground">
-            This panel has no GitHub App yet. GitHub creates one that belongs to you, with this panel's addresses filled
+            Coresmith has no GitHub App yet. GitHub creates one that belongs to you, with Coresmith's addresses filled
             in, and Coresmith keeps its key encrypted here. It asks only for contents read-only, commit statuses and
             webhooks.
         </p>

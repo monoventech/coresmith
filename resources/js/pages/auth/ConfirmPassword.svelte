@@ -2,7 +2,7 @@
     export const layout = {
         title: 'Confirm your password',
         mark: 'password',
-        description: 'This part of the panel changes security settings, so it asks once more.'
+        description: 'This part of Coresmith changes security settings, so it asks once more.'
     }
 </script>
 

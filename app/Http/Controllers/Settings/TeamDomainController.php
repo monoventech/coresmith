@@ -85,6 +85,6 @@ final class TeamDomainController extends Controller
 
         activity()->performedOn($team)->withProperties(['hostname' => $domain->hostname])->log('team_domain_removed');
 
-        return back()->with('success', 'Removed. ' . $domain->hostname . ' no longer opens this panel.');
+        return back()->with('success', 'Removed. ' . $domain->hostname . ' no longer opens this team.');
     }
 }

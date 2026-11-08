@@ -234,7 +234,7 @@ test('the uninstaller removes the panel and keeps a copy of its data', function 
         ->and($process->getOutput())->toContain("A copy of its .env, backups and database is in {$saved}.")
         ->and($process->getOutput())->toContain('Caddy, Redis, PHP, Node.js, Bun, Composer and any database server are still installed, as other software may use them.')
         ->and($process->getOutput())->toContain('Firewall rules for SSH, 80 and 443 are unchanged.')
-        ->and($process->getOutput())->toContain("Servers this panel managed keep running. The panel's public key stays in their authorized_keys until you remove it.")
+        ->and($process->getOutput())->toContain('Servers Coresmith managed keep running. Its public key stays in their authorized_keys until you remove it.')
         ->and($process->getOutput())->not->toContain('—');
 });
 
@@ -286,7 +286,7 @@ test('nothing is removed until uninstall is typed', function () {
     $process = runUninstaller($base, [], "yes\n");
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getOutput())->toContain("This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith, its logs and the coresmith user.\nA copy of its .env, backups and database is saved under {$base}/root first.\n")
+        ->and($process->getOutput())->toContain("This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith, its logs and the coresmith user.\nA copy of its .env, backups and database is saved under {$base}/root first.\n")
         ->and($process->getOutput())->toContain('Type uninstall to remove Coresmith from this server:')
         ->and($process->getErrorOutput())->toContain('Nothing was removed.')
         ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
@@ -329,7 +329,7 @@ test('the question says the coresmith user stays while apps deployed here use it
     $process = runUninstaller($base, [], "no\n");
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getOutput())->toContain("This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith and its logs.\n")
+        ->and($process->getOutput())->toContain("This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith and its logs.\n")
         ->and($process->getOutput())->toContain("Apps deployed here (shop) keep running, with {$base}/var/coresmith, {$base}/etc/coresmith and the coresmith user.\n")
         ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue();
 });

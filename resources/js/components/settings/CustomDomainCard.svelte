@@ -79,7 +79,7 @@
 
     {#if !domain}
         <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Open this team on a domain you own, like panel.example.com. Coresmith issues the certificate.
+            Open this team on a domain you own, like deploy.example.com. Coresmith issues the certificate.
         </p>
         {#if planNote}
             <PlanNote note={planNote} />
@@ -172,7 +172,7 @@
                         id="custom-domain"
                         name="hostname"
                         required
-                        placeholder="panel.example.com"
+                        placeholder="deploy.example.com"
                         autocomplete="off"
                         spellcheck="false"
                         class="font-mono text-[13px]"
@@ -193,8 +193,7 @@
     <Dialog.Content>
         <Dialog.Header>
             <Dialog.Title>Remove {domain?.hostname}?</Dialog.Title>
-            <Dialog.Description
-                >The domain stops opening this panel. Your team address keeps working.</Dialog.Description
+            <Dialog.Description>The domain stops opening this team. Your team address keeps working.</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>

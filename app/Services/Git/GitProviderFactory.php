@@ -43,7 +43,7 @@ final class GitProviderFactory
 
         return new GitHubAppClient(
             $provider,
-            $this->apps->for($provider) ?? throw new GitProviderException('This GitHub connection was made through an app this panel no longer has. Connect GitHub again from Settings, Git.'),
+            $this->apps->for($provider) ?? throw new GitProviderException('This GitHub connection was made through an app Coresmith no longer has. Connect GitHub again from Settings, Git.'),
             $this->api,
         );
     }

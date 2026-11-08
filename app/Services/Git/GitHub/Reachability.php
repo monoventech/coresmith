@@ -56,7 +56,7 @@ final readonly class Reachability
 
     public function sentence(): ?string
     {
-        $host = $this->host === '' ? 'this panel' : $this->host;
+        $host = $this->host === '' ? 'Coresmith' : $this->host;
 
         return match ($this->reason) {
             self::LOOPBACK => "GitHub cannot reach {$host}, it only answers on this machine.",
@@ -64,8 +64,8 @@ final readonly class Reachability
                 ? "GitHub cannot reach {$host}, it is not a public address."
                 : "GitHub cannot reach {$host}, {$this->address} is not a public address.",
             self::LOCAL => "GitHub cannot reach {$host}, it only resolves on your own network.",
-            self::IP => "GitHub cannot check a certificate for {$host}. Give the panel a domain name to get pushes as they happen.",
-            self::HTTP => 'This panel is served over http, and GitHub only delivers to https.',
+            self::IP => "GitHub cannot check a certificate for {$host}. Give Coresmith a domain name to get pushes as they happen.",
+            self::HTTP => 'Coresmith is served over http, and GitHub only delivers to https.',
             default => null,
         };
     }

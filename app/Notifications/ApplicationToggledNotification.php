@@ -39,7 +39,7 @@ final class ApplicationToggledNotification extends Notification implements Shoul
     {
         return (new MailMessage)
             ->subject("{$this->change} · {$this->application->name}")
-            ->line(($this->actor ?? 'Someone') . ' made the change from the panel.' . ($this->withoutDeployment ? ' No deployment was needed.' : ''))
+            ->line(($this->actor ?? 'Someone') . ' made the change in Coresmith.' . ($this->withoutDeployment ? ' No deployment was needed.' : ''))
             ->action('Open ' . $this->application->name, route('servers.applications.show', [$this->application->server_id, $this->application]));
     }
 }

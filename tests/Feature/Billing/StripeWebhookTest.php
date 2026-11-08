@@ -94,7 +94,7 @@ test('a panel without a webhook secret refuses every event', function () {
 
     stripeWebhook(FakeStripe::event('customer.subscription.created', FakeStripe::subscription('sub_1', 'cus_1', 'price_test_pro')), secret: '')
         ->assertStatus(503)
-        ->assertSeeText('Stripe webhooks are not configured on this panel.');
+        ->assertSeeText('Stripe webhooks are not configured here.');
 
     expect(Subscription::query()->count())->toBe(0)
         ->and(collect($logged)->contains(fn(MessageLogged $event): bool => $event->level === 'critical'

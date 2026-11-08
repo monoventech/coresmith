@@ -35,7 +35,7 @@ final class GitHubWebhookController extends Controller
         $app = $this->apps->env();
 
         if ($app === null) {
-            return response()->json(['message' => 'This panel has no GitHub App.'], 404);
+            return response()->json(['message' => 'Coresmith has no GitHub App.'], 404);
         }
 
         return $this->handle($request, $app, null);

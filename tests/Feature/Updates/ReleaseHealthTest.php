@@ -104,7 +104,7 @@ test('a panel still serving the old release fails the check', function () {
     $failed = updatesHealthFailure($this->release, 6);
 
     expect($failed->step)->toBe('health')
-        ->and($failed->getMessage())->toBe('The panel is still serving 0.1.0-8413dce, not the new release.');
+        ->and($failed->getMessage())->toBe('Coresmith is still serving 0.1.0-8413dce, not the new release.');
 
     Http::assertSentCount(3);
     Sleep::assertSleptTimes(2);
@@ -116,9 +116,9 @@ test('a panel that never answers fails the check', function (Closure $answer, st
 
     expect(updatesHealthFailure($this->release, 4)->getMessage())->toBe($message);
 })->with([
-    'no connection' => [fn() => Http::failedConnection(), "The panel didn't answer on http://127.0.0.1:8484/api/up/release."],
-    'a constant 503' => [fn() => Http::response('Service Unavailable', 503), 'The panel answered 503 on http://127.0.0.1:8484/api/up/release.'],
-    'an answer that names no release' => [fn() => Http::response('<html>ok</html>'), 'The panel answered on http://127.0.0.1:8484/api/up/release without saying which release it serves.'],
+    'no connection' => [fn() => Http::failedConnection(), "Coresmith didn't answer on http://127.0.0.1:8484/api/up/release."],
+    'a constant 503' => [fn() => Http::response('Service Unavailable', 503), 'Coresmith answered 503 on http://127.0.0.1:8484/api/up/release.'],
+    'an answer that names no release' => [fn() => Http::response('<html>ok</html>'), 'Coresmith answered on http://127.0.0.1:8484/api/up/release without saying which release it serves.'],
 ]);
 
 test('the probe goes to the loopback site whatever address the panel has', function (string $url) {

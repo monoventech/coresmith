@@ -65,7 +65,7 @@ final class PreProvisioningAudit
         $sections = $this->sections($output);
 
         if (($sections['panel'] ?? []) !== []) {
-            return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs the Coresmith panel itself', 'Add a different server for your apps.')]);
+            return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs Coresmith itself', 'Add a different server for your apps.')]);
         }
 
         $listeners = $this->ports->parse(implode("\n", $sections['ports'] ?? []));

@@ -82,7 +82,7 @@ test.describe('changing the plan on coresmith cloud', () => {
 
         await expect(consequences).toContainText('There is nothing to cancel.')
         await expect(consequences).toContainText(
-            "To bring this team's servers and apps along, create a move code in Settings, General on your own panel and paste it here."
+            "To bring this team's servers and apps along, create a move code in Settings, General on your self-hosted Coresmith and paste it here."
         )
         await expect(dialog(page).getByLabel('Move code')).toBeVisible()
         await expect(dialog(page).getByRole('button', { name: 'Download move file' })).toHaveCount(0)

@@ -1,6 +1,6 @@
 <script module lang="ts">
     export const layout = {
-        title: 'Sign in to your panel',
+        title: 'Sign in to Coresmith',
         mark: 'panel',
         description: 'Use the email and password you set up for this Coresmith installation.'
     }
@@ -97,8 +97,10 @@
 
             {#if !sso.start && sso.lookup}
                 <p class="m-0 text-[13px] text-muted-foreground">
-                    Signing in through your company? <TextLink href={route('sso')} data-test="sso-lookup-link"
-                        >Use single sign-on</TextLink
+                    Signing in through your company? <TextLink
+                        href={route('sso')}
+                        class="whitespace-nowrap"
+                        data-test="sso-lookup-link">Use single sign-on</TextLink
                     >
                 </p>
             {/if}

@@ -30,7 +30,7 @@ test.describe('moving a team to your own panel', () => {
         await dialog(page).getByRole('button', { name: 'Download move file' }).click()
 
         expect((await download).suggestedFilename()).toBe(`${slug}.coresmith-move`)
-        await expect(page.getByTestId('move-card')).toContainText('Moving to your own panel')
+        await expect(page.getByTestId('move-card')).toContainText('Moving to self-hosted Coresmith')
         await expect(page.getByTestId('move-card')).toContainText('https://panel.example.com')
         await expect(page.getByTestId('move-card').getByRole('link', { name: 'Download move file' })).toBeVisible()
     })
@@ -42,7 +42,7 @@ test.describe('moving a team to your own panel', () => {
         await dialog(page).getByRole('button', { name: 'Download move file' }).click()
 
         await expect(dialog(page)).toContainText(
-            "That isn't a move code. Copy it again from Settings, General on your panel."
+            "That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith."
         )
     })
 
@@ -50,7 +50,9 @@ test.describe('moving a team to your own panel', () => {
         await page.goto(`/${own(testInfo, 'moving')}/dashboard`)
         const banner = page.getByTestId('billing-banner')
 
-        await expect(banner).toContainText('This team is moving to your own panel.')
+        await expect(page.getByTestId('server-card')).toContainText('Moving out')
+
+        await expect(banner).toContainText('This team is moving to self-hosted Coresmith.')
         await banner.getByRole('link', { name: 'See the move' }).click()
 
         await page.getByTestId('move-card').getByRole('button', { name: 'Cancel the move' }).click()

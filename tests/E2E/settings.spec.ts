@@ -15,7 +15,7 @@ import {
 } from './support/fixtures'
 
 test.describe('settings', () => {
-    test('the tabs cover the panel, the team, git, notifications and tokens', async ({ page }) => {
+    test('the tabs cover the installation, the team, git, notifications and tokens', async ({ page }) => {
         await gotoSettings(page, 'General')
 
         const sections = tabs(page, 'Settings')
@@ -89,14 +89,19 @@ test.describe('settings', () => {
 })
 
 test.describe('general settings', () => {
-    test('the panel card shows the version and what can be changed', async ({ page }) => {
+    test('the installation card shows the version and what can be changed', async ({ page }) => {
         await gotoSettings(page, 'General')
+
+        await expect(
+            page.getByText('Installation, team and notification preferences for Coresmith.', { exact: true })
+        ).toBeVisible()
+        await expect(page.getByTestId('panel-card').getByRole('heading', { name: 'Installation' })).toBeVisible()
 
         await expect(page.getByTestId('panel-updates-card')).toContainText(/Coresmith v\d+\.\d+\.\d+ · stable channel/)
 
         const panel = page.getByTestId('panel-card')
 
-        await expect(panel.getByLabel('Panel name')).toHaveValue('Coresmith')
+        await expect(panel.getByLabel('Installation name')).toHaveValue('Coresmith')
         await expect(panel.getByLabel('Timezone')).toBeVisible()
     })
 
@@ -172,7 +177,7 @@ test.describe('general settings', () => {
         const closing = page.getByTestId('close-account')
 
         await expect(closing).toContainText(
-            'Make someone else an owner of Foundry first. To remove the panel instead, run coresmith:uninstall on its server.'
+            'Make someone else an owner of Foundry first. To remove Coresmith instead, run coresmith:uninstall on its server.'
         )
         await expect(closing.getByRole('button', { name: 'Close your account' })).toBeDisabled()
         await expect(page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' })).toHaveCount(0)

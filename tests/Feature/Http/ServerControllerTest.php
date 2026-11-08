@@ -197,7 +197,7 @@ test('an admin can delete a server', function () {
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->delete(route('servers.destroy', $server))
         ->assertRedirect(route('dashboard'))
-        ->assertSessionHas('success', "Detached. {$server->name} was removed from the panel. The VM is untouched.");
+        ->assertSessionHas('success', "Detached. {$server->name} was removed from Coresmith. The VM is untouched.");
 
     expect(Server::find($server->id))->toBeNull()
         ->and(Server::withTrashed()->find($server->id))->not->toBeNull();

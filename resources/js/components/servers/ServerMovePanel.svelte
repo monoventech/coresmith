@@ -9,10 +9,10 @@
     let working = $state(false)
 
     const failed = $derived(!move.away && move.state === 'failed')
-    const title = $derived(move.away ? 'Moving to your panel' : failed ? 'The move stopped' : 'Moving here')
+    const title = $derived(move.away ? 'Moving to self-hosted Coresmith' : failed ? 'The move stopped' : 'Moving here')
     const body = $derived(
         move.away
-            ? 'Coresmith Cloud has stopped managing this server while its team moves to your own panel. It keeps running.'
+            ? 'Coresmith Cloud has stopped managing this server while its team moves to self-hosted Coresmith. It keeps running.'
             : failed
               ? (move.error ?? 'Taking this server over stopped.')
               : 'Coresmith is taking this server over from Coresmith Cloud, without setting it up again. Its apps keep serving the whole time.'

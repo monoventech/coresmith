@@ -46,7 +46,7 @@ test('the private half of a move code is sealed at rest', function () {
 
 test('text that is not a move code is refused', function (string $text) {
     expect(moveCodesRefusal(fn() => app(MoveCodes::class)->read($text)))
-        ->toBe("That isn't a move code. Copy it again from Settings, General on your panel.");
+        ->toBe("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
 })->with([
     'empty' => '',
     'another prefix' => 'csmove9_eyJ2IjoxfQ',
@@ -62,7 +62,7 @@ test('a move code past its time is refused', function () {
     $this->travel(25)->hours();
 
     expect(moveCodesRefusal(fn() => $codes->read($text)))
-        ->toBe('This move code has expired. Create a new one in Settings, General on your panel.');
+        ->toBe('This move code has expired. Create a new one in Settings, General on your self-hosted Coresmith.');
 });
 
 test('a move code stops being usable once it is imported or expires', function () {

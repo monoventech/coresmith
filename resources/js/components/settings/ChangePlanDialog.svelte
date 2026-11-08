@@ -149,7 +149,7 @@
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span id="plan-self-hosted-label" class="text-[14px] font-medium">Self-hosted</span>
                     <span id="plan-self-hosted-summary" class="text-[12px] text-muted-foreground"
-                        >Free · every feature · you run the panel</span
+                        >Free · every feature · you run it yourself</span
                     >
                 </span>
             </label>
@@ -183,7 +183,8 @@
                         <Label for="move-code">Move code</Label>
                         <p class="m-0 text-muted-foreground" id="move-code-hint">
                             To bring this team's servers and apps along, create a move code in Settings, General on your
-                            own panel and paste it here. Downloading the move file pauses this team on Coresmith Cloud.
+                            self-hosted Coresmith and paste it here. Downloading the move file pauses this team on
+                            Coresmith Cloud.
                         </p>
                         <Input
                             id="move-code"

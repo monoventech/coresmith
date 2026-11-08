@@ -394,14 +394,14 @@ final class PanelUpdater
             try {
                 $this->services->up();
             } catch (Throwable $e) {
-                $problems[] = "taking the panel out of maintenance failed: {$e->getMessage()}";
+                $problems[] = "taking Coresmith out of maintenance failed: {$e->getMessage()}";
             }
         }
 
         $reason = $this->withoutPeriod($failure->getMessage());
 
         if ($problems === []) {
-            $final = $run->finish(UpdateStatus::ROLLED_BACK, "{$reason}. Coresmith rolled back to v{$run->status()->fromVersion}, and the panel is running as before.", $failedStep);
+            $final = $run->finish(UpdateStatus::ROLLED_BACK, "{$reason}. Coresmith rolled back to v{$run->status()->fromVersion} and is running as before.", $failedStep);
             $this->record($run, 'panel_update_rolled_back', $final, ['step' => $failedStep, 'message' => $final->message]);
             $this->notify($run, $final);
 
@@ -412,7 +412,7 @@ final class PanelUpdater
 
         if ($this->services->isDown()) {
             $app = "cd {$this->paths->current()} &&";
-            $message .= " The panel is in maintenance mode. Fix the problem above, then run {$app} sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.";
+            $message .= " Coresmith is in maintenance mode. Fix the problem above, then run {$app} sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.";
 
             if ($restoreFailed && $backup !== null) {
                 $message .= " To restore the backup by hand instead, run {$app} sudo -u coresmith php artisan tinker --execute=\"app(App\\Services\\Panel\\PanelBackup::class)->restore('{$backup}')\", then {$app} sudo -u coresmith php artisan up.";

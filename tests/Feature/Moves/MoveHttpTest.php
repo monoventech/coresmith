@@ -83,7 +83,7 @@ describe('on coresmith cloud', function () {
         $this->actingAs(moveHttpOwner($team))->from(route('settings.billing'))
             ->post(route('settings.billing.move.store'), ['code' => moveHttpCodeText()])
             ->assertRedirect(route('settings.billing'))
-            ->assertSessionHas('success', 'Saved. Coresmith Cloud has paused this team. Upload the move file on your panel to finish.');
+            ->assertSessionHas('success', 'Saved. Coresmith Cloud has paused this team. Upload the move file on your self-hosted Coresmith to finish.');
 
         expect($team->fresh()->moving_at)->not->toBeNull();
     });
@@ -92,7 +92,7 @@ describe('on coresmith cloud', function () {
         $team = moveHttpCloudTeam();
 
         $this->actingAs(moveHttpOwner($team))->post(route('settings.billing.move.store'), ['code' => ''])
-            ->assertSessionHasErrors(['code' => 'Paste the move code from Settings, General on your panel.']);
+            ->assertSessionHasErrors(['code' => 'Paste the move code from Settings, General on your self-hosted Coresmith.']);
     });
 
     test('only someone who manages billing can move the team', function () {
@@ -126,7 +126,7 @@ describe('on coresmith cloud', function () {
         app(TeamMove::class)->start($team, moveHttpOwner($team), moveHttpCodeText());
 
         $this->actingAs(moveHttpOwner($team))->from(route('servers.show', $server))->post(route('servers.audit', $server))
-            ->assertSessionHas('error', 'This team is moving to your own panel, so Coresmith Cloud no longer changes it. Cancel the move in Billing settings to make changes here again.');
+            ->assertSessionHas('error', 'This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer changes it. Cancel the move in Billing settings to make changes here again.');
 
         $this->actingAs(moveHttpOwner($team))->from(route('settings.billing'))->delete(route('settings.billing.move.destroy'))
             ->assertRedirect(route('settings.billing'))
@@ -147,7 +147,7 @@ describe('on coresmith cloud', function () {
             ->where('move.can_cancel', true));
 
         $this->actingAs(moveHttpOwner($team))->get(route('dashboard'))->assertInertia(fn(Assert $page) => $page
-            ->where('billing.banner.title', 'This team is moving to your own panel.')
+            ->where('billing.banner.title', 'This team is moving to self-hosted Coresmith.')
             ->where('billing.banner.body', 'Coresmith Cloud has stopped managing its servers, and they keep running. Upload the move file on https://app.coresmith.io to finish.')
             ->where('billing.banner.action', 'See the move'));
     });
@@ -205,7 +205,7 @@ describe('on a self-hosted panel', function () {
         $other = app(MoveCodes::class)->create(User::factory()->create());
 
         $this->actingAs($owner)->post(route('settings.moves.upload', $code), ['file' => moveHttpUploaded($code, $other)])
-            ->assertSessionHasErrors(['file' => "This move file was made for a different move code. Paste this panel's code in Coresmith Cloud and download the file again."]);
+            ->assertSessionHasErrors(['file' => 'This move file was made for a different move code. Paste the code from here into Coresmith Cloud and download the file again.']);
 
         expect($code->fresh()->file)->toBeNull();
     });

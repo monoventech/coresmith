@@ -24,7 +24,7 @@ final class VerifyStripeSignature
         if (!is_string($secret) || $secret === '') {
             Log::critical('A Stripe webhook arrived but STRIPE_WEBHOOK_SECRET is not set, so it was refused.');
 
-            return new Response('Stripe webhooks are not configured on this panel.', 503);
+            return new Response('Stripe webhooks are not configured here.', 503);
         }
 
         try {

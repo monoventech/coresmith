@@ -45,7 +45,7 @@ final class FeedDocument
     public static function fromArray(array $data): self
     {
         if (($data['schema'] ?? self::SCHEMA) !== self::SCHEMA) {
-            throw new InvalidFeed('schema is newer than this panel understands.');
+            throw new InvalidFeed('schema is newer than this version of Coresmith understands.');
         }
 
         $channel = $data['channel'] ?? 'stable';
