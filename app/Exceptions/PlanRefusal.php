@@ -55,6 +55,11 @@ final class PlanRefusal extends RuntimeException
         return new self($feature->note() . ' ' . ($canManage ? 'Change the plan in Billing settings.' : 'Ask an owner to change the plan.'), 'feature', 403);
     }
 
+    public static function moving(bool $canManage): self
+    {
+        return new self('This team is moving to your own panel, so Coresmith Cloud no longer changes it. ' . ($canManage ? 'Cancel the move in Billing settings to make changes here again.' : 'Ask an owner if it should stay here.'), 'moving', 409);
+    }
+
     public static function inactive(): self
     {
         return new self("Stripe says this team's plan is no longer active, so nothing was added. Open Billing settings to see why.", 'inactive', 402);

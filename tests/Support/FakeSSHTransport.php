@@ -65,6 +65,11 @@ final class FakeSSHTransport implements SSHTransport
     /** @var array<string, Closure> */
     private array $hooks = [];
 
+    /** @var list<string> */
+    private array $loginKeys = [];
+
+    private ?string $accepted = null;
+
     public static function keyNamed(string $label): string
     {
         return 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . hash('sha256', $label, true));
@@ -200,9 +205,35 @@ final class FakeSSHTransport implements SSHTransport
         return $this->hostKey;
     }
 
+    public function onlyAccept(string $publicKey): self
+    {
+        $this->accepted = self::keyBlob($publicKey);
+
+        return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function loginKeys(): array
+    {
+        return $this->loginKeys;
+    }
+
+    public static function keyBlob(string $publicKey): string
+    {
+        return explode(' ', trim($publicKey))[1] ?? '';
+    }
+
     public function login(string $user, PrivateKey $key): bool
     {
         $this->loginAttempted = true;
+        $offered = $key->getPublicKey()->toString('OpenSSH');
+        $this->loginKeys[] = $offered;
+
+        if ($this->accepted !== null && self::keyBlob($offered) !== $this->accepted) {
+            return false;
+        }
 
         if ($this->loginFailures > 0) {
             $this->loginFailures--;

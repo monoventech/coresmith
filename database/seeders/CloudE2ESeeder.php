@@ -83,9 +83,29 @@ final class CloudE2ESeeder extends Seeder
             $this->vaultTeam($tenant->owner, $code);
             $this->leftoverTeam($tenant->owner, $code);
             $this->partingTeam($code);
+            $this->moveTeams($tenant->owner, $code);
         }
 
+        $this->movingTeam($tenant->owner, 'Moved Away', 'moved-away');
+
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
+    }
+
+    private function moveTeams(User $owner, string $code): void
+    {
+        $team = $this->ownedTeam($owner, "Move {$code}", "move-{$code}");
+        $team->forceFill(['trial_ends_at' => now()->addDays(9)])->save();
+        $server = Server::factory()->for($team)->active()->create(['name' => "move-{$code}-01", 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', "move-{$code}", true)), 0, 43)]);
+        Application::factory()->for($team)->for($server)->create(['name' => "move-{$code}-site", 'slug' => "move-{$code}-site", 'system_user' => "coresmith-app-mv{$code}"]);
+
+        $this->movingTeam($owner, "Moving {$code}", "moving-{$code}");
+    }
+
+    private function movingTeam(User $owner, string $name, string $slug): void
+    {
+        $team = $this->ownedTeam($owner, $name, $slug);
+        $team->forceFill(['trial_ends_at' => now()->addDays(9), 'moving_at' => now()->subHour(), 'moving_to' => 'https://panel.example.com', 'move_file' => '{"format":1}'])->save();
+        Server::factory()->for($team)->create(['name' => "{$slug}-01", 'status' => ServerStatus::Moving, 'os_name' => 'ubuntu', 'os_version' => '24.04', 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $slug, true)), 0, 43)]);
     }
 
     private function trialTeam(User $owner): void

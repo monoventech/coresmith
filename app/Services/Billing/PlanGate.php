@@ -71,6 +71,10 @@ final class PlanGate
             return;
         }
 
+        if ($team->moving_at !== null) {
+            throw PlanRefusal::moving($this->canManage($team, $user));
+        }
+
         $status = $this->billing->status($team);
 
         if ($status->readOnly()) {

@@ -14,3 +14,14 @@ setup('authenticate as member', async ({ browser }) => {
 
     await context.close()
 })
+
+for (const code of ['chr', 'ffx', 'wbk', 'mch', 'msf']) {
+    setup(`authenticate as the owner who moves a team in on ${code}`, async ({ browser }) => {
+        const context = await browser.newContext()
+        const page = await context.newPage()
+
+        await signIn(page, `mover-${code}@coresmith.test`, `tests/E2E/.auth/mover-${code}.json`)
+
+        await context.close()
+    })
+}

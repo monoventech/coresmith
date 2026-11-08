@@ -86,5 +86,13 @@ export type BillingPage = {
     receipts_to: string | null
     plans: PlanOption[]
     self_hosting: SelfHosting
+    move: TeamMove | null
     checkout: CheckoutStatus | null
+}
+
+export type TeamMove = {
+    to: string
+    since: string
+    file: string | null
+    can_cancel: boolean
 }

@@ -62,9 +62,7 @@ test.describe('changing the plan on coresmith cloud', () => {
 
         await expect(dialog(page).getByRole('radio', { name: 'Self-hosted' })).toBeChecked()
         await expect(dialog(page).getByTestId('plan-consequences')).toContainText('Coresmith Cloud stops on')
-        await expect(dialog(page).getByTestId('plan-consequences')).toContainText(
-            "A self-hosted panel can't take over servers Coresmith Cloud set up yet, so set your apps up there on fresh servers."
-        )
+        await expect(dialog(page).getByTestId('plan-consequences')).toContainText('Your servers and apps keep running.')
         await expect(dialog(page).getByRole('link', { name: 'Read how to self-host' })).toHaveAttribute(
             'href',
             'https://github.com/monoventech/coresmith#self-hosting'
@@ -76,7 +74,7 @@ test.describe('changing the plan on coresmith cloud', () => {
         await expect(page.getByTestId('plan-card')).toContainText('Ending')
     })
 
-    test('moving to self-host from a trial cancels nothing and starts on fresh servers', async ({ page }) => {
+    test('moving to self-host from a trial cancels nothing and offers to bring the team along', async ({ page }) => {
         await page.goto('/trial/settings/billing')
         await page.getByRole('button', { name: 'Move to self-host' }).click()
 
@@ -84,8 +82,10 @@ test.describe('changing the plan on coresmith cloud', () => {
 
         await expect(consequences).toContainText('There is nothing to cancel.')
         await expect(consequences).toContainText(
-            "It can't take over servers Coresmith Cloud set up yet, so add fresh servers for your apps."
+            "To bring this team's servers and apps along, create a move code in Settings, General on your own panel and paste it here."
         )
+        await expect(dialog(page).getByLabel('Move code')).toBeVisible()
+        await expect(dialog(page).getByRole('button', { name: 'Download move file' })).toHaveCount(0)
     })
 
     test('an ending plan can be kept', async ({ page }, testInfo) => {

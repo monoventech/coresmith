@@ -6,6 +6,7 @@ use App\Http\Controllers\Settings\BillingController;
 use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
 use App\Http\Controllers\Settings\GitHubAppController;
+use App\Http\Controllers\Settings\MoveCodeController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\OffsiteBackupController;
 use App\Http\Controllers\Settings\PanelUpdateController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\Settings\SourceProviderController;
 use App\Http\Controllers\Settings\SourceRepositoryController;
 use App\Http\Controllers\Settings\TeamDeletionController;
 use App\Http\Controllers\Settings\TeamDomainController;
+use App\Http\Controllers\Settings\TeamMoveController;
 use App\Http\Controllers\Settings\TeamUrlController;
 use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -89,6 +91,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/billing/portal', [BillingController::class, 'portal'])
         ->middleware(['cloud', 'throttle:10,1,billing-portal'])
         ->name('settings.billing.portal');
+    Route::post('settings/billing/move', [TeamMoveController::class, 'store'])
+        ->middleware(['cloud', 'throttle:10,1,team-move'])
+        ->name('settings.billing.move.store');
+    Route::get('settings/billing/move', [TeamMoveController::class, 'show'])->middleware('cloud')->name('settings.billing.move.file');
+    Route::delete('settings/billing/move', [TeamMoveController::class, 'destroy'])
+        ->middleware(['cloud', 'throttle:10,1,team-move-cancel'])
+        ->name('settings.billing.move.destroy');
+
+    Route::post('settings/moves', [MoveCodeController::class, 'store'])->middleware('throttle:10,1,move-code')->name('settings.moves.store');
+    Route::post('settings/moves/{moveCode}/file', [MoveCodeController::class, 'upload'])
+        ->middleware('throttle:20,1,move-file')
+        ->name('settings.moves.upload');
+    Route::post('settings/moves/{moveCode}/import', [MoveCodeController::class, 'import'])
+        ->middleware('throttle:10,1,move-import')
+        ->name('settings.moves.import');
+    Route::delete('settings/moves/{moveCode}', [MoveCodeController::class, 'destroy'])->name('settings.moves.destroy');
 
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 

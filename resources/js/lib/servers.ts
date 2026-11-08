@@ -1,5 +1,6 @@
 import type { CloudServer } from '@/lib/cloud'
 import type { EntityState } from '@/lib/fleet'
+import type { ServerMove } from '@/lib/moves'
 
 export type MetricSeries = { now: number | null; series: number[] }
 
@@ -36,6 +37,7 @@ export type ServerHeader = {
     unreachable: { last_answer: string | null; reason: string; can_reboot: boolean } | null
     disk_warning: { percent: number; apps: number } | null
     host_key: { expected: string | null; observed: string; changed_at: string | null } | null
+    move: ServerMove | null
     provisioning: {
         status: string | null
         completed: number

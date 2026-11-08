@@ -10,6 +10,7 @@ use App\Jobs\PollRepositories;
 use App\Jobs\PruneRemovedApplications;
 use App\Jobs\ResumeCloudTasks;
 use App\Models\InstanceSetting;
+use App\Models\MoveCode;
 use App\Models\Server;
 use App\Models\StripeEvent;
 use App\Services\Deployment\RemovedApplicationFolders;
@@ -57,6 +58,8 @@ Schedule::command('coresmith:prune-metrics')->weeklyOn(0, '03:15')->name('coresm
 Schedule::command('coresmith:prune-activity')->dailyAt('03:30')->name('coresmith:prune-activity')->withoutOverlapping();
 
 Schedule::command('model:prune', ['--model' => [StripeEvent::class]])->dailyAt('05:00')->name('coresmith:prune-stripe-events');
+
+Schedule::command('model:prune', ['--model' => [MoveCode::class]])->dailyAt('05:10')->name('coresmith:prune-move-codes');
 
 Schedule::command('coresmith:trial-reminders')->dailyAt('09:00')->name('coresmith:trial-reminders')->withoutOverlapping();
 
