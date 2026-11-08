@@ -21,6 +21,8 @@ final class PreProvisioningAudit
 
     private const RUNTIMES = ['php' => 'PHP', 'node' => 'Node.js', 'ruby' => 'Ruby', 'bun' => 'Bun', 'deno' => 'Deno'];
 
+    public const PANEL_CHECK = 'ls -d /opt/coresmith /etc/systemd/system/coresmith-horizon.service /etc/systemd/system/coresmith-reverb.service /etc/systemd/system/coresmith-scheduler.timer /etc/systemd/system/coresmith-update.path 2>/dev/null';
+
     private const PROBE = <<<'BASH'
     echo '== ports'
     ss -tlnpH 2>/dev/null
@@ -45,9 +47,7 @@ final class PreProvisioningAudit
     echo '== docker'
     ps -C dockerd -o rss= 2>/dev/null | head -n 1
     echo '== panel'
-    ls -d /opt/coresmith /etc/systemd/system/coresmith-horizon.service /etc/systemd/system/coresmith-reverb.service /etc/systemd/system/coresmith-scheduler.timer /etc/systemd/system/coresmith-update.path 2>/dev/null
-    exit 0
-    BASH;
+    BASH . "\n" . self::PANEL_CHECK . "\nexit 0";
 
     public function __construct(private readonly PortScanner $ports) {}
 

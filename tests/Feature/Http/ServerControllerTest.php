@@ -8,16 +8,17 @@ use App\Http\Controllers\ServerController;
 use App\Jobs\AuditServer;
 use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
-use App\Jobs\TestSSHConnection;
 use App\Models\CloudProvider;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Panel\ServerPresenter;
+use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Support\FakeSSHTransport;
 
 function checkedServer(Team $team, array $findings = [], int $minutesAgo = 5): Server
 {
@@ -452,29 +453,39 @@ test('applying a fix on another teams server is refused and queues nothing', fun
     Queue::assertNothingPushed();
 });
 
-test('a member cannot trigger a connection test', function () {
-    Queue::fake();
+test('a member cannot trigger a connection test, and Coresmith never dials the server', function () {
+    $transport = new FakeSSHTransport;
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
 
-    $this->actingAs(teamMember($team, TeamRole::Member))
-        ->post(route('servers.test-connection', $server))
-        ->assertForbidden();
+    try {
+        $this->actingAs(teamMember($team, TeamRole::Member))
+            ->post(route('servers.test-connection', $server))
+            ->assertForbidden();
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
 
-    Queue::assertNotPushed(TestSSHConnection::class);
+    expect($transport->calls())->toBe([]);
 });
 
-test('a server being created has no connection to test', function () {
-    Queue::fake();
+test('a server being created has no connection to test, and Coresmith never dials it', function () {
+    $transport = new FakeSSHTransport;
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
     $team = Team::factory()->create();
     $account = CloudProvider::factory()->for($team)->create();
     $server = Server::factory()->fromProvider($account)->creating()->create();
 
-    $this->actingAs(teamMember($team, TeamRole::Admin))
-        ->post(route('servers.test-connection', $server))
-        ->assertNotFound();
+    try {
+        $this->actingAs(teamMember($team, TeamRole::Admin))
+            ->post(route('servers.test-connection', $server))
+            ->assertNotFound();
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
 
-    Queue::assertNotPushed(TestSSHConnection::class);
+    expect($transport->calls())->toBe([]);
 });
 
 test('a failed server resumes from the phase that failed', function () {
@@ -537,6 +548,7 @@ test('every server route requires authentication', function (string $method, str
     ['post', 'servers.provision'],
     ['post', 'servers.audit'],
     ['post', 'servers.test-connection'],
+    ['post', 'servers.connect'],
     ['post', 'servers.reboot'],
     ['post', 'servers.prune-releases'],
 ]);

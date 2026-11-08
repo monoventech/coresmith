@@ -81,6 +81,19 @@ test.describe('the first server in setup', () => {
         await expect(page.getByLabel('API token')).toHaveCount(0)
     })
 
+    test('a server added by hand waits for its key, then says it is connected', async ({ page }) => {
+        await page.goto('/quench/setup?step=2')
+
+        await expect(page.getByTestId('setup-step')).toContainText('Provisioning quench-01')
+        await expect(page.getByTestId('setup-step')).toContainText('Waiting for its key')
+
+        await page.goto('/temper/setup?step=2')
+
+        await expect(page.getByTestId('setup-step')).toContainText('Provisioning temper-01')
+        await expect(page.getByTestId('setup-step')).toContainText('Connected')
+        await expect(page.getByTestId('setup-step')).not.toContainText('Waiting for its key')
+    })
+
     test('connecting a provider from setup checks the token first', async ({ page }) => {
         await page.goto('/foundry/setup?step=1')
         await page.getByLabel('Provider').selectOption('connect:hetzner')

@@ -70,6 +70,17 @@ final class FakeSSHTransport implements SSHTransport
 
     private ?string $accepted = null;
 
+    /** @var array{user: string, password: string}|null */
+    private ?array $password = null;
+
+    private bool $passwordsAllowed = true;
+
+    /** @var list<string> */
+    private array $passwordLogins = [];
+
+    /** @var array<int, string> */
+    private array $inputs = [];
+
     public static function keyNamed(string $label): string
     {
         return 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . hash('sha256', $label, true));
@@ -242,6 +253,57 @@ final class FakeSSHTransport implements SSHTransport
         }
 
         return true;
+    }
+
+    public function acceptPassword(string $user, string $password): self
+    {
+        $this->password = ['user' => $user, 'password' => $password];
+
+        return $this;
+    }
+
+    public function refusePasswords(): self
+    {
+        $this->passwordsAllowed = false;
+
+        return $this;
+    }
+
+    /** @return list<string> */
+    public function passwordLogins(): array
+    {
+        return $this->passwordLogins;
+    }
+
+    public function loginWithPassword(string $user, #[\SensitiveParameter] string $password): bool
+    {
+        $this->loginAttempted = true;
+        $this->passwordLogins[] = $user;
+
+        return $this->passwordsAllowed && $this->password === ['user' => $user, 'password' => $password];
+    }
+
+    public function acceptsPasswords(): bool
+    {
+        return $this->passwordsAllowed;
+    }
+
+    public function inputFor(string $needle): ?string
+    {
+        foreach ($this->commands as $index => $command) {
+            if (str_contains($command, $needle)) {
+                return $this->inputs[$index] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    public function execWithInput(string $command, #[\SensitiveParameter] string $input, int $timeout = self::COMMAND_SECONDS): string
+    {
+        $this->inputs[count($this->commands)] = $input;
+
+        return $this->exec($command, null, $timeout);
     }
 
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string

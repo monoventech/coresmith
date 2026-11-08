@@ -190,6 +190,7 @@ final class E2ESeeder extends Seeder
         $this->shortOfMemory('hot-01', '198.51.100.71');
         $this->ssrDidNotStart($this->realtime('ssr-failed', 9220, [], Server::query()->where('name', 'hot-01')->sole()));
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
+        $this->connectFixtures();
         $this->auditFixtures();
         $this->invitations($tenant->owner);
 
@@ -353,6 +354,18 @@ final class E2ESeeder extends Seeder
         TeamInvitation::factory()->for($this->team)->withToken(self::EXPIRED_INVITATION_TOKEN)->expired()->create(['email' => 'expired@coresmith.test', 'invited_by' => $owner->id]);
     }
 
+    private function connectFixtures(): void
+    {
+        foreach (array_values(self::PROJECTS) as $code) {
+            $this->server("connect-{$code}", '127.0.0.1', ServerStatus::Pending)->forceFill(['ssh_port' => 1])->save();
+        }
+
+        $this->server('refused-01', '203.0.113.12', ServerStatus::Pending)->forceFill([
+            'ssh_user' => 'deploy',
+            'last_connection_error' => 'The server refused the password for deploy. Check it and try again.',
+        ])->save();
+    }
+
     private function auditFixtures(): void
     {
         $blocked = [
@@ -367,17 +380,20 @@ final class E2ESeeder extends Seeder
         ];
         $done = fn(array $findings): array => ['state' => 'done', 'ran_at' => now()->addHours(5)->toIso8601String(), 'findings' => $findings];
 
-        $this->server('audit-server', '203.0.113.60', ServerStatus::Pending)->forceFill(['audit' => $done($blocked)])->save();
-        $this->server('checking-server', '203.0.113.61', ServerStatus::Pending)->forceFill(['audit' => ['state' => 'running', 'started_at' => now()->addHours(5)->toIso8601String()]])->save();
+        $connected = now()->subMinutes(5);
+
+        $this->server('audit-server', '203.0.113.60', ServerStatus::Pending)->forceFill(['audit' => $done($blocked), 'last_connected_at' => $connected])->save();
+        $this->server('checking-server', '203.0.113.61', ServerStatus::Pending)->forceFill(['audit' => ['state' => 'running', 'started_at' => now()->addHours(5)->toIso8601String()], 'last_connected_at' => $connected])->save();
         $panelHost = $this->server('panel-host', '203.0.113.63', ServerStatus::Pending);
-        $panelHost->forceFill(['audit' => $done(app(PreProvisioningAudit::class)->report("== users\ncoresmith\n== panel\n/opt/coresmith\n/etc/systemd/system/coresmith-horizon.service\n", $panelHost)->toArray())])->save();
+        $panelHost->forceFill(['audit' => $done(app(PreProvisioningAudit::class)->report("== users\ncoresmith\n== panel\n/opt/coresmith\n/etc/systemd/system/coresmith-horizon.service\n", $panelHost)->toArray()), 'last_connected_at' => $connected])->save();
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
-            $this->server("blocked-{$code}", '203.0.113.' . (70 + $index), ServerStatus::Pending)->forceFill(['audit' => $done($blocked)])->save();
-            $this->server("ready-{$code}", '203.0.113.' . (80 + $index), ServerStatus::Pending)->forceFill(['audit' => $done($ready)])->save();
+            $this->server("blocked-{$code}", '203.0.113.' . (70 + $index), ServerStatus::Pending)->forceFill(['audit' => $done($blocked), 'last_connected_at' => $connected])->save();
+            $this->server("ready-{$code}", '203.0.113.' . (80 + $index), ServerStatus::Pending)->forceFill(['audit' => $done($ready), 'last_connected_at' => $connected])->save();
         }
 
         $failed = fn(Server $server) => $server->forceFill([
+            'last_connected_at' => $connected,
             'status' => ServerStatus::Failed,
             'provisioning_phase' => 3,
             'provisioning_error' => "Directories failed. The command exited with code 1.\nmkdir: cannot create directory '/var/coresmith': Read-only file system",
@@ -603,6 +619,14 @@ final class E2ESeeder extends Seeder
         $kiln01 = Server::factory()->fromProvider($kilnCloud)->creating()->create(['name' => 'kiln-01', 'environment' => 'Production', 'host_key_fingerprint' => null]);
         CloudTask::start($kiln01, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
         CloudTask::advance($kiln01, 'ssh');
+
+        foreach (['Quench' => null, 'Temper' => now()->subMinutes(5)] as $name => $connectedAt) {
+            $slug = strtolower($name);
+            $team = Team::factory()->create(['name' => $name, 'slug' => $slug, 'owner_id' => $owner->id]);
+            $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+            SourceProvider::factory()->for($team)->create(['name' => "{$slug}-works", 'access_token' => "ghs_{$slug}_never_sent"]);
+            Server::factory()->for($team)->create(['name' => "{$slug}-01", 'status' => ServerStatus::Pending, 'host_key_fingerprint' => null, 'last_connected_at' => $connectedAt]);
+        }
     }
 
     private function registeredApp(Team $team, User $owner, string $login, string $appId): GitHubApp
