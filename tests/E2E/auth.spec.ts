@@ -116,7 +116,7 @@ asGuest.describe('signing in', () => {
         ).toBeVisible()
     })
 
-    asGuest('the landing page leads to the panel', async ({ page }) => {
+    asGuest('the landing page leads to Coresmith', async ({ page }) => {
         await page.goto('/')
 
         await expect(

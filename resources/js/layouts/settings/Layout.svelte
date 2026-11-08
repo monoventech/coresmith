@@ -37,7 +37,9 @@
             return 'Coresmith Cloud plans are billed monthly, per team. Self-hosting is free under ELv2, every feature included.'
         }
 
-        return 'Installation, team and notification preferences for Coresmith.'
+        return page.props.edition === 'cloud'
+            ? 'Team and notification preferences.'
+            : 'Installation, team and notification preferences for Coresmith.'
     })
 </script>
 

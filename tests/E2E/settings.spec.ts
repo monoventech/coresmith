@@ -15,7 +15,7 @@ import {
 } from './support/fixtures'
 
 test.describe('settings', () => {
-    test('the tabs cover the panel, the team, git, notifications and tokens', async ({ page }) => {
+    test('the tabs cover the installation, the team, git, notifications and tokens', async ({ page }) => {
         await gotoSettings(page, 'General')
 
         const sections = tabs(page, 'Settings')
@@ -89,8 +89,13 @@ test.describe('settings', () => {
 })
 
 test.describe('general settings', () => {
-    test('the panel card shows the version and what can be changed', async ({ page }) => {
+    test('the installation card shows the version and what can be changed', async ({ page }) => {
         await gotoSettings(page, 'General')
+
+        await expect(
+            page.getByText('Installation, team and notification preferences for Coresmith.', { exact: true })
+        ).toBeVisible()
+        await expect(page.getByTestId('panel-card').getByRole('heading', { name: 'Installation' })).toBeVisible()
 
         await expect(page.getByTestId('panel-updates-card')).toContainText(/Coresmith v\d+\.\d+\.\d+ · stable channel/)
 

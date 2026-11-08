@@ -158,7 +158,7 @@ test('a server already on this panel stops the import and nothing is created', f
     $teams = Team::query()->count();
 
     expect(teamImporterRefusal(teamImporterPayload(), teamImporterCode($owner), $owner))
-        ->toBe('203.0.113.11 is already a server here. Remove it there, then upload the file again.')
+        ->toBe('203.0.113.11 is already a server here. Remove it first, then upload the file again.')
         ->and(Team::query()->count())->toBe($teams);
 });
 
@@ -167,7 +167,7 @@ test('an app whose address is taken on this panel stops the import', function ()
     Application::factory()->create(['slug' => 'acme-docs']);
 
     expect(teamImporterRefusal(teamImporterPayload(), teamImporterCode($owner), $owner))
-        ->toBe('An app called acme-docs is already here. Remove it there, then upload the file again.');
+        ->toBe('An app called acme-docs is already here. Remove it first, then upload the file again.');
 });
 
 test('the preview says what moves and what needs reconnecting', function () {

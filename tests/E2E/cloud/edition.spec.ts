@@ -1,17 +1,17 @@
 import { asGuest, expect, tabs, test } from '../support/fixtures'
 
 test.describe('coresmith cloud', () => {
-    test('the general tab says coresmith cloud runs the panel', async ({ page }) => {
+    test('the general tab says coresmith cloud looks after updates and backups', async ({ page }) => {
         await page.goto('/monoven/settings')
+
+        await expect(page.getByText('Team and notification preferences.', { exact: true })).toBeVisible()
 
         await expect(page.getByTestId('panel-updates-card')).toContainText(
             'Coresmith Cloud · updates are managed for you'
         )
         await expect(page.getByTestId('panel-card')).toHaveCount(0)
         await expect(page.getByLabel('Installation name')).toHaveCount(0)
-        await expect(page.getByTestId('backups-card')).toContainText(
-            'Coresmith Cloud backs itself up every night.'
-        )
+        await expect(page.getByTestId('backups-card')).toContainText('Coresmith Cloud backs itself up every night.')
         await expect(page.getByTestId('backups-card').getByRole('button', { name: 'Back up now' })).toHaveCount(0)
     })
 

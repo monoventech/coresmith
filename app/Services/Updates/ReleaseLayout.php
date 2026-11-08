@@ -153,7 +153,7 @@ final class ReleaseLayout
         if (!@rename($temporary, $this->paths->current())) {
             @unlink($temporary);
 
-            throw new RuntimeException("Coresmith couldn't point Coresmith at {$release->name}.");
+            throw new RuntimeException("Coresmith couldn't switch to {$release->name}.");
         }
 
         if (@readlink($this->paths->current()) !== $path) {

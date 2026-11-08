@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { dialog, expect, isMobile, main, nav, own, test, toast } from './support/fixtures'
+import { dialog, expect, isMobile, main, NARROW_PHONE, nav, own, test, toast } from './support/fixtures'
 
 function card(page: Page, name: string) {
     return page.getByTestId('server-card').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -45,6 +45,30 @@ test.describe('the fleet', () => {
         await expect(card(page, 'rekeyed-server')).toContainText('Host key changed')
         await expect(card(page, 'empty-server')).toContainText('Not connected')
         await expect(card(page, 'empty-server')).toContainText('Staging · ams3 · 0 apps')
+    })
+
+    test('a long server name wraps before its state label does on the narrowest phone', async ({ page }) => {
+        await page.setViewportSize(NARROW_PHONE)
+        await page.goto('/dashboard')
+        await expect(card(page, 'rekeyed-server')).toContainText('Host key changed')
+
+        const layout = await card(page, 'rekeyed-server').evaluate((element) => {
+            const name = element.querySelector('a.card-link')
+            const label = element.querySelector('[data-testid="server-state"]')
+
+            if (name === null || label === null) {
+                return null
+            }
+
+            name.textContent = 'rekeyed-production-web-server-01'
+
+            const text = document.createRange()
+            text.selectNodeContents(label)
+
+            return { lines: text.getClientRects().length, overflow: element.scrollWidth - element.clientWidth }
+        })
+
+        expect(layout).toEqual({ lines: 1, overflow: 0 })
     })
 
     test('a server with fresh readings shows them rather than dashes', async ({ page }, testInfo) => {

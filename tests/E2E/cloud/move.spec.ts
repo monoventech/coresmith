@@ -50,6 +50,8 @@ test.describe('moving a team to your own panel', () => {
         await page.goto(`/${own(testInfo, 'moving')}/dashboard`)
         const banner = page.getByTestId('billing-banner')
 
+        await expect(page.getByTestId('server-card')).toContainText('Moving out')
+
         await expect(banner).toContainText('This team is moving to self-hosted Coresmith.')
         await banner.getByRole('link', { name: 'See the move' }).click()
 

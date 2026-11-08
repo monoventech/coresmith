@@ -1133,7 +1133,7 @@ UNIT
 
     cat >/etc/systemd/system/coresmith-update.path <<UNIT
 [Unit]
-Description=Start a Coresmith update when Coresmith asks for one
+Description=Start a Coresmith update when one is requested
 
 [Path]
 PathExists=${UPDATES_DIR}/request.json
