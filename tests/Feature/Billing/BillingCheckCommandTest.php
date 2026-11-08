@@ -81,8 +81,8 @@ test('a panel ready for stripe passes every check', function () {
         ->and($output)->toContain('✓ Starter costs $9 a month in Stripe.')
         ->and($output)->toContain('✓ Pro costs $19 a month in Stripe.')
         ->and($output)->toContain('✓ Business costs $39 a month in Stripe.')
-        ->and($output)->toContain('✓ Stripe sends every event the panel needs to ' . route('cashier.webhook') . '.')
-        ->and($output)->toContain('✓ MAIL_MAILER is smtp, so the panel can send email.')
+        ->and($output)->toContain('✓ Stripe sends every event Coresmith needs to ' . route('cashier.webhook') . '.')
+        ->and($output)->toContain('✓ MAIL_MAILER is smtp, so Coresmith can send email.')
         ->and($output)->not->toContain('✗')
         ->and($output)->not->toContain(FakeStripe::SECRET)
         ->and($output)->not->toContain(FakeStripe::WEBHOOK_SECRET)
@@ -118,7 +118,7 @@ test('a panel with no mailer, or one it does not know, fails the check', functio
 })->with([
     'none set' => [null, '✗ MAIL_MAILER is not set, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.'],
     'an empty name' => ['', '✗ MAIL_MAILER is not set, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.'],
-    'a name with a typo' => ['stmp', '✗ MAIL_MAILER is stmp, which is not a mailer this panel knows, so no email can be sent. Set it to a configured mailer such as smtp.'],
+    'a name with a typo' => ['stmp', '✗ MAIL_MAILER is stmp, which is not a mailer Coresmith knows, so no email can be sent. Set it to a configured mailer such as smtp.'],
 ]);
 
 test('without --live nothing is asked of stripe', function () {
@@ -164,7 +164,7 @@ test('a price that disagrees with the panel is named', function () {
     [$code, $output] = billingCheck(['--live' => true]);
 
     expect($code)->toBe(1)
-        ->and($output)->toContain('✗ Pro costs $25 a month in Stripe, but the panel says $19.');
+        ->and($output)->toContain('✗ Pro costs $25 a month in Stripe, but Coresmith says $19.');
 });
 
 test('a price stripe cannot bill monthly in dollars is named', function (array $overrides, string $line) {
@@ -216,7 +216,7 @@ test('an endpoint on another api version is named', function () {
     [$code, $output] = billingCheck(['--live' => true]);
 
     expect($code)->toBe(1)
-        ->and($output)->toContain('✗ The Stripe webhook to ' . route('cashier.webhook') . ' uses API version 2024-06-20, but the panel expects ' . Cashier::STRIPE_VERSION . '.');
+        ->and($output)->toContain('✗ The Stripe webhook to ' . route('cashier.webhook') . ' uses API version 2024-06-20, but Coresmith expects ' . Cashier::STRIPE_VERSION . '.');
 });
 
 test('a panel with no endpoint is told how to make one', function () {

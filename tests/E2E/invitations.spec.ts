@@ -24,7 +24,7 @@ async function invite(page: Page, email: string) {
     await dialog(page).getByRole('button', { name: 'Add to the team' }).click()
 
     await expect(toast(page)).toContainText(
-        `Invitation created. This panel cannot send email yet, so copy the link below and send it to ${email} yourself.`
+        `Invitation created. Coresmith cannot send email yet, so copy the link below and send it to ${email} yourself.`
     )
 }
 

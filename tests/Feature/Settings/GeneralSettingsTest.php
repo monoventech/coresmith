@@ -124,7 +124,7 @@ test('the last owner of a team is told what has to happen before their account c
 
     $this->actingAs($user)
         ->get(route('settings.general'))
-        ->assertInertia(fn($page) => $page->where('account.refusal', "Make someone else an owner of {$team->name} first. To remove the panel instead, run coresmith:uninstall on its server."));
+        ->assertInertia(fn($page) => $page->where('account.refusal', "Make someone else an owner of {$team->name} first. To remove Coresmith instead, run coresmith:uninstall on its server."));
 });
 
 test('the users ssh keys are listed newest first with their type', function () {

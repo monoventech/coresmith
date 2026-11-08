@@ -123,7 +123,7 @@
 
 <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="panel-updates-card">
     <div class="mb-1 flex items-center gap-2.5">
-        <h3 class="type-h3 m-0">Panel updates</h3>
+        <h3 class="type-h3 m-0">Coresmith updates</h3>
         {#if updates.badge}
             <Badge
                 variant={updates.badge.tone}

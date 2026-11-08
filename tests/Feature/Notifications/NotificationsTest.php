@@ -202,8 +202,8 @@ test('a toggle email says what changed, who changed it and links to the applicat
         ->and($mail->actionText)->toBe('Open Shop')
         ->and($mail->actionUrl)->toBe(route('servers.applications.show', [$application->server_id, $application]));
 })->with([
-    'a named person' => ['Ada Lovelace', 'Ada Lovelace made the change from the panel. No deployment was needed.'],
-    'nobody named' => [null, 'Someone made the change from the panel. No deployment was needed.'],
+    'a named person' => ['Ada Lovelace', 'Ada Lovelace made the change in Coresmith. No deployment was needed.'],
+    'nobody named' => [null, 'Someone made the change in Coresmith. No deployment was needed.'],
 ]);
 
 test('the weekly digest counts in words that match the numbers', function (array $summary, array $lines) {

@@ -118,7 +118,7 @@
 
 {#if move}
     <div class="mb-4 rounded-xl border border-border bg-card px-5.5 py-5" data-testid="move-card">
-        <h3 class="type-h3 m-0">Moving to your own panel</h3>
+        <h3 class="type-h3 m-0">Moving to self-hosted Coresmith</h3>
         <p class="mt-1 mb-0 text-[12.5px] text-muted-foreground">
             Since {move.since}, Coresmith Cloud has stopped managing this team's servers, and they keep running. Upload
             the move file on {move.to} to finish, or cancel the move to keep the team here.

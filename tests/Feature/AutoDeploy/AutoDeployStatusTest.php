@@ -75,7 +75,7 @@ test('a linked app whose app receives webhooks deploys every push', function () 
     app(GitHubAppHealth::class)->received(app(GitHubApps::class)->for($application->githubConnection()), 'push', 'delivery-1');
     $this->travelTo(CarbonImmutable::parse('2026-10-18 14:05:00'));
 
-    expect(statusOf($application))->toBe(['Deploys every push to main. GitHub reached this panel 3 minutes ago.', 10, 'github']);
+    expect(statusOf($application))->toBe(['Deploys every push to main. GitHub reached Coresmith 3 minutes ago.', 10, 'github']);
 });
 
 test('a linked app on a panel github cannot reach checks every minute and says why', function () {
@@ -87,7 +87,7 @@ test('a linked app on a panel github cannot reach checks every minute and says w
 });
 
 test('a linked app with no evidence yet checks through github and says so', function () {
-    expect(statusOf(statusLinkedApp()))->toBe(['Checks main for new commits every minute. No delivery from GitHub has reached this panel yet.', 1, 'github']);
+    expect(statusOf(statusLinkedApp()))->toBe(['Checks main for new commits every minute. No delivery from GitHub has reached Coresmith yet.', 1, 'github']);
 });
 
 test('an unlinked app checks from its server', function () {
@@ -150,7 +150,7 @@ test('intervals follow configuration and read naturally', function () {
     $pushed = statusLinkedApp();
     app(GitHubAppHealth::class)->received(app(GitHubApps::class)->for($pushed->githubConnection()), 'push', 'delivery-1');
 
-    expect(statusOf($polling))->toBe(['Checks main for new commits every 3 minutes. No delivery from GitHub has reached this panel yet.', 3, 'github'])
+    expect(statusOf($polling))->toBe(['Checks main for new commits every 3 minutes. No delivery from GitHub has reached Coresmith yet.', 3, 'github'])
         ->and(statusOf(statusUnlinkedApp()))->toBe([
             'Checks main for new commits every minute from forge-01. This app is not linked to a GitHub connection, so pushes are not delivered here.',
             1,

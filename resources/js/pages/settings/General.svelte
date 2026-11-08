@@ -78,12 +78,12 @@
         const where = list(teamDeletion.providers)
 
         if (teamDeletion.servers === 1) {
-            return `It was created at ${where}, so it keeps running and billing there until you destroy it at ${where}, or from the panel before you delete the team.`
+            return `It was created at ${where}, so it keeps running and billing there until you destroy it at ${where}, or from Coresmith before you delete the team.`
         }
 
         return teamDeletion.provider_servers === 1
-            ? `One of them was created at ${where}, so it keeps running and billing there until you destroy it at ${where}, or from the panel before you delete the team.`
-            : `${teamDeletion.provider_servers} of them were created at ${where}, so they keep running and billing there until you destroy them there, or from the panel before you delete the team.`
+            ? `One of them was created at ${where}, so it keeps running and billing there until you destroy it at ${where}, or from Coresmith before you delete the team.`
+            : `${teamDeletion.provider_servers} of them were created at ${where}, so they keep running and billing there until you destroy them there, or from Coresmith before you delete the team.`
     })
 
     function list(names: string[]): string {
@@ -119,11 +119,11 @@
         </div>
         {#if cloud}
             <p class="mb-3 text-[12.5px] text-muted-foreground">
-                The panel is backed up every night by Coresmith Cloud. Databases on your servers are not included.
+                Coresmith Cloud backs itself up every night. Databases on your servers are not included.
             </p>
         {:else}
             <p class="mb-3 text-[12.5px] text-muted-foreground">
-                Taken nightly at 04:00 and before every update. The panel database and its environment are archived
+                Taken nightly at 04:00 and before every update. Coresmith's database and environment are archived
                 together, secrets included.
             </p>
             <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
@@ -187,7 +187,7 @@
 
     {#if !cloud}
         <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="panel-card">
-            <h3 class="type-h3 m-0 mb-1">Panel</h3>
+            <h3 class="type-h3 m-0 mb-1">Installation</h3>
             <p class="mb-3.5 text-[12.5px] text-muted-foreground">
                 Name, timezone and alert email for this installation.
             </p>
@@ -201,7 +201,7 @@
                     {#snippet children({ errors, processing })}
                         <div class="flex flex-col gap-3.5">
                             <div>
-                                <Label for="instance_name" class="mb-1.5">Panel name</Label>
+                                <Label for="instance_name" class="mb-1.5">Installation name</Label>
                                 <Input
                                     id="instance_name"
                                     name="instance_name"

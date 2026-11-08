@@ -537,7 +537,7 @@ test('the setup token is written by the panel user into a file it owns', functio
     expect($body)->toContain('install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"')
         ->and($body)->toContain('coresmith:setup-token --force 2>&1)" || true')
         ->and($body)->toContain("grep -q 'already has an account'")
-        ->and($body)->toContain('The panel is already set up. Sign in at');
+        ->and($body)->toContain('Coresmith is already set up. Sign in at');
 });
 
 test('a failed step is named on the way out rather than ending the install silently', function () {
@@ -743,7 +743,7 @@ test('without a domain the panel answers on the address the server owns, not one
 
     expect($body)->toContain('SERVER_IP="$(ip -4 route get 1.1.1.1 2>/dev/null')
         ->and($body)->not->toContain('default_sni')
-        ->and($body)->toContain('through NAT. Without --domain the panel answers on');
+        ->and($body)->toContain('through NAT. Without --domain Coresmith answers on');
 });
 
 test('the installer announces the version in the VERSION file', function () {

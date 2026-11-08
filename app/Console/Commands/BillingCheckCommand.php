@@ -24,7 +24,7 @@ final class BillingCheckCommand extends Command
 {
     protected $signature = 'coresmith:billing-check {--live : Also ask Stripe about the prices and the webhook}';
 
-    protected $description = 'Check that this panel is ready to bill Coresmith Cloud teams through Stripe';
+    protected $description = 'Check that Coresmith is ready to bill Coresmith Cloud teams through Stripe';
 
     private bool $failed = false;
 
@@ -45,12 +45,12 @@ final class BillingCheckCommand extends Command
         $mailer = Mailer::name();
         $failure = match (true) {
             $mailer === '' => 'MAIL_MAILER is not set, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.',
-            !Mailer::defined() => "MAIL_MAILER is {$mailer}, which is not a mailer this panel knows, so no email can be sent. Set it to a configured mailer such as smtp.",
+            !Mailer::defined() => "MAIL_MAILER is {$mailer}, which is not a mailer Coresmith knows, so no email can be sent. Set it to a configured mailer such as smtp.",
             !Mailer::delivers() => "MAIL_MAILER is {$mailer}, so sign-up, invitation and billing emails are never delivered. Set MAIL_MAILER and the other MAIL_* settings.",
             default => null,
         };
 
-        $this->check($failure === null, "MAIL_MAILER is {$mailer}, so the panel can send email.", (string) $failure);
+        $this->check($failure === null, "MAIL_MAILER is {$mailer}, so Coresmith can send email.", (string) $failure);
 
         if ($this->option('live') && $this->filled(config('cashier.secret'))) {
             $this->live();
@@ -103,7 +103,7 @@ final class BillingCheckCommand extends Command
             !$price->active => "{$plan->label()} uses {$id}, which is archived in Stripe.",
             $interval !== 'month' => "{$plan->label()} uses {$id}, which Stripe bills every {$interval}, not every month.",
             $currency !== 'USD' => "{$plan->label()} uses {$id}, which is in {$currency}, not USD.",
-            (int) $price->unit_amount !== $plan->amount() * 100 => "{$plan->label()} costs {$amount} a month in Stripe, but the panel says {$expected}.",
+            (int) $price->unit_amount !== $plan->amount() * 100 => "{$plan->label()} costs {$amount} a month in Stripe, but Coresmith says {$expected}.",
             default => null,
         };
 
@@ -129,11 +129,11 @@ final class BillingCheckCommand extends Command
         $failure = match (true) {
             $endpoint->status !== 'enabled' => "The Stripe webhook to {$url} is disabled. Turn it on in the Stripe dashboard.",
             $missing !== [] => "The Stripe webhook to {$url} does not send " . implode(', ', $missing) . '.',
-            $version !== Cashier::STRIPE_VERSION => "The Stripe webhook to {$url} uses API version {$version}, but the panel expects " . Cashier::STRIPE_VERSION . '.',
+            $version !== Cashier::STRIPE_VERSION => "The Stripe webhook to {$url} uses API version {$version}, but Coresmith expects " . Cashier::STRIPE_VERSION . '.',
             default => null,
         };
 
-        $this->check($failure === null, "Stripe sends every event the panel needs to {$url}.", (string) $failure);
+        $this->check($failure === null, "Stripe sends every event Coresmith needs to {$url}.", (string) $failure);
     }
 
     private function interval(Price $price): string

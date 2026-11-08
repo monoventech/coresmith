@@ -164,7 +164,7 @@ test('a failed migration restores the database and keeps the old release', funct
 
     expect($status->state)->toBe(UpdateStatus::ROLLED_BACK)
         ->and($status->failedStep)->toBe('migrate')
-        ->and($status->message)->toBe('Running migrations failed: SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: users.email. Coresmith rolled back to v0.1.0, and the panel is running as before.')
+        ->and($status->message)->toBe('Running migrations failed: SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: users.email. Coresmith rolled back to v0.1.0 and is running as before.')
         ->and(updatesProbeNotes())->toBe(['before'])
         ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce')
         ->and(app(PanelServices::class)->isDown())->toBeFalse()
@@ -215,7 +215,7 @@ test('a rollback that cannot restore the database leaves the panel in maintenanc
         ->and($status->failedStep)->toBe('migrate')
         ->and(app(PanelServices::class)->isDown())->toBeTrue()
         ->and($status->message)->toContain('The rollback did not finish:')
-        ->and($status->message)->toContain(" The panel is in maintenance mode. Fix the problem above, then run cd {$app} && sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.")
+        ->and($status->message)->toContain(" Coresmith is in maintenance mode. Fix the problem above, then run cd {$app} && sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.")
         ->and($status->message)->toContain(" To restore the backup by hand instead, run cd {$app} && sudo -u coresmith php artisan tinker --execute=\"app(App\\Services\\Panel\\PanelBackup::class)->restore('{$backup}')\", then cd {$app} && sudo -u coresmith php artisan up.")
         ->and(Activity::query()->where('description', 'panel_update_failed')->count())->toBe(1);
 });
@@ -235,7 +235,7 @@ test('following the failure mail finishes the rollback once the problem is fixed
     expect($status->id)->toBe($failed->id)
         ->and($status->state)->toBe(UpdateStatus::ROLLED_BACK)
         ->and($status->failedStep)->toBe('migrate')
-        ->and($status->message)->toBe('Running migrations failed: Migration failed. Coresmith rolled back to v0.1.0, and the panel is running as before.')
+        ->and($status->message)->toBe('Running migrations failed: Migration failed. Coresmith rolled back to v0.1.0 and is running as before.')
         ->and(updatesProbeNotes())->toBe(['before'])
         ->and(app(PanelServices::class)->isDown())->toBeFalse()
         ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.0-8413dce');
@@ -330,7 +330,7 @@ test('a rollback whose switch back fails stays in maintenance and says so', func
     expect($status->state)->toBe(UpdateStatus::FAILED)
         ->and($status->failedStep)->toBe('health')
         ->and($status->message)->toContain('The rollback did not finish: switching back failed:')
-        ->and($status->message)->toContain('The panel is in maintenance mode')
+        ->and($status->message)->toContain('Coresmith is in maintenance mode')
         ->and($status->message)->not->toContain('To restore the backup by hand')
         ->and(app(PanelServices::class)->isDown())->toBeTrue()
         ->and(basename((string) readlink(config('coresmith.updates.root') . '/app')))->toBe('0.1.1-a1b2c3d');

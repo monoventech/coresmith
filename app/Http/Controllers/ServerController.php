@@ -157,7 +157,7 @@ final class ServerController extends Controller
         $server->delete();
 
         return to_route('dashboard')->with('success', match (true) {
-            $label === null => "Detached. {$server->name} was removed from the panel. The VM is untouched.",
+            $label === null => "Detached. {$server->name} was removed from Coresmith. The VM is untouched.",
             $uncertain => "Removed. Coresmith could not confirm whether {$label} created {$server->name}. Check your {$label} account and delete it there if it exists.",
             $server->provider_server_id === null => "Removed. Nothing was created at {$label}.",
             default => "Detached. {$server->name} keeps running at {$label}, and {$label} keeps billing for it.",

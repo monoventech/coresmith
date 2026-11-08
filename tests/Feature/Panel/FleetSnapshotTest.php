@@ -68,6 +68,17 @@ test('a server state follows a fixed precedence from broken to healthy', functio
     'no readings' => [[], null, false, 'healthy', 'Healthy', 'success'],
 ]);
 
+test('a server between installations reads as moving out, moving here or a failed move', function (bool $teamMoving, ?array $takeover, string $key, string $label, string $tone) {
+    $team = Team::factory()->create(['moving_at' => $teamMoving ? now() : null]);
+    $server = fleetServer($team, ['status' => ServerStatus::Moving, 'takeover' => $takeover]);
+
+    expect((new FleetSnapshot($team))->state($server->fresh()))->toBe(['key' => $key, 'label' => $label, 'tone' => $tone]);
+})->with([
+    'leaving coresmith cloud' => [true, null, 'moving_away', 'Moving out', 'default'],
+    'arriving here' => [false, ['state' => 'running'], 'moving', 'Moving here', 'accent'],
+    'a takeover that stopped' => [false, ['state' => 'failed', 'reason' => 'Coresmith Cloud\'s key no longer opens web-01.'], 'move_failed', 'Move failed', 'destructive'],
+]);
+
 test('a stale disk reading does not raise a warning', function () {
     $team = Team::factory()->create();
     $server = fleetServer($team);

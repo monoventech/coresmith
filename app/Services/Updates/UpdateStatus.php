@@ -41,7 +41,7 @@ final class UpdateStatus
         'migrate' => 'Running migrations',
         'switch' => 'Switching to the new release',
         'restart' => 'Restarting the queue and websockets',
-        'health' => 'Checking the panel answers',
+        'health' => 'Checking Coresmith answers',
         'rollback' => 'Rolling back',
     ];
 

@@ -18,9 +18,9 @@ final class GitHubAppHealth
 {
     private const NO_WEBHOOK = 'The GitHub app has no webhook yet. Point it here to get pushes as they happen.';
 
-    private const MOVED = 'This panel\'s address changed after the GitHub app was created. Point its webhook here.';
+    private const MOVED = 'Coresmith\'s address changed after the GitHub app was created. Point its webhook here.';
 
-    private const NO_DELIVERY = 'No delivery from GitHub has reached this panel yet.';
+    private const NO_DELIVERY = 'No delivery from GitHub has reached Coresmith yet.';
 
     private const NO_PUSH = 'The GitHub app does not send push events, so Coresmith checks for new commits instead. Turn on the Push event in the app\'s settings on GitHub.';
 

@@ -295,6 +295,6 @@ test('turning it on does not say no deployment was needed, turning it off still 
 
     Notification::assertSentTo($teammate->fresh(), ApplicationToggledNotification::class, fn(ApplicationToggledNotification $notification): bool => str_ends_with($notification->toMail($teammate)->introLines[0], $sentence));
 })->with([
-    'on' => [true, 'made the change from the panel.'],
-    'off' => [false, 'made the change from the panel. No deployment was needed.'],
+    'on' => [true, 'made the change in Coresmith.'],
+    'off' => [false, 'made the change in Coresmith. No deployment was needed.'],
 ]);

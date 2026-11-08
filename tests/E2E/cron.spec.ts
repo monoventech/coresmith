@@ -108,7 +108,7 @@ test.describe('cron jobs on the app page', () => {
         await gotoApplication(page, 'bench-01', 'cron-waiting')
 
         await expect(page.getByTestId('cron-status')).toHaveText(
-            "Still waiting to reach bench-01. The panel's queue may be stopped, and the next deploy writes the cron file too."
+            "Still waiting to reach bench-01. Coresmith's queue may be stopped, and the next deploy writes the cron file too."
         )
     })
 

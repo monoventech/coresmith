@@ -34,7 +34,7 @@ test.describe('monitoring', () => {
 
         await expect(banner).toContainText("Coresmith can't reach down-01 over SSH.")
         await expect(banner).toContainText('The last answer was ')
-        await expect(banner).toContainText('The connection to port 22 was refused or timed out. Check the server is running and its firewall allows SSH from this panel.')
+        await expect(banner).toContainText('The connection to port 22 was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.')
         await expect(page.getByTestId('disk-warning')).toHaveCount(0)
     })
 

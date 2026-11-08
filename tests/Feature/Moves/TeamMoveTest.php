@@ -74,7 +74,7 @@ test('a moving team refuses changes and says why', function () {
     app(TeamMove::class)->start($team, teamMoveOwner($team), teamMoveCodeText());
 
     expect(fn() => app(PlanGate::class)->ensureWritable($team->fresh(), teamMoveOwner($team)))
-        ->toThrow(PlanRefusal::class, 'This team is moving to your own panel, so Coresmith Cloud no longer changes it. Cancel the move in Billing settings to make changes here again.');
+        ->toThrow(PlanRefusal::class, 'This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer changes it. Cancel the move in Billing settings to make changes here again.');
 });
 
 test('a teammate who cannot cancel the move is told to ask an owner', function () {
@@ -82,7 +82,7 @@ test('a teammate who cannot cancel the move is told to ask an owner', function (
     app(TeamMove::class)->start($team, teamMoveOwner($team), teamMoveCodeText());
 
     expect(fn() => app(PlanGate::class)->ensureWritable($team->fresh(), CloudBilling::member($team)))
-        ->toThrow(PlanRefusal::class, 'This team is moving to your own panel, so Coresmith Cloud no longer changes it. Ask an owner if it should stay here.');
+        ->toThrow(PlanRefusal::class, 'This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer changes it. Ask an owner if it should stay here.');
 });
 
 test('a moving team is not deployed', function () {
@@ -90,7 +90,7 @@ test('a moving team is not deployed', function () {
     app(TeamMove::class)->start($team, teamMoveOwner($team), teamMoveCodeText());
 
     expect(app(DeployGuard::class)->refusal($team->applications()->first()))
-        ->toBe('This team is moving to your own panel, so Coresmith Cloud no longer deploys it.');
+        ->toBe('This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer deploys it.');
 });
 
 test('cancelling the move gives the team back to coresmith cloud', function () {

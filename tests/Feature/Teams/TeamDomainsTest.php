@@ -62,9 +62,9 @@ test('a domain that is not a domain, the panel itself or already taken is refuse
         ->post(route('settings.team-domain.store'), ['hostname' => $hostname])
         ->assertSessionHasErrors(['hostname' => $message]);
 })->with([
-    'not a domain' => ['not a domain', "That doesn't look like a domain. Try panel.example.com."],
-    'a wildcard' => ['*.example.com', "That doesn't look like a domain. Try panel.example.com."],
-    'a bare word' => ['localhost', 'That is the address of this panel itself.'],
+    'not a domain' => ['not a domain', "That doesn't look like a domain. Try deploy.example.com."],
+    'a wildcard' => ['*.example.com', "That doesn't look like a domain. Try deploy.example.com."],
+    'a bare word' => ['localhost', 'That is the address of Coresmith itself.'],
     'another team' => ['taken.example.com', 'Another team already uses that domain.'],
 ]);
 
@@ -136,7 +136,7 @@ test('removing the domain stops it opening the team', function () {
 
     $this->actingAs($user)
         ->delete(route('settings.team-domain.destroy'))
-        ->assertSessionHas('success', 'Removed. panel.acme.test no longer opens this panel.');
+        ->assertSessionHas('success', 'Removed. panel.acme.test no longer opens this team.');
 
     expect($team->fresh()->domain)->toBeNull();
 

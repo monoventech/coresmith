@@ -129,10 +129,10 @@ final class ActivityFeed
 
         $text = match ($activity->description) {
             'panel_updated' => ($properties['trigger'] ?? null) === 'auto'
-                ? "Auto-update applied, panel v{$to}, backup taken, health check passed"
-                : "Panel updated to v{$to}, backup taken, health check passed",
-            'panel_update_rolled_back' => "Panel update to v{$to} failed while {$step}, rolled back to v{$from}",
-            'panel_update_failed' => "Panel update to v{$to} failed and needs attention",
+                ? "Auto-update applied, Coresmith v{$to}, backup taken, health check passed"
+                : "Coresmith updated to v{$to}, backup taken, health check passed",
+            'panel_update_rolled_back' => "Coresmith update to v{$to} failed while {$step}, rolled back to v{$from}",
+            'panel_update_failed' => "Coresmith update to v{$to} failed and needs attention",
             default => null,
         };
 
@@ -217,7 +217,7 @@ final class ActivityFeed
         $applicationHref = $application !== null && !$application->trashed() ? route('servers.applications.show', [$application->server_id, $application]) : null;
 
         $parts = match ($activity->description) {
-            'server_added' => [$this->mono($server?->name), $this->text(' added to the panel, waiting for its key')],
+            'server_added' => [$this->mono($server?->name), $this->text(' added to Coresmith, waiting for its key')],
             'server_creation_started' => [$this->mono($server?->name), $this->text(' is being created at ' . ($properties['provider'] ?? 'its provider') . ', ' . ($properties['size'] ?? '') . ' in ' . ($properties['region'] ?? ''))],
             'server_created_at_provider' => [$this->mono($server?->name), $this->text(' created at ' . ($properties['provider'] ?? 'its provider') . $this->took($properties['seconds'] ?? null) . ', checking it before provisioning')],
             'server_creation_failed' => [$this->text('Creating '), $this->mono($server?->name), $this->text(' at ' . ($properties['provider'] ?? 'its provider') . ' failed')],

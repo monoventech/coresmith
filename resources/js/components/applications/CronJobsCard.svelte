@@ -147,7 +147,7 @@
             {:else}
                 <TriangleAlert class="size-3.5 shrink-0 text-warning" aria-hidden="true" />
                 <span
-                    >{`Still waiting to reach ${server}. The panel's queue may be stopped, and the next deploy writes the cron file too.`}</span
+                    >{`Still waiting to reach ${server}. Coresmith's queue may be stopped, and the next deploy writes the cron file too.`}</span
                 >
             {/if}
         </p>

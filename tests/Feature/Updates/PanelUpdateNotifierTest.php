@@ -44,7 +44,7 @@ test('a failed update reaches every instance owner and the alert email once', fu
     Team::factory()->create()->members()->attach([$second->id => ['role' => TeamRole::Owner->value], $admin->id => ['role' => TeamRole::Admin->value]]);
     InstanceSetting::put('notification_email', 'ops@example.com');
 
-    expect(app(PanelUpdateNotifier::class)->failed(updatesFinished(UpdateStatus::ROLLED_BACK, 'Running migrations failed: x. Coresmith rolled back to v0.1.0, and the panel is running as before.', 'migrate')))->toBeTrue();
+    expect(app(PanelUpdateNotifier::class)->failed(updatesFinished(UpdateStatus::ROLLED_BACK, 'Running migrations failed: x. Coresmith rolled back to v0.1.0 and is running as before.', 'migrate')))->toBeTrue();
 
     Notification::assertSentTo([$this->owner, $second], PanelUpdateFailedNotification::class);
     Notification::assertNotSentTo($admin, PanelUpdateFailedNotification::class);
@@ -78,18 +78,18 @@ test('nothing is emailed while mail goes nowhere', function () {
 });
 
 test('a rolled back update is emailed in plain words', function () {
-    $status = updatesFinished(UpdateStatus::ROLLED_BACK, 'Running migrations failed: x. Coresmith rolled back to v0.1.0, and the panel is running as before.', 'migrate');
+    $status = updatesFinished(UpdateStatus::ROLLED_BACK, 'Running migrations failed: x. Coresmith rolled back to v0.1.0 and is running as before.', 'migrate');
     $mail = (new PanelUpdateFailedNotification($status->toArray()))->toMail($this->owner);
 
     expect($mail->subject)->toBe("Coresmith couldn't update to v0.1.1")
-        ->and($mail->introLines)->toBe(['The update failed while running migrations, so Coresmith rolled back to v0.1.0. The panel is running as before.', $status->message])
+        ->and($mail->introLines)->toBe(['The update failed while running migrations, so Coresmith rolled back to v0.1.0 and is running as before.', $status->message])
         ->and($mail->actionText)->toBe('Read the log')
         ->and($mail->actionUrl)->toBe(route('settings.general'))
         ->and((new PanelUpdateFailedNotification($status->toArray()))->via($this->owner))->toBe(['mail']);
 });
 
 test('a failed rollback is emailed with what went wrong and how to finish it', function () {
-    $message = 'Running migrations failed: x. The rollback did not finish: the backup is missing. The panel is in maintenance mode. Fix the problem above, then run cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.';
+    $message = 'Running migrations failed: x. The rollback did not finish: the backup is missing. Coresmith is in maintenance mode. Fix the problem above, then run cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:update --recover to finish the rollback.';
     $mail = (new PanelUpdateFailedNotification(updatesFinished(UpdateStatus::FAILED, $message, 'migrate')->toArray()))->toMail($this->owner);
 
     expect($mail->subject)->toBe('Coresmith needs attention after a failed update')

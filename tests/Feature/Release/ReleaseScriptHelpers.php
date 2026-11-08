@@ -251,8 +251,9 @@ function releaseMergePr(array $sandbox, string $version, bool $squash = false): 
     releaseGit($sandbox, ['checkout', '--quiet', '-B', 'merge-pull-request', 'origin/main']);
 
     if ($squash) {
+        $messages = releaseGit($sandbox, ['log', '--reverse', '--format=* %B', "origin/main..origin/release/v{$version}"]);
         releaseGit($sandbox, ['merge', '--quiet', '--squash', "origin/release/v{$version}"]);
-        releaseGit($sandbox, ['commit', '--quiet', '-m', "Release v{$version} (#1)"]);
+        releaseGit($sandbox, ['commit', '--quiet', '-m', "Release v{$version} (#1)\n\n{$messages}"]);
     } else {
         releaseGit($sandbox, ['merge', '--quiet', '--no-ff', '-m', "Merge pull request #1 from monoven/release/v{$version}", "origin/release/v{$version}"]);
     }

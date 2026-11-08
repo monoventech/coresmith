@@ -57,7 +57,7 @@ final class ReleaseHealth
     {
         $probe = self::probeUrl();
         $attempts = max(1, intdiv($timeout, 2));
-        $problem = "The panel didn't answer on {$probe}.";
+        $problem = "Coresmith didn't answer on {$probe}.";
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
             try {
@@ -72,12 +72,12 @@ final class ReleaseHealth
                 }
 
                 $problem = match (true) {
-                    $response->status() !== 200 => "The panel answered {$response->status()} on {$probe}.",
-                    is_string($serving) => "The panel is still serving {$serving}, not the new release.",
-                    default => "The panel answered on {$probe} without saying which release it serves.",
+                    $response->status() !== 200 => "Coresmith answered {$response->status()} on {$probe}.",
+                    is_string($serving) => "Coresmith is still serving {$serving}, not the new release.",
+                    default => "Coresmith answered on {$probe} without saying which release it serves.",
                 };
             } catch (Throwable) {
-                $problem = "The panel didn't answer on {$probe}.";
+                $problem = "Coresmith didn't answer on {$probe}.";
             }
 
             if ($attempt < $attempts) {

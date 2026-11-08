@@ -62,10 +62,10 @@ Remove Coresmith from this server.
 Usage: sudo bash uninstall.sh [--yes] [--purge]
 
   --yes     Remove it without asking first
-  --purge   Don't keep a copy of the panel's settings, backups and database
+  --purge   Don't keep a copy of Coresmith's settings, backups and database
   --help    Show this message
 
-Without --purge, the panel's .env, its backups and its SQLite database are saved under ${SAVE_ROOT} first.
+Without --purge, Coresmith's .env, its backups and its SQLite database are saved under ${SAVE_ROOT} first.
 Apps deployed on this machine keep running.
 USAGE
 
@@ -136,10 +136,10 @@ confirm() {
     fi
 
     if [ -n "$APPS" ]; then
-        printf 'This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s and its logs.\n' "$CORESMITH_ROOT" "$DATA_DIR"
+        printf 'This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s and its logs.\n' "$CORESMITH_ROOT" "$DATA_DIR"
         printf 'Apps deployed here (%s) keep running, with %s, %s and the coresmith user.\n' "$APPS" "$APPS_DIR" "$CONFIG_DIR"
     else
-        printf 'This removes the Coresmith panel from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s, its logs and the coresmith user.\n' "$CORESMITH_ROOT" "$DATA_DIR"
+        printf 'This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s, its logs and the coresmith user.\n' "$CORESMITH_ROOT" "$DATA_DIR"
     fi
 
     if ! $PURGE; then
@@ -180,13 +180,13 @@ save_copy() {
         fi
     fi
 
-    success "Saved the panel's settings, backups and database to $SAVED"
+    success "Saved Coresmith's settings, backups and database to $SAVED"
 }
 
 stop_units() {
     local unit
 
-    log "Stopping the panel's services..."
+    log "Stopping Coresmith's services..."
 
     for unit in $UNITS; do
         systemctl stop "$unit" >/dev/null 2>&1 || true
@@ -207,7 +207,7 @@ remove_units() {
     fi
 
     systemctl daemon-reload >/dev/null 2>&1 || true
-    success "Removed the panel's services"
+    success "Removed Coresmith's services"
 }
 
 remove_caddy_site() {
@@ -231,7 +231,7 @@ remove_caddy_site() {
         systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
     fi
 
-    success "Removed the panel's Caddy site"
+    success "Removed Coresmith's Caddy site"
 }
 
 remove_fpm_pool() {
@@ -252,8 +252,8 @@ remove_fpm_pool() {
             ;;
         esac
 
-        systemctl restart "$service" >/dev/null 2>&1 || warn "Couldn't restart ${service}. Restart it so the panel's pool stops."
-        success "Removed the panel's PHP-FPM pool"
+        systemctl restart "$service" >/dev/null 2>&1 || warn "Couldn't restart ${service}. Restart it so Coresmith's pool stops."
+        success "Removed Coresmith's PHP-FPM pool"
     done
 }
 
@@ -264,7 +264,7 @@ remove_fail2ban() {
 
     rm -f "$FAIL2BAN_JAIL" "$FAIL2BAN_FILTER"
     systemctl restart fail2ban >/dev/null 2>&1 || true
-    success "Removed the panel's fail2ban jail"
+    success "Removed Coresmith's fail2ban jail"
 }
 
 forget_safe_directories() {
@@ -294,7 +294,7 @@ remove_files() {
         rm -rf "${APPS_DIR:?}" "${CONFIG_DIR:?}"
     fi
 
-    success "Removed the panel's files"
+    success "Removed Coresmith's files"
 }
 
 remove_user() {
@@ -330,7 +330,7 @@ summary() {
 
     printf '  Caddy, Redis, PHP, Node.js, Bun, Composer and any database server are still installed, as other software may use them.\n'
     printf '  Firewall rules for SSH, 80 and 443 are unchanged.\n'
-    printf "  Servers this panel managed keep running. The panel's public key stays in their authorized_keys until you remove it.\n"
+    printf "  Servers Coresmith managed keep running. Its public key stays in their authorized_keys until you remove it.\n"
 }
 
 main() {

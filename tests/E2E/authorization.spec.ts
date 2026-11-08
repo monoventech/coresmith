@@ -72,7 +72,7 @@ asMember.describe('what a member may do', () => {
         await expect(page.getByTestId('env-preview')).not.toContainText('production')
     })
 
-    asMember('a member sees the panel settings but cannot change them', async ({ page }) => {
+    asMember('a member sees the settings but cannot change them', async ({ page }) => {
         await gotoSettings(page, 'General')
 
         await expect(page.getByTestId('panel-card')).toContainText('Coresmith')

@@ -34,7 +34,7 @@ final readonly class WebhookMode
 
     public static function instant(CarbonInterface $since): self
     {
-        return new self(true, self::RECEIVED, 'GitHub reached this panel ' . $since->min()->diffForHumans(['options' => CarbonInterface::JUST_NOW]) . '.');
+        return new self(true, self::RECEIVED, 'GitHub reached Coresmith ' . $since->min()->diffForHumans(['options' => CarbonInterface::JUST_NOW]) . '.');
     }
 
     public static function polling(string $reason, string $sentence): self

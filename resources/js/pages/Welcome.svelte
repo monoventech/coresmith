@@ -52,7 +52,7 @@
                     class="focus-ring rounded-sm text-muted-foreground no-underline underline-offset-4 hover:underline max-sm:hidden"
                     rel="noopener noreferrer">Source</a
                 >
-                <Button size="sm" href={panelHref}>Open the panel</Button>
+                <Button size="sm" href={panelHref}>Open Coresmith</Button>
             </nav>
         </header>
 

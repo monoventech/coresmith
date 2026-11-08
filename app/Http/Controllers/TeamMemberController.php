@@ -142,7 +142,7 @@ final class TeamMemberController extends Controller
         }
 
         return back()->with([
-            'success' => "Invitation created. This panel cannot send email yet, so copy the link below and send it to {$invitation->email} yourself.",
+            'success' => "Invitation created. Coresmith cannot send email yet, so copy the link below and send it to {$invitation->email} yourself.",
             TeamInvitations::ISSUED => ['id' => $invitation->getKey(), 'token' => $token],
         ]);
     }
