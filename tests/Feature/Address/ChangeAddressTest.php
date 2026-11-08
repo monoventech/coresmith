@@ -115,6 +115,14 @@ test('the change counts as done while the old address still serves coresmith, so
     expect($caddy->states)->toBe(['running', 'done']);
 });
 
+test('an ipv6 address is written into the environment the way urls need it', function () {
+    [$directory] = changeAddressMachine();
+
+    changeAddressTo('fd00::248');
+
+    expect(file_get_contents("{$directory}/.env"))->toBe("APP_URL=https://[fd00::248]\nVITE_REVERB_HOST=[fd00::248]\n");
+});
+
 test('the background services restart so they pick the new address up', function () {
     changeAddressMachine();
 

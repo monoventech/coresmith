@@ -74,7 +74,7 @@ final class ChangeAddress implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $environment->set(['APP_URL' => "https://{$this->host}", 'VITE_REVERB_HOST' => $this->host]);
+        $environment->set(['APP_URL' => 'https://' . InstallationAddress::urlHost($this->host), 'VITE_REVERB_HOST' => InstallationAddress::urlHost($this->host)]);
 
         if (app()->configurationIsCached()) {
             Artisan::call('config:cache');

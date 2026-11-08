@@ -20,12 +20,12 @@ final class SiteFile
     {
         $template = (string) file_get_contents(resource_path('caddy/panel.caddy'));
         $blocks = array_map(
-            fn(string $from, string $to): string => "\n" . self::address($from) . " {\n    redir https://" . self::address($to) . "{uri} permanent\n}\n",
+            fn(string $from, string $to): string => "\n" . InstallationAddress::urlHost($from) . " {\n    redir https://" . InstallationAddress::urlHost($to) . "{uri} permanent\n}\n",
             array_keys($redirects),
             array_values($redirects),
         );
 
-        return str_replace(['__ADDRESSES__', "__REDIRECTS__\n"], [implode(', ', array_map(self::address(...), $addresses)), implode('', $blocks)], $template);
+        return str_replace(['__ADDRESSES__', "__REDIRECTS__\n"], [implode(', ', array_map(InstallationAddress::urlHost(...), $addresses)), implode('', $blocks)], $template);
     }
 
     /**
@@ -42,10 +42,5 @@ final class SiteFile
 
             throw new RuntimeException("Coresmith couldn't write its Caddy site at {$path}.");
         }
-    }
-
-    private static function address(string $host): string
-    {
-        return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? "[{$host}]" : $host;
     }
 }

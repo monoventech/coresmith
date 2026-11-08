@@ -23,14 +23,9 @@ final class AddressController extends Controller
         abort_unless($request->user()->managesInstance(), 403);
 
         $host = InstallationAddress::normalise((string) $request->input('address'));
-        $refusal = match (true) {
-            AddressChange::running() => 'Coresmith is already changing its address. Wait for it to finish.',
-            default => $address->refusal($host),
-        };
-
-        if ($refusal === null && !$address->managed()) {
-            $refusal = "This install can't change its address from here yet. Run the installer again with --domain {$host}.";
-        }
+        $refusal = AddressChange::running()
+            ? 'Coresmith is already changing its address. Wait for it to finish.'
+            : $address->refusal($host) ?? ($address->managed() ? null : "This install can't change its address from here yet. Run the installer again with --domain {$host}.");
 
         if ($refusal !== null) {
             throw ValidationException::withMessages(['address' => $refusal]);

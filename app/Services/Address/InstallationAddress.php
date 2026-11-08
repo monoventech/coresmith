@@ -32,6 +32,11 @@ final class InstallationAddress
         return rtrim(strtolower(trim($host, '[]')), '.');
     }
 
+    public static function urlHost(string $host): string
+    {
+        return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? "[{$host}]" : $host;
+    }
+
     public static function certificate(string $host): CertificateSource
     {
         return match (true) {
