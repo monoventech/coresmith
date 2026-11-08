@@ -137,13 +137,15 @@
                             {selfHosting.ends_on
                                 ? `Coresmith Cloud stops on ${selfHosting.ends_on}, when this period ends.`
                                 : 'Coresmith Cloud stops when this period ends.'}
-                            Install Coresmith on your own server and add your servers there; they keep running the whole time.
+                            Your servers and apps keep running. A self-hosted panel can't take over servers Coresmith Cloud
+                            set up yet, so set your apps up there on fresh servers.
                         </p>
                     {:else}
                         <p class="m-0">
                             There is nothing to cancel.
                             {#if selfHosting.trial_ends_on}The trial ends on its own on {selfHosting.trial_ends_on}.{/if}
-                            To run Coresmith yourself, install it on your own server and add your servers there.
+                            To run Coresmith yourself, install it on your own server. It can't take over servers Coresmith
+                            Cloud set up yet, so add fresh servers for your apps.
                         </p>
                     {/if}
                     <a
