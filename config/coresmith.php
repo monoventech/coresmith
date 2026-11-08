@@ -79,6 +79,13 @@ return [
         'server_poll_minutes' => (int) env('CORESMITH_SERVER_POLL_MINUTES', 5),
     ],
 
+    'address' => [
+        'site' => (string) env('CORESMITH_CADDY_SITE', ''),
+        'caddyfile' => '/etc/caddy/Caddyfile',
+        'apps_config' => '/etc/caddy/caddy-config.json',
+        'tailscaled_defaults' => '/etc/default/tailscaled',
+    ],
+
     'live' => [
         'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
         'socket' => [
