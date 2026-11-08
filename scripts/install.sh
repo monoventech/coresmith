@@ -39,6 +39,9 @@ readonly DATA_DIR="/var/lib/coresmith"
 readonly UPDATES_DIR="$DATA_DIR/updates"
 readonly APPS_DIR="/var/coresmith"
 readonly CONFIG_DIR="/etc/coresmith"
+readonly CADDY_SITE_DIR="/etc/caddy/coresmith"
+readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"
+readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
 readonly PHP_VERSION="8.5"
@@ -793,6 +796,7 @@ configure_environment() {
     update_env APP_ENV "production"
     update_env APP_DEBUG "false"
     update_env APP_URL "$PANEL_URL"
+    update_env CORESMITH_CADDY_SITE "$CADDY_SITE"
     update_env APP_TIMEZONE "UTC"
 
     update_env DB_CONNECTION "$DB_DRIVER"
@@ -879,7 +883,7 @@ configure_caddy() {
         printf '    on_demand_tls {\n        permission http http://127.0.0.1:8484/api/caddy/ask\n    }\n'
         printf '    log {\n        output file /var/log/caddy/access.log\n        format json\n    }\n'
         printf '}\n\n'
-        printf 'import /etc/caddy/panel.caddy\n'
+        printf 'import %s\n' "$CADDY_SITE"
     } >/etc/caddy/Caddyfile
 
 
@@ -920,94 +924,13 @@ php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,p
 php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp
 FPMCONF
 
-    cat >/etc/caddy/panel.caddy <<SITECONF
-${PANEL_HOST} {
-    root * ${INSTALL_DIR}/public
-
-    php_fastcgi unix/${fpm_sock} {
-        resolve_root_symlink
-    }
-
-    file_server
-    encode gzip zstd
-
-    header {
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        -Server
-    }
-
-    @reverb path /app/* /apps/*
-    reverse_proxy @reverb 127.0.0.1:6001
-
-    log {
-        output file /var/log/caddy/coresmith-panel.log {
-            roll_size 10mb
-            roll_keep 5
-        }
-        format json
-    }
-}
-
-http://127.0.0.1:8484 {
-    bind 127.0.0.1
-    root * ${INSTALL_DIR}/public
-
-    @ask path /api/caddy/ask
-    handle @ask {
-        php_fastcgi unix/${fpm_sock} {
-            resolve_root_symlink
-        }
-    }
-
-    @release path /api/up/release
-    handle @release {
-        php_fastcgi unix/${fpm_sock} {
-            resolve_root_symlink
-        }
-    }
-
-    respond 404
-}
-
-https:// {
-    tls {
-        on_demand
-    }
-
-    root * ${INSTALL_DIR}/public
-
-    php_fastcgi unix/${fpm_sock} {
-        resolve_root_symlink
-    }
-
-    file_server
-    encode gzip zstd
-
-    header {
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        -Server
-    }
-
-    @reverb path /app/* /apps/*
-    reverse_proxy @reverb 127.0.0.1:6001
-
-    log {
-        output file /var/log/caddy/coresmith-panel.log {
-            roll_size 10mb
-            roll_keep 5
-        }
-        format json
-    }
-}
-SITECONF
+    mkdir -p "$CADDY_SITE_DIR"
+    chown coresmith:caddy "$CADDY_SITE_DIR"
+    chmod 2750 "$CADDY_SITE_DIR"
+    sed -e "s|__ADDRESSES__|${PANEL_HOST}|" -e '/^__REDIRECTS__$/d' "$RELEASE_DIR/resources/caddy/panel.caddy" >"$CADDY_SITE"
+    chown coresmith:caddy "$CADDY_SITE"
+    chmod 0640 "$CADDY_SITE"
+    rm -f "$LEGACY_CADDY_SITE"
 
     setfacl -P -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"
     setfacl -R -P -m u:caddy:rX "$RELEASE_DIR/public"

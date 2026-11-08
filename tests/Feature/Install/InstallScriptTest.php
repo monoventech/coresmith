@@ -22,6 +22,11 @@ function installScriptBody(): string
     return (string) file_get_contents(installScript());
 }
 
+function installSiteTemplate(): string
+{
+    return (string) file_get_contents(base_path('resources/caddy/panel.caddy'));
+}
+
 function runInstaller(array $arguments): Process
 {
     $process = new Process(array_merge(['bash', installScript()], $arguments), base_path());
@@ -458,26 +463,61 @@ test('the machine test is valid bash that the shell lint covers', function () {
 });
 
 test('caddy only issues certificates for hosts the panel approves, asked over loopback', function () {
-    $body = installScriptBody();
-
-    expect($body)->toContain('permission http http://127.0.0.1:8484/api/caddy/ask')
-        ->and($body)->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
-        ->and($body)->toContain("https:// {\n    tls {\n        on_demand\n    }");
+    expect(installScriptBody())->toContain('permission http http://127.0.0.1:8484/api/caddy/ask')
+        ->and(installSiteTemplate())->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
+        ->and(installSiteTemplate())->toContain("https:// {\n    tls {\n        on_demand\n    }");
 });
 
 test('the updater checks the new release over the loopback site, never through tls', function () {
-    $site = str(installScriptBody())->after("http://127.0.0.1:8484 {\n")->before("\n}\n")->toString();
+    $site = str(installSiteTemplate())->after("http://127.0.0.1:8484 {\n")->before("\n}\n")->toString();
 
-    expect($site)->toContain("@release path /api/up/release\n    handle @release {\n        php_fastcgi unix/\${fpm_sock} {\n            resolve_root_symlink\n        }\n    }")
+    expect($site)->toContain("@release path /api/up/release\n    handle @release {\n        php_fastcgi unix//run/php/coresmith-panel-fpm.sock {\n            resolve_root_symlink\n        }\n    }")
         ->and(config('coresmith.updates.probe_url'))->toBe('http://127.0.0.1:8484/api/up/release');
 });
 
 test('team domains get hsts for themselves only, never for the customer subdomains', function () {
-    $site = str(installScriptBody())->after("https:// {\n")->before("\n}\nSITECONF")->toString();
+    $site = str(installSiteTemplate())->after("https:// {\n")->before("\n}\n__REDIRECTS__")->toString();
 
     expect($site)->toContain('Strict-Transport-Security "max-age=31536000"')
         ->and($site)->not->toContain('includeSubDomains')
         ->and($site)->not->toContain('preload');
+});
+
+test('the site Caddy serves comes from the template Coresmith also writes, which only coresmith may change', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"')
+        ->and($body)->toContain("printf 'import %s\\n' \"\$CADDY_SITE\"")
+        ->and($body)->toContain("chown coresmith:caddy \"\$CADDY_SITE_DIR\"\n    chmod 2750 \"\$CADDY_SITE_DIR\"")
+        ->and($body)->toContain('"$RELEASE_DIR/resources/caddy/panel.caddy" >"$CADDY_SITE"')
+        ->and($body)->toContain("chown coresmith:caddy \"\$CADDY_SITE\"\n    chmod 0640 \"\$CADDY_SITE\"")
+        ->and($body)->toContain('rm -f "$LEGACY_CADDY_SITE"')
+        ->and($body)->toContain('update_env CORESMITH_CADDY_SITE "$CADDY_SITE"')
+        ->and($body)->not->toContain('SITECONF');
+});
+
+test('the site template serves the release the installer installs, through the pool it configures', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly CORESMITH_ROOT="/opt/coresmith"')
+        ->and($body)->toContain('readonly INSTALL_DIR="$CORESMITH_ROOT/app"')
+        ->and($body)->toContain('local fpm_sock="/run/php/coresmith-panel-fpm.sock"')
+        ->and($body)->toContain('listen = ${fpm_sock}')
+        ->and(substr_count(installSiteTemplate(), 'root * /opt/coresmith/app/public'))->toBe(3)
+        ->and(substr_count(installSiteTemplate(), 'php_fastcgi unix//run/php/coresmith-panel-fpm.sock {'))->toBe(4);
+});
+
+test('the installer fills the template with the address and no other site', function () {
+    $line = trim((string) collect(explode("\n", installScriptBody()))->first(fn(string $line): bool => str_contains($line, 'resources/caddy/panel.caddy')));
+    $script = 'RELEASE_DIR=' . escapeshellarg(base_path()) . '; PANEL_HOST=coresmith.example.com; CADDY_SITE=/dev/stdout; ' . $line;
+
+    $process = new Process(['bash', '-c', $script]);
+    $process->mustRun();
+    $site = $process->getOutput();
+
+    expect($site)->toStartWith("coresmith.example.com {\n    root * /opt/coresmith/app/public\n")
+        ->and($site)->not->toContain('__')
+        ->and($site)->toEndWith("    }\n}\n");
 });
 
 test('failed jobs and batches live on a connection the installer migrates', function () {
