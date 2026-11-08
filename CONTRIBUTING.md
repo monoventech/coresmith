@@ -106,8 +106,8 @@ A "not built" note names what blocks it. If nothing blocks it, build it.
 A stable release is a pull request into `main`, then a tag. Maintainers run `scripts/release.sh` from a clean checkout.
 
 1. `./scripts/release.sh 1.0.2` makes `release/v1.0.2` from `main` and cherry-picks every commit `dev` has that `main` doesn't. It runs every check in "Before you commit", builds, bumps `VERSION` and the installer's version, writes `CHANGELOG.md`, pushes the branch and opens a pull request into `main`. Add `--omit <commit>`, once per commit, to keep changes that aren't ready for production on `dev` for a later release; the pull request lists them.
-2. Review the pull request and merge it with a merge commit, never a squash or rebase: the next release compares `main` with `dev` commit by commit to see what has shipped.
-3. `./scripts/release.sh publish 1.0.2` tags the merge commit, signs the installer and publishes a GitHub release with it attached.
+2. Review the pull request and merge it with any method. The next release reads the history on `main` to tell what has shipped, including the cherry-pick notes a squash keeps while the repository's squash commits list each commit's message.
+3. `./scripts/release.sh publish 1.0.2` tags the commit the merge put on `main`, signs the installer and publishes a GitHub release with it attached.
 
 `./scripts/release.sh 1.0.3-beta.1` cuts a pre-release instead: it tags a version bump on top of `dev` as it is, with no pull request, and changes neither `dev` nor `main`.
 

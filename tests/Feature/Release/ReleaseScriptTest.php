@@ -204,7 +204,7 @@ test('preparing a stable release picks dev onto main, runs every gate, bumps and
         ->and($changelog)->not->toContain('chore')
         ->and($changelog)->not->toContain('—')
         ->and($body)->toStartWith("### Added\n- feat: deploy faster\n\n### Fixed\n- fix: keep log colours\n")
-        ->and($body)->toContain('Merge it with a merge commit')
+        ->and($body)->toContain('Merge it with any method')
         ->and($body)->toContain('./scripts/release.sh publish 1.0.0')
         ->and($body)->not->toContain('—')
         ->and(releaseOutput($process))->toContain('Picked 2 commits from dev.')
@@ -458,23 +458,45 @@ test('publishing needs the release pull request merged', function (?string $stat
         ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('');
 })->with([
     'no pull request' => [null, "There's no pull request for release/v1.0.0. Open one with ./scripts/release.sh 1.0.0."],
-    'still open' => ['OPEN', "https://github.com/monoven/coresmith/pull/1 isn't merged yet. Merge it with a merge commit, then publish."],
+    'still open' => ['OPEN', "https://github.com/monoven/coresmith/pull/1 isn't merged yet. Merge it, then publish."],
     'closed' => ['CLOSED', 'https://github.com/monoven/coresmith/pull/1 was closed without merging. Open a new one with ./scripts/release.sh 1.0.0.'],
 ]);
 
-test('publishing refuses a squashed release pull request', function () {
+test('a squashed release pull request publishes, and the next release knows what it shipped', function () {
     $sandbox = releaseScriptSandbox();
-    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+    releaseCommit($sandbox, 'dev', 'feat: one', 'page.txt', "one\n");
+    releaseCommit($sandbox, 'dev', 'fix: two', 'page.txt', "two\n");
+
+    expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
+
+    $merge = releaseMergePr($sandbox, '1.0.0', squash: true);
+    $published = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned']);
+
+    expect($published->getExitCode())->toBe(0, releaseOutput($published))
+        ->and(releaseOrigin($sandbox, ['rev-parse', 'v1.0.0^{commit}']))->toBe($merge)
+        ->and(releaseOrigin($sandbox, ['rev-list', '--parents', '-n', '1', 'main']))->toBe("{$merge} " . releaseOrigin($sandbox, ['rev-parse', 'main^']));
+
+    releaseCommit($sandbox, 'dev', 'feat: three');
+
+    $next = releaseScriptRun($sandbox, ['1.0.1', '--yes', '--unsigned']);
+
+    expect($next->getExitCode())->toBe(0, releaseOutput($next))
+        ->and(explode("\n", releaseOrigin($sandbox, ['log', '--format=%s', 'main..release/v1.0.1'])))->toBe(['chore(release): v1.0.1', 'feat: three'])
+        ->and(releaseOutput($next))->toContain('Picked 1 commit from dev.');
+});
+
+test('a release with everything already shipped through a squash is refused', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: one');
 
     expect(releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'])->getExitCode())->toBe(0);
 
     releaseMergePr($sandbox, '1.0.0', squash: true);
 
-    $process = releaseScriptRun($sandbox, ['publish', '1.0.0', '--yes', '--unsigned']);
+    $process = releaseScriptRun($sandbox, ['1.0.1', '--yes', '--unsigned']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain('https://github.com/monoven/coresmith/pull/1 was squashed or rebased into main. A release needs a merge commit, because the next release compares main with dev commit by commit to see what has shipped.')
-        ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('');
+        ->and(releaseOutput($process))->toContain('Nothing to release: everything on origin/dev is already on main.');
 });
 
 test('publishing checks main has the version being published', function () {
