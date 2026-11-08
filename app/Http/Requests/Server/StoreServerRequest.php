@@ -37,6 +37,7 @@ final class StoreServerRequest extends FormRequest
             'ssh_port' => ['required', 'integer', 'min:1', 'max:65535'],
             'ssh_user' => ['required', 'string', 'regex:' . SafeName::SYSTEM_USER_PATTERN],
             'audit_logging_enabled' => ['boolean'],
+            'password' => ['nullable', 'string', 'max:1024'],
         ];
     }
 

@@ -290,8 +290,6 @@ test('the server still being set up is shown in preference to an active one', fu
             ->where('server.id', $pending->id)
             ->where('server.name', 'in-progress')
             ->where('server.href', route('servers.show', $pending))
-            ->where('server.test_href', route('servers.test-connection', $pending))
-            ->where('server.provision_href', route('servers.provision', $pending))
             ->has('server.provisioning.phases', 8)
             ->where('create_application_href', null));
 });

@@ -2,6 +2,7 @@
     import CloudCreationCard from '@/components/cloud/CloudCreationCard.svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
     import AuditReport from '@/components/servers/AuditReport.svelte'
+    import ConnectCard from '@/components/servers/ConnectCard.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
@@ -21,16 +22,9 @@
     const errorSummary = $derived(errorLines[0] ?? '')
     const errorOutput = $derived(errorLines.slice(1).join('\n'))
 
-    let copied = $state(false)
     let restarting = $state(false)
 
-    async function copyKey() {
-        await navigator.clipboard.writeText(provisioning.public_key)
-        copied = true
-        setTimeout(() => (copied = false), 2000)
-    }
-
-    function post(name: 'servers.test-connection' | 'servers.provisioning.retry' | 'servers.provisioning.restart') {
+    function post(name: 'servers.provisioning.retry' | 'servers.provisioning.restart') {
         router.post(route(name, server.id), {}, { preserveScroll: true, onFinish: () => (restarting = false) })
     }
 
@@ -54,38 +48,11 @@
             onrestart={() => (restarting = true)}
         />
     {:else}
-        <div class="rounded-xl border border-border bg-card p-6">
-            <h3 class="type-h3 m-0 mb-1">Connect {server.name}</h3>
-            <p class="mb-4 text-[12.5px] text-muted-foreground">
-                Add this key to <span class="font-mono text-[12px]">~/.ssh/authorized_keys</span> for
-                <span class="font-mono text-[12px]">{provisioning.ssh_user}</span>, then test the connection. Coresmith
-                generated it for this server alone.
-            </p>
-            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-            <pre
-                class="terminal max-h-28 text-[11.5px] leading-[1.7] break-all whitespace-pre-wrap"
-                data-testid="public-key"
-                tabindex="0"
-                role="region"
-                aria-label="SSH public key">{provisioning.public_key}</pre>
-            {#if provisioning.ssh}
-                <p class="mt-2 font-mono text-[12px] text-muted-foreground">{provisioning.ssh}</p>
-            {/if}
-            <div class="mt-4 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onclick={copyKey}>{copied ? 'Copied' : 'Copy the key'}</Button>
-                {#if server.can.update}
-                    <Button variant="outline" size="sm" onclick={() => post('servers.test-connection')}
-                        >Test connection</Button
-                    >
-                    {#if failed}
-                        <Button size="sm" onclick={() => post('servers.provisioning.retry')}
-                            >{`Retry from phase ${provisioning.failed_phase}`}</Button
-                        >
-                        <Button variant="outline" size="sm" onclick={() => (restarting = true)}>Start over</Button>
-                    {/if}
-                {/if}
-            </div>
-        </div>
+        <ConnectCard
+            {server}
+            onretry={() => post('servers.provisioning.retry')}
+            onrestart={() => (restarting = true)}
+        />
     {/if}
 
     <div class="rounded-xl border border-border bg-card p-6" data-testid="provisioning-phases">

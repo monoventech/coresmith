@@ -84,6 +84,7 @@ class Server extends Model
         return [
             'ssh_private_key' => Vaulted::class,
             'status' => ServerStatus::class,
+            'ssh_port' => 'integer',
             'installed_runtimes' => 'array',
             'meta' => 'array',
             'audit' => 'array',

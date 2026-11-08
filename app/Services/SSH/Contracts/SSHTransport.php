@@ -22,7 +22,13 @@ interface SSHTransport
 
     public function login(string $user, PrivateKey $key): bool;
 
+    public function loginWithPassword(string $user, #[\SensitiveParameter] string $password): bool;
+
+    public function acceptsPasswords(): bool;
+
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string;
+
+    public function execWithInput(string $command, #[\SensitiveParameter] string $input, int $timeout = self::COMMAND_SECONDS): string;
 
     public function timedOut(): bool;
 

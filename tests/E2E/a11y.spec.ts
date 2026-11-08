@@ -112,6 +112,7 @@ const PAGES: [string, Visit][] = [
         }
     ],
     ['Server not connected yet', (page) => gotoServer(page, 'empty-server')],
+    ['Server whose connection failed', (page) => gotoServer(page, 'refused-01')],
     ['Server checked before provisioning', (page) => gotoServer(page, 'audit-server')],
     ['Server being checked', (page) => gotoServer(page, 'checking-server')],
     ['Server whose provisioning failed', (page) => gotoServer(page, 'halfway-server')],

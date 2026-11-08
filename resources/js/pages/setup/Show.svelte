@@ -39,7 +39,7 @@
         complete: boolean
         github: GitHubSetup | null
         team: { id: string }
-        server: (ServerHeader & { href: string; test_href: string; provision_href: string }) | null
+        server: (ServerHeader & { href: string }) | null
         application: {
             id: string
             name: string
@@ -474,6 +474,8 @@
                         <Badge variant="accent" dot pulse>Phase {Math.min(8, provisioning.completed + 1)} of 8</Badge>
                     {:else if provisioning.status === 'failed'}
                         <Badge variant="destructive" dot>Failed</Badge>
+                    {:else if provisioning.connected}
+                        <Badge variant="success" dot>Connected</Badge>
                     {:else}
                         <Badge variant="default">Waiting for its key</Badge>
                     {/if}

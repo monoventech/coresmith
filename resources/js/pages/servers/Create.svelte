@@ -242,11 +242,28 @@
                                     id="ssh_user"
                                     name="ssh_user"
                                     value="root"
+                                    autocomplete="off"
+                                    spellcheck="false"
                                     required
                                     aria-invalid={errors.ssh_user ? true : undefined}
                                 />
                                 <FieldError message={errors.ssh_user} />
                             </div>
+                        </div>
+                        <div>
+                            <Label for="password" class="mb-1.5">Password, optional</Label>
+                            <Input
+                                id="password"
+                                name="password"
+                                type="password"
+                                autocomplete="new-password"
+                                aria-describedby="password-hint"
+                                aria-invalid={errors.password ? true : undefined}
+                            />
+                            <FieldError message={errors.password} />
+                            <p id="password-hint" class="mt-1.5 text-[12px] text-muted-foreground">
+                                The SSH user's password. Coresmith uses it once to add its own key, then forgets it.
+                            </p>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
@@ -284,8 +301,8 @@
                             <input type="hidden" name="team_id" value={chosenTeam ?? ''} />
                         {/if}
                         <p class="-mt-1 text-[12px] text-muted-foreground">
-                            Needs Ubuntu 24.04 or Debian 12 and SSH access. Coresmith generates a key for this server
-                            alone, you add it, then it provisions.
+                            Needs Ubuntu 24.04 or Debian 12 and SSH access. Coresmith makes a key for this server alone.
+                            Without a password, you run one command to add it.
                         </p>
                         <FieldError message={errors.team_id} />
                         {#if note}
