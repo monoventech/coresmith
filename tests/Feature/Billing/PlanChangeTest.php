@@ -268,7 +268,7 @@ test('a plan without a price is not offered', function () {
     FakeStripe::fake();
 
     $this->actingAs(planChangeOwner($team))->put(route('settings.billing.plan.update'), ['plan' => 'business'])
-        ->assertSessionHasErrors(['plan' => 'Business is not available on this panel yet. Choose another plan.']);
+        ->assertSessionHasErrors(['plan' => 'Business is not available here yet. Choose another plan.']);
 
     Http::assertNothingSent();
 });

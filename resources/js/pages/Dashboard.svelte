@@ -143,15 +143,16 @@
                         <StateDot tone={server.state.tone} state={server.state.key} class="max-sm:size-1.75" />
                         <Link
                             href={server.href}
-                            class="card-link font-mono text-[15px] font-medium text-foreground no-underline outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] max-sm:text-[14px]"
+                            class="card-link min-w-0 font-mono text-[15px] font-medium wrap-anywhere text-foreground no-underline outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] max-sm:text-[14px]"
                         >
                             {server.name}
                         </Link>
                         <span
                             class={cn(
-                                'ml-auto text-[12px] font-medium max-sm:text-[11.5px]',
+                                'ml-auto text-[12px] font-medium whitespace-nowrap max-sm:text-[11.5px]',
                                 toneText(server.state.tone)
-                            )}>{server.state.label}</span
+                            )}
+                            data-testid="server-state">{server.state.label}</span
                         >
                     </div>
                     <div class="mb-4 text-[12.5px] text-muted-foreground max-sm:hidden">

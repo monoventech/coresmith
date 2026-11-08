@@ -72,10 +72,10 @@ final class CloudProviderException extends RuntimeException implements ExplainsF
             CloudFailure::RateLimited => "{$label} is rate limiting this account.{$said} Coresmith tries again shortly.",
             CloudFailure::Refused => "{$label} refused the request.{$said}",
             CloudFailure::Unavailable => "{$label} had a problem answering" . ($this->status === null ? '' : " (HTTP {$this->status})") . '. Try again in a minute.',
-            CloudFailure::Unreachable => "Coresmith couldn't reach {$label} at {$this->provider->apiHost()}. Check this panel can make outbound HTTPS requests, then try again.",
+            CloudFailure::Unreachable => "Coresmith couldn't reach {$label} at {$this->provider->apiHost()}. Check Coresmith can make outbound HTTPS requests, then try again.",
             CloudFailure::NoToken => "No token is stored for this {$label} account. Replace the token in Settings → Team, then try again.",
             CloudFailure::UnreadableToken => "Coresmith couldn't read the token stored for this {$label} account. Replace the token in Settings → Team, then try again.",
-            CloudFailure::AddressRefused => "{$label} refused requests from this panel's IP address.{$said} Add the address to Access Control in {$label}'s API settings, then try again.",
+            CloudFailure::AddressRefused => "{$label} refused requests from Coresmith's IP address.{$said} Add the address to Access Control in {$label}'s API settings, then try again.",
         };
     }
 

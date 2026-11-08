@@ -73,7 +73,7 @@ test('each refusal says what is wrong without repeating what the feed sent', fun
     'withdrawn not a list' => [['latest' => '1.0.0', 'withdrawn' => ['a' => '1.0.1']], 'withdrawn is not a list of versions.'],
     'withdrawn too long' => [['latest' => '1.0.0', 'withdrawn' => array_fill(0, 201, '1.0.1')], 'withdrawn lists more than 200 versions.'],
     'withdrawn entry' => [['latest' => '1.0.0', 'withdrawn' => [['1.0.1']]], 'withdrawn holds something that is not a version like 1.2.3.'],
-    'schema' => [['latest' => '1.0.0', 'schema' => '1'], 'schema is newer than this panel understands.'],
+    'schema' => [['latest' => '1.0.0', 'schema' => '1'], 'schema is newer than this version of Coresmith understands.'],
     'channel' => [['latest' => '1.0.0', 'channel' => ['stable']], 'channel is neither stable nor beta.'],
     'channel that is not text' => [['latest' => '1.0.0', 'channel' => true], 'channel is neither stable nor beta.'],
 ]);

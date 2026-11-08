@@ -129,7 +129,7 @@ test("the panel's own host is refused with one blocker and none of the advice th
     expect($findings)->toBe([[
         'key' => 'panel_host',
         'severity' => 'blocker',
-        'title' => 'This server runs the Coresmith panel itself',
+        'title' => 'This server runs Coresmith itself',
         'detail' => 'Add a different server for your apps.',
         'fix' => null,
     ]]);

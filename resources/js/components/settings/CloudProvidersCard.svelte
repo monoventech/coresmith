@@ -95,7 +95,7 @@
         <div class="flex flex-col items-start gap-1 border-t border-border px-5.5 py-5">
             <p class="m-0 text-[13.5px] font-medium">No provider connected yet.</p>
             {#if cloud.can_manage}
-                <p class="m-0 text-[12.5px] text-muted-foreground">Connect one to create servers from this panel.</p>
+                <p class="m-0 text-[12.5px] text-muted-foreground">Connect one to create servers from Coresmith.</p>
                 <Button class="mt-2" variant="ghost" size="sm" onclick={openAdd}>Add a provider</Button>
             {:else}
                 <p class="m-0 text-[12.5px] text-muted-foreground">An owner or admin can connect one.</p>
@@ -250,7 +250,7 @@
                     <Dialog.Header>
                         <Dialog.Title>Rename {account.name}</Dialog.Title>
                         <Dialog.Description
-                            >The name is only for the panel, nothing changes at {account.provider}.</Dialog.Description
+                            >The name is only for Coresmith, nothing changes at {account.provider}.</Dialog.Description
                         >
                     </Dialog.Header>
                     <div class="mt-4">

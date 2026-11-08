@@ -61,14 +61,14 @@ test('the panel address is judged by what github could do with it', function (st
     'a lan name' => ['https://box.lan', [], false, 'local', 'GitHub cannot reach box.lan, it only resolves on your own network.'],
     'a home.arpa name' => ['https://nas.home.arpa', [], false, 'local', 'GitHub cannot reach nas.home.arpa, it only resolves on your own network.'],
     'a single label' => ['https://beelink', [], false, 'local', 'GitHub cannot reach beelink, it only resolves on your own network.'],
-    'a public ip' => ['https://140.82.112.3', [], false, 'ip', 'GitHub cannot check a certificate for 140.82.112.3. Give the panel a domain name to get pushes as they happen.'],
-    'a public ipv6 address' => ['https://[2606:4700::1111]', [], false, 'ip', 'GitHub cannot check a certificate for 2606:4700::1111. Give the panel a domain name to get pushes as they happen.'],
-    'plain http' => ['http://panel.example.com', ['panel.example.com' => ['140.82.112.3']], false, 'http', 'This panel is served over http, and GitHub only delivers to https.'],
+    'a public ip' => ['https://140.82.112.3', [], false, 'ip', 'GitHub cannot check a certificate for 140.82.112.3. Give Coresmith a domain name to get pushes as they happen.'],
+    'a public ipv6 address' => ['https://[2606:4700::1111]', [], false, 'ip', 'GitHub cannot check a certificate for 2606:4700::1111. Give Coresmith a domain name to get pushes as they happen.'],
+    'plain http' => ['http://panel.example.com', ['panel.example.com' => ['140.82.112.3']], false, 'http', 'Coresmith is served over http, and GitHub only delivers to https.'],
     'a name that does not resolve' => ['https://unresolvable.example.com', [], true, null, null],
     'a name that resolves to a mix' => ['https://panel.example.com', ['panel.example.com' => ['192.168.0.10', '140.82.112.3']], true, null, null],
     'upper case and a trailing dot' => ['https://Panel.Example.COM.', ['panel.example.com' => ['140.82.112.3']], true, null, null],
     'a private literal beats plain http' => ['http://192.168.0.5', [], false, 'private', 'GitHub cannot reach 192.168.0.5, it is not a public address.'],
-    'a public literal beats plain http' => ['http://140.82.112.3', [], false, 'ip', 'GitHub cannot check a certificate for 140.82.112.3. Give the panel a domain name to get pushes as they happen.'],
+    'a public literal beats plain http' => ['http://140.82.112.3', [], false, 'ip', 'GitHub cannot check a certificate for 140.82.112.3. Give Coresmith a domain name to get pushes as they happen.'],
     'a private resolution beats plain http' => ['http://panel.example.com', ['panel.example.com' => ['10.0.0.7']], false, 'private', 'GitHub cannot reach panel.example.com, 10.0.0.7 is not a public address.'],
     'loopback beats plain http' => ['http://127.0.0.1', [], false, 'loopback', 'GitHub cannot reach 127.0.0.1, it only answers on this machine.'],
     'a trailing newline on a loopback address' => ["https://127.0.0.1\n", [], false, 'loopback', 'GitHub cannot reach 127.0.0.1, it only answers on this machine.'],
@@ -98,7 +98,7 @@ test('an address that cannot be read as a host counts as this machine and is nev
     expect($verdict->reachable)->toBeFalse()
         ->and($verdict->reason)->toBe('loopback')
         ->and($verdict->host)->toBe('')
-        ->and($verdict->sentence())->toBe('GitHub cannot reach this panel, it only answers on this machine.')
+        ->and($verdict->sentence())->toBe('GitHub cannot reach Coresmith, it only answers on this machine.')
         ->and(reachabilityAsked())->toBe([]);
 })->with([
     'an empty address' => [''],

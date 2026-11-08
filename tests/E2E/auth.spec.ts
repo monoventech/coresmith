@@ -1,4 +1,4 @@
-import { asGuest, expect, own, PASSWORD, toast } from './support/fixtures'
+import { asGuest, expect, NARROW_PHONE, own, PASSWORD, toast } from './support/fixtures'
 
 const OWNER = 'owner@coresmith.test'
 
@@ -9,10 +9,33 @@ asGuest.describe('signing in', () => {
         await expect(page).toHaveURL(/\/login$/)
     })
 
+    asGuest('the single sign-on link never breaks across lines on a phone', async ({ page }) => {
+        const link = page.getByRole('link', { name: 'Use single sign-on' })
+
+        for (const width of [NARROW_PHONE.width, 320, 360, 393, 414]) {
+            await page.setViewportSize({ width, height: 800 })
+            await page.goto('/login')
+            await expect(link).toBeVisible()
+
+            const lines = await link.evaluate((element) => {
+                const text = document.createRange()
+                text.selectNodeContents(element)
+
+                return new Set(
+                    Array.from(text.getClientRects())
+                        .filter((rect) => rect.width > 0 && rect.height > 0)
+                        .map((rect) => Math.round(rect.top))
+                ).size
+            })
+
+            expect(lines, `at ${width}px`).toBe(1)
+        }
+    })
+
     asGuest('the sign in page carries the wordmark, the form and the Monoven mark', async ({ page }) => {
         await page.goto('/login')
 
-        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to your panel' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Coresmith' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Coresmith home' })).toBeVisible()
         await expect(page.getByLabel('Email address')).toBeVisible()
         await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
@@ -30,7 +53,7 @@ asGuest.describe('signing in', () => {
         page.on('pageerror', (error) => problems.push(error.message))
 
         await page.goto('/login')
-        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to your panel' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Coresmith' })).toBeVisible()
 
         expect(problems).toEqual([])
     })
@@ -116,13 +139,13 @@ asGuest.describe('signing in', () => {
         ).toBeVisible()
     })
 
-    asGuest('the landing page leads to the panel', async ({ page }) => {
+    asGuest('the landing page leads to Coresmith', async ({ page }) => {
         await page.goto('/')
 
         await expect(
             page.getByRole('heading', { level: 1, name: 'Server management without the complexity.' })
         ).toBeVisible()
-        await page.getByRole('link', { name: 'Open the panel' }).click()
+        await page.getByRole('link', { name: 'Open Coresmith' }).click()
 
         await expect(page).toHaveURL(/\/login$/)
     })

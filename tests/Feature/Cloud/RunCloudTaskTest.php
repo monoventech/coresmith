@@ -436,7 +436,7 @@ test('an unexpected error fails the task and is reported', function () {
     expect(cloudTaskOf($server))
         ->state->toBe(CloudTask::FAILED)
         ->error->toStartWith('Coresmith stopped with an unexpected error: boom.')
-        ->error->toBe("Coresmith stopped with an unexpected error: boom. Try again, and if it keeps happening check the panel's logs.")
+        ->error->toBe("Coresmith stopped with an unexpected error: boom. Try again, and if it keeps happening check Coresmith's logs.")
         ->and(cloudTaskCalls())->toBe(['step one', 'failed one']);
     Exceptions::assertReported(RuntimeException::class);
 });
@@ -448,7 +448,7 @@ test('the error stored for an unexpected failure is cleaned and cut', function (
 
     cloudTaskRun($server);
 
-    expect(cloudTaskOf($server)->error)->toBe("Coresmith stopped with an unexpected error: {$shown}. Try again, and if it keeps happening check the panel's logs.")
+    expect(cloudTaskOf($server)->error)->toBe("Coresmith stopped with an unexpected error: {$shown}. Try again, and if it keeps happening check Coresmith's logs.")
         ->and(json_encode($server->fresh()->provider_task))->not->toContain('the-account-token');
 })->with([
     'a token in the message' => ['The request with Bearer the-account-token failed.', 'The request with Bearer [REDACTED] failed'],

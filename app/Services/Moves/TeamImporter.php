@@ -186,13 +186,13 @@ final class TeamImporter
         $taken = Server::query()->whereIn('ip_address', array_column($servers, 'ip_address'))->value('ip_address');
 
         if ($taken !== null) {
-            $this->refuse("{$taken} is already a server on this panel. Remove it there, then upload the file again.");
+            $this->refuse("{$taken} is already a server here. Remove it first, then upload the file again.");
         }
 
         $slug = Application::withTrashed()->whereIn('slug', array_column($this->records($payload, 'applications'), 'slug'))->value('slug');
 
         if ($slug !== null) {
-            $this->refuse("An app called {$slug} is already on this panel. Remove it there, then upload the file again.");
+            $this->refuse("An app called {$slug} is already here. Remove it first, then upload the file again.");
         }
     }
 

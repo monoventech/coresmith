@@ -43,7 +43,7 @@ final class CheckUpdateCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->line("Coresmith {$available->tag()} is available. This panel runs {$current->tag()}.");
+        $this->line("Coresmith {$available->tag()} is available. You're running {$current->tag()}.");
 
         if ($check->feed?->changelogUrl !== null) {
             $this->line("Release notes: {$check->feed->changelogUrl}");

@@ -113,7 +113,7 @@
     <div class="flex flex-wrap items-center gap-3 border-b border-border px-5.5 py-4">
         <div>
             <h3 class="type-h3 m-0">{team.name}</h3>
-            <p class="mt-0.5 text-[12.5px] text-muted-foreground">Everyone with access to this panel.</p>
+            <p class="mt-0.5 text-[12.5px] text-muted-foreground">Everyone with access to this team.</p>
         </div>
         {#if can.manageMembers}
             <span class="ml-auto"

@@ -25,7 +25,7 @@ final class AccountClosing
             }
 
             return match (true) {
-                Edition::current()->isSelfHosted() => "Make someone else an owner of {$team->name} first. To remove the panel instead, run coresmith:uninstall on its server.",
+                Edition::current()->isSelfHosted() => "Make someone else an owner of {$team->name} first. To remove Coresmith instead, run coresmith:uninstall on its server.",
                 $team->members()->whereKeyNot($user->getKey())->exists() => "Make someone else an owner of {$team->name} first, remove the other members, or delete the team.",
                 default => "Delete {$team->name} from Settings, General first, then close your account.",
             };

@@ -132,7 +132,7 @@ final class PanelBackup
         match ($driver) {
             'sqlite' => $this->restoreSqlite($phar, (string) $config['database']),
             'pgsql', 'mysql', 'mariadb' => $this->restoreExternal($phar, $driver, $config, $archive),
-            default => throw new RuntimeException('Backups support SQLite, PostgreSQL and MySQL panels.'),
+            default => throw new RuntimeException('Backups support Coresmith on SQLite, PostgreSQL and MySQL.'),
         };
     }
 
@@ -222,7 +222,7 @@ final class PanelBackup
             'sqlite' => $connection->statement('VACUUM INTO ?', [$work . '/database.sqlite']),
             'pgsql' => $this->external(['pg_dump', '--no-owner', '--clean', '--if-exists', '--file=' . $work . '/database.sql', '--host=' . $config['host'], '--port=' . $config['port'], '--username=' . $config['username'], $config['database']], ['PGPASSWORD' => (string) $config['password']]),
             'mysql', 'mariadb' => $this->external(['mysqldump', '--single-transaction', '--result-file=' . $work . '/database.sql', '--host=' . $config['host'], '--port=' . $config['port'], '--user=' . $config['username'], $config['database']], ['MYSQL_PWD' => (string) $config['password']]),
-            default => throw new RuntimeException('Backups support SQLite, PostgreSQL and MySQL panels.'),
+            default => throw new RuntimeException('Backups support Coresmith on SQLite, PostgreSQL and MySQL.'),
         };
     }
 

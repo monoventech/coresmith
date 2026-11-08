@@ -46,7 +46,7 @@ test('the last owner of a team with other members is told what to do first', fun
     $this->assertAuthenticatedAs($owner);
 })->with([
     'on cloud' => ['cloud', 'Make someone else an owner of Monoven first, remove the other members, or delete the team.'],
-    'on a self-hosted panel' => ['self-hosted', 'Make someone else an owner of Monoven first. To remove the panel instead, run coresmith:uninstall on its server.'],
+    'on a self-hosted panel' => ['self-hosted', 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.'],
 ]);
 
 test('a cloud owner alone on their team is told to delete it first', function () {
@@ -64,7 +64,7 @@ test('the only person on a self-hosted panel keeps their account, so the panel i
     $owner = User::factory()->create();
     accountClosingTeam($owner);
 
-    accountClosingAsk($owner)->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first. To remove the panel instead, run coresmith:uninstall on its server.']);
+    accountClosingAsk($owner)->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.']);
 
     expect(User::find($owner->id))->not->toBeNull();
 });
@@ -161,5 +161,5 @@ test('settings say what has to happen before the account can close', function (s
 })->with([
     'alone on cloud' => ['cloud', true, 'Delete Monoven from Settings, General first, then close your account.'],
     'another owner on cloud' => ['cloud', false, null],
-    'alone on a self-hosted panel' => ['self-hosted', true, 'Make someone else an owner of Monoven first. To remove the panel instead, run coresmith:uninstall on its server.'],
+    'alone on a self-hosted panel' => ['self-hosted', true, 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.'],
 ]);

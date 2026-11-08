@@ -15,7 +15,7 @@ final class HealthCommand extends Command
 {
     protected $signature = 'coresmith:health {--json : Print the result as JSON}';
 
-    protected $description = "Check this panel's database, migrations, cache, queue, Horizon, interface, storage and keys";
+    protected $description = "Check Coresmith's database, migrations, cache, queue, Horizon, interface, storage and keys";
 
     public function handle(PanelHealth $health): int
     {
@@ -38,7 +38,7 @@ final class HealthCommand extends Command
         }
 
         $this->newLine();
-        $this->line($ok ? 'The panel is healthy.' : 'The panel is not healthy. Fix the checks marked fail, then run this again.');
+        $this->line($ok ? 'Coresmith is healthy.' : 'Coresmith is not healthy. Fix the checks marked fail, then run this again.');
 
         return $ok ? self::SUCCESS : self::FAILURE;
     }

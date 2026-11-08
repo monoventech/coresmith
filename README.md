@@ -136,7 +136,7 @@ Until then nothing reaches anyone: inviting someone without an account gives you
 
 ### Updating
 
-Settings, General, **Panel updates** shows the version you run and any newer release with its notes. **Update now** builds the new release beside the running one, checks its signature, backs up, migrates, switches over and checks Coresmith is healthy; if any step fails it puts the previous release back on its own. Turn on **Install patch updates automatically** to have patch releases installed at 04:00.
+Settings, General, **Coresmith updates** shows the version you run and any newer release with its notes. **Update now** builds the new release beside the running one, checks its signature, backs up, migrates, switches over and checks Coresmith is healthy; if any step fails it puts the previous release back on its own. Turn on **Install patch updates automatically** to have patch releases installed at 04:00.
 
 From the shell:
 

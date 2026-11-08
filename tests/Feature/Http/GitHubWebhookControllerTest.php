@@ -313,7 +313,7 @@ test('an app that does not exist is not found', function (string $key) {
 test('the environment app answers at its own address only when configured', function () {
     githubHookPost(route('webhooks.github'), ['zen' => 'Keep it logically awesome.'], 'ping', 'env-secret')
         ->assertNotFound()
-        ->assertExactJson(['message' => 'This panel has no GitHub App.']);
+        ->assertExactJson(['message' => 'Coresmith has no GitHub App.']);
 
     githubHookConfigureEnv('env-secret');
 
@@ -754,7 +754,7 @@ test('a replayed delivery still counts as evidence that github reaches the panel
 
     expect(app(GitHubAppHealth::class)->mode(app(GitHubApps::class)->fromModel($githubApp)))
         ->instant->toBeTrue()
-        ->sentence->toBe('GitHub reached this panel just now.');
+        ->sentence->toBe('GitHub reached Coresmith just now.');
 });
 
 test('an uninstalled installation is forgotten', function () {

@@ -39,7 +39,7 @@
         twoFactorEnabled
             ? 'Sign-ins now ask for a code from your authenticator app as well as your password.'
             : verifying
-              ? 'Type the six-digit code your authenticator app shows for this panel.'
+              ? 'Type the six-digit code your authenticator app shows for Coresmith.'
               : 'Scan the code with an authenticator app, or type the setup key in by hand.'
     )
 

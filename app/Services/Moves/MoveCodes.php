@@ -58,13 +58,13 @@ final class MoveCodes
         $key = base64_decode((string) ($claims['key'] ?? ''), true);
 
         if ($key === false || strlen($key) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES || !is_string($claims['id'] ?? null) || !is_int($claims['until'] ?? null) || !is_string($claims['panel'] ?? null)) {
-            $this->refuse("That isn't a move code. Copy it again from Settings, General on your panel.");
+            $this->refuse("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
         }
 
         $until = CarbonImmutable::createFromTimestamp($claims['until']);
 
         if (!$until->isFuture()) {
-            $this->refuse('This move code has expired. Create a new one in Settings, General on your panel.');
+            $this->refuse('This move code has expired. Create a new one in Settings, General on your self-hosted Coresmith.');
         }
 
         return new MoveTarget($claims['id'], $key, $until, $claims['panel']);
@@ -76,14 +76,14 @@ final class MoveCodes
     private function claims(string $text): array
     {
         if (!str_starts_with($text, self::PREFIX)) {
-            $this->refuse("That isn't a move code. Copy it again from Settings, General on your panel.");
+            $this->refuse("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
         }
 
         $json = base64_decode(strtr(substr($text, strlen(self::PREFIX)), '-_', '+/'), true);
         $claims = $json === false ? null : json_decode($json, true);
 
         if (!is_array($claims) || ($claims['v'] ?? null) !== 1) {
-            $this->refuse("That isn't a move code. Copy it again from Settings, General on your panel.");
+            $this->refuse("That isn't a move code. Copy it again from Settings, General on your self-hosted Coresmith.");
         }
 
         return $claims;

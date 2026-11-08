@@ -2,7 +2,7 @@
     export const layout = {
         title: 'Create your account',
         mark: 'account',
-        description: 'A name, an email and a long password. The rest happens in the panel.'
+        description: 'A name, an email and a long password. The rest happens in Coresmith.'
     }
 </script>
 

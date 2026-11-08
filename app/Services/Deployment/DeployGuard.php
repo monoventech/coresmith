@@ -23,7 +23,7 @@ final class DeployGuard
         $team = $application->team;
 
         if ($team?->moving_at !== null) {
-            return 'This team is moving to your own panel, so Coresmith Cloud no longer deploys it.';
+            return 'This team is moving to self-hosted Coresmith, so Coresmith Cloud no longer deploys it.';
         }
 
         if ($application->server?->status === ServerStatus::Moving) {

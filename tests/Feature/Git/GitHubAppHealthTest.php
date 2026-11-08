@@ -126,7 +126,7 @@ test('a delivery received means webhooks work', function () {
 
     expect($mode->instant)->toBeTrue()
         ->and($mode->reason)->toBe('received')
-        ->and($mode->sentence)->toBe('GitHub reached this panel 3 minutes ago.');
+        ->and($mode->sentence)->toBe('GitHub reached Coresmith 3 minutes ago.');
 });
 
 test('a failure older than the last delivery received is already over', function () {
@@ -135,7 +135,7 @@ test('a failure older than the last delivery received is already over', function
     app(GitHubAppHealth::class)->checked($app, healthDelivery(502, 'Invalid HTTP Response: 502', '2026-10-18T13:30:00Z'));
 
     expect(healthMode($app)->instant)->toBeTrue()
-        ->and(healthMode($app)->sentence)->toBe('GitHub reached this panel 3 minutes ago.');
+        ->and(healthMode($app)->sentence)->toBe('GitHub reached Coresmith 3 minutes ago.');
 });
 
 test('a delivery received is the evidence named even when github logged a success too', function () {
@@ -143,7 +143,7 @@ test('a delivery received is the evidence named even when github logged a succes
     healthAt('2026-10-18 14:02:00', fn(GitHubAppHealth $health) => $health->received($app, 'push', 'delivery-1'));
     app(GitHubAppHealth::class)->checked($app, healthDelivery(200, 'OK', '2026-10-18T13:50:00Z'));
 
-    expect(healthMode($app)->sentence)->toBe('GitHub reached this panel 3 minutes ago.');
+    expect(healthMode($app)->sentence)->toBe('GitHub reached Coresmith 3 minutes ago.');
 });
 
 test('github\'s own log of a success is enough', function () {
@@ -154,7 +154,7 @@ test('github\'s own log of a success is enough', function () {
 
     expect($mode->instant)->toBeTrue()
         ->and($mode->reason)->toBe('received')
-        ->and($mode->sentence)->toBe('GitHub reached this panel 15 minutes ago.');
+        ->and($mode->sentence)->toBe('GitHub reached Coresmith 15 minutes ago.');
 });
 
 test('github\'s log counts a delivery answered with 200 to 399 as delivered', function (int $code, bool $instant) {
@@ -176,7 +176,7 @@ test('a delivery github logged a moment ahead of this panel\'s clock reads as ju
     $app = healthApp();
     app(GitHubAppHealth::class)->checked($app, healthDelivery(200, 'OK', '2026-10-18T14:05:04Z'));
 
-    expect(healthMode($app)->sentence)->toBe('GitHub reached this panel just now.');
+    expect(healthMode($app)->sentence)->toBe('GitHub reached Coresmith just now.');
 });
 
 test('a moved panel is told to point the webhook here', function () {
@@ -186,7 +186,7 @@ test('a moved panel is told to point the webhook here', function () {
 
     expect($mode->instant)->toBeFalse()
         ->and($mode->reason)->toBe('moved')
-        ->and($mode->sentence)->toBe('This panel\'s address changed after the GitHub app was created. Point its webhook here.');
+        ->and($mode->sentence)->toBe('Coresmith\'s address changed after the GitHub app was created. Point its webhook here.');
 });
 
 test('deliveries that arrive count for more than an address that moved', function (string $evidence) {
@@ -209,7 +209,7 @@ test('with no evidence at all the panel polls', function () {
 
     expect($mode->instant)->toBeFalse()
         ->and($mode->reason)->toBe('unproven')
-        ->and($mode->sentence)->toBe('No delivery from GitHub has reached this panel yet.');
+        ->and($mode->sentence)->toBe('No delivery from GitHub has reached Coresmith yet.');
 });
 
 test('the environment app is judged by its deliveries alone', function () {
@@ -223,12 +223,12 @@ test('the environment app is judged by its deliveries alone', function () {
     $health->checked($app, null);
 
     expect($health->mode($app)->reason)->toBe('unproven')
-        ->and($health->mode($app)->sentence)->toBe('No delivery from GitHub has reached this panel yet.');
+        ->and($health->mode($app)->sentence)->toBe('No delivery from GitHub has reached Coresmith yet.');
 
     healthAt('2026-10-18 14:02:00', fn(GitHubAppHealth $health) => $health->received($app, 'ping', 'delivery-1'));
 
     expect($health->mode($app)->instant)->toBeTrue()
-        ->and($health->mode($app)->sentence)->toBe('GitHub reached this panel 3 minutes ago.');
+        ->and($health->mode($app)->sentence)->toBe('GitHub reached Coresmith 3 minutes ago.');
 
     $health->checked($app, healthDelivery(500, 'Invalid HTTP Response: 500', '2026-10-18T14:04:00Z'));
 
@@ -310,7 +310,7 @@ test('evidence the cache cannot read is no evidence at all', function (mixed $ga
 
     $health->received($app, 'push', 'delivery-1');
 
-    expect($health->mode($app)->sentence)->toBe('GitHub reached this panel just now.');
+    expect($health->mode($app)->sentence)->toBe('GitHub reached Coresmith just now.');
 })->with([
     'a string' => ['nonsense'],
     'times that are not times' => [['received_at' => 'yesterday', 'latest' => ['status_code' => 500, 'status' => 'x', 'delivered_at' => 'today']]],

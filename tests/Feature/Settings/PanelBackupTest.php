@@ -222,7 +222,7 @@ test('a failed dump is reported with the tools error and leaves no working files
 test('a panel on an unsupported database refuses to back up', function () {
     backupUseExternalDatabase('sqlsrv');
 
-    expect(fn() => app(PanelBackup::class)->run())->toThrow(RuntimeException::class, 'Backups support SQLite, PostgreSQL and MySQL panels.');
+    expect(fn() => app(PanelBackup::class)->run())->toThrow(RuntimeException::class, 'Backups support Coresmith on SQLite, PostgreSQL and MySQL.');
 
     expect(File::directories(backupDirectory()))->toBe([]);
 });

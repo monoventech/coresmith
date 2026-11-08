@@ -162,6 +162,6 @@ test('a self-hosted panel has nothing to give', function () {
     freePlanTeam();
 
     $this->artisan('coresmith:free-plan', ['team' => 'acme', '--plan' => 'pro'])
-        ->expectsOutput('Free plans are part of Coresmith Cloud. A self-hosted panel has every feature already.')
+        ->expectsOutput('Free plans are part of Coresmith Cloud. Self-hosted Coresmith has every feature already.')
         ->assertFailed();
 });

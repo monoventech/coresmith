@@ -264,7 +264,7 @@ test('the command says what it found', function () {
     updatesFeed(['latest' => '1.0.2', 'changelog_url' => 'https://github.com/monoven/coresmith/releases/tag/v1.0.2']);
 
     $this->artisan('coresmith:check-update')
-        ->expectsOutput('Coresmith v1.0.2 is available. This panel runs v1.0.1.')
+        ->expectsOutput("Coresmith v1.0.2 is available. You're running v1.0.1.")
         ->expectsOutput('Release notes: https://github.com/monoven/coresmith/releases/tag/v1.0.2')
         ->assertExitCode(0);
 
