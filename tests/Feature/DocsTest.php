@@ -75,6 +75,6 @@ test('an example environment with the github app settings left empty configures 
     expect(app(GitHubApps::class)->env())->toBeNull();
 });
 
-test("the readme says apps go on servers other than the panel's own", function () {
-    expect(docsReadme())->toContain("Run the panel on a server of its own. Coresmith can't provision the server the panel runs on, so add other servers for your apps.");
+test("the readme says apps go on servers other than coresmith's own", function () {
+    expect(docsReadme())->toContain("Give Coresmith a server of its own. It can't provision the server it runs on, so add other servers for your apps.");
 });
