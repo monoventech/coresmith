@@ -29,6 +29,11 @@ final class SSHConnectionManager
         return $this->connections[$server->getKey()] ??= new SSHConnection($server, $this->makeTransport());
     }
 
+    public function fresh(Server $server): SSHConnection
+    {
+        return new SSHConnection($server, $this->makeTransport());
+    }
+
     public function probe(Server $server, #[\SensitiveParameter] string $privateKey): SSHConnection
     {
         $copy = clone $server;

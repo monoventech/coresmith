@@ -65,8 +65,6 @@ final class SetupController extends Controller
             'server' => $server instanceof Server ? [
                 ...$servers->header($server, $user),
                 'href' => route('servers.show', $server),
-                'test_href' => route('servers.test-connection', $server),
-                'provision_href' => route('servers.provision', $server),
             ] : null,
             'application' => $application instanceof Application ? [
                 'id' => $application->id,

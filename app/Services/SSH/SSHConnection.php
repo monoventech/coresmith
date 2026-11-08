@@ -12,6 +12,7 @@ use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\ServerHasNoAddress;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandTimedOut;
+use App\Exceptions\SSHPasswordRefused;
 use App\Models\Server;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -52,13 +53,7 @@ final class SSHConnection
             return $this;
         }
 
-        if ($this->server->ip_address === null) {
-            throw ServerHasNoAddress::forServer($this->server);
-        }
-
-        $this->transport->connect($this->server->ip_address, $this->server->ssh_port, self::TIMEOUT_SECONDS);
-
-        $this->verifyHostKey();
+        $this->open();
 
         $key = PublicKeyLoader::load($this->server->ssh_private_key);
 
@@ -75,34 +70,32 @@ final class SSHConnection
         return $this;
     }
 
-    public function execute(string $command, bool $sudo = false, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
+    public function signInWithPassword(string $user, #[\SensitiveParameter] string $password): static
     {
-        $command = $this->prepare($command, $sudo);
+        $this->open();
 
-        try {
-            $output = $this->connect()->transport->exec($command, null, $timeout);
-        } catch (ConnectionClosedException $e) {
-            $this->authenticated = false;
-
-            throw $e;
+        if (!$this->transport->loginWithPassword($user, $password)) {
+            throw SSHPasswordRefused::forUser((string) $this->server->ip_address, $user, $this->transport->acceptsPasswords());
         }
 
-        return $this->conclude($command, $output, $timeout);
+        $this->authenticated = true;
+
+        return $this;
+    }
+
+    public function execute(string $command, bool $sudo = false, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
+    {
+        return $this->run($this->prepare($command, $sudo), $timeout);
     }
 
     public function stream(string $command, callable $onOutput, bool $sudo = false, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
     {
-        $command = $this->prepare($command, $sudo);
+        return $this->run($this->prepare($command, $sudo), $timeout, $onOutput);
+    }
 
-        try {
-            $output = $this->connect()->transport->exec($command, $onOutput, $timeout);
-        } catch (ConnectionClosedException $e) {
-            $this->authenticated = false;
-
-            throw $e;
-        }
-
-        return $this->conclude($command, $output, $timeout);
+    public function executeWithInput(string $command, #[\SensitiveParameter] string $input, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
+    {
+        return $this->run($command, $timeout, input: $input);
     }
 
     public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath, int $timeout = SSHTransport::COMMAND_SECONDS): void
@@ -146,6 +139,33 @@ final class SSHConnection
     {
         $this->transport->disconnect();
         $this->authenticated = false;
+    }
+
+    private function open(): void
+    {
+        if ($this->server->ip_address === null) {
+            throw ServerHasNoAddress::forServer($this->server);
+        }
+
+        $this->transport->connect($this->server->ip_address, $this->server->ssh_port, self::TIMEOUT_SECONDS);
+
+        $this->verifyHostKey();
+    }
+
+    private function run(string $command, int $timeout, ?callable $onOutput = null, #[\SensitiveParameter] ?string $input = null): SSHResult
+    {
+        try {
+            $transport = $this->connect()->transport;
+            $output = $input === null
+                ? $transport->exec($command, $onOutput, $timeout)
+                : $transport->execWithInput($command, $input, $timeout);
+        } catch (ConnectionClosedException $e) {
+            $this->authenticated = false;
+
+            throw $e;
+        }
+
+        return $this->conclude($command, $output, $timeout);
     }
 
     private function verifyHostKey(): void

@@ -85,7 +85,22 @@ function reachabilityStalled(string $message): SSHTransport
             return true;
         }
 
+        public function loginWithPassword(string $user, string $password): bool
+        {
+            return false;
+        }
+
+        public function acceptsPasswords(): bool
+        {
+            return false;
+        }
+
         public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
+        {
+            return '';
+        }
+
+        public function execWithInput(string $command, string $input, int $timeout = self::COMMAND_SECONDS): string
         {
             return '';
         }
