@@ -40,7 +40,7 @@ function uninstallerTree(): string
         'root/.keep' => '',
     ];
 
-    foreach (['coresmith-horizon.service', 'coresmith-reverb.service', 'coresmith-scheduler.service', 'coresmith-scheduler.timer', 'coresmith-update.service', 'coresmith-update.path'] as $unit) {
+    foreach (['coresmith-horizon.service', 'coresmith-reverb.service', 'coresmith-scheduler.service', 'coresmith-scheduler.timer', 'coresmith-update.service', 'coresmith-update.path', 'coresmith-address.service', 'coresmith-address.path'] as $unit) {
         $files["etc/systemd/system/{$unit}"] = "[Unit]\n";
     }
 
@@ -156,6 +156,8 @@ test('everything the installer creates, the uninstaller removes', function () {
         'coresmith-scheduler.timer' => 'coresmith-scheduler.timer',
         'coresmith-update.service' => 'coresmith-update.service',
         'coresmith-update.path' => 'coresmith-update.path',
+        'coresmith-address.service' => 'coresmith-address.service',
+        'coresmith-address.path' => 'coresmith-address.path',
         'caddy.service.d/coresmith.conf' => 'caddy.service.d/coresmith.conf',
         '/etc/caddy/coresmith' => '/etc/caddy/coresmith',
         '/etc/caddy/panel.caddy' => '/etc/caddy/panel.caddy',
@@ -216,6 +218,7 @@ test('the uninstaller removes the panel and keeps a copy of its data', function 
         'etc/fail2ban/filter.d/coresmith-login.conf', 'var/log/coresmith-horizon.log', 'var/log/coresmith-install.log',
         'etc/systemd/system/coresmith-horizon.service', 'etc/systemd/system/coresmith-reverb.service', 'etc/systemd/system/coresmith-scheduler.service',
         'etc/systemd/system/coresmith-scheduler.timer', 'etc/systemd/system/coresmith-update.service', 'etc/systemd/system/coresmith-update.path',
+        'etc/systemd/system/coresmith-address.service', 'etc/systemd/system/coresmith-address.path',
     ] as $path) {
         expect(file_exists("{$base}/{$path}"))->toBeFalse("{$path} is still there");
     }

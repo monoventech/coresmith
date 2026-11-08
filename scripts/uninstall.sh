@@ -23,7 +23,7 @@ FAIL2BAN_FILTER="/etc/fail2ban/filter.d/coresmith-login.conf"
 LOGS="/var/log/coresmith-*.log"
 SAVE_ROOT="/root"
 DEFAULT_REPOSITORY="https://github.com/monoventech/coresmith.git"
-UNITS="coresmith-update.path coresmith-update.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service"
+UNITS="coresmith-update.path coresmith-update.service coresmith-address.path coresmith-address.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service"
 
 YES=false
 PURGE=false

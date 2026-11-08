@@ -2,13 +2,15 @@
 
 declare(strict_types=1);
 
-use App\Jobs\ChangeAddress;
 use App\Services\Address\AddressChange;
+use App\Services\Address\AddressRequest;
+use App\Services\Address\AddressSwitch;
 use App\Services\Address\CaddyAdmin;
 use App\Services\Address\CertificateProbe;
 use App\Services\Address\CertificateSource;
 use App\Services\Address\EnvironmentFile;
 use App\Services\Address\SiteFile;
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -65,6 +67,7 @@ function changeAddressMachine(int $refusals = 0, int $certificateAfter = 0): arr
         'coresmith.address.site' => "{$directory}/panel.caddy",
         'coresmith.address.apps_config' => "{$directory}/caddy-config.json",
         'coresmith.address.tailscaled_defaults' => "{$directory}/tailscaled",
+        'coresmith.address.state_path' => $directory,
     ]);
 
     $caddy = new ChangeAddressCaddy("{$directory}/panel.caddy", $refusals);
@@ -79,7 +82,7 @@ function changeAddressMachine(int $refusals = 0, int $certificateAfter = 0): arr
 function changeAddressTo(string $host): void
 {
     AddressChange::begin('192.168.0.248', $host);
-    app()->call([new ChangeAddress($host), 'handle']);
+    app(AddressSwitch::class)->run($host);
 }
 
 beforeEach(function () {
@@ -87,7 +90,16 @@ beforeEach(function () {
     File::ensureDirectoryExists($this->addressDirectory);
     Process::preventStrayProcesses();
     Sleep::fake();
-    Artisan::spy();
+
+    $this->artisanCalls = [];
+    $kernel = app(Kernel::class);
+    $proxy = Mockery::mock($kernel);
+    $proxy->shouldReceive('call')->andReturnUsing(function (string $command, mixed ...$rest) use ($kernel) {
+        $this->artisanCalls[] = $command;
+
+        return in_array($command, ['horizon:terminate', 'reverb:restart'], true) ? 0 : $kernel->call($command, ...$rest);
+    });
+    Artisan::swap($proxy);
 });
 
 afterEach(fn() => File::deleteDirectory($this->addressDirectory));
@@ -128,8 +140,7 @@ test('the background services restart so they pick the new address up', function
 
     changeAddressTo('coresmith.example.com');
 
-    Artisan::shouldHaveReceived('call')->with('horizon:terminate')->once();
-    Artisan::shouldHaveReceived('call')->with('reverb:restart')->once();
+    expect($this->artisanCalls)->toBe(['horizon:terminate', 'reverb:restart']);
 });
 
 test('a certificate that never comes leaves everything on the old address and says why', function () {
@@ -233,11 +244,66 @@ test('a ready tailscale name goes live with the certificate tailscale issues', f
         ->and(AddressChange::current()['state'])->toBe('done');
 });
 
-test('a switch that dies part way says so, so the page stops waiting', function () {
-    changeAddressMachine();
-    AddressChange::begin('192.168.0.248', 'coresmith.example.com');
+test('an environment file that cannot be written leaves the old address in place', function () {
+    [$directory, $caddy] = changeAddressMachine();
+    File::ensureDirectoryExists("{$directory}/shared");
+    file_put_contents("{$directory}/shared/.env", "APP_URL=https://192.168.0.248\n");
+    app()->instance(EnvironmentFile::class, new EnvironmentFile("{$directory}/shared/.env"));
+    chmod("{$directory}/shared", 0555);
 
-    (new ChangeAddress('coresmith.example.com'))->failed(new RuntimeException('Killed'));
+    try {
+        changeAddressTo('coresmith.example.com');
+    } finally {
+        chmod("{$directory}/shared", 0755);
+    }
+
+    expect($caddy->loaded)->toHaveCount(2)
+        ->and($caddy->loaded[1])->toBe(app(SiteFile::class)->render(['192.168.0.248']))
+        ->and(file_get_contents("{$directory}/shared/.env"))->toBe("APP_URL=https://192.168.0.248\n")
+        ->and(AddressChange::current()['state'])->toBe('failed')
+        ->and(AddressChange::current()['error'])->toStartWith("Coresmith couldn't update " . realpath("{$directory}/shared") . '/.env: ');
+});
+
+test('the command moves coresmith to the address asked for, once', function () {
+    [$directory, $caddy] = changeAddressMachine();
+    AddressChange::begin('192.168.0.248', 'coresmith.example.com');
+    AddressRequest::submit('coresmith.example.com');
+    rename(AddressRequest::file(), AddressRequest::takenFile());
+
+    $this->artisan('coresmith:address')->expectsOutput('Coresmith now answers on coresmith.example.com.')->assertSuccessful();
+
+    expect(AddressChange::current()['state'])->toBe('done')
+        ->and(file_exists(AddressRequest::takenFile()))->toBeFalse()
+        ->and($caddy->loaded)->toHaveCount(2);
+
+    $this->artisan('coresmith:address')->expectsOutput('No address change was requested.')->assertSuccessful();
+
+    expect($caddy->loaded)->toHaveCount(2);
+});
+
+test('the command says why a move failed and exits with an error', function () {
+    changeAddressMachine(certificateAfter: PHP_INT_MAX);
+    AddressChange::begin('192.168.0.248', 'coresmith.example.com');
+    AddressRequest::submit('coresmith.example.com');
+
+    $this->artisan('coresmith:address')
+        ->expectsOutput('No certificate for coresmith.example.com after 3 minutes. Check that it points at this server and that ports 80 and 443 reach this server from the internet, then try again.')
+        ->assertFailed();
+});
+
+test('a move that stops part way says so, so the page stops waiting', function () {
+    changeAddressMachine();
+    app()->instance(CaddyAdmin::class, new class implements CaddyAdmin
+    {
+        public function reload(): void
+        {
+            throw new LogicException('A bug, not a refusal.');
+        }
+    });
+    AddressChange::begin('192.168.0.248', 'coresmith.example.com');
+    AddressRequest::submit('coresmith.example.com');
+
+    $this->artisan('coresmith:address')->assertFailed();
 
     expect(AddressChange::current())->toMatchArray([
         'state' => 'failed',

@@ -8,8 +8,6 @@ declare(strict_types=1);
 
 namespace App\Services\Address;
 
-use RuntimeException;
-
 final class SiteFile
 {
     /**
@@ -35,12 +33,7 @@ final class SiteFile
     public function write(array $addresses, array $redirects = []): void
     {
         $path = (string) config('coresmith.address.site');
-        $temporary = dirname($path) . '/.' . basename($path) . '.' . bin2hex(random_bytes(4));
 
-        if (file_put_contents($temporary, $this->render($addresses, $redirects)) === false || !chmod($temporary, 0640) || !rename($temporary, $path)) {
-            @unlink($temporary);
-
-            throw new RuntimeException("Coresmith couldn't write its Caddy site at {$path}.");
-        }
+        AtomicFile::write($path, $this->render($addresses, $redirects), 0640, "Coresmith couldn't write its Caddy site at {$path}");
     }
 }

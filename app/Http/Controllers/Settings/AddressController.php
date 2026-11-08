@@ -9,12 +9,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ChangeAddress;
 use App\Services\Address\AddressChange;
+use App\Services\Address\AddressRequest;
 use App\Services\Address\InstallationAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 final class AddressController extends Controller
 {
@@ -34,7 +35,14 @@ final class AddressController extends Controller
         $from = $address->host();
 
         AddressChange::begin($from, $host);
-        ChangeAddress::dispatch($host);
+
+        try {
+            AddressRequest::submit($host);
+        } catch (RuntimeException $unasked) {
+            AddressChange::fail($unasked->getMessage());
+
+            throw ValidationException::withMessages(['address' => $unasked->getMessage()]);
+        }
 
         return back()->with('success', "Switching to {$host}. Coresmith keeps answering on {$from} until the certificate is ready.");
     }

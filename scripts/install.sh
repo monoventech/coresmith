@@ -37,6 +37,7 @@ readonly SHARED_DIR="$CORESMITH_ROOT/shared"
 readonly INSTALL_DIR="$CORESMITH_ROOT/app"
 readonly DATA_DIR="/var/lib/coresmith"
 readonly UPDATES_DIR="$DATA_DIR/updates"
+readonly ADDRESS_DIR="$DATA_DIR/address"
 readonly APPS_DIR="/var/coresmith"
 readonly CONFIG_DIR="/etc/coresmith"
 readonly CADDY_SITE_DIR="/etc/caddy/coresmith"
@@ -331,7 +332,7 @@ refuse_link() {
 }
 
 refuse_linked_layout() {
-    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$SHARED_DIR/.env" "$UPDATES_DIR" "$DATA_DIR/database.sqlite" "$SETUP_TOKEN_FILE"
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$SHARED_DIR/.env" "$UPDATES_DIR" "$ADDRESS_DIR" "$DATA_DIR/database.sqlite" "$SETUP_TOKEN_FILE"
 }
 
 trust_repository() {
@@ -673,14 +674,14 @@ create_user_and_dirs() {
     id coresmith >/dev/null 2>&1 ||
         useradd --system --shell /bin/bash --home-dir /opt/coresmith --create-home coresmith
 
-    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"
-    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
+    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$ADDRESS_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
         "$CONFIG_DIR"/env "$CONFIG_DIR"/deploy-keys /etc/caddy /var/log/caddy
 
     chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"
-    chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"
+    chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
     chmod 700 "$DATA_DIR"
-    chmod 700 "$UPDATES_DIR"
+    chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"
     chmod 755 "$APPS_DIR"
 
     # Application environment files and deploy keys are root-only.
@@ -1066,6 +1067,38 @@ Unit=coresmith-update.service
 WantedBy=multi-user.target
 UNIT
 
+    cat >/etc/systemd/system/coresmith-address.service <<UNIT
+[Unit]
+Description=Coresmith address change, started from Settings
+After=network-online.target redis-server.service caddy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=coresmith
+Group=coresmith
+WorkingDirectory=${INSTALL_DIR}
+ExecStartPre=-/bin/mv -f ${ADDRESS_DIR}/request.json ${ADDRESS_DIR}/request.taken.json
+ExecStart=/usr/bin/php artisan coresmith:address --no-interaction
+TimeoutStartSec=10min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=${CADDY_SITE_DIR}
+UNIT
+
+    cat >/etc/systemd/system/coresmith-address.path <<UNIT
+[Unit]
+Description=Change Coresmith's address when one is requested
+
+[Path]
+PathExists=${ADDRESS_DIR}/request.json
+Unit=coresmith-address.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
     systemctl daemon-reload
     success "Systemd services created"
 }
@@ -1163,6 +1196,7 @@ finalize() {
     run systemctl restart coresmith-reverb
     run systemctl enable --now coresmith-scheduler.timer
     run systemctl enable --now coresmith-update.path
+    run systemctl enable --now coresmith-address.path
 
     configure_firewall
     configure_fail2ban

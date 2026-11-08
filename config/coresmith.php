@@ -84,6 +84,7 @@ return [
         'caddyfile' => '/etc/caddy/Caddyfile',
         'apps_config' => '/etc/caddy/caddy-config.json',
         'tailscaled_defaults' => '/etc/default/tailscaled',
+        'state_path' => env('CORESMITH_ADDRESS_STATE_PATH', '/var/lib/coresmith/address'),
     ],
 
     'live' => [

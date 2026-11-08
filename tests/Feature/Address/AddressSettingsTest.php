@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 use App\Enums\Plan;
 use App\Enums\TeamRole;
-use App\Jobs\ChangeAddress;
 use App\Models\GitHubApp;
 use App\Models\Team;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Services\Address\AddressChange;
+use App\Services\Address\AddressRequest;
 use App\Services\Network\AddressResolver;
 use App\Services\Network\LocalAddresses;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\File;
 use Inertia\Testing\AssertableInertia;
 use Tests\Support\CloudBilling;
 
@@ -47,9 +47,16 @@ function addressSettingsResolving(array $addresses): void
 }
 
 beforeEach(function () {
-    Queue::fake();
-    config(['app.url' => 'https://192.168.0.248', 'coresmith.address.site' => '/etc/caddy/coresmith/panel.caddy']);
+    $this->addressState = sys_get_temp_dir() . '/coresmith-address-state-' . bin2hex(random_bytes(4));
+    File::ensureDirectoryExists($this->addressState);
+    config([
+        'app.url' => 'https://192.168.0.248',
+        'coresmith.address.site' => '/etc/caddy/coresmith/panel.caddy',
+        'coresmith.address.state_path' => $this->addressState,
+    ]);
 });
+
+afterEach(fn() => File::deleteDirectory($this->addressState));
 
 test('an owner moves coresmith to a new address, which the old one answers on until it is ready', function () {
     addressSettingsResolving(['93.184.215.14']);
@@ -60,9 +67,8 @@ test('an owner moves coresmith to a new address, which the old one answers on un
         ->assertRedirect(route('settings.general'))
         ->assertSessionHas('success', 'Switching to coresmith.example.com. Coresmith keeps answering on 192.168.0.248 until the certificate is ready.');
 
-    expect(AddressChange::current())->toMatchArray(['state' => 'running', 'from' => '192.168.0.248', 'to' => 'coresmith.example.com']);
-
-    Queue::assertPushed(ChangeAddress::class, fn(ChangeAddress $job): bool => $job->host === 'coresmith.example.com');
+    expect(AddressChange::current())->toMatchArray(['state' => 'running', 'from' => '192.168.0.248', 'to' => 'coresmith.example.com'])
+        ->and(json_decode((string) file_get_contents(AddressRequest::file()), true)['host'])->toBe('coresmith.example.com');
 });
 
 test('an address that would not work is refused next to the field, and nothing starts', function () {
@@ -74,7 +80,7 @@ test('an address that would not work is refused next to the field, and nothing s
 
     expect(AddressChange::current())->toBeNull();
 
-    Queue::assertNothingPushed();
+    expect(file_exists(AddressRequest::file()))->toBeFalse();
 });
 
 test('an install from before Coresmith could change its address says to run the installer', function () {
@@ -85,7 +91,7 @@ test('an install from before Coresmith could change its address says to run the 
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
         ->assertSessionHasErrors(['address' => "This install can't change its address from here yet. Run the installer again with --domain coresmith.example.com."]);
 
-    Queue::assertNothingPushed();
+    expect(file_exists(AddressRequest::file()))->toBeFalse();
 });
 
 test('a change already under way is not started twice', function () {
@@ -96,7 +102,23 @@ test('a change already under way is not started twice', function () {
         ->put(route('settings.address.update'), ['address' => 'other.example.com'])
         ->assertSessionHasErrors(['address' => 'Coresmith is already changing its address. Wait for it to finish.']);
 
-    Queue::assertNothingPushed();
+    expect(file_exists(AddressRequest::file()))->toBeFalse();
+});
+
+test('a request coresmith cannot write fails at once and says why', function () {
+    addressSettingsResolving(['93.184.215.14']);
+    chmod($this->addressState, 0555);
+
+    try {
+        $this->actingAs(addressSettingsUser())
+            ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
+            ->assertSessionHasErrors('address');
+    } finally {
+        chmod($this->addressState, 0755);
+    }
+
+    expect(AddressChange::current()['state'])->toBe('failed')
+        ->and(AddressChange::current()['error'])->toStartWith("Coresmith couldn't ask for the change: ");
 });
 
 test('only an owner of a team here may change the address', function () {
@@ -106,7 +128,7 @@ test('only an owner of a team here may change the address', function () {
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
         ->assertForbidden();
 
-    Queue::assertNothingPushed();
+    expect(file_exists(AddressRequest::file()))->toBeFalse();
 });
 
 test('coresmith cloud has no address to change, even for an owner on a paid plan', function () {
@@ -118,7 +140,7 @@ test('coresmith cloud has no address to change, even for an owner on a paid plan
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
         ->assertForbidden();
 
-    Queue::assertNothingPushed();
+    expect(file_exists(AddressRequest::file()))->toBeFalse();
 });
 
 test('the settings page shows the address, its certificate and whether it can change here', function () {

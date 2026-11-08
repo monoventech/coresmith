@@ -520,6 +520,27 @@ test('the installer fills the template with the address and no other site', func
         ->and($site)->toEndWith("    }\n}\n");
 });
 
+test('an address change runs in its own service that may write only the caddy site', function () {
+    $body = installScriptBody();
+    $unit = str($body)->after("cat >/etc/systemd/system/coresmith-address.service <<UNIT\n")->before("\nUNIT\n")->toString();
+
+    expect($unit)->toContain("Type=oneshot\nUser=coresmith\nGroup=coresmith\n")
+        ->and($unit)->toContain('ExecStartPre=-/bin/mv -f ${ADDRESS_DIR}/request.json ${ADDRESS_DIR}/request.taken.json')
+        ->and($unit)->toContain('ExecStart=/usr/bin/php artisan coresmith:address --no-interaction')
+        ->and($unit)->toContain("NoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nReadWritePaths=\${CADDY_SITE_DIR}")
+        ->and($body)->toContain("[Path]\nPathExists=\${ADDRESS_DIR}/request.json\nUnit=coresmith-address.service")
+        ->and($body)->toContain('run systemctl enable --now coresmith-address.path')
+        ->and($body)->toContain('chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"');
+});
+
+test('the address requests the installer watches are where coresmith writes them', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
+        ->and($body)->toContain('readonly ADDRESS_DIR="$DATA_DIR/address"')
+        ->and((require config_path('coresmith.php'))['address']['state_path'])->toBe('/var/lib/coresmith/address');
+});
+
 test('failed jobs and batches live on a connection the installer migrates', function () {
     $body = installScriptBody();
     $queue = (string) file_get_contents(base_path('config/queue.php'));
@@ -1102,7 +1123,7 @@ test('a fetched release whose VERSION cannot name it is removed again before the
 function installScriptLinkedLayout(string $base): string
 {
     return 'CORESMITH_ROOT=' . escapeshellarg("{$base}/opt/coresmith") . '; DATA_DIR=' . escapeshellarg("{$base}/var/lib/coresmith") . '; APPS_DIR=' . escapeshellarg("{$base}/var/coresmith") . '; CONFIG_DIR=' . escapeshellarg("{$base}/etc/coresmith") . "\n"
-        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; UPDATES_DIR="$DATA_DIR/updates"; SETUP_TOKEN_FILE="$DATA_DIR/setup-token"' . "\n";
+        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; UPDATES_DIR="$DATA_DIR/updates"; ADDRESS_DIR="$DATA_DIR/address"; SETUP_TOKEN_FILE="$DATA_DIR/setup-token"' . "\n";
 }
 
 test('a link where the installer changes things as root stops it before anything changes', function (string $path) {
@@ -1123,6 +1144,7 @@ test('a link where the installer changes things as root stops it before anything
     'shared' => ['opt/coresmith/shared'],
     'the environment file' => ['opt/coresmith/shared/.env'],
     'updates' => ['var/lib/coresmith/updates'],
+    'address requests' => ['var/lib/coresmith/address'],
     'the database' => ['var/lib/coresmith/database.sqlite'],
     'the setup token' => ['var/lib/coresmith/setup-token'],
 ]);
@@ -1202,8 +1224,8 @@ test('the environment is replaced by a file written beside it, never rewritten i
 test('root changes owners and modes only on paths it has just checked are not links', function () {
     foreach ([
         ['adopt_legacy_layout', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR"', 'chown coresmith:coresmith "$RELEASES_DIR" "$SHARED_DIR"'],
-        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"', 'chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"'],
-        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"', 'chmod 700 "$UPDATES_DIR"'],
+        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"', 'chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"'],
+        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"', 'chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"'],
         ['configure_environment', 'refuse_link "$DATA_DIR/database.sqlite"', 'chown coresmith:coresmith "$DATA_DIR/database.sqlite"'],
         ['configure_environment', 'refuse_link "$SHARED_DIR/.env"', 'chown coresmith:coresmith "$SHARED_DIR/.env"'],
         ['finalize', 'refuse_link "$SETUP_TOKEN_FILE"', 'install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"'],

@@ -53,6 +53,34 @@ test('the site file is replaced whole, readable by caddy and nobody else', funct
     }
 });
 
+test('a site file that cannot be written says where and why', function () {
+    $directory = siteFileTemp();
+    chmod($directory, 0555);
+    config(['coresmith.address.site' => "{$directory}/panel.caddy"]);
+
+    try {
+        expect(fn() => app(SiteFile::class)->write(['coresmith.example.com']))
+            ->toThrow(RuntimeException::class, "Coresmith couldn't write its Caddy site at {$directory}/panel.caddy: ");
+    } finally {
+        chmod($directory, 0755);
+        File::deleteDirectory($directory);
+    }
+});
+
+test('an environment file that cannot be written says where and why', function () {
+    $directory = siteFileTemp();
+    file_put_contents("{$directory}/.env", "APP_URL=https://192.168.0.248\n");
+    chmod($directory, 0555);
+
+    try {
+        expect(fn() => (new EnvironmentFile("{$directory}/.env"))->set(['APP_URL' => 'https://coresmith.example.com']))
+            ->toThrow(RuntimeException::class, "Coresmith couldn't update " . realpath($directory) . '/.env: ');
+    } finally {
+        chmod($directory, 0755);
+        File::deleteDirectory($directory);
+    }
+});
+
 test('the environment file keeps everything it does not change, through the link releases use', function () {
     $directory = siteFileTemp();
     file_put_contents("{$directory}/shared.env", "APP_NAME=Coresmith\nAPP_URL=https://192.168.0.248\nREVERB_APP_SECRET=\"keep me\"\n");

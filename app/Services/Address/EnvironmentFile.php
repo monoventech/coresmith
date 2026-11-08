@@ -9,7 +9,6 @@ declare(strict_types=1);
 namespace App\Services\Address;
 
 use InvalidArgumentException;
-use RuntimeException;
 
 final class EnvironmentFile
 {
@@ -40,13 +39,6 @@ final class EnvironmentFile
                 : rtrim($contents, "\n") . "\n{$key}={$value}\n";
         }
 
-        $mode = fileperms($target) & 0777;
-        $temporary = dirname($target) . '/.' . basename($target) . '.' . bin2hex(random_bytes(4));
-
-        if (file_put_contents($temporary, $contents) === false || !chmod($temporary, $mode) || !rename($temporary, $target)) {
-            @unlink($temporary);
-
-            throw new RuntimeException("Coresmith couldn't update {$target}.");
-        }
+        AtomicFile::write($target, $contents, fileperms($target) & 0777, "Coresmith couldn't update {$target}");
     }
 }
