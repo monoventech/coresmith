@@ -1,4 +1,4 @@
-import { asGuest, expect, own, PASSWORD, toast } from './support/fixtures'
+import { asGuest, expect, NARROW_PHONE, own, PASSWORD, toast } from './support/fixtures'
 
 const OWNER = 'owner@coresmith.test'
 
@@ -7,6 +7,29 @@ asGuest.describe('signing in', () => {
         await page.goto('/dashboard')
 
         await expect(page).toHaveURL(/\/login$/)
+    })
+
+    asGuest('the single sign-on link never breaks across lines on a phone', async ({ page }) => {
+        const link = page.getByRole('link', { name: 'Use single sign-on' })
+
+        for (const width of [NARROW_PHONE.width, 320, 360, 393, 414]) {
+            await page.setViewportSize({ width, height: 800 })
+            await page.goto('/login')
+            await expect(link).toBeVisible()
+
+            const lines = await link.evaluate((element) => {
+                const text = document.createRange()
+                text.selectNodeContents(element)
+
+                return new Set(
+                    Array.from(text.getClientRects())
+                        .filter((rect) => rect.width > 0 && rect.height > 0)
+                        .map((rect) => Math.round(rect.top))
+                ).size
+            })
+
+            expect(lines, `at ${width}px`).toBe(1)
+        }
     })
 
     asGuest('the sign in page carries the wordmark, the form and the Monoven mark', async ({ page }) => {

@@ -97,8 +97,10 @@
 
             {#if !sso.start && sso.lookup}
                 <p class="m-0 text-[13px] text-muted-foreground">
-                    Signing in through your company? <TextLink href={route('sso')} data-test="sso-lookup-link"
-                        >Use single sign-on</TextLink
+                    Signing in through your company? <TextLink
+                        href={route('sso')}
+                        class="whitespace-nowrap"
+                        data-test="sso-lookup-link">Use single sign-on</TextLink
                     >
                 </p>
             {/if}

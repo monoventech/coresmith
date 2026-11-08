@@ -65,7 +65,14 @@ test.describe('the fleet', () => {
             const text = document.createRange()
             text.selectNodeContents(label)
 
-            return { lines: text.getClientRects().length, overflow: element.scrollWidth - element.clientWidth }
+            return {
+                lines: new Set(
+                    Array.from(text.getClientRects())
+                        .filter((rect) => rect.width > 0 && rect.height > 0)
+                        .map((rect) => Math.round(rect.top))
+                ).size,
+                overflow: element.scrollWidth - element.clientWidth
+            }
         })
 
         expect(layout).toEqual({ lines: 1, overflow: 0 })
