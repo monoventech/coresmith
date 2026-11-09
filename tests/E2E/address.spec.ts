@@ -1,5 +1,14 @@
 import type { Locator, Page } from '@playwright/test'
-import { asMember, blockingViolations, dialog, expect, gotoSettings, test, useTheme } from './support/fixtures'
+import {
+    asMember,
+    blockingViolations,
+    dialog,
+    expect,
+    gotoSettings,
+    test,
+    useTheme,
+    withProps
+} from './support/fixtures'
 
 const MOVED = {
     host: 'coresmith.example.com',
@@ -23,18 +32,8 @@ function card(page: Page): Locator {
 }
 
 async function settingsShowing(page: Page, address: Record<string, unknown>) {
-    await page.route(/\/settings$/, async (route) => {
-        if (route.request().headers()['x-inertia'] === undefined) {
-            await route.continue()
-
-            return
-        }
-
-        const response = await route.fetch()
-        const body = await response.json()
-
-        body.props.address = { ...body.props.address, ...address }
-        await route.fulfill({ response, json: body })
+    await withProps(page, /\/settings$/, (props) => {
+        props.address = { ...(props.address as Record<string, unknown>), ...address }
     })
     await gotoSettings(page, 'General')
 }

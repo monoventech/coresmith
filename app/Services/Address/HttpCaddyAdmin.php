@@ -24,10 +24,16 @@ final class HttpCaddyAdmin implements CaddyAdmin
             throw new RuntimeException("Coresmith couldn't read {$path}.");
         }
 
-        $response = Http::withHeaders(['Origin' => self::ADMIN])
+        $socket = (string) config('coresmith.address.caddy_admin_socket');
+
+        $request = $socket === ''
+            ? Http::withHeaders(['Origin' => self::ADMIN])
+            : Http::withOptions(['curl' => [CURLOPT_UNIX_SOCKET_PATH => $socket]]);
+
+        $response = $request
             ->withBody($caddyfile, 'text/caddyfile')
             ->timeout(30)
-            ->post(self::ADMIN . '/load');
+            ->post(($socket === '' ? self::ADMIN : 'http://localhost') . '/load');
 
         if ($response->failed()) {
             throw new RuntimeException('Caddy refused the new site: ' . trim((string) ($response->json('error') ?? $response->body())));

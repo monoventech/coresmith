@@ -1,5 +1,6 @@
 import {
     applicationRow,
+    blockingViolations,
     dialog,
     expect,
     gotoServer,
@@ -12,7 +13,9 @@ import {
     tabs,
     tabStaysInViewAsTabsWiden,
     test,
-    toast
+    toast,
+    useTheme,
+    withProps
 } from './support/fixtures'
 
 test.describe('a server', () => {
@@ -190,6 +193,45 @@ test.describe('hardening', () => {
         await expect(isolation.getByRole('listitem')).toHaveCount(9)
         await expect(page.getByRole('heading', { name: 'Server hardening' })).toBeVisible()
         await expect(page.getByRole('switch', { name: 'Audit logging' })).toBeVisible()
+    })
+
+    test("a server's admin API on its private socket is listed among its hardening", async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Hardening')
+
+        const hardening = page.getByRole('heading', { name: 'Server hardening' }).locator('..')
+
+        await expect(hardening).toContainText('Admin API on a socket only Caddy and root can open')
+        await expect(hardening).not.toContainText('Admin API bound to localhost')
+        await expect(page.getByTestId('admin-move-error')).toHaveCount(0)
+    })
+
+    test('a server whose admin API could not move yet says that apps can still reach it, and why', async ({ page }) => {
+        await withProps(page, /\/hardening$/, (props) => {
+            props.admin_move_error =
+                "curl: (7) Failed to connect to localhost port 2019 after 0 ms: Couldn't connect to server"
+        })
+        await gotoServerTab(page, 'bench-01', 'Hardening')
+
+        await expect(page.getByTestId('admin-move-error')).toHaveText(
+            "Apps on this server can still reach Caddy's admin API. Coresmith tries to move it to a private socket every hour, and the last try failed: curl: (7) Failed to connect to localhost port 2019 after 0 ms: Couldn't connect to server"
+        )
+    })
+
+    test.describe('accessibility', () => {
+        test.use({ reducedMotion: 'reduce' })
+
+        for (const theme of ['light', 'dark'] as const) {
+            test(`a failed admin API move has no serious or critical violations in ${theme}`, async ({ page }) => {
+                await useTheme(page, theme)
+                await withProps(page, /\/hardening$/, (props) => {
+                    props.admin_move_error = 'curl: (7) Failed to connect to localhost port 2019'
+                })
+                await gotoServerTab(page, 'bench-01', 'Hardening')
+                await expect(page.getByTestId('admin-move-error')).toBeVisible()
+
+                expect(await blockingViolations(page), `failed move in ${theme}`).toEqual([])
+            })
+        }
     })
 
     test('ssh access shows how Coresmith signs in, never a password', async ({ page }) => {

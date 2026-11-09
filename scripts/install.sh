@@ -43,6 +43,9 @@ readonly CONFIG_DIR="/etc/coresmith"
 readonly CADDY_SITE_DIR="/etc/caddy/coresmith"
 readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"
 readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
+readonly CADDY_ADMIN_DIR="/run/caddy-admin"
+readonly CADDY_ADMIN_SOCKET="$CADDY_ADMIN_DIR/admin.sock"
+readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
 readonly PHP_VERSION="8.5"
@@ -798,6 +801,7 @@ configure_environment() {
     update_env APP_DEBUG "false"
     update_env APP_URL "$PANEL_URL"
     update_env CORESMITH_CADDY_SITE "$CADDY_SITE"
+    update_env CORESMITH_CADDY_ADMIN_SOCKET "$CADDY_ADMIN_SOCKET"
     update_env APP_TIMEZONE "UTC"
 
     update_env DB_CONNECTION "$DB_DRIVER"
@@ -877,9 +881,13 @@ configure_caddy() {
     local fpm_sock="/run/php/coresmith-panel-fpm.sock"
     mkdir -p /run/php
 
+    printf 'd %s 0750 caddy coresmith -\n' "$CADDY_ADMIN_DIR" >"$CADDY_ADMIN_TMPFILES"
+    chmod 0644 "$CADDY_ADMIN_TMPFILES"
+    run systemd-tmpfiles --create "$CADDY_ADMIN_TMPFILES"
+
     {
         printf '{\n'
-        printf '    admin localhost:2019\n'
+        printf '    admin unix/%s|0222\n' "$CADDY_ADMIN_SOCKET"
         [ -n "$ACME_EMAIL" ] && printf '    email %s\n' "$ACME_EMAIL"
         printf '    on_demand_tls {\n        permission http http://127.0.0.1:8484/api/caddy/ask\n    }\n'
         printf '    log {\n        output file /var/log/caddy/access.log\n        format json\n    }\n'
@@ -953,7 +961,7 @@ create_systemd_services() {
     mkdir -p /etc/systemd/system/caddy.service.d
     cat >/etc/systemd/system/caddy.service.d/coresmith.conf <<'UNIT'
 [Service]
-ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load -H "Origin: http://localhost:2019" -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
+ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS --unix-socket /run/caddy-admin/admin.sock -X POST http://localhost/load -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
 UNIT
 
     cat >/etc/systemd/system/coresmith-horizon.service <<UNIT

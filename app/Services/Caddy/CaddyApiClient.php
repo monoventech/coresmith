@@ -10,6 +10,7 @@ namespace App\Services\Caddy;
 
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
+use App\Models\Server;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHResult;
 use Illuminate\Support\Sleep;
@@ -19,6 +20,10 @@ final class CaddyApiClient
     public const ADMIN_PORT = 2019;
 
     public const ADMIN_ORIGIN = 'http://localhost:' . self::ADMIN_PORT;
+
+    public const ADMIN_SOCKET = '/run/caddy-admin/admin.sock';
+
+    public const ADMIN_LISTEN = 'unix/' . self::ADMIN_SOCKET;
 
     public const ROUTES_PATH = '/config/apps/http/servers/' . CaddyInstaller::SERVER . '/routes';
 
@@ -84,7 +89,12 @@ final class CaddyApiClient
 
     public function persistConfig(SSHConnection $connection): void
     {
-        $this->script($connection, $this->curl('GET', '/config/') . ' > ' . self::STAGED_CONFIG_FILE . ' && mv -f ' . self::STAGED_CONFIG_FILE . ' ' . CaddyInstaller::CONFIG_FILE);
+        $this->script($connection, self::persistScript($connection->server()->caddyAdminOnSocket()));
+    }
+
+    public static function persistScript(bool $socket): string
+    {
+        return 'curl -fsS --max-time 30 -X GET ' . self::address($socket, '/config/') . ' > ' . self::STAGED_CONFIG_FILE . ' && mv -f ' . self::STAGED_CONFIG_FILE . ' ' . CaddyInstaller::CONFIG_FILE;
     }
 
     private function script(SSHConnection $connection, string $script): void
@@ -95,7 +105,7 @@ final class CaddyApiClient
     private function exists(SSHConnection $connection, string $path): bool
     {
         try {
-            $this->run($connection, $this->curl('GET', $path) . ' >/dev/null');
+            $this->run($connection, $this->curl($connection->server(), 'GET', $path) . ' >/dev/null');
 
             return true;
         } catch (SSHCommandFailedException $e) {
@@ -143,28 +153,39 @@ final class CaddyApiClient
         return $config;
     }
 
+    public static function probe(Server $server, int $timeout = 10): string
+    {
+        return self::probeAt($server->caddyAdminOnSocket(), $timeout);
+    }
+
+    public static function probeAt(bool $socket, int $timeout = 10): string
+    {
+        return 'curl -fsS --max-time ' . $timeout . ' ' . self::address($socket, '/config/') . ' >/dev/null';
+    }
+
+    public static function address(bool $socket, string $path): string
+    {
+        if ($socket) {
+            return '--unix-socket ' . self::ADMIN_SOCKET . ' ' . escapeshellarg('http://localhost' . $path);
+        }
+
+        return escapeshellarg(self::ADMIN_ORIGIN . $path) . ' -H ' . escapeshellarg('Origin: ' . self::ADMIN_ORIGIN);
+    }
+
     /**
      * @param  array<string, mixed>|null  $payload
      */
-    public static function probe(int $timeout = 10): string
-    {
-        return 'curl -fsS --max-time ' . $timeout . ' ' . escapeshellarg(self::ADMIN_ORIGIN . '/config/')
-            . ' -H ' . escapeshellarg('Origin: ' . self::ADMIN_ORIGIN) . ' >/dev/null';
-    }
-
     private function request(SSHConnection $connection, string $method, string $path, ?array $payload = null): void
     {
-        $this->run($connection, $this->curl($method, $path, $payload), retry: in_array($method, self::IDEMPOTENT_METHODS, true));
+        $this->run($connection, $this->curl($connection->server(), $method, $path, $payload), retry: in_array($method, self::IDEMPOTENT_METHODS, true));
     }
 
     /**
      * @param  array<string, mixed>|null  $payload
      */
-    private function curl(string $method, string $path, ?array $payload = null): string
+    private function curl(Server $server, string $method, string $path, ?array $payload = null): string
     {
-        $url = self::ADMIN_ORIGIN . $path;
-
-        $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . escapeshellarg($url) . ' -H ' . escapeshellarg('Origin: ' . self::ADMIN_ORIGIN);
+        $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . self::address($server->caddyAdminOnSocket(), $path);
 
         if ($payload !== null) {
             $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);

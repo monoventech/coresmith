@@ -20,12 +20,14 @@
         server,
         isolation = [],
         hardening = [],
+        admin_move_error = null,
         firewall,
         access
     }: {
         server: ServerHeader
         isolation: string[]
         hardening: string[]
+        admin_move_error?: string | null
         firewall: { open: number[]; ssh_port: number; changes: Change[] }
         access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
     } = $props()
@@ -86,6 +88,12 @@
                 </li>
             {/each}
         </ul>
+        {#if admin_move_error}
+            <p class="tint-warning mt-3.5 rounded-lg border px-3.5 py-2.5 text-[12.5px]" data-testid="admin-move-error">
+                Apps on this server can still reach Caddy's admin API. Coresmith tries to move it to a private socket
+                every hour, and the last try failed: <span class="font-mono wrap-anywhere">{admin_move_error}</span>
+            </p>
+        {/if}
         <div class="mt-auto pt-3">
             <ToggleRow
                 label="Audit logging"

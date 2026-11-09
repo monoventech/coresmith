@@ -596,8 +596,21 @@ test('caddy can read what it serves without being able to read or change the res
 test('an empty saved route config never replaces the panel config when caddy starts', function () {
     $body = installScriptBody();
 
-    expect($body)->toContain('grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS -X POST http://localhost:2019/load')
+    expect($body)->toContain('grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS --unix-socket /run/caddy-admin/admin.sock -X POST http://localhost/load')
         ->and($body)->not->toContain("echo '{}' >/etc/caddy/caddy-config.json");
+});
+
+test("Coresmith's Caddy admin API is a socket in a folder only Caddy, root and the coresmith group can enter", function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly CADDY_ADMIN_DIR="/run/caddy-admin"')
+        ->and($body)->toContain('readonly CADDY_ADMIN_SOCKET="$CADDY_ADMIN_DIR/admin.sock"')
+        ->and($body)->toContain('readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"')
+        ->and($body)->toContain("printf 'd %s 0750 caddy coresmith -\\n' \"\$CADDY_ADMIN_DIR\" >\"\$CADDY_ADMIN_TMPFILES\"")
+        ->and($body)->toContain('run systemd-tmpfiles --create "$CADDY_ADMIN_TMPFILES"')
+        ->and($body)->toContain("printf '    admin unix/%s|0222\\n' \"\$CADDY_ADMIN_SOCKET\"")
+        ->and($body)->toContain('update_env CORESMITH_CADDY_ADMIN_SOCKET "$CADDY_ADMIN_SOCKET"')
+        ->and($body)->not->toContain('localhost:2019');
 });
 
 test('the setup token is written by the panel user into a file it owns', function () {
