@@ -20,13 +20,24 @@ final class ProvisioningVerifier
         $this->assert($connection, 'test -d ' . AsdfManager::DATA_DIR, 'shared runtime directory');
         $this->assert($connection, 'test -d /var/coresmith/apps', 'application directory');
         $this->assert($connection, 'systemctl is-active --quiet caddy', 'Caddy service');
-        $this->assert(
-            $connection,
-            CaddyApiClient::probe(),
-            'Caddy admin API',
-        );
+        $this->assert($connection, CaddyApiClient::probe($connection->server()), 'Caddy admin API', sudo: true);
+
+        if ($connection->server()->caddyAdminOnSocket()) {
+            $this->assertAdminPortIsClosed($connection);
+        }
 
         $this->assertAdminApiIsNotPubliclyReachable($connection);
+    }
+
+    private function assertAdminPortIsClosed(SSHConnection $connection): void
+    {
+        $port = CaddyApiClient::ADMIN_PORT;
+
+        $result = $connection->execute("curl -s --max-time 5 -o /dev/null http://127.0.0.1:{$port}/config/ && echo open || echo closed");
+
+        if (trim($result->output) !== 'closed') {
+            throw ProvisioningVerificationException::adminPortOpen($port);
+        }
     }
 
     private function assertAdminApiIsNotPubliclyReachable(SSHConnection $connection): void
@@ -43,9 +54,9 @@ final class ProvisioningVerifier
         }
     }
 
-    private function assert(SSHConnection $connection, string $command, string $what): void
+    private function assert(SSHConnection $connection, string $command, string $what, bool $sudo = false): void
     {
-        if ($connection->execute($command)->failed()) {
+        if ($connection->execute($command, sudo: $sudo)->failed()) {
             throw ProvisioningVerificationException::missing($what);
         }
     }

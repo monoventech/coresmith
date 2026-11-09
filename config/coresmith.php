@@ -81,6 +81,7 @@ return [
 
     'address' => [
         'site' => (string) env('CORESMITH_CADDY_SITE', ''),
+        'caddy_admin_socket' => (string) env('CORESMITH_CADDY_ADMIN_SOCKET', ''),
         'caddyfile' => '/etc/caddy/Caddyfile',
         'apps_config' => '/etc/caddy/caddy-config.json',
         'tailscaled_defaults' => '/etc/default/tailscaled',

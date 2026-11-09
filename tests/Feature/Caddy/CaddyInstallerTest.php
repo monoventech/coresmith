@@ -128,3 +128,27 @@ test('the acme email is only written when a valid one is known', function (?stri
     'a valid email' => ['ops@example.com', true],
     'an email that would break the config' => ['ops@example.com} {', false],
 ]);
+
+test('a new server keeps the admin api on a socket in a folder only caddy can enter, and is recorded as moved', function () {
+    $transport = new FakeSSHTransport;
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+
+    app(CaddyInstaller::class)->install((new SSHConnection($server, $transport))->connect());
+
+    $commands = $transport->commands();
+    $tmpfiles = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'systemd-tmpfiles --create /etc/tmpfiles.d/coresmith-caddy.conf')));
+    $restart = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'systemctl restart caddy')));
+
+    expect($transport->uploads()['/etc/tmpfiles.d/coresmith-caddy.conf'] ?? null)->toBe("d /run/caddy-admin 0700 caddy caddy -\n")
+        ->and($tmpfiles)->toBeInt()->toBeLessThan($restart)
+        ->and(end($commands))->toBe("curl -fsS --max-time 10 --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/' >/dev/null")
+        ->and($server->fresh()->caddyAdminOnSocket())->toBeTrue();
+});
+
+test('a sudo user probes the admin socket through sudo, since only caddy and root can open it', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyInstall($transport, 'deploy');
+
+    expect($transport->commands())->toContain('sudo bash -c ' . escapeshellarg("curl -fsS --max-time 10 --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/' >/dev/null"));
+});

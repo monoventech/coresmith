@@ -25,6 +25,10 @@ final class CaddyInstaller
 
     public const SERVICE_DROP_IN = '/etc/systemd/system/caddy.service.d/coresmith.conf';
 
+    public const ADMIN_TMPFILES = '/etc/tmpfiles.d/coresmith-caddy.conf';
+
+    public const ADMIN_TMPFILES_ENTRY = "d /run/caddy-admin 0700 caddy caddy -\n";
+
     public function install(SSHConnection $connection): void
     {
         $this->installPackage($connection);
@@ -78,6 +82,17 @@ final class CaddyInstaller
         $connection->uploadContent($this->serviceDropIn(), self::SERVICE_DROP_IN);
 
         $connection->execute('chmod 644 ' . self::CONFIG_FILE . ' ' . self::SERVICE_DROP_IN, sudo: true)->throw();
+
+        $this->prepareAdminSocket($connection);
+
+        $server = $connection->server();
+        $server->forceFill(['meta' => [...(array) $server->meta, 'caddy_admin' => 'socket']])->save();
+    }
+
+    public function prepareAdminSocket(SSHConnection $connection): void
+    {
+        $connection->uploadContent(self::ADMIN_TMPFILES_ENTRY, self::ADMIN_TMPFILES);
+        $connection->execute('chmod 644 ' . self::ADMIN_TMPFILES . ' && systemd-tmpfiles --create ' . self::ADMIN_TMPFILES, sudo: true)->throw();
     }
 
     private function enableService(SSHConnection $connection): void
@@ -89,21 +104,13 @@ final class CaddyInstaller
 
     private function verifyAdminApi(SSHConnection $connection): void
     {
-        $connection->execute(
-            CaddyApiClient::probe(),
-        )->throw();
+        $connection->execute(CaddyApiClient::probe($connection->server()), sudo: true)->throw();
     }
 
     public function config(?string $email = null, string $current = ''): string
     {
-        $port = CaddyApiClient::ADMIN_PORT;
-
         $config = [
-            'admin' => [
-                'listen' => "localhost:{$port}",
-                'origins' => ["localhost:{$port}"],
-                'enforce_origin' => true,
-            ],
+            'admin' => ['listen' => CaddyApiClient::ADMIN_LISTEN],
             'logging' => [
                 'logs' => [
                     'default' => ['exclude' => ['http.log.access']],

@@ -29,6 +29,7 @@ function provisioningTransport(): FakeSSHTransport
 {
     return (new FakeSSHTransport)
         ->respondTo('echo reachable || echo blocked', "blocked\n", 0)
+        ->respondTo('echo open || echo closed', "closed\n", 0)
         ->queueResult("ID=ubuntu\nVERSION_ID=\"24.04\"\n", 0)
         ->queueResult('systemd 255', 0)
         ->queueResult("4\n", 0)
@@ -56,7 +57,7 @@ test('phase 1 persists the detected os and hardware', function () {
 
     expect($fresh->os_name)->toBe('ubuntu')
         ->and($fresh->os_version)->toBe('24.04')
-        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40]);
+        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'caddy_admin' => 'socket']);
 });
 
 test('phase 2 installs base packages through the abstraction', function () {
@@ -139,7 +140,7 @@ test('a re-run at phase 1 resumes from phase 2 without re-detecting', function (
         'os_name' => 'ubuntu',
         'provisioning_phase' => 1,
     ]);
-    $transport = (new FakeSSHTransport)->respondTo('echo reachable || echo blocked', "blocked\n", 0);
+    $transport = (new FakeSSHTransport)->respondTo('echo reachable || echo blocked', "blocked\n", 0)->respondTo('echo open || echo closed', "closed\n", 0);
 
     provision($server, $transport);
 
@@ -151,7 +152,7 @@ test('a re-run at phase 1 resumes from phase 2 without re-detecting', function (
 
 test('every phase is logged as it starts and finishes, and completed phases say they were skipped', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'provisioning_phase' => 1]);
-    $transport = (new FakeSSHTransport)->respondTo('echo reachable || echo blocked', "blocked\n", 0);
+    $transport = (new FakeSSHTransport)->respondTo('echo reachable || echo blocked', "blocked\n", 0)->respondTo('echo open || echo closed', "closed\n", 0);
 
     provision($server, $transport);
 
@@ -270,7 +271,7 @@ test('phase 4 creates the coresmith directory tree with locked down secret dirs'
         ->and($commands)->toContain('chmod 700 /etc/coresmith/deploy-keys');
 });
 
-test('phase 5 installs caddy and verifies the admin api responds on localhost', function () {
+test('phase 5 installs caddy and verifies the admin api answers on its private socket', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = provisioningTransport();
 
@@ -280,7 +281,7 @@ test('phase 5 installs caddy and verifies the admin api responds on localhost', 
 
     expect($commands)->toContain("apt-get install -y --no-install-recommends 'caddy'")
         ->and($commands)->toContain('systemctl enable caddy')
-        ->and($commands)->toContain('http://localhost:2019/config/');
+        ->and($commands)->toContain("--unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/'");
 });
 
 test('phase 5 uploads the caddy config apps are added to, and starts caddy from it', function () {

@@ -46,6 +46,7 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
             ->where('server.can.update', false)
             ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
             ->where('hardening', ServerTabsController::HARDENING)
+            ->where('admin_move_error', null)
             ->where('firewall.open', [2222, 80, 443])
             ->where('firewall.ssh_port', 2222)
             ->where('firewall.changes', [])
@@ -55,6 +56,29 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
                 'public_key' => $server->ssh_public_key,
                 'audit_logging' => true,
             ]));
+});
+
+test('a server whose admin api moved to the socket says so among its hardening', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['meta' => ['caddy_admin' => 'socket', 'caddy_admin_error' => 'an old failure']]);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('hardening', fn($items): bool => in_array('Admin API on a socket only Caddy and root can open', $items->all(), true)
+                && !in_array(ServerTabsController::ADMIN_API_ON_LOCALHOST, $items->all(), true))
+            ->where('admin_move_error', null));
+});
+
+test('a server whose admin api could not move yet says why', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['meta' => ['caddy_admin_error' => 'curl: (7) Failed to connect to localhost port 2019']]);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('hardening', ServerTabsController::HARDENING)
+            ->where('admin_move_error', 'curl: (7) Failed to connect to localhost port 2019'));
 });
 
 test('the default ssh port is not listed twice among the open ports', function () {

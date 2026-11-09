@@ -53,6 +53,11 @@ class Server extends Model
         return "{$this->ssh_user}@{$this->ip_address}:{$this->ssh_port}";
     }
 
+    public function caddyAdminOnSocket(): bool
+    {
+        return (((array) $this->meta)['caddy_admin'] ?? null) === 'socket';
+    }
+
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class);

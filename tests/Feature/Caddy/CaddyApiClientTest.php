@@ -23,6 +23,13 @@ function caddyConnection(FakeSSHTransport $transport): SSHConnection
     return (new SSHConnection($server, $transport))->connect();
 }
 
+function caddySocketConnection(FakeSSHTransport $transport): SSHConnection
+{
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'meta' => ['caddy_admin' => 'socket']]);
+
+    return (new SSHConnection($server, $transport))->connect();
+}
+
 function caddyClient(): CaddyApiClient
 {
     return new CaddyApiClient(new CaddyRouteBuilder, new RouteConfigValidator);
@@ -228,17 +235,17 @@ test('an invalid route is never pushed to caddy', function () {
     }
 });
 
-test('the bootstrap config keeps the admin api on localhost and answers only the origin it trusts', function () {
+test('the bootstrap config puts the admin api on a socket only caddy and root can open', function () {
     $config = json_decode((new CaddyInstaller)->config(), true);
 
-    expect($config['admin'])->toBe(['listen' => 'localhost:2019', 'origins' => ['localhost:2019'], 'enforce_origin' => true]);
+    expect($config['admin'])->toBe(['listen' => 'unix//run/caddy-admin/admin.sock']);
 });
 
 test('the bootstrap config never contains a managed application site', function () {
     expect((new CaddyInstaller)->config())->not->toContain('/var/coresmith/apps');
 });
 
-test('every admin api call carries the origin caddy enforces, or caddy answers 403', function () {
+test('every admin api call to a server still on tcp carries the origin caddy enforces, or caddy answers 403', function () {
     $transport = new FakeSSHTransport;
 
     caddyClient()->addSite(caddyConnection($transport), routableApp());
@@ -249,6 +256,27 @@ test('every admin api call carries the origin caddy enforces, or caddy answers 4
         expect($command)->toContain('Origin: http://localhost:2019');
     }
 
-    expect(CaddyApiClient::probe())->toContain("-H 'Origin: http://localhost:2019'")
-        ->and(json_decode((new CaddyInstaller)->config(), true)['admin']['enforce_origin'])->toBeTrue();
+    expect(CaddyApiClient::probe(Server::factory()->make()))->toContain("-H 'Origin: http://localhost:2019'");
+});
+
+test('a server whose admin api moved to the socket is only ever reached through it, with no origin to forge', function () {
+    $transport = new FakeSSHTransport;
+
+    caddyClient()->addSite(caddySocketConnection($transport), routableApp());
+
+    expect($transport->commands())->not->toBeEmpty()
+        ->and($transport->commands()[0])->toContain("-X POST --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/apps/http/servers/coresmith/routes'");
+
+    foreach ($transport->commands() as $command) {
+        expect($command)->toContain('--unix-socket /run/caddy-admin/admin.sock')
+            ->not->toContain('localhost:2019')
+            ->not->toContain('Origin:');
+    }
+});
+
+test('the probe asks the admin api where the server keeps it', function () {
+    expect(CaddyApiClient::probe(Server::factory()->make(['meta' => ['caddy_admin' => 'socket']])))
+        ->toBe("curl -fsS --max-time 10 --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/' >/dev/null")
+        ->and(CaddyApiClient::probe(Server::factory()->make()))
+        ->toBe("curl -fsS --max-time 10 'http://localhost:2019/config/' -H 'Origin: http://localhost:2019' >/dev/null");
 });
