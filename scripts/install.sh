@@ -46,6 +46,7 @@ readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
 readonly CADDY_ADMIN_DIR="/run/caddy-admin"
 readonly CADDY_ADMIN_SOCKET="$CADDY_ADMIN_DIR/admin.sock"
 readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
+readonly REDIS_CONFIGS="/etc/redis/redis.conf /etc/redis.conf"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
 readonly PHP_VERSION="8.5"
@@ -787,6 +788,45 @@ update_env() {
     mv -f "$tmp" "$file"
 }
 
+secure_redis() {
+    local config="" candidate password tmp
+
+    password="$(env_value REDIS_PASSWORD)"
+
+    for candidate in $REDIS_CONFIGS; do
+        if [ -f "$candidate" ]; then
+            config="$candidate"
+            break
+        fi
+    done
+
+    [ -n "$config" ] || fatal "Couldn't find Redis's configuration to give it a password."
+
+    refuse_link "$config"
+    tmp="$(mktemp "${config}.XXXXXX")"
+
+    PASSWORD="$password" awk '
+        /^[[:space:]]*#?[[:space:]]*requirepass[[:space:]]/ { next }
+        { print }
+        END { print "requirepass " ENVIRON["PASSWORD"] }
+    ' "$config" >"$tmp"
+
+    cat "$tmp" >"$config"
+    rm -f "$tmp"
+
+    run systemctl restart redis-server || run systemctl restart redis
+
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if [ "$(REDISCLI_AUTH="$password" redis-cli -p 6379 ping 2>/dev/null)" = "PONG" ]; then
+            return 0
+        fi
+
+        sleep 1
+    done
+
+    fatal "Redis didn't accept Coresmith's new password. See journalctl -u redis-server or -u redis."
+}
+
 configure_environment() {
     log "Phase 5/8: configuring the environment..."
 
@@ -824,6 +864,8 @@ configure_environment() {
 
     update_env REDIS_HOST "127.0.0.1"
     update_env REDIS_PORT "6379"
+    ensure_env_secret REDIS_PASSWORD "$(openssl rand -hex 32)"
+    secure_redis
     update_env QUEUE_CONNECTION "redis"
     update_env CACHE_STORE "redis"
     update_env SESSION_DRIVER "redis"
