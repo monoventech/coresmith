@@ -10,6 +10,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\DatabaseType;
 use App\Enums\PlanFeature;
+use App\Enums\PrivilegeLevel;
 use App\Http\Requests\Database\DestroyDatabaseRequest;
 use App\Http\Requests\Database\StoreDatabaseRequest;
 use App\Jobs\BackupDatabase;
@@ -18,6 +19,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Services\Billing\TeamBilling;
 use App\Services\Database\DatabaseManager;
+use App\Services\Database\RedisPorts;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
@@ -58,14 +60,22 @@ final class DatabaseController extends Controller
         ]);
     }
 
-    public function store(StoreDatabaseRequest $request, Server $server): RedirectResponse
+    public function store(StoreDatabaseRequest $request, Server $server, RedisPorts $redisPorts): RedirectResponse
     {
-        $database = ManagedDatabase::create([
-            ...$request->safe()->except([]),
-            'server_id' => $server->id,
-            'team_id' => $server->team_id,
-            'port' => $this->defaultPort($request->string('type')->value()),
-        ]);
+        $attributes = [...$request->safe()->except([]), 'server_id' => $server->id, 'team_id' => $server->team_id];
+
+        try {
+            $database = $request->safe()->string('type')->value() === DatabaseType::Redis->value
+                ? $redisPorts->lock($server)->block(RedisPorts::LOCK_SECONDS, fn(): ManagedDatabase => ManagedDatabase::create([
+                    ...$attributes,
+                    'db_user' => null,
+                    'privilege_level' => PrivilegeLevel::Standard->value,
+                    'port' => $redisPorts->next($server),
+                ]))
+                : ManagedDatabase::create([...$attributes, 'port' => $this->defaultPort($request->string('type')->value())]);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         CreateDatabase::dispatch($database);
 
@@ -115,9 +125,11 @@ final class DatabaseController extends Controller
 
         activity()->performedOn($database)->log('database_deleted');
 
-        return to_route('servers.databases.index', $server)->with('success', $database->onSharedRedis()
-            ? "Removed {$database->name}. The shared Redis on {$server->name} keeps what's in it."
-            : "Deleted {$database->name} and its user from {$server->name}.");
+        return to_route('servers.databases.index', $server)->with('success', match (true) {
+            $database->onSharedRedis() => "Removed {$database->name}. The shared Redis on {$server->name} keeps what's in it.",
+            $database->type === DatabaseType::Redis => "Deleted {$database->name} and its Redis instance from {$server->name}.",
+            default => "Deleted {$database->name} and its user from {$server->name}.",
+        });
     }
 
     private function dropped(SSHConnectionManager $connections, DatabaseManager $databases, Server $server, ManagedDatabase $database): bool
@@ -162,11 +174,7 @@ final class DatabaseController extends Controller
 
     private function defaultPort(string $type): int
     {
-        return match ($type) {
-            'postgresql' => 5432,
-            'redis' => 6379,
-            default => 3306,
-        };
+        return $type === DatabaseType::Postgresql->value ? 5432 : 3306;
     }
 
     /**

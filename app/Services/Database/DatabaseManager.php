@@ -28,12 +28,12 @@ final class DatabaseManager
     private const SERVICES = [
         'mysql' => ['mysql', 'mysqld', 'mariadb'],
         'postgresql' => ['postgresql'],
-        'redis' => ['redis-server', 'redis'],
     ];
 
     public function __construct(
         private readonly MysqlDriver $mysql,
         private readonly PostgresDriver $postgres,
+        private readonly RedisInstance $redis = new RedisInstance,
     ) {}
 
     public static function generatePassword(): string
@@ -43,6 +43,12 @@ final class DatabaseManager
 
     public function ensureServerInstalled(SSHConnection $connection, DatabaseType $type, ?ManagedDatabase $for = null): bool
     {
+        if ($type === DatabaseType::Redis) {
+            $this->ensureRedisPackage($connection);
+
+            return false;
+        }
+
         $server = $connection->server();
         $meta = (array) $server->meta;
         $installed = array_values((array) ($meta['installed_databases'] ?? []));
@@ -73,6 +79,20 @@ final class DatabaseManager
         return false;
     }
 
+    private function ensureRedisPackage(SSHConnection $connection): void
+    {
+        $server = $connection->server();
+        $packages = PackageManagerFactory::for($server);
+        $package = $this->packageFor($server->os_name, DatabaseType::Redis);
+
+        if ($connection->execute($packages->isInstalled($package), sudo: true)->successful()) {
+            return;
+        }
+
+        $connection->execute($packages->install([$package]), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        $connection->execute('systemctl disable --now ' . $package, sudo: true);
+    }
+
     private function alreadyRunning(SSHConnection $connection, DatabaseType $type): bool
     {
         $checks = array_map(fn(string $service): string => 'systemctl is-active --quiet ' . escapeshellarg($service), self::SERVICES[$type->value]);
@@ -84,24 +104,17 @@ final class DatabaseManager
     {
         $server = $connection->server()->name;
 
-        [$command, $engine, $problem, $advice, $expected] = match ($type) {
-            DatabaseType::Mysql => [$this->mysql->command('SELECT 1'), 'MySQL', 'Coresmith cannot create databases on it', 'Let root sign in through the local socket, or grant it CREATE, CREATE USER and GRANT OPTION, then try again.', null],
-            DatabaseType::Postgresql => [$this->postgres->command('SELECT 1'), 'PostgreSQL', 'Coresmith cannot create databases on it', 'Make sure the postgres system user can run psql, then try again.', null],
-            DatabaseType::Redis => ['redis-cli -t 3 ping 2>&1', 'Redis', 'Coresmith cannot reach it', 'Let redis-cli connect on this server without a password, or drop the requirepass setting, then try again.', 'PONG'],
+        [$command, $engine, $advice] = match ($type) {
+            DatabaseType::Mysql => [$this->mysql->command('SELECT 1'), 'MySQL', 'Let root sign in through the local socket, or grant it CREATE, CREATE USER and GRANT OPTION, then try again.'],
+            DatabaseType::Postgresql => [$this->postgres->command('SELECT 1'), 'PostgreSQL', 'Make sure the postgres system user can run psql, then try again.'],
+            DatabaseType::Redis => throw new LogicException('Every Redis database gets an instance of its own.'),
         };
 
-        $result = $connection->execute($command, sudo: true);
-
-        if ($result->successful() && ($expected === null || str_contains($result->output, $expected))) {
+        if ($connection->execute($command, sudo: true)->successful()) {
             return;
         }
 
-        if (str_contains($result->output, 'command not found')) {
-            $problem = 'Coresmith cannot check it';
-            $advice = 'Install redis-tools on the server so Coresmith can check it, then try again.';
-        }
-
-        throw new ExistingDatabaseServerRefused("{$engine} is already running on {$server}, but {$problem}. {$advice}");
+        throw new ExistingDatabaseServerRefused("{$engine} is already running on {$server}, but Coresmith cannot create databases on it. {$advice}");
     }
 
     public function create(SSHConnection $connection, ManagedDatabase $database, string $password): void
@@ -113,7 +126,7 @@ final class DatabaseManager
         match ($database->type) {
             DatabaseType::Mysql => $this->createMysql($connection, $name, $user, $password, $level),
             DatabaseType::Postgresql => $this->createPostgres($connection, $name, $user, $password, $level, $database),
-            DatabaseType::Redis => null,
+            DatabaseType::Redis => $database->onSharedRedis() ? null : $this->redis->create($connection, (int) $database->port, $password),
         };
     }
 
@@ -124,7 +137,9 @@ final class DatabaseManager
         match ($database->type) {
             DatabaseType::Mysql => $this->send($connection, $this->mysql->client(), $this->mysql->changePassword($user, $password)),
             DatabaseType::Postgresql => $this->send($connection, $this->postgres->client(), $this->postgres->changePassword($user, $password)),
-            DatabaseType::Redis => throw new LogicException('A Redis database has no password of its own to change.'),
+            DatabaseType::Redis => $database->onSharedRedis()
+                ? throw new LogicException('A Redis database on the shared instance has no password of its own to change.')
+                : $this->redis->changePassword($connection, (int) $database->port, $password),
         };
     }
 
@@ -143,7 +158,7 @@ final class DatabaseManager
                 $this->postgres->command($this->postgres->dropDatabase($name)),
                 $this->postgres->command($this->postgres->dropUser($user)),
             ]),
-            DatabaseType::Redis => null,
+            DatabaseType::Redis => $database->onSharedRedis() ? null : $this->redis->drop($connection, (int) $database->port),
         };
     }
 
@@ -230,7 +245,7 @@ final class DatabaseManager
         return match ($type) {
             DatabaseType::Mysql => $this->mysql->bindToLoopback(),
             DatabaseType::Postgresql => $this->postgres->bindToLoopback(),
-            DatabaseType::Redis => "sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf && systemctl restart redis-server || systemctl restart redis",
+            DatabaseType::Redis => throw new LogicException('Every Redis database gets an instance of its own.'),
         };
     }
 

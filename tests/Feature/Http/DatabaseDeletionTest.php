@@ -90,6 +90,19 @@ test('a Redis database on the shared instance has nothing of its own to drop, so
         ->and($database->fresh()->trashed())->toBeTrue();
 });
 
+test('deleting a Redis database on its own instance stops and removes the instance', function () {
+    $transport = databaseDeletionTransport();
+    [$server, $database, $admin] = databaseDeletionSetup(type: DatabaseType::Redis);
+    $database->forceFill(['port' => 6380])->save();
+
+    $this->actingAs($admin)
+        ->delete(route('servers.databases.destroy', [$server, $database]), ['confirm' => 'shop_production'])
+        ->assertSessionHas('success', 'Deleted shop_production and its Redis instance from forge-07.');
+
+    expect($transport->commands())->toContain('systemctl disable --now coresmith-redis-6380.service || true')
+        ->and($database->fresh()->trashed())->toBeTrue();
+});
+
 test('the name has to be typed exactly, or nothing happens', function (?string $typed) {
     $transport = databaseDeletionTransport();
     [$server, $database, $admin] = databaseDeletionSetup();

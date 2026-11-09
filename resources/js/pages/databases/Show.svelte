@@ -47,9 +47,10 @@
     let typed = $state('')
 
     const password = $derived(database.has_password ? (page.flash?.databasePassword ?? null) : null)
+    const redis = $derived(database.type === 'redis')
     const dsn = $derived(
-        database.type === 'redis'
-            ? `redis://${database.host}:${database.port}`
+        redis
+            ? `redis://${password === null ? '' : `:${encodeURIComponent(password)}@`}${database.host}:${database.port}`
             : `${database.type}://${database.db_user}${password === null ? '' : `:${encodeURIComponent(password)}`}@${database.host}:${database.port}/${database.name}`
     )
 
@@ -136,7 +137,7 @@
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div>host {database.host}</div>
             <div>port {database.port}</div>
-            {#if database.db_user && !database.shared_redis}<div>user {database.db_user}</div>{/if}
+            {#if database.db_user && !redis}<div>user {database.db_user}</div>{/if}
             {#if password !== null}
                 <div class="break-all text-foreground" data-testid="database-password">password {password}</div>
             {/if}
@@ -180,12 +181,14 @@
         <div class="rounded-xl border border-border bg-card px-5.5 py-5">
             <h3 class="type-h3 m-0 mb-1">Access</h3>
             <p class="mb-3 text-[12.5px] text-muted-foreground">
-                {!database.shared_redis
-                    ? 'Its own user, with only the privileges its app needs.'
-                    : `No user of its own. Every app on ${server.name} shares it.`}
+                {database.shared_redis
+                    ? `No user of its own. Every app on ${server.name} shares it.`
+                    : redis
+                      ? 'An instance of its own. Only apps with its password get in.'
+                      : 'Its own user, with only the privileges its app needs.'}
             </p>
             <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-                {#if !database.shared_redis}<div>privileges {database.privilege_level}</div>{/if}
+                {#if !redis}<div>privileges {database.privilege_level}</div>{/if}
                 <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
         </div>
@@ -195,7 +198,9 @@
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
                     {database.shared_redis
                         ? "Removes it from Coresmith. The shared Redis keeps running and keeps what's in it."
-                        : `Drops it and its user from ${server.name}. Take a backup first if anything still needs the data.`}
+                        : redis
+                          ? `Stops and removes its Redis instance on ${server.name}, with everything in it.`
+                          : `Drops it and its user from ${server.name}. Take a backup first if anything still needs the data.`}
                 </p>
                 <Button variant="outline" size="sm" class="text-destructive-strong" onclick={() => (deleting = true)}
                     >Delete this database</Button
@@ -234,7 +239,9 @@
                     <Dialog.Description
                         >{database.shared_redis
                             ? `It's removed from Coresmith. The shared Redis on ${server.name} keeps running and keeps what's in it.`
-                            : `Coresmith drops it and its user from ${server.name}. Everything in it is gone and apps using it stop working. Take a backup first if anything still needs the data.`}</Dialog.Description
+                            : redis
+                              ? `Coresmith stops and removes its Redis instance on ${server.name}. Everything in it is gone and apps using it stop working.`
+                              : `Coresmith drops it and its user from ${server.name}. Everything in it is gone and apps using it stop working. Take a backup first if anything still needs the data.`}</Dialog.Description
                     >
                 </Dialog.Header>
                 <div class="mt-4">

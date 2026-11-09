@@ -78,6 +78,50 @@ test.describe('databases', () => {
         await expect(databaseRow(page, name)).toBeVisible()
     })
 
+    test('a Redis database needs only a name, and gets an instance of its own', async ({ page }) => {
+        const name = `cache_${Date.now().toString(36)}`
+
+        await gotoServerTab(page, 'anvil-01', 'Databases')
+        await page.getByRole('link', { name: 'Create a database' }).click()
+        await page.getByLabel('Engine').selectOption('redis')
+
+        await expect(page.getByLabel('User', { exact: true })).toHaveCount(0)
+        await expect(page.getByLabel('Privileges')).toHaveCount(0)
+        await expect(page.getByTestId('redis-instance-note')).toHaveText(
+            'It gets an instance of its own on a free port, with its own password. Apps connect with the host, port and password its page shows.'
+        )
+        await expect(page.getByRole('main')).toContainText(
+            'An instance of its own, its own port, process and data, apart from every other app'
+        )
+
+        await page.getByLabel('Database name').fill(name)
+        await page.getByRole('button', { name: 'Create the database' }).click()
+
+        await expect(toast(page)).toContainText('Database queued for creation.')
+        await expect(databaseRow(page, name)).toContainText('password')
+        await expect(databaseRow(page, name)).toContainText(/63[89]\d|64[0-7]\d/)
+    })
+
+    test('a Redis database on its own instance shows its port and promises its own password', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Databases')
+
+        await expect(databaseRow(page, 'cache_production')).toContainText('password')
+        await expect(databaseRow(page, 'cache_production')).toContainText('6380')
+        await databaseRow(page, 'cache_production').click()
+
+        await expect(page.getByRole('main')).toContainText('Redis · on forge-01 · localhost only')
+        await expect(page.getByTestId('database-url')).toHaveText(/^redis:\/\/[^@]+:6380$/)
+        await expect(page.getByRole('main')).toContainText(
+            'An instance of its own. Only apps with its password get in.'
+        )
+        await expect(page.getByRole('main')).not.toContainText('privileges')
+        await expect(page.getByRole('button', { name: 'Show password' })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Back up now' })).toHaveCount(0)
+        await expect(page.getByRole('main')).toContainText(
+            'Stops and removes its Redis instance on forge-01, with everything in it.'
+        )
+    })
+
     test('a name carrying sql metacharacters is refused next to the field', async ({ page }) => {
         await gotoServerTab(page, 'anvil-01', 'Databases')
         await page.getByRole('link', { name: 'Create a database' }).click()
@@ -244,6 +288,16 @@ test.describe('database passwords', () => {
                 await page.getByRole('button', { name: 'Rotate password' }).click()
                 await expect(dialog(page)).toBeVisible()
                 expect(await blockingViolations(page), `rotate dialog in ${theme}`).toEqual([])
+            })
+
+            test(`creating a Redis database has no serious or critical violations in ${theme}`, async ({ page }) => {
+                await useTheme(page, theme)
+                await gotoServerTab(page, 'anvil-01', 'Databases')
+                await page.getByRole('link', { name: 'Create a database' }).click()
+                await page.getByLabel('Engine').selectOption('redis')
+                await expect(page.getByTestId('redis-instance-note')).toBeVisible()
+
+                expect(await blockingViolations(page), `redis form in ${theme}`).toEqual([])
             })
 
             test(`the delete dialog has no serious or critical violations in ${theme}`, async ({ page }) => {
