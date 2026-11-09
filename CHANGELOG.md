@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.2 (2026-11-09)
+
+### Fixed
+- fix: on an install served on an IP address, HTTPS no longer hangs once its certificate is due for renewal (#27)
+
+### Changed
+- chore: a release's gate is the full CI, run on the exact commit its pull request opens (#28)
+
 ## v0.4.1 (2026-11-09)
 
 ### Fixed
