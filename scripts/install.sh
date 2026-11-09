@@ -44,6 +44,10 @@ readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
 readonly CADDY_ADMIN_DIR="/run/caddy-admin"
 readonly CADDY_ADMIN_SOCKET="$CADDY_ADMIN_DIR/admin.sock"
 readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
+readonly CADDY_DROP_IN="/etc/systemd/system/caddy.service.d/coresmith.conf"
+readonly THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
+readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+readonly APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 readonly REDIS_CONFIGS="/etc/redis/redis.conf /etc/redis.conf"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
@@ -1010,11 +1014,9 @@ FPMCONF
 create_systemd_services() {
     log "Phase 7/8: creating systemd services..."
 
-    mkdir -p /etc/systemd/system/caddy.service.d
-    cat >/etc/systemd/system/caddy.service.d/coresmith.conf <<'UNIT'
-[Service]
-ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS --unix-socket /run/caddy-admin/admin.sock -X POST http://localhost/load -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
-UNIT
+    remove_legacy_caddy_drop_in
+    install_this_machine_helper
+    create_apps_slice
 
     cat >/etc/systemd/system/coresmith-horizon.service <<UNIT
 [Unit]
@@ -1035,7 +1037,7 @@ StandardError=append:${HORIZON_LOG}
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR}
+ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR} -${THIS_MACHINE_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -1159,9 +1161,322 @@ Unit=coresmith-address.service
 WantedBy=multi-user.target
 UNIT
 
+    cat >/etc/systemd/system/coresmith-this-machine.service <<UNIT
+[Unit]
+Description=Coresmith access to this machine, started from Add server
+
+[Service]
+Type=oneshot
+ExecStart=${THIS_MACHINE_HELPER}
+TimeoutStartSec=2min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/root/.ssh /etc/ssh ${THIS_MACHINE_DIR}
+RuntimeDirectory=sshd
+RuntimeDirectoryPreserve=yes
+UNIT
+
+    cat >/etc/systemd/system/coresmith-this-machine.path <<UNIT
+[Unit]
+Description=Answer Coresmith when it asks to manage this machine
+
+[Path]
+PathExists=${THIS_MACHINE_DIR}/request
+Unit=coresmith-this-machine.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
     secure_logs
     systemctl daemon-reload
     success "Systemd services created"
+}
+
+remove_legacy_caddy_drop_in() {
+    if [ -f "$CADDY_DROP_IN" ] && grep -qF "ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs" "$CADDY_DROP_IN"; then
+        rm -f "$CADDY_DROP_IN"
+        rmdir "${CADDY_DROP_IN%/*}" 2>/dev/null || true
+    fi
+}
+
+create_apps_slice() {
+    local total apps reserve=1024 limit=MemoryMax
+
+    total="$(free -m | awk '/^Mem:/ {print $2}')"
+
+    if [ "$DB_DRIVER" != "sqlite" ]; then
+        case "$DB_HOST" in
+        127.0.0.1 | localhost | ::1) reserve=$((reserve + 512)) ;;
+        esac
+    fi
+
+    apps=$((total - reserve))
+    [ "$apps" -ge $((total / 2)) ] || apps=$((total / 2))
+    [ "$(systemctl --version | awk 'NR == 1 {print $2}')" -ge 231 ] || limit=MemoryLimit
+
+    cat >"$APPS_SLICE" <<UNIT
+[Unit]
+Description=Apps Coresmith deploys on the machine it runs on
+
+[Slice]
+${limit}=${apps}M
+UNIT
+}
+
+install_this_machine_helper() {
+    local tmp
+
+    refuse_link "${THIS_MACHINE_HELPER%/*}" "$THIS_MACHINE_HELPER" "$THIS_MACHINE_DIR"
+    mkdir -p "${THIS_MACHINE_HELPER%/*}" "$THIS_MACHINE_DIR"
+    chown root:root "${THIS_MACHINE_HELPER%/*}"
+    chmod 0755 "${THIS_MACHINE_HELPER%/*}"
+    chown root:coresmith "$THIS_MACHINE_DIR"
+    chmod 1770 "$THIS_MACHINE_DIR"
+    [ -d /root/.ssh ] || install -d -m 0700 /root/.ssh
+
+    tmp="$(mktemp "${THIS_MACHINE_HELPER}.XXXXXX")"
+    cat >"$tmp" <<'HELPER'
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+readonly EXCHANGE=/var/lib/coresmith-this-machine
+readonly KEYS=/root/.ssh/authorized_keys
+readonly SSHD_CONFIG=/etc/ssh/sshd_config
+readonly DROP_IN=/etc/ssh/sshd_config.d/00-coresmith-local.conf
+readonly BEGIN='# coresmith-this-machine begin'
+readonly END='# coresmith-this-machine end'
+readonly KEY_OPTIONS='from="127.0.0.1,::1",no-agent-forwarding,no-port-forwarding,no-X11-forwarding'
+readonly REQUEST='^([A-Za-z0-9]{1,64}) (add (ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})|remove)$'
+readonly REQUEST_ID='^([A-Za-z0-9]{1,64}) '
+readonly FINGERPRINT='^SHA256:[A-Za-z0-9+/]{43}$'
+readonly KEY_KIND='^[A-Z0-9-]{1,16}$'
+readonly REFUSED="The request wasn't one Coresmith's helper accepts, so nothing changed."
+readonly UNEXPECTED="Coresmith's helper stopped before it finished, so the old settings are back. See journalctl -u coresmith-this-machine."
+
+ID=''
+WORK=''
+ANSWERED=''
+EFFECTIVE=''
+PORT=''
+
+answer() {
+    local tmp
+
+    tmp="$(mktemp "$EXCHANGE/.result.XXXXXX")"
+    printf '{"id":"%s",%s}\n' "$ID" "$1" >"$tmp"
+    chgrp coresmith "$tmp"
+    chmod 0640 "$tmp"
+    mv -f -- "$tmp" "$EXCHANGE/result.json"
+    ANSWERED=1
+}
+
+copy_out() {
+    if [ -e "$1" ]; then
+        cp -p -- "$1" "$WORK/$2"
+    else
+        : >"$WORK/$2.absent"
+    fi
+}
+
+copy_back() {
+    if [ -e "$WORK/$2" ]; then
+        cp -p -- "$WORK/$2" "$1"
+    elif [ -e "$WORK/$2.absent" ]; then
+        rm -f -- "$1"
+    fi
+}
+
+save() {
+    WORK="$(mktemp -d)"
+    copy_out "$KEYS" keys
+    copy_out "$SSHD_CONFIG" sshd_config
+    copy_out "$DROP_IN" drop_in
+}
+
+restore() {
+    [ -n "$WORK" ] || return 0
+    copy_back "$KEYS" keys
+    copy_back "$SSHD_CONFIG" sshd_config
+    copy_back "$DROP_IN" drop_in
+}
+
+fail() {
+    restore
+    answer "\"ok\":false,\"error\":\"$1\""
+    exit 1
+}
+
+finish() {
+    local status=$?
+
+    if [ "$status" -ne 0 ] && [ -z "$ANSWERED" ]; then
+        restore || true
+        answer "\"ok\":false,\"error\":\"$UNEXPECTED\"" || true
+    fi
+
+    [ -z "$WORK" ] || rm -rf -- "$WORK"
+}
+
+strip() {
+    awk -v start="$BEGIN" -v stop="$END" '$0 == start { printf "%s", held; held = ""; inside = 1; next } $0 == stop { held = ""; inside = 0; next } inside { held = held $0 ORS; next } { print } END { printf "%s", held }' "$1"
+}
+
+has_block() {
+    [ -f "$1" ] && grep -qxF "$BEGIN" "$1"
+}
+
+reads_drop_ins() {
+    grep -Eqi '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf([[:space:]]|$)' "$SSHD_CONFIG"
+}
+
+rule() {
+    printf '%s\n' 'Match Address 127.0.0.1,::1' '    PermitRootLogin prohibit-password' 'Match all'
+}
+
+write_keys() {
+    local tmp
+
+    tmp="$(mktemp "$KEYS.XXXXXX")"
+    cat -- "$1" >"$tmp"
+    chmod 0600 "$tmp"
+    mv -f -- "$tmp" "$KEYS"
+}
+
+write_config() {
+    cat -- "$1" >"$SSHD_CONFIG"
+}
+
+reload_sshd() {
+    local unit
+
+    for unit in sshd ssh; do
+        if systemctl is-active --quiet "$unit"; then
+            systemctl reload "$unit"
+            return 0
+        fi
+    done
+}
+
+check_sshd() {
+    sshd -t >/dev/null 2>&1 || fail 'sshd refused the new settings, so the old ones are back. Run sshd -t to see why.'
+    EFFECTIVE="$(sshd -T -C user=root,host=localhost,addr=127.0.0.1 2>/dev/null)" || fail "sshd didn't report its settings, so the old ones are back. Run sshd -T to see why."
+
+    case "$(awk '$1 == "permitrootlogin" { print $2; exit }' <<<"$EFFECTIVE")" in
+    prohibit-password | without-password | yes) ;;
+    *) fail 'sshd still turns root away from this machine, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config.' ;;
+    esac
+
+    PORT="$(awk '$1 == "listenaddress" && $2 ~ /^(0\.0\.0\.0|127\.0\.0\.1):[0-9]+$/ { sub(/^.*:/, "", $2); print $2; exit }' <<<"$EFFECTIVE")"
+    [ -n "$PORT" ] || fail "sshd doesn't listen on 127.0.0.1, so Coresmith can't reach it from this machine and the old settings are back. Check ListenAddress in /etc/ssh/sshd_config."
+}
+
+host_keys() {
+    local path line fingerprint kind separator=''
+
+    printf '{'
+    while read -r path; do
+        line="$(ssh-keygen -l -E sha256 -f "$path" 2>/dev/null)" || continue
+        fingerprint="$(awk '{ print $2 }' <<<"$line")"
+        kind="$(awk '{ print $NF }' <<<"$line" | tr -d '()')"
+        [[ "$fingerprint" =~ $FINGERPRINT && "$kind" =~ $KEY_KIND ]] || continue
+        printf '%s"%s":"%s"' "$separator" "$kind" "$fingerprint"
+        separator=','
+    done < <(awk '$1 == "hostkey" { print $2 }' <<<"$EFFECTIVE")
+    printf '}'
+}
+
+add() {
+    local keys
+
+    save
+    {
+        [ ! -f "$KEYS" ] || strip "$KEYS"
+        printf '%s\n%s %s coresmith-this-machine\n%s\n' "$BEGIN" "$KEY_OPTIONS" "$1" "$END"
+    } >"$WORK/keys.new"
+    write_keys "$WORK/keys.new"
+
+    if reads_drop_ins; then
+        mkdir -p -- "${DROP_IN%/*}"
+        rule >"$DROP_IN"
+
+        if has_block "$SSHD_CONFIG"; then
+            strip "$SSHD_CONFIG" >"$WORK/sshd_config.new"
+            write_config "$WORK/sshd_config.new"
+        fi
+    else
+        {
+            strip "$SSHD_CONFIG"
+            printf '%s\n' "$BEGIN"
+            rule
+            printf '%s\n' "$END"
+        } >"$WORK/sshd_config.new"
+        write_config "$WORK/sshd_config.new"
+        rm -f -- "$DROP_IN"
+    fi
+
+    check_sshd
+    keys="$(host_keys)"
+    reload_sshd
+    answer "\"ok\":true,\"port\":${PORT},\"host_keys\":${keys}"
+}
+
+remove() {
+    save
+
+    if has_block "$KEYS"; then
+        strip "$KEYS" >"$WORK/keys.new"
+        write_keys "$WORK/keys.new"
+    fi
+
+    rm -f -- "$DROP_IN"
+
+    if has_block "$SSHD_CONFIG"; then
+        strip "$SSHD_CONFIG" >"$WORK/sshd_config.new"
+        write_config "$WORK/sshd_config.new"
+    fi
+
+    sshd -t >/dev/null 2>&1 || fail 'sshd refused the new settings, so the old ones are back. Run sshd -t to see why.'
+    reload_sshd
+    answer '"ok":true'
+}
+
+handle_request() {
+    local request
+
+    [ -e "$EXCHANGE/request" ] || [ -L "$EXCHANGE/request" ] || exit 0
+
+    if [ -L "$EXCHANGE/request" ] || [ ! -f "$EXCHANGE/request" ]; then
+        rm -f -- "$EXCHANGE/request"
+        fail "$REFUSED"
+    fi
+
+    request="$(head -c 513 -- "$EXCHANGE/request" 2>/dev/null)" || exit 0
+    rm -f -- "$EXCHANGE/request"
+
+    if [[ "$request" =~ $REQUEST_ID ]]; then
+        ID="${BASH_REMATCH[1]}"
+    fi
+
+    if [ "${#request}" -gt 512 ] || ! [[ "$request" =~ $REQUEST ]]; then
+        fail "$REFUSED"
+    fi
+
+    if [ "${BASH_REMATCH[2]}" = remove ]; then
+        remove
+    else
+        add "${BASH_REMATCH[3]}"
+    fi
+}
+
+trap finish EXIT
+handle_request
+HELPER
+    chown root:root "$tmp"
+    chmod 0755 "$tmp"
+    mv -f "$tmp" "$THIS_MACHINE_HELPER"
 }
 
 secure_logs() {
@@ -1274,6 +1589,7 @@ finalize() {
     run systemctl enable --now coresmith-scheduler.timer
     run systemctl enable --now coresmith-update.path
     run systemctl enable --now coresmith-address.path
+    run systemctl enable --now coresmith-this-machine.path
 
     configure_firewall
     configure_fail2ban
