@@ -169,6 +169,7 @@ final class E2ESeeder extends Seeder
             $this->application("doomed-{$code}", 8120 + $index * 30);
 
             ManagedDatabase::factory()->postgres()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
+            ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
             $this->server("detach-{$code}", '198.51.100.' . (60 + $index), ServerStatus::Active);

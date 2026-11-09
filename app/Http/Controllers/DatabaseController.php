@@ -149,6 +149,7 @@ final class DatabaseController extends Controller
             'privilege_level' => $database->privilege_level,
             'is_external' => (bool) $database->is_external,
             'has_password' => $database->hasPassword(),
+            'password_shown' => $database->credentials_shown_at !== null,
         ];
     }
 }

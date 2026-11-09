@@ -156,3 +156,17 @@ test('creating a database lets go of it when done', function () {
 test('the hold on a database outlasts the job that creates it', function () {
     expect(ManagedDatabase::CREDENTIALS_LOCK_SECONDS)->toBeGreaterThan((new CreateDatabase(ManagedDatabase::factory()->make()))->timeout);
 });
+
+test('a password the job sets has not been shown yet, even when an earlier one had', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+    $database = ManagedDatabase::factory()->for($server)->create(['name' => 'reports', 'db_user' => 'reports_app', 'credentials_shown_at' => now()]);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3));
+
+    try {
+        app()->call([new CreateDatabase($database), 'handle']);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($database->fresh()->credentials_shown_at)->toBeNull();
+});

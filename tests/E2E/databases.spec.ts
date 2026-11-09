@@ -12,6 +12,7 @@ import {
     test,
     toast,
     useTheme,
+    withInertia,
     withProps
 } from './support/fixtures'
 
@@ -136,33 +137,40 @@ test.describe('a database on a server that was already there', () => {
 })
 
 test.describe('database passwords', () => {
-    test('an owner shows the password, which joins the connection URL and goes when the page does', async ({
+    test('a password is shown once, joins the connection URL, and is never offered again', async ({
         page
-    }) => {
-        await gotoDatabase(page, 'forge-01', 'atlas_production')
+    }, testInfo) => {
+        const name = own(testInfo, 'reveal', '_')
+
+        await gotoDatabase(page, 'bench-01', name)
 
         await expect(page.getByTestId('database-password')).toHaveCount(0)
-        await expect(page.getByRole('main')).toContainText(
-            'The password is encrypted at rest. Showing or rotating it is recorded in the activity log.'
+        await expect(page.getByTestId('database-password-note')).toHaveText(
+            'It can be shown once, then only rotating gives you a new one. Both are recorded in the activity log.'
         )
 
         const password = await showPassword(page)
 
-        await expect(page.getByTestId('database-url')).toContainText(`postgresql://atlas_app:${password}@`)
-        await expect(page.getByRole('main')).toContainText("Copy it now. It's hidden again when you leave this page.")
+        await expect(page.getByTestId('database-url')).toContainText(`mysql://${name}:${password}@`)
+        await expect(page.getByTestId('database-password-note')).toHaveText(
+            "Copy it now. It isn't shown again; rotate it if you lose it."
+        )
         await expect(page.getByRole('button', { name: 'Copy password' })).toBeVisible()
         await expect(page.getByRole('button', { name: 'Copy URL' })).toBeVisible()
 
-        await gotoDatabase(page, 'forge-01', 'atlas_production')
+        await gotoDatabase(page, 'bench-01', name)
 
         await expect(page.getByTestId('database-password')).toHaveCount(0)
         await expect(page.getByTestId('database-url')).not.toContainText(password)
-        await expect(page.getByRole('button', { name: 'Show password' })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Show password' })).toHaveCount(0)
+        await expect(page.getByTestId('database-password-note')).toHaveText(
+            'It was shown once and is encrypted at rest. Rotate it if you lose it.'
+        )
+        await expect(page.getByRole('button', { name: 'Rotate password' })).toBeVisible()
     })
 
-    test('rotating asks first, and a server Coresmith cannot reach keeps the old password', async ({ page }) => {
+    test('rotating asks first, and a server Coresmith cannot reach changes nothing', async ({ page }) => {
         await gotoDatabase(page, 'vault-01', 'vault_production')
-        const before = await showPassword(page)
 
         await page.getByRole('button', { name: 'Rotate password' }).click()
         await expect(dialog(page)).toContainText('Rotate the password of vault_production?')
@@ -175,8 +183,10 @@ test.describe('database passwords', () => {
             "Coresmith couldn't change the password on vault-01, so the old one still works. Check the server is online, then try again."
         )
         await expect(dialog(page)).toHaveCount(0)
-
-        expect(await showPassword(page)).toBe(before)
+        await expect(page.getByTestId('database-password')).toHaveCount(0)
+        await expect(page.getByTestId('database-password-note')).toHaveText(
+            'It can be shown once, then only rotating gives you a new one. Both are recorded in the activity log.'
+        )
     })
 
     test('a Redis database on the shared instance says it has no password and offers none', async ({ page }) => {
@@ -200,8 +210,11 @@ test.describe('database passwords', () => {
                 page
             }) => {
                 await useTheme(page, theme)
+                await withInertia(page, /\/databases\/[A-Za-z0-9]+$/, (body) => {
+                    body.flash = { ...body.flash, databasePassword: 'Kq3vX9pLm2Rt7Yw4Zb8Nc1Hd' }
+                })
                 await gotoDatabase(page, 'forge-01', 'atlas_production')
-                await showPassword(page)
+                await expect(page.getByTestId('database-password')).toHaveText('password Kq3vX9pLm2Rt7Yw4Zb8Nc1Hd')
                 expect(await blockingViolations(page), `shown password in ${theme}`).toEqual([])
 
                 await page.getByRole('button', { name: 'Rotate password' }).click()

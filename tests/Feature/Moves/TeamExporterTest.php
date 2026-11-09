@@ -65,7 +65,7 @@ function teamExporterTeam(): Team
         'deploy_key_public' => 'ssh-ed25519 AAAAdocs',
     ]);
     WebhookEndpoint::factory()->create(['application_id' => $site->id, 'secret' => 'hook-secret-moves']);
-    ManagedDatabase::factory()->create(['team_id' => $team->id, 'server_id' => $server->id, 'name' => 'acme', 'db_password' => 'database-password-moves']);
+    ManagedDatabase::factory()->create(['team_id' => $team->id, 'server_id' => $server->id, 'name' => 'acme', 'db_password' => 'database-password-moves', 'credentials_shown_at' => '2026-10-01 09:30:00']);
     BackupDestination::factory()->create(['team_id' => $team->id, 'bucket' => 'acme-backups', 'access_key_id' => 'AKIAMOVES', 'secret_access_key' => 's3-secret-moves']);
 
     return $team->fresh();
@@ -94,6 +94,7 @@ test('the export carries the team, its servers, apps and databases with their se
         ->and($docs['deploy_key_private'])->toContain('docs-deploy-key')
         ->and($payload['webhook_endpoints'][0])->toMatchArray(['application' => $site['ref'], 'secret' => 'hook-secret-moves'])
         ->and($payload['databases'][0])->toMatchArray(['server' => $server['ref'], 'name' => 'acme', 'db_password' => 'database-password-moves'])
+        ->and($payload['databases'][0]['credentials_shown_at'])->not->toBeNull()
         ->and($payload['backup_destination'])->toMatchArray(['bucket' => 'acme-backups', 'access_key_id' => 'AKIAMOVES', 'secret_access_key' => 's3-secret-moves']);
 });
 

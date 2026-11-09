@@ -69,6 +69,7 @@ class ManagedDatabase extends Model
             'extensions' => 'array',
             'is_external' => 'boolean',
             'last_offsite_at' => 'datetime',
+            'credentials_shown_at' => 'datetime',
         ];
     }
 }
