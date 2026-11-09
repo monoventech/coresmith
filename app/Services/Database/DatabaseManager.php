@@ -137,10 +137,11 @@ final class DatabaseManager
 
         match ($database->type) {
             DatabaseType::Mysql => $this->run($connection, [
-                $this->mysql->command($this->mysql->dropDatabase($name)),
+                $this->mysql->command('SET SESSION lock_wait_timeout = 30; ' . $this->mysql->dropDatabase($name)),
                 $this->mysql->command($this->mysql->dropUser($user)),
             ]),
             DatabaseType::Postgresql => $this->run($connection, [
+                $this->postgres->command($this->postgres->endSessions($name)),
                 $this->postgres->command($this->postgres->dropDatabase($name)),
                 $this->postgres->command($this->postgres->dropUser($user)),
             ]),

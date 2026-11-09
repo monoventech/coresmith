@@ -110,17 +110,41 @@ test.describe('databases', () => {
         await expect(toast(page)).toContainText('Backup started.')
     })
 
-    test('deleting asks first, then removes it from the panel', async ({ page }, testInfo) => {
+    test('deleting asks for the name, then a shared Redis database leaves Coresmith', async ({ page }, testInfo) => {
         const name = own(testInfo, 'doomed', '_')
 
         await gotoDatabase(page, 'bench-01', name)
 
         await page.getByRole('button', { name: 'Delete this database' }).click()
         await expect(dialog(page)).toContainText(`Delete ${name}?`)
+        await expect(dialog(page)).toContainText(
+            "It's removed from Coresmith. The shared Redis on bench-01 keeps running and keeps what's in it."
+        )
+        await expect(dialog(page).getByRole('button', { name: 'Delete it' })).toBeDisabled()
+        await dialog(page).getByLabel(`Type ${name} to confirm`).fill(`${name}x`)
+        await expect(dialog(page).getByRole('button', { name: 'Delete it' })).toBeDisabled()
+        await dialog(page).getByLabel(`Type ${name} to confirm`).fill(name)
         await dialog(page).getByRole('button', { name: 'Delete it' }).click()
 
-        await expect(toast(page)).toContainText('Database removed.')
+        await expect(toast(page)).toContainText(`Removed ${name}. The shared Redis on bench-01 keeps what's in it.`)
         await expect(databaseRow(page, name)).toHaveCount(0)
+    })
+
+    test('a database Coresmith cannot drop from its server stays, and the page says why', async ({ page }) => {
+        await gotoDatabase(page, 'vault-01', 'vault_production')
+
+        await page.getByRole('button', { name: 'Delete this database' }).click()
+        await expect(dialog(page)).toContainText(
+            'Coresmith drops it and its user from vault-01. Everything in it is gone and apps using it stop working. Take a backup first if anything still needs the data.'
+        )
+        await dialog(page).getByLabel('Type vault_production to confirm').fill('vault_production')
+        await dialog(page).getByRole('button', { name: 'Delete it' }).click()
+
+        await expect(toast(page)).toContainText(
+            "Coresmith couldn't delete vault_production from vault-01, so it's still there. Check the server is online and nothing is using the database, then try again."
+        )
+        await expect(dialog(page)).toHaveCount(0)
+        await expect(page.getByRole('heading', { level: 1, name: 'vault_production' })).toBeVisible()
     })
 })
 
@@ -190,7 +214,7 @@ test.describe('database passwords', () => {
     })
 
     test('a Redis database on the shared instance says it has no password and offers none', async ({ page }) => {
-        await databaseShowing(page, { type: 'redis', port: 6379, has_password: false })
+        await databaseShowing(page, { type: 'redis', port: 6379, has_password: false, shared_redis: true })
         await gotoDatabase(page, 'forge-01', 'atlas_production')
 
         await expect(page.getByTestId('shared-redis-note')).toHaveText(
@@ -220,6 +244,15 @@ test.describe('database passwords', () => {
                 await page.getByRole('button', { name: 'Rotate password' }).click()
                 await expect(dialog(page)).toBeVisible()
                 expect(await blockingViolations(page), `rotate dialog in ${theme}`).toEqual([])
+            })
+
+            test(`the delete dialog has no serious or critical violations in ${theme}`, async ({ page }) => {
+                await useTheme(page, theme)
+                await gotoDatabase(page, 'forge-01', 'atlas_production')
+                await page.getByRole('button', { name: 'Delete this database' }).click()
+                await dialog(page).getByLabel('Type atlas_production to confirm').fill('atlas_production')
+
+                expect(await blockingViolations(page), `delete dialog in ${theme}`).toEqual([])
             })
         }
     })
