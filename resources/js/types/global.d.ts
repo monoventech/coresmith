@@ -32,6 +32,7 @@ declare module '@inertiajs/core' {
             success?: string
             error?: string
             plainTextToken?: string
+            databasePassword?: string
         }
     }
 }

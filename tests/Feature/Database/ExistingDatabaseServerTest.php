@@ -11,6 +11,8 @@ use App\Services\Database\DatabaseManager;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Sleep;
 use Tests\Support\FakeSSHTransport;
 
 function existingDbConnection(FakeSSHTransport $transport, array $server = []): SSHConnection
@@ -117,4 +119,40 @@ test('the redis probe cannot hang the provisioning job', function () {
     app(DatabaseManager::class)->ensureServerInstalled(existingDbConnection($transport), DatabaseType::Redis);
 
     expect(implode("\n", $transport->commands()))->toContain('redis-cli -t 3 ping');
+});
+
+test('creating a database waits for a password rotation on it, then gives up rather than racing it', function () {
+    Sleep::fake(syncWithCarbon: true);
+    $database = ManagedDatabase::factory()->create(['name' => 'reports', 'db_user' => 'reports_app']);
+    $transport = new FakeSSHTransport;
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+    $held = $database->credentialsLock();
+    $held->get();
+
+    try {
+        expect(fn() => app()->call([new CreateDatabase($database), 'handle']))->toThrow(LockTimeoutException::class);
+    } finally {
+        $held->release();
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($transport->calls())->toBe([]);
+});
+
+test('creating a database lets go of it when done', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+    $database = ManagedDatabase::factory()->for($server)->create(['name' => 'reports', 'db_user' => 'reports_app']);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3));
+
+    try {
+        app()->call([new CreateDatabase($database), 'handle']);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($database->credentialsLock()->get())->toBeTrue();
+});
+
+test('the hold on a database outlasts the job that creates it', function () {
+    expect(ManagedDatabase::CREDENTIALS_LOCK_SECONDS)->toBeGreaterThan((new CreateDatabase(ManagedDatabase::factory()->make()))->timeout);
 });

@@ -88,6 +88,7 @@ class HandleInertiaRequests extends Middleware
             'success' => $request->session()->get('success'),
             'error' => $request->session()->get('error'),
             'plainTextToken' => $request->session()->get('plainTextToken'),
+            'databasePassword' => $request->session()->get('databasePassword'),
         ], fn(mixed $value): bool => is_string($value) && $value !== '');
 
         if ($flash !== []) {
