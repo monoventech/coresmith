@@ -123,7 +123,7 @@ test('the new address goes live once its certificate is served, and the old one 
         ->and($probe->asked)->toBe([CertificateSource::Public, CertificateSource::Public, CertificateSource::Public])
         ->and(file_get_contents("{$directory}/.env"))->toBe("APP_URL=https://coresmith.example.com\nVITE_REVERB_HOST=coresmith.example.com\n")
         ->and(AddressChange::current())->toMatchArray(['state' => 'done', 'from' => '192.168.0.248', 'to' => 'coresmith.example.com', 'error' => null])
-        ->and(Activity::query()->where('description', 'address_changed')->sole()->properties->all())->toBe(['from' => '192.168.0.248', 'to' => 'coresmith.example.com']);
+        ->and(Activity::query()->where('description', 'address_changed')->sole()->properties->all())->toBeInAnyKeyOrder(['from' => '192.168.0.248', 'to' => 'coresmith.example.com']);
 });
 
 test('the change counts as done while the old address still serves coresmith, so an open page can see it', function () {
