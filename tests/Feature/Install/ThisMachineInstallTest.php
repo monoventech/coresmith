@@ -36,6 +36,7 @@ function thisMachineKey(string $which = 'first'): string
 function thisMachineBase(): string
 {
     $base = realpath(sys_get_temp_dir()) . '/csm-' . bin2hex(random_bytes(4));
+    test()->scratchFolders = [...test()->scratchFolders, $base];
 
     foreach (['exchange', 'ssh/sshd_config.d', 'root-ssh', 'bin', 'tmp'] as $directory) {
         mkdir("{$base}/{$directory}", 0700, true);
@@ -111,9 +112,13 @@ function thisMachineRule(): string
     return "Match Address 127.0.0.1,::1\n    PermitRootLogin prohibit-password\nMatch all\n";
 }
 
+beforeEach(function () {
+    $this->scratchFolders = [];
+});
+
 afterEach(function () {
-    foreach (glob(realpath(sys_get_temp_dir()) . '/csm-*') ?: [] as $base) {
-        File::deleteDirectory($base);
+    foreach ($this->scratchFolders as $folder) {
+        File::deleteDirectory($folder);
     }
 });
 
@@ -326,6 +331,7 @@ test('the helper passes shellcheck', function () {
 
     $file = realpath(sys_get_temp_dir()) . '/csm-' . bin2hex(random_bytes(4)) . '/this-machine';
     File::ensureDirectoryExists(dirname($file));
+    test()->scratchFolders = [...test()->scratchFolders, dirname($file)];
     file_put_contents($file, thisMachineHelper());
     $process = new Process(['shellcheck', '-S', 'style', '-s', 'bash', $file]);
     $process->run();
@@ -521,6 +527,7 @@ test('the saving script passes shellcheck', function () {
 
     $file = realpath(sys_get_temp_dir()) . '/csm-' . bin2hex(random_bytes(4)) . '/persist';
     File::ensureDirectoryExists(dirname($file));
+    test()->scratchFolders = [...test()->scratchFolders, dirname($file)];
     file_put_contents($file, thisMachinePersist());
     $process = new Process(['shellcheck', '-S', 'style', '-s', 'bash', $file]);
     $process->run();

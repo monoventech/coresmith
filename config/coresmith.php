@@ -88,6 +88,10 @@ return [
         'state_path' => env('CORESMITH_ADDRESS_STATE_PATH', '/var/lib/coresmith/address'),
     ],
 
+    'this_machine' => [
+        'state_path' => env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine'),
+    ],
+
     'live' => [
         'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
         'socket' => [

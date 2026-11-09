@@ -200,3 +200,38 @@ test('the probe runs as root in one round trip and never changes anything', func
         ->and($transport->commands()[0])->toEndWith('| base64 -d | sudo bash -s')
         ->and(base64_decode(explode("'", $transport->commands()[0])[1]))->not->toMatch('/\b(apt|yum|dnf|rm|systemctl (stop|disable|restart))\b/');
 });
+
+function auditCoresmithsOwnMachine(array $overrides = []): array
+{
+    return auditFindings(auditProbe([
+        'ports' => ['LISTEN 0 4096 *:80 *:* users:(("caddy",pid=900,fd=7))', 'LISTEN 0 4096 *:443 *:* users:(("caddy",pid=900,fd=8))', 'LISTEN 0 4096 127.0.0.1:6001 0.0.0.0:* users:(("php",pid=950,fd=9))', 'LISTEN 0 4096 127.0.0.1:8484 0.0.0.0:* users:(("caddy",pid=900,fd=9))'],
+        'services' => ['caddy.service', 'coresmith-horizon.service', 'coresmith-reverb.service', 'php8.5-fpm.service', 'redis-server.service'],
+        'users' => ['coresmith'],
+        'panel' => ['/opt/coresmith', '/etc/systemd/system/coresmith-horizon.service'],
+        ...$overrides,
+    ]), ['runs_coresmith' => true]);
+}
+
+test("on Coresmith's own machine its Caddy, PHP-FPM, Redis and coresmith user are expected, and nothing of Coresmith's blocks provisioning", function () {
+    $findings = auditCoresmithsOwnMachine();
+
+    expect(collect($findings)->whereIn('severity', ['blocker', 'warning'])->values()->all())->toBe([])
+        ->and(auditFinding($findings, 'panel_host'))->toBe(['key' => 'panel_host', 'severity' => 'info', 'title' => 'Coresmith runs on this machine', 'detail' => 'It keeps running beside your apps, which get users, folders and processes of their own.', 'fix' => null])
+        ->and(auditFinding($findings, 'ports_coresmith'))->toBe(['key' => 'ports_coresmith', 'severity' => 'info', 'title' => "Coresmith's Caddy holds ports 80 and 443", 'detail' => 'Provisioning gives it the config every server uses, so it serves your apps beside Coresmith.', 'fix' => null])
+        ->and(auditFinding($findings, 'php_fpm'))->toBe(['key' => 'php_fpm', 'severity' => 'info', 'title' => 'PHP-FPM runs Coresmith here', 'detail' => 'Coresmith adds a separate pool per app beside its own.', 'fix' => null])
+        ->and(auditFinding($findings, 'user_coresmith'))->toBe(['key' => 'user_coresmith', 'severity' => 'info', 'title' => "The coresmith user is Coresmith's own here", 'detail' => 'Apps get users of their own, and runtimes belong to coresmith-runtime.', 'fix' => null])
+        ->and(auditFinding($findings, 'redis')['severity'] ?? null)->toBe('info')
+        ->and(auditFinding($findings, 'app_port_8484'))->toMatchArray(['severity' => 'info', 'title' => "Port 8484 is Coresmith's"])
+        ->and(auditFinding($findings, 'port_80'))->toBeNull();
+});
+
+test("on Coresmith's own machine anything but its Caddy on port 80 or 443 still blocks, and so does nginx", function () {
+    $findings = auditCoresmithsOwnMachine([
+        'ports' => ['LISTEN 0 4096 *:80 *:* users:(("nginx",pid=800,fd=6))', 'LISTEN 0 4096 *:443 *:* users:(("caddy",pid=900,fd=8))'],
+        'services' => ['caddy.service', 'nginx.service', 'php8.5-fpm.service'],
+    ]);
+
+    expect(auditFinding($findings, 'port_80'))->toMatchArray(['severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'fix' => 'stop-nginx'])
+        ->and(auditFinding($findings, 'port_443'))->toBeNull()
+        ->and(auditFinding($findings, 'ports_coresmith'))->toMatchArray(['title' => "Coresmith's Caddy holds port 443"]);
+});

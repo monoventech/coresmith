@@ -32,7 +32,13 @@
 </script>
 
 <div class="rounded-xl border border-border bg-card p-6" data-testid="server-connect">
-    <h3 class="type-h3 m-0 mb-1">{provisioning.connected ? 'Connection' : `Connect ${server.name}`}</h3>
+    <h3 class="type-h3 m-0 mb-1">
+        {provisioning.connected
+            ? 'Connection'
+            : server.this_machine
+              ? 'Access to this machine'
+              : `Connect ${server.name}`}
+    </h3>
 
     {#if provisioning.connected}
         <p class="mb-4 flex items-center gap-2 text-[12.5px] text-muted-foreground">
@@ -42,6 +48,21 @@
                 its own key.</span
             >
         </p>
+    {:else if server.this_machine}
+        <p class="mb-4 text-[12.5px] text-muted-foreground" data-testid="this-machine-access">
+            Coresmith asks its helper for root on this machine, with a key that only works from the machine itself. It
+            checks the machine once it's in.
+        </p>
+
+        {#if provisioning.connect_error}
+            <div
+                class="tint-destructive mb-4 rounded-lg border px-3.5 py-3 text-[12.5px] leading-normal"
+                role="alert"
+                data-testid="connect-error"
+            >
+                {provisioning.connect_error}
+            </div>
+        {/if}
     {:else}
         <p class="mb-4 text-[12.5px] text-muted-foreground">
             {offersPassword
@@ -133,7 +154,19 @@
     {/if}
 
     <div class="mt-4 flex flex-wrap gap-2">
-        {#if !provisioning.connected}
+        {#if server.this_machine && !provisioning.connected && provisioning.connect_error && server.can.update}
+            <Form
+                method="post"
+                action={route('servers.this-machine.retry', server.id)}
+                options={{ preserveScroll: true }}
+            >
+                {#snippet children({ processing })}
+                    <Button type="submit" size="sm" disabled={processing}>{processing ? 'Asking…' : 'Try again'}</Button
+                    >
+                {/snippet}
+            </Form>
+        {/if}
+        {#if !provisioning.connected && !server.this_machine}
             <Button variant="outline" size="sm" onclick={() => copy('command')}
                 >{copied === 'command' ? 'Copied' : 'Copy the command'}</Button
             >
@@ -142,13 +175,19 @@
             >
         {/if}
         {#if server.can.update}
-            <Form method="post" action={route('servers.test-connection', server.id)} options={{ preserveScroll: true }}>
-                {#snippet children({ processing })}
-                    <Button type="submit" variant="outline" size="sm" disabled={processing}
-                        >{processing ? 'Testing…' : 'Test connection'}</Button
-                    >
-                {/snippet}
-            </Form>
+            {#if provisioning.connected || !server.this_machine}
+                <Form
+                    method="post"
+                    action={route('servers.test-connection', server.id)}
+                    options={{ preserveScroll: true }}
+                >
+                    {#snippet children({ processing })}
+                        <Button type="submit" variant="outline" size="sm" disabled={processing}
+                            >{processing ? 'Testing…' : 'Test connection'}</Button
+                        >
+                    {/snippet}
+                </Form>
+            {/if}
             {#if failed}
                 <Button size="sm" onclick={onretry}>{`Retry from phase ${provisioning.failed_phase}`}</Button>
                 <Button variant="outline" size="sm" onclick={onrestart}>Start over</Button>

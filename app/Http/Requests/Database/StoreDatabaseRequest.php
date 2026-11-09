@@ -12,9 +12,11 @@ use App\Enums\Ability;
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
 use App\Models\Server;
+use App\Services\Database\CoresmithDatabase;
 use App\Services\SafeName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 final class StoreDatabaseRequest extends FormRequest
 {
@@ -39,6 +41,30 @@ final class StoreDatabaseRequest extends FormRequest
             'extensions' => ['nullable', 'array'],
             'extensions.*' => ['string', 'regex:/^[a-zA-Z0-9_-]{1,63}$/D'],
         ];
+    }
+
+    /**
+     * @return list<callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $server = $this->route('server');
+            $type = DatabaseType::tryFrom((string) $this->input('type'));
+            $own = app(CoresmithDatabase::class);
+
+            if (!$server instanceof Server || !$server->runs_coresmith || $type === null || !$own->sharesEngineOnThisMachine($type)) {
+                return;
+            }
+
+            if ($own->named($this->string('name')->value())) {
+                $validator->errors()->add('name', "That's the database Coresmith itself uses on this machine. Pick another name.");
+            }
+
+            if ($own->usedBy($this->string('db_user')->value())) {
+                $validator->errors()->add('db_user', "That's the user Coresmith's own database uses on this machine. Pick another user.");
+            }
+        }];
     }
 
     /**

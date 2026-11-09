@@ -12,6 +12,7 @@ use App\Casts\Vaulted;
 use App\Enums\ServerStatus;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Server\SecurityHardening;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -62,6 +63,11 @@ class Server extends Model
     public function sshHardened(): bool
     {
         return (((array) $this->meta)['ssh_hardening'] ?? null) === 'verified';
+    }
+
+    public function sshPasswordsKept(): bool
+    {
+        return (((array) $this->meta)['ssh_hardening'] ?? null) === SecurityHardening::PASSWORDS_KEPT;
     }
 
     public function runtimeUser(): string

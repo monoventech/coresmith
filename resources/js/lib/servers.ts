@@ -33,6 +33,7 @@ export type ServerHeader = {
     state: EntityState
     meta: string
     active: boolean
+    this_machine: boolean
     metrics: { cpu: MetricSeries; memory: MetricSeries; disk: MetricSeries }
     unreachable: { last_answer: string | null; reason: string; can_reboot: boolean } | null
     disk_warning: { percent: number; apps: number } | null

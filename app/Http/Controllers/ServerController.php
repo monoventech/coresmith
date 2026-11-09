@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Exceptions\ServerConnectionFailed;
+use App\Exceptions\ThisMachineRefused;
 use App\Http\Requests\Server\ConnectServerRequest;
 use App\Http\Requests\Server\StoreServerRequest;
 use App\Http\Requests\Server\UpdateServerRequest;
@@ -33,6 +34,7 @@ use App\Services\Panel\ServerPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\Server\ServerConnector;
+use App\Services\Server\ThisMachine;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamUrls;
@@ -47,7 +49,7 @@ final class ServerController extends Controller
 {
     public const ENVIRONMENTS = ['Production', 'Staging', 'Development'];
 
-    public function create(Request $request, CloudPresenter $cloud, TeamContext $context, PlanGate $plans): Response
+    public function create(Request $request, CloudPresenter $cloud, TeamContext $context, PlanGate $plans, ThisMachine $machine): Response
     {
         $this->authorize('create', Server::class);
 
@@ -61,6 +63,12 @@ final class ServerController extends Controller
             'current' => $team->getKey(),
             'environments' => self::ENVIRONMENTS,
             'phases' => ServerPresenter::PROVISIONING_PHASES,
+            'thisMachine' => $request->user()->managesInstance() ? [
+                'installed' => $machine->installed(),
+                'taken_by' => $machine->server()?->team?->name,
+                'name' => (string) gethostname(),
+                'installer' => ThisMachine::INSTALLER,
+            ] : null,
             'cloud' => fn(): array => $cloud->choices($team, $request->user(), $requested),
             'catalog' => Inertia::defer(function () use ($cloud, $team, $requested): ?array {
                 $account = $cloud->selectedAccount($team, $requested);
@@ -142,9 +150,13 @@ final class ServerController extends Controller
         return back()->with('success', 'Saved.');
     }
 
-    public function destroy(Server $server): RedirectResponse
+    public function destroy(Server $server, ThisMachine $machine): RedirectResponse
     {
         $this->authorize('delete', $server);
+
+        if ($server->runs_coresmith) {
+            return $this->detachThisMachine($server, $machine);
+        }
 
         $label = $server->cloudProvider?->type->label();
 
@@ -164,6 +176,24 @@ final class ServerController extends Controller
             $server->provider_server_id === null => "Removed. Nothing was created at {$label}.",
             default => "Detached. {$server->name} keeps running at {$label}, and {$label} keeps billing for it.",
         });
+    }
+
+    private function detachThisMachine(Server $server, ThisMachine $machine): RedirectResponse
+    {
+        try {
+            $machine->remove(ThisMachine::REMOVE_SECONDS);
+            $refusal = null;
+        } catch (ThisMachineRefused $refused) {
+            $refusal = $refused->getMessage();
+        }
+
+        activity()->performedOn($server)->log('server_detached');
+
+        $server->delete();
+
+        return $refusal === null
+            ? to_route('dashboard')->with('success', 'Detached. Coresmith took its key off this machine and stopped managing it. Apps keep running, and so does Coresmith.')
+            : to_route('dashboard')->with('error', "Detached, but Coresmith couldn't take its key off this machine: {$refusal} Remove the coresmith-this-machine lines from /root/.ssh/authorized_keys and /etc/ssh/sshd_config, and delete /etc/ssh/sshd_config.d/00-coresmith-local.conf.");
     }
 
     public function testConnection(Server $server, ServerConnector $connector): RedirectResponse

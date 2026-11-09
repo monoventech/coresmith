@@ -23,7 +23,8 @@
         environments = [],
         phases = [],
         cloud,
-        catalog
+        catalog,
+        thisMachine = null
     }: {
         teams: { id: string; name: string; limit: string | null }[]
         current?: string | null
@@ -31,6 +32,7 @@
         phases: { name: string; desc: string }[]
         cloud: CloudChoices
         catalog?: CloudCatalog | null
+        thisMachine?: { installed: boolean; taken_by: string | null; name: string; installer: string } | null
     } = $props()
 
     let picked = $state<string | null>(null)
@@ -43,6 +45,7 @@
     let name = $state('')
 
     const options = $derived([
+        ...(thisMachine ? [{ value: 'this-machine', label: 'This machine' }] : []),
         ...cloud.accounts.map((row) => ({
             value: `account:${row.id}`,
             label: row.refused ? `${row.name}, token refused` : row.name
@@ -62,6 +65,10 @@
         }
 
         picked = value
+
+        if (value === 'this-machine' && name === '' && thisMachine) {
+            name = thisMachine.name
+        }
 
         if (value.startsWith('account:')) {
             router.get(
@@ -101,6 +108,24 @@
     </div>
 {/snippet}
 
+{#snippet teamField(error: string | undefined)}
+    {#if teams.length > 1}
+        <div>
+            <Label for="team_id" class="mb-1.5">Team</Label>
+            <NativeSelect
+                id="team_id"
+                name="team_id"
+                options={teams.map((row) => ({ value: row.id, label: row.name }))}
+                value={chosenTeam ?? undefined}
+                onchange={(event) => (team = (event.currentTarget as HTMLSelectElement).value)}
+            />
+        </div>
+    {:else}
+        <input type="hidden" name="team_id" value={chosenTeam ?? ''} />
+    {/if}
+    <FieldError message={error} />
+{/snippet}
+
 {#snippet limitBanner(text: string)}
     <div
         class="tint-warning flex items-start gap-3 rounded-xl border px-4.5 py-3 max-sm:px-3.5"
@@ -123,7 +148,39 @@
 
 <div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
     <div class="rounded-xl border border-border bg-card p-6">
-        {#if account}
+        {#if choice === 'this-machine' && thisMachine}
+            <Form method="post" action={route('servers.this-machine.store')}>
+                {#snippet children({ errors, processing })}
+                    <div class="flex flex-col gap-4">
+                        {@render serverName(errors.name)}
+                        {@render providerSelect()}
+                        {#if thisMachine.taken_by !== null}
+                            <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="this-machine-taken">
+                                This machine is already a server in {thisMachine.taken_by}.
+                            </p>
+                        {:else if !thisMachine.installed}
+                            <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="this-machine-installer">
+                                This install's installer is from before Coresmith could use its own machine. Run it
+                                again on this machine, then come back.
+                            </p>
+                            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                            <pre
+                                class="terminal text-[11.5px] leading-[1.7] wrap-anywhere whitespace-pre-wrap"
+                                tabindex="0"
+                                role="region"
+                                aria-label="Command that runs the installer again">{thisMachine.installer}</pre>
+                        {:else}
+                            <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="this-machine-explained">
+                                Run your apps on the machine Coresmith runs on. Coresmith gets root here with a key that
+                                only works from this machine, then checks and provisions it like any server.
+                            </p>
+                            {@render teamField(errors.team_id)}
+                            <Button type="submit" class="w-full" disabled={processing}>Use this machine</Button>
+                        {/if}
+                    </div>
+                {/snippet}
+            </Form>
+        {:else if account}
             <Form method="post" action={route('servers.cloud.store')}>
                 {#snippet children({ errors, processing })}
                     <div class="flex flex-col gap-4">
@@ -286,25 +343,11 @@
                                 <FieldError message={errors.region} />
                             </div>
                         </div>
-                        {#if teams.length > 1}
-                            <div>
-                                <Label for="team_id" class="mb-1.5">Team</Label>
-                                <NativeSelect
-                                    id="team_id"
-                                    name="team_id"
-                                    options={teams.map((row) => ({ value: row.id, label: row.name }))}
-                                    value={chosenTeam ?? undefined}
-                                    onchange={(event) => (team = (event.currentTarget as HTMLSelectElement).value)}
-                                />
-                            </div>
-                        {:else}
-                            <input type="hidden" name="team_id" value={chosenTeam ?? ''} />
-                        {/if}
+                        {@render teamField(errors.team_id)}
                         <p class="-mt-1 text-[12px] text-muted-foreground">
                             Needs Ubuntu 24.04 or Debian 12 and SSH access. Coresmith makes a key for this server alone.
                             Without a password, you run one command to add it.
                         </p>
-                        <FieldError message={errors.team_id} />
                         {#if note}
                             {@render limitBanner(note)}
                         {/if}
