@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.1 (2026-11-09)
+
+### Fixed
+- fix: SSH password logins really turn off, and the Hardening tab claims it only once sshd confirms it (#20)
+
 ## v0.4.0 (2026-11-09)
 
 ### Added
