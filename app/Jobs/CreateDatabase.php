@@ -22,6 +22,8 @@ final class CreateDatabase implements ShouldQueue
 
     public int $tries = 2;
 
+    public const LOCK_WAIT_SECONDS = 30;
+
     public int $timeout = 1260;
 
     public function __construct(private readonly ManagedDatabase $database)
@@ -31,18 +33,20 @@ final class CreateDatabase implements ShouldQueue
 
     public function handle(SSHConnectionManager $connections, DatabaseManager $databases): void
     {
-        $server = $this->database->server;
-        $connection = $connections->for($server);
+        $this->database->credentialsLock()->block(self::LOCK_WAIT_SECONDS, function () use ($connections, $databases): void {
+            $server = $this->database->server;
+            $connection = $connections->for($server);
 
-        try {
-            $password = DatabaseManager::generatePassword();
+            try {
+                $password = DatabaseManager::generatePassword();
 
-            $external = $databases->ensureServerInstalled($connection, $this->database->type, $this->database);
-            $databases->create($connection, $this->database, $password);
+                $external = $databases->ensureServerInstalled($connection, $this->database->type, $this->database);
+                $databases->create($connection, $this->database, $password);
 
-            $this->database->forceFill(['db_password' => $password, 'is_external' => $external])->save();
-        } finally {
-            $connections->disconnect($server);
-        }
+                $this->database->forceFill(['db_password' => $password, 'is_external' => $external])->save();
+            } finally {
+                $connections->disconnect($server);
+            }
+        });
     }
 }

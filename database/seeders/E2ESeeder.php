@@ -191,6 +191,7 @@ final class E2ESeeder extends Seeder
         $this->ssrDidNotStart($this->realtime('ssr-failed', 9220, [], Server::query()->where('name', 'hot-01')->sole()));
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->connectFixtures();
+        $this->databasePasswordFixtures();
         $this->auditFixtures();
         $this->invitations($tenant->owner);
 
@@ -352,6 +353,14 @@ final class E2ESeeder extends Seeder
     {
         TeamInvitation::factory()->for($this->team)->withToken(self::WAITING_INVITATION_TOKEN)->create(['email' => 'waiting@coresmith.test', 'invited_by' => $owner->id]);
         TeamInvitation::factory()->for($this->team)->withToken(self::EXPIRED_INVITATION_TOKEN)->expired()->create(['email' => 'expired@coresmith.test', 'invited_by' => $owner->id]);
+    }
+
+    private function databasePasswordFixtures(): void
+    {
+        $vault = $this->server('vault-01', '127.0.0.1', ServerStatus::Active);
+        $vault->forceFill(['ssh_port' => 1])->save();
+
+        ManagedDatabase::factory()->for($this->team)->for($vault)->create(['name' => 'vault_production', 'db_user' => 'vault_app']);
     }
 
     private function connectFixtures(): void

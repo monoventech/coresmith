@@ -79,7 +79,7 @@ final class DatabaseController extends Controller
             'database' => $this->summarise($database),
             'can' => [
                 'viewCredentials' => auth()->user()?->can('viewCredentials', $database) ?? false,
-                'backup' => auth()->user()?->can('backup', $database) ?? false,
+                'backup' => (auth()->user()?->can('backup', $database) ?? false) && $database->takesBackups(),
                 'delete' => auth()->user()?->can('delete', $database) ?? false,
             ],
             'offsite' => !$this->goesToS3($database) ? null : [
@@ -103,6 +103,7 @@ final class DatabaseController extends Controller
     {
         $this->authorize('backup', $database);
         $this->assertBelongsTo($server, $database);
+        abort_unless($database->takesBackups(), 404);
 
         BackupDatabase::dispatch($database, now()->format('YmdHis'), offsite: $this->goesToS3($database));
 
@@ -147,6 +148,7 @@ final class DatabaseController extends Controller
             'status' => $database->status,
             'privilege_level' => $database->privilege_level,
             'is_external' => (bool) $database->is_external,
+            'has_password' => $database->hasPassword(),
         ];
     }
 }

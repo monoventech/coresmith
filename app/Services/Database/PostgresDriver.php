@@ -31,6 +31,13 @@ final class PostgresDriver
         return "CREATE ROLE \"{$user}\" LOGIN PASSWORD {$escaped} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;";
     }
 
+    public function changePassword(string $user, #[\SensitiveParameter] string $password): string
+    {
+        $user = SafeName::assertDatabaseIdentifier($user);
+
+        return "ALTER ROLE \"{$user}\" WITH PASSWORD {$this->quoteLiteral($password)};";
+    }
+
     public function grant(string $database, string $user, PrivilegeLevel $level): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);

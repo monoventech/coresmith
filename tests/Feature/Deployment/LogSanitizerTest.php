@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Services\Database\MysqlDriver;
+use App\Services\Database\PostgresDriver;
 use App\Services\Deployment\LogSanitizer;
 
 test('terminal colour and cursor codes are dropped, so a log reads as plain text', function () {
@@ -193,3 +195,24 @@ test('deployment output is sanitised before it reaches the database', function (
     expect(DB::table('deployments')->where('id', $deployment->id)->value('log'))
         ->not->toContain('leaky-password-value');
 });
+
+test('the password in a command that creates a MySQL user is redacted and the rest stays readable', function () {
+    $mysql = new MysqlDriver;
+
+    expect((new LogSanitizer)->sanitize($mysql->command($mysql->createUser('shop_app', 'Secr3tPassw0rdXYZ'))))
+        ->toBe("mysql --protocol=socket -e 'CREATE USER IF NOT EXISTS '\\''shop_app'\\''@'\\''localhost'\\'' IDENTIFIED BY '\\''[REDACTED]'\\'';'");
+});
+
+test('the password in a command that creates a PostgreSQL role is redacted and the rest stays readable', function () {
+    $postgres = new PostgresDriver;
+
+    expect((new LogSanitizer)->sanitize($postgres->command($postgres->createUser('shop_app', 'Secr3tPassw0rdXYZ'))))
+        ->toBe("sudo -u postgres psql -v ON_ERROR_STOP=1 -c 'CREATE ROLE \"shop_app\" LOGIN PASSWORD '\\''[REDACTED]'\\'' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;'");
+});
+
+test('a password in plain SQL is redacted, including one with an escaped quote inside', function (string $sql, string $expected) {
+    expect((new LogSanitizer)->sanitize($sql))->toBe($expected);
+})->with([
+    'mysql' => ["ALTER USER 'shop_app'@'localhost' IDENTIFIED BY 'it\\'s-a-s3cret-value';", "ALTER USER 'shop_app'@'localhost' IDENTIFIED BY '[REDACTED]';"],
+    'postgres' => ["ALTER ROLE \"shop_app\" WITH PASSWORD 'it''s-a-s3cret-value';", "ALTER ROLE \"shop_app\" WITH PASSWORD '[REDACTED]';"],
+]);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
 use App\Exceptions\BackupNotFoundException;
+use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\ManagedDatabase;
@@ -216,3 +217,35 @@ test('restoring refuses when the backup file is missing rather than truncating t
 
     expect(implode("\n", $transport->commands()))->not->toContain('gunzip');
 });
+
+test('a mysql password change keeps the user and quotes the new password', function () {
+    expect((new MysqlDriver)->changePassword('app_user', "pa'ss"))->toBe("ALTER USER 'app_user'@'localhost' IDENTIFIED BY 'pa\\'ss';");
+});
+
+test('a postgres password change keeps the role and doubles a quote', function () {
+    expect((new PostgresDriver)->changePassword('app_user', "pa'ss"))->toBe("ALTER ROLE \"app_user\" WITH PASSWORD 'pa''ss';");
+});
+
+test('a password change refuses a user name carrying sql metacharacters', function (string $driver) {
+    (new $driver)->changePassword("evil'@'%", 'secret');
+})->with([MysqlDriver::class, PostgresDriver::class])->throws(UnsafeNameException::class);
+
+test('changing a database password runs the engine\'s own command on its server', function (DatabaseType $type, string $expected) {
+    $transport = new FakeSSHTransport;
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user']);
+
+    databaseManager()->changePassword(databaseConnection($transport), $database, 'N3wPassw0rdValue');
+
+    expect($transport->commands())->toHaveCount(1)
+        ->and($transport->commands()[0])->toContain($expected);
+})->with([
+    'mysql' => [DatabaseType::Mysql, "ALTER USER '\\''app_user'\\''@'\\''localhost'\\'' IDENTIFIED BY '\\''N3wPassw0rdValue'\\''"],
+    'postgres' => [DatabaseType::Postgresql, "ALTER ROLE \"app_user\" WITH PASSWORD '\\''N3wPassw0rdValue'\\''"],
+]);
+
+test('a failed password change on the server is reported, not swallowed', function () {
+    $transport = (new FakeSSHTransport)->respondTo('ALTER USER', "ERROR 1396 (HY000): Operation ALTER USER failed for 'app_user'@'localhost'", 1);
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db', 'db_user' => 'app_user']);
+
+    databaseManager()->changePassword(databaseConnection($transport), $database, 'N3wPassw0rdValue');
+})->throws(SSHCommandFailedException::class);

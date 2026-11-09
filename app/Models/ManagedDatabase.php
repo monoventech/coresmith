@@ -12,16 +12,20 @@ use App\Casts\Vaulted;
 use App\Enums\DatabaseType;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\ManagedDatabaseFactory;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 
 class ManagedDatabase extends Model
 {
     /** @use HasFactory<ManagedDatabaseFactory> */
     use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
+
+    public const CREDENTIALS_LOCK_SECONDS = 1320;
 
     protected $table = 'databases';
 
@@ -37,6 +41,21 @@ class ManagedDatabase extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function hasPassword(): bool
+    {
+        return $this->type !== DatabaseType::Redis;
+    }
+
+    public function takesBackups(): bool
+    {
+        return $this->type !== DatabaseType::Redis;
+    }
+
+    public function credentialsLock(): Lock
+    {
+        return Cache::lock('database-credentials:' . $this->getKey(), self::CREDENTIALS_LOCK_SECONDS);
     }
 
     /**
