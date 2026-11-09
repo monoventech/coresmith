@@ -40,12 +40,12 @@ async function settingsShowing(page: Page, address: Record<string, unknown>) {
 }
 
 test.describe("Coresmith's address", () => {
-    test('the card shows where Coresmith answers and how browsers treat its certificate', async ({ page }) => {
+    test('the card shows where Coresmith answers and how browsers treat its certificate', async ({ page, baseURL }) => {
         await gotoSettings(page, 'General')
 
         await expect(card(page).getByRole('link', { name: '127.0.0.1' })).toHaveAttribute(
             'href',
-            'http://127.0.0.1:8123'
+            new URL(String(baseURL)).origin
         )
         await expect(card(page)).toContainText('Browsers warn')
         await expect(card(page)).toContainText('browsers warn until Coresmith has a domain or a Tailscale name')
