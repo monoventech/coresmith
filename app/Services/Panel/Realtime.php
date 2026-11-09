@@ -14,4 +14,20 @@ final class Realtime
     {
         return !in_array((string) config('broadcasting.default'), ['null', 'log', ''], true);
     }
+
+    /**
+     * @return array{key: string, host: string, port: int, tls: bool}|null
+     */
+    public static function socket(): ?array
+    {
+        $socket = (array) config('coresmith.live.socket');
+        $key = (string) ($socket['key'] ?? '');
+
+        return $key === '' ? null : [
+            'key' => $key,
+            'host' => (string) ($socket['host'] ?? ''),
+            'port' => (int) ($socket['port'] ?? 443),
+            'tls' => ($socket['scheme'] ?? 'https') === 'https',
+        ];
+    }
 }

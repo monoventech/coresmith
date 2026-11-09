@@ -1,3 +1,5 @@
+import type { PanelProps } from '@/lib/panel'
+import { page } from '@inertiajs/svelte'
 import Echo from 'laravel-echo'
 import Pusher from 'pusher-js'
 
@@ -9,12 +11,18 @@ declare global {
 
 let connection: Echo<'reverb'> | null = null
 
+function socket(): PanelProps['live']['socket'] {
+    return (page.props.panel as PanelProps | null)?.live.socket ?? null
+}
+
 export function realtimeConfigured(): boolean {
-    return Boolean(import.meta.env.VITE_REVERB_APP_KEY)
+    return socket() !== null
 }
 
 export function realtime(): Echo<'reverb'> | null {
-    if (!realtimeConfigured()) {
+    const settings = socket()
+
+    if (settings === null) {
         return null
     }
 
@@ -26,11 +34,11 @@ export function realtime(): Echo<'reverb'> | null {
 
     connection = new Echo({
         broadcaster: 'reverb',
-        key: import.meta.env.VITE_REVERB_APP_KEY,
-        wsHost: import.meta.env.VITE_REVERB_HOST,
-        wsPort: Number(import.meta.env.VITE_REVERB_PORT ?? 80),
-        wssPort: Number(import.meta.env.VITE_REVERB_PORT ?? 443),
-        forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
+        key: settings.key,
+        wsHost: settings.host,
+        wsPort: settings.port,
+        wssPort: settings.port,
+        forceTLS: settings.tls,
         enabledTransports: ['ws', 'wss']
     })
 

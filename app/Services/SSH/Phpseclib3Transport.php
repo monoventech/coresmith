@@ -76,6 +76,16 @@ final class Phpseclib3Transport implements SSHTransport
         return $this->connection()->login($user, $key);
     }
 
+    public function loginWithPassword(string $user, #[\SensitiveParameter] string $password): bool
+    {
+        return $this->connection()->login($user, $password);
+    }
+
+    public function acceptsPasswords(): bool
+    {
+        return array_intersect(['password', 'keyboard-interactive'], $this->connection()->getAuthMethodsToContinue() ?? []) !== [];
+    }
+
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
     {
         $ssh = $this->connection();
@@ -94,6 +104,22 @@ final class Phpseclib3Transport implements SSHTransport
         });
 
         return $output;
+    }
+
+    public function execWithInput(string $command, #[\SensitiveParameter] string $input, int $timeout = self::COMMAND_SECONDS): string
+    {
+        $ssh = $this->connection();
+        $ssh->setTimeout($timeout);
+        self::forgetExitStatus($ssh);
+
+        if ($ssh->exec($command, false) !== true) {
+            return '';
+        }
+
+        $ssh->write($input, SSH2::CHANNEL_EXEC);
+        $ssh->sendEOF(SSH2::CHANNEL_EXEC);
+
+        return (string) $ssh->read('', SSH2::READ_SIMPLE, SSH2::CHANNEL_EXEC);
     }
 
     public function timedOut(): bool

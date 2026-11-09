@@ -61,9 +61,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.cloud.resize');
     Route::delete('servers/{server}/cloud/task', [CloudServerController::class, 'dismiss'])
         ->name('servers.cloud.dismiss');
-    Route::resource('servers', ServerController::class)->except(['index', 'edit'])->withTrashed(['show']);
+    Route::resource('servers', ServerController::class)->except(['index', 'edit'])->withTrashed(['show'])
+        ->middlewareFor('store', 'throttle:server-password');
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
+        ->middleware('throttle:10,1,server-test')
         ->name('servers.test-connection');
+    Route::post('servers/{server}/connect', [ServerController::class, 'connect'])
+        ->middleware('throttle:server-password')
+        ->name('servers.connect');
     Route::post('servers/{server}/provision', [ServerController::class, 'provision'])
         ->name('servers.provision');
     Route::post('servers/{server}/provisioning/retry', [ServerController::class, 'retryProvisioning'])

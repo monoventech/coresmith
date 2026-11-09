@@ -79,8 +79,22 @@ return [
         'server_poll_minutes' => (int) env('CORESMITH_SERVER_POLL_MINUTES', 5),
     ],
 
+    'address' => [
+        'site' => (string) env('CORESMITH_CADDY_SITE', ''),
+        'caddyfile' => '/etc/caddy/Caddyfile',
+        'apps_config' => '/etc/caddy/caddy-config.json',
+        'tailscaled_defaults' => '/etc/default/tailscaled',
+        'state_path' => env('CORESMITH_ADDRESS_STATE_PATH', '/var/lib/coresmith/address'),
+    ],
+
     'live' => [
         'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
+        'socket' => [
+            'key' => (string) env('VITE_REVERB_APP_KEY', ''),
+            'host' => (string) env('VITE_REVERB_HOST', ''),
+            'port' => (int) env('VITE_REVERB_PORT', 443),
+            'scheme' => (string) env('VITE_REVERB_SCHEME', 'https'),
+        ],
     ],
 
     'runtimes' => [

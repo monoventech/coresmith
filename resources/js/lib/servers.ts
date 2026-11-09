@@ -46,6 +46,10 @@ export type ServerHeader = {
         failed_phase: number | null
         log: string | null
         public_key: string
+        connect_command: string
+        connect_error: string | null
+        connected: boolean
+        password_sign_in: boolean
         ssh: string | null
         ssh_user: string
         audit: ServerAudit | null

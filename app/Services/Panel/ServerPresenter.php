@@ -15,6 +15,7 @@ use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\User;
 use App\Services\Server\Audit\ServerAudit;
+use App\Services\SSH\AuthorizedKeyCommand;
 use Carbon\CarbonImmutable;
 
 final class ServerPresenter
@@ -150,6 +151,10 @@ final class ServerPresenter
             'failed_phase' => $failed ? $completed + 1 : null,
             'log' => $server->provisioning_log,
             'public_key' => $server->ssh_public_key,
+            'connect_command' => AuthorizedKeyCommand::forPerson($server->ssh_user, (string) $server->ssh_public_key),
+            'connect_error' => $server->last_connection_error,
+            'connected' => $server->last_connected_at !== null && $server->last_connection_error === null,
+            'password_sign_in' => $server->status->isBeforeProvisioning(),
             'ssh' => $server->sshAddress(),
             'ssh_user' => $server->ssh_user,
             'audit' => $this->audit($server),

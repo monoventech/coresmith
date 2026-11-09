@@ -148,6 +148,7 @@ class HandleInertiaRequests extends Middleware
             'live' => [
                 'streaming' => Realtime::available(),
                 'refresh_seconds' => (int) config('coresmith.live.refresh_seconds'),
+                'socket' => Realtime::socket(),
             ],
         ];
     }

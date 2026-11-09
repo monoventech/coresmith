@@ -31,6 +31,19 @@ asMember.describe('what a member may do', () => {
         await expect(page.getByRole('button', { name: 'Detach' })).toHaveCount(0)
     })
 
+    asMember('a member sees the command that connects a server, but no password sign-in or test', async ({ page }) => {
+        await gotoServer(page, 'empty-server')
+
+        const card = page.getByTestId('server-connect')
+
+        await expect(card).toContainText('Coresmith needs its own key on the server.')
+        await expect(card).not.toContainText('with a password')
+        await expect(card.getByRole('heading', { name: 'Run this on the server' })).toBeVisible()
+        await expect(page.getByTestId('connect-command')).toContainText('sudo sh -c')
+        await expect(card.getByLabel('Password')).toHaveCount(0)
+        await expect(card.getByRole('button', { name: 'Test connection' })).toHaveCount(0)
+    })
+
     asMember('a member is not offered the firewall or the prune action', async ({ page }) => {
         await gotoServerTab(page, 'outpost-01', 'Hardening')
 

@@ -22,6 +22,11 @@ function installScriptBody(): string
     return (string) file_get_contents(installScript());
 }
 
+function installSiteTemplate(): string
+{
+    return (string) file_get_contents(base_path('resources/caddy/panel.caddy'));
+}
+
 function runInstaller(array $arguments): Process
 {
     $process = new Process(array_merge(['bash', installScript()], $arguments), base_path());
@@ -458,26 +463,90 @@ test('the machine test is valid bash that the shell lint covers', function () {
 });
 
 test('caddy only issues certificates for hosts the panel approves, asked over loopback', function () {
-    $body = installScriptBody();
-
-    expect($body)->toContain('permission http http://127.0.0.1:8484/api/caddy/ask')
-        ->and($body)->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
-        ->and($body)->toContain("https:// {\n    tls {\n        on_demand\n    }");
+    expect(installScriptBody())->toContain('permission http http://127.0.0.1:8484/api/caddy/ask')
+        ->and(installSiteTemplate())->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
+        ->and(installSiteTemplate())->toContain("https:// {\n    tls {\n        on_demand\n    }");
 });
 
 test('the updater checks the new release over the loopback site, never through tls', function () {
-    $site = str(installScriptBody())->after("http://127.0.0.1:8484 {\n")->before("\n}\n")->toString();
+    $site = str(installSiteTemplate())->after("http://127.0.0.1:8484 {\n")->before("\n}\n")->toString();
 
-    expect($site)->toContain("@release path /api/up/release\n    handle @release {\n        php_fastcgi unix/\${fpm_sock} {\n            resolve_root_symlink\n        }\n    }")
+    expect($site)->toContain("@release path /api/up/release\n    handle @release {\n        php_fastcgi unix//run/php/coresmith-panel-fpm.sock {\n            resolve_root_symlink\n        }\n    }")
         ->and(config('coresmith.updates.probe_url'))->toBe('http://127.0.0.1:8484/api/up/release');
 });
 
 test('team domains get hsts for themselves only, never for the customer subdomains', function () {
-    $site = str(installScriptBody())->after("https:// {\n")->before("\n}\nSITECONF")->toString();
+    $site = str(installSiteTemplate())->after("https:// {\n")->before("\n}\n__REDIRECTS__")->toString();
 
     expect($site)->toContain('Strict-Transport-Security "max-age=31536000"')
         ->and($site)->not->toContain('includeSubDomains')
         ->and($site)->not->toContain('preload');
+});
+
+test('the site Caddy serves comes from the template Coresmith also writes, which only coresmith may change', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"')
+        ->and($body)->toContain("printf 'import %s\\n' \"\$CADDY_SITE\"")
+        ->and($body)->toContain("chown coresmith:caddy \"\$CADDY_SITE_DIR\"\n    chmod 2750 \"\$CADDY_SITE_DIR\"")
+        ->and($body)->toContain('"$RELEASE_DIR/resources/caddy/panel.caddy" >"$CADDY_SITE"')
+        ->and($body)->toContain("chown coresmith:caddy \"\$CADDY_SITE\"\n    chmod 0640 \"\$CADDY_SITE\"")
+        ->and($body)->toContain('rm -f "$LEGACY_CADDY_SITE"')
+        ->and($body)->toContain('update_env CORESMITH_CADDY_SITE "$CADDY_SITE"')
+        ->and($body)->not->toContain('SITECONF');
+});
+
+test('the site template serves the release the installer installs, through the pool it configures', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly CORESMITH_ROOT="/opt/coresmith"')
+        ->and($body)->toContain('readonly INSTALL_DIR="$CORESMITH_ROOT/app"')
+        ->and($body)->toContain('local fpm_sock="/run/php/coresmith-panel-fpm.sock"')
+        ->and($body)->toContain('listen = ${fpm_sock}')
+        ->and(substr_count(installSiteTemplate(), 'root * /opt/coresmith/app/public'))->toBe(3)
+        ->and(substr_count(installSiteTemplate(), 'php_fastcgi unix//run/php/coresmith-panel-fpm.sock {'))->toBe(4);
+});
+
+test('the installer fills the template with the address and no other site', function () {
+    $line = trim((string) collect(explode("\n", installScriptBody()))->first(fn(string $line): bool => str_contains($line, 'resources/caddy/panel.caddy')));
+    $script = 'RELEASE_DIR=' . escapeshellarg(base_path()) . '; PANEL_HOST=coresmith.example.com; CADDY_SITE=/dev/stdout; ' . $line;
+
+    $process = new Process(['bash', '-c', $script]);
+    $process->mustRun();
+    $site = $process->getOutput();
+
+    expect($site)->toStartWith("coresmith.example.com {\n    root * /opt/coresmith/app/public\n")
+        ->and($site)->not->toContain('__')
+        ->and($site)->toEndWith("    }\n}\n");
+});
+
+test('an address change runs in its own service that may write only the caddy site', function () {
+    $body = installScriptBody();
+    $unit = str($body)->after("cat >/etc/systemd/system/coresmith-address.service <<UNIT\n")->before("\nUNIT\n")->toString();
+
+    expect($unit)->toContain("Type=oneshot\nUser=coresmith\nGroup=coresmith\n")
+        ->and($unit)->toContain('ExecStartPre=-/bin/mv -f ${ADDRESS_DIR}/request.json ${ADDRESS_DIR}/request.taken.json')
+        ->and($unit)->toContain('ExecStart=/usr/bin/php artisan coresmith:address --no-interaction')
+        ->and($unit)->toContain("NoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nReadWritePaths=\${CADDY_SITE_DIR}")
+        ->and($body)->toContain("[Path]\nPathExists=\${ADDRESS_DIR}/request.json\nUnit=coresmith-address.service")
+        ->and($body)->toContain('run systemctl enable --now coresmith-address.path')
+        ->and($body)->toContain('chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"');
+});
+
+test('the summary names the address coresmith answers on, lined up with the rest', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain("printf '  %sAddress:%s      %s\\n' \"\$BOLD\" \"\$NC\" \"\$PANEL_URL\"")
+        ->and($body)->toContain("printf '  %sDatabase:%s     %s\\n'")
+        ->and($body)->not->toContain('Panel:');
+});
+
+test('the address requests the installer watches are where coresmith writes them', function () {
+    $body = installScriptBody();
+
+    expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
+        ->and($body)->toContain('readonly ADDRESS_DIR="$DATA_DIR/address"')
+        ->and((require config_path('coresmith.php'))['address']['state_path'])->toBe('/var/lib/coresmith/address');
 });
 
 test('failed jobs and batches live on a connection the installer migrates', function () {
@@ -1062,7 +1131,7 @@ test('a fetched release whose VERSION cannot name it is removed again before the
 function installScriptLinkedLayout(string $base): string
 {
     return 'CORESMITH_ROOT=' . escapeshellarg("{$base}/opt/coresmith") . '; DATA_DIR=' . escapeshellarg("{$base}/var/lib/coresmith") . '; APPS_DIR=' . escapeshellarg("{$base}/var/coresmith") . '; CONFIG_DIR=' . escapeshellarg("{$base}/etc/coresmith") . "\n"
-        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; UPDATES_DIR="$DATA_DIR/updates"; SETUP_TOKEN_FILE="$DATA_DIR/setup-token"' . "\n";
+        . 'RELEASES_DIR="$CORESMITH_ROOT/releases"; SHARED_DIR="$CORESMITH_ROOT/shared"; UPDATES_DIR="$DATA_DIR/updates"; ADDRESS_DIR="$DATA_DIR/address"; SETUP_TOKEN_FILE="$DATA_DIR/setup-token"' . "\n";
 }
 
 test('a link where the installer changes things as root stops it before anything changes', function (string $path) {
@@ -1083,6 +1152,7 @@ test('a link where the installer changes things as root stops it before anything
     'shared' => ['opt/coresmith/shared'],
     'the environment file' => ['opt/coresmith/shared/.env'],
     'updates' => ['var/lib/coresmith/updates'],
+    'address requests' => ['var/lib/coresmith/address'],
     'the database' => ['var/lib/coresmith/database.sqlite'],
     'the setup token' => ['var/lib/coresmith/setup-token'],
 ]);
@@ -1162,8 +1232,8 @@ test('the environment is replaced by a file written beside it, never rewritten i
 test('root changes owners and modes only on paths it has just checked are not links', function () {
     foreach ([
         ['adopt_legacy_layout', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR"', 'chown coresmith:coresmith "$RELEASES_DIR" "$SHARED_DIR"'],
-        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"', 'chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"'],
-        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"', 'chmod 700 "$UPDATES_DIR"'],
+        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"', 'chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"'],
+        ['create_user_and_dirs', 'refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"', 'chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"'],
         ['configure_environment', 'refuse_link "$DATA_DIR/database.sqlite"', 'chown coresmith:coresmith "$DATA_DIR/database.sqlite"'],
         ['configure_environment', 'refuse_link "$SHARED_DIR/.env"', 'chown coresmith:coresmith "$SHARED_DIR/.env"'],
         ['finalize', 'refuse_link "$SETUP_TOKEN_FILE"', 'install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"'],

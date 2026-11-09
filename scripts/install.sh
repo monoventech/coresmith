@@ -29,7 +29,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="0.2.1"
+readonly CORESMITH_VERSION="0.3.0"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoventech/coresmith.git}"
 readonly CORESMITH_ROOT="/opt/coresmith"
 readonly RELEASES_DIR="$CORESMITH_ROOT/releases"
@@ -37,8 +37,12 @@ readonly SHARED_DIR="$CORESMITH_ROOT/shared"
 readonly INSTALL_DIR="$CORESMITH_ROOT/app"
 readonly DATA_DIR="/var/lib/coresmith"
 readonly UPDATES_DIR="$DATA_DIR/updates"
+readonly ADDRESS_DIR="$DATA_DIR/address"
 readonly APPS_DIR="/var/coresmith"
 readonly CONFIG_DIR="/etc/coresmith"
+readonly CADDY_SITE_DIR="/etc/caddy/coresmith"
+readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"
+readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
 readonly PHP_VERSION="8.5"
@@ -328,7 +332,7 @@ refuse_link() {
 }
 
 refuse_linked_layout() {
-    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$SHARED_DIR/.env" "$UPDATES_DIR" "$DATA_DIR/database.sqlite" "$SETUP_TOKEN_FILE"
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$SHARED_DIR/.env" "$UPDATES_DIR" "$ADDRESS_DIR" "$DATA_DIR/database.sqlite" "$SETUP_TOKEN_FILE"
 }
 
 trust_repository() {
@@ -670,14 +674,14 @@ create_user_and_dirs() {
     id coresmith >/dev/null 2>&1 ||
         useradd --system --shell /bin/bash --home-dir /opt/coresmith --create-home coresmith
 
-    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"
-    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
+    refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
+    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$ADDRESS_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
         "$CONFIG_DIR"/env "$CONFIG_DIR"/deploy-keys /etc/caddy /var/log/caddy
 
     chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"
-    chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR"
+    chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
     chmod 700 "$DATA_DIR"
-    chmod 700 "$UPDATES_DIR"
+    chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"
     chmod 755 "$APPS_DIR"
 
     # Application environment files and deploy keys are root-only.
@@ -793,6 +797,7 @@ configure_environment() {
     update_env APP_ENV "production"
     update_env APP_DEBUG "false"
     update_env APP_URL "$PANEL_URL"
+    update_env CORESMITH_CADDY_SITE "$CADDY_SITE"
     update_env APP_TIMEZONE "UTC"
 
     update_env DB_CONNECTION "$DB_DRIVER"
@@ -879,7 +884,7 @@ configure_caddy() {
         printf '    on_demand_tls {\n        permission http http://127.0.0.1:8484/api/caddy/ask\n    }\n'
         printf '    log {\n        output file /var/log/caddy/access.log\n        format json\n    }\n'
         printf '}\n\n'
-        printf 'import /etc/caddy/panel.caddy\n'
+        printf 'import %s\n' "$CADDY_SITE"
     } >/etc/caddy/Caddyfile
 
 
@@ -920,94 +925,13 @@ php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,p
 php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp
 FPMCONF
 
-    cat >/etc/caddy/panel.caddy <<SITECONF
-${PANEL_HOST} {
-    root * ${INSTALL_DIR}/public
-
-    php_fastcgi unix/${fpm_sock} {
-        resolve_root_symlink
-    }
-
-    file_server
-    encode gzip zstd
-
-    header {
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        -Server
-    }
-
-    @reverb path /app/* /apps/*
-    reverse_proxy @reverb 127.0.0.1:6001
-
-    log {
-        output file /var/log/caddy/coresmith-panel.log {
-            roll_size 10mb
-            roll_keep 5
-        }
-        format json
-    }
-}
-
-http://127.0.0.1:8484 {
-    bind 127.0.0.1
-    root * ${INSTALL_DIR}/public
-
-    @ask path /api/caddy/ask
-    handle @ask {
-        php_fastcgi unix/${fpm_sock} {
-            resolve_root_symlink
-        }
-    }
-
-    @release path /api/up/release
-    handle @release {
-        php_fastcgi unix/${fpm_sock} {
-            resolve_root_symlink
-        }
-    }
-
-    respond 404
-}
-
-https:// {
-    tls {
-        on_demand
-    }
-
-    root * ${INSTALL_DIR}/public
-
-    php_fastcgi unix/${fpm_sock} {
-        resolve_root_symlink
-    }
-
-    file_server
-    encode gzip zstd
-
-    header {
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Strict-Transport-Security "max-age=31536000"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        -Server
-    }
-
-    @reverb path /app/* /apps/*
-    reverse_proxy @reverb 127.0.0.1:6001
-
-    log {
-        output file /var/log/caddy/coresmith-panel.log {
-            roll_size 10mb
-            roll_keep 5
-        }
-        format json
-    }
-}
-SITECONF
+    mkdir -p "$CADDY_SITE_DIR"
+    chown coresmith:caddy "$CADDY_SITE_DIR"
+    chmod 2750 "$CADDY_SITE_DIR"
+    sed -e "s|__ADDRESSES__|${PANEL_HOST}|" -e '/^__REDIRECTS__$/d' "$RELEASE_DIR/resources/caddy/panel.caddy" >"$CADDY_SITE"
+    chown coresmith:caddy "$CADDY_SITE"
+    chmod 0640 "$CADDY_SITE"
+    rm -f "$LEGACY_CADDY_SITE"
 
     setfacl -P -m u:caddy:x "$CORESMITH_ROOT" "$RELEASES_DIR" "$RELEASE_DIR"
     setfacl -R -P -m u:caddy:rX "$RELEASE_DIR/public"
@@ -1143,6 +1067,38 @@ Unit=coresmith-update.service
 WantedBy=multi-user.target
 UNIT
 
+    cat >/etc/systemd/system/coresmith-address.service <<UNIT
+[Unit]
+Description=Coresmith address change, started from Settings
+After=network-online.target redis-server.service caddy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=coresmith
+Group=coresmith
+WorkingDirectory=${INSTALL_DIR}
+ExecStartPre=-/bin/mv -f ${ADDRESS_DIR}/request.json ${ADDRESS_DIR}/request.taken.json
+ExecStart=/usr/bin/php artisan coresmith:address --no-interaction
+TimeoutStartSec=10min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=${CADDY_SITE_DIR}
+UNIT
+
+    cat >/etc/systemd/system/coresmith-address.path <<UNIT
+[Unit]
+Description=Change Coresmith's address when one is requested
+
+[Path]
+PathExists=${ADDRESS_DIR}/request.json
+Unit=coresmith-address.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
     systemctl daemon-reload
     success "Systemd services created"
 }
@@ -1240,6 +1196,7 @@ finalize() {
     run systemctl restart coresmith-reverb
     run systemctl enable --now coresmith-scheduler.timer
     run systemctl enable --now coresmith-update.path
+    run systemctl enable --now coresmith-address.path
 
     configure_firewall
     configure_fail2ban
@@ -1280,7 +1237,7 @@ print_summary() {
     printf '%s%s║        Coresmith installed successfully!         ║%s\n' "$BOLD" "$GREEN" "$NC"
     printf '%s%s╚══════════════════════════════════════════════════╝%s\n\n' "$BOLD" "$GREEN" "$NC"
 
-    printf '  %sPanel:%s        %s\n' "$BOLD" "$NC" "$PANEL_URL"
+    printf '  %sAddress:%s      %s\n' "$BOLD" "$NC" "$PANEL_URL"
     printf '  %sDatabase:%s     %s\n' "$BOLD" "$NC" "$DB_DRIVER"
     printf '  %sInstalled in:%s %s\n' "$BOLD" "$NC" "$RELEASE_DIR"
     printf '  %sData in:%s      %s\n\n' "$BOLD" "$NC" "$DATA_DIR"

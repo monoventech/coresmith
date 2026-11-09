@@ -1,0 +1,87 @@
+__ADDRESSES__ {
+    root * /opt/coresmith/app/public
+
+    php_fastcgi unix//run/php/coresmith-panel-fpm.sock {
+        resolve_root_symlink
+    }
+
+    file_server
+    encode gzip zstd
+
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    @reverb path /app/* /apps/*
+    reverse_proxy @reverb 127.0.0.1:6001
+
+    log {
+        output file /var/log/caddy/coresmith-panel.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+http://127.0.0.1:8484 {
+    bind 127.0.0.1
+    root * /opt/coresmith/app/public
+
+    @ask path /api/caddy/ask
+    handle @ask {
+        php_fastcgi unix//run/php/coresmith-panel-fpm.sock {
+            resolve_root_symlink
+        }
+    }
+
+    @release path /api/up/release
+    handle @release {
+        php_fastcgi unix//run/php/coresmith-panel-fpm.sock {
+            resolve_root_symlink
+        }
+    }
+
+    respond 404
+}
+
+https:// {
+    tls {
+        on_demand
+    }
+
+    root * /opt/coresmith/app/public
+
+    php_fastcgi unix//run/php/coresmith-panel-fpm.sock {
+        resolve_root_symlink
+    }
+
+    file_server
+    encode gzip zstd
+
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    @reverb path /app/* /apps/*
+    reverse_proxy @reverb 127.0.0.1:6001
+
+    log {
+        output file /var/log/caddy/coresmith-panel.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+__REDIRECTS__
