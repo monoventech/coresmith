@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.0 (2026-11-09)
+
+### Added
+- feat: a database on the shared Redis moves to a Redis of its own, and the shared Redis turns off once nothing uses it (#17)
+- feat: a new Redis database gets an instance of its own, on its own port, behind its own password (#16)
+- feat: Caddy's admin API moves to a socket only Caddy and root can open (#12)
+- feat: show and rotate a database's password, and keep passwords out of the command log (#11)
+
+### Fixed
+- fix: Coresmith's own Redis gets a password, so apps on its machine can't read its queue or sessions (#18)
+- fix: database passwords reach MySQL and PostgreSQL on stdin, so they never show in the server's process list (#15)
+- fix: deleting a database drops it and its user from the server, once its name is typed (#14)
+- fix: a database password is shown once, as the spec says, then only rotating gives a new one (#13)
+
 ## v0.3.0 (2026-11-09)
 
 ### Added
