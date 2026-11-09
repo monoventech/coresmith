@@ -160,7 +160,7 @@ test('a no at the prompt changes nothing', function () {
         ->and(releaseRefs($sandbox))->toBe($before);
 });
 
-test('preparing a stable release picks dev onto main, runs every gate, bumps and opens a pull request', function () {
+test('preparing a stable release picks dev onto main, bumps, runs the full ci on that exact commit and opens a pull request', function () {
     $sandbox = releaseScriptSandbox();
     releaseTag($sandbox, 'v0.1.0');
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
@@ -177,18 +177,10 @@ test('preparing a stable release picks dev onto main, runs every gate, bumps and
     $body = (string) file_get_contents($sandbox['body']);
 
     expect(array_slice($calls, 0, -1))->toBe([
-        'pint --test',
-        'bun run lint:check',
-        'bun run lint:sh',
-        'bun run format:check',
-        'bun run lint:tailwind',
-        'bun run types:check',
-        'php artisan test',
-        'bun run e2e:refresh',
-        'bun run e2e:install-refresh',
-        'bun run test:e2e',
         'bun run build',
+        'bun run ci',
     ])->and(end($calls))->toMatch('#^gh pr create --repo monoven/coresmith --base main --head release/v1\.0\.0 --title Release v1\.0\.0 --body-file \S+$#')
+        ->and((string) file_get_contents($sandbox['ci']))->toBe(releaseOrigin($sandbox, ['rev-parse', 'release/v1.0.0']) . " 1.0.0 0\n")
         ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe($main)
         ->and(releaseOrigin($sandbox, ['rev-parse', 'dev']))->toBe($dev)
         ->and(releaseOrigin($sandbox, ['tag', '--list']))->toBe('v0.1.0')
@@ -391,12 +383,12 @@ test('a failing gate leaves nothing behind', function () {
     releaseCommit($sandbox, 'dev', 'feat: deploy faster');
     $before = releaseRefs($sandbox);
 
-    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'], ['STUB_FAIL_PHP' => '1', 'STUB_FAIL_MATCH' => 'artisan test']);
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned'], ['STUB_FAIL_BUN' => '1', 'STUB_FAIL_MATCH' => 'run ci']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and(releaseOutput($process))->toContain('php artisan test failed. Fix it on dev, then release.')
+        ->and(releaseOutput($process))->toContain('bun run ci failed. Fix it on dev, then release.')
         ->and(releaseOutput($process))->toContain('Release v1.0.0 stopped. Nothing was pushed.')
-        ->and(releaseCalls($sandbox))->not->toContain('bun run e2e:refresh')
+        ->and(array_filter(releaseCalls($sandbox), fn(string $line) => str_starts_with($line, 'gh pr create')))->toBe([])
         ->and(releaseGitProcess($sandbox, ['rev-parse', '-q', '--verify', 'refs/heads/release/v1.0.0'])->isSuccessful())->toBeFalse()
         ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main')
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('')
@@ -780,11 +772,14 @@ test('--unsigned wins over a configured key while no release key ships', functio
         ->and(is_file($sandbox['asset']))->toBeFalse();
 });
 
-test('the release runs every gate the project requires', function () {
-    $body = releaseScriptBody();
+test('the release gate is the full ci every pull request passes', function () {
+    $ci = (string) file_get_contents(base_path('scripts/ci-local.sh'));
 
-    foreach (['./vendor/bin/pint --test', 'bun run lint:check', 'bun run lint:sh', 'bun run format:check', 'bun run lint:tailwind', 'bun run types:check', 'bun run build', 'php artisan test', 'bun run test:e2e'] as $gate) {
-        expect($body)->toContain($gate);
+    expect(releaseScriptBody())->toContain("gates() {\n    gate bun run ci\n")
+        ->and(json_decode((string) file_get_contents(base_path('package.json')), true)['scripts']['ci'])->toBe('bash scripts/ci-local.sh');
+
+    foreach (['vendor/bin/pint', 'bun run lint:check', 'bun run lint:sh', 'bun run format:check', 'bun run lint:tailwind', 'bun run types:check', 'bun run build', 'vendor/bin/pest', 'bun run e2e:refresh', 'bun run e2e:install-refresh', 'bun run e2e:cloud-refresh', 'playwright test'] as $check) {
+        expect($ci)->toContain($check);
     }
 });
 
