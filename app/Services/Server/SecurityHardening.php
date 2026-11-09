@@ -33,6 +33,7 @@ final class SecurityHardening
     private const SSHD_SETTINGS = [
         'PasswordAuthentication no',
         'KbdInteractiveAuthentication no',
+        'ChallengeResponseAuthentication no',
         'PermitRootLogin prohibit-password',
         'PubkeyAuthentication yes',
         'MaxAuthTries 3',

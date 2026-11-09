@@ -39,7 +39,7 @@ test('the SSH settings go in a file sshd reads before any other, so an earlier f
     $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings()));
 
     expect(array_keys($transport->uploads()))->toBe(['/etc/ssh/sshd_config.d/00-coresmith.conf'])
-        ->and($transport->uploads()['/etc/ssh/sshd_config.d/00-coresmith.conf'])->toContain("Port 2222\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n")
+        ->and($transport->uploads()['/etc/ssh/sshd_config.d/00-coresmith.conf'])->toContain("Port 2222\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nChallengeResponseAuthentication no\n")
         ->and(implode("\n", $transport->commands()))->toContain('rm -f /etc/ssh/sshd_config.d/99-coresmith.conf')
         ->and($server->fresh()->meta)->toBeInAnyKeyOrder(['cpu_cores' => 2, 'ssh_hardening' => 'verified']);
 });
@@ -51,7 +51,7 @@ test('a server whose sshd never reads the drop-in folder gets the settings at th
         ->respondTo('sshd -T', hardenSshSettings()));
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain("printf '%s\\n' '# coresmith-sshd begin' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PermitRootLogin prohibit-password'")
+    expect($commands)->toContain("printf '%s\\n' '# coresmith-sshd begin' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'ChallengeResponseAuthentication no' 'PermitRootLogin prohibit-password'")
         ->and($commands)->toContain('sshd -t -f "$tmp" && cat "$tmp" > /etc/ssh/sshd_config')
         ->and($commands)->not->toContain('sntrup761')
         ->and($server->fresh()->meta['ssh_hardening'] ?? null)->toBe('verified');
