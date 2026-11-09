@@ -171,8 +171,6 @@ test('everything the installer creates, the uninstaller removes', function () {
         'safe.directory' => 'safe.directory',
         '/opt/coresmith' => '/opt/coresmith',
         '/var/lib/coresmith' => '/var/lib/coresmith',
-        '/etc/coresmith' => '/etc/coresmith',
-        '/var/coresmith' => '/var/coresmith',
         '/var/log/coresmith-' => '/var/log/coresmith-',
         'useradd' => 'userdel',
     ];
@@ -396,4 +394,11 @@ test('only files root owns are given back to the panel', function () {
 
     expect($process->getExitCode())->toBe(1)
         ->and(uninstallerCalls($base))->toBe([]);
+});
+
+test('the app and config folders older installers created are still removed, unless apps are deployed there', function () {
+    expect(file_get_contents(base_path('scripts/install.sh')))->not->toContain('/var/coresmith')
+        ->and(uninstallerBody())->toContain('APPS_DIR="/var/coresmith"')
+        ->and(uninstallerBody())->toContain('CONFIG_DIR="/etc/coresmith"')
+        ->and(uninstallerBody())->toContain('rm -rf "${APPS_DIR:?}" "${CONFIG_DIR:?}"');
 });
