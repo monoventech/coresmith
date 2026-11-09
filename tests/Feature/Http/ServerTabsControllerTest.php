@@ -81,6 +81,18 @@ test('a server whose admin api could not move yet says why', function () {
             ->where('admin_move_error', 'curl: (7) Failed to connect to localhost port 2019'));
 });
 
+test('a server still running the shared Redis says its databases are dedicated except for it', function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['meta' => ['installed_databases' => ['redis']]]);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('isolation', fn($layers): bool => in_array('Dedicated database credentials, except the shared Redis on port 6379', $layers->all(), true)
+                && !in_array('Dedicated database credentials', $layers->all(), true)
+                && $layers->count() === 9));
+});
+
 test('the default ssh port is not listed twice among the open ports', function () {
     $team = Team::factory()->create();
     $server = serverTabServer($team, ['ssh_port' => 22]);

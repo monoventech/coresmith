@@ -20,6 +20,7 @@ use App\Models\Server;
 use App\Services\Billing\TeamBilling;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\RedisPorts;
+use App\Services\Database\SharedRedis;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
@@ -31,7 +32,7 @@ use RuntimeException;
 
 final class DatabaseController extends Controller
 {
-    public function index(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
+    public function index(Request $request, Server $server, ServerPresenter $presenter, SharedRedis $sharedRedis): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -47,7 +48,11 @@ final class DatabaseController extends Controller
                     'href' => route('servers.databases.show', [$server, $database]),
                 ],
             )->values(),
-            'can' => ['create' => $request->user()->can('create', ManagedDatabase::class)],
+            'can' => [
+                'create' => $request->user()->can('create', ManagedDatabase::class),
+                'update' => $request->user()->can('update', $server),
+            ],
+            'shared_redis' => $sharedRedis->state($server),
         ]);
     }
 

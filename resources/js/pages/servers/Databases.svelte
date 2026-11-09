@@ -3,12 +3,13 @@
 </script>
 
 <script lang="ts">
-    import { Link } from '@inertiajs/svelte'
+    import { Link, router } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
+    import * as Dialog from '@/components/ui/dialog'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
 
@@ -29,8 +30,26 @@
     let {
         server,
         databases = [],
-        can
-    }: { server: ServerHeader; databases: DatabaseRow[]; can: { create: boolean } } = $props()
+        can,
+        shared_redis = null
+    }: {
+        server: ServerHeader
+        databases: DatabaseRow[]
+        can: { create: boolean; update: boolean }
+        shared_redis?: { databases: number; can_turn_off: boolean } | null
+    } = $props()
+
+    let turningOff = $state(false)
+    let working = $state(false)
+
+    function turnOffSharedRedis() {
+        working = true
+        router.post(
+            route('servers.shared-redis.off', server.id),
+            {},
+            { preserveScroll: true, onFinish: () => ((working = false), (turningOff = false)) }
+        )
+    }
 
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
     const columns = 'grid grid-cols-[1.3fr_1fr_1fr_0.8fr_0.7fr] gap-3 max-sm:grid-cols-[1fr_auto]'
@@ -41,6 +60,30 @@
 <AppHead title="{server.name} databases" />
 
 <ServerHeaderView {server} />
+
+{#if shared_redis}
+    <div class="tint-warning mb-4 rounded-xl border px-5.5 py-4" data-testid="shared-redis">
+        <p class="m-0 text-[13.5px]">
+            {#if shared_redis.databases > 0}
+                {shared_redis.databases === 1
+                    ? '1 Redis database still uses'
+                    : `${shared_redis.databases} Redis databases still use`} the shared Redis on port 6379, which has no password,
+                so every app on <span class="whitespace-nowrap">{server.name}</span> can read and change what's in it. Give
+                each one a Redis of its own from its page.
+            {:else}
+                No database uses the shared Redis on port 6379 any more, but it still answers without a password. Turn
+                it off once no app connects to it.
+            {/if}
+        </p>
+        {#if shared_redis.can_turn_off && can.update}
+            <div class="mt-3">
+                <Button variant="outline" size="sm" disabled={working} onclick={() => (turningOff = true)}
+                    >Turn off the shared Redis</Button
+                >
+            </div>
+        {/if}
+    </div>
+{/if}
 
 {#if databases.length === 0}
     <EmptyState
@@ -112,3 +155,21 @@
         </div>
     </div>
 {/if}
+
+<Dialog.Root bind:open={turningOff}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title
+                >Turn off the shared Redis on <span class="whitespace-nowrap">{server.name}?</span></Dialog.Title
+            >
+            <Dialog.Description
+                >Coresmith first checks that no app still connects to it, and stops only if none does. Whatever is in it
+                stays on disk.</Dialog.Description
+            >
+        </Dialog.Header>
+        <Dialog.Footer>
+            <Button variant="ghost" onclick={() => (turningOff = false)}>Keep it on</Button>
+            <Button disabled={working} onclick={turnOffSharedRedis}>Turn it off</Button>
+        </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>

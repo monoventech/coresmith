@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Server;
+use App\Services\Database\SharedRedis;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\FirewallConfigurator;
@@ -25,12 +26,16 @@ final class ServerTabsController extends Controller
         'systemd sandboxing (NoNewPrivileges, ProtectSystem, PrivateTmp)',
         'File permission enforcement',
         'Root-owned env, injected via systemd',
-        'Dedicated database credentials',
+        self::DEDICATED_CREDENTIALS,
         'Memory limits per app (MemoryMax)',
         'Non-overlapping port blocks',
         'Per-app Caddy routing',
         'Separate log files',
     ];
+
+    public const DEDICATED_CREDENTIALS = 'Dedicated database credentials';
+
+    public const DEDICATED_CREDENTIALS_EXCEPT_SHARED_REDIS = 'Dedicated database credentials, except the shared Redis on port 6379';
 
     public const ADMIN_API_ON_LOCALHOST = 'Admin API bound to localhost, verified unreachable';
 
@@ -46,7 +51,7 @@ final class ServerTabsController extends Controller
         'Automatic OS security patches',
     ];
 
-    public function hardening(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
+    public function hardening(Request $request, Server $server, ServerPresenter $presenter, SharedRedis $sharedRedis): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -56,7 +61,9 @@ final class ServerTabsController extends Controller
 
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
-            'isolation' => self::ISOLATION_LAYERS,
+            'isolation' => $sharedRedis->state($server) === null
+                ? self::ISOLATION_LAYERS
+                : array_map(fn(string $layer): string => $layer === self::DEDICATED_CREDENTIALS ? self::DEDICATED_CREDENTIALS_EXCEPT_SHARED_REDIS : $layer, self::ISOLATION_LAYERS),
             'hardening' => $server->caddyAdminOnSocket()
                 ? array_map(fn(string $item): string => $item === self::ADMIN_API_ON_LOCALHOST ? self::ADMIN_API_ON_SOCKET : $item, self::HARDENING)
                 : self::HARDENING,

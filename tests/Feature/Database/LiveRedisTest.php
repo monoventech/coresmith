@@ -6,6 +6,7 @@ use App\Enums\DatabaseType;
 use App\Models\Server;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\RedisInstance;
+use App\Services\Database\SharedRedis;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 
@@ -88,4 +89,29 @@ test('two Redis databases on a real server are two instances that only open with
         ->and($connection->execute('test -e /etc/systemd/system/coresmith-redis-6380.service')->successful())->toBeFalse();
 
     $connection->disconnect();
+});
+
+test('the shared Redis on a real server is counted, refused while an app holds a connection, then turned off', function () {
+    $connection = liveRedisConnection();
+    $shared = app(SharedRedis::class);
+    $connection->execute('DEBIAN_FRONTEND=noninteractive apt-get install -y -qq redis-server && systemctl enable --now redis-server', sudo: true, timeout: 600)->throw();
+
+    try {
+        $connection->execute("nohup sh -c 'redis-cli -p 6379 BLPOP coresmith-live-held 15' >/dev/null 2>&1 & sleep 1");
+
+        expect($shared->connections($connection))->toBe(1);
+
+        $connection->execute('redis-cli -p 6379 CLIENT KILL TYPE normal >/dev/null', sudo: true);
+
+        expect($shared->connections($connection))->toBe(0);
+
+        $shared->turnOff($connection);
+
+        expect(trim($connection->execute('ss -Hltn | grep -c ":6379 " || true')->output))->toBe('0')
+            ->and(trim($connection->execute('systemctl is-enabled redis-server || true')->output))->toBe('disabled')
+            ->and($connection->server()->fresh()->meta['shared_redis'] ?? null)->toBe('off');
+    } finally {
+        $connection->execute('DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq redis-server', sudo: true, timeout: 600);
+        $connection->disconnect();
+    }
 });
