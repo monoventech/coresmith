@@ -13,6 +13,7 @@ use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Models\User;
 use App\Services\Caddy\CaddyInstaller;
+use App\Services\Git\DeployKeyManager;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
@@ -254,6 +255,22 @@ test('an unsupported distribution fails provisioning cleanly', function () {
         ->and($server->fresh()->provisioning_phase)->toBeNull();
 });
 
+test('on the machine Coresmith runs on, runtimes and app folders belong to a user of their own, so nothing borrows Coresmith\'s user', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'runs_coresmith' => true]);
+    $transport = provisioningTransport();
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('useradd --system --create-home --home-dir /home/coresmith-runtime --shell /bin/bash coresmith-runtime')
+        ->and($commands)->toContain('chown -R coresmith-runtime:coresmith-runtime /opt/asdf')
+        ->and($commands)->toContain('chown root:coresmith-runtime /var/coresmith/apps && chmod 751 /var/coresmith/apps')
+        ->and($commands)->not->toContain('--home-dir /home/coresmith --shell')
+        ->and($commands)->not->toContain('chown root:coresmith /var')
+        ->and($commands)->not->toContain('sudo -u coresmith env ');
+});
+
 test('phase 4 creates the coresmith directory tree with locked down secret dirs', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = provisioningTransport();
@@ -269,7 +286,7 @@ test('phase 4 creates the coresmith directory tree with locked down secret dirs'
         ->and($commands)->toContain('mkdir -p /etc/coresmith/env')
         ->and($commands)->toContain('chown root:root /etc/coresmith/env')
         ->and($commands)->toContain('chmod 700 /etc/coresmith/env')
-        ->and($commands)->toContain('chmod 700 /etc/coresmith/deploy-keys');
+        ->and($commands)->toContain('mkdir -p ' . DeployKeyManager::KEY_DIR . ' && chown root:root ' . DeployKeyManager::KEY_DIR . ' && chmod 700 ' . DeployKeyManager::KEY_DIR);
 });
 
 test('phase 5 installs caddy and verifies the admin api answers on its private socket', function () {

@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Http\Middleware\ContentSecurityPolicy;
-use App\Services\Git\DeployKeyManager;
 use App\Services\Install\SetupToken;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
@@ -120,7 +119,7 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
 
     expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
         ->and($body)->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
-        ->and($body)->toContain('chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"')
+        ->and($body)->toContain("chown -R coresmith:coresmith \"\$DATA_DIR\"\n")
         ->and($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
         ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
@@ -150,8 +149,7 @@ test('secrets are written with restrictive permissions', function () {
     $body = installScriptBody();
 
     expect($body)->toContain('chmod 600 "$SHARED_DIR/.env"')
-        ->and($body)->toContain('chmod 600 "$DATA_DIR/database.sqlite"')
-        ->and($body)->toContain('chmod 700 "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"');
+        ->and($body)->toContain('chmod 600 "$DATA_DIR/database.sqlite"');
 });
 
 test('the vault key is generated rather than left at a default', function () {
@@ -257,11 +255,6 @@ test('only a caddy new enough for the panel config counts as already installed',
 
 test('a caddy still too old after installing stops the install with the version it found', function () {
     expect(installScriptBody())->toContain('is too old: Coresmith needs 2.8 or newer');
-});
-
-test('the deploy key directory the deployment code expects is created', function () {
-    expect(installScriptBody())->toContain('deploy-keys')
-        ->and(DeployKeyManager::KEY_DIR)->toBe('/etc/coresmith/deploy-keys');
 });
 
 test('the php version the installer installs satisfies what the project requires', function () {
@@ -1506,4 +1499,70 @@ test('the Redis password never reaches a command line', function () {
 
     expect(installScriptRedisCalls($directory, 'redis-cli'))->not->toBeEmpty()
         ->and(file_get_contents("{$directory}/calls"))->not->toContain('Gener4tedRedisPassw0rd');
+});
+
+test('the installer leaves the app and config folders to provisioning, so a rerun never hands apps\' files to Coresmith\'s user', function () {
+    $body = installScriptBody();
+    $directories = installScriptFunctions('create_user_and_dirs');
+
+    expect($directories)->not->toContain('/var/coresmith')
+        ->and($directories)->not->toContain('APPS_DIR')
+        ->and($directories)->not->toContain('CONFIG_DIR')
+        ->and($body)->not->toContain('readonly APPS_DIR=')
+        ->and($body)->not->toContain('readonly CONFIG_DIR=')
+        ->and($body)->toContain("ReadWritePaths=\${SHARED_DIR}/storage \${DATA_DIR}\nProtectKernelTunables=true");
+});
+
+function installScriptLogsRun(string $directory): Process
+{
+    $script = "set -euo pipefail\n"
+        . 'D=' . escapeshellarg($directory) . "\n"
+        . "HORIZON_LOG=\"\$D/horizon.log\"\nREVERB_LOG=\"\$D/reverb.log\"\nFPM_ERROR_LOG=\"\$D/fpm-error.log\"\n"
+        . "fatal() { echo \"fatal: \$*\"; exit 1; }\n"
+        . "chown() { echo \"chown \$*\" >>\"\$D/calls\"; }\n"
+        . installScriptFunctions('refuse_link', 'secure_logs')
+        . "\nsecure_logs\nsecure_logs\n";
+
+    $process = new Process(['bash', '-c', $script]);
+    $process->run();
+
+    return $process;
+}
+
+test('Coresmith\'s logs are readable by Coresmith and root only, never by apps on its machine', function () {
+    $directory = installScriptScratch();
+    file_put_contents("{$directory}/horizon.log", "an old line\n");
+    chmod("{$directory}/horizon.log", 0644);
+
+    $process = installScriptLogsRun($directory);
+    $mode = fn(string $file): string => substr(sprintf('%o', fileperms("{$directory}/{$file}")), -3);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($mode('horizon.log'))->toBe('640')
+        ->and($mode('reverb.log'))->toBe('640')
+        ->and($mode('fpm-error.log'))->toBe('640')
+        ->and(file_get_contents("{$directory}/horizon.log"))->toBe("an old line\n")
+        ->and(array_unique(array_filter(explode("\n", (string) file_get_contents("{$directory}/calls")))))->toBe([
+            "chown root:coresmith {$directory}/horizon.log",
+            "chown root:coresmith {$directory}/reverb.log",
+            "chown coresmith:coresmith {$directory}/fpm-error.log",
+        ]);
+});
+
+test('a log that is a symbolic link stops the installer instead of being followed as root', function () {
+    $directory = installScriptScratch();
+    symlink('/etc/passwd', "{$directory}/reverb.log");
+
+    $process = installScriptLogsRun($directory);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getOutput())->toContain("fatal: {$directory}/reverb.log is a symbolic link");
+});
+
+test('the install log, which holds the setup link, is readable by root only, before anything is written to it', function () {
+    $main = installScriptFunctions('main');
+
+    expect($main)->toContain("touch \"\$LOG_FILE\"\n    chmod 600 \"\$LOG_FILE\"\n    exec > >(tee -a \"\$LOG_FILE\") 2>&1")
+        ->and(installScriptBody())->toContain("    create_systemd_services\n")
+        ->and(installScriptFunctions('create_systemd_services'))->toContain("    secure_logs\n");
 });

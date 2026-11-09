@@ -28,7 +28,7 @@ final class AsdfInstaller
 
     private function createSystemUser(SSHConnection $connection): void
     {
-        $user = AsdfManager::SYSTEM_USER;
+        $user = $connection->server()->runtimeUser();
 
         $connection->execute(
             "id -u {$user} >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/{$user} --shell /bin/bash {$user}",
@@ -39,7 +39,7 @@ final class AsdfInstaller
     private function cloneAsdf(SSHConnection $connection): void
     {
         $dir = self::ASDF_DIR;
-        $user = AsdfManager::SYSTEM_USER;
+        $user = $connection->server()->runtimeUser();
 
         $connection->execute(
             "test -d {$dir}/.git || git clone https://github.com/asdf-vm/asdf.git {$dir} --branch " . self::ASDF_VERSION,
@@ -52,7 +52,7 @@ final class AsdfInstaller
     private function createDataDirectory(SSHConnection $connection): void
     {
         $data = AsdfManager::DATA_DIR;
-        $user = AsdfManager::SYSTEM_USER;
+        $user = $connection->server()->runtimeUser();
 
         $connection->execute(
             "mkdir -p {$data} && chown -R {$user}:{$user} {$data} && chmod 755 {$data}",
@@ -62,7 +62,7 @@ final class AsdfInstaller
 
     private function configureShell(SSHConnection $connection): void
     {
-        $user = AsdfManager::SYSTEM_USER;
+        $user = $connection->server()->runtimeUser();
         $bashrc = "/home/{$user}/.bashrc";
 
         $exports = implode("\n", [
@@ -82,12 +82,12 @@ final class AsdfInstaller
         foreach (AsdfManager::PLUGINS as $plugin) {
             $command = "asdf plugin list | grep -qx {$plugin} || asdf plugin add {$plugin}";
 
-            $connection->execute(AsdfManager::asSystemUser($command), sudo: true)->throw();
+            $connection->execute(AsdfManager::asSystemUser($command, [], $connection->server()->runtimeUser()), sudo: true)->throw();
         }
     }
 
     private function verify(SSHConnection $connection): void
     {
-        $connection->execute(AsdfManager::asSystemUser('asdf --version'), sudo: true)->throw();
+        $connection->execute(AsdfManager::asSystemUser('asdf --version', [], $connection->server()->runtimeUser()), sudo: true)->throw();
     }
 }

@@ -240,6 +240,20 @@ test('runtime installs run as the coresmith user, never root directly', function
     expect(end($commands))->toContain('sudo -u coresmith env ');
 });
 
+test('on the machine Coresmith runs on, runtimes install as a user of their own, never as Coresmith', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'runs_coresmith' => true]);
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = (new SSHConnection($server, $transport))->connect();
+
+    (new AsdfManager)->install($connection, $server, 'nodejs', '24.15.0');
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('sudo -u coresmith-runtime env ')
+        ->and($commands)->toContain("HOME='/home/coresmith-runtime'")
+        ->and($commands)->not->toContain('sudo -u coresmith env ');
+});
+
 test('installed versions are listed and sorted', function () {
     $connection = asdfConnection((new FakeSSHTransport)->queueResult("8.5.5\n8.4.17\n\n", 0));
 
@@ -309,4 +323,11 @@ test('asdf commands carry their own environment and start in their own home, not
         ->and($command)->toContain("CORESMITH_RUNTIME='php'")
         ->and($command)->toEndWith("bash -c 'cd \"\$HOME\" && asdf --version'")
         ->and($command)->not->toContain('bash -lc');
+});
+
+test('asdf commands run as the user and home they are given', function () {
+    $command = AsdfManager::asSystemUser('asdf --version', [], 'coresmith-runtime');
+
+    expect($command)->toStartWith('sudo -u coresmith-runtime env ')
+        ->and($command)->toContain("HOME='/home/coresmith-runtime'");
 });

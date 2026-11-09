@@ -96,7 +96,7 @@ final class RuntimeBinaries
         $notes = [];
 
         if ($connection->execute('test -x ' . escapeshellarg($root . '/bin/composer'))->failed()) {
-            $this->asdf->withDownloadRetries($connection, $this->asdf->asCoresmith($this->composerScript(), [
+            $this->asdf->withDownloadRetries($connection, $this->asdf->asRuntimeUser($connection, $this->composerScript(), [
                 'CORESMITH_PHP' => $root . '/bin/php',
                 'CORESMITH_BIN' => $root . '/bin',
             ]), SSHTransport::COMMAND_SECONDS);
@@ -134,7 +134,7 @@ final class RuntimeBinaries
             return [];
         }
 
-        $this->asdf->withDownloadRetries($connection, $this->asdf->asCoresmith('PATH="$CORESMITH_BIN:$PATH" npm install -g corepack', [
+        $this->asdf->withDownloadRetries($connection, $this->asdf->asRuntimeUser($connection, 'PATH="$CORESMITH_BIN:$PATH" npm install -g corepack', [
             'CORESMITH_BIN' => $root . '/bin',
         ]), SSHTransport::COMMAND_SECONDS);
 
