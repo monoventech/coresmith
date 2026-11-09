@@ -139,11 +139,27 @@ test('the installer issues the token through artisan rather than minting its own
     expect(installScriptBody())->toContain('php artisan coresmith:setup-token --force');
 });
 
-test('a token the installer could not issue comes with the link to use it in', function () {
+test('a link the installer could not issue comes with the command that prints one', function () {
     expect(installScriptBody())
-        ->toContain('warn "Could not issue a setup token. Run this on the server, then open ${PANEL_URL}/install?token= followed by the token it prints:"')
-        ->not->toContain('open the URL it prints');
+        ->toContain('warn "Coresmith could not issue the link that creates the owner account. Run this on the server, then open the link it prints:"')
+        ->toContain('warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"')
+        ->not->toContain('followed by the token it prints');
 });
+
+test('the installer only takes a link to its own address that carries a whole token, and prints it as it is', function (string $output, string $link) {
+    $process = new Process(['bash', '-c', "set -euo pipefail\n" . installScriptFunctions('setup_link_from') . "\nsetup_link_from \"\$1\"", 'setup', $output]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(trim($process->getOutput()))->toBe($link)
+        ->and(installScriptFunctions('print_summary'))->toContain("printf '  %s%s%s\\n\\n' \"\$BOLD\" \"\$setup_link\" \"\$NC\"");
+})->with([
+    'the link the command prints' => ["Open this link to create the owner account. It works once:\nhttps://coresmith.example.com/install?token=" . str_repeat('a', 64), 'https://coresmith.example.com/install?token=' . str_repeat('a', 64)],
+    'an address without a domain' => ["Open this link to create the owner account. It works once:\nhttps://203.0.113.40/install?token=" . str_repeat('B', 64), 'https://203.0.113.40/install?token=' . str_repeat('B', 64)],
+    'setup already done' => ['This instance already has an account. Setup is closed.', ''],
+    'a link with more after it' => ['https://coresmith.example.com/install?token=' . str_repeat('a', 64) . '; reboot', ''],
+    'a short token' => ['https://coresmith.example.com/install?token=abc', ''],
+]);
 
 test('secrets are written with restrictive permissions', function () {
     $body = installScriptBody();

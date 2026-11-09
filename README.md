@@ -64,7 +64,7 @@ The installer adds Caddy, PHP, Redis, Git, SQLite, Node.js, Bun and fail2ban, cr
 
 ### 3. Create the owner account
 
-The installer ends with a one-time link, `https://<your address>/install?token=<token>`. Open it to create the owner account. It works once; after the owner exists it is cleared from the server. If you lose it, issue a new token on the server and put it after `/install?token=`:
+The installer ends with a one-time link, `https://<your address>/install?token=<token>`. Open it to create the owner account. It works once; after the owner exists it is cleared from the server. If you lose it, run this on the server, and open the new link it prints:
 
     cd /opt/coresmith/app && sudo -u coresmith php artisan coresmith:setup-token --force
 

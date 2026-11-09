@@ -232,6 +232,14 @@ test('a fresh instance shows the holding page rather than the app', function () 
         ->assertInertia(fn($page) => $page->component('auth/SetupRequired'));
 });
 
+test('the holding page gives the whole command that prints a new link, run as Coresmith from where it lives', function () {
+    config(['coresmith.updates.root' => '/srv/coresmith']);
+
+    $this->get('/dashboard')
+        ->assertStatus(503)
+        ->assertInertia(fn($page) => $page->where('command', 'cd /srv/coresmith/app && sudo -u coresmith php artisan coresmith:setup-token --force'));
+});
+
 test('the holding page never leaks the token', function () {
     $token = issueToken();
 
