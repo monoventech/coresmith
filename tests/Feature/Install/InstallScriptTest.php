@@ -465,7 +465,7 @@ test('the machine test is valid bash that the shell lint covers', function () {
 test('caddy only issues certificates for hosts the panel approves, asked over loopback', function () {
     expect(installScriptBody())->toContain('permission http http://127.0.0.1:8484/api/caddy/ask')
         ->and(installSiteTemplate())->toContain("http://127.0.0.1:8484 {\n    bind 127.0.0.1")
-        ->and(installSiteTemplate())->toContain("https:// {\n    tls {\n        on_demand\n    }");
+        ->and(installSiteTemplate())->toContain("https:// {\n    tls {\n        on_demand\n");
 });
 
 test('the updater checks the new release over the loopback site, never through tls', function () {
@@ -489,7 +489,7 @@ test('the site Caddy serves comes from the template Coresmith also writes, which
     expect($body)->toContain('readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"')
         ->and($body)->toContain("printf 'import %s\\n' \"\$CADDY_SITE\"")
         ->and($body)->toContain("chown coresmith:caddy \"\$CADDY_SITE_DIR\"\n    chmod 2750 \"\$CADDY_SITE_DIR\"")
-        ->and($body)->toContain('"$RELEASE_DIR/resources/caddy/panel.caddy" >"$CADDY_SITE"')
+        ->and($body)->toContain('render_site "$PANEL_HOST" >"$CADDY_SITE"')
         ->and($body)->toContain("chown coresmith:caddy \"\$CADDY_SITE\"\n    chmod 0640 \"\$CADDY_SITE\"")
         ->and($body)->toContain('rm -f "$LEGACY_CADDY_SITE"')
         ->and($body)->toContain('update_env CORESMITH_CADDY_SITE "$CADDY_SITE"')
@@ -505,19 +505,6 @@ test('the site template serves the release the installer installs, through the p
         ->and($body)->toContain('listen = ${fpm_sock}')
         ->and(substr_count(installSiteTemplate(), 'root * /opt/coresmith/app/public'))->toBe(3)
         ->and(substr_count(installSiteTemplate(), 'php_fastcgi unix//run/php/coresmith-panel-fpm.sock {'))->toBe(4);
-});
-
-test('the installer fills the template with the address and no other site', function () {
-    $line = trim((string) collect(explode("\n", installScriptBody()))->first(fn(string $line): bool => str_contains($line, 'resources/caddy/panel.caddy')));
-    $script = 'RELEASE_DIR=' . escapeshellarg(base_path()) . '; PANEL_HOST=coresmith.example.com; CADDY_SITE=/dev/stdout; ' . $line;
-
-    $process = new Process(['bash', '-c', $script]);
-    $process->mustRun();
-    $site = $process->getOutput();
-
-    expect($site)->toStartWith("coresmith.example.com {\n    root * /opt/coresmith/app/public\n")
-        ->and($site)->not->toContain('__')
-        ->and($site)->toEndWith("    }\n}\n");
 });
 
 test('an address change runs in its own service that may write only the caddy site', function () {

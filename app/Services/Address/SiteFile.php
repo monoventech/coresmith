@@ -10,6 +10,8 @@ namespace App\Services\Address;
 
 final class SiteFile
 {
+    private const IF_IP = '__IF_IP__';
+
     /**
      * @param  list<string>  $addresses
      * @param  array<string, string>  $redirects
@@ -22,6 +24,8 @@ final class SiteFile
             array_keys($redirects),
             array_values($redirects),
         );
+        $onIp = array_filter([...$addresses, ...array_keys($redirects)], fn(string $host): bool => filter_var($host, FILTER_VALIDATE_IP) !== false) !== [];
+        $template = $onIp ? str_replace(self::IF_IP, '', $template) : (string) preg_replace('/^.*' . self::IF_IP . ".*\n/m", '', $template);
 
         return str_replace(['__ADDRESSES__', "__REDIRECTS__\n"], [implode(', ', array_map(InstallationAddress::urlHost(...), $addresses)), implode('', $blocks)], $template);
     }
