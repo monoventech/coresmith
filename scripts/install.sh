@@ -933,6 +933,16 @@ configure_environment() {
 
 # ── Phase 6: Caddy configuration ─────────────────────────────────────────────
 
+render_site() {
+    local host="$1" ip_lines='/__IF_IP__/d'
+
+    if [[ "$host" =~ ^[0-9]+(\.[0-9]+){3}$ || "$host" == *:* ]]; then
+        ip_lines='s/__IF_IP__//'
+    fi
+
+    sed -e "s|__ADDRESSES__|${host}|" -e '/^__REDIRECTS__$/d' -e "$ip_lines" "$RELEASE_DIR/resources/caddy/panel.caddy"
+}
+
 configure_caddy() {
     log "Phase 6/8: configuring Caddy for Coresmith..."
 
@@ -994,7 +1004,7 @@ FPMCONF
     mkdir -p "$CADDY_SITE_DIR"
     chown coresmith:caddy "$CADDY_SITE_DIR"
     chmod 2750 "$CADDY_SITE_DIR"
-    sed -e "s|__ADDRESSES__|${PANEL_HOST}|" -e '/^__REDIRECTS__$/d' "$RELEASE_DIR/resources/caddy/panel.caddy" >"$CADDY_SITE"
+    render_site "$PANEL_HOST" >"$CADDY_SITE"
     chown coresmith:caddy "$CADDY_SITE"
     chmod 0640 "$CADDY_SITE"
     rm -f "$LEGACY_CADDY_SITE"

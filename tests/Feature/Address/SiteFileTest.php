@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Services\Address\EnvironmentFile;
 use App\Services\Address\SiteFile;
 use Illuminate\Support\Facades\File;
+use Symfony\Component\Process\Process;
 
 function siteFileTemp(): string
 {
@@ -14,14 +15,48 @@ function siteFileTemp(): string
     return $directory;
 }
 
+function siteFileFromInstaller(string $host): string
+{
+    preg_match('/^render_site\(\) \{.*?^\}$/ms', (string) file_get_contents(base_path('scripts/install.sh')), $function);
+    $process = new Process(['bash', '-c', "set -euo pipefail\nRELEASE_DIR=" . escapeshellarg(base_path()) . "\n" . ($function[0] ?? '') . "\nrender_site " . escapeshellarg($host)]);
+    $process->mustRun();
+
+    return $process->getOutput();
+}
+
+test('the installer writes the site coresmith itself writes for the same address', function (string $host) {
+    $site = siteFileFromInstaller($host);
+
+    expect($site)->toBe(app(SiteFile::class)->render([$host]))
+        ->and($site)->not->toContain('__');
+})->with(['coresmith.example.com', '192.168.0.248']);
+
 test('the site answers on every address it is given, the same way the installer writes it', function () {
     $site = app(SiteFile::class)->render(['192.168.0.248', 'coresmith.example.com']);
 
     expect($site)->toStartWith("192.168.0.248, coresmith.example.com {\n    root * /opt/coresmith/app/public\n")
         ->and($site)->toContain("http://127.0.0.1:8484 {\n")
-        ->and($site)->toContain("https:// {\n    tls {\n        on_demand\n    }")
         ->and($site)->not->toContain('__');
 });
+
+test('on a domain, the catch-all gets certificates from public authorities only', function () {
+    $site = app(SiteFile::class)->render(['coresmith.example.com']);
+
+    expect($site)->toContain("https:// {\n    tls {\n        on_demand\n    }")
+        ->and($site)->not->toContain('issuer');
+});
+
+test('a visit to an ip names no host and lands on the catch-all, so there it can renew the ip from caddy\'s own authority', function (array $addresses, array $redirects) {
+    $site = app(SiteFile::class)->render($addresses, $redirects);
+
+    expect($site)->toContain("https:// {\n    tls {\n        on_demand\n        issuer acme\n        issuer internal\n    }")
+        ->and($site)->not->toContain('__');
+})->with([
+    'served on an ip' => [['192.168.0.248'], []],
+    'an ip beside a domain' => [['192.168.0.248', 'coresmith.example.com'], []],
+    'an old ip sending people on' => [['coresmith.example.com'], ['192.168.0.248' => 'coresmith.example.com']],
+    'served on ipv6' => [['fd00::248'], []],
+]);
 
 test('an old address sends people on to the new one', function () {
     $site = app(SiteFile::class)->render(['coresmith.example.com'], ['192.168.0.248' => 'coresmith.example.com']);
