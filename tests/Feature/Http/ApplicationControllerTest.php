@@ -607,6 +607,7 @@ test('additional domains are validated one by one', function () {
 });
 
 test('the app page explains a recent out of memory kill', function () {
+    $this->freezeTime();
     $team = Team::factory()->create();
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['app_size' => 'small']);
 

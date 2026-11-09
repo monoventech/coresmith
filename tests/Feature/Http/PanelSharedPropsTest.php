@@ -99,6 +99,8 @@ test('the panel counts what needs attention in the current team', function () {
 });
 
 test('a user without a team gets an empty panel', function () {
+    config(['coresmith.live.socket.key' => '']);
+
     $this->actingAs(User::factory()->create())
         ->get(route('dashboard'))
         ->assertInertia(fn($page) => $page->where('panel', [
@@ -109,7 +111,7 @@ test('a user without a team gets an empty panel', function () {
             'setup' => null,
             'attention' => 0,
             'can' => ['createServer' => false],
-            'live' => ['streaming' => false, 'refresh_seconds' => 60],
+            'live' => ['streaming' => false, 'refresh_seconds' => 60, 'socket' => null],
         ]));
 });
 

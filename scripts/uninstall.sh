@@ -13,7 +13,8 @@ CONFIG_DIR="/etc/coresmith"
 SYSTEMD_DIR="/etc/systemd/system"
 CADDY_DROPIN="/etc/systemd/system/caddy.service.d/coresmith.conf"
 CADDYFILE="/etc/caddy/Caddyfile"
-PANEL_SITE="/etc/caddy/panel.caddy"
+PANEL_SITE_DIR="/etc/caddy/coresmith"
+LEGACY_PANEL_SITE="/etc/caddy/panel.caddy"
 CADDY_CONFIG="/etc/caddy/caddy-config.json"
 FPM_POOLS="/etc/php/*/fpm/pool.d /etc/php-fpm.d /etc/php/fpm/pool.d"
 FPM_POOL="coresmith-panel.conf"
@@ -22,7 +23,7 @@ FAIL2BAN_FILTER="/etc/fail2ban/filter.d/coresmith-login.conf"
 LOGS="/var/log/coresmith-*.log"
 SAVE_ROOT="/root"
 DEFAULT_REPOSITORY="https://github.com/monoventech/coresmith.git"
-UNITS="coresmith-update.path coresmith-update.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service"
+UNITS="coresmith-update.path coresmith-update.service coresmith-address.path coresmith-address.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service"
 
 YES=false
 PURGE=false
@@ -211,13 +212,14 @@ remove_units() {
 }
 
 remove_caddy_site() {
-    rm -f "$PANEL_SITE"
+    rm -rf "$PANEL_SITE_DIR"
+    rm -f "$LEGACY_PANEL_SITE"
 
     if [ -z "$APPS" ]; then
         rm -f "$CADDY_CONFIG"
     fi
 
-    if [ -f "$CADDYFILE" ] && grep -qF "import $PANEL_SITE" "$CADDYFILE"; then
+    if [ -f "$CADDYFILE" ] && { grep -qF "import $PANEL_SITE_DIR/" "$CADDYFILE" || grep -qF "import $LEGACY_PANEL_SITE" "$CADDYFILE"; }; then
         if [ -n "$SAVED" ]; then
             cp -p "$CADDYFILE" "$SAVED/Caddyfile"
         fi

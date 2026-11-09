@@ -10,8 +10,10 @@
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
     import { Textarea } from '@/components/ui/textarea'
+    import AddressCard from '@/components/settings/AddressCard.svelte'
     import MoveTeamCard from '@/components/settings/MoveTeamCard.svelte'
     import PanelUpdatesCard from '@/components/settings/PanelUpdatesCard.svelte'
+    import type { Address } from '@/lib/address'
     import type { Moves } from '@/lib/moves'
     import type { PanelUpdates } from '@/lib/panelUpdates.svelte'
     import { cn } from '@/lib/utils'
@@ -28,6 +30,7 @@
 
     let {
         instance,
+        address = null,
         backups,
         account,
         team_deletion: teamDeletion = null,
@@ -44,6 +47,7 @@
             timezone: string
             notification_email: string | null
         }
+        address?: Address | null
         backups: { last: { when: string; size: string; verified: boolean } | null; keep: number }
         account: { refusal: string | null }
         team_deletion?: TeamDeletion | null
@@ -55,6 +59,7 @@
     } = $props()
 
     const cloud = $derived(page.props.edition === 'cloud')
+    const cardsBeforeDanger = $derived(3 + (moves ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0))
 
     let dialog = $state<'key' | 'delete' | 'team' | null>(null)
     let backingUp = $state(false)
@@ -250,10 +255,14 @@
         </div>
     {/if}
 
+    {#if address}
+        <AddressCard {address} canManage={can.manageInstance} />
+    {/if}
+
     <div
         class={cn(
             'border-danger flex h-full flex-col rounded-xl border bg-card px-5.5 py-5',
-            !cloud && 'col-span-2 max-[900px]:col-span-1'
+            cardsBeforeDanger % 2 === 0 && 'col-span-2 max-[900px]:col-span-1'
         )}
         data-testid="danger-zone"
     >
