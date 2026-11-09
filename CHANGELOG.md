@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0 (2026-11-09)
+
+### Added
+- feat: self-hosted Coresmith can change its address, with a certificate, from Settings (#9)
+- feat: connect a server with a password once, or one command, instead of copying keys (#8)
+
 ## v0.2.1 (2026-11-08)
 
 ### Fixed
