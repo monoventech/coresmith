@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Services\Address\EnvironmentFile;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\HttpCloudApiFactory;
+use App\Services\Database\CoresmithDatabase;
 use App\Services\Dns\DnsResolver;
 use App\Services\Dns\NativeDnsResolver;
 use App\Services\Install\NativeProcessHandOff;
@@ -50,6 +51,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(CloudApiFactory::class, HttpCloudApiFactory::class);
 
         $this->app->bind(ProcessHandOff::class, NativeProcessHandOff::class);
+
+        $this->app->bind(CoresmithDatabase::class, fn(): CoresmithDatabase => CoresmithDatabase::fromConfig());
     }
 
     /**

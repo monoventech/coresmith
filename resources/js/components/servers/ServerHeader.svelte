@@ -21,6 +21,7 @@
     let renaming = $state(false)
     let detaching = $state(false)
     let destroying = $state(false)
+    let rebooting = $state(false)
     let resizing = $state(false)
     let name = $state('')
     let working = $state(false)
@@ -60,6 +61,7 @@
     }
 
     function reboot() {
+        rebooting = false
         router.post(route('servers.reboot', server.id), {}, { preserveScroll: true })
     }
 
@@ -99,7 +101,7 @@
                 {#if server.active && server.cloud?.task?.state !== 'running'}
                     <Button
                         variant="outline"
-                        onclick={reboot}
+                        onclick={() => (server.this_machine ? (rebooting = true) : reboot())}
                         disabled={server.unreachable?.can_reboot === false}
                         aria-describedby={server.unreachable?.can_reboot === false ? 'reboot-needs-ssh' : undefined}
                         >Reboot server</Button
@@ -223,18 +225,36 @@
     {/if}
 {/if}
 
+<Dialog.Root bind:open={rebooting}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title>Reboot this machine?</Dialog.Title>
+            <Dialog.Description
+                >Coresmith runs here too, so it goes down with the machine and comes back once it has restarted. That
+                usually takes a minute or two.</Dialog.Description
+            >
+        </Dialog.Header>
+        <Dialog.Footer>
+            <Button variant="ghost" onclick={() => (rebooting = false)}>Keep it running</Button>
+            <Button variant="destructive" onclick={reboot}>Reboot</Button>
+        </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
+
 <Dialog.Root bind:open={detaching}>
     <Dialog.Content>
         <Dialog.Header>
             <Dialog.Title>Detach {server.name}?</Dialog.Title>
             <Dialog.Description
-                >{server.cloud?.uncertain
-                    ? `Coresmith could not confirm whether ${server.cloud.provider} created ${server.name}. Check your ${server.cloud.provider} account and delete it there if it exists.`
-                    : server.cloud?.instance
-                      ? `Coresmith stops managing ${server.name}. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
-                      : server.cloud
-                        ? `Nothing was created at ${server.cloud.provider}, so ${server.name} only leaves Coresmith.`
-                        : 'Coresmith stops managing this server. The VM itself, and everything on it, is untouched.'}</Dialog.Description
+                >{server.this_machine
+                    ? 'Coresmith takes its key off this machine and stops managing it. Apps keep running, and so does Coresmith.'
+                    : server.cloud?.uncertain
+                      ? `Coresmith could not confirm whether ${server.cloud.provider} created ${server.name}. Check your ${server.cloud.provider} account and delete it there if it exists.`
+                      : server.cloud?.instance
+                        ? `Coresmith stops managing ${server.name}. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
+                        : server.cloud
+                          ? `Nothing was created at ${server.cloud.provider}, so ${server.name} only leaves Coresmith.`
+                          : 'Coresmith stops managing this server. The VM itself, and everything on it, is untouched.'}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>

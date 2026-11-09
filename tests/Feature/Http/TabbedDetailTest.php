@@ -232,9 +232,10 @@ test('the hardening tab claims key-only SSH only once sshd has reported it, and 
                 && collect($items)->contains(ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS))
             ->where('ssh', $ssh));
 })->with([
-    'verified' => [['ssh_hardening' => 'verified'], true, ['verified' => true, 'error' => null]],
-    'still accepting passwords' => [['ssh_hardening_error' => 'sshd reports passwordauthentication yes'], false, ['verified' => false, 'error' => 'sshd reports passwordauthentication yes']],
-    'not checked yet' => [[], false, ['verified' => false, 'error' => null]],
+    'verified' => [['ssh_hardening' => 'verified'], true, ['verified' => true, 'passwords_kept' => false, 'error' => null]],
+    'still accepting passwords' => [['ssh_hardening_error' => 'sshd reports passwordauthentication yes'], false, ['verified' => false, 'passwords_kept' => false, 'error' => 'sshd reports passwordauthentication yes']],
+    'not checked yet' => [[], false, ['verified' => false, 'passwords_kept' => false, 'error' => null]],
+    "keeping passwords on Coresmith's machine until a key is in" => [['ssh_hardening' => 'passwords_kept'], false, ['verified' => false, 'passwords_kept' => true, 'error' => null]],
 ]);
 
 test('an admin can queue a firewall change', function () {

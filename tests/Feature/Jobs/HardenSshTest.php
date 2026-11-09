@@ -3,8 +3,12 @@
 declare(strict_types=1);
 
 use App\Enums\ServerStatus;
+use App\Enums\TeamRole;
 use App\Jobs\HardenSsh;
+use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Server;
+use App\Models\Team;
+use App\Models\User;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Console\Scheduling\Schedule;
@@ -117,3 +121,59 @@ test('a server never gets its SSH settings from two jobs at once', function () {
     expect(new HardenSsh($server))->toBeInstanceOf(ShouldBeUnique::class)
         ->and((new HardenSsh($server))->uniqueId())->toBe('01JC0000000000000000000000');
 });
+
+function hardenSshThisMachine(bool $withKey, array $attributes = []): Server
+{
+    $team = Team::factory()->create();
+    $owner = User::factory()->create();
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    if ($withKey) {
+        $owner->sshKeys()->create(['name' => 'laptop', 'public_key' => 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3c2T1iNFs1YD4dSAe0LJ6V8Gt5hhX8ArXQpZ5MA7qC owner@laptop', 'fingerprint' => 'SHA256:laptop']);
+    }
+
+    return Server::factory()->for($team)->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'ssh_port' => 22, 'runs_coresmith' => true, 'ip_address' => '127.0.0.1', 'meta' => [], ...$attributes]);
+}
+
+test("on Coresmith's own machine, password logins stay on until an owner or admin has an SSH key, so nobody is locked out of it", function () {
+    $server = hardenSshThisMachine(false);
+    $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings('yes', 'without-password', 'yes')));
+    $dropIn = (string) $transport->uploads()['/etc/ssh/sshd_config.d/00-coresmith.conf'];
+
+    expect($dropIn)->not->toContain('PasswordAuthentication')
+        ->and($dropIn)->not->toContain('KbdInteractiveAuthentication')
+        ->and($dropIn)->not->toContain('ChallengeResponseAuthentication')
+        ->and($dropIn)->toContain("PermitRootLogin prohibit-password\n")
+        ->and($server->fresh()->meta)->toBe(['ssh_hardening' => 'passwords_kept'])
+        ->and($server->fresh()->sshHardened())->toBeFalse();
+});
+
+test("once an owner or admin has a key there, Coresmith's own machine turns password logins off like every server", function () {
+    $server = hardenSshThisMachine(true);
+    $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings()));
+
+    expect($transport->uploads()['/etc/ssh/sshd_config.d/00-coresmith.conf'])->toContain("PasswordAuthentication no\nKbdInteractiveAuthentication no\nChallengeResponseAuthentication no\n")
+        ->and($server->fresh()->meta)->toBe(['ssh_hardening' => 'verified']);
+});
+
+test("even while password logins stay on, root never signs in with a password on Coresmith's own machine", function () {
+    $server = hardenSshThisMachine(false);
+
+    hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings('yes', 'yes')));
+
+    expect($server->fresh()->meta)->toBe(['ssh_hardening_error' => 'sshd reports permitrootlogin yes']);
+});
+
+test("the first owner or admin key synced onto Coresmith's own machine turns its password logins off", function (array $server, bool $hardened) {
+    Queue::fake([HardenSsh::class]);
+    $machine = hardenSshThisMachine(true, ['status' => ServerStatus::Active, ...$server]);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => new FakeSSHTransport);
+
+    app()->call([new SyncAuthorizedKeys($machine), 'handle']);
+
+    $hardened ? Queue::assertPushed(HardenSsh::class, fn(HardenSsh $job): bool => $job->server->is($machine)) : Queue::assertNotPushed(HardenSsh::class);
+})->with([
+    'passwords kept until now' => [['meta' => ['ssh_hardening' => 'passwords_kept']], true],
+    'passwords already off' => [['meta' => ['ssh_hardening' => 'verified']], false],
+    'another server' => [['runs_coresmith' => false, 'meta' => ['ssh_hardening' => 'passwords_kept']], false],
+]);

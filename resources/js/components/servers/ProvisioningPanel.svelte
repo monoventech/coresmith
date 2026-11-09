@@ -121,7 +121,7 @@
     </Dialog.Content>
 </Dialog.Root>
 
-{#if pending && !creating}
+{#if pending && !creating && (provisioning.connected || !server.this_machine)}
     <AuditReport {server} />
 {/if}
 

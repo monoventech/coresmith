@@ -53,6 +53,7 @@ final class ServerPresenter
             'state' => $state,
             'meta' => $fleet->meta($server, long: true),
             'active' => $server->status === ServerStatus::Active,
+            'this_machine' => (bool) $server->runs_coresmith,
             'metrics' => $metrics,
             'unreachable' => $unreachable ? [
                 'last_answer' => Formats::when($server->last_connected_at),
@@ -154,7 +155,7 @@ final class ServerPresenter
             'connect_command' => AuthorizedKeyCommand::forPerson($server->ssh_user, (string) $server->ssh_public_key),
             'connect_error' => $server->last_connection_error,
             'connected' => $server->last_connected_at !== null && $server->last_connection_error === null,
-            'password_sign_in' => $server->status->isBeforeProvisioning(),
+            'password_sign_in' => $server->status->isBeforeProvisioning() && !$server->runs_coresmith,
             'ssh' => $server->sshAddress(),
             'ssh_user' => $server->ssh_user,
             'audit' => $this->audit($server),
