@@ -1666,7 +1666,7 @@ finalize() {
         prune_releases
     fi
 
-    local setup_token="" setup_output="" already_set_up=false
+    local setup_link="" setup_output="" already_set_up=false
 
     refuse_link "$SETUP_TOKEN_FILE"
     install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"
@@ -1675,19 +1675,25 @@ finalize() {
     if printf '%s\n' "$setup_output" | grep -q 'already has an account'; then
         already_set_up=true
         rm -f "$SETUP_TOKEN_FILE"
-    elif printf '%s\n' "$setup_output" | tail -1 | grep -qE '^[A-Za-z0-9]{64}$'; then
-        setup_token="$(printf '%s\n' "$setup_output" | tail -1)"
     else
-        printf '%s\n' "$setup_output" >>"$LOG_FILE"
-        warn "Could not issue a setup token. Run this on the server, then open ${PANEL_URL}/install?token= followed by the token it prints:"
-        warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"
+        setup_link="$(setup_link_from "$setup_output")"
+
+        if [ -z "$setup_link" ]; then
+            printf '%s\n' "$setup_output" >>"$LOG_FILE"
+            warn "Coresmith could not issue the link that creates the owner account. Run this on the server, then open the link it prints:"
+            warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"
+        fi
     fi
 
-    print_summary "$setup_token" "$healthy" "$already_set_up"
+    print_summary "$setup_link" "$healthy" "$already_set_up"
+}
+
+setup_link_from() {
+    printf '%s\n' "$1" | tail -n 1 | grep -E '^https?://[^[:space:]/?#]+/install\?token=[A-Za-z0-9]{64}$' || true
 }
 
 print_summary() {
-    local setup_token="$1" healthy="$2" already_set_up="${3:-false}"
+    local setup_link="$1" healthy="$2" already_set_up="${3:-false}"
 
     printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$GREEN" "$NC"
     printf '%s%s║        Coresmith installed successfully!         ║%s\n' "$BOLD" "$GREEN" "$NC"
@@ -1698,9 +1704,9 @@ print_summary() {
     printf '  %sInstalled in:%s %s\n' "$BOLD" "$NC" "$RELEASE_DIR"
     printf '  %sData in:%s      %s\n\n' "$BOLD" "$NC" "$DATA_DIR"
 
-    if [ -n "$setup_token" ]; then
+    if [ -n "$setup_link" ]; then
         printf '  %s%s⚠  Finish setup now:%s\n\n' "$BOLD" "$YELLOW" "$NC"
-        printf '  %s%s/install?token=%s%s\n\n' "$BOLD" "$PANEL_URL" "$setup_token" "$NC"
+        printf '  %s%s%s\n\n' "$BOLD" "$setup_link" "$NC"
         printf '  %sThis link works once. After the owner account exists it is%s\n' "$YELLOW" "$NC"
         printf '  %scleared from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
     elif [ "$already_set_up" = "true" ]; then
