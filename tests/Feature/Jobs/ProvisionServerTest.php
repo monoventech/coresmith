@@ -13,6 +13,7 @@ use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Models\User;
 use App\Services\Caddy\CaddyInstaller;
+use App\Services\Git\DeployKeyManager;
 use App\Services\Server\OsDetector;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
@@ -269,7 +270,7 @@ test('phase 4 creates the coresmith directory tree with locked down secret dirs'
         ->and($commands)->toContain('mkdir -p /etc/coresmith/env')
         ->and($commands)->toContain('chown root:root /etc/coresmith/env')
         ->and($commands)->toContain('chmod 700 /etc/coresmith/env')
-        ->and($commands)->toContain('chmod 700 /etc/coresmith/deploy-keys');
+        ->and($commands)->toContain('mkdir -p ' . DeployKeyManager::KEY_DIR . ' && chown root:root ' . DeployKeyManager::KEY_DIR . ' && chmod 700 ' . DeployKeyManager::KEY_DIR);
 });
 
 test('phase 5 installs caddy and verifies the admin api answers on its private socket', function () {

@@ -38,8 +38,6 @@ readonly INSTALL_DIR="$CORESMITH_ROOT/app"
 readonly DATA_DIR="/var/lib/coresmith"
 readonly UPDATES_DIR="$DATA_DIR/updates"
 readonly ADDRESS_DIR="$DATA_DIR/address"
-readonly APPS_DIR="/var/coresmith"
-readonly CONFIG_DIR="/etc/coresmith"
 readonly CADDY_SITE_DIR="/etc/caddy/coresmith"
 readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"
 readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
@@ -49,6 +47,9 @@ readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
 readonly REDIS_CONFIGS="/etc/redis/redis.conf /etc/redis.conf"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
+readonly HORIZON_LOG="/var/log/coresmith-horizon.log"
+readonly REVERB_LOG="/var/log/coresmith-reverb.log"
+readonly FPM_ERROR_LOG="/var/log/coresmith-fpm-error.log"
 readonly PHP_VERSION="8.5"
 
 if [ -t 1 ]; then
@@ -679,19 +680,12 @@ create_user_and_dirs() {
         useradd --system --shell /bin/bash --home-dir /opt/coresmith --create-home coresmith
 
     refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
-    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$ADDRESS_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
-        "$CONFIG_DIR"/env "$CONFIG_DIR"/deploy-keys /etc/caddy /var/log/caddy
+    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$ADDRESS_DIR" "$RELEASES_DIR" "$SHARED_DIR" /etc/caddy /var/log/caddy
 
-    chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"
+    chown -R coresmith:coresmith "$DATA_DIR"
     chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
     chmod 700 "$DATA_DIR"
     chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"
-    chmod 755 "$APPS_DIR"
-
-    # Application environment files and deploy keys are root-only.
-    chown root:root "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"
-    chmod 700 "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"
-
 
     success "User and directories created"
 }
@@ -983,7 +977,7 @@ pm.max_spare_servers = 4
 pm.max_requests = 500
 chdir = ${INSTALL_DIR}/public
 
-php_admin_value[error_log] = /var/log/coresmith-fpm-error.log
+php_admin_value[error_log] = ${FPM_ERROR_LOG}
 php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
@@ -1035,13 +1029,13 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/php artisan horizon
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/coresmith-horizon.log
-StandardError=append:/var/log/coresmith-horizon.log
+StandardOutput=append:${HORIZON_LOG}
+StandardError=append:${HORIZON_LOG}
 
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR} ${APPS_DIR} ${CONFIG_DIR}
+ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -1063,8 +1057,8 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/php artisan reverb:start --host=127.0.0.1 --port=6001
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/coresmith-reverb.log
-StandardError=append:/var/log/coresmith-reverb.log
+StandardOutput=append:${REVERB_LOG}
+StandardError=append:${REVERB_LOG}
 
 NoNewPrivileges=true
 PrivateTmp=true
@@ -1165,8 +1159,25 @@ Unit=coresmith-address.service
 WantedBy=multi-user.target
 UNIT
 
+    secure_logs
     systemctl daemon-reload
     success "Systemd services created"
+}
+
+secure_logs() {
+    local log
+
+    for log in "$HORIZON_LOG" "$REVERB_LOG"; do
+        refuse_link "$log"
+        touch "$log"
+        chown root:coresmith "$log"
+        chmod 640 "$log"
+    done
+
+    refuse_link "$FPM_ERROR_LOG"
+    touch "$FPM_ERROR_LOG"
+    chown coresmith:coresmith "$FPM_ERROR_LOG"
+    chmod 640 "$FPM_ERROR_LOG"
 }
 
 # ── Phase 8: start, harden, finish ───────────────────────────────────────────
@@ -1319,7 +1330,7 @@ print_summary() {
 
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"
     printf '    Status:  systemctl status caddy coresmith-horizon coresmith-reverb\n'
-    printf '    Logs:    tail -f /var/log/coresmith-horizon.log\n'
+    printf '    Logs:    tail -f %s\n' "$HORIZON_LOG"
     printf '    Health:  cd %s && sudo -u coresmith php artisan coresmith:health\n' "$INSTALL_DIR"
     printf '    Update:  cd %s && sudo -u coresmith php artisan coresmith:update\n\n' "$INSTALL_DIR"
 
@@ -1340,6 +1351,8 @@ main() {
     ensure_database_password
 
     mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE"
+    chmod 600 "$LOG_FILE"
     exec > >(tee -a "$LOG_FILE") 2>&1
     trap on_failure ERR
 
