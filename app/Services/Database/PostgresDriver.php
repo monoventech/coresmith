@@ -111,13 +111,18 @@ final class PostgresDriver
 
     public function command(string $sql, ?string $database = null): string
     {
-        $command = 'sudo -u postgres psql -v ON_ERROR_STOP=1';
+        return $this->client($database) . ' -c ' . escapeshellarg($sql);
+    }
+
+    public function client(?string $database = null): string
+    {
+        $client = 'sudo -u postgres psql -v ON_ERROR_STOP=1';
 
         if ($database !== null) {
-            $command .= ' -d ' . escapeshellarg(SafeName::assertDatabaseIdentifier($database));
+            $client .= ' -d ' . escapeshellarg(SafeName::assertDatabaseIdentifier($database));
         }
 
-        return $command . ' -c ' . escapeshellarg($sql);
+        return $client;
     }
 
     private function quoteLiteral(string $value): string

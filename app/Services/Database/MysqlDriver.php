@@ -90,7 +90,12 @@ final class MysqlDriver
 
     public function command(string $sql): string
     {
-        return 'mysql --protocol=socket -e ' . escapeshellarg($sql);
+        return $this->client() . ' -e ' . escapeshellarg($sql);
+    }
+
+    public function client(): string
+    {
+        return 'mysql --protocol=socket';
     }
 
     private function quoteLiteral(string $value): string

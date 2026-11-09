@@ -131,13 +131,14 @@ test('rotating sets a new password on the server, seals it, and shows it once', 
     expect($password)->not->toBe('Old5ecretPasswordValue')->toHaveLength(32)
         ->and(session('databasePassword'))->toBe($password)
         ->and($database->fresh()->credentials_shown_at)->not->toBeNull()
-        ->and(implode("\n", $transport->commands()))->toContain("ALTER USER '\\''shop_app'\\''@'\\''localhost'\\'' IDENTIFIED BY '\\''{$password}'\\''")
+        ->and($transport->sent())->toBe([['mysql --protocol=socket', "ALTER USER 'shop_app'@'localhost' IDENTIFIED BY '{$password}';"]])
+        ->and(implode("\n", $transport->commands()))->not->toContain($password)
         ->and(json_encode($command->properties))->not->toContain($password)
         ->and(Activity::query()->where('description', 'database_password_rotated')->sole()->subject?->is($database))->toBeTrue();
 });
 
 test('a rotation the server refuses keeps the old password and says so', function () {
-    databasePasswordTransport((new FakeSSHTransport)->respondTo('ALTER USER', "ERROR 1396 (HY000): Operation ALTER USER failed for 'shop_app'@'localhost'", 1));
+    databasePasswordTransport((new FakeSSHTransport)->respondTo('mysql --protocol=socket', "ERROR 1396 (HY000): Operation ALTER USER failed for 'shop_app'@'localhost'", 1));
     [$server, $database, $admin] = databasePasswordSetup();
 
     $this->actingAs($admin)
