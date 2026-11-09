@@ -185,7 +185,7 @@ final class PreProvisioningAudit
         }
 
         if (array_intersect(['redis-server', 'redis'], $services) !== []) {
-            $findings[] = new AuditFinding('redis', AuditSeverity::Info, 'Redis is already running', 'Coresmith uses it as it is and leaves its configuration alone.');
+            $findings[] = new AuditFinding('redis', AuditSeverity::Info, 'Redis is already running', 'Coresmith leaves it alone and gives each Redis database an instance of its own, with its own password.');
         }
 
         if (array_filter($services, fn(string $service): bool => preg_match('/^php[0-9.]*-fpm$/', $service) === 1) !== []) {

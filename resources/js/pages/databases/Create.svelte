@@ -13,6 +13,25 @@
     import { NativeSelect } from '@/components/ui/native-select'
 
     let { server }: { server: { id: string; name: string; href: string } } = $props()
+
+    let engine = $state('postgresql')
+
+    const redis = $derived(engine === 'redis')
+    const boundaries = $derived(
+        redis
+            ? [
+                  ['Localhost only', 'never bound to a public interface'],
+                  ['An instance of its own', 'its own port, process and data, apart from every other app'],
+                  ['Its own password', 'anything without it is turned away'],
+                  ['Encrypted at rest', 'the password is vaulted after it is shown once']
+              ]
+            : [
+                  ['Localhost only', 'never bound to a public interface'],
+                  ['Its own user', 'no shared credentials between apps'],
+                  ['Least privilege', 'standard grants unless you choose more'],
+                  ['Encrypted at rest', 'the password is vaulted after it is shown once']
+              ]
+    )
 </script>
 
 <AppHead title="Create a database" />
@@ -21,7 +40,9 @@
 
 <h1 class="type-h1 m-0 mb-1.5">Create a database</h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
-    On <span class="font-mono text-[13px]">{server.name}</span>, listening on localhost only, with a user of its own.
+    On <span class="font-mono text-[13px]">{server.name}</span>, listening on localhost only, with {redis
+        ? 'an instance and a password of its own'
+        : 'a user of its own'}.
 </p>
 
 <div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
@@ -34,7 +55,7 @@
                         <NativeSelect
                             id="type"
                             name="type"
-                            value="postgresql"
+                            bind:value={engine}
                             options={[
                                 { value: 'postgresql', label: 'PostgreSQL' },
                                 { value: 'mysql', label: 'MySQL' },
@@ -43,7 +64,7 @@
                         />
                         <FieldError message={errors.type} />
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class={redis ? '' : 'grid grid-cols-2 gap-3'}>
                         <div>
                             <Label for="name" class="mb-1.5">Database name</Label>
                             <Input
@@ -56,32 +77,41 @@
                             />
                             <FieldError message={errors.name} />
                         </div>
+                        {#if !redis}
+                            <div>
+                                <Label for="db_user" class="mb-1.5">User</Label>
+                                <Input
+                                    id="db_user"
+                                    name="db_user"
+                                    required
+                                    placeholder="shop_app"
+                                    class="font-mono text-[13px]"
+                                    aria-invalid={errors.db_user ? true : undefined}
+                                />
+                                <FieldError message={errors.db_user} />
+                            </div>
+                        {/if}
+                    </div>
+                    {#if redis}
+                        <p class="m-0 text-[12.5px] text-muted-foreground" data-testid="redis-instance-note">
+                            It gets an instance of its own on a free port, with its own password. Apps connect with the
+                            host, port and password its page shows.
+                        </p>
+                    {:else}
                         <div>
-                            <Label for="db_user" class="mb-1.5">User</Label>
-                            <Input
-                                id="db_user"
-                                name="db_user"
-                                required
-                                placeholder="shop_app"
-                                class="font-mono text-[13px]"
-                                aria-invalid={errors.db_user ? true : undefined}
+                            <Label for="privilege_level" class="mb-1.5">Privileges</Label>
+                            <NativeSelect
+                                id="privilege_level"
+                                name="privilege_level"
+                                value="standard"
+                                options={[
+                                    { value: 'standard', label: 'Standard, suits almost every app' },
+                                    { value: 'extended', label: 'Extended, adds views, routines and events' },
+                                    { value: 'full', label: 'Full, for apps that manage their own schema' }
+                                ]}
                             />
-                            <FieldError message={errors.db_user} />
                         </div>
-                    </div>
-                    <div>
-                        <Label for="privilege_level" class="mb-1.5">Privileges</Label>
-                        <NativeSelect
-                            id="privilege_level"
-                            name="privilege_level"
-                            value="standard"
-                            options={[
-                                { value: 'standard', label: 'Standard, suits almost every app' },
-                                { value: 'extended', label: 'Extended, adds views, routines and events' },
-                                { value: 'full', label: 'Full, for apps that manage their own schema' }
-                            ]}
-                        />
-                    </div>
+                    {/if}
                     <Button type="submit" class="w-full" disabled={processing}>Create the database</Button>
                 </div>
             {/snippet}
@@ -92,7 +122,7 @@
         <h3 class="type-h3 m-0 mb-1">How it's isolated</h3>
         <p class="mb-4 text-[12.5px] text-muted-foreground">The same boundaries every app gets.</p>
         <ol class="m-0 flex list-none flex-col gap-0.5 p-0">
-            {#each [['Localhost only', 'never bound to a public interface'], ['Its own user', 'no shared credentials between apps'], ['Least privilege', 'standard grants unless you choose more'], ['Encrypted at rest', 'the password is vaulted after it is shown once']] as [name, desc], index (name)}
+            {#each boundaries as [name, desc], index (name)}
                 <li class="flex items-baseline gap-3 py-1.75">
                     <span class="w-4 flex-none font-mono text-[12px] text-primary-strong">{index + 1}</span>
                     <span class="text-[13.5px]"
