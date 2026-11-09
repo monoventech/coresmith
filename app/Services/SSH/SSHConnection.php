@@ -93,9 +93,9 @@ final class SSHConnection
         return $this->run($this->prepare($command, $sudo), $timeout, $onOutput);
     }
 
-    public function executeWithInput(string $command, #[\SensitiveParameter] string $input, int $timeout = SSHTransport::COMMAND_SECONDS): SSHResult
+    public function executeWithInput(string $command, #[\SensitiveParameter] string $input, int $timeout = SSHTransport::COMMAND_SECONDS, bool $sudo = false): SSHResult
     {
-        return $this->run($command, $timeout, input: $input);
+        return $this->run($this->prepare($command, $sudo), $timeout, input: $input);
     }
 
     public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath, int $timeout = SSHTransport::COMMAND_SECONDS): void
