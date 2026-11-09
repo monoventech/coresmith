@@ -952,6 +952,10 @@ is_ip_address() {
     [[ "$1" =~ ^[0-9]+(\.[0-9]+){3}$ || "$1" == *:* ]]
 }
 
+caddy_signs_itself() {
+    is_ip_address "$1" || [[ "$1" == localhost || "$1" =~ \.(localhost|local|internal|home\.arpa)$ ]]
+}
+
 render_site() {
     local host="$1" ip_lines='/__IF_IP__/d'
 
@@ -1162,7 +1166,7 @@ UNIT
 
     cat >/etc/systemd/system/coresmith-address.service <<UNIT
 [Unit]
-Description=Coresmith address change, started from Settings
+Description=Coresmith address change, started from Settings or the installer
 After=network-online.target redis-server.service caddy.service
 Wants=network-online.target
 
@@ -1780,7 +1784,7 @@ print_summary() {
         printf '  Coresmith is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
 
-    if is_ip_address "$PANEL_HOST"; then
+    if caddy_signs_itself "$PANEL_HOST"; then
         print_wrapped "Your browser will warn about the certificate at ${PANEL_URL}, because Caddy signs it itself. Continue past the warning to open Coresmith."
     fi
 

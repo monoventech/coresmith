@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Services\Address\CertificateSource;
+use App\Services\Address\InstallationAddress;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
@@ -45,7 +47,7 @@ function installAddressRun(string $body, array $variables = [], ?string $env = n
         . "log() { printf 'log: %s\\n' \"\$1\"; }\n"
         . "success() { printf 'ok: %s\\n' \"\$1\"; }\n"
         . "warn() { printf 'warn: %s\\n' \"\$1\"; }\n"
-        . installAddressFunctions('env_value', 'is_ip_address', 'choose_address', 'move_to_domain', 'link_loads', 'print_wrapped', 'print_summary') . "\n"
+        . installAddressFunctions('env_value', 'is_ip_address', 'caddy_signs_itself', 'choose_address', 'move_to_domain', 'link_loads', 'print_wrapped', 'print_summary') . "\n"
         . $body;
 
     $process = new Process(['bash', '-c', $script]);
@@ -163,6 +165,18 @@ test('an install on its address alone warns about the certificate once, and says
         ->and(substr_count($output, 'warn about the certificate'))->toBe(1)
         ->and($output)->not->toContain("isn't on");
 });
+
+test('the summary warns about the certificate wherever Caddy signs it itself, by the rule Coresmith uses', function (string $host) {
+    $process = installAddressRun(<<<'BASH'
+        link_loads() { return 0; }
+        print_summary "$PANEL_URL/install?token=abc" true false
+        BASH, ['PANEL_HOST' => $host, 'PANEL_URL' => "https://{$host}"]);
+
+    $warns = str_contains(installAddressFlat($process), "Your browser will warn about the certificate at https://{$host}, because Caddy signs it itself.");
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($warns)->toBe(InstallationAddress::certificate($host) === CertificateSource::Internal);
+})->with(['192.168.0.248', 'cs-r1.internal', 'panel.local', 'panel.home.arpa', 'panel.localhost', 'localhost', 'beelink.coresmith.io', 'panel.tailnet.ts.net', 'internal.example.com']);
 
 test('the summary only says installed successfully when the link it prints loads', function () {
     $process = installAddressRun(<<<'BASH'
