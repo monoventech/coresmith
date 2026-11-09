@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Enums\Plan;
 use App\Services\Billing\BillingPresenter;
 use App\Services\Git\GitHub\GitHubApps;
 use Illuminate\Support\Facades\Artisan;
@@ -58,15 +57,9 @@ test('the readme has the self-hosting section the billing page links to', functi
         ->and((new ReflectionClassConstant(BillingPresenter::class, 'SELF_HOSTING_URL'))->getValue())->toBe('https://github.com/monoventech/coresmith#self-hosting');
 });
 
-test('the readme prices every cloud plan as the panel does', function (Plan $plan) {
-    expect(docsReadme())->toContain("| {$plan->label()} | \${$plan->amount()} a month |");
-})->with(Plan::purchasable());
-
-test('the readme gives the cloud trial the length the panel does', function () {
-    $days = (int) config('coresmith.billing.trial_days');
-
-    expect(docsReadme())->toContain("| Trial | Free for {$days} days, no card |")
-        ->toContain("{$days}-day free trial");
+test('the readme leaves coresmith cloud to coresmith.io, in one sentence', function () {
+    expect(docsReadme())->toContain('Coresmith Cloud runs Coresmith for you. Read about it at [coresmith.io](https://coresmith.io).')
+        ->and(substr_count(docsReadme(), 'Cloud'))->toBe(1);
 });
 
 test('an example environment with the github app settings left empty configures no github app', function () {
