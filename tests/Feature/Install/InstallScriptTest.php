@@ -685,6 +685,18 @@ test('an unattended install on postgresql or mysql still gets a database passwor
         ->and($process->getOutput())->toMatch('/^[0-9a-f]{32}$/');
 });
 
+test('a secret Laravel reads as empty, like the null the example environment ships, is generated', function (string $placeholder) {
+    $directory = installScriptScratch();
+    file_put_contents($directory . '/.env', "REDIS_PASSWORD={$placeholder}\nKEEP=me\n");
+
+    $process = runInstallScriptFunctions($directory, "ensure_env_secret REDIS_PASSWORD generated\n");
+    $result = (string) file_get_contents($directory . '/.env');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($result)->toContain('REDIS_PASSWORD=generated')
+        ->and($result)->toContain('KEEP=me');
+})->with(['null', '(null)', 'empty', '(empty)', '""']);
+
 test('an existing secret is never replaced and a missing one is created', function () {
     $directory = sys_get_temp_dir() . '/coresmith-secrets-' . getmypid();
     @mkdir($directory, 0700, true);
