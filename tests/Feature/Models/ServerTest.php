@@ -15,6 +15,11 @@ test('a server belongs to a team', function () {
     expect(Server::factory()->for($team)->create()->team->id)->toBe($team->id);
 });
 
+test('runtimes belong to the coresmith user, except on the machine Coresmith runs on, where that user is Coresmith itself', function () {
+    expect(Server::factory()->create()->fresh()->runtimeUser())->toBe('coresmith')
+        ->and(Server::factory()->create(['runs_coresmith' => true])->fresh()->runtimeUser())->toBe('coresmith-runtime');
+});
+
 test('a server defaults to pending status', function () {
     expect(Server::factory()->create()->fresh()->status)->toBe(ServerStatus::Pending);
 });
