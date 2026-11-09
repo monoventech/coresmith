@@ -24,6 +24,9 @@ if [ "$*" = "run build" ]; then
         printf 'edited\n' >> "$file"
     done
 fi
+if [ "$*" = "run ci" ]; then
+    printf '%s %s %s\n' "$(git rev-parse HEAD)" "$(cat VERSION)" "$(git status --porcelain | wc -l | tr -d ' ')" > "$STUB_CI"
+fi
 SH;
 
 const RELEASE_GH = <<<'SH'
@@ -97,6 +100,7 @@ function releaseScriptEnvironment(array $sandbox): array
         'STUB_INSTALLER' => $sandbox['installer'],
         'STUB_PR_BODY' => $sandbox['body'],
         'STUB_PR_VIEW' => $sandbox['pr'],
+        'STUB_CI' => $sandbox['ci'],
     ];
 }
 
@@ -140,6 +144,7 @@ function releaseScriptSandbox(): array
         'installer' => "{$base}/install.sh",
         'body' => "{$base}/pull-request.md",
         'pr' => "{$base}/pull-request.state",
+        'ci' => "{$base}/ci.state",
     ];
 
     releaseScriptSandboxes()->bases[] = $sandbox;
