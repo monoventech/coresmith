@@ -106,6 +106,7 @@ test('existing databases, redis, php-fpm and docker are reported with what Cores
         ->and(auditFinding($findings, 'mysql')['title'])->toBe('MariaDB is already running')
         ->and(auditFinding($findings, 'postgresql')['severity'])->toBe('info')
         ->and(auditFinding($findings, 'redis')['severity'])->toBe('info')
+        ->and(auditFinding($findings, 'redis')['detail'])->toBe('Coresmith leaves it alone and gives each Redis database an instance of its own, with its own password.')
         ->and(auditFinding($findings, 'php_fpm')['severity'])->toBe('warning')
         ->and(auditFinding($findings, 'docker')['title'])->toBe('Docker is running, using about 375 MB of memory');
 });

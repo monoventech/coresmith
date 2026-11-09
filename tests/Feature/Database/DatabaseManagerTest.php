@@ -120,7 +120,7 @@ test('creating a mysql database makes the db, the user and the grant', function 
         ->and((new MysqlDriver)->createUser('app_user', 'x'))->toContain("'app_user'@'localhost'");
 });
 
-test('a database server binds to loopback only', function (DatabaseType $type, string $expected) {
+test('a MySQL or PostgreSQL server binds to loopback only', function (DatabaseType $type, string $expected) {
     $transport = (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3);
 
     databaseManager()->ensureServerInstalled(databaseConnection($transport), $type);
@@ -129,7 +129,6 @@ test('a database server binds to loopback only', function (DatabaseType $type, s
 })->with([
     [DatabaseType::Mysql, 'bind-address = 127.0.0.1'],
     [DatabaseType::Postgresql, "listen_addresses = '127.0.0.1'"],
-    [DatabaseType::Redis, 'bind 127.0.0.1'],
 ]);
 
 test('a database server is only installed when missing', function () {
