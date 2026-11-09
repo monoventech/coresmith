@@ -210,7 +210,7 @@ test.describe('hardening', () => {
             props.admin_move_error =
                 "curl: (7) Failed to connect to localhost port 2019 after 0 ms: Couldn't connect to server"
         })
-        await gotoServerTab(page, 'anvil-01', 'Hardening')
+        await gotoServerTab(page, 'bench-01', 'Hardening')
 
         await expect(page.getByTestId('admin-move-error')).toHaveText(
             "Apps on this server can still reach Caddy's admin API. Coresmith tries to move it to a private socket every hour, and the last try failed: curl: (7) Failed to connect to localhost port 2019 after 0 ms: Couldn't connect to server"
@@ -226,7 +226,7 @@ test.describe('hardening', () => {
                 await withProps(page, /\/hardening$/, (props) => {
                     props.admin_move_error = 'curl: (7) Failed to connect to localhost port 2019'
                 })
-                await gotoServerTab(page, 'anvil-01', 'Hardening')
+                await gotoServerTab(page, 'bench-01', 'Hardening')
                 await expect(page.getByTestId('admin-move-error')).toBeVisible()
 
                 expect(await blockingViolations(page), `failed move in ${theme}`).toEqual([])
