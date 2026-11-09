@@ -5,6 +5,7 @@ use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
 use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
+use App\Jobs\HardenSsh;
 use App\Jobs\IdleAppSleeper;
 use App\Jobs\MoveCaddyAdminToSocket;
 use App\Jobs\PollRepositories;
@@ -56,6 +57,18 @@ Schedule::call(function (): void {
             }
         });
 })->hourly()->name('coresmith:move-caddy-admin')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->whereNull('unreachable_since')
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(function (Server $server): void {
+            if (!$server->sshHardened()) {
+                HardenSsh::dispatch($server);
+            }
+        });
+})->hourly()->name('coresmith:harden-ssh')->withoutOverlapping();
 
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
 

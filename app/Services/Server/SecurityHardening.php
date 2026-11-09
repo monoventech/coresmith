@@ -13,11 +13,47 @@ use App\Models\Server;
 use App\Models\SshKey;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
 final class SecurityHardening
 {
-    public const SSHD_CONFIG = '/etc/ssh/sshd_config.d/99-coresmith.conf';
+    public const SSHD_CONFIG = '/etc/ssh/sshd_config.d/00-coresmith.conf';
+
+    public const LEGACY_SSHD_CONFIG = '/etc/ssh/sshd_config.d/99-coresmith.conf';
+
+    public const SSHD_MAIN_CONFIG = '/etc/ssh/sshd_config';
+
+    public const SSHD_BLOCK_BEGIN = '# coresmith-sshd begin';
+
+    public const SSHD_BLOCK_END = '# coresmith-sshd end';
+
+    public const READS_DROP_INS = "grep -Eqi '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\\.d/\\*\\.conf([[:space:]]|$)' /etc/ssh/sshd_config";
+
+    private const SSHD_SETTINGS = [
+        'PasswordAuthentication no',
+        'KbdInteractiveAuthentication no',
+        'PermitRootLogin prohibit-password',
+        'PubkeyAuthentication yes',
+        'MaxAuthTries 3',
+        'ClientAliveInterval 120',
+        'ClientAliveCountMax 3',
+        'AllowAgentForwarding no',
+        'AllowTcpForwarding no',
+        'X11Forwarding no',
+    ];
+
+    private const SSHD_KEX = 'curve25519-sha256,curve25519-sha256@libssh.org';
+
+    private const SSHD_CRYPTO = [
+        'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com',
+        'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com',
+        'HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256',
+    ];
+
+    private const ROOT_WITHOUT_PASSWORD = ['without-password', 'prohibit-password', 'forced-commands-only', 'no'];
+
+    private const STRIP_SSHD_BLOCK = '$0 == start { inside = 1; next } $0 == stop { inside = 0; next } !inside { print }';
 
     public const SYSCTL_CONFIG = '/etc/sysctl.d/99-coresmith-hardening.conf';
 
@@ -158,16 +194,85 @@ final class SecurityHardening
         return implode(' && ', ['mkdir -p ' . $directory, 'touch ' . $file, ...$steps]);
     }
 
-    private function hardenSsh(SSHConnection $connection): void
+    public function hardenSsh(SSHConnection $connection): void
     {
+        $server = $connection->server();
+
         $connection->execute('mkdir -p /etc/ssh/sshd_config.d', sudo: true)->throw();
+        $connection->uploadContent($this->sshdConfig($server->ssh_port), self::SSHD_CONFIG);
+        $connection->execute('chmod 600 ' . self::SSHD_CONFIG . ' && rm -f ' . self::LEGACY_SSHD_CONFIG, sudo: true)->throw();
 
-        $connection->uploadContent($this->sshdConfig($connection->server()->ssh_port), self::SSHD_CONFIG);
+        $atTop = !$connection->execute(self::READS_DROP_INS, sudo: true)->successful();
+        $this->applySsh($connection, $atTop);
+        $problem = $this->passwordProblem($connection);
 
-        $connection->execute('chmod 600 ' . self::SSHD_CONFIG, sudo: true)->throw();
+        if ($problem !== null && !$atTop) {
+            $this->applySsh($connection, true);
+            $problem = $this->passwordProblem($connection);
+        }
 
-        $connection->execute('sshd -t', sudo: true)->throw();
-        $connection->execute('systemctl reload sshd || systemctl reload ssh', sudo: true)->throw();
+        $this->recordSsh($server, $problem === null ? ['ssh_hardening' => 'verified'] : ['ssh_hardening_error' => $problem]);
+    }
+
+    /**
+     * @param  array<string, string>  $result
+     */
+    public function recordSsh(Server $server, array $result): void
+    {
+        $fresh = $server->fresh() ?? $server;
+
+        $fresh->forceFill(['meta' => [...Arr::except((array) $fresh->meta, ['ssh_hardening', 'ssh_hardening_error']), ...$result]])->save();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sshdBlock(): array
+    {
+        return [...self::SSHD_SETTINGS, 'KexAlgorithms ' . self::SSHD_KEX, ...self::SSHD_CRYPTO];
+    }
+
+    private function applySsh(SSHConnection $connection, bool $atTop): void
+    {
+        $main = self::SSHD_MAIN_CONFIG;
+        $block = $atTop
+            ? "printf '%s\\n' " . implode(' ', array_map(escapeshellarg(...), [self::SSHD_BLOCK_BEGIN, ...$this->sshdBlock(), self::SSHD_BLOCK_END])) . ' && '
+            : '';
+        $strip = 'awk -v start=' . escapeshellarg(self::SSHD_BLOCK_BEGIN) . ' -v stop=' . escapeshellarg(self::SSHD_BLOCK_END) . ' ' . escapeshellarg(self::STRIP_SSHD_BLOCK) . ' ' . $main;
+        $rewrite = 'tmp=$(mktemp ' . $main . '.XXXXXX) && { { ' . $block . $strip . '; } > "$tmp" && sshd -t -f "$tmp" && cat "$tmp" > ' . $main . '; status=$?; rm -f "$tmp"; [ "$status" -eq 0 ]; }';
+
+        $connection->execute(
+            $atTop ? $rewrite : 'if grep -qxF ' . escapeshellarg(self::SSHD_BLOCK_BEGIN) . ' ' . $main . '; then ' . $rewrite . '; fi',
+            sudo: true,
+        )->throw();
+
+        $connection->execute('sshd -t && { systemctl reload sshd || systemctl reload ssh; }', sudo: true)->throw();
+    }
+
+    private function passwordProblem(SSHConnection $connection): ?string
+    {
+        $settings = [];
+
+        foreach (preg_split('/\R/', $connection->execute('sshd -T', sudo: true)->throw()->output) ?: [] as $line) {
+            $parts = preg_split('/\s+/', trim($line), 2) ?: [];
+
+            if (count($parts) === 2) {
+                $settings[strtolower($parts[0])] = strtolower($parts[1]);
+            }
+        }
+
+        if (!isset($settings['passwordauthentication'], $settings['permitrootlogin'])) {
+            return "sshd didn't report its settings";
+        }
+
+        $open = array_keys(array_filter([
+            'passwordauthentication' => $settings['passwordauthentication'] !== 'no',
+            'kbdinteractiveauthentication' => ($settings['kbdinteractiveauthentication'] ?? 'no') !== 'no',
+            'challengeresponseauthentication' => ($settings['challengeresponseauthentication'] ?? 'no') !== 'no',
+            'permitrootlogin' => !in_array($settings['permitrootlogin'], self::ROOT_WITHOUT_PASSWORD, true),
+        ]));
+
+        return $open === [] ? null : 'sshd reports ' . implode(', ', array_map(fn(string $key): string => "{$key} {$settings[$key]}", $open));
     }
 
     private function installFail2ban(SSHConnection $connection): void
@@ -242,24 +347,13 @@ final class SecurityHardening
 
     public function sshdConfig(int $sshPort): string
     {
-        return <<<CONFIG
-        Port {$sshPort}
-        PasswordAuthentication no
-        PermitRootLogin prohibit-password
-        PubkeyAuthentication yes
-        MaxAuthTries 3
-        ClientAliveInterval 120
-        ClientAliveCountMax 3
-        AllowAgentForwarding no
-        AllowTcpForwarding no
-        X11Forwarding no
-
-        KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
-        Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
-        MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
-        HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
-
-        CONFIG;
+        return implode("\n", [
+            "Port {$sshPort}",
+            ...self::SSHD_SETTINGS,
+            '',
+            'KexAlgorithms sntrup761x25519-sha512@openssh.com,' . self::SSHD_KEX,
+            ...self::SSHD_CRYPTO,
+        ]) . "\n";
     }
 
     public function fail2banJail(int $sshPort): string

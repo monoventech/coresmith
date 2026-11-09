@@ -217,10 +217,74 @@ test.describe('hardening', () => {
         )
     })
 
+    test("a server whose sshd reported key-only SSH lists it, and Caddy's real answer to unknown hostnames", async ({
+        page
+    }) => {
+        await gotoServerTab(page, 'forge-01', 'Hardening')
+
+        const hardening = page.getByRole('heading', { name: 'Server hardening' }).locator('..')
+
+        await expect(hardening).toContainText('SSH key-only, modern ciphers (curve25519, ed25519)')
+        await expect(hardening).toContainText('Caddy serves no site for unknown hostnames')
+        await expect(hardening).not.toContainText('444')
+        await expect(page.getByTestId('ssh-hardening-error')).toHaveCount(0)
+        await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveCount(0)
+    })
+
+    test('a server whose sshd still accepts passwords says what sshd reported, and claims neither key-only SSH nor password login off', async ({
+        page
+    }) => {
+        await withProps(page, /\/hardening$/, (props) => {
+            props.ssh = { verified: false, error: 'sshd reports passwordauthentication yes' }
+            props.hardening = (props.hardening as string[]).filter((item) => !item.startsWith('SSH key-only'))
+        })
+        await gotoServerTab(page, 'bench-01', 'Hardening')
+
+        await expect(page.getByTestId('ssh-hardening-error')).toHaveText(
+            'SSH may still accept passwords on this server. Coresmith tries to turn them off every hour, and the last try found: sshd reports passwordauthentication yes'
+        )
+        await expect(page.getByRole('heading', { name: 'Server hardening' }).locator('..')).not.toContainText(
+            'SSH key-only'
+        )
+        await expect(page.getByRole('heading', { name: 'SSH access' }).locator('..')).not.toContainText(
+            'Password login is off.'
+        )
+    })
+
+    test('a server Coresmith has not checked yet says it will check its SSH settings within the hour', async ({
+        page
+    }) => {
+        await withProps(page, /\/hardening$/, (props) => {
+            props.ssh = { verified: false, error: null }
+            props.hardening = (props.hardening as string[]).filter((item) => !item.startsWith('SSH key-only'))
+        })
+        await gotoServerTab(page, 'bench-01', 'Hardening')
+
+        await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveText(
+            "Coresmith hasn't checked this server's SSH settings yet. It checks them within the hour."
+        )
+        await expect(page.getByRole('heading', { name: 'SSH access' }).locator('..')).not.toContainText(
+            'Password login is off.'
+        )
+    })
+
     test.describe('accessibility', () => {
         test.use({ reducedMotion: 'reduce' })
 
         for (const theme of ['light', 'dark'] as const) {
+            test(`sshd still accepting passwords has no serious or critical violations in ${theme}`, async ({
+                page
+            }) => {
+                await useTheme(page, theme)
+                await withProps(page, /\/hardening$/, (props) => {
+                    props.ssh = { verified: false, error: 'sshd reports passwordauthentication yes' }
+                })
+                await gotoServerTab(page, 'bench-01', 'Hardening')
+                await expect(page.getByTestId('ssh-hardening-error')).toBeVisible()
+
+                expect(await blockingViolations(page), `ssh warning in ${theme}`).toEqual([])
+            })
+
             test(`a failed admin API move has no serious or critical violations in ${theme}`, async ({ page }) => {
                 await useTheme(page, theme)
                 await withProps(page, /\/hardening$/, (props) => {
