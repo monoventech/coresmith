@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\AddressController;
 use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\AuditLogController;
 use App\Http\Controllers\Settings\BillingController;
@@ -30,6 +31,9 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings', [GeneralSettingsController::class, 'show'])->name('settings.general');
     Route::put('settings/instance', [GeneralSettingsController::class, 'update'])->name('settings.instance.update');
+    Route::put('settings/address', [AddressController::class, 'update'])
+        ->middleware('throttle:6,1,settings-address')
+        ->name('settings.address.update');
     Route::post('settings/backups', [GeneralSettingsController::class, 'backup'])
         ->middleware('throttle:6,1,backups')
         ->name('settings.backups.store');

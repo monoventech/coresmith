@@ -18,6 +18,7 @@ use App\Models\SshKey;
 use App\Models\Team;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Moves\MovePresenter;
+use App\Services\Panel\AddressPresenter;
 use App\Services\Panel\PanelBackup;
 use App\Services\Panel\PanelUpdatesPresenter;
 use App\Services\Teams\AccountClosing;
@@ -42,7 +43,7 @@ final class GeneralSettingsController extends Controller
         return back()->with('success', 'Backing up. The database and environment are archived, the last ' . PanelBackup::KEEP . ' are kept.');
     }
 
-    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion, MovePresenter $moves): Response
+    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion, MovePresenter $moves, AddressPresenter $address): Response
     {
         $cloud = Edition::current()->isCloud();
         $installed = $cloud ? null : InstanceSetting::get('installed_at');
@@ -56,6 +57,7 @@ final class GeneralSettingsController extends Controller
                 'timezone' => InstanceSetting::get('timezone', config('app.timezone')),
                 'notification_email' => $cloud ? null : InstanceSetting::get('notification_email'),
             ],
+            'address' => $address->present(),
             'backups' => [
                 'last' => $latest === null ? null : [
                     'when' => $latest['at']->isToday() ? 'today ' . $latest['at']->format('H:i') : $latest['at']->format('M j, H:i'),

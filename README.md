@@ -4,7 +4,7 @@ Server management without the complexity. Coresmith sets up your own Linux serve
 
 **One server, every stack.** PHP apps such as Laravel, JavaScript and TypeScript apps on Node.js, Bun or Deno, Ruby apps such as Rails, and static sites can all share one server. Each app gets its own Linux user, its own block of ports and an environment file only root can read.
 
-- **Servers set up for you.** Coresmith provisions a fresh server over SSH and hardens it, with key-only SSH, fail2ban and a firewall.
+- **Servers set up for you.** Add a server with its password once, or by pasting one command on it, and Coresmith provisions it over SSH and hardens it, with key-only SSH, fail2ban and a firewall.
 - **Push to deploy.** Connect GitHub or your own Git host. Every deploy builds a new release beside the live one, health-checks it, then switches over in one step, and the previous release stays ready to roll back to.
 - **Everything an app needs.** HTTPS certificates, domains, environment variables, background processes, cron jobs, and MySQL, PostgreSQL and Redis databases, all set from the browser.
 
@@ -75,6 +75,8 @@ Then download the installer and its signature from the latest release, check the
     sudo bash install.sh --domain coresmith.example.com --email you@example.com
 
 Go on only if `gpg --verify` reports a good signature from "Coresmith releases". Leave out `--domain` to use the server's IP address. `curl -fsSL https://get.coresmith.io/install | sudo bash` runs the same installer in one line.
+
+You can give Coresmith a domain later from Settings, General: point the domain, or the server's Tailscale name, at the server, and Coresmith switches over once Caddy has a certificate for it. The old address then sends people to the new one.
 
 The installer adds Caddy, PHP, Redis, Git, SQLite, Node.js, Bun and fail2ban, creates a `coresmith` user, installs the release, configures the firewall and starts the services. It takes these options:
 

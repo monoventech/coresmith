@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Enums\Edition;
 use App\Models\ApiToken;
 use App\Models\Server;
+use App\Services\Address\EnvironmentFile;
 use App\Services\Cloud\Contracts\CloudApiFactory;
 use App\Services\Cloud\HttpCloudApiFactory;
 use App\Services\Dns\DnsResolver;
@@ -42,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(TeamContext::class);
 
         $this->app->bind(DnsResolver::class, NativeDnsResolver::class);
+        $this->app->bind(EnvironmentFile::class, fn(): EnvironmentFile => new EnvironmentFile($this->app->environmentFilePath()));
 
         $this->app->bind(UpdatePaths::class, fn(): UpdatePaths => UpdatePaths::fromConfig());
 
