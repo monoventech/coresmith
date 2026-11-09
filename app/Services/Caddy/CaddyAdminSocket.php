@@ -52,10 +52,15 @@ final class CaddyAdminSocket
         $running = $connection->execute('curl -fsS --max-time 30 -X GET ' . CaddyApiClient::address(false, '/config/'), sudo: true)->throw()->output;
 
         $connection->uploadContent($this->onSocket($running), self::LOAD_FILE);
-        $connection->execute(
-            'curl -fsS --max-time 30 -X POST ' . CaddyApiClient::address(false, '/load') . ' -H ' . escapeshellarg('Content-Type: application/json') . ' --data-binary @' . self::LOAD_FILE,
-            sudo: true,
-        )->throw();
+
+        try {
+            $connection->execute(
+                'curl -fsS --max-time 30 -X POST ' . CaddyApiClient::address(false, '/load') . ' -H ' . escapeshellarg('Content-Type: application/json') . ' --data-binary @' . self::LOAD_FILE,
+                sudo: true,
+            )->throw();
+        } finally {
+            $connection->execute('rm -f ' . self::LOAD_FILE, sudo: true);
+        }
 
         if (!$this->answers($connection, self::ATTEMPTS)) {
             $connection->execute('systemctl restart caddy', sudo: true);

@@ -50,6 +50,7 @@ test('a server on tcp loads its running config with the socket listener through 
         ->and($loaded->apps->http->servers->coresmith->routes)->toEqual([(object) ['@id' => 'app-1']])
         ->and($loaded->apps->http->servers->coresmith->logs)->toEqual(new stdClass)
         ->and($commands)->toContain("curl -fsS --max-time 30 -X POST 'http://localhost:2019/load' -H 'Origin: http://localhost:2019' -H 'Content-Type: application/json' --data-binary @/etc/caddy/caddy-config.socket.json")
+        ->and(array_search('rm -f /etc/caddy/caddy-config.socket.json', $commands, true))->toBeGreaterThan(array_search("curl -fsS --max-time 30 -X POST 'http://localhost:2019/load' -H 'Origin: http://localhost:2019' -H 'Content-Type: application/json' --data-binary @/etc/caddy/caddy-config.socket.json", $commands, true))
         ->and(end($commands))->toBe("sh -c 'curl -fsS --max-time 30 -X GET --unix-socket /run/caddy-admin/admin.sock '\\''http://localhost/config/'\\'' > /etc/caddy/caddy-config.staged.json && mv -f /etc/caddy/caddy-config.staged.json /etc/caddy/caddy-config.json'")
         ->and($server->fresh()->meta)->toBeInAnyKeyOrder(['cpu_cores' => 2, 'caddy_admin' => 'socket']);
 });
@@ -88,6 +89,7 @@ test('caddy refusing the new settings leaves everything as it was', function () 
     expect(fn() => adminSocketMove($server, $transport))->toThrow(SSHCommandFailedException::class);
 
     expect($transport->commands())->not->toContain('systemctl restart caddy')
+        ->toContain('rm -f /etc/caddy/caddy-config.socket.json')
         ->and($server->fresh()->caddyAdminOnSocket())->toBeFalse();
 });
 
