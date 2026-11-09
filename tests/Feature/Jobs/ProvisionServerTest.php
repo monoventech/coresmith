@@ -257,7 +257,7 @@ test('an unsupported distribution fails provisioning cleanly', function () {
 
 test('on the machine Coresmith runs on, runtimes and app folders belong to a user of their own, so nothing borrows Coresmith\'s user', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'runs_coresmith' => true]);
-    $transport = provisioningTransport();
+    $transport = provisioningTransport()->respondTo('caddy adapt', (string) file_get_contents(base_path('tests/Fixtures/Caddy/adapted-internal.json')));
 
     provision($server, $transport);
 

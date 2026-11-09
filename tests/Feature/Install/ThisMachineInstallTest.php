@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Services\Caddy\CaddyApiClient;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
@@ -434,5 +435,111 @@ test("the installer leaves Caddy's service to provisioning, and takes out only t
         ->and(thisMachineInstaller())->toContain('readonly CADDY_DROP_IN="/etc/systemd/system/caddy.service.d/coresmith.conf"')
         ->and(thisMachineInstallerFunction('create_systemd_services'))->toContain("    remove_legacy_caddy_drop_in\n")
         ->and(thisMachineInstallerFunction('create_systemd_services'))->not->toContain('caddy.service.d')
-        ->and(thisMachineInstallerFunction('create_systemd_services'))->not->toContain('ExecStartPost');
+        ->and(thisMachineInstallerFunction('create_systemd_services'))->not->toContain("ExecStartPost=/bin/bash -c 'sleep 2");
 });
+
+function thisMachinePersist(): string
+{
+    preg_match("/<<'PERSIST'\n(.*?)\nPERSIST\n/s", thisMachineInstaller(), $matches);
+
+    return $matches[1] ?? '';
+}
+
+function thisMachinePersistRun(string $base, string $dropIn, string $live, int $curlExit = 0): Process
+{
+    mkdir("{$base}/caddy", 0700, true);
+    file_put_contents("{$base}/caddy/caddy-config.json", "{\"old\":true}\n");
+    file_put_contents("{$base}/drop-in.conf", $dropIn);
+    thisMachineStub($base, 'curl', 'printf %s ' . escapeshellarg($live) . "\nexit {$curlExit}");
+    thisMachineStub($base, 'flock', ':');
+
+    $script = preg_replace(
+        ['/^readonly CONFIG=.*$/m', '/^readonly DROP_IN=.*$/m', '/^readonly LOCK=.*$/m'],
+        ["readonly CONFIG={$base}/caddy/caddy-config.json", "readonly DROP_IN={$base}/drop-in.conf", "readonly LOCK={$base}/caddy-config.lock"],
+        thisMachinePersist(),
+    );
+    $process = new Process(['bash', '-c', $script], null, ['PATH' => "{$base}/bin:/usr/bin:/bin"]);
+    $process->run();
+
+    return $process;
+}
+
+test('where Caddy runs the managed config with Coresmith inside it, the live config is saved over the old one, in one step', function () {
+    $base = thisMachineBase();
+
+    $process = thisMachinePersistRun($base, "[Service]\nExecStart=\nExecStart=/usr/bin/caddy run --environ --config /etc/caddy/caddy-config.json\n", '{"apps":{"http":{}}}');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(file_get_contents("{$base}/caddy/caddy-config.json"))->toBe('{"apps":{"http":{}}}')
+        ->and(substr(sprintf('%o', fileperms("{$base}/caddy/caddy-config.json")), -3))->toBe('644')
+        ->and(glob("{$base}/caddy/.caddy-config.*"))->toBe([])
+        ->and(thisMachineCalls($base))->toContain('flock -w 60 9', 'curl -fsS --max-time 30 --unix-socket /run/caddy-admin/admin.sock http://localhost/config/');
+});
+
+test('where Caddy runs Coresmith from its Caddyfile, nothing is saved', function () {
+    $base = thisMachineBase();
+
+    $process = thisMachinePersistRun($base, '', '{"apps":{}}');
+
+    expect($process->getExitCode())->toBe(0)
+        ->and(file_get_contents("{$base}/caddy/caddy-config.json"))->toBe("{\"old\":true}\n")
+        ->and(thisMachineCalls($base))->toBe([]);
+});
+
+test("a config Caddy doesn't hand over leaves the saved one as it was", function (string $live, int $exit) {
+    $base = thisMachineBase();
+
+    $process = thisMachinePersistRun($base, "ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/caddy-config.json\n", $live, $exit);
+
+    expect($process->getExitCode())->not->toBe(0)
+        ->and(file_get_contents("{$base}/caddy/caddy-config.json"))->toBe("{\"old\":true}\n")
+        ->and(glob("{$base}/caddy/.caddy-config.*"))->toBe([]);
+})->with(['caddy down' => ['', 7], 'an empty answer' => ['', 0], 'no config at all' => ['null', 0]]);
+
+test('the saving script is installed for root from the installer, and every change on this machine ends with it', function () {
+    $body = thisMachineInstaller();
+    $address = str($body)->after("cat >/etc/systemd/system/coresmith-address.service <<UNIT\n")->before("\nUNIT\n")->toString();
+    $finalize = thisMachineInstallerFunction('finalize');
+
+    expect($body)->toContain('readonly CADDY_PERSIST="' . CaddyApiClient::THIS_MACHINE_PERSIST . '"')
+        ->and(thisMachineInstallFunction())->toContain("cat >\"\$tmp\" <<'PERSIST'\n")
+        ->and(thisMachineInstallFunction())->toContain('mv -f "$tmp" "$CADDY_PERSIST"')
+        ->and(thisMachinePersist())->toStartWith("#!/bin/bash\n")
+        ->and($address)->toContain('ExecStartPost=+${CADDY_PERSIST}')
+        ->and($finalize)->toContain("    if caddy_runs_managed_config; then\n        wait_for_caddy_admin\n        run sudo -u coresmith php \"\$INSTALL_DIR/artisan\" coresmith:caddy-sync\n        run \"\$CADDY_PERSIST\"\n    fi\n")
+        ->and(strpos($finalize, 'coresmith:caddy-sync'))->toBeGreaterThan(strpos($finalize, 'run systemctl restart caddy'))
+        ->and(thisMachineInstallerFunction('caddy_runs_managed_config'))->toContain('grep -qsF -- "--config /etc/caddy/caddy-config.json" "$CADDY_DROP_IN"');
+});
+
+test('the saving script passes shellcheck', function () {
+    $shellcheck = new Process(['which', 'shellcheck']);
+    $shellcheck->run();
+
+    if ($shellcheck->getExitCode() !== 0) {
+        $this->markTestSkipped('shellcheck is not installed on this machine; CI installs it.');
+    }
+
+    $file = realpath(sys_get_temp_dir()) . '/csm-' . bin2hex(random_bytes(4)) . '/persist';
+    File::ensureDirectoryExists(dirname($file));
+    file_put_contents($file, thisMachinePersist());
+    $process = new Process(['shellcheck', '-S', 'style', '-s', 'bash', $file]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getOutput());
+});
+
+test("after Caddy restarts on Coresmith's machine, the installer waits for its admin socket before syncing, and says where to look if it never answers", function (string $curl, int $exit, string $output) {
+    $base = thisMachineBase();
+    thisMachineStub($base, 'curl', $curl);
+    thisMachineStub($base, 'sleep', ':');
+
+    $script = "set -euo pipefail\nCADDY_ADMIN_SOCKET=/run/caddy-admin/admin.sock\nfatal() { printf '%s\\n' \"\$1\"; exit 1; }\n" . thisMachineInstallerFunction('wait_for_caddy_admin') . "\nwait_for_caddy_admin\necho waited\n";
+    $process = new Process(['bash', '-c', $script], null, ['PATH' => "{$base}/bin:/usr/bin:/bin"]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe($exit)
+        ->and(trim($process->getOutput()))->toBe($output);
+})->with([
+    'answering' => ['exit 0', 0, 'waited'],
+    'never answering' => ['exit 7', 1, "Caddy didn't answer on its admin socket after it restarted. See journalctl -u caddy, then run the installer again."],
+]);

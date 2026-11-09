@@ -10,9 +10,11 @@ namespace App\Services\Caddy;
 
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
+use App\Models\InstanceSetting;
 use App\Models\Server;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHResult;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Sleep;
 
 final class CaddyApiClient
@@ -26,6 +28,20 @@ final class CaddyApiClient
     public const ADMIN_LISTEN = 'unix/' . self::ADMIN_SOCKET;
 
     public const ROUTES_PATH = '/config/apps/http/servers/' . CaddyInstaller::SERVER . '/routes';
+
+    public const AFTER_CORESMITH_SITE = self::ROUTES_PATH . '/1';
+
+    public const POLICIES_PATH = '/config/apps/tls/automation/policies';
+
+    public const FIRST_POLICY = self::POLICIES_PATH . '/0';
+
+    public const THIS_MACHINE_LOCK = 'caddy-config:this-machine';
+
+    public const THIS_MACHINE_PERSIST = '/usr/local/libexec/coresmith/persist-caddy-config';
+
+    public const LOCK_SECONDS = 120;
+
+    public const LOCK_WAIT_SECONDS = 60;
 
     public const STAGED_CONFIG_FILE = '/etc/caddy/caddy-config.staged.json';
 
@@ -46,16 +62,21 @@ final class CaddyApiClient
     {
         $config = $this->buildValidated($application);
 
-        $this->request($connection, 'POST', self::ROUTES_PATH, $config);
-        $this->persistConfig($connection);
+        $this->changing($connection, function () use ($connection, $application, $config): void {
+            $this->insertSite($connection, $application, $config);
+            $this->persistConfig($connection);
+        });
     }
 
     public function updateSite(SSHConnection $connection, Application $application): void
     {
         $config = $this->buildValidated($application);
 
-        $this->request($connection, 'PATCH', '/id/' . CaddyRouteBuilder::routeId($application), $config);
-        $this->persistConfig($connection);
+        $this->changing($connection, function () use ($connection, $application, $config): void {
+            $this->request($connection, 'PATCH', '/id/' . CaddyRouteBuilder::routeId($application), $config);
+            $this->updatePolicy($connection, $application);
+            $this->persistConfig($connection);
+        });
     }
 
     public function putSite(SSHConnection $connection, Application $application): void
@@ -63,38 +84,124 @@ final class CaddyApiClient
         $config = $this->buildValidated($application);
         $path = '/id/' . CaddyRouteBuilder::routeId($application);
 
-        if ($this->exists($connection, $path)) {
-            $this->request($connection, 'PATCH', $path, $config);
-        } else {
-            $this->request($connection, 'POST', self::ROUTES_PATH, $config);
-        }
+        $this->changing($connection, function () use ($connection, $application, $config, $path): void {
+            if ($this->exists($connection, $path)) {
+                $this->request($connection, 'PATCH', $path, $config);
+                $this->updatePolicy($connection, $application);
+            } else {
+                $this->insertSite($connection, $application, $config);
+            }
 
-        $this->persistConfig($connection);
+            $this->persistConfig($connection);
+        });
     }
 
     public function removeSite(SSHConnection $connection, Application $application): void
     {
-        try {
-            $this->request($connection, 'DELETE', '/id/' . CaddyRouteBuilder::routeId($application));
-        } catch (SSHCommandFailedException $e) {
-            if ($this->missing($e)) {
-                return;
+        $this->changing($connection, function () use ($connection, $application): void {
+            $removed = $this->delete($connection, '/id/' . CaddyRouteBuilder::routeId($application));
+
+            if ($this->onCoresmithsMachine($connection)) {
+                $removed = $this->delete($connection, '/id/' . self::policyId($application)) || $removed;
             }
 
-            throw $e;
-        }
+            if ($removed) {
+                $this->persistConfig($connection);
+            }
+        });
+    }
 
-        $this->persistConfig($connection);
+    public static function policyId(Application $application): string
+    {
+        return CaddyRouteBuilder::routeId($application) . '-tls';
     }
 
     public function persistConfig(SSHConnection $connection): void
     {
-        $this->script($connection, self::persistScript($connection->server()->caddyAdminOnSocket()));
+        $this->script($connection, $this->onCoresmithsMachine($connection) ? self::THIS_MACHINE_PERSIST : self::persistScript($connection->server()->caddyAdminOnSocket()));
+    }
+
+    public static function exclusively(Server $server, callable $change): mixed
+    {
+        if (!$server->runs_coresmith) {
+            return $change();
+        }
+
+        return Cache::lock(self::THIS_MACHINE_LOCK, self::LOCK_SECONDS)->block(self::LOCK_WAIT_SECONDS, $change);
     }
 
     public static function persistScript(bool $socket): string
     {
         return 'curl -fsS --max-time 30 -X GET ' . self::address($socket, '/config/') . ' > ' . self::STAGED_CONFIG_FILE . ' && mv -f ' . self::STAGED_CONFIG_FILE . ' ' . CaddyInstaller::CONFIG_FILE;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function insertSite(SSHConnection $connection, Application $application, array $config): void
+    {
+        if (!$this->onCoresmithsMachine($connection)) {
+            $this->request($connection, 'POST', self::ROUTES_PATH, $config);
+
+            return;
+        }
+
+        $this->request($connection, 'PUT', self::AFTER_CORESMITH_SITE, $config, retry: false);
+        $this->request($connection, 'PUT', self::FIRST_POLICY, $this->policy($application), retry: false);
+    }
+
+    private function updatePolicy(SSHConnection $connection, Application $application): void
+    {
+        if (!$this->onCoresmithsMachine($connection)) {
+            return;
+        }
+
+        try {
+            $this->request($connection, 'PATCH', '/id/' . self::policyId($application), $this->policy($application));
+        } catch (SSHCommandFailedException $e) {
+            if (!$this->missing($e)) {
+                throw $e;
+            }
+
+            $this->request($connection, 'PUT', self::FIRST_POLICY, $this->policy($application), retry: false);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function policy(Application $application): array
+    {
+        return CaddyInstaller::appPolicy(
+            CaddyRouteBuilder::routeId($application),
+            $this->builder->domains($application),
+            CaddyInstaller::issuers(InstanceSetting::get('notification_email')),
+        );
+    }
+
+    private function delete(SSHConnection $connection, string $path): bool
+    {
+        try {
+            $this->request($connection, 'DELETE', $path);
+        } catch (SSHCommandFailedException $e) {
+            if ($this->missing($e)) {
+                return false;
+            }
+
+            throw $e;
+        }
+
+        return true;
+    }
+
+    private function onCoresmithsMachine(SSHConnection $connection): bool
+    {
+        return (bool) $connection->server()->runs_coresmith;
+    }
+
+    private function changing(SSHConnection $connection, callable $change): void
+    {
+        self::exclusively($connection->server(), $change);
     }
 
     private function script(SSHConnection $connection, string $script): void
@@ -175,9 +282,9 @@ final class CaddyApiClient
     /**
      * @param  array<string, mixed>|null  $payload
      */
-    private function request(SSHConnection $connection, string $method, string $path, ?array $payload = null): void
+    private function request(SSHConnection $connection, string $method, string $path, ?array $payload = null, ?bool $retry = null): void
     {
-        $this->run($connection, $this->curl($connection->server(), $method, $path, $payload), retry: in_array($method, self::IDEMPOTENT_METHODS, true));
+        $this->run($connection, $this->curl($connection->server(), $method, $path, $payload), retry: $retry ?? in_array($method, self::IDEMPOTENT_METHODS, true));
     }
 
     /**
