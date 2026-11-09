@@ -19,6 +19,8 @@ final class PreProvisioningAudit
 {
     public const FIXES = ['stop-nginx' => 'nginx', 'stop-apache2' => 'apache2', 'stop-httpd' => 'httpd'];
 
+    private const CORESMITH_INTERNAL_PORT = 8484;
+
     private const RUNTIMES = ['php' => 'PHP', 'node' => 'Node.js', 'ruby' => 'Ruby', 'bun' => 'Bun', 'deno' => 'Deno'];
 
     public const PANEL_CHECK = 'ls -d /opt/coresmith /etc/systemd/system/coresmith-horizon.service /etc/systemd/system/coresmith-reverb.service /etc/systemd/system/coresmith-scheduler.timer /etc/systemd/system/coresmith-update.path 2>/dev/null';
@@ -63,19 +65,21 @@ final class PreProvisioningAudit
     public function report(string $output, Server $server): AuditReport
     {
         $sections = $this->sections($output);
+        $ownMachine = (bool) $server->runs_coresmith;
 
-        if (($sections['panel'] ?? []) !== []) {
+        if (($sections['panel'] ?? []) !== [] && !$ownMachine) {
             return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs Coresmith itself', 'Add a different server for your apps.')]);
         }
 
         $listeners = $this->ports->parse(implode("\n", $sections['ports'] ?? []));
         $services = array_map(fn(string $unit): string => Str::before($unit, '.service'), $sections['services'] ?? []);
-        $ports = $this->portFindings($listeners, $services);
+        $ports = $this->portFindings($listeners, $services, $ownMachine);
         $covered = array_filter(array_map(fn(AuditFinding $finding): ?string => $finding->fix, $ports));
 
         return new AuditReport([
+            ...(($sections['panel'] ?? []) !== [] ? [new AuditFinding('panel_host', AuditSeverity::Info, 'Coresmith runs on this machine', 'It keeps running beside your apps, which get users, folders and processes of their own.')] : []),
             ...$ports,
-            ...$this->serviceFindings($services, $covered, (int) ($sections['docker'][0] ?? 0)),
+            ...$this->serviceFindings($services, $covered, (int) ($sections['docker'][0] ?? 0), $ownMachine),
             ...$this->userFindings($sections['users'] ?? [], $server),
             ...$this->capacityFindings((int) ($sections['disk'][0] ?? 0), (int) ($sections['memory'][0] ?? 0)),
             ...$this->securityFindings((string) ($sections['selinux'][0] ?? ''), (string) ($sections['apparmor'][0] ?? '')),
@@ -110,9 +114,10 @@ final class PreProvisioningAudit
      * @param  list<string>  $services
      * @return list<AuditFinding>
      */
-    private function portFindings(array $listeners, array $services): array
+    private function portFindings(array $listeners, array $services, bool $ownMachine): array
     {
         $findings = [];
+        $coresmiths = [];
 
         if ($listeners === []) {
             return [new AuditFinding('ports_unknown', AuditSeverity::Warning, 'Coresmith could not read the listening ports', 'Install iproute2 so ss is available, then check again, or confirm yourself that nothing holds ports 80 and 443.')];
@@ -124,6 +129,12 @@ final class PreProvisioningAudit
             }
 
             $process = $listeners[$port];
+
+            if ($ownMachine && $process === 'caddy') {
+                $coresmiths[] = $port;
+
+                continue;
+            }
             $fix = $this->webServerFix($process, $services);
 
             $findings[] = new AuditFinding(
@@ -135,14 +146,22 @@ final class PreProvisioningAudit
             );
         }
 
+        if ($coresmiths !== []) {
+            $findings[] = new AuditFinding('ports_coresmith', AuditSeverity::Info, "Coresmith's Caddy holds " . (count($coresmiths) === 2 ? 'ports 80 and 443' : "port {$coresmiths[0]}"), 'Provisioning gives it the config every server uses, so it serves your apps beside Coresmith.');
+        }
+
         if (!isset($listeners[80]) && !isset($listeners[443])) {
             $findings[] = new AuditFinding('ports_free', AuditSeverity::Info, 'Ports 80 and 443 are free', 'Caddy takes them when provisioning runs.');
         }
 
         foreach ($listeners as $port => $process) {
-            if (PortAllocator::isInAllocatableRange($port)) {
-                $findings[] = new AuditFinding("app_port_{$port}", AuditSeverity::Warning, "Port {$port} is in use by {$process}", 'It is inside the range Coresmith gives apps (8000–9999). Apps skip that port block, or stop the process to free it.');
+            if (!PortAllocator::isInAllocatableRange($port)) {
+                continue;
             }
+
+            $findings[] = $ownMachine && $port === self::CORESMITH_INTERNAL_PORT && $process === 'caddy'
+                ? new AuditFinding("app_port_{$port}", AuditSeverity::Info, "Port {$port} is Coresmith's", "Caddy asks Coresmith there before it issues a certificate for a team's domain. Apps skip that port block.")
+                : new AuditFinding("app_port_{$port}", AuditSeverity::Warning, "Port {$port} is in use by {$process}", 'It is inside the range Coresmith gives apps (8000–9999). Apps skip that port block, or stop the process to free it.');
         }
 
         return $findings;
@@ -163,7 +182,7 @@ final class PreProvisioningAudit
      * @param  array<int, string>  $covered
      * @return list<AuditFinding>
      */
-    private function serviceFindings(array $services, array $covered, int $dockerRssKb): array
+    private function serviceFindings(array $services, array $covered, int $dockerRssKb, bool $ownMachine): array
     {
         $findings = [];
 
@@ -189,7 +208,9 @@ final class PreProvisioningAudit
         }
 
         if (array_filter($services, fn(string $service): bool => preg_match('/^php[0-9.]*-fpm$/', $service) === 1) !== []) {
-            $findings[] = new AuditFinding('php_fpm', AuditSeverity::Warning, 'PHP-FPM is running with its own pools', 'Coresmith adds a separate pool per app and leaves the existing pools alone.');
+            $findings[] = $ownMachine
+                ? new AuditFinding('php_fpm', AuditSeverity::Info, 'PHP-FPM runs Coresmith here', 'Coresmith adds a separate pool per app beside its own.')
+                : new AuditFinding('php_fpm', AuditSeverity::Warning, 'PHP-FPM is running with its own pools', 'Coresmith adds a separate pool per app and leaves the existing pools alone.');
         }
 
         if (in_array('docker', $services, true)) {
@@ -208,9 +229,11 @@ final class PreProvisioningAudit
         $findings = [];
 
         if (in_array('coresmith', $users, true)) {
-            $findings[] = (int) ($server->provisioning_phase ?? 0) > 0
-                ? new AuditFinding('user_coresmith', AuditSeverity::Info, 'The coresmith user exists from an earlier run', 'Provisioning keeps using it.')
-                : new AuditFinding('user_coresmith', AuditSeverity::Blocker, 'A coresmith user already exists', 'Coresmith creates and owns a user with that name. Rename or remove the existing user, then check again.');
+            $findings[] = match (true) {
+                (bool) $server->runs_coresmith => new AuditFinding('user_coresmith', AuditSeverity::Info, "The coresmith user is Coresmith's own here", 'Apps get users of their own, and runtimes belong to coresmith-runtime.'),
+                (int) ($server->provisioning_phase ?? 0) > 0 => new AuditFinding('user_coresmith', AuditSeverity::Info, 'The coresmith user exists from an earlier run', 'Provisioning keeps using it.'),
+                default => new AuditFinding('user_coresmith', AuditSeverity::Blocker, 'A coresmith user already exists', 'Coresmith creates and owns a user with that name. Rename or remove the existing user, then check again.'),
+            };
         }
 
         $apps = count(array_filter($users, fn(string $user): bool => str_starts_with($user, 'coresmith-app-')));

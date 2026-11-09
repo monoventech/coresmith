@@ -75,6 +75,7 @@ final class ServerTabsController extends Controller
             'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
             'ssh' => [
                 'verified' => $server->sshHardened(),
+                'passwords_kept' => $server->sshPasswordsKept(),
                 'error' => $server->sshHardened() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
             ],
             'firewall' => [

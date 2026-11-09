@@ -89,5 +89,9 @@ final class SyncAuthorizedKeys implements ShouldBeUniqueUntilProcessing, ShouldQ
             ->performedOn($this->server)
             ->withProperties(['keys' => $count])
             ->log('authorized_keys_synced');
+
+        if ($count > 0 && $this->server->runs_coresmith && $this->server->fresh()?->sshPasswordsKept()) {
+            HardenSsh::dispatch($this->server);
+        }
     }
 }

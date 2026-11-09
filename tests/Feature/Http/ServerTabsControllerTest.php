@@ -47,7 +47,7 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
             ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
             ->where('hardening', ServerTabsController::HARDENING)
             ->where('admin_move_error', null)
-            ->where('ssh', ['verified' => true, 'error' => null])
+            ->where('ssh', ['verified' => true, 'passwords_kept' => false, 'error' => null])
             ->where('firewall.open', [2222, 80, 443])
             ->where('firewall.ssh_port', 2222)
             ->where('firewall.changes', [])

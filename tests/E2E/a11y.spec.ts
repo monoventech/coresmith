@@ -254,6 +254,15 @@ const PAGES: [string, Visit][] = [
             await page.getByLabel('API token').waitFor()
         }
     ],
+    [
+        'Provision on this machine',
+        async (page) => {
+            await page.goto('/servers/create')
+            await page.getByLabel('Provider').selectOption('this-machine')
+            await page.getByTestId('this-machine-taken').waitFor()
+        }
+    ],
+    ['This machine waiting for access', (page) => gotoServer(page, 'coresmith-box')],
     ['Server being created', (page) => gotoServer(page, 'creating-server')],
     ['Server whose creation failed', (page) => gotoServer(page, 'failed-create')],
     [

@@ -19,6 +19,7 @@ function uninstallerBody(): string
 function uninstallerTree(): string
 {
     $base = realpath(sys_get_temp_dir()) . '/csx-' . bin2hex(random_bytes(4));
+    test()->scratchFolders = [...test()->scratchFolders, $base];
     $files = [
         'opt/coresmith/shared/.env' => "APP_URL=https://panel.example.test\nDB_CONNECTION=sqlite\nDB_DATABASE={$base}/var/lib/coresmith/database.sqlite\nCORESMITH_REPOSITORY=\"https://git.example.test/coresmith.git\"\n",
         'opt/coresmith/shared/storage/app/private/backups/panel-20261101.sql.gz' => 'backup',
@@ -97,9 +98,13 @@ function uninstallerSaved(string $base): ?string
     return glob("{$base}/root/coresmith-uninstalled-*")[0] ?? null;
 }
 
+beforeEach(function () {
+    $this->scratchFolders = [];
+});
+
 afterEach(function () {
-    foreach (glob(realpath(sys_get_temp_dir()) . '/csx-*') ?: [] as $base) {
-        File::deleteDirectory($base);
+    foreach ($this->scratchFolders as $folder) {
+        File::deleteDirectory($folder);
     }
 });
 

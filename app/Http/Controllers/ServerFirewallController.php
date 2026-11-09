@@ -30,6 +30,10 @@ final class ServerFirewallController extends Controller
             return back()->with('error', 'That is the SSH port Coresmith uses to reach this server. Denying it would lock you out.');
         }
 
+        if ($validated['action'] === 'deny' && $server->runs_coresmith && in_array((int) $validated['port'], [80, 443], true)) {
+            return back()->with('error', "Coresmith runs on this machine, and people reach it through port {$validated['port']}. Denying it would cut everyone off from Coresmith.");
+        }
+
         ManageFirewallRule::dispatch(
             $server,
             $validated['action'],

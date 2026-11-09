@@ -378,6 +378,11 @@ final class E2ESeeder extends Seeder
             'ssh_user' => 'deploy',
             'last_connection_error' => 'The server refused the password for deploy. Check it and try again.',
         ])->save();
+
+        $this->server('coresmith-box', '127.0.0.1', ServerStatus::Pending)->forceFill([
+            'runs_coresmith' => true,
+            'last_connection_error' => "sshd doesn't listen on 127.0.0.1, so Coresmith can't reach it from this machine and the old settings are back. Check ListenAddress in /etc/ssh/sshd_config.",
+        ])->save();
     }
 
     private function auditFixtures(): void
