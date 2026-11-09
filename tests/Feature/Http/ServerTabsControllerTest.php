@@ -34,7 +34,7 @@ function serverTabServer(Team $team, array $attributes = []): Server
 
 test('the hardening tab lists the isolation layers, hardening, firewall and access details', function () {
     $team = Team::factory()->create();
-    $server = serverTabServer($team);
+    $server = serverTabServer($team, ['meta' => ['ssh_hardening' => 'verified']]);
 
     $this->actingAs(serverTabMember($team))
         ->get(route('servers.hardening', $server))
@@ -47,6 +47,7 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
             ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
             ->where('hardening', ServerTabsController::HARDENING)
             ->where('admin_move_error', null)
+            ->where('ssh', ['verified' => true, 'error' => null])
             ->where('firewall.open', [2222, 80, 443])
             ->where('firewall.ssh_port', 2222)
             ->where('firewall.changes', [])
@@ -72,7 +73,7 @@ test('a server whose admin api moved to the socket says so among its hardening',
 
 test('a server whose admin api could not move yet says why', function () {
     $team = Team::factory()->create();
-    $server = serverTabServer($team, ['meta' => ['caddy_admin_error' => 'curl: (7) Failed to connect to localhost port 2019']]);
+    $server = serverTabServer($team, ['meta' => ['caddy_admin_error' => 'curl: (7) Failed to connect to localhost port 2019', 'ssh_hardening' => 'verified']]);
 
     $this->actingAs(serverTabMember($team))
         ->get(route('servers.hardening', $server))

@@ -25,7 +25,7 @@ final class ServerPresenter
         ['name' => 'Base system', 'desc' => 'packages and build tools'],
         ['name' => 'Runtimes', 'desc' => 'asdf, shared across apps'],
         ['name' => 'Directories', 'desc' => 'apps, releases and logs, root-owned'],
-        ['name' => 'Caddy', 'desc' => 'HTTP routing, 444 catch-all'],
+        ['name' => 'Caddy', 'desc' => 'HTTP routing, automatic HTTPS'],
         ['name' => 'Firewall', 'desc' => 'default-deny, SSH and web ports open'],
         ['name' => 'Hardening', 'desc' => 'SSH key-only, fail2ban, sysctls, auto-patching'],
         ['name' => 'Verification', 'desc' => 'admin API reachable from localhost only'],

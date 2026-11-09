@@ -15,7 +15,6 @@ use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 final class MoveCaddyAdminToSocket implements ShouldBeUnique, ShouldQueue
@@ -43,16 +42,9 @@ final class MoveCaddyAdminToSocket implements ShouldBeUnique, ShouldQueue
             report($e);
 
             $server = $this->server->fresh() ?? $this->server;
-            $server->forceFill(['meta' => [...(array) $server->meta, 'caddy_admin_error' => $this->reason($e)]])->save();
+            $server->forceFill(['meta' => [...(array) $server->meta, 'caddy_admin_error' => SSHCommandFailedException::reason($e)]])->save();
         } finally {
             $connections->disconnect($this->server);
         }
-    }
-
-    private function reason(RuntimeException $e): string
-    {
-        $output = $e instanceof SSHCommandFailedException ? trim($e->output()) : '';
-
-        return $output !== '' ? Str::limit($output, 300) : $e->getMessage();
     }
 }

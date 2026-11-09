@@ -58,6 +58,11 @@ class Server extends Model
         return (((array) $this->meta)['caddy_admin'] ?? null) === 'socket';
     }
 
+    public function sshHardened(): bool
+    {
+        return (((array) $this->meta)['ssh_hardening'] ?? null) === 'verified';
+    }
+
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class);
