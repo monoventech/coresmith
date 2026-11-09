@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 function setupToken(): string {
     return readFileSync('storage/app/e2e-setup-token', 'utf8').trim()
@@ -13,8 +13,11 @@ test.describe('first run', () => {
 
         expect(response?.status()).toBe(503)
         await expect(page.getByRole('heading', { level: 1, name: 'Installed, not yet configured' })).toBeVisible()
-        await expect(page.getByText(/one-time token/)).toBeVisible()
-        await expect(page.getByText('php artisan coresmith:setup-token --force')).toBeVisible()
+        await expect(page.getByText(/one-time link/)).toBeVisible()
+        await expect(
+            page.getByText(/^cd \S+\/app && sudo -u coresmith php artisan coresmith:setup-token --force$/)
+        ).toBeVisible()
+        await expect(page.getByText('It prints a new link to open. The old one stops working.')).toBeVisible()
     })
 
     test('the setup page is refused without the token', async ({ page }) => {

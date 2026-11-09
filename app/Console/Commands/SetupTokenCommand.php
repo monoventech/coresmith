@@ -32,7 +32,8 @@ final class SetupTokenCommand extends Command
             return self::FAILURE;
         }
 
-        $this->line($token->generate());
+        $this->line('Open this link to create the owner account. It works once:');
+        $this->line(rtrim((string) config('app.url'), '/') . route('install.show', ['token' => $token->generate()], false));
 
         return self::SUCCESS;
     }
