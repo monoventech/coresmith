@@ -1406,21 +1406,37 @@ test('the installer reads a release VERSION as the panel user, never as root', f
         ->and(preg_match('#<\s*"\$[A-Za-z0-9_{}]*/VERSION"#', installScriptBody()))->toBe(0);
 });
 
-function installScriptRedisRun(string $directory, string $config, string $answer): Process
+function installScriptRedisRun(string $directory, string $config, string $live = '', ?string $afterRestart = null, bool $horizon = false): Process
 {
+    file_put_contents("{$directory}/live", $live);
+    file_put_contents("{$directory}/calls", '');
+
+    $restart = $afterRestart === null
+        ? 'awk \'$1 == "requirepass" { p = $2 } END { printf "%s", p }\' ' . escapeshellarg($config) . ' >"$D/live"'
+        : 'printf %s ' . escapeshellarg($afterRestart) . ' >"$D/live"';
+
     $script = "set -euo pipefail\n"
-        . 'SHARED_DIR=' . escapeshellarg($directory) . "\n"
+        . 'D=' . escapeshellarg($directory) . "\n"
+        . 'SHARED_DIR="$D"' . "\n"
         . 'REDIS_CONFIGS=' . escapeshellarg("{$directory}/missing.conf {$config}") . "\n"
         . "log() { :; }\nrun() { \"\$@\"; }\nfatal() { echo \"fatal: \$*\"; exit 1; }\nsleep() { :; }\n"
-        . 'systemctl() { echo "systemctl $*" >>' . escapeshellarg("{$directory}/calls") . "; }\n"
-        . 'redis-cli() { if [ "${REDISCLI_AUTH:-}" = ' . escapeshellarg($answer) . " ]; then echo PONG; fi; }\n"
-        . installScriptFunctions('env_value', 'refuse_link', 'secure_redis')
+        . "systemctl() {\n    echo \"systemctl \$*\" >>\"\$D/calls\"\n    case \"\$*\" in\n"
+        . '    "is-active --quiet coresmith-horizon") ' . ($horizon ? 'return 0' : 'return 3') . " ;;\n"
+        . "    \"restart redis-server\") {$restart} ;;\n    esac\n}\n"
+        . "redis-cli() {\n    echo \"redis-cli \$*\" >>\"\$D/calls\"\n    local live\n    live=\"\$(cat \"\$D/live\")\"\n"
+        . "    if [ -z \"\$live\" ] || [ \"\${REDISCLI_AUTH:-}\" = \"\$live\" ]; then echo PONG; else echo 'NOAUTH Authentication required.'; fi\n}\n"
+        . installScriptFunctions('env_value', 'refuse_link', 'redis_requires', 'secure_redis')
         . "\nsecure_redis\nsecure_redis\n";
 
     $process = new Process(['bash', '-c', $script]);
     $process->run();
 
     return $process;
+}
+
+function installScriptRedisCalls(string $directory, string $prefix): array
+{
+    return array_values(array_filter(explode("\n", (string) file_get_contents("{$directory}/calls")), fn(string $call): bool => str_starts_with($call, $prefix)));
 }
 
 test("Coresmith's own Redis gets a password before the installer's commands use it", function () {
@@ -1438,21 +1454,69 @@ test('setting Redis password replaces any requirepass line, keeps the rest of it
     file_put_contents($config, "bind 127.0.0.1 -::1\n# requirepass foobared\n  requirepass an-old-one\nport 6379\n");
     file_put_contents("{$directory}/.env", "APP_ENV=production\nREDIS_PASSWORD=Gener4tedRedisPassw0rd\n");
 
-    $process = installScriptRedisRun($directory, $config, 'Gener4tedRedisPassw0rd');
+    $process = installScriptRedisRun($directory, $config);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
         ->and(file_get_contents($config))->toBe("bind 127.0.0.1 -::1\nport 6379\nrequirepass Gener4tedRedisPassw0rd\n")
-        ->and(file_get_contents("{$directory}/calls"))->toContain('systemctl restart redis-server');
+        ->and(installScriptRedisCalls($directory, 'systemctl restart'))->toBe(['systemctl restart redis-server'])
+        ->and(file_get_contents("{$directory}/live"))->toBe('Gener4tedRedisPassw0rd');
 });
 
-test('a Redis that never accepts the new password stops the install and says where to look', function () {
+test('a Redis that already asks for Coresmith\'s password keeps running, so Horizon hands over to the new release as usual', function () {
+    $directory = installScriptScratch();
+    $config = "{$directory}/redis.conf";
+    file_put_contents($config, "port 6379\n# requirepass foobared\nrequirepass Gener4tedRedisPassw0rd\n");
+    file_put_contents("{$directory}/.env", "REDIS_PASSWORD=Gener4tedRedisPassw0rd\n");
+
+    $process = installScriptRedisRun($directory, $config, live: 'Gener4tedRedisPassw0rd', horizon: true);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and(file_get_contents($config))->toBe("port 6379\nrequirepass Gener4tedRedisPassw0rd\n")
+        ->and(installScriptRedisCalls($directory, 'systemctl'))->toBe([]);
+});
+
+test('Horizon stops before Redis takes a new password, so its jobs finish while Redis still answers it and the new release starts it', function () {
     $directory = installScriptScratch();
     $config = "{$directory}/redis.conf";
     file_put_contents($config, "port 6379\n");
     file_put_contents("{$directory}/.env", "REDIS_PASSWORD=Gener4tedRedisPassw0rd\n");
 
-    $process = installScriptRedisRun($directory, $config, 'something-else');
+    $process = installScriptRedisRun($directory, $config, horizon: true);
+    $finalize = installScriptFunctions('finalize');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and(installScriptRedisCalls($directory, 'systemctl'))->toBe([
+            'systemctl is-active --quiet coresmith-horizon',
+            'systemctl stop coresmith-horizon',
+            'systemctl restart redis-server',
+        ])
+        ->and($finalize)->toContain("if systemctl is-active --quiet coresmith-horizon; then\n")
+        ->and($finalize)->toContain("    else\n        run systemctl start coresmith-horizon\n");
+});
+
+test('a Redis that never asks for the new password stops the install and says where to look', function (string $afterRestart) {
+    $directory = installScriptScratch();
+    $config = "{$directory}/redis.conf";
+    file_put_contents($config, "port 6379\n");
+    file_put_contents("{$directory}/.env", "REDIS_PASSWORD=Gener4tedRedisPassw0rd\n");
+
+    $process = installScriptRedisRun($directory, $config, afterRestart: $afterRestart);
 
     expect($process->getExitCode())->toBe(1)
         ->and($process->getOutput())->toContain("fatal: Redis didn't accept Coresmith's new password. See journalctl -u redis-server or -u redis.");
+})->with([
+    'a different password' => ['something-else'],
+    'still no password' => [''],
+]);
+
+test('the Redis password never reaches a command line', function () {
+    $directory = installScriptScratch();
+    $config = "{$directory}/redis.conf";
+    file_put_contents($config, "port 6379\n");
+    file_put_contents("{$directory}/.env", "REDIS_PASSWORD=Gener4tedRedisPassw0rd\n");
+
+    installScriptRedisRun($directory, $config);
+
+    expect(installScriptRedisCalls($directory, 'redis-cli'))->not->toBeEmpty()
+        ->and(file_get_contents("{$directory}/calls"))->not->toContain('Gener4tedRedisPassw0rd');
 });

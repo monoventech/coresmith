@@ -790,6 +790,11 @@ update_env() {
     mv -f "$tmp" "$file"
 }
 
+redis_requires() {
+    [ "$(REDISCLI_AUTH="$1" redis-cli -p 6379 ping 2>/dev/null)" = "PONG" ] &&
+        [ "$(redis-cli -p 6379 ping 2>/dev/null)" != "PONG" ]
+}
+
 secure_redis() {
     local config="" candidate password tmp
 
@@ -816,10 +821,19 @@ secure_redis() {
     cat "$tmp" >"$config"
     rm -f "$tmp"
 
+    if redis_requires "$password"; then
+        return 0
+    fi
+
+    if systemctl is-active --quiet coresmith-horizon; then
+        log "Stopping coresmith-horizon while Redis takes its new password. It starts again at the end of the install."
+        run systemctl stop coresmith-horizon
+    fi
+
     run systemctl restart redis-server || run systemctl restart redis
 
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-        if [ "$(REDISCLI_AUTH="$password" redis-cli -p 6379 ping 2>/dev/null)" = "PONG" ]; then
+        if redis_requires "$password"; then
             return 0
         fi
 
