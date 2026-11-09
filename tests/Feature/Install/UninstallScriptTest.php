@@ -28,6 +28,8 @@ function uninstallerTree(): string
         'etc/caddy/Caddyfile' => "{\n    admin localhost:2019\n}\n\nimport {$base}/etc/caddy/coresmith/panel.caddy\n",
         'etc/caddy/coresmith/panel.caddy' => "panel.example.test {\n}\n",
         'etc/caddy/caddy-config.json' => '{"apps":{}}',
+        'etc/tmpfiles.d/coresmith-caddy.conf' => "d /run/caddy-admin 0750 caddy coresmith -\n",
+        'run/caddy-admin/admin.sock' => '',
         'etc/php/8.5/fpm/pool.d/coresmith-panel.conf' => "[coresmith-panel]\n",
         'etc/php/8.5/fpm/pool.d/www.conf' => "[www]\n",
         'etc/fail2ban/jail.d/coresmith.conf' => "[coresmith]\n",
@@ -161,6 +163,8 @@ test('everything the installer creates, the uninstaller removes', function () {
         'caddy.service.d/coresmith.conf' => 'caddy.service.d/coresmith.conf',
         '/etc/caddy/coresmith' => '/etc/caddy/coresmith',
         '/etc/caddy/panel.caddy' => '/etc/caddy/panel.caddy',
+        '/etc/tmpfiles.d/coresmith-caddy.conf' => '/etc/tmpfiles.d/coresmith-caddy.conf',
+        '/run/caddy-admin' => '/run/caddy-admin',
         'coresmith-panel.conf' => 'coresmith-panel.conf',
         '/etc/fail2ban/jail.d/coresmith.conf' => '/etc/fail2ban/jail.d/coresmith.conf',
         '/etc/fail2ban/filter.d/coresmith-login.conf' => '/etc/fail2ban/filter.d/coresmith-login.conf',
@@ -214,6 +218,7 @@ test('the uninstaller removes the panel and keeps a copy of its data', function 
 
     foreach ([
         'opt/coresmith', 'var/lib/coresmith', 'var/coresmith', 'etc/coresmith', 'etc/caddy/coresmith', 'etc/caddy/caddy-config.json',
+        'etc/tmpfiles.d/coresmith-caddy.conf', 'run/caddy-admin',
         'etc/systemd/system/caddy.service.d', 'etc/php/8.5/fpm/pool.d/coresmith-panel.conf', 'etc/fail2ban/jail.d/coresmith.conf',
         'etc/fail2ban/filter.d/coresmith-login.conf', 'var/log/coresmith-horizon.log', 'var/log/coresmith-install.log',
         'etc/systemd/system/coresmith-horizon.service', 'etc/systemd/system/coresmith-reverb.service', 'etc/systemd/system/coresmith-scheduler.service',
@@ -267,6 +272,8 @@ test('apps deployed on this machine keep running', function () {
         ->and(is_dir("{$base}/etc/coresmith/env"))->toBeTrue()
         ->and(is_file("{$base}/etc/caddy/caddy-config.json"))->toBeTrue()
         ->and(is_file("{$base}/etc/systemd/system/caddy.service.d/coresmith.conf"))->toBeTrue()
+        ->and(is_file("{$base}/etc/tmpfiles.d/coresmith-caddy.conf"))->toBeTrue()
+        ->and(file_get_contents("{$base}/etc/caddy/Caddyfile"))->toBe("{\n    admin unix/{$base}/run/caddy-admin/admin.sock|0222\n}\n")
         ->and(file_exists("{$base}/opt/coresmith"))->toBeFalse()
         ->and(file_exists("{$base}/etc/caddy/coresmith"))->toBeFalse()
         ->and($calls)->toContain('systemctl restart caddy')

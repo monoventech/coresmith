@@ -32,13 +32,17 @@ final class ServerTabsController extends Controller
         'Separate log files',
     ];
 
+    public const ADMIN_API_ON_LOCALHOST = 'Admin API bound to localhost, verified unreachable';
+
+    public const ADMIN_API_ON_SOCKET = 'Admin API on a socket only Caddy and root can open';
+
     public const HARDENING = [
         'SSH key-only, modern ciphers (curve25519, ed25519)',
         'fail2ban active, SSH jail after 5 failures',
         'Kernel hardening sysctls applied',
         'AppArmor checked for profiles in complain mode',
         'Caddy catch-all returns 444 for unknown hosts',
-        'Admin API bound to localhost, verified unreachable',
+        self::ADMIN_API_ON_LOCALHOST,
         'Automatic OS security patches',
     ];
 
@@ -53,7 +57,10 @@ final class ServerTabsController extends Controller
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
             'isolation' => self::ISOLATION_LAYERS,
-            'hardening' => self::HARDENING,
+            'hardening' => $server->caddyAdminOnSocket()
+                ? array_map(fn(string $item): string => $item === self::ADMIN_API_ON_LOCALHOST ? self::ADMIN_API_ON_SOCKET : $item, self::HARDENING)
+                : self::HARDENING,
+            'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
             'firewall' => [
                 'open' => (new FirewallConfigurator)->requiredPorts($server->ssh_port),
                 'ssh_port' => $server->ssh_port,

@@ -310,6 +310,22 @@ export async function openSecurity(page: Page) {
     await expect(page.getByTestId('password-card')).toBeVisible()
 }
 
+export async function withProps(page: Page, url: RegExp, change: (props: Record<string, unknown>) => void) {
+    await page.route(url, async (route) => {
+        if (route.request().headers()['x-inertia'] === undefined) {
+            await route.continue()
+
+            return
+        }
+
+        const response = await route.fetch()
+        const body = await response.json()
+
+        change(body.props)
+        await route.fulfill({ response, json: body })
+    })
+}
+
 export async function blockingViolations(page: Page): Promise<string[]> {
     await page.waitForLoadState('load')
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined)

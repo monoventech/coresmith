@@ -11,7 +11,8 @@ import {
     pageData,
     test,
     toast,
-    useTheme
+    useTheme,
+    withProps
 } from './support/fixtures'
 
 async function showPassword(page: Page): Promise<string> {
@@ -22,18 +23,8 @@ async function showPassword(page: Page): Promise<string> {
 }
 
 async function databaseShowing(page: Page, database: Record<string, unknown>) {
-    await page.route(/\/databases\/[A-Za-z0-9]+$/, async (route) => {
-        if (route.request().headers()['x-inertia'] === undefined) {
-            await route.continue()
-
-            return
-        }
-
-        const response = await route.fetch()
-        const body = await response.json()
-
-        body.props.database = { ...body.props.database, ...database }
-        await route.fulfill({ response, json: body })
+    await withProps(page, /\/databases\/[A-Za-z0-9]+$/, (props) => {
+        props.database = { ...(props.database as Record<string, unknown>), ...database }
     })
 }
 
