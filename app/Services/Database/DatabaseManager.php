@@ -17,6 +17,7 @@ use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Str;
+use LogicException;
 
 final class DatabaseManager
 {
@@ -114,6 +115,19 @@ final class DatabaseManager
             DatabaseType::Postgresql => $this->createPostgres($connection, $name, $user, $password, $level, $database),
             DatabaseType::Redis => null,
         };
+    }
+
+    public function changePassword(SSHConnection $connection, ManagedDatabase $database, #[\SensitiveParameter] string $password): void
+    {
+        $user = (string) $database->db_user;
+
+        $command = match ($database->type) {
+            DatabaseType::Mysql => $this->mysql->command($this->mysql->changePassword($user, $password)),
+            DatabaseType::Postgresql => $this->postgres->command($this->postgres->changePassword($user, $password)),
+            DatabaseType::Redis => throw new LogicException('A Redis database has no password of its own to change.'),
+        };
+
+        $connection->execute($command, sudo: true)->throw();
     }
 
     public function drop(SSHConnection $connection, ManagedDatabase $database): void

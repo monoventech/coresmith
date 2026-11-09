@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-    import { router } from '@inertiajs/svelte'
+    import { page, router } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -27,6 +27,7 @@
             status: string
             privilege_level: string
             is_external: boolean
+            has_password: boolean
         }
         can: { viewCredentials: boolean; backup: boolean; delete: boolean }
         offsite?: { sent: string | null; error: string | null } | null
@@ -35,13 +36,39 @@
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
 
     let deleting = $state(false)
+    let rotating = $state(false)
     let working = $state(false)
+    let copied = $state<'password' | 'url' | null>(null)
 
+    const password = $derived(database.has_password ? (page.flash?.databasePassword ?? null) : null)
     const dsn = $derived(
         database.type === 'redis'
             ? `redis://${database.host}:${database.port}`
-            : `${database.type}://${database.db_user}@${database.host}:${database.port}/${database.name}`
+            : `${database.type}://${database.db_user}${password === null ? '' : `:${encodeURIComponent(password)}`}@${database.host}:${database.port}/${database.name}`
     )
+
+    function showPassword() {
+        working = true
+        router.post(
+            route('servers.databases.password.show', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => (working = false) }
+        )
+    }
+
+    function rotate() {
+        working = true
+        router.put(
+            route('servers.databases.password.update', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => ((working = false), (rotating = false), (copied = null)) }
+        )
+    }
+
+    async function copy(what: 'password' | 'url', value: string) {
+        await navigator.clipboard.writeText(value)
+        copied = what
+    }
 
     function backup() {
         router.post(route('servers.databases.backup', [server.id, database.id]), {}, { preserveScroll: true })
@@ -105,22 +132,54 @@
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div>host {database.host}</div>
             <div>port {database.port}</div>
-            {#if database.db_user}<div>user {database.db_user}</div>{/if}
+            {#if database.db_user && database.has_password}<div>user {database.db_user}</div>{/if}
+            {#if password !== null}
+                <div class="break-all text-foreground" data-testid="database-password">password {password}</div>
+            {/if}
         </div>
-        <pre class="terminal mt-3 text-[11.5px] break-all whitespace-pre-wrap">{dsn}</pre>
-        <p class="mt-2 text-[12px] text-muted-foreground">
-            The password was shown once at creation and is encrypted at rest. Rotate it if you lose it.
-        </p>
+        <pre class="terminal mt-3 text-[11.5px] break-all whitespace-pre-wrap" data-testid="database-url">{dsn}</pre>
+        {#if database.has_password}
+            <p class="mt-2 text-[12px] text-muted-foreground">
+                {password === null
+                    ? 'The password is encrypted at rest. Showing or rotating it is recorded in the activity log.'
+                    : "Copy it now. It's hidden again when you leave this page."}
+            </p>
+            {#if can.viewCredentials}
+                <div class="mt-3 flex flex-wrap gap-2">
+                    {#if password === null}
+                        <Button variant="outline" size="sm" disabled={working} onclick={showPassword}
+                            >Show password</Button
+                        >
+                    {:else}
+                        <Button variant="outline" size="sm" onclick={() => copy('password', password)}
+                            >{copied === 'password' ? 'Copied' : 'Copy password'}</Button
+                        >
+                        <Button variant="outline" size="sm" onclick={() => copy('url', dsn)}
+                            >{copied === 'url' ? 'Copied' : 'Copy URL'}</Button
+                        >
+                    {/if}
+                    <Button variant="ghost" size="sm" disabled={working} onclick={() => (rotating = true)}
+                        >Rotate password</Button
+                    >
+                </div>
+            {/if}
+        {:else}
+            <p class="mt-2 text-[12px] text-muted-foreground" data-testid="shared-redis-note">
+                It has no password, so every app on {server.name} can read and change what's in it.
+            </p>
+        {/if}
     </div>
 
     <div class="flex flex-col gap-4">
         <div class="rounded-xl border border-border bg-card px-5.5 py-5">
             <h3 class="type-h3 m-0 mb-1">Access</h3>
             <p class="mb-3 text-[12.5px] text-muted-foreground">
-                Its own user, with only the privileges its app needs.
+                {database.has_password
+                    ? 'Its own user, with only the privileges its app needs.'
+                    : `No user of its own. Every app on ${server.name} shares it.`}
             </p>
             <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-                <div>privileges {database.privilege_level}</div>
+                {#if database.has_password}<div>privileges {database.privilege_level}</div>{/if}
                 <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
         </div>
@@ -137,6 +196,21 @@
         {/if}
     </div>
 </div>
+
+<Dialog.Root bind:open={rotating}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title>Rotate the password of {database.name}?</Dialog.Title>
+            <Dialog.Description
+                >Apps using the current password lose access until you give them the new one and deploy.</Dialog.Description
+            >
+        </Dialog.Header>
+        <Dialog.Footer>
+            <Button variant="ghost" onclick={() => (rotating = false)}>Keep it</Button>
+            <Button disabled={working} onclick={rotate}>Rotate it</Button>
+        </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={deleting}>
     <Dialog.Content>

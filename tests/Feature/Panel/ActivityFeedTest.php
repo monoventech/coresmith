@@ -165,6 +165,21 @@ test('database events are described without a link', function () {
         ->and($row['href'])->toBeNull();
 });
 
+test('showing and rotating a database password are described, never with the password', function (string $description, string $sentence) {
+    [$team, $server] = feedFixture();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'shop_production', 'db_password' => 'Sealed5ecretValue']);
+
+    feedLog($database, $description);
+
+    $row = (new ActivityFeed)->forTeam($team)[0];
+
+    expect(feedSentence($row))->toBe($sentence)
+        ->and(json_encode($row))->not->toContain('Sealed5ecretValue');
+})->with([
+    'shown' => ['database_password_shown', 'Password of shop_production shown'],
+    'rotated' => ['database_password_rotated', 'Password of shop_production rotated'],
+]);
+
 test('another teams activity is never shown', function () {
     [$team] = feedFixture();
     [, $theirServer, $theirApplication] = feedFixture();

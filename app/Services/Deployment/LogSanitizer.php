@@ -18,6 +18,10 @@ final class LogSanitizer
 
     public const CREDENTIAL_SHAPE = '/^(?=\S*\d)(?=\S*[A-Za-z])\S{24,}\z/';
 
+    private const SQL_PASSWORD = <<<'REGEX'
+        /((?:IDENTIFIED\s+BY|PASSWORD)\s+)('\\''[^'\\]*'\\''|'(?:[^'\\]|\\.|'')*')/i
+        REGEX;
+
     private const TERMINAL_CODES = '/\e(?:\[[0-?]*[ -\/]*[@-~]|\][^\a\e]*(?:\a|\e\\\\)|[@-Z\\\\-_])/';
 
     private const PATTERNS = [
@@ -38,6 +42,7 @@ final class LogSanitizer
         $output = (string) preg_replace(self::TERMINAL_CODES, '', $output);
         $output = $this->redactEnvironmentValues($output, $application);
         $output = $this->redactCredentialsInUrls($output);
+        $output = $this->redactSqlPasswords($output);
 
         foreach (self::PATTERNS as $pattern => $replacement) {
             $output = (string) preg_replace($pattern, $replacement, $output);
@@ -72,6 +77,15 @@ final class LogSanitizer
         return (string) preg_replace(
             '/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s@\/]+@/i',
             '$1[REDACTED]@',
+            $output,
+        );
+    }
+
+    private function redactSqlPasswords(string $output): string
+    {
+        return (string) preg_replace_callback(
+            self::SQL_PASSWORD,
+            fn(array $match): string => $match[1] . (str_starts_with($match[2], "'\\''") ? "'\\''[REDACTED]'\\''" : "'[REDACTED]'"),
             $output,
         );
     }

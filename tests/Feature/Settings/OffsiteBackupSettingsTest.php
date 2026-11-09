@@ -243,14 +243,18 @@ test('the database page states s3 facts only for databases that go to s3', funct
     'postgresql on a lapsed team' => [fn() => Team::factory()->trialEnded()->owned()->create(), DatabaseType::Postgresql, false],
 ]);
 
-test('a redis backup started by hand does not claim to go to s3', function () {
+test('a redis database offers no backup by hand, so nothing claims to go to s3', function () {
     Queue::fake();
     $team = Team::factory()->subscribed(Plan::Business)->owned()->create();
     BackupDestination::factory()->for($team)->create();
     $server = Server::factory()->for($team)->create();
-    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['type' => DatabaseType::Redis]);
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['type' => DatabaseType::Redis, 'port' => 6379]);
+    $owner = offsiteSettingsOwner($team);
 
-    $this->actingAs(offsiteSettingsOwner($team))->post(route('servers.databases.backup', [$server, $database]));
+    $this->actingAs($owner)
+        ->get(route('servers.databases.show', [$server, $database]))
+        ->assertInertia(fn($page) => $page->where('can.backup', false)->where('offsite', null));
+    $this->actingAs($owner)->post(route('servers.databases.backup', [$server, $database]))->assertNotFound();
 
-    Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->offsite === false);
+    Queue::assertNothingPushed();
 });
