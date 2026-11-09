@@ -25,7 +25,14 @@ final class ChangeAddressCaddy implements CaddyAdmin
     /** @var list<?string> */
     public array $states = [];
 
+    public bool $managed = false;
+
     public function __construct(private readonly string $site, private int $refusals = 0) {}
+
+    public function managed(): bool
+    {
+        return $this->managed;
+    }
 
     public function reload(): void
     {
@@ -199,6 +206,17 @@ test('a server that also serves apps through caddy is left alone', function () {
         ]);
 });
 
+test("on Coresmith's own machine, which also serves apps, the address still changes, Coresmith's routes only", function () {
+    [$directory, $caddy] = changeAddressMachine();
+    $caddy->managed = true;
+    file_put_contents("{$directory}/caddy-config.json", '{"apps":{"http":{}}}');
+
+    changeAddressTo('coresmith.example.com');
+
+    expect(AddressChange::current()['state'])->toBe('done')
+        ->and($caddy->loaded)->not->toBe([]);
+});
+
 test('a tailscale name is checked with tailscale before caddy is touched', function (array $status, string $defaults, string $refusal) {
     [$directory, $caddy] = changeAddressMachine();
     file_put_contents("{$directory}/tailscaled", $defaults);
@@ -316,6 +334,11 @@ test('a crash once the move is done leaves it reported as done', function () {
                 throw new LogicException('A bug after the move.');
             }
         }
+
+        public function managed(): bool
+        {
+            return false;
+        }
     });
     AddressChange::begin('192.168.0.248', 'coresmith.example.com');
     AddressRequest::submit('coresmith.example.com');
@@ -359,6 +382,11 @@ test('a move that stops part way says so, so the page stops waiting', function (
         public function reload(): void
         {
             throw new LogicException('A bug, not a refusal.');
+        }
+
+        public function managed(): bool
+        {
+            return false;
         }
     });
     AddressChange::begin('192.168.0.248', 'coresmith.example.com');

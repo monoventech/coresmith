@@ -47,6 +47,7 @@ readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
 readonly CADDY_DROP_IN="/etc/systemd/system/caddy.service.d/coresmith.conf"
 readonly THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
 readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+readonly CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
 readonly APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 readonly REDIS_CONFIGS="/etc/redis/redis.conf /etc/redis.conf"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
@@ -1152,6 +1153,7 @@ Group=coresmith
 WorkingDirectory=${INSTALL_DIR}
 ExecStartPre=-/bin/mv -f ${ADDRESS_DIR}/request.json ${ADDRESS_DIR}/request.taken.json
 ExecStart=/usr/bin/php artisan coresmith:address --no-interaction
+ExecStartPost=+${CADDY_PERSIST}
 TimeoutStartSec=10min
 NoNewPrivileges=true
 PrivateTmp=true
@@ -1487,6 +1489,51 @@ HELPER
     chown root:root "$tmp"
     chmod 0755 "$tmp"
     mv -f "$tmp" "$THIS_MACHINE_HELPER"
+
+    tmp="$(mktemp "${CADDY_PERSIST}.XXXXXX")"
+    cat >"$tmp" <<'PERSIST'
+#!/bin/bash
+set -euo pipefail
+umask 022
+
+readonly CONFIG=/etc/caddy/caddy-config.json
+readonly DROP_IN=/etc/systemd/system/caddy.service.d/coresmith.conf
+readonly LOCK=/run/lock/coresmith-caddy-config.lock
+
+grep -qsF -- '--config /etc/caddy/caddy-config.json' "$DROP_IN" || exit 0
+
+exec 9>"$LOCK"
+flock -w 60 9
+
+staged="$(mktemp "${CONFIG%/*}/.caddy-config.XXXXXX")"
+trap 'rm -f "$staged"' EXIT
+
+curl -fsS --max-time 30 --unix-socket /run/caddy-admin/admin.sock http://localhost/config/ >"$staged"
+[ "$(head -c 1 "$staged")" = "{" ]
+chmod 0644 "$staged"
+mv -f "$staged" "$CONFIG"
+PERSIST
+    chown root:root "$tmp"
+    chmod 0755 "$tmp"
+    mv -f "$tmp" "$CADDY_PERSIST"
+}
+
+caddy_runs_managed_config() {
+    grep -qsF -- "--config /etc/caddy/caddy-config.json" "$CADDY_DROP_IN"
+}
+
+wait_for_caddy_admin() {
+    local _
+
+    for _ in $(seq 1 30); do
+        if curl -fsS --max-time 2 --unix-socket "$CADDY_ADMIN_SOCKET" http://localhost/config/ >/dev/null 2>&1; then
+            return 0
+        fi
+
+        sleep 1
+    done
+
+    fatal "Caddy didn't answer on its admin socket after it restarted. See journalctl -u caddy, then run the installer again."
 }
 
 secure_logs() {
@@ -1584,6 +1631,12 @@ finalize() {
     run systemctl restart "php${PHP_VERSION}-fpm" || run systemctl restart php-fpm || true
     run systemctl enable caddy
     run systemctl restart caddy
+
+    if caddy_runs_managed_config; then
+        wait_for_caddy_admin
+        run sudo -u coresmith php "$INSTALL_DIR/artisan" coresmith:caddy-sync
+        run "$CADDY_PERSIST"
+    fi
     run systemctl enable coresmith-horizon coresmith-reverb
 
     local horizon_pid=""

@@ -13,6 +13,7 @@ CONFIG_DIR="/etc/coresmith"
 SYSTEMD_DIR="/etc/systemd/system"
 CADDY_DROPIN="/etc/systemd/system/caddy.service.d/coresmith.conf"
 THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
+CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
 THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
 APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 CADDYFILE="/etc/caddy/Caddyfile"
@@ -235,7 +236,35 @@ remove_units() {
     success "Removed Coresmith's services"
 }
 
+take_coresmith_out_of_caddy() {
+    local socket="$CADDY_ADMIN_DIR/admin.sock" policies id path
+
+    if ! grep -qsF -- "--config /etc/caddy/caddy-config.json" "$CADDY_DROPIN"; then
+        return 0
+    fi
+
+    policies="$(curl -fsS --max-time 30 --unix-socket "$socket" http://localhost/config/apps/tls/automation/policies 2>/dev/null || true)"
+
+    for id in coresmith-site coresmith-any $(printf '%s' "$policies" | grep -oE '"@id":"coresmith-[a-z]+-tls(-[0-9]+)?"' | cut -d'"' -f4 || true); do
+        curl -fsS --max-time 30 --unix-socket "$socket" -X DELETE "http://localhost/id/$id" >/dev/null 2>&1 || true
+    done
+
+    for path in apps/http/servers/coresmith-internal apps/tls/automation/on_demand logging/logs/coresmith; do
+        curl -fsS --max-time 30 --unix-socket "$socket" -X DELETE "http://localhost/config/$path" >/dev/null 2>&1 || true
+    done
+
+    if [ -x "$CADDY_PERSIST" ] && "$CADDY_PERSIST"; then
+        success "Took Coresmith's routes out of Caddy, which keeps serving the apps"
+    else
+        warn "Took Coresmith's routes out of Caddy, but couldn't save its config. Run curl --unix-socket ${socket} http://localhost/config/ > ${CADDY_CONFIG} so a restart keeps it."
+    fi
+}
+
 remove_caddy_site() {
+    if [ -n "$APPS" ]; then
+        take_coresmith_out_of_caddy
+    fi
+
     rm -rf "$PANEL_SITE_DIR"
     rm -f "$LEGACY_PANEL_SITE"
 
@@ -315,7 +344,7 @@ remove_files() {
     local file
 
     rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}"
-    rm -f "$THIS_MACHINE_HELPER"
+    rm -f "$THIS_MACHINE_HELPER" "$CADDY_PERSIST"
     rmdir "${THIS_MACHINE_HELPER%/*}" >/dev/null 2>&1 || true
 
     for file in $LOGS; do
