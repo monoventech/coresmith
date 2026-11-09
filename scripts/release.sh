@@ -486,16 +486,7 @@ gate() {
 }
 
 gates() {
-    gate ./vendor/bin/pint --test
-    gate bun run lint:check
-    gate bun run lint:sh
-    gate bun run format:check
-    gate bun run lint:tailwind
-    gate bun run types:check
-    gate php artisan test
-    gate bun run e2e:refresh
-    gate bun run e2e:install-refresh
-    gate bun run test:e2e
+    gate bun run ci
     success "Every gate passed"
 }
 
@@ -632,6 +623,11 @@ prepare() {
     BRANCH_CREATED=true
     pick_commits
     resolve_signing HEAD
+    build
+    bump
+    changelog
+    git add VERSION scripts/install.sh CHANGELOG.md
+    git commit --quiet -m "chore(release): v${VERSION}"
 
     if $SKIP_GATES; then
         require_exactly_dev
@@ -639,11 +635,6 @@ prepare() {
         gates
     fi
 
-    build
-    bump
-    changelog
-    git add VERSION scripts/install.sh CHANGELOG.md
-    git commit --quiet -m "chore(release): v${VERSION}"
     push_ref "$RELEASE_BRANCH" "refs/heads/${RELEASE_BRANCH}"
     git checkout --quiet "$START_BRANCH"
     SWITCHED=false
@@ -745,11 +736,11 @@ cut_prerelease() {
     SWITCHED=true
     git checkout --quiet --detach "${REMOTE}/dev"
     resolve_signing HEAD
-    gates
     build
     bump
     git add VERSION scripts/install.sh
     git commit --quiet -m "chore(release): v${VERSION}"
+    gates
     INSTALLER="${TMP}/install.sh"
     git show "HEAD:scripts/install.sh" >"$INSTALLER"
     tag_release HEAD
