@@ -11,6 +11,7 @@ namespace App\Services\Address;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Sleep;
 use RuntimeException;
+use Throwable;
 
 final class AddressSwitch
 {
@@ -58,6 +59,8 @@ final class AddressSwitch
             return;
         }
 
+        $before = ['APP_URL' => (string) config('app.url'), 'VITE_REVERB_HOST' => (string) config('coresmith.live.socket.host')];
+
         try {
             $this->environment->set(['APP_URL' => 'https://' . InstallationAddress::urlHost($host), 'VITE_REVERB_HOST' => InstallationAddress::urlHost($host)]);
         } catch (RuntimeException $unsaved) {
@@ -67,8 +70,12 @@ final class AddressSwitch
             return;
         }
 
-        if (app()->configurationIsCached()) {
-            Artisan::call('config:cache');
+        if (app()->configurationIsCached() && Artisan::call('config:cache') !== 0) {
+            $this->environment->set($before);
+            $this->restore($from);
+            AddressChange::fail("Coresmith couldn't load its new configuration, so it stays on {$from}.");
+
+            return;
         }
 
         AddressChange::finish();
@@ -81,8 +88,13 @@ final class AddressSwitch
             report($unredirected);
         }
 
-        Artisan::call('horizon:terminate');
-        Artisan::call('reverb:restart');
+        foreach (['horizon:terminate', 'reverb:restart'] as $restart) {
+            try {
+                Artisan::call($restart);
+            } catch (Throwable $unrestarted) {
+                report($unrestarted);
+            }
+        }
     }
 
     private function servesApps(): bool

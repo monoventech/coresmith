@@ -33,7 +33,10 @@ final class AddressCommand extends Command
         try {
             $switch->run($host);
         } catch (Throwable $stopped) {
-            AddressChange::fail("Changing the address to {$host} stopped part way. Try again, and check Caddy's log with journalctl -u caddy if it keeps failing.");
+            if (AddressChange::running()) {
+                AddressChange::fail("Changing the address to {$host} stopped part way. Try again, and check Caddy's log with journalctl -u caddy if it keeps failing.");
+            }
+
             report($stopped);
         }
 

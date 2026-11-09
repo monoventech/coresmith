@@ -92,12 +92,19 @@ beforeEach(function () {
     Sleep::fake();
 
     $this->artisanCalls = [];
+    $this->artisanAnswers = ['horizon:terminate' => 0, 'reverb:restart' => 0, 'config:cache' => 0];
     $kernel = app(Kernel::class);
     $proxy = Mockery::mock($kernel);
     $proxy->shouldReceive('call')->andReturnUsing(function (string $command, mixed ...$rest) use ($kernel) {
         $this->artisanCalls[] = $command;
 
-        return in_array($command, ['horizon:terminate', 'reverb:restart'], true) ? 0 : $kernel->call($command, ...$rest);
+        if (!array_key_exists($command, $this->artisanAnswers)) {
+            return $kernel->call($command, ...$rest);
+        }
+
+        $answer = $this->artisanAnswers[$command];
+
+        return $answer instanceof Throwable ? throw $answer : $answer;
     });
     Artisan::swap($proxy);
 });
@@ -262,6 +269,60 @@ test('an environment file that cannot be written leaves the old address in place
         ->and(file_get_contents("{$directory}/shared/.env"))->toBe("APP_URL=https://192.168.0.248\n")
         ->and(AddressChange::current()['state'])->toBe('failed')
         ->and(AddressChange::current()['error'])->toStartWith("Coresmith couldn't update " . realpath("{$directory}/shared") . '/.env: ');
+});
+
+test('a restart that fails after the move is reported, and the move still counts', function () {
+    changeAddressMachine();
+    $this->artisanAnswers['horizon:terminate'] = new RuntimeException('Redis went away.');
+
+    changeAddressTo('coresmith.example.com');
+
+    expect(AddressChange::current()['state'])->toBe('done')
+        ->and($this->artisanCalls)->toContain('reverb:restart');
+});
+
+test('an install that runs from cached configuration re-caches it with the new address', function () {
+    changeAddressMachine();
+    app()->instance('config_loaded_from_cache', true);
+
+    changeAddressTo('coresmith.example.com');
+
+    expect($this->artisanCalls)->toBe(['config:cache', 'horizon:terminate', 'reverb:restart'])
+        ->and(AddressChange::current()['state'])->toBe('done');
+});
+
+test('configuration that cannot be cached puts the old address back', function () {
+    [$directory, $caddy] = changeAddressMachine();
+    app()->instance('config_loaded_from_cache', true);
+    $this->artisanAnswers['config:cache'] = 1;
+    config(['coresmith.live.socket.host' => '192.168.0.248']);
+
+    changeAddressTo('coresmith.example.com');
+
+    expect(file_get_contents("{$directory}/.env"))->toBe("APP_URL=https://192.168.0.248\nVITE_REVERB_HOST=192.168.0.248\n")
+        ->and(end($caddy->loaded))->toBe(app(SiteFile::class)->render(['192.168.0.248']))
+        ->and(AddressChange::current())->toMatchArray(['state' => 'failed', 'error' => "Coresmith couldn't load its new configuration, so it stays on 192.168.0.248."]);
+});
+
+test('a crash once the move is done leaves it reported as done', function () {
+    changeAddressMachine();
+    app()->instance(CaddyAdmin::class, new class implements CaddyAdmin
+    {
+        private int $loads = 0;
+
+        public function reload(): void
+        {
+            if (++$this->loads === 2) {
+                throw new LogicException('A bug after the move.');
+            }
+        }
+    });
+    AddressChange::begin('192.168.0.248', 'coresmith.example.com');
+    AddressRequest::submit('coresmith.example.com');
+
+    $this->artisan('coresmith:address')->assertSuccessful();
+
+    expect(AddressChange::current()['state'])->toBe('done');
 });
 
 test('the command moves coresmith to the address asked for, once', function () {
