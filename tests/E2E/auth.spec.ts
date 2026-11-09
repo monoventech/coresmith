@@ -1,4 +1,4 @@
-import { asGuest, expect, NARROW_PHONE, own, PASSWORD, toast } from './support/fixtures'
+import { asGuest, expect, NARROW_PHONE, own, PASSWORD, test, toast } from './support/fixtures'
 
 const OWNER = 'owner@coresmith.test'
 
@@ -139,40 +139,19 @@ asGuest.describe('signing in', () => {
         ).toBeVisible()
     })
 
-    asGuest('the landing page leads to Coresmith', async ({ page }) => {
+    asGuest("a guest opening Coresmith's address lands on sign in", async ({ page }) => {
         await page.goto('/')
-
-        await expect(
-            page.getByRole('heading', { level: 1, name: 'Server management without the complexity.' })
-        ).toBeVisible()
-        await page.getByRole('link', { name: 'Open Coresmith' }).click()
 
         await expect(page).toHaveURL(/\/login$/)
+        await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Coresmith' })).toBeVisible()
     })
+})
 
-    asGuest('the landing page says how each deploy reads its repository', async ({ page }) => {
-        await page.goto('/')
+test("someone signed in opening Coresmith's address lands on their fleet", async ({ page }) => {
+    await page.goto('/')
 
-        const card = page.getByRole('heading', { name: 'Connect a repository' }).locator('..')
-
-        await expect(card).toContainText(
-            'A GitHub App with per-repo permissions. Each deploy clones with a read-only token that lasts an hour, or a read-only Ed25519 deploy key for repositories added by URL.'
-        )
-        await expect(card).not.toContainText('deploy key per app')
-    })
-
-    asGuest('the landing page links to the source and the self-hosting guide', async ({ page }) => {
-        await page.goto('/')
-
-        await expect(page.getByRole('link', { name: 'Self-host it' })).toHaveAttribute(
-            'href',
-            'https://github.com/monoventech/coresmith#self-hosting'
-        )
-        await expect(page.getByRole('link', { name: 'Browse on GitHub' })).toHaveAttribute(
-            'href',
-            'https://github.com/monoventech/coresmith'
-        )
-    })
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
 })
 
 asGuest.describe('signing out', () => {
