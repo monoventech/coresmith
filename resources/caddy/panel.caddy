@@ -53,6 +53,8 @@ http://127.0.0.1:8484 {
 https:// {
     tls {
         on_demand
+        __IF_IP__issuer acme
+        __IF_IP__issuer internal
     }
 
     root * /opt/coresmith/app/public
