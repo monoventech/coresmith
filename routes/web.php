@@ -14,6 +14,7 @@ use App\Http\Controllers\DatabasePasswordController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NoTeamController;
@@ -30,11 +31,8 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberController;
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Features;
 
-Route::inertia('/', 'Welcome', [
-    'canRegister' => Features::enabled(Features::registration()),
-])->name('home');
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

@@ -6,8 +6,8 @@ test('app name is Coresmith', function () {
     expect(config('app.name'))->toBe('Coresmith');
 });
 
-test('welcome page renders Coresmith branding', function () {
-    $response = $this->get('/');
+test('the sign-in page renders Coresmith branding', function () {
+    $response = $this->get(route('login'));
     $response->assertStatus(200);
     expect($response->getContent())->toContain('Coresmith');
 });
@@ -26,7 +26,7 @@ test('coresmith config exposes vault_key entry', function () {
 });
 
 test('inertia shares appName, edition, vaultKeyConfigured', function () {
-    $response = $this->get('/');
+    $response = $this->get(route('login'));
     $response->assertInertia(
         fn($page) => $page
             ->where('appName', 'Coresmith')
@@ -38,5 +38,5 @@ test('inertia shares appName, edition, vaultKeyConfigured', function () {
 test('vaultKeyConfigured is false when no vault key is set', function () {
     config(['coresmith.vault_key' => null]);
 
-    $this->get('/')->assertInertia(fn($page) => $page->where('vaultKeyConfigured', false));
+    $this->get(route('login'))->assertInertia(fn($page) => $page->where('vaultKeyConfigured', false));
 });

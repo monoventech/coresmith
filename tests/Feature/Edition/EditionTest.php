@@ -104,19 +104,19 @@ test('on cloud no customer manages the instance', function () {
 test('on cloud the panel is named for the product, not by a customer', function () {
     InstanceSetting::put('instance_name', 'Acme ops');
 
-    $this->get('/')->assertInertia(fn($page) => $page->where('appName', 'Acme ops'));
+    $this->get(route('login'))->assertInertia(fn($page) => $page->where('appName', 'Acme ops'));
 
     config(['coresmith.edition' => 'cloud']);
 
-    $this->get('/')->assertInertia(fn($page) => $page->where('appName', 'Coresmith'));
+    $this->get(route('login'))->assertInertia(fn($page) => $page->where('appName', 'Coresmith'));
 });
 
 test('every page knows the edition', function () {
-    $this->get('/')->assertInertia(fn($page) => $page->where('edition', 'self-hosted')->missing('billingEnabled'));
+    $this->get(route('login'))->assertInertia(fn($page) => $page->where('edition', 'self-hosted')->missing('billingEnabled'));
 
     config(['coresmith.edition' => 'cloud']);
 
-    $this->get('/')->assertInertia(fn($page) => $page->where('edition', 'cloud'));
+    $this->get(route('login'))->assertInertia(fn($page) => $page->where('edition', 'cloud'));
 });
 
 test('the palette offers billing on cloud only', function () {
