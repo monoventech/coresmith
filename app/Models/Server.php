@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Casts\Vaulted;
 use App\Enums\ServerStatus;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
+use App\Services\Runtime\AsdfManager;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -63,6 +64,11 @@ class Server extends Model
         return (((array) $this->meta)['ssh_hardening'] ?? null) === 'verified';
     }
 
+    public function runtimeUser(): string
+    {
+        return $this->runs_coresmith ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;
+    }
+
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class);
@@ -100,6 +106,7 @@ class Server extends Model
             'audit' => 'array',
             'takeover' => 'array',
             'audit_logging_enabled' => 'boolean',
+            'runs_coresmith' => 'boolean',
             'last_connected_at' => 'datetime',
             'unreachable_since' => 'datetime',
             'unreachable_alerted_at' => 'datetime',

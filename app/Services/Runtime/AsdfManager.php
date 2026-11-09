@@ -12,6 +12,7 @@ use App\Exceptions\InvalidRuntimeException;
 use App\Exceptions\PackageSourceFailed;
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Server;
+use App\Services\SafeName;
 use App\Services\Server\AptPackageManager;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -26,6 +27,8 @@ final class AsdfManager
     public const INSTALL_DIR = self::DATA_DIR . '/installs';
 
     public const SYSTEM_USER = 'coresmith';
+
+    public const CORESMITH_HOST_USER = 'coresmith-runtime';
 
     public const PATH = AsdfInstaller::ASDF_DIR . '/bin:' . self::DATA_DIR . '/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
@@ -85,8 +88,8 @@ final class AsdfManager
             $this->withDownloadRetries($connection, $packages->install($dependencies), SSHTransport::PACKAGE_SECONDS);
         }
 
-        $this->withDownloadRetries($connection, $this->asCoresmith('asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);
-        $this->withDownloadRetries($connection, $this->asdfCommand('install', $runtime, $version, self::BUILD_ENVIRONMENT[$runtime] ?? []), self::INSTALL_SECONDS);
+        $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, 'asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);
+        $this->withDownloadRetries($connection, $this->asdfCommand($connection, 'install', $runtime, $version, self::BUILD_ENVIRONMENT[$runtime] ?? []), self::INSTALL_SECONDS);
     }
 
     public function withDownloadRetries(SSHConnection $connection, string $command, int $timeout): void
@@ -148,15 +151,15 @@ final class AsdfManager
     {
         self::assertValid($runtime, $version);
 
-        $connection->execute($this->asdfCommand('uninstall', $runtime, $version), sudo: true)->throw();
+        $connection->execute($this->asdfCommand($connection, 'uninstall', $runtime, $version), sudo: true)->throw();
     }
 
     /**
      * @param  array<string, string>  $env
      */
-    private function asdfCommand(string $action, string $runtime, string $version, array $env = []): string
+    private function asdfCommand(SSHConnection $connection, string $action, string $runtime, string $version, array $env = []): string
     {
-        return $this->asCoresmith("asdf {$action} \"\$CORESMITH_RUNTIME\" \"\$CORESMITH_VERSION\"", [
+        return $this->asRuntimeUser($connection, "asdf {$action} \"\$CORESMITH_RUNTIME\" \"\$CORESMITH_VERSION\"", [
             ...$env,
             'CORESMITH_RUNTIME' => $runtime,
             'CORESMITH_VERSION' => $version,
@@ -225,18 +228,19 @@ final class AsdfManager
     /**
      * @param  array<string, string>  $env
      */
-    public function asCoresmith(string $command, array $env = []): string
+    public function asRuntimeUser(SSHConnection $connection, string $command, array $env = []): string
     {
-        return self::asSystemUser($command, $env);
+        return self::asSystemUser($command, $env, $connection->server()->runtimeUser());
     }
 
     /**
      * @param  array<string, string>  $env
      */
-    public static function asSystemUser(string $command, array $env = []): string
+    public static function asSystemUser(string $command, array $env = [], string $user = self::SYSTEM_USER): string
     {
+        $user = SafeName::assertSystemUser($user);
         $variables = [
-            'HOME' => '/home/' . self::SYSTEM_USER,
+            'HOME' => '/home/' . $user,
             'ASDF_DIR' => AsdfInstaller::ASDF_DIR,
             'ASDF_DATA_DIR' => self::DATA_DIR,
             'PATH' => self::PATH,
@@ -249,6 +253,6 @@ final class AsdfManager
             $exports .= $name . '=' . escapeshellarg($value) . ' ';
         }
 
-        return 'sudo -u ' . self::SYSTEM_USER . ' env ' . $exports . 'bash -c ' . escapeshellarg('cd "$HOME" && ' . $command);
+        return 'sudo -u ' . $user . ' env ' . $exports . 'bash -c ' . escapeshellarg('cd "$HOME" && ' . $command);
     }
 }
