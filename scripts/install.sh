@@ -948,10 +948,14 @@ configure_environment() {
 
 # ── Phase 6: Caddy configuration ─────────────────────────────────────────────
 
+is_ip_address() {
+    [[ "$1" =~ ^[0-9]+(\.[0-9]+){3}$ || "$1" == *:* ]]
+}
+
 render_site() {
     local host="$1" ip_lines='/__IF_IP__/d'
 
-    if [[ "$host" =~ ^[0-9]+(\.[0-9]+){3}$ || "$host" == *:* ]]; then
+    if is_ip_address "$host"; then
         ip_lines='s/__IF_IP__//'
     fi
 
@@ -1662,7 +1666,11 @@ move_to_domain() {
 }
 
 link_loads() {
-    curl -fsk -o /dev/null --max-time 10 --resolve "${1}:443:127.0.0.1" "https://${1}/up"
+    if is_ip_address "$1"; then
+        curl -fsk -o /dev/null --max-time 10 "https://${1}/up"
+    else
+        curl -fsk -o /dev/null --max-time 10 --resolve "${1}:443:127.0.0.1" "https://${1}/up"
+    fi
 }
 
 finalize() {
@@ -1772,7 +1780,7 @@ print_summary() {
         printf '  Coresmith is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
 
-    if [[ "$PANEL_HOST" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then
+    if is_ip_address "$PANEL_HOST"; then
         print_wrapped "Your browser will warn about the certificate at ${PANEL_URL}, because Caddy signs it itself. Continue past the warning to open Coresmith."
     fi
 

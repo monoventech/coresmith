@@ -45,7 +45,7 @@ function installAddressRun(string $body, array $variables = [], ?string $env = n
         . "log() { printf 'log: %s\\n' \"\$1\"; }\n"
         . "success() { printf 'ok: %s\\n' \"\$1\"; }\n"
         . "warn() { printf 'warn: %s\\n' \"\$1\"; }\n"
-        . installAddressFunctions('env_value', 'choose_address', 'move_to_domain', 'link_loads', 'print_wrapped', 'print_summary') . "\n"
+        . installAddressFunctions('env_value', 'is_ip_address', 'choose_address', 'move_to_domain', 'link_loads', 'print_wrapped', 'print_summary') . "\n"
         . $body;
 
     $process = new Process(['bash', '-c', $script]);
@@ -176,23 +176,29 @@ test('the summary only says installed successfully when the link it prints loads
         ->toContain("https://192.168.0.248 didn't load from this server. Check Caddy's log with journalctl -u caddy -n 50.");
 });
 
-test('the link loads when Coresmith answers it on this server, whatever DNS or the router do', function (int $answer, int $code) {
+test('the link loads when Coresmith answers it on this server, whatever DNS or the router do', function (string $host, ?string $resolve, int $answer) {
     $process = installAddressRun(<<<'BASH'
         curl() { printf '%s' "$*" >"$SHARED_DIR/called"; return "$ANSWER"; }
         code=0
-        link_loads beelink.coresmith.io || code=$?
+        link_loads "$HOST" || code=$?
         printf '%s|%s' "$code" "$(cat "$SHARED_DIR/called")"
-        BASH, ['ANSWER' => (string) $answer]);
+        BASH, ['HOST' => $host, 'ANSWER' => (string) $answer]);
 
     [$status, $arguments] = explode('|', $process->getOutput());
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
-        ->and((int) $status > 0)->toBe($code > 0)
-        ->and($arguments)->toContain('--resolve beelink.coresmith.io:443:127.0.0.1')
-        ->toContain('https://beelink.coresmith.io/up');
+        ->and((int) $status)->toBe($answer)
+        ->and($arguments)->toEndWith("https://{$host}/up");
+
+    if ($resolve === null) {
+        expect($arguments)->not->toContain('--resolve');
+    } else {
+        expect($arguments)->toContain($resolve);
+    }
 })->with([
-    'it answers' => [0, 0],
-    'it does not' => [7, 1],
+    'a domain, asked on this server' => ['beelink.coresmith.io', '--resolve beelink.coresmith.io:443:127.0.0.1', 0],
+    'a domain that does not answer' => ['beelink.coresmith.io', '--resolve beelink.coresmith.io:443:127.0.0.1', 7],
+    'an address, asked on itself since it carries no name for Caddy to pick a certificate by' => ['192.168.0.248', null, 0],
 ]);
 
 test('the installer moves Coresmith with the command whose checks Settings shares', function () {
