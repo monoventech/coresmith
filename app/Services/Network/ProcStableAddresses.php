@@ -1,0 +1,41 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+namespace App\Services\Network;
+
+final class ProcStableAddresses implements StableAddresses
+{
+    private const GLOBAL_SCOPE = '00';
+
+    private const UNSTABLE = 0x01 | 0x08 | 0x20 | 0x40;
+
+    public function __construct(private readonly string $path = '/proc/net/if_inet6') {}
+
+    public function ipv6(): array
+    {
+        $lines = @file($this->path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $addresses = [];
+
+        foreach ($lines === false ? [] : $lines as $line) {
+            $fields = preg_split('/\s+/', trim($line)) ?: [];
+
+            if (count($fields) < 6 || $fields[3] !== self::GLOBAL_SCOPE || (hexdec($fields[4]) & self::UNSTABLE) !== 0) {
+                continue;
+            }
+
+            $packed = @inet_pton(implode(':', str_split($fields[0], 4)));
+            $address = $packed === false ? false : inet_ntop($packed);
+
+            if ($address !== false && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 | FILTER_FLAG_GLOBAL_RANGE) !== false) {
+                $addresses[] = $address;
+            }
+        }
+
+        return array_values(array_unique($addresses));
+    }
+}
