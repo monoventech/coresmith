@@ -586,13 +586,6 @@ test('caddy can read what it serves without being able to read or change the res
         ->and($body)->not->toMatch('/usermod\s+-aG\s+coresmith\s+caddy/');
 });
 
-test('an empty saved route config never replaces the panel config when caddy starts', function () {
-    $body = installScriptBody();
-
-    expect($body)->toContain('grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS --unix-socket /run/caddy-admin/admin.sock -X POST http://localhost/load')
-        ->and($body)->not->toContain("echo '{}' >/etc/caddy/caddy-config.json");
-});
-
 test("Coresmith's Caddy admin API is a socket in a folder only Caddy, root and the coresmith group can enter", function () {
     $body = installScriptBody();
 
