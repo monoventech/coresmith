@@ -41,6 +41,7 @@ function uninstallerTree(): string
         'var/coresmith/apps/.keep' => '',
         'root/.keep' => '',
         'usr/local/libexec/coresmith/this-machine' => "#!/bin/bash\n",
+        'usr/local/libexec/coresmith/persist-caddy-config' => "#!/bin/bash\n",
         'var/lib/coresmith-this-machine/.keep' => '',
         'etc/systemd/system/coresmith-apps.slice' => "[Slice]\n",
     ];
@@ -168,6 +169,7 @@ test('everything the installer creates, the uninstaller removes', function () {
         'coresmith-this-machine.service' => 'coresmith-this-machine.service',
         'coresmith-this-machine.path' => 'coresmith-this-machine.path',
         '/usr/local/libexec/coresmith/this-machine' => '/usr/local/libexec/coresmith/this-machine',
+        '/usr/local/libexec/coresmith/persist-caddy-config' => '/usr/local/libexec/coresmith/persist-caddy-config',
         '/var/lib/coresmith-this-machine' => '/var/lib/coresmith-this-machine',
         '/etc/systemd/system/coresmith-apps.slice' => '/etc/systemd/system/coresmith-apps.slice',
         'caddy.service.d/coresmith.conf' => 'caddy.service.d/coresmith.conf',
@@ -470,3 +472,64 @@ test('the request to take the key off replaces a link planted in its place rathe
         ->and(uninstallerCalls($base))->toContain('request uninstall remove')
         ->and(uninstallerCalls($base))->not->toContain('request link');
 });
+
+function uninstallerManagedCaddy(string $base): string
+{
+    mkdir("{$base}/var/coresmith/apps/shop");
+    file_put_contents("{$base}/etc/systemd/system/caddy.service.d/coresmith.conf", "[Service]\nExecStart=\nExecStart=/usr/bin/caddy run --environ --config /etc/caddy/caddy-config.json\n");
+    File::ensureDirectoryExists("{$base}/usr/local/libexec/coresmith");
+    file_put_contents("{$base}/usr/local/libexec/coresmith/persist-caddy-config", "#!/bin/sh\nprintf 'persist\\n' >>" . escapeshellarg("{$base}/calls.log") . "\n");
+    chmod("{$base}/usr/local/libexec/coresmith/persist-caddy-config", 0755);
+
+    return "curl() { printf 'curl %s\\n' \"\$*\" >>" . escapeshellarg("{$base}/calls.log") . "; case \"\$*\" in *automation/policies) printf '[{\"@id\":\"app-01-tls\",\"subjects\":[\"shop.example.com\"]},{\"@id\":\"coresmith-site-tls\"},{\"@id\":\"coresmith-site-tls-2\"},{\"@id\":\"coresmith-any-tls\",\"on_demand\":true}]' ;; esac; }";
+}
+
+test("on Coresmith's own machine, uninstalling takes only Coresmith out of Caddy and saves the rest, so the apps keep serving", function () {
+    $base = uninstallerTree();
+    $stubs = uninstallerManagedCaddy($base);
+
+    $process = runUninstaller($base, ['--yes'], null, $stubs);
+    $calls = uninstallerCalls($base);
+    $socket = "--unix-socket {$base}/run/caddy-admin/admin.sock";
+    $deleted = collect($calls)->filter(fn(string $call) => str_contains($call, '-X DELETE'))->map(fn(string $call) => preg_replace('#^.*http://localhost#', '', $call))->values()->all();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($deleted)->toBe([
+            '/id/coresmith-site', '/id/coresmith-any', '/id/coresmith-site-tls', '/id/coresmith-site-tls-2', '/id/coresmith-any-tls',
+            '/config/apps/http/servers/coresmith-internal', '/config/apps/tls/automation/on_demand', '/config/logging/logs/coresmith',
+        ])
+        ->and($calls)->toContain("curl -fsS --max-time 30 {$socket} -X DELETE http://localhost/id/coresmith-site")
+        ->and(array_search('persist', $calls, true))->toBeGreaterThan(array_search("curl -fsS --max-time 30 {$socket} -X DELETE http://localhost/config/logging/logs/coresmith", $calls, true))
+        ->and(array_search('systemctl restart caddy', $calls, true))->toBeGreaterThan(array_search('persist', $calls, true))
+        ->and($process->getOutput())->toContain("Took Coresmith's routes out of Caddy, which keeps serving the apps");
+});
+
+test("a Caddy config that couldn't be saved after Coresmith left it says how to save it", function () {
+    $base = uninstallerTree();
+    $stubs = uninstallerManagedCaddy($base);
+    file_put_contents("{$base}/usr/local/libexec/coresmith/persist-caddy-config", "#!/bin/sh\nexit 1\n");
+
+    $process = runUninstaller($base, ['--yes'], null, $stubs);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($process->getOutput())->toContain("Took Coresmith's routes out of Caddy, but couldn't save its config. Run curl --unix-socket {$base}/run/caddy-admin/admin.sock http://localhost/config/ > {$base}/etc/caddy/caddy-config.json so a restart keeps it.");
+});
+
+test("where Caddy runs Coresmith's own Caddyfile, or nothing is left for apps, the uninstaller never takes routes out through Caddy's API", function (bool $apps, string $dropIn) {
+    $base = uninstallerTree();
+    $stubs = uninstallerManagedCaddy($base);
+
+    if (!$apps) {
+        rmdir("{$base}/var/coresmith/apps/shop");
+    }
+
+    file_put_contents("{$base}/etc/systemd/system/caddy.service.d/coresmith.conf", $dropIn);
+
+    $process = runUninstaller($base, ['--yes'], null, $stubs);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and(collect(uninstallerCalls($base))->filter(fn(string $call) => str_contains($call, '-X DELETE'))->all())->toBe([]);
+})->with([
+    'apps, Caddyfile' => [true, "[Service]\n"],
+    'no apps, managed config' => [false, "[Service]\nExecStart=\nExecStart=/usr/bin/caddy run --environ --config /etc/caddy/caddy-config.json\n"],
+]);

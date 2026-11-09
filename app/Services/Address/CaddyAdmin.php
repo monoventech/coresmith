@@ -14,4 +14,6 @@ use Illuminate\Container\Attributes\Bind;
 interface CaddyAdmin
 {
     public function reload(): void;
+
+    public function managed(): bool;
 }
