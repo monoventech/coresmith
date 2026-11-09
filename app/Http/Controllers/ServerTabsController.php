@@ -41,12 +41,16 @@ final class ServerTabsController extends Controller
 
     public const ADMIN_API_ON_SOCKET = 'Admin API on a socket only Caddy and root can open';
 
+    public const SSH_KEY_ONLY = 'SSH key-only, modern ciphers (curve25519, ed25519)';
+
+    public const NO_SITE_FOR_UNKNOWN_HOSTS = 'Caddy serves no site for unknown hostnames';
+
     public const HARDENING = [
-        'SSH key-only, modern ciphers (curve25519, ed25519)',
+        self::SSH_KEY_ONLY,
         'fail2ban active, SSH jail after 5 failures',
         'Kernel hardening sysctls applied',
         'AppArmor checked for profiles in complain mode',
-        'Caddy catch-all returns 444 for unknown hosts',
+        self::NO_SITE_FOR_UNKNOWN_HOSTS,
         self::ADMIN_API_ON_LOCALHOST,
         'Automatic OS security patches',
     ];
@@ -64,10 +68,15 @@ final class ServerTabsController extends Controller
             'isolation' => $sharedRedis->state($server) === null
                 ? self::ISOLATION_LAYERS
                 : array_map(fn(string $layer): string => $layer === self::DEDICATED_CREDENTIALS ? self::DEDICATED_CREDENTIALS_EXCEPT_SHARED_REDIS : $layer, self::ISOLATION_LAYERS),
-            'hardening' => $server->caddyAdminOnSocket()
-                ? array_map(fn(string $item): string => $item === self::ADMIN_API_ON_LOCALHOST ? self::ADMIN_API_ON_SOCKET : $item, self::HARDENING)
-                : self::HARDENING,
+            'hardening' => array_values(array_filter(
+                array_map(fn(string $item): string => $item === self::ADMIN_API_ON_LOCALHOST && $server->caddyAdminOnSocket() ? self::ADMIN_API_ON_SOCKET : $item, self::HARDENING),
+                fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $server->sshHardened(),
+            )),
             'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
+            'ssh' => [
+                'verified' => $server->sshHardened(),
+                'error' => $server->sshHardened() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
+            ],
             'firewall' => [
                 'open' => (new FirewallConfigurator)->requiredPorts($server->ssh_port),
                 'ssh_port' => $server->ssh_port,

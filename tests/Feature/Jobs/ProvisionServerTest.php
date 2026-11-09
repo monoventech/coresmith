@@ -30,6 +30,7 @@ function provisioningTransport(): FakeSSHTransport
     return (new FakeSSHTransport)
         ->respondTo('echo reachable || echo blocked', "blocked\n", 0)
         ->respondTo('echo open || echo closed', "closed\n", 0)
+        ->respondTo('sshd -T', "permitrootlogin without-password\npasswordauthentication no\nkbdinteractiveauthentication no\n", 0)
         ->queueResult("ID=ubuntu\nVERSION_ID=\"24.04\"\n", 0)
         ->queueResult('systemd 255', 0)
         ->queueResult("4\n", 0)
@@ -57,7 +58,7 @@ test('phase 1 persists the detected os and hardware', function () {
 
     expect($fresh->os_name)->toBe('ubuntu')
         ->and($fresh->os_version)->toBe('24.04')
-        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'caddy_admin' => 'socket']);
+        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified']);
 });
 
 test('phase 2 installs base packages through the abstraction', function () {
@@ -376,10 +377,13 @@ test('phase 7 hardens ssh, installs fail2ban and applies sysctls', function () {
     $commands = implode("\n", $transport->commands());
     $uploads = $transport->uploads();
 
-    expect($uploads['/etc/ssh/sshd_config.d/99-coresmith.conf'])->toContain('PasswordAuthentication no')
+    expect($uploads['/etc/ssh/sshd_config.d/00-coresmith.conf'])->toContain('PasswordAuthentication no')
+        ->and($uploads)->not->toHaveKey('/etc/ssh/sshd_config.d/99-coresmith.conf')
         ->and($uploads['/etc/sysctl.d/99-coresmith-hardening.conf'])->toContain('kernel.kptr_restrict = 2')
         ->and($uploads['/etc/fail2ban/jail.d/coresmith-ssh.conf'])->toContain('maxretry = 5')
-        ->and($commands)->toContain('sshd -t')
+        ->and($commands)->toContain('rm -f /etc/ssh/sshd_config.d/99-coresmith.conf')
+        ->and($commands)->toContain('sshd -T')
+        ->and($server->fresh()->sshHardened())->toBeTrue()
         ->and($commands)->toContain('sysctl --system')
         ->and($commands)->toContain('timedatectl set-timezone UTC');
 });

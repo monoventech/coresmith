@@ -177,7 +177,7 @@ final class MonovenTenant
                 'status' => ServerStatus::Active,
                 'os_name' => 'ubuntu',
                 'os_version' => '24.04',
-                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'memory_mb' => $memory, 'disk_gb' => 160, 'caddy_admin' => 'socket'],
+                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'memory_mb' => $memory, 'disk_gb' => 160, 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified'],
                 'provisioning_phase' => 8,
                 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $name, true)), 0, 43),
                 'last_connected_at' => now(),

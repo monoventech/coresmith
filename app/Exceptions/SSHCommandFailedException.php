@@ -8,10 +8,18 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use Illuminate\Support\Str;
 use RuntimeException;
 
 final class SSHCommandFailedException extends RuntimeException
 {
+    public static function reason(RuntimeException $e): string
+    {
+        $output = $e instanceof self ? trim($e->output()) : '';
+
+        return $output !== '' ? Str::limit($output, 300) : $e->getMessage();
+    }
+
     public function __construct(
         private readonly string $commandOutput,
         private readonly int $commandExitCode,
