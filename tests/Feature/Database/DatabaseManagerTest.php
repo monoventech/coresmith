@@ -115,7 +115,7 @@ test('creating a mysql database makes the db, the user and the grant', function 
     $commands = implode("\n", $transport->commands());
 
     expect($commands)->toContain('CREATE DATABASE IF NOT EXISTS `app_db`')
-        ->and($commands)->toContain('CREATE USER IF NOT EXISTS')
+        ->and(implode("\n", array_column($transport->sent(), 1)))->toContain('CREATE USER IF NOT EXISTS')
         ->and($commands)->toContain('GRANT SELECT, INSERT')
         ->and((new MysqlDriver)->createUser('app_user', 'x'))->toContain("'app_user'@'localhost'");
 });
@@ -230,21 +230,34 @@ test('a password change refuses a user name carrying sql metacharacters', functi
     (new $driver)->changePassword("evil'@'%", 'secret');
 })->with([MysqlDriver::class, PostgresDriver::class])->throws(UnsafeNameException::class);
 
-test('changing a database password runs the engine\'s own command on its server', function (DatabaseType $type, string $expected) {
+test('changing a database password sends the statement to the engine\'s own client, never on the command line', function (DatabaseType $type, string $client, string $statement) {
     $transport = new FakeSSHTransport;
     $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user']);
 
     databaseManager()->changePassword(databaseConnection($transport), $database, 'N3wPassw0rdValue');
 
-    expect($transport->commands())->toHaveCount(1)
-        ->and($transport->commands()[0])->toContain($expected);
+    expect($transport->sent())->toBe([[$client, $statement]])
+        ->and(implode("\n", $transport->commands()))->not->toContain('N3wPassw0rdValue');
 })->with([
-    'mysql' => [DatabaseType::Mysql, "ALTER USER '\\''app_user'\\''@'\\''localhost'\\'' IDENTIFIED BY '\\''N3wPassw0rdValue'\\''"],
-    'postgres' => [DatabaseType::Postgresql, "ALTER ROLE \"app_user\" WITH PASSWORD '\\''N3wPassw0rdValue'\\''"],
+    'mysql' => [DatabaseType::Mysql, 'mysql --protocol=socket', "ALTER USER 'app_user'@'localhost' IDENTIFIED BY 'N3wPassw0rdValue';"],
+    'postgres' => [DatabaseType::Postgresql, 'sudo -u postgres psql -v ON_ERROR_STOP=1', "ALTER ROLE \"app_user\" WITH PASSWORD 'N3wPassw0rdValue';"],
+]);
+
+test('creating a database never puts its password on the command line', function (DatabaseType $type, string $statement) {
+    $transport = new FakeSSHTransport;
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user', 'privilege_level' => 'standard']);
+
+    databaseManager()->create(databaseConnection($transport), $database, 'Cr3atedPassw0rdValue');
+
+    expect(implode("\n", $transport->commands()))->not->toContain('Cr3atedPassw0rdValue')
+        ->and(array_column($transport->sent(), 1))->toContain($statement);
+})->with([
+    'mysql' => [DatabaseType::Mysql, "CREATE USER IF NOT EXISTS 'app_user'@'localhost' IDENTIFIED BY 'Cr3atedPassw0rdValue';"],
+    'postgres' => [DatabaseType::Postgresql, "CREATE ROLE \"app_user\" LOGIN PASSWORD 'Cr3atedPassw0rdValue' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;"],
 ]);
 
 test('a failed password change on the server is reported, not swallowed', function () {
-    $transport = (new FakeSSHTransport)->respondTo('ALTER USER', "ERROR 1396 (HY000): Operation ALTER USER failed for 'app_user'@'localhost'", 1);
+    $transport = (new FakeSSHTransport)->respondTo('mysql --protocol=socket', "ERROR 1396 (HY000): Operation ALTER USER failed for 'app_user'@'localhost'", 1);
     $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db', 'db_user' => 'app_user']);
 
     databaseManager()->changePassword(databaseConnection($transport), $database, 'N3wPassw0rdValue');

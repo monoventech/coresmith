@@ -288,6 +288,14 @@ final class FakeSSHTransport implements SSHTransport
         return $this->passwordsAllowed;
     }
 
+    /**
+     * @return list<array{0: string, 1: string}>
+     */
+    public function sent(): array
+    {
+        return array_values(array_map(fn(int $index): array => [$this->commands[$index], $this->inputs[$index]], array_keys($this->inputs)));
+    }
+
     public function inputFor(string $needle): ?string
     {
         foreach ($this->commands as $index => $command) {

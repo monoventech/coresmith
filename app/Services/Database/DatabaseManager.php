@@ -121,13 +121,11 @@ final class DatabaseManager
     {
         $user = (string) $database->db_user;
 
-        $command = match ($database->type) {
-            DatabaseType::Mysql => $this->mysql->command($this->mysql->changePassword($user, $password)),
-            DatabaseType::Postgresql => $this->postgres->command($this->postgres->changePassword($user, $password)),
+        match ($database->type) {
+            DatabaseType::Mysql => $this->send($connection, $this->mysql->client(), $this->mysql->changePassword($user, $password)),
+            DatabaseType::Postgresql => $this->send($connection, $this->postgres->client(), $this->postgres->changePassword($user, $password)),
             DatabaseType::Redis => throw new LogicException('A Redis database has no password of its own to change.'),
         };
-
-        $connection->execute($command, sudo: true)->throw();
     }
 
     public function drop(SSHConnection $connection, ManagedDatabase $database): void
@@ -194,17 +192,15 @@ final class DatabaseManager
 
     private function createMysql(SSHConnection $connection, string $name, string $user, string $password, PrivilegeLevel $level): void
     {
-        $this->run($connection, [
-            $this->mysql->command($this->mysql->createDatabase($name)),
-            $this->mysql->command($this->mysql->createUser($user, $password)),
-            $this->mysql->command($this->mysql->grant($name, $user, $level)),
-        ]);
+        $this->run($connection, [$this->mysql->command($this->mysql->createDatabase($name))]);
+        $this->send($connection, $this->mysql->client(), $this->mysql->createUser($user, $password));
+        $this->run($connection, [$this->mysql->command($this->mysql->grant($name, $user, $level))]);
     }
 
     private function createPostgres(SSHConnection $connection, string $name, string $user, string $password, PrivilegeLevel $level, ManagedDatabase $database): void
     {
+        $this->send($connection, $this->postgres->client(), $this->postgres->createUser($user, $password));
         $this->run($connection, [
-            $this->postgres->command($this->postgres->createUser($user, $password)),
             $this->postgres->command($this->postgres->createDatabase($name, $user)),
             $this->postgres->command($this->postgres->grant($name, $user, $level), $name),
         ]);
@@ -212,6 +208,11 @@ final class DatabaseManager
         foreach ((array) $database->extensions as $extension) {
             $connection->execute($this->postgres->command($this->postgres->createExtension((string) $extension, $name), $name), sudo: true)->throw();
         }
+    }
+
+    private function send(SSHConnection $connection, string $client, #[\SensitiveParameter] string $statement): void
+    {
+        $connection->executeWithInput($client, $statement, sudo: true)->throw();
     }
 
     /**
