@@ -83,3 +83,55 @@ test('a real database user signs in with the rotated password, and the old one i
         $connection->disconnect();
     }
 })->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+function liveDatabaseExists(SSHConnection $connection, ManagedDatabase $database): array
+{
+    $name = (string) $database->name;
+    $user = (string) $database->db_user;
+
+    $queries = match ($database->type) {
+        DatabaseType::Mysql => [
+            "mysql --protocol=socket -N -e \"SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{$name}'\"",
+            "mysql --protocol=socket -N -e \"SELECT COUNT(*) FROM mysql.user WHERE user = '{$user}'\"",
+        ],
+        DatabaseType::Postgresql => [
+            "sudo -u postgres psql -tAc \"SELECT COUNT(*) FROM pg_database WHERE datname = '{$name}'\"",
+            "sudo -u postgres psql -tAc \"SELECT COUNT(*) FROM pg_roles WHERE rolname = '{$user}'\"",
+        ],
+    };
+
+    return array_map(fn(string $query): string => trim($connection->execute($query, sudo: true)->output), $queries);
+}
+
+test('a real database and its user are gone once Coresmith drops them, even with a session still open', function (DatabaseType $type) {
+    $connection = liveDatabaseConnection();
+    $databases = app(DatabaseManager::class);
+    $suffix = Str::lower(Str::random(8));
+    $database = ManagedDatabase::factory()->for($connection->server())->create([
+        'type' => $type,
+        'name' => "live_drop_{$suffix}",
+        'db_user' => "live_drop_{$suffix}",
+        'privilege_level' => 'standard',
+    ]);
+    $password = DatabaseManager::generatePassword();
+
+    try {
+        $databases->create($connection, $database, $password);
+
+        expect(liveDatabaseExists($connection, $database))->toBe(['1', '1']);
+
+        $held = match ($type) {
+            DatabaseType::Mysql => 'MYSQL_PWD=' . escapeshellarg($password) . ' mysql --protocol=socket -u ' . escapeshellarg((string) $database->db_user) . ' ' . escapeshellarg((string) $database->name) . " -e 'SELECT SLEEP(20)'",
+            DatabaseType::Postgresql => 'PGPASSWORD=' . escapeshellarg($password) . ' psql -h 127.0.0.1 -U ' . escapeshellarg((string) $database->db_user) . ' -d ' . escapeshellarg((string) $database->name) . " -c 'SELECT pg_sleep(20)'",
+        };
+        $connection->execute('nohup sh -c ' . escapeshellarg($held) . ' >/dev/null 2>&1 & sleep 2');
+
+        $databases->drop($connection, $database);
+
+        expect(liveDatabaseExists($connection, $database))->toBe(['0', '0'])
+            ->and(liveDatabaseSignsIn($connection, $database, $password))->toBeFalse();
+    } finally {
+        $databases->drop($connection, $database);
+        $connection->disconnect();
+    }
+})->with([DatabaseType::Mysql, DatabaseType::Postgresql]);

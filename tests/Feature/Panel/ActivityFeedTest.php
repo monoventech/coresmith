@@ -180,6 +180,16 @@ test('showing and rotating a database password are described, never with the pas
     'rotated' => ['database_password_rotated', 'Password of shop_production rotated'],
 ]);
 
+test('a deleted database is still named in the activity', function () {
+    [$team, $server] = feedFixture();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'shop_production']);
+
+    feedLog($database, 'database_deleted');
+    $database->delete();
+
+    expect(feedSentence((new ActivityFeed)->forTeam($team)[0]))->toBe('Database shop_production deleted');
+});
+
 test('another teams activity is never shown', function () {
     [$team] = feedFixture();
     [, $theirServer, $theirApplication] = feedFixture();
