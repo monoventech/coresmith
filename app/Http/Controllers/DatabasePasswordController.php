@@ -22,6 +22,16 @@ final class DatabasePasswordController extends Controller
         $this->authorize('viewCredentials', $database);
         $this->assertHasPassword($server, $database);
 
+        if ($database->db_password === null) {
+            return back()->with('error', 'Coresmith is still creating this database. Try again in a minute.');
+        }
+
+        $claimed = ManagedDatabase::query()->whereKey($database->getKey())->whereNull('credentials_shown_at')->update(['credentials_shown_at' => now()]);
+
+        if ($claimed !== 1) {
+            return back()->with('error', 'The password was shown once already. Rotate it to get a new one.');
+        }
+
         activity()->performedOn($database)->log('database_password_shown');
 
         return back()->with('databasePassword', (string) $database->db_password);
@@ -68,7 +78,7 @@ final class DatabasePasswordController extends Controller
             $connections->disconnect($server);
         }
 
-        $database->forceFill(['db_password' => $password])->save();
+        $database->forceFill(['db_password' => $password, 'credentials_shown_at' => now()])->save();
 
         activity()->performedOn($database)->log('database_password_rotated');
 

@@ -28,6 +28,7 @@
             privilege_level: string
             is_external: boolean
             has_password: boolean
+            password_shown: boolean
         }
         can: { viewCredentials: boolean; backup: boolean; delete: boolean }
         offsite?: { sent: string | null; error: string | null } | null
@@ -139,18 +140,20 @@
         </div>
         <pre class="terminal mt-3 text-[11.5px] break-all whitespace-pre-wrap" data-testid="database-url">{dsn}</pre>
         {#if database.has_password}
-            <p class="mt-2 text-[12px] text-muted-foreground">
-                {password === null
-                    ? 'The password is encrypted at rest. Showing or rotating it is recorded in the activity log.'
-                    : "Copy it now. It's hidden again when you leave this page."}
+            <p class="mt-2 text-[12px] text-muted-foreground" data-testid="database-password-note">
+                {password !== null
+                    ? "Copy it now. It isn't shown again; rotate it if you lose it."
+                    : database.password_shown
+                      ? 'It was shown once and is encrypted at rest. Rotate it if you lose it.'
+                      : 'It can be shown once, then only rotating gives you a new one. Both are recorded in the activity log.'}
             </p>
             {#if can.viewCredentials}
                 <div class="mt-3 flex flex-wrap gap-2">
-                    {#if password === null}
+                    {#if password === null && !database.password_shown}
                         <Button variant="outline" size="sm" disabled={working} onclick={showPassword}
                             >Show password</Button
                         >
-                    {:else}
+                    {:else if password !== null}
                         <Button variant="outline" size="sm" onclick={() => copy('password', password)}
                             >{copied === 'password' ? 'Copied' : 'Copy password'}</Button
                         >

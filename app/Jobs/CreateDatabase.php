@@ -43,7 +43,7 @@ final class CreateDatabase implements ShouldQueue
                 $external = $databases->ensureServerInstalled($connection, $this->database->type, $this->database);
                 $databases->create($connection, $this->database, $password);
 
-                $this->database->forceFill(['db_password' => $password, 'is_external' => $external])->save();
+                $this->database->forceFill(['db_password' => $password, 'credentials_shown_at' => null, 'is_external' => $external])->save();
             } finally {
                 $connections->disconnect($server);
             }

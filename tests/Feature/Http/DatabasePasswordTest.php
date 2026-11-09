@@ -55,7 +55,32 @@ test('an admin is shown a database password once, and the reveal is recorded', f
 
     expect($activity->subject?->is($database))->toBeTrue()
         ->and($activity->causer?->is($admin))->toBeTrue()
-        ->and(json_encode($activity->properties))->not->toContain('Old5ecretPasswordValue');
+        ->and(json_encode($activity->properties))->not->toContain('Old5ecretPasswordValue')
+        ->and($database->fresh()->credentials_shown_at)->not->toBeNull();
+});
+
+test('a password already shown once is never shown again, only rotated', function () {
+    [$server, $database, $admin] = databasePasswordSetup();
+    $database->forceFill(['credentials_shown_at' => now()->subDay()])->save();
+
+    $this->actingAs($admin)
+        ->post(route('servers.databases.password.show', [$server, $database]))
+        ->assertSessionHas('error', 'The password was shown once already. Rotate it to get a new one.')
+        ->assertSessionMissing('databasePassword');
+
+    expect(Activity::query()->where('description', 'database_password_shown')->count())->toBe(0);
+});
+
+test('a database Coresmith is still creating has no password to show yet', function () {
+    [$server, $database, $admin] = databasePasswordSetup();
+    $database->forceFill(['db_password' => null])->save();
+
+    $this->actingAs($admin)
+        ->post(route('servers.databases.password.show', [$server, $database]))
+        ->assertSessionHas('error', 'Coresmith is still creating this database. Try again in a minute.')
+        ->assertSessionMissing('databasePassword');
+
+    expect($database->fresh()->credentials_shown_at)->toBeNull();
 });
 
 test('a deployer cannot see or rotate a database password, and Coresmith never dials the server', function () {
@@ -105,6 +130,7 @@ test('rotating sets a new password on the server, seals it, and shows it once', 
 
     expect($password)->not->toBe('Old5ecretPasswordValue')->toHaveLength(32)
         ->and(session('databasePassword'))->toBe($password)
+        ->and($database->fresh()->credentials_shown_at)->not->toBeNull()
         ->and(implode("\n", $transport->commands()))->toContain("ALTER USER '\\''shop_app'\\''@'\\''localhost'\\'' IDENTIFIED BY '\\''{$password}'\\''")
         ->and(json_encode($command->properties))->not->toContain($password)
         ->and(Activity::query()->where('description', 'database_password_rotated')->sole()->subject?->is($database))->toBeTrue();
@@ -141,7 +167,8 @@ test('the database page says whether the password can be shown, and to whom', fu
         ->get(route('servers.databases.show', [$server, $database]))
         ->assertInertia(fn($page) => $page
             ->where('can.viewCredentials', $credentials)
-            ->where('database.has_password', $password));
+            ->where('database.has_password', $password)
+            ->where('database.password_shown', false));
 })->with([
     'an admin, mysql' => [TeamRole::Admin, DatabaseType::Mysql, true, true],
     'an admin, postgres' => [TeamRole::Admin, DatabaseType::Postgresql, true, true],
@@ -175,4 +202,13 @@ test('a rotation lets go of the database when it is done, even when the server r
     $this->actingAs($admin)->put(route('servers.databases.password.update', [$server, $database]));
 
     expect($database->credentialsLock()->get())->toBeTrue();
+});
+
+test('the database page says once its password has been shown', function () {
+    [$server, $database, $admin] = databasePasswordSetup();
+    $database->forceFill(['credentials_shown_at' => now()])->save();
+
+    $this->actingAs($admin)
+        ->get(route('servers.databases.show', [$server, $database]))
+        ->assertInertia(fn($page) => $page->where('database.password_shown', true));
 });

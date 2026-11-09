@@ -310,7 +310,9 @@ export async function openSecurity(page: Page) {
     await expect(page.getByTestId('password-card')).toBeVisible()
 }
 
-export async function withProps(page: Page, url: RegExp, change: (props: Record<string, unknown>) => void) {
+type InertiaBody = { props: Record<string, unknown>; flash?: Record<string, unknown> }
+
+export async function withInertia(page: Page, url: RegExp, change: (body: InertiaBody) => void) {
     await page.route(url, async (route) => {
         if (route.request().headers()['x-inertia'] === undefined) {
             await route.continue()
@@ -319,11 +321,15 @@ export async function withProps(page: Page, url: RegExp, change: (props: Record<
         }
 
         const response = await route.fetch()
-        const body = await response.json()
+        const body = (await response.json()) as InertiaBody
 
-        change(body.props)
+        change(body)
         await route.fulfill({ response, json: body })
     })
+}
+
+export async function withProps(page: Page, url: RegExp, change: (props: Record<string, unknown>) => void) {
+    await withInertia(page, url, (body) => change(body.props))
 }
 
 export async function blockingViolations(page: Page): Promise<string[]> {

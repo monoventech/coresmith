@@ -50,7 +50,7 @@ function teamImporterPayload(array $overrides = []): array
             ['ref' => 'a3', 'server' => 's1', 'source_provider' => 'cu', 'name' => 'docs', 'slug' => 'acme-docs', 'type' => 'php', 'framework' => 'laravel', 'repository_url' => 'git@git.example.org:acme/docs.git', 'system_user' => 'coresmith-app-docs', 'base_port' => 8140, 'php_version' => '8.5.5', 'status' => 'active', 'deploy_key_private' => "-----BEGIN OPENSSH PRIVATE KEY-----\ndocs-deploy-key\n-----END OPENSSH PRIVATE KEY-----", 'deploy_key_public' => 'ssh-ed25519 AAAAdocs'],
         ],
         'webhook_endpoints' => [['application' => 'a1', 'secret' => 'hook-secret-moves', 'provider' => 'github', 'active' => true]],
-        'databases' => [['server' => 's2', 'type' => 'mysql', 'name' => 'acme', 'db_user' => 'acme', 'db_password' => 'database-password-moves', 'host' => '127.0.0.1', 'port' => 3306, 'status' => 'active', 'privilege_level' => 'full', 'extensions' => [], 'is_external' => false, 'last_offsite_at' => null, 'last_offsite_key' => null, 'last_offsite_error' => null]],
+        'databases' => [['server' => 's2', 'type' => 'mysql', 'name' => 'acme', 'db_user' => 'acme', 'db_password' => 'database-password-moves', 'credentials_shown_at' => '2026-10-01 09:30:00', 'host' => '127.0.0.1', 'port' => 3306, 'status' => 'active', 'privilege_level' => 'full', 'extensions' => [], 'is_external' => false, 'last_offsite_at' => null, 'last_offsite_key' => null, 'last_offsite_error' => null]],
         'backup_destination' => ['endpoint' => 'https://s3.eu-central-1.amazonaws.com', 'region' => 'eu-central-1', 'bucket' => 'acme-backups', 'prefix' => 'nightly', 'access_key_id' => 'AKIAMOVES', 'secret_access_key' => 's3-secret-moves', 'path_style' => false, 'last_run_at' => null],
     ], $overrides);
 }
@@ -108,6 +108,7 @@ test('importing recreates the team with its servers waiting to be taken over', f
         ->and($site->webhookEndpoints()->first()?->secret)->toBe('hook-secret-moves')
         ->and($team->applications()->where('slug', 'acme-docs')->first()->deploy_key_private)->toContain('docs-deploy-key')
         ->and(ManagedDatabase::query()->where('team_id', $team->id)->first()?->db_password)->toBe('database-password-moves')
+        ->and(ManagedDatabase::query()->where('team_id', $team->id)->first()?->credentials_shown_at?->toDateTimeString())->toBe('2026-10-01 09:30:00')
         ->and(ManagedDatabase::query()->where('team_id', $team->id)->first()?->server_id)->toBe($team->servers()->where('name', 'db-01')->first()->id)
         ->and($team->backupDestination?->secret_access_key)->toBe('s3-secret-moves')
         ->and($code->fresh()->imported_at)->not->toBeNull()
