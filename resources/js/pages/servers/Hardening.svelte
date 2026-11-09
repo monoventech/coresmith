@@ -21,6 +21,7 @@
         isolation = [],
         hardening = [],
         admin_move_error = null,
+        ssh = { verified: false, error: null },
         firewall,
         access
     }: {
@@ -28,6 +29,7 @@
         isolation: string[]
         hardening: string[]
         admin_move_error?: string | null
+        ssh?: { verified: boolean; error: string | null }
         firewall: { open: number[]; ssh_port: number; changes: Change[] }
         access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
     } = $props()
@@ -92,6 +94,19 @@
             <p class="tint-warning mt-3.5 rounded-lg border px-3.5 py-2.5 text-[12.5px]" data-testid="admin-move-error">
                 Apps on this server can still reach Caddy's admin API. Coresmith tries to move it to a private socket
                 every hour, and the last try failed: <span class="font-mono wrap-anywhere">{admin_move_error}</span>
+            </p>
+        {/if}
+        {#if ssh.error}
+            <p
+                class="tint-warning mt-3.5 rounded-lg border px-3.5 py-2.5 text-[12.5px]"
+                data-testid="ssh-hardening-error"
+            >
+                SSH may still accept passwords on this server. Coresmith tries to turn them off every hour, and the last
+                try found: <span class="font-mono wrap-anywhere">{ssh.error}</span>
+            </p>
+        {:else if !ssh.verified}
+            <p class="mt-3.5 text-[12.5px] text-muted-foreground" data-testid="ssh-hardening-unchecked">
+                Coresmith hasn't checked this server's SSH settings yet. It checks them within the hour.
             </p>
         {/if}
         <div class="mt-auto pt-3">
@@ -186,7 +201,9 @@
     <div class="flex flex-col rounded-xl border border-border bg-card px-5.5 py-5">
         <h3 class="type-h3 m-0 mb-1">SSH access</h3>
         <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Coresmith signs in with a key it generated for this server alone. Password login is off.
+            Coresmith signs in with a key it generated for this server alone.{ssh.verified
+                ? ' Password login is off.'
+                : ''}
         </p>
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div class="text-foreground">{access.ssh ?? 'no address yet'}</div>

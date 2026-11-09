@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\TeamRole;
+use App\Http\Controllers\ServerTabsController;
 use App\Jobs\ManageFirewallRule;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
@@ -218,6 +219,23 @@ test('the hardening tab lists only the firewall changes coresmith applied to tha
             ->has('firewall.changes', 1)
             ->where('firewall.changes.0.port', 8080));
 });
+
+test('the hardening tab claims key-only SSH only once sshd has reported it, and says what sshd reported otherwise', function (array $meta, bool $listed, array $ssh) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['meta' => $meta]);
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->get(route('servers.hardening', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->where('hardening', fn($items): bool => collect($items)->contains(ServerTabsController::SSH_KEY_ONLY) === $listed
+                && collect($items)->contains(ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS))
+            ->where('ssh', $ssh));
+})->with([
+    'verified' => [['ssh_hardening' => 'verified'], true, ['verified' => true, 'error' => null]],
+    'still accepting passwords' => [['ssh_hardening_error' => 'sshd reports passwordauthentication yes'], false, ['verified' => false, 'error' => 'sshd reports passwordauthentication yes']],
+    'not checked yet' => [[], false, ['verified' => false, 'error' => null]],
+]);
 
 test('an admin can queue a firewall change', function () {
     Queue::fake();
