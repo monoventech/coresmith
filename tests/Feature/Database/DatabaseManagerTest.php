@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
 use App\Exceptions\BackupNotFoundException;
+use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\ManagedDatabase;
@@ -114,12 +115,12 @@ test('creating a mysql database makes the db, the user and the grant', function 
     $commands = implode("\n", $transport->commands());
 
     expect($commands)->toContain('CREATE DATABASE IF NOT EXISTS `app_db`')
-        ->and($commands)->toContain('CREATE USER IF NOT EXISTS')
+        ->and(implode("\n", array_column($transport->sent(), 1)))->toContain('CREATE USER IF NOT EXISTS')
         ->and($commands)->toContain('GRANT SELECT, INSERT')
         ->and((new MysqlDriver)->createUser('app_user', 'x'))->toContain("'app_user'@'localhost'");
 });
 
-test('a database server binds to loopback only', function (DatabaseType $type, string $expected) {
+test('a MySQL or PostgreSQL server binds to loopback only', function (DatabaseType $type, string $expected) {
     $transport = (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3);
 
     databaseManager()->ensureServerInstalled(databaseConnection($transport), $type);
@@ -128,7 +129,6 @@ test('a database server binds to loopback only', function (DatabaseType $type, s
 })->with([
     [DatabaseType::Mysql, 'bind-address = 127.0.0.1'],
     [DatabaseType::Postgresql, "listen_addresses = '127.0.0.1'"],
-    [DatabaseType::Redis, 'bind 127.0.0.1'],
 ]);
 
 test('a database server is only installed when missing', function () {
@@ -216,3 +216,48 @@ test('restoring refuses when the backup file is missing rather than truncating t
 
     expect(implode("\n", $transport->commands()))->not->toContain('gunzip');
 });
+
+test('a mysql password change keeps the user and quotes the new password', function () {
+    expect((new MysqlDriver)->changePassword('app_user', "pa'ss"))->toBe("ALTER USER 'app_user'@'localhost' IDENTIFIED BY 'pa\\'ss';");
+});
+
+test('a postgres password change keeps the role and doubles a quote', function () {
+    expect((new PostgresDriver)->changePassword('app_user', "pa'ss"))->toBe("ALTER ROLE \"app_user\" WITH PASSWORD 'pa''ss';");
+});
+
+test('a password change refuses a user name carrying sql metacharacters', function (string $driver) {
+    (new $driver)->changePassword("evil'@'%", 'secret');
+})->with([MysqlDriver::class, PostgresDriver::class])->throws(UnsafeNameException::class);
+
+test('changing a database password sends the statement to the engine\'s own client, never on the command line', function (DatabaseType $type, string $client, string $statement) {
+    $transport = new FakeSSHTransport;
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user']);
+
+    databaseManager()->changePassword(databaseConnection($transport), $database, 'N3wPassw0rdValue');
+
+    expect($transport->sent())->toBe([[$client, $statement]])
+        ->and(implode("\n", $transport->commands()))->not->toContain('N3wPassw0rdValue');
+})->with([
+    'mysql' => [DatabaseType::Mysql, 'mysql --protocol=socket', "ALTER USER 'app_user'@'localhost' IDENTIFIED BY 'N3wPassw0rdValue';"],
+    'postgres' => [DatabaseType::Postgresql, 'sudo -u postgres psql -v ON_ERROR_STOP=1', "ALTER ROLE \"app_user\" WITH PASSWORD 'N3wPassw0rdValue';"],
+]);
+
+test('creating a database never puts its password on the command line', function (DatabaseType $type, string $statement) {
+    $transport = new FakeSSHTransport;
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user', 'privilege_level' => 'standard']);
+
+    databaseManager()->create(databaseConnection($transport), $database, 'Cr3atedPassw0rdValue');
+
+    expect(implode("\n", $transport->commands()))->not->toContain('Cr3atedPassw0rdValue')
+        ->and(array_column($transport->sent(), 1))->toContain($statement);
+})->with([
+    'mysql' => [DatabaseType::Mysql, "CREATE USER IF NOT EXISTS 'app_user'@'localhost' IDENTIFIED BY 'Cr3atedPassw0rdValue';"],
+    'postgres' => [DatabaseType::Postgresql, "CREATE ROLE \"app_user\" LOGIN PASSWORD 'Cr3atedPassw0rdValue' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;"],
+]);
+
+test('a failed password change on the server is reported, not swallowed', function () {
+    $transport = (new FakeSSHTransport)->respondTo('mysql --protocol=socket', "ERROR 1396 (HY000): Operation ALTER USER failed for 'app_user'@'localhost'", 1);
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db', 'db_user' => 'app_user']);
+
+    databaseManager()->changePassword(databaseConnection($transport), $database, 'N3wPassw0rdValue');
+})->throws(SSHCommandFailedException::class);

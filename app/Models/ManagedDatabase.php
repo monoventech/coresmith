@@ -12,16 +12,22 @@ use App\Casts\Vaulted;
 use App\Enums\DatabaseType;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\ManagedDatabaseFactory;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 
 class ManagedDatabase extends Model
 {
     /** @use HasFactory<ManagedDatabaseFactory> */
     use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
+
+    public const CREDENTIALS_LOCK_SECONDS = 1320;
+
+    public const SHARED_REDIS_PORT = 6379;
 
     protected $table = 'databases';
 
@@ -39,6 +45,26 @@ class ManagedDatabase extends Model
         return $this->belongsTo(Team::class);
     }
 
+    public function onSharedRedis(): bool
+    {
+        return $this->type === DatabaseType::Redis && (int) $this->port === self::SHARED_REDIS_PORT;
+    }
+
+    public function hasPassword(): bool
+    {
+        return !$this->onSharedRedis();
+    }
+
+    public function takesBackups(): bool
+    {
+        return $this->type !== DatabaseType::Redis;
+    }
+
+    public function credentialsLock(): Lock
+    {
+        return Cache::lock('database-credentials:' . $this->getKey(), self::CREDENTIALS_LOCK_SECONDS);
+    }
+
     /**
      * @return array<string, string>
      */
@@ -50,6 +76,7 @@ class ManagedDatabase extends Model
             'extensions' => 'array',
             'is_external' => 'boolean',
             'last_offsite_at' => 'datetime',
+            'credentials_shown_at' => 'datetime',
         ];
     }
 }

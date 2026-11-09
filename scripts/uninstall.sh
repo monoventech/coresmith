@@ -16,6 +16,8 @@ CADDYFILE="/etc/caddy/Caddyfile"
 PANEL_SITE_DIR="/etc/caddy/coresmith"
 LEGACY_PANEL_SITE="/etc/caddy/panel.caddy"
 CADDY_CONFIG="/etc/caddy/caddy-config.json"
+CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
+CADDY_ADMIN_DIR="/run/caddy-admin"
 FPM_POOLS="/etc/php/*/fpm/pool.d /etc/php-fpm.d /etc/php/fpm/pool.d"
 FPM_POOL="coresmith-panel.conf"
 FAIL2BAN_JAIL="/etc/fail2ban/jail.d/coresmith.conf"
@@ -224,13 +226,19 @@ remove_caddy_site() {
             cp -p "$CADDYFILE" "$SAVED/Caddyfile"
         fi
 
-        printf '{\n    admin localhost:2019\n}\n' >"$CADDYFILE"
+        if [ -n "$APPS" ]; then
+            printf '{\n    admin unix/%s/admin.sock|0222\n}\n' "$CADDY_ADMIN_DIR" >"$CADDYFILE"
+        else
+            printf '{\n    admin localhost:2019\n}\n' >"$CADDYFILE"
+        fi
     fi
 
     if [ -n "$APPS" ]; then
         systemctl restart caddy >/dev/null 2>&1 || warn "Caddy didn't restart. Run systemctl restart caddy so the apps' sites load."
     else
         systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
+        rm -f "$CADDY_ADMIN_TMPFILES"
+        rm -rf "$CADDY_ADMIN_DIR"
     fi
 
     success "Removed Coresmith's Caddy site"

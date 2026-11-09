@@ -30,6 +30,13 @@ final class MysqlDriver
         return "CREATE USER IF NOT EXISTS '{$user}'@'localhost' IDENTIFIED BY {$escaped};";
     }
 
+    public function changePassword(string $user, #[\SensitiveParameter] string $password): string
+    {
+        $user = SafeName::assertDatabaseIdentifier($user);
+
+        return "ALTER USER '{$user}'@'localhost' IDENTIFIED BY {$this->quoteLiteral($password)};";
+    }
+
     public function grant(string $database, string $user, PrivilegeLevel $level): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);
@@ -83,7 +90,12 @@ final class MysqlDriver
 
     public function command(string $sql): string
     {
-        return 'mysql --protocol=socket -e ' . escapeshellarg($sql);
+        return $this->client() . ' -e ' . escapeshellarg($sql);
+    }
+
+    public function client(): string
+    {
+        return 'mysql --protocol=socket';
     }
 
     private function quoteLiteral(string $value): string

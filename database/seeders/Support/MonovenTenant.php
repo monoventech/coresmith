@@ -177,7 +177,7 @@ final class MonovenTenant
                 'status' => ServerStatus::Active,
                 'os_name' => 'ubuntu',
                 'os_version' => '24.04',
-                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'memory_mb' => $memory, 'disk_gb' => 160],
+                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'memory_mb' => $memory, 'disk_gb' => 160, 'caddy_admin' => 'socket'],
                 'provisioning_phase' => 8,
                 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $name, true)), 0, 43),
                 'last_connected_at' => now(),
@@ -299,6 +299,7 @@ final class MonovenTenant
         ManagedDatabase::factory()->postgres()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'ledger_production', 'db_user' => 'ledger_app']);
         ManagedDatabase::factory()->for($this->team)->for($this->servers['anvil-01'])->create(['name' => 'warehouse', 'db_user' => 'warehouse_app']);
         ManagedDatabase::factory()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'legacy_reports', 'db_user' => 'reports_app', 'is_external' => true]);
+        ManagedDatabase::factory()->redis()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'cache_production', 'db_user' => null, 'port' => 6380]);
     }
 
     private function deployments(): void

@@ -289,6 +289,11 @@ final class ActivityFeed
             'webhook_signature_rejected' => [$this->text((int) ($properties['count'] ?? 1) > 1 ? ((int) $properties['count']) . ' webhooks with a bad signature were rejected' : 'A webhook with a bad signature was rejected')],
             'database_created' => [$this->text('Database '), $this->mono($database?->name), $this->text(' created')],
             'database_backed_up' => [$this->text('Backup taken of '), $this->mono($database?->name)],
+            'database_deleted' => [$this->text('Database '), $this->mono($database?->name), $this->text(' deleted')],
+            'database_moved_off_shared_redis' => [$this->mono($database?->name), $this->text(' moved to a Redis of its own on port ' . (int) ($properties['port'] ?? 0))],
+            'shared_redis_turned_off' => [$this->text('Shared Redis turned off on '), $this->mono($server?->name)],
+            'database_password_shown' => [$this->text('Password of '), $this->mono($database?->name), $this->text(' shown')],
+            'database_password_rotated' => [$this->text('Password of '), $this->mono($database?->name), $this->text(' rotated')],
             default => null,
         };
 

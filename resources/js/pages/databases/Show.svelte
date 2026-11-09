@@ -3,12 +3,15 @@
 </script>
 
 <script lang="ts">
-    import { router } from '@inertiajs/svelte'
+    import { Form, page, router } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
+    import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
+    import { Input } from '@/components/ui/input'
+    import { Label } from '@/components/ui/label'
 
     let {
         server,
@@ -27,6 +30,9 @@
             status: string
             privilege_level: string
             is_external: boolean
+            has_password: boolean
+            password_shown: boolean
+            shared_redis: boolean
         }
         can: { viewCredentials: boolean; backup: boolean; delete: boolean }
         offsite?: { sent: string | null; error: string | null } | null
@@ -35,23 +41,59 @@
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
 
     let deleting = $state(false)
+    let moving = $state(false)
+    let rotating = $state(false)
     let working = $state(false)
+    let copied = $state<'password' | 'url' | null>(null)
+    let typed = $state('')
 
+    const password = $derived(database.has_password ? (page.flash?.databasePassword ?? null) : null)
+    const redis = $derived(database.type === 'redis')
     const dsn = $derived(
-        database.type === 'redis'
-            ? `redis://${database.host}:${database.port}`
-            : `${database.type}://${database.db_user}@${database.host}:${database.port}/${database.name}`
+        redis
+            ? `redis://${password === null ? '' : `:${encodeURIComponent(password)}@`}${database.host}:${database.port}`
+            : `${database.type}://${database.db_user}${password === null ? '' : `:${encodeURIComponent(password)}`}@${database.host}:${database.port}/${database.name}`
     )
+
+    function showPassword() {
+        working = true
+        router.post(
+            route('servers.databases.password.show', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => (working = false) }
+        )
+    }
+
+    function rotate() {
+        working = true
+        router.put(
+            route('servers.databases.password.update', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => ((working = false), (rotating = false), (copied = null)) }
+        )
+    }
+
+    async function copy(what: 'password' | 'url', value: string) {
+        await navigator.clipboard.writeText(value)
+        copied = what
+    }
 
     function backup() {
         router.post(route('servers.databases.backup', [server.id, database.id]), {}, { preserveScroll: true })
     }
 
-    function destroy() {
+    function moveToOwnRedis() {
         working = true
-        router.delete(route('servers.databases.destroy', [server.id, database.id]), {
-            onFinish: () => ((working = false), (deleting = false))
-        })
+        router.post(
+            route('servers.databases.own-redis', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => ((working = false), (moving = false)) }
+        )
+    }
+
+    function stopDeleting() {
+        typed = ''
+        deleting = false
     }
 </script>
 
@@ -105,22 +147,65 @@
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div>host {database.host}</div>
             <div>port {database.port}</div>
-            {#if database.db_user}<div>user {database.db_user}</div>{/if}
+            {#if database.db_user && !redis}<div>user {database.db_user}</div>{/if}
+            {#if password !== null}
+                <div class="break-all text-foreground" data-testid="database-password">password {password}</div>
+            {/if}
         </div>
-        <pre class="terminal mt-3 text-[11.5px] break-all whitespace-pre-wrap">{dsn}</pre>
-        <p class="mt-2 text-[12px] text-muted-foreground">
-            The password was shown once at creation and is encrypted at rest. Rotate it if you lose it.
-        </p>
+        <pre class="terminal mt-3 text-[11.5px] break-all whitespace-pre-wrap" data-testid="database-url">{dsn}</pre>
+        {#if database.has_password}
+            <p class="mt-2 text-[12px] text-muted-foreground" data-testid="database-password-note">
+                {password !== null
+                    ? "Copy it now. It isn't shown again; rotate it if you lose it."
+                    : database.password_shown
+                      ? 'It was shown once and is encrypted at rest. Rotate it if you lose it.'
+                      : 'It can be shown once, then only rotating gives you a new one. Both are recorded in the activity log.'}
+            </p>
+            {#if can.viewCredentials}
+                <div class="mt-3 flex flex-wrap gap-2">
+                    {#if password === null && !database.password_shown}
+                        <Button variant="outline" size="sm" disabled={working} onclick={showPassword}
+                            >Show password</Button
+                        >
+                    {:else if password !== null}
+                        <Button variant="outline" size="sm" onclick={() => copy('password', password)}
+                            >{copied === 'password' ? 'Copied' : 'Copy password'}</Button
+                        >
+                        <Button variant="outline" size="sm" onclick={() => copy('url', dsn)}
+                            >{copied === 'url' ? 'Copied' : 'Copy URL'}</Button
+                        >
+                    {/if}
+                    <Button variant="ghost" size="sm" disabled={working} onclick={() => (rotating = true)}
+                        >Rotate password</Button
+                    >
+                </div>
+            {/if}
+        {:else}
+            <p class="mt-2 text-[12px] text-muted-foreground" data-testid="shared-redis-note">
+                It has no password, so every app on {server.name} can read and change what's in it.
+            </p>
+            {#if can.viewCredentials}
+                <div class="mt-3">
+                    <Button variant="outline" size="sm" disabled={working} onclick={() => (moving = true)}
+                        >Give it its own Redis</Button
+                    >
+                </div>
+            {/if}
+        {/if}
     </div>
 
     <div class="flex flex-col gap-4">
         <div class="rounded-xl border border-border bg-card px-5.5 py-5">
             <h3 class="type-h3 m-0 mb-1">Access</h3>
             <p class="mb-3 text-[12.5px] text-muted-foreground">
-                Its own user, with only the privileges its app needs.
+                {database.shared_redis
+                    ? `No user of its own. Every app on ${server.name} shares it.`
+                    : redis
+                      ? 'An instance of its own. Only apps with its password get in.'
+                      : 'Its own user, with only the privileges its app needs.'}
             </p>
             <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-                <div>privileges {database.privilege_level}</div>
+                {#if !redis}<div>privileges {database.privilege_level}</div>{/if}
                 <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
         </div>
@@ -128,7 +213,11 @@
             <div class="border-danger flex-1 rounded-xl border bg-card px-5.5 py-5">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Removes the database from Coresmith. Take a backup first if anything still needs the data.
+                    {database.shared_redis
+                        ? "Removes it from Coresmith. The shared Redis keeps running and keeps what's in it."
+                        : redis
+                          ? `Stops and removes its Redis instance on ${server.name}, with everything in it.`
+                          : `Drops it and its user from ${server.name}. Take a backup first if anything still needs the data.`}
                 </p>
                 <Button variant="outline" size="sm" class="text-destructive-strong" onclick={() => (deleting = true)}
                     >Delete this database</Button
@@ -138,17 +227,75 @@
     </div>
 </div>
 
-<Dialog.Root bind:open={deleting}>
+<Dialog.Root bind:open={moving}>
     <Dialog.Content>
         <Dialog.Header>
-            <Dialog.Title>Delete {database.name}?</Dialog.Title>
+            <Dialog.Title>Give {database.name} a Redis of its own?</Dialog.Title>
             <Dialog.Description
-                >It's removed from Coresmith. Take a backup first if anything still needs the data.</Dialog.Description
+                >Coresmith starts a Redis on a free port with its own password and shows the password once. What's in
+                the shared Redis stays there: queued jobs, sessions and cached values don't move. Apps keep using the
+                shared Redis until you give them the new port and password and deploy.</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>
-            <Button variant="ghost" onclick={() => (deleting = false)}>Keep it</Button>
-            <Button variant="destructive" disabled={working} onclick={destroy}>Delete it</Button>
+            <Button variant="ghost" onclick={() => (moving = false)}>Keep it shared</Button>
+            <Button disabled={working} onclick={moveToOwnRedis}>Give it its own Redis</Button>
         </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={rotating}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title>Rotate the password of {database.name}?</Dialog.Title>
+            <Dialog.Description
+                >Apps using the current password lose access until you give them the new one and deploy.</Dialog.Description
+            >
+        </Dialog.Header>
+        <Dialog.Footer>
+            <Button variant="ghost" onclick={() => (rotating = false)}>Keep it</Button>
+            <Button disabled={working} onclick={rotate}>Rotate it</Button>
+        </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={deleting} onOpenChange={(open) => !open && (typed = '')}>
+    <Dialog.Content>
+        <Form
+            method="delete"
+            action={route('servers.databases.destroy', [server.id, database.id])}
+            options={{ preserveScroll: true }}
+            onSuccess={stopDeleting}
+        >
+            {#snippet children({ errors, processing })}
+                <Dialog.Header>
+                    <Dialog.Title>Delete {database.name}?</Dialog.Title>
+                    <Dialog.Description
+                        >{database.shared_redis
+                            ? `It's removed from Coresmith. The shared Redis on ${server.name} keeps running and keeps what's in it.`
+                            : redis
+                              ? `Coresmith stops and removes its Redis instance on ${server.name}. Everything in it is gone and apps using it stop working.`
+                              : `Coresmith drops it and its user from ${server.name}. Everything in it is gone and apps using it stop working. Take a backup first if anything still needs the data.`}</Dialog.Description
+                    >
+                </Dialog.Header>
+                <div class="mt-4">
+                    <Label for="delete-confirm" class="mb-1.5">Type {database.name} to confirm</Label>
+                    <Input
+                        id="delete-confirm"
+                        name="confirm"
+                        autocomplete="off"
+                        bind:value={typed}
+                        aria-invalid={errors.confirm ? true : undefined}
+                    />
+                    <FieldError message={errors.confirm} />
+                </div>
+                <Dialog.Footer>
+                    <Button variant="ghost" type="button" onclick={stopDeleting}>Keep it</Button>
+                    <Button variant="destructive" type="submit" disabled={processing || typed !== database.name}
+                        >Delete it</Button
+                    >
+                </Dialog.Footer>
+            {/snippet}
+        </Form>
     </Dialog.Content>
 </Dialog.Root>

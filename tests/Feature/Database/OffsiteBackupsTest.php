@@ -164,7 +164,7 @@ test('a dump over five gigabytes stays on the server', function () {
 test('an offsite backup is handed to its own job', function () {
     Queue::fake([SendBackupOffsite::class]);
     $mysql = offsiteDatabase();
-    $redis = offsiteDatabase($mysql->team, server: ['name' => 'forge-02'], attributes: ['type' => DatabaseType::Redis, 'name' => 'cache']);
+    $redis = offsiteDatabase($mysql->team, server: ['name' => 'forge-02'], attributes: ['type' => DatabaseType::Redis, 'port' => 6379, 'name' => 'cache']);
 
     offsiteRun(new BackupDatabase($mysql, '20261018023000', offsite: true), new FakeSSHTransport);
 
@@ -349,7 +349,7 @@ test('on cloud the nightly run covers business teams only', function () {
     $pro = Team::factory()->subscribed(Plan::Pro)->owned()->create(['slug' => 'pro']);
     $mysql = offsiteDatabase($business);
     $postgres = offsiteDatabase($business, attributes: ['type' => DatabaseType::Postgresql, 'name' => 'reports']);
-    $redis = offsiteDatabase($business, attributes: ['type' => DatabaseType::Redis, 'name' => 'cache']);
+    $redis = offsiteDatabase($business, attributes: ['type' => DatabaseType::Redis, 'port' => 6379, 'name' => 'cache']);
     $stopped = offsiteDatabase($business, server: ['name' => 'forge-02', 'status' => ServerStatus::Disconnected], attributes: ['name' => 'archive']);
     offsiteDatabase($pro, attributes: ['name' => 'pro_db']);
     $businessDestination = offsiteDestination($business);

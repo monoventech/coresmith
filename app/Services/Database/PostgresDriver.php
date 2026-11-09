@@ -31,6 +31,13 @@ final class PostgresDriver
         return "CREATE ROLE \"{$user}\" LOGIN PASSWORD {$escaped} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;";
     }
 
+    public function changePassword(string $user, #[\SensitiveParameter] string $password): string
+    {
+        $user = SafeName::assertDatabaseIdentifier($user);
+
+        return "ALTER ROLE \"{$user}\" WITH PASSWORD {$this->quoteLiteral($password)};";
+    }
+
     public function grant(string $database, string $user, PrivilegeLevel $level): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);
@@ -58,6 +65,13 @@ final class PostgresDriver
         $name = SafeName::assertDatabaseIdentifier($name);
 
         return "DROP DATABASE IF EXISTS \"{$name}\";";
+    }
+
+    public function endSessions(string $database): string
+    {
+        $database = SafeName::assertDatabaseIdentifier($database);
+
+        return "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$database}' AND pid <> pg_backend_pid();";
     }
 
     public function dropUser(string $user): string
@@ -97,13 +111,18 @@ final class PostgresDriver
 
     public function command(string $sql, ?string $database = null): string
     {
-        $command = 'sudo -u postgres psql -v ON_ERROR_STOP=1';
+        return $this->client($database) . ' -c ' . escapeshellarg($sql);
+    }
+
+    public function client(?string $database = null): string
+    {
+        $client = 'sudo -u postgres psql -v ON_ERROR_STOP=1';
 
         if ($database !== null) {
-            $command .= ' -d ' . escapeshellarg(SafeName::assertDatabaseIdentifier($database));
+            $client .= ' -d ' . escapeshellarg(SafeName::assertDatabaseIdentifier($database));
         }
 
-        return $command . ' -c ' . escapeshellarg($sql);
+        return $client;
     }
 
     private function quoteLiteral(string $value): string

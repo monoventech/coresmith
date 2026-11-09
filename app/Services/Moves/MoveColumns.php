@@ -33,7 +33,7 @@ final class MoveColumns
     ];
 
     public const DATABASES = [
-        'type', 'name', 'db_user', 'db_password', 'host', 'port', 'status', 'privilege_level', 'extensions',
+        'type', 'name', 'db_user', 'db_password', 'credentials_shown_at', 'host', 'port', 'status', 'privilege_level', 'extensions',
         'is_external', 'last_offsite_at', 'last_offsite_key', 'last_offsite_error',
     ];
 

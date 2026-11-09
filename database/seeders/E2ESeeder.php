@@ -168,7 +168,8 @@ final class E2ESeeder extends Seeder
             $this->application("scratch-{$code}", 8110 + $index * 30);
             $this->application("doomed-{$code}", 8120 + $index * 30);
 
-            ManagedDatabase::factory()->postgres()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
+            ManagedDatabase::factory()->redis()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
+            ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
             $this->server("detach-{$code}", '198.51.100.' . (60 + $index), ServerStatus::Active);
@@ -191,6 +192,7 @@ final class E2ESeeder extends Seeder
         $this->ssrDidNotStart($this->realtime('ssr-failed', 9220, [], Server::query()->where('name', 'hot-01')->sole()));
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->connectFixtures();
+        $this->databasePasswordFixtures();
         $this->auditFixtures();
         $this->invitations($tenant->owner);
 
@@ -352,6 +354,18 @@ final class E2ESeeder extends Seeder
     {
         TeamInvitation::factory()->for($this->team)->withToken(self::WAITING_INVITATION_TOKEN)->create(['email' => 'waiting@coresmith.test', 'invited_by' => $owner->id]);
         TeamInvitation::factory()->for($this->team)->withToken(self::EXPIRED_INVITATION_TOKEN)->expired()->create(['email' => 'expired@coresmith.test', 'invited_by' => $owner->id]);
+    }
+
+    private function databasePasswordFixtures(): void
+    {
+        $vault = $this->server('vault-01', '127.0.0.1', ServerStatus::Active);
+        $vault->forceFill(['ssh_port' => 1])->save();
+
+        ManagedDatabase::factory()->for($this->team)->for($vault)->create(['name' => 'vault_production', 'db_user' => 'vault_app']);
+        ManagedDatabase::factory()->redis()->for($this->team)->for($vault)->create(['name' => 'vault_cache', 'db_user' => null]);
+
+        $unused = $this->server('vault-02', '127.0.0.1', ServerStatus::Active);
+        $unused->forceFill(['ssh_port' => 1, 'meta' => [...(array) $unused->meta, 'installed_databases' => ['redis']]])->save();
     }
 
     private function connectFixtures(): void

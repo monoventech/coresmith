@@ -158,6 +158,18 @@ test('sudo is not prefixed for root', function () {
     expect($transport->commands())->toContain('systemctl restart caddy');
 });
 
+test('input sent to a command run through sudo stays off the command line', function (string $user, string $expected) {
+    $server = Server::factory()->create(['ssh_user' => $user, 'host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    connectTo($server, $transport)->executeWithInput('mysql --protocol=socket', 'ALTER USER secret;', sudo: true);
+
+    expect($transport->sent())->toBe([[$expected, 'ALTER USER secret;']]);
+})->with([
+    'a sudo user' => ['coresmith', 'sudo mysql --protocol=socket'],
+    'root' => ['root', 'mysql --protocol=socket'],
+]);
+
 test('a compound command runs whole as root for a non-root user', function () {
     $server = Server::factory()->create(['ssh_user' => 'deploy', 'host_key_fingerprint' => null]);
     $transport = new FakeSSHTransport;
