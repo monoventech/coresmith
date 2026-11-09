@@ -3,12 +3,15 @@
 </script>
 
 <script lang="ts">
-    import { page, router } from '@inertiajs/svelte'
+    import { Form, page, router } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
+    import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
+    import { Input } from '@/components/ui/input'
+    import { Label } from '@/components/ui/label'
 
     let {
         server,
@@ -29,6 +32,7 @@
             is_external: boolean
             has_password: boolean
             password_shown: boolean
+            shared_redis: boolean
         }
         can: { viewCredentials: boolean; backup: boolean; delete: boolean }
         offsite?: { sent: string | null; error: string | null } | null
@@ -40,6 +44,7 @@
     let rotating = $state(false)
     let working = $state(false)
     let copied = $state<'password' | 'url' | null>(null)
+    let typed = $state('')
 
     const password = $derived(database.has_password ? (page.flash?.databasePassword ?? null) : null)
     const dsn = $derived(
@@ -75,11 +80,9 @@
         router.post(route('servers.databases.backup', [server.id, database.id]), {}, { preserveScroll: true })
     }
 
-    function destroy() {
-        working = true
-        router.delete(route('servers.databases.destroy', [server.id, database.id]), {
-            onFinish: () => ((working = false), (deleting = false))
-        })
+    function stopDeleting() {
+        typed = ''
+        deleting = false
     }
 </script>
 
@@ -133,7 +136,7 @@
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div>host {database.host}</div>
             <div>port {database.port}</div>
-            {#if database.db_user && database.has_password}<div>user {database.db_user}</div>{/if}
+            {#if database.db_user && !database.shared_redis}<div>user {database.db_user}</div>{/if}
             {#if password !== null}
                 <div class="break-all text-foreground" data-testid="database-password">password {password}</div>
             {/if}
@@ -177,12 +180,12 @@
         <div class="rounded-xl border border-border bg-card px-5.5 py-5">
             <h3 class="type-h3 m-0 mb-1">Access</h3>
             <p class="mb-3 text-[12.5px] text-muted-foreground">
-                {database.has_password
+                {!database.shared_redis
                     ? 'Its own user, with only the privileges its app needs.'
                     : `No user of its own. Every app on ${server.name} shares it.`}
             </p>
             <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
-                {#if database.has_password}<div>privileges {database.privilege_level}</div>{/if}
+                {#if !database.shared_redis}<div>privileges {database.privilege_level}</div>{/if}
                 <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
         </div>
@@ -190,7 +193,9 @@
             <div class="border-danger flex-1 rounded-xl border bg-card px-5.5 py-5">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Removes the database from Coresmith. Take a backup first if anything still needs the data.
+                    {database.shared_redis
+                        ? "Removes it from Coresmith. The shared Redis keeps running and keeps what's in it."
+                        : `Drops it and its user from ${server.name}. Take a backup first if anything still needs the data.`}
                 </p>
                 <Button variant="outline" size="sm" class="text-destructive-strong" onclick={() => (deleting = true)}
                     >Delete this database</Button
@@ -215,17 +220,41 @@
     </Dialog.Content>
 </Dialog.Root>
 
-<Dialog.Root bind:open={deleting}>
+<Dialog.Root bind:open={deleting} onOpenChange={(open) => !open && (typed = '')}>
     <Dialog.Content>
-        <Dialog.Header>
-            <Dialog.Title>Delete {database.name}?</Dialog.Title>
-            <Dialog.Description
-                >It's removed from Coresmith. Take a backup first if anything still needs the data.</Dialog.Description
-            >
-        </Dialog.Header>
-        <Dialog.Footer>
-            <Button variant="ghost" onclick={() => (deleting = false)}>Keep it</Button>
-            <Button variant="destructive" disabled={working} onclick={destroy}>Delete it</Button>
-        </Dialog.Footer>
+        <Form
+            method="delete"
+            action={route('servers.databases.destroy', [server.id, database.id])}
+            options={{ preserveScroll: true }}
+            onSuccess={stopDeleting}
+        >
+            {#snippet children({ errors, processing })}
+                <Dialog.Header>
+                    <Dialog.Title>Delete {database.name}?</Dialog.Title>
+                    <Dialog.Description
+                        >{database.shared_redis
+                            ? `It's removed from Coresmith. The shared Redis on ${server.name} keeps running and keeps what's in it.`
+                            : `Coresmith drops it and its user from ${server.name}. Everything in it is gone and apps using it stop working. Take a backup first if anything still needs the data.`}</Dialog.Description
+                    >
+                </Dialog.Header>
+                <div class="mt-4">
+                    <Label for="delete-confirm" class="mb-1.5">Type {database.name} to confirm</Label>
+                    <Input
+                        id="delete-confirm"
+                        name="confirm"
+                        autocomplete="off"
+                        bind:value={typed}
+                        aria-invalid={errors.confirm ? true : undefined}
+                    />
+                    <FieldError message={errors.confirm} />
+                </div>
+                <Dialog.Footer>
+                    <Button variant="ghost" type="button" onclick={stopDeleting}>Keep it</Button>
+                    <Button variant="destructive" type="submit" disabled={processing || typed !== database.name}
+                        >Delete it</Button
+                    >
+                </Dialog.Footer>
+            {/snippet}
+        </Form>
     </Dialog.Content>
 </Dialog.Root>

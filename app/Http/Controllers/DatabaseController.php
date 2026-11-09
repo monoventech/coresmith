@@ -10,18 +10,22 @@ namespace App\Http\Controllers;
 
 use App\Enums\DatabaseType;
 use App\Enums\PlanFeature;
+use App\Http\Requests\Database\DestroyDatabaseRequest;
 use App\Http\Requests\Database\StoreDatabaseRequest;
 use App\Jobs\BackupDatabase;
 use App\Jobs\CreateDatabase;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Services\Billing\TeamBilling;
+use App\Services\Database\DatabaseManager;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
+use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 final class DatabaseController extends Controller
 {
@@ -89,14 +93,46 @@ final class DatabaseController extends Controller
         ]);
     }
 
-    public function destroy(Server $server, ManagedDatabase $database): RedirectResponse
+    public function destroy(DestroyDatabaseRequest $request, Server $server, ManagedDatabase $database, SSHConnectionManager $connections, DatabaseManager $databases): RedirectResponse
     {
-        $this->authorize('delete', $database);
         $this->assertBelongsTo($server, $database);
 
-        $database->delete();
+        $lock = $database->credentialsLock();
 
-        return to_route('servers.databases.index', $server)->with('success', 'Database removed.');
+        if (!$lock->get()) {
+            return back()->with('error', 'Coresmith is still working on this database. Try again in a minute.');
+        }
+
+        try {
+            if (!$database->onSharedRedis() && !$this->dropped($connections, $databases, $server, $database)) {
+                return back()->with('error', "Coresmith couldn't delete {$database->name} from {$server->name}, so it's still there. Check the server is online and nothing is using the database, then try again.");
+            }
+
+            $database->delete();
+        } finally {
+            $lock->release();
+        }
+
+        activity()->performedOn($database)->log('database_deleted');
+
+        return to_route('servers.databases.index', $server)->with('success', $database->onSharedRedis()
+            ? "Removed {$database->name}. The shared Redis on {$server->name} keeps what's in it."
+            : "Deleted {$database->name} and its user from {$server->name}.");
+    }
+
+    private function dropped(SSHConnectionManager $connections, DatabaseManager $databases, Server $server, ManagedDatabase $database): bool
+    {
+        try {
+            $databases->drop($connections->for($server), $database);
+        } catch (RuntimeException $e) {
+            report($e);
+
+            return false;
+        } finally {
+            $connections->disconnect($server);
+        }
+
+        return true;
     }
 
     public function backup(Server $server, ManagedDatabase $database): RedirectResponse
@@ -149,6 +185,7 @@ final class DatabaseController extends Controller
             'privilege_level' => $database->privilege_level,
             'is_external' => (bool) $database->is_external,
             'has_password' => $database->hasPassword(),
+            'shared_redis' => $database->onSharedRedis(),
             'password_shown' => $database->credentials_shown_at !== null,
         ];
     }

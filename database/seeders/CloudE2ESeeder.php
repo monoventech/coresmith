@@ -207,7 +207,7 @@ final class CloudE2ESeeder extends Seeder
             'last_offsite_at' => now()->subHours(2),
             'last_offsite_key' => 'nightly/atelier/atelier-01/atelier_main/atelier_main-' . now()->subHours(2)->format('YmdHis') . '.sql.gz',
         ]);
-        ManagedDatabase::factory()->for($team)->for($server)->create(['type' => DatabaseType::Redis, 'name' => 'atelier_cache']);
+        ManagedDatabase::factory()->redis()->for($team)->for($server)->create(['name' => 'atelier_cache']);
         ManagedDatabase::factory()->for($team)->for($server)->create([
             'type' => DatabaseType::Mysql,
             'name' => 'atelier_legacy',

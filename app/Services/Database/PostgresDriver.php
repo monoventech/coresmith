@@ -67,6 +67,13 @@ final class PostgresDriver
         return "DROP DATABASE IF EXISTS \"{$name}\";";
     }
 
+    public function endSessions(string $database): string
+    {
+        $database = SafeName::assertDatabaseIdentifier($database);
+
+        return "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$database}' AND pid <> pg_backend_pid();";
+    }
+
     public function dropUser(string $user): string
     {
         $user = SafeName::assertDatabaseIdentifier($user);

@@ -43,4 +43,12 @@ class ManagedDatabaseFactory extends Factory
             'port' => 5432,
         ]);
     }
+
+    public function redis(): static
+    {
+        return $this->state(fn(array $attributes): array => [
+            'type' => DatabaseType::Redis,
+            'port' => ManagedDatabase::SHARED_REDIS_PORT,
+        ]);
+    }
 }

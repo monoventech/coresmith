@@ -27,6 +27,8 @@ class ManagedDatabase extends Model
 
     public const CREDENTIALS_LOCK_SECONDS = 1320;
 
+    public const SHARED_REDIS_PORT = 6379;
+
     protected $table = 'databases';
 
     protected $guarded = ['id'];
@@ -43,9 +45,14 @@ class ManagedDatabase extends Model
         return $this->belongsTo(Team::class);
     }
 
+    public function onSharedRedis(): bool
+    {
+        return $this->type === DatabaseType::Redis && (int) $this->port === self::SHARED_REDIS_PORT;
+    }
+
     public function hasPassword(): bool
     {
-        return $this->type !== DatabaseType::Redis;
+        return !$this->onSharedRedis();
     }
 
     public function takesBackups(): bool
