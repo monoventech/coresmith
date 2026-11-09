@@ -695,7 +695,7 @@ test('a secret Laravel reads as empty, like the null the example environment shi
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($result)->toContain('REDIS_PASSWORD=generated')
         ->and($result)->toContain('KEEP=me');
-})->with(['null', '(null)', 'empty', '(empty)', '""']);
+})->with(['null', '(null)', 'empty', '(empty)', '""', 'NULL', '(Null)', 'EMPTY', '(Empty)']);
 
 test('an existing secret is never replaced and a missing one is created', function () {
     $directory = sys_get_temp_dir() . '/coresmith-secrets-' . getmypid();

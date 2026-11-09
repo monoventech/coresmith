@@ -765,7 +765,7 @@ vault_key_is_valid() {
 }
 
 ensure_env_secret() {
-    case "$(env_value "$1")" in
+    case "$(env_value "$1" | tr '[:upper:]' '[:lower:]')" in
     '' | null | '(null)' | empty | '(empty)') update_env "$1" "$2" ;;
     esac
 }
