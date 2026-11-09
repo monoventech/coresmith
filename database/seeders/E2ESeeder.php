@@ -362,6 +362,10 @@ final class E2ESeeder extends Seeder
         $vault->forceFill(['ssh_port' => 1])->save();
 
         ManagedDatabase::factory()->for($this->team)->for($vault)->create(['name' => 'vault_production', 'db_user' => 'vault_app']);
+        ManagedDatabase::factory()->redis()->for($this->team)->for($vault)->create(['name' => 'vault_cache', 'db_user' => null]);
+
+        $unused = $this->server('vault-02', '127.0.0.1', ServerStatus::Active);
+        $unused->forceFill(['ssh_port' => 1, 'meta' => [...(array) $unused->meta, 'installed_databases' => ['redis']]])->save();
     }
 
     private function connectFixtures(): void

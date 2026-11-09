@@ -63,7 +63,7 @@ final class RedisPorts
     /**
      * @return list<int>
      */
-    private function listening(SSHConnection $connection): array
+    public function listening(SSHConnection $connection): array
     {
         preg_match_all('/^\S+\s+\d+\s+\d+\s+\S*:(\d+)\s/m', $connection->execute('ss -Hltn')->output, $matches);
 

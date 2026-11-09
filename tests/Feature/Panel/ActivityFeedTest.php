@@ -190,6 +190,20 @@ test('a deleted database is still named in the activity', function () {
     expect(feedSentence((new ActivityFeed)->forTeam($team)[0]))->toBe('Database shop_production deleted');
 });
 
+test('a database leaving the shared Redis, and the shared Redis turned off, are described', function () {
+    [$team, $server] = feedFixture();
+    $database = ManagedDatabase::factory()->redis()->for($team)->for($server)->create(['name' => 'cache']);
+
+    feedLog($database, 'database_moved_off_shared_redis', ['port' => 6380]);
+    $this->travel(1)->second();
+    feedLog($server, 'shared_redis_turned_off');
+
+    expect(array_map(feedSentence(...), (new ActivityFeed)->forTeam($team)))->toBe([
+        "Shared Redis turned off on {$server->name}",
+        'cache moved to a Redis of its own on port 6380',
+    ]);
+});
+
 test('another teams activity is never shown', function () {
     [$team] = feedFixture();
     [, $theirServer, $theirApplication] = feedFixture();

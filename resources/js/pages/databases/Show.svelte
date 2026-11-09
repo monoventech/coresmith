@@ -41,6 +41,7 @@
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
 
     let deleting = $state(false)
+    let moving = $state(false)
     let rotating = $state(false)
     let working = $state(false)
     let copied = $state<'password' | 'url' | null>(null)
@@ -79,6 +80,15 @@
 
     function backup() {
         router.post(route('servers.databases.backup', [server.id, database.id]), {}, { preserveScroll: true })
+    }
+
+    function moveToOwnRedis() {
+        working = true
+        router.post(
+            route('servers.databases.own-redis', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => ((working = false), (moving = false)) }
+        )
     }
 
     function stopDeleting() {
@@ -174,6 +184,13 @@
             <p class="mt-2 text-[12px] text-muted-foreground" data-testid="shared-redis-note">
                 It has no password, so every app on {server.name} can read and change what's in it.
             </p>
+            {#if can.viewCredentials}
+                <div class="mt-3">
+                    <Button variant="outline" size="sm" disabled={working} onclick={() => (moving = true)}
+                        >Give it its own Redis</Button
+                    >
+                </div>
+            {/if}
         {/if}
     </div>
 
@@ -209,6 +226,23 @@
         {/if}
     </div>
 </div>
+
+<Dialog.Root bind:open={moving}>
+    <Dialog.Content>
+        <Dialog.Header>
+            <Dialog.Title>Give {database.name} a Redis of its own?</Dialog.Title>
+            <Dialog.Description
+                >Coresmith starts a Redis on a free port with its own password and shows the password once. What's in
+                the shared Redis stays there: queued jobs, sessions and cached values don't move. Apps keep using the
+                shared Redis until you give them the new port and password and deploy.</Dialog.Description
+            >
+        </Dialog.Header>
+        <Dialog.Footer>
+            <Button variant="ghost" onclick={() => (moving = false)}>Keep it shared</Button>
+            <Button disabled={working} onclick={moveToOwnRedis}>Give it its own Redis</Button>
+        </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={rotating}>
     <Dialog.Content>
