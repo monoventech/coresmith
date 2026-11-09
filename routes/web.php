@@ -24,6 +24,7 @@ use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\ServerTabsController;
 use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\SetupController;
+use App\Http\Controllers\SharedRedisController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
@@ -152,6 +153,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('servers/{server}/databases/{database}/password', [DatabasePasswordController::class, 'update'])
         ->middleware('throttle:10,1,database-password-rotation')
         ->name('servers.databases.password.update');
+    Route::post('servers/{server}/databases/{database}/own-redis', [SharedRedisController::class, 'move'])
+        ->middleware('throttle:10,1,shared-redis-move')
+        ->name('servers.databases.own-redis');
+    Route::post('servers/{server}/shared-redis/off', [SharedRedisController::class, 'turnOff'])
+        ->middleware('throttle:6,1,shared-redis-off')
+        ->name('servers.shared-redis.off');
 
     Route::resource('ssh-keys', SshKeyController::class)->only(['store', 'destroy']);
 

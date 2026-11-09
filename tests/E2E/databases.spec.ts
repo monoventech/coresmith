@@ -312,6 +312,92 @@ test.describe('database passwords', () => {
     })
 })
 
+test.describe('the shared Redis', () => {
+    test('a database on it is offered a Redis of its own, and a server Coresmith cannot reach keeps it shared', async ({
+        page
+    }) => {
+        await gotoDatabase(page, 'vault-01', 'vault_cache')
+
+        await page.getByRole('button', { name: 'Give it its own Redis' }).click()
+        await expect(dialog(page)).toContainText('Give vault_cache a Redis of its own?')
+        await expect(dialog(page)).toContainText(
+            "What's in the shared Redis stays there: queued jobs, sessions and cached values don't move."
+        )
+        await dialog(page).getByRole('button', { name: 'Give it its own Redis' }).click()
+
+        await expect(toast(page)).toContainText(
+            "Coresmith couldn't start a Redis of its own for vault_cache on vault-01, so it's still on the shared Redis. Check the server is online, then try again."
+        )
+        await expect(page.getByTestId('shared-redis-note')).toBeVisible()
+    })
+
+    test('the Databases tab counts the databases still on it', async ({ page }) => {
+        await gotoServerTab(page, 'vault-01', 'Databases')
+
+        await expect(page.getByTestId('shared-redis')).toHaveText(
+            "1 Redis database still uses the shared Redis on port 6379, which has no password, so every app on vault-01 can read and change what's in it. Give each one a Redis of its own from its page."
+        )
+        await expect(page.getByRole('button', { name: 'Turn off the shared Redis' })).toHaveCount(0)
+    })
+
+    test('an unused shared Redis is offered to be turned off, and a server Coresmith cannot reach keeps it on', async ({
+        page
+    }) => {
+        await gotoServerTab(page, 'vault-02', 'Databases')
+
+        await expect(page.getByTestId('shared-redis')).toContainText(
+            'No database uses the shared Redis on port 6379 any more, but it still answers without a password.'
+        )
+        await page.getByRole('button', { name: 'Turn off the shared Redis' }).click()
+        await expect(dialog(page)).toContainText('Turn off the shared Redis on vault-02?')
+        await dialog(page).getByRole('button', { name: 'Turn it off' }).click()
+
+        await expect(toast(page)).toContainText(
+            "Coresmith couldn't turn off the shared Redis on vault-02. Check the server is online, then try again."
+        )
+        await expect(page.getByRole('button', { name: 'Turn off the shared Redis' })).toBeVisible()
+    })
+
+    test('the hardening tab names the shared Redis as the exception to dedicated credentials', async ({ page }) => {
+        await gotoServerTab(page, 'vault-02', 'Hardening')
+
+        await expect(page.getByRole('heading', { name: 'Nine-layer app isolation' }).locator('..')).toContainText(
+            'Dedicated database credentials, except the shared Redis on port 6379'
+        )
+    })
+
+    test.describe('accessibility', () => {
+        test.use({ reducedMotion: 'reduce' })
+
+        for (const theme of ['light', 'dark'] as const) {
+            test(`the shared Redis card and its dialogs have no serious or critical violations in ${theme}`, async ({
+                page
+            }) => {
+                await useTheme(page, theme)
+                await gotoServerTab(page, 'vault-02', 'Databases')
+                await page.getByRole('button', { name: 'Turn off the shared Redis' }).click()
+                await expect(dialog(page)).toBeVisible()
+                expect(await blockingViolations(page), `turn off dialog in ${theme}`).toEqual([])
+
+                await gotoDatabase(page, 'vault-01', 'vault_cache')
+                await page.getByRole('button', { name: 'Give it its own Redis' }).click()
+                await expect(dialog(page)).toBeVisible()
+                expect(await blockingViolations(page), `move dialog in ${theme}`).toEqual([])
+            })
+        }
+    })
+})
+
+asMember('a deployer sees the shared Redis but cannot move a database off it or turn it off', async ({ page }) => {
+    await gotoDatabase(page, 'vault-01', 'vault_cache')
+    await expect(page.getByTestId('shared-redis-note')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Give it its own Redis' })).toHaveCount(0)
+
+    await gotoServerTab(page, 'vault-02', 'Databases')
+    await expect(page.getByTestId('shared-redis')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Turn off the shared Redis' })).toHaveCount(0)
+})
+
 asMember('a deployer sees how to connect but cannot show or rotate the password', async ({ page }) => {
     await gotoDatabase(page, 'forge-01', 'atlas_production')
 
