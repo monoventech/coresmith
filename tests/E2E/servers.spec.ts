@@ -168,11 +168,13 @@ test.describe('a server', () => {
 
         await page.getByRole('button', { name: 'Detach' }).click()
         await expect(dialog(page)).toContainText(`Detach ${name}?`)
-        await expect(dialog(page)).toContainText('The VM itself, and everything on it, is untouched.')
+        await expect(dialog(page)).toContainText('Coresmith takes its key off this server and stops managing it.')
         await dialog(page).getByRole('button', { name: 'Detach server' }).click()
 
         await page.waitForURL(/\/dashboard$/)
-        await expect(toast(page)).toContainText('Detached.')
+        await expect(toast(page)).toContainText(
+            `Detached. Coresmith couldn't take its key off ${name}, so remove the line ending in coresmith from /root/.ssh/authorized_keys there.`
+        )
         await expect(page.getByTestId('server-card').getByRole('link', { name, exact: true })).toHaveCount(0)
     })
 

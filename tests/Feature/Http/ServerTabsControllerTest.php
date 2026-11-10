@@ -47,7 +47,7 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
             ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
             ->where('hardening', ServerTabsController::HARDENING)
             ->where('admin_move_error', null)
-            ->where('ssh', ['verified' => true, 'passwords_kept' => false, 'error' => null])
+            ->where('ssh', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null])
             ->where('firewall.open', [2222, 80, 443])
             ->where('firewall.ssh_port', 2222)
             ->where('firewall.changes', [])
@@ -103,16 +103,19 @@ test("on Coresmith's own machine whose firewall was already on, only the web por
         ->assertInertia(fn($page) => $page->where('firewall.open', [80, 443])->where('firewall.kept_ssh', true));
 });
 
-test("Coresmith's own machine that already refuses passwords by its own settings reads as key-only, though Coresmith leaves them alone", function () {
+test("on Coresmith's own machine the hardening tab says SSH is left as its owner set it up, and whether it takes passwords", function (array $meta, bool $off) {
     $team = Team::factory()->create();
-    $server = serverTabServer($team, ['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'passwords_kept', 'ssh_passwords' => 'off']]);
+    $server = serverTabServer($team, ['runs_coresmith' => true, 'meta' => $meta]);
 
     $this->actingAs(serverTabMember($team))
         ->get(route('servers.hardening', $server))
         ->assertInertia(fn($page) => $page
-            ->where('ssh', ['verified' => true, 'passwords_kept' => false, 'error' => null])
-            ->where('hardening', fn($items) => collect($items)->contains(ServerTabsController::SSH_KEY_ONLY)));
-});
+            ->where('ssh', ['verified' => false, 'owner' => true, 'passwords_off' => $off, 'error' => null])
+            ->where('hardening', fn($items) => collect($items)->contains(ServerTabsController::SSH_LEFT_TO_OWNER) && !collect($items)->contains(ServerTabsController::SSH_KEY_ONLY)));
+})->with([
+    'passwords off' => [['ssh_hardening' => 'owner', 'ssh_passwords' => 'off'], true],
+    'passwords on' => [['ssh_hardening' => 'owner'], false],
+]);
 
 test('the default ssh port is not listed twice among the open ports', function () {
     $team = Team::factory()->create();

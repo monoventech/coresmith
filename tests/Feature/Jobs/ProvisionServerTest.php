@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Caddy\CaddyInstaller;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Server\OsDetector;
+use App\Services\Server\SecurityHardening;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Database\QueryException;
@@ -417,6 +418,19 @@ test("phase 6 on Coresmith's own machine keeps the firewall it already has, open
         ->and($commands)->not->toContain('default deny incoming')
         ->and($commands)->not->toContain('ufw --force enable')
         ->and($server->fresh()->meta['firewall_ssh'] ?? null)->toBe('kept');
+});
+
+test("on Coresmith's own machine, provisioning leaves the owner's SSH settings and timezone alone", function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'runs_coresmith' => true]);
+    $transport = provisioningTransport()->respondTo('caddy adapt', (string) file_get_contents(base_path('tests/Fixtures/Caddy/adapted-internal.json')));
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($transport->uploads())->not->toHaveKey(SecurityHardening::SSHD_CONFIG)
+        ->and($commands)->not->toContain('timedatectl set-timezone')
+        ->and($server->fresh()->meta['ssh_hardening'] ?? null)->toBe('owner');
 });
 
 test("phase 6 on Coresmith's own machine turns a firewall that was off on with SSH open, so nobody is locked out", function () {

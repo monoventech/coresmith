@@ -142,7 +142,7 @@ test.describe('general settings', () => {
 
         await expect(keys).toContainText('maya@monoven')
         await expect(keys.getByTestId('ssh-keys-reach')).toHaveText(
-            'Installed on every server you manage. Password login stays off.'
+            'Installed on every server you manage, except the machine Coresmith runs on. Password login stays off.'
         )
 
         await keys.getByRole('button', { name: 'Add key' }).click()

@@ -40,6 +40,7 @@ final class SSHConnection
     public function __construct(
         private readonly Server $server,
         private readonly SSHTransport $transport,
+        private readonly int $timeout = self::TIMEOUT_SECONDS,
     ) {}
 
     public function server(): Server
@@ -147,7 +148,7 @@ final class SSHConnection
             throw ServerHasNoAddress::forServer($this->server);
         }
 
-        $this->transport->connect($this->server->ip_address, $this->server->ssh_port, self::TIMEOUT_SECONDS);
+        $this->transport->connect($this->server->ip_address, $this->server->ssh_port, $this->timeout);
 
         $this->verifyHostKey();
     }

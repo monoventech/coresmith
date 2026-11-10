@@ -172,7 +172,7 @@ final class E2ESeeder extends Seeder
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
-            $this->server("detach-{$code}", '198.51.100.' . (60 + $index), ServerStatus::Active);
+            $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
             $this->application("busy-{$code}", 9200 + $index * 10);
