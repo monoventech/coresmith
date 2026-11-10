@@ -19,6 +19,7 @@ KEY=""
 HOST=""
 FEED_PID=""
 SCENARIO="setting up"
+CURRENT=""
 
 usage() {
     cat <<USAGE
@@ -154,6 +155,13 @@ feed() {
         "$1" "$1" "$(date +%Y-%m-%d)" >"$FEED/v1/version"
 }
 
+next_version() {
+    local major minor patch
+
+    IFS=. read -r major minor patch <<<"${CURRENT%%-*}"
+    printf '%s.%s.%s' "$major" "$minor" "$((patch + $1))"
+}
+
 write_as_panel() {
     sudo -u coresmith sh -c 'umask 077 && printf "%s" "$1" >"$2.tmp" && mv -f "$2.tmp" "$2"' sh "$1" "$2"
 }
@@ -162,6 +170,8 @@ set_up() {
     [ -n "$REPOSITORY" ] || usage
     [ "$(id -u)" -eq 0 ] || fail "run this as root: sudo bash tests/Machine/updates.sh $REPOSITORY"
     [ -L "$APP" ] || fail "$APP isn't a release symlink. Install the panel from $REPOSITORY first."
+    CURRENT="$(tr -d '[:space:]' <"$APP/VERSION")"
+    [ -n "$CURRENT" ] || fail "$APP/VERSION is empty"
 
     WORK="$(mktemp -d /tmp/csm.XXXXXX)"
     export GNUPGHOME="$WORK/g"
@@ -182,7 +192,7 @@ set_up() {
     HOST="$(awk -F/ '/^APP_URL=/ { print $3 }' "$SHARED/.env")"
     [ -n "$HOST" ] || fail "APP_URL has no host"
 
-    feed 0.1.0
+    feed "$CURRENT"
     python3 -m http.server 8099 --bind 127.0.0.1 --directory "$FEED" >/dev/null 2>&1 &
     FEED_PID=$!
     wait_for 30 curl -fs -o /dev/null http://127.0.0.1:8099/v1/version || fail "the feed server didn't start"
@@ -191,16 +201,17 @@ set_up() {
 }
 
 a_signed_update_is_installed() {
-    local previous horizon output probe
+    local previous horizon output probe next
 
     SCENARIO="a signed update is installed"
-    tag_release 0.1.1 signed
-    feed 0.1.1
+    next="$(next_version 1)"
+    tag_release "$next" signed
+    feed "$next"
 
     output="$(as_panel php artisan coresmith:check-update)"
 
     case "$output" in
-    *"Coresmith v0.1.1 is available."*) ;;
+    *"Coresmith v$next is available."*) ;;
     *) fail "check-update said: $output" ;;
     esac
 
@@ -210,7 +221,7 @@ a_signed_update_is_installed() {
     as_panel php artisan coresmith:update --force || fail "the update exited $?"
 
     case "$(release)" in
-    "$ROOT/releases/0.1.1-"*) ;;
+    "$ROOT/releases/$next-"*) ;;
     *) fail "the panel runs $(release)" ;;
     esac
 
@@ -228,13 +239,14 @@ a_signed_update_is_installed() {
 }
 
 a_broken_release_is_rolled_back() {
-    local count running
+    local count running next
 
     SCENARIO="a broken release is rolled back"
     count="$(migrations)"
     running="$(release)"
-    tag_release 0.1.2 signed break
-    feed 0.1.2
+    next="$(next_version 2)"
+    tag_release "$next" signed break
+    feed "$next"
 
     if as_panel php artisan coresmith:update --force; then
         fail "the broken update exited 0"
@@ -252,12 +264,13 @@ a_broken_release_is_rolled_back() {
 }
 
 an_unsigned_release_is_refused() {
-    local running
+    local running next
 
     SCENARIO="an unsigned release is refused before anything changes"
     running="$(release)"
-    tag_release 0.1.3 unsigned
-    feed 0.1.3
+    next="$(next_version 3)"
+    tag_release "$next" unsigned
+    feed "$next"
 
     if as_panel php artisan coresmith:update --force; then
         fail "the unsigned update exited 0"
@@ -267,7 +280,7 @@ an_unsigned_release_is_refused() {
     [ "$(state .failed_step)" = "verify" ] || fail "the failed step is $(state .failed_step)"
     [ "$(release)" = "$running" ] || fail "the panel moved to $(release)"
 
-    if compgen -G "$ROOT/releases/0.1.3-*" >/dev/null; then
+    if compgen -G "$ROOT/releases/$next-*" >/dev/null; then
         fail "the unsigned release was left in $ROOT/releases"
     fi
 
@@ -279,16 +292,17 @@ succeeded_on() {
 }
 
 the_panel_request_starts_the_service() {
-    local now
+    local now next
 
     SCENARIO="the panel's request starts the update service"
-    tag_release 0.1.4 signed
-    feed 0.1.4
+    next="$(next_version 4)"
+    tag_release "$next" signed
+    feed "$next"
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    write_as_panel "{\"schema\":1,\"to\":\"0.1.4\",\"trigger\":\"panel\",\"requested_by\":null,\"requested_at\":\"$now\"}" "$UPDATES/request.json"
+    write_as_panel "{\"schema\":1,\"to\":\"$next\",\"trigger\":\"panel\",\"requested_by\":null,\"requested_at\":\"$now\"}" "$UPDATES/request.json"
 
-    wait_for 900 succeeded_on 0.1.4 || fail "the requested update didn't finish: $(state .state)"
+    wait_for 900 succeeded_on "$next" || fail "the requested update didn't finish: $(state .state)"
     [ "$(systemctl show coresmith-update.service --property=Result --value)" = "success" ] || fail "coresmith-update.service ended with $(systemctl show coresmith-update.service --property=Result --value)"
     [ ! -e "$UPDATES/request.json" ] || fail "request.json is still there"
     [ ! -e "$UPDATES/request.taken.json" ] || fail "request.taken.json is still there"
@@ -301,13 +315,15 @@ recovered() {
 }
 
 an_interrupted_update_recovers() {
-    local now id
+    local now id from to
 
     SCENARIO="an interrupted update recovers on its own"
+    from="$(next_version 4)"
+    to="$(next_version 5)"
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     id="$(printf '01machine%017d' "$(date +%s)")"
 
-    write_as_panel "{\"schema\":1,\"id\":\"$id\",\"state\":\"running\",\"trigger\":\"cli\",\"requested_by\":null,\"from\":{\"version\":\"0.1.4\",\"release\":\"$(basename "$(release)")\"},\"to\":{\"version\":\"0.1.5\",\"release\":null},\"step\":\"backup\",\"failed_step\":null,\"message\":null,\"signature\":\"verified\",\"markers\":{\"built\":null,\"maintenance\":true,\"backup\":null,\"migrating\":false,\"switched\":false,\"healthy\":false},\"started_at\":\"$now\",\"updated_at\":\"$now\",\"finished_at\":null}" "$UPDATES/status.json"
+    write_as_panel "{\"schema\":1,\"id\":\"$id\",\"state\":\"running\",\"trigger\":\"cli\",\"requested_by\":null,\"from\":{\"version\":\"$from\",\"release\":\"$(basename "$(release)")\"},\"to\":{\"version\":\"$to\",\"release\":null},\"step\":\"backup\",\"failed_step\":null,\"message\":null,\"signature\":\"verified\",\"markers\":{\"built\":null,\"maintenance\":true,\"backup\":null,\"migrating\":false,\"switched\":false,\"healthy\":false},\"started_at\":\"$now\",\"updated_at\":\"$now\",\"finished_at\":null}" "$UPDATES/status.json"
     as_panel php artisan down >/dev/null
 
     wait_for 180 recovered || fail "the panel didn't recover: the status is $(state .state) and /up answers $(answers /up)"
