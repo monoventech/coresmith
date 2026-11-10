@@ -15,6 +15,8 @@
     let domain = $state('')
     let checkedFor = $state<string | null>(null)
     let checking = $state(false)
+    let pointing = $state(false)
+    let connecting = $state(false)
 
     const result = $derived(checkedFor !== null && checkedFor === domain ? address.check : null)
 
@@ -50,6 +52,20 @@
         domain = value
         checkedFor = null
         changing = true
+    }
+
+    function point() {
+        pointing = true
+
+        router.post(
+            route('settings.address.point'),
+            { address: domain },
+            { preserveScroll: true, only: ['address'], onFinish: () => (pointing = false) }
+        )
+    }
+
+    function disconnect() {
+        router.delete(route('settings.address.cloudflare.destroy'), { preserveScroll: true, only: ['address'] })
     }
 
     function check() {
@@ -159,6 +175,42 @@
         {/if}
     {/if}
 
+    {#if canManage && address.managed}
+        <div class="mt-4 border-t border-border pt-3.5 text-[12.5px]" data-testid="address-dns">
+            {#if address.cloudflare.connected}
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="m-0 font-medium">Cloudflare DNS</p>
+                        {#if address.cloudflare.error}
+                            <p class="m-0 mt-1 flex gap-2 text-destructive-strong">
+                                <CircleAlert class="mt-0.5 size-3.75 shrink-0" />
+                                <span class="wrap-anywhere">{address.cloudflare.error}</span>
+                            </p>
+                        {:else if address.cloudflare.host && address.cloudflare.synced}
+                            <p class="m-0 mt-1 text-muted-foreground">
+                                Keeps <span class="font-mono text-[12px] wrap-anywhere">{address.cloudflare.host}</span>
+                                pointed at this server. Checked {address.cloudflare.synced}.
+                            </p>
+                        {:else}
+                            <p class="m-0 mt-1 text-muted-foreground">
+                                Connected. Coresmith keeps its domain pointed at this server, checking every ten
+                                minutes.
+                            </p>
+                        {/if}
+                    </div>
+                    <Button variant="outline" size="sm" onclick={disconnect}>Disconnect</Button>
+                </div>
+            {:else}
+                <div class="flex items-start justify-between gap-3">
+                    <p class="m-0 text-muted-foreground">
+                        Coresmith can keep its domain's DNS records pointed here, with a Cloudflare API token.
+                    </p>
+                    <Button variant="outline" size="sm" onclick={() => (connecting = true)}>Connect Cloudflare</Button>
+                </div>
+            {/if}
+        </div>
+    {/if}
+
     {#if canManage && !address.managed}
         <p class="mt-3 mb-2 text-[12.5px] text-muted-foreground">
             To change it, run the installer again on this server with the new domain:
@@ -225,6 +277,18 @@
                                         <span class="wrap-anywhere">{problem}</span>
                                     </p>
                                 {/each}
+                                {#if address.cloudflare.connected}
+                                    <div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            type="button"
+                                            disabled={pointing}
+                                            onclick={point}
+                                            >{pointing ? 'Pointing…' : 'Point it here with Cloudflare'}</Button
+                                        >
+                                    </div>
+                                {/if}
                             {/if}
                             {#each result.notes as note (note)}
                                 <p class="m-0 flex gap-2 text-muted-foreground">
@@ -243,6 +307,45 @@
                     <Button type="submit" disabled={processing || !result?.ok}
                         >{processing ? 'Switching…' : 'Switch address'}</Button
                     >
+                </Dialog.Footer>
+            {/snippet}
+        </Form>
+    </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={connecting}>
+    <Dialog.Content>
+        <Form
+            method="post"
+            action={route('settings.address.cloudflare.store')}
+            options={{ preserveScroll: true, only: ['address'] }}
+            onSuccess={() => (connecting = false)}
+        >
+            {#snippet children({ errors, processing })}
+                <Dialog.Header>
+                    <Dialog.Title>Connect Cloudflare</Dialog.Title>
+                    <Dialog.Description
+                        >Create a token in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template,
+                        limited to your domain's zone. Coresmith keeps it encrypted and never shows it again.</Dialog.Description
+                    >
+                </Dialog.Header>
+                <div class="mt-4">
+                    <Label for="cloudflare-token" class="mb-1.5">API token</Label>
+                    <Input
+                        id="cloudflare-token"
+                        name="token"
+                        type="password"
+                        required
+                        autocomplete="off"
+                        spellcheck="false"
+                        class="font-mono text-[13px]"
+                        aria-invalid={errors.token ? true : undefined}
+                    />
+                    <FieldError message={errors.token} />
+                </div>
+                <Dialog.Footer>
+                    <Button variant="ghost" type="button" onclick={() => (connecting = false)}>Cancel</Button>
+                    <Button type="submit" disabled={processing}>{processing ? 'Connecting…' : 'Connect'}</Button>
                 </Dialog.Footer>
             {/snippet}
         </Form>

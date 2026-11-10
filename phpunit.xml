@@ -44,8 +44,10 @@
         <env name="SENTRY_LARAVEL_DSN" value="" force="true"/>
         <env name="SENTRY_BROWSER_DSN" value="" force="true"/>
         <env name="CORESMITH_REACH_URL" value="" force="true"/>
+        <env name="CORESMITH_CLOUDFLARE_API" value="" force="true"/>
         <server name="SENTRY_LARAVEL_DSN" value=""/>
         <server name="SENTRY_BROWSER_DSN" value=""/>
         <server name="CORESMITH_REACH_URL" value=""/>
+        <server name="CORESMITH_CLOUDFLARE_API" value=""/>
     </php>
 </phpunit>
