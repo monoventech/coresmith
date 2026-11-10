@@ -163,7 +163,7 @@ final class MetricsCollector
     private function alert(Server $server, string $preference, Notification $notification): bool
     {
         try {
-            app(TeamNotifier::class)->send($server->team, $preference, $notification);
+            app(TeamNotifier::class)->send($server->team, $preference, $notification, about: $server);
         } catch (Throwable $e) {
             report($e);
 
