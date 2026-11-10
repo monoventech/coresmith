@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.0 (2026-11-10)
+
+### Added
+- feat: Coresmith keeps its domain pointed at this server with a Cloudflare API token, and a failed address check can point it there (#38)
+- feat: Coresmith says what stands between people and a working address: a cloud install behind NAT, and each check in Settings before a move (#37)
+- feat: managed servers close the connection for unknown hostnames, and in-app updates refresh Coresmith's own Caddy site (#36)
+- feat: apps on Coresmith's own machine run sandboxed in their own slice, Coresmith gets root there past an SSH guest list, and Add server points this machine's own address to This machine (#35)
+- feat: an install with a domain comes up on the machine's own address and moves to the domain only once it works (#33)
+- feat: before Coresmith moves to a domain, it checks from outside that the domain reaches this server and says exactly what to fix (#32)
+- feat: every way to the first sign-in ends in a link to click, never a token to paste (#31)
+- feat: Add server offers This machine, so a self-hosted Coresmith can deploy apps onto the machine it runs on (#26)
+- feat: on Coresmith's own machine one Caddy serves Coresmith and its apps, and an address change swaps only Coresmith's routes (#25)
+- feat: the installer readies Coresmith's own machine to host apps, with a root helper that only answers over loopback (#24)
+- feat: Coresmith's address opens sign-in or your fleet, and the marketing page moves to coresmith.io (#23)
+- feat: on Coresmith's own machine, runtimes get a user of their own, its logs are private, and the installer leaves app folders to provisioning (#22)
+
+### Fixed
+- fix: on a real install, Add server opens and provisioning this machine survives the library updates it installs (#39)
+
+### Changed
+- test: the countdown, installer and update checks no longer depend on the date, the version or folders Coresmith stopped making (#34)
+- docs: the readme says only where to read about Coresmith Cloud, at coresmith.io (#30)
+
 ## v0.4.2 (2026-11-09)
 
 ### Fixed
