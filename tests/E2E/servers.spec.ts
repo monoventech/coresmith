@@ -36,7 +36,7 @@ test.describe('a server', () => {
             page.getByText(label, { exact: true }).locator('xpath=../..').getByTestId('metric-detail')
 
         await expect(detail('CPU · 24h')).toHaveText('AMD EPYC-Milan Processor · 4 cores · load 1.36')
-        await expect(detail('Memory · 24h')).toHaveText(/^\d+(\.\d)? GB of 8 GB used$/)
+        await expect(detail('Memory · 24h')).toHaveText(/^\d+(\.\d)?\sGB of 8\sGB used$/)
         await expect(detail('Disk · 24h')).toHaveText('67 GB of 160 GB used · 85 GB free')
     })
 
