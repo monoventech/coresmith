@@ -22,6 +22,7 @@ use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Panel\Realtime;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -67,7 +68,7 @@ final class DeploymentController extends Controller
         $deployment->setRelation('application', $application->setRelation('server', $server));
 
         return Inertia::render('deployments/Show', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => app(TeamAccess::class)->canSeeServer($request->user(), $server) ? route('servers.show', $server) : null],
             'application' => [
                 'id' => $application->id,
                 'name' => $application->name,

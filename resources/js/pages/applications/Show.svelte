@@ -41,7 +41,7 @@
         cron,
         can
     }: {
-        server: { id: string; name: string; href: string }
+        server: { id: string; name: string; href: string | null }
         application: {
             id: string
             name: string
@@ -318,7 +318,7 @@
 
 <AppHead title={application.name} />
 
-<BackLink href={server.href} label={server.name} />
+<BackLink href={server.href ?? route('dashboard')} label={server.href ? server.name : 'Fleet'} />
 
 <div class="mb-6 flex flex-wrap items-end justify-between gap-6 max-sm:mb-3.5 max-sm:gap-4">
     <div class="min-w-0">

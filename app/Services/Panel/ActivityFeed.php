@@ -17,8 +17,10 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
+use App\Models\User;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\CertificateCheck;
+use App\Services\Teams\TeamAccess;
 use App\Services\Updates\UpdateStatus;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -33,8 +35,17 @@ final class ActivityFeed
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    public function forTeam(Team $team, int $limit = 5): array
+    public function forTeam(Team $team, int $limit = 5, ?User $viewer = null): array
     {
+        if ($viewer !== null && !app(TeamAccess::class)->seesEverything($viewer, $team)) {
+            $access = app(TeamAccess::class);
+            $servers = $access->servers($viewer, $team)->get()->keyBy('id');
+            $applications = $access->applications($viewer, $team)->with('server')->get()->keyBy('id');
+            $databases = ManagedDatabase::query()->where('team_id', $team->getKey())->whereIn('server_id', $servers->keys())->get()->keyBy('id');
+
+            return $this->merge($servers, $applications, $databases, collect(), $limit, panel: true);
+        }
+
         $servers = Server::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');
         $applications = Application::withTrashed()->where('team_id', $team->getKey())->with(['server' => fn($query) => $query->withTrashed()])->get()->keyBy('id');
         $databases = ManagedDatabase::withTrashed()->where('team_id', $team->getKey())->get()->keyBy('id');

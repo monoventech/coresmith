@@ -20,6 +20,7 @@ use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Panel\SetupProgress;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -44,9 +45,10 @@ final class SetupController extends Controller
         $account = $request->query('account');
         $account = is_string($account) ? $account : null;
 
-        $server = $team->servers()->whereNot('status', ServerStatus::Active->value)->latest()->first()
-            ?? $team->servers()->latest()->first();
-        $application = $team->applications()->with('server')->latest()->first();
+        $access = app(TeamAccess::class);
+        $server = $access->servers($request->user(), $team)->whereNot('status', ServerStatus::Active->value)->latest()->first()
+            ?? $access->servers($request->user(), $team)->latest()->first();
+        $application = $access->applications($request->user(), $team)->with('server')->latest()->first();
 
         return Inertia::render('setup/Show', [
             'steps' => array_map(fn(string $label, int $index): array => ['label' => $label, 'done' => $done[$index]], SetupProgress::STEPS, array_keys(SetupProgress::STEPS)),
