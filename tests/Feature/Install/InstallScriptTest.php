@@ -428,7 +428,8 @@ test('the installer workflow proves the instance it built actually works', funct
         ->and($workflow)->toContain('ubuntu-24.04')
         ->and($workflow)->toContain('/var/lib/coresmith/setup-token')
         ->and($workflow)->toContain('expected 403')
-        ->and($workflow)->toContain('expected 503');
+        ->and($workflow)->toContain('expected 503')
+        ->and($workflow)->not->toContain('/etc/coresmith');
 });
 
 test('the installer workflow updates, rolls back and uninstalls the instance it built', function () {
@@ -459,7 +460,9 @@ test('the machine test checks each scenario it promises', function () {
         expect($script)->toContain("ok \"{$scenario}\"");
     }
 
-    expect($script)->toContain("printf 'ok %s\\n'");
+    expect($script)->toContain("printf 'ok %s\\n'")
+        ->and($script)->toContain('$APP/VERSION')
+        ->and($script)->not->toMatch('/(tag_release|feed|succeeded_on) \d/');
 });
 
 test('the machine test is valid bash that the shell lint covers', function () {
