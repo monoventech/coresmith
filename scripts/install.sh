@@ -735,7 +735,7 @@ install_coresmith_app() {
     incoming="$RELEASES_DIR/.incoming-$$"
     rm -rf "$incoming"
     cd /
-    sudo -u coresmith git clone --quiet --depth 1 --branch "$ref" "$CORESMITH_REPO" "$incoming" ||
+    sudo -u coresmith git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$ref" "$CORESMITH_REPO" "$incoming" ||
         fatal "Could not fetch ${ref} from ${CORESMITH_REPO}. Check the repository is reachable and has that release; to install a branch, pass --branch <name>."
 
     name_release "$incoming" || {

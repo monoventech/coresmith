@@ -43,6 +43,21 @@ test.describe('checking a server before provisioning', () => {
         await expect(report.getByRole('button', { name: 'Proceed with provisioning' })).toBeDisabled()
     })
 
+    test("Coresmith's own machine, added by its address, is pointed to the Detach button it has and to This machine", async ({
+        page
+    }) => {
+        await gotoServer(page, 'own-host')
+
+        const report = page.getByTestId('audit-report')
+
+        await expect(report).toContainText('This server runs Coresmith itself')
+        await expect(report).toContainText(
+            'Detach it here, then add it again with This machine under Provider in Add server.'
+        )
+        await expect(page.getByRole('button', { name: 'Detach', exact: true })).toBeVisible()
+        await expect(page.getByTestId('server-state')).toHaveText('Not provisioned')
+    })
+
     test('a web server in the way is stopped after confirming, and the server is checked again', async ({
         page
     }, testInfo) => {

@@ -30,7 +30,7 @@
         hardening: string[]
         admin_move_error?: string | null
         ssh?: { verified: boolean; passwords_kept: boolean; error: string | null }
-        firewall: { open: number[]; ssh_port: number; changes: Change[] }
+        firewall: { open: number[]; kept_ssh: boolean; ssh_port: number; changes: Change[] }
         access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
     } = $props()
 
@@ -132,9 +132,15 @@
 <div class="mt-4 grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
     <div class="flex flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="firewall">
         <h3 class="type-h3 m-0 mb-1">Firewall</h3>
-        <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Default-deny. Provisioning opened <span class="font-mono text-[12px]">{firewall.open.join(', ')}</span>.
-            Changes Coresmith applied are listed here.
+        <p class="mb-3 text-[12.5px] text-muted-foreground" data-testid="firewall-summary">
+            {#if firewall.kept_ssh}
+                This machine's firewall was already on. Provisioning opened
+                <span class="font-mono text-[12px]">{firewall.open.join(', ')}</span> and kept its SSH rules. Changes Coresmith
+                applied are listed here.
+            {:else}
+                Default-deny. Provisioning opened <span class="font-mono text-[12px]">{firewall.open.join(', ')}</span>.
+                Changes Coresmith applied are listed here.
+            {/if}
         </p>
         <div class="flex flex-col">
             {#each firewall.changes as change (change.id)}
@@ -195,9 +201,14 @@
                         <Button type="submit" variant="outline" disabled={processing}>Apply</Button>
                     </div>
                     <FieldError message={errors.port ?? errors.from_ip} />
-                    <p class="mt-2 text-[12px] text-muted-foreground">
-                        Port <span class="font-mono">{firewall.ssh_port}</span> is how Coresmith reaches this server, so it
-                        can't be denied here.
+                    <p class="mt-2 text-[12px] text-muted-foreground" data-testid="firewall-ssh-note">
+                        {#if server.this_machine}
+                            Port <span class="font-mono">{firewall.ssh_port}</span> is how people sign in to this machine,
+                            so it can't be denied here.
+                        {:else}
+                            Port <span class="font-mono">{firewall.ssh_port}</span> is how Coresmith reaches this server,
+                            so it can't be denied here.
+                        {/if}
                     </p>
                 {/snippet}
             </Form>

@@ -250,7 +250,7 @@ test('this very Coresmith, added the ordinary way, is pointed to This machine ra
         'key' => 'panel_host',
         'severity' => 'blocker',
         'title' => 'This server runs Coresmith itself',
-        'detail' => 'Delete it here, then add it again with This machine under Provider in Add server.',
+        'detail' => 'Detach it here, then add it again with This machine under Provider in Add server.',
         'fix' => null,
     ]]);
 });

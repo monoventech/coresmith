@@ -27,7 +27,9 @@ final class ServerFirewallController extends Controller
         ]);
 
         if ($validated['action'] === 'deny' && (int) $validated['port'] === $server->ssh_port) {
-            return back()->with('error', 'That is the SSH port Coresmith uses to reach this server. Denying it would lock you out.');
+            return back()->with('error', $server->runs_coresmith
+                ? "That is this machine's SSH port. Denying it would lock you out of the machine."
+                : 'That is the SSH port Coresmith uses to reach this server. Denying it would lock you out.');
         }
 
         if ($validated['action'] === 'deny' && $server->runs_coresmith && in_array((int) $validated['port'], [80, 443], true)) {

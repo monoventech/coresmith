@@ -74,7 +74,7 @@ final class PreProvisioningAudit
 
         if (($sections['panel'] ?? []) !== [] && !$ownMachine) {
             return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs Coresmith itself', !Edition::current()->isCloud() && $this->own->is((string) $server->ip_address)
-                ? 'Delete it here, then add it again with This machine under Provider in Add server.'
+                ? 'Detach it here, then add it again with This machine under Provider in Add server.'
                 : 'Add a different server for your apps.')]);
         }
 
