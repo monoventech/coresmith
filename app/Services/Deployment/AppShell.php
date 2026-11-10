@@ -10,6 +10,7 @@ namespace App\Services\Deployment;
 
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
+use App\Services\Process\AppSandbox;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -104,6 +105,7 @@ final class AppShell
             ...array_map(fn(string $name, string $value): string => '-E ' . escapeshellarg($name . '=' . $value), array_keys($environment), $environment),
             '-p ' . escapeshellarg('EnvironmentFile=' . (new ReleasePaths($application))->envFile()),
             ...array_map(fn(string $property): string => '-p ' . $property, $properties),
+            ...array_map(fn(string $property): string => '-p ' . escapeshellarg($property), AppSandbox::properties($application->server)),
             '-p UMask=' . AppAccount::UMASK,
             '-p NoNewPrivileges=yes',
             '-E ' . escapeshellarg('PATH=' . $this->path($versions)),

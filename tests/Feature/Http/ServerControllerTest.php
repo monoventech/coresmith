@@ -13,10 +13,12 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Network\LocalAddresses;
 use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Testing\TestResponse;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -626,4 +628,55 @@ test('detaching a creation Coresmith could not confirm says to check the provide
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->delete(route('servers.destroy', $server))
         ->assertSessionHas('success', 'Removed. Coresmith could not confirm whether Hetzner Cloud created lost-02. Check your Hetzner Cloud account and delete it there if it exists.');
+});
+
+function serverStoreOwnMachine(): void
+{
+    app()->instance(LocalAddresses::class, new class implements LocalAddresses
+    {
+        public function all(): array
+        {
+            return ['127.0.0.1', '::1', '192.168.0.248'];
+        }
+    });
+}
+
+function serverStoreOwnAddress(User $user, Team $team, string $address = '192.168.0.248'): TestResponse
+{
+    return test()->actingAs($user)->post(route('servers.store'), [
+        'team_id' => $team->id,
+        'name' => 'beelink',
+        'ip_address' => $address,
+        'ssh_port' => 22,
+        'ssh_user' => 'root',
+    ]);
+}
+
+test('the machine Coresmith runs on is never added as a VM, and whoever runs Coresmith is pointed to This machine', function (string $address) {
+    serverStoreOwnMachine();
+    $team = Team::factory()->create();
+
+    serverStoreOwnAddress(teamMember($team, TeamRole::Owner), $team, $address)
+        ->assertSessionHasErrors(['ip_address' => "That's the machine Coresmith runs on. Choose This machine under Provider instead."]);
+
+    expect(Server::count())->toBe(0);
+})->with(['its network address' => '192.168.0.248', 'loopback' => '127.0.0.1']);
+
+test('once this machine is a server, adding it again says which team has it', function () {
+    serverStoreOwnMachine();
+    $team = Team::factory()->create(['name' => 'Acme Labs']);
+    Server::factory()->for($team)->create(['runs_coresmith' => true, 'ip_address' => '127.0.0.1']);
+
+    serverStoreOwnAddress(teamMember($team, TeamRole::Owner), $team)
+        ->assertSessionHasErrors(['ip_address' => "That's the machine Coresmith runs on, and it's already a server in Acme Labs."]);
+});
+
+test("someone who doesn't run Coresmith is told to add a different server", function () {
+    serverStoreOwnMachine();
+    $team = Team::factory()->create();
+
+    serverStoreOwnAddress(teamMember($team, TeamRole::Admin), $team)
+        ->assertSessionHasErrors(['ip_address' => "That's the machine Coresmith runs on. Add a different server for your apps."]);
+
+    expect(Server::count())->toBe(0);
 });

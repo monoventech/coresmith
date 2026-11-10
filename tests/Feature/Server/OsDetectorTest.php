@@ -8,11 +8,11 @@ use App\Services\Server\OsDetector;
 use App\Services\SSH\SSHConnection;
 use Tests\Support\FakeSSHTransport;
 
-function detectorTransport(string $osRelease): FakeSSHTransport
+function detectorTransport(string $osRelease, string $systemd = "systemd 255 (255.4-1ubuntu8)\n+PAM +AUDIT +SELINUX"): FakeSSHTransport
 {
     return (new FakeSSHTransport)
         ->queueResult($osRelease, 0)
-        ->queueResult('systemd 255 (255.4-1ubuntu8)', 0)
+        ->queueResult($systemd, 0)
         ->queueResult("8\n", 0)
         ->queueResult("              total        used        free\nMem:          16040        2000       14040\n", 0)
         ->queueResult("Filesystem     1G-blocks  Used Available Use% Mounted on\n/dev/vda1           80G   20G       60G  25% /\n", 0);
@@ -69,5 +69,16 @@ test('rejects an unreadable os-release', function () {
 test('the detected info converts to the server meta shape', function () {
     $info = (new OsDetector)->detect(detectorConnection(detectorTransport("ID=ubuntu\nVERSION_ID=\"24.04\"\n")));
 
-    expect($info->toMeta())->toBe(['cpu_cores' => 8, 'memory_mb' => 16040, 'disk_gb' => 80]);
+    expect($info->toMeta())->toBe(['cpu_cores' => 8, 'memory_mb' => 16040, 'disk_gb' => 80, 'systemd' => 255]);
 });
+
+test('records the systemd version the server runs, which decides how far apps on Coresmith\'s machine can be sandboxed', function (string $output, ?int $version) {
+    $info = (new OsDetector)->detect(detectorConnection(detectorTransport("ID=ubuntu\nVERSION_ID=\"24.04\"\n", $output)));
+
+    expect($info->systemd)->toBe($version);
+})->with([
+    'ubuntu 24.04' => ["systemd 255 (255.4-1ubuntu8)\n+PAM +AUDIT", 255],
+    'rocky 8' => ["systemd 239 (239-82.el8)\n+PAM +AUDIT", 239],
+    'amazon linux 2' => ["systemd 219\n +PAM +AUDIT", 219],
+    'an answer it can\'t read' => ['something else entirely', null],
+]);

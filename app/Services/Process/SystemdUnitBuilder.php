@@ -55,6 +55,7 @@ final class SystemdUnitBuilder
         $production = implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($defaults), $defaults));
         $command = $process === 'web' ? $command : $this->workerCommand($command);
         $umask = AppAccount::UMASK;
+        $sandbox = implode('', array_map(fn(string $property): string => $property . "\n", AppSandbox::properties($application->server)));
 
         return <<<UNIT
         [Unit]
@@ -90,7 +91,7 @@ final class SystemdUnitBuilder
         ProtectKernelTunables=true
         ProtectKernelModules=true
         ProtectControlGroups=true
-
+        {$sandbox}
         [Install]
         WantedBy=multi-user.target
 

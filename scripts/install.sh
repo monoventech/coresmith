@@ -1369,7 +1369,22 @@ reads_drop_ins() {
 }
 
 rule() {
-    printf '%s\n' 'Match Address 127.0.0.1,::1' '    PermitRootLogin prohibit-password' 'Match all'
+    printf '%s\n' 'Match User root Address 127.0.0.1,::1' '    PermitRootLogin prohibit-password' '    AllowUsers root' '    AllowGroups root' 'Match all'
+}
+
+lists() {
+    awk -v key="$1" '$1 == key { found = 1 } END { exit !found }' <<<"$EFFECTIVE"
+}
+
+names_root() {
+    local pattern
+
+    while read -r pattern; do
+        # shellcheck disable=SC2053
+        [[ root == ${pattern%%@*} ]] && return 0
+    done < <(awk -v key="$1" '$1 == key { print $2 }' <<<"$EFFECTIVE")
+
+    return 1
 }
 
 write_keys() {
@@ -1404,6 +1419,22 @@ check_sshd() {
     prohibit-password | without-password | yes) ;;
     *) fail 'sshd still turns root away from this machine, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config.' ;;
     esac
+
+    if lists allowusers && ! names_root allowusers; then
+        fail "sshd's AllowUsers still leaves root out on this machine, so the old settings are back. Check AllowUsers in /etc/ssh/sshd_config and the files it includes."
+    fi
+
+    if lists allowgroups && ! names_root allowgroups; then
+        fail "sshd's AllowGroups still leaves root out on this machine, so the old settings are back. Check AllowGroups in /etc/ssh/sshd_config and the files it includes."
+    fi
+
+    if names_root denyusers; then
+        fail "sshd's DenyUsers turns root away, so the old settings are back. Take root out of DenyUsers in /etc/ssh/sshd_config or the files it includes, then try again."
+    fi
+
+    if names_root denygroups; then
+        fail "sshd's DenyGroups turns root's group away, so the old settings are back. Take root out of DenyGroups in /etc/ssh/sshd_config or the files it includes, then try again."
+    fi
 
     PORT="$(awk '$1 == "listenaddress" && $2 ~ /^(0\.0\.0\.0|127\.0\.0\.1):[0-9]+$/ { sub(/^.*:/, "", $2); print $2; exit }' <<<"$EFFECTIVE")"
     [ -n "$PORT" ] || fail "sshd doesn't listen on 127.0.0.1, so Coresmith can't reach it from this machine and the old settings are back. Check ListenAddress in /etc/ssh/sshd_config."

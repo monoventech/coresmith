@@ -9,7 +9,9 @@ declare(strict_types=1);
 namespace App\Services\Server\Audit;
 
 use App\Enums\AuditSeverity;
+use App\Enums\Edition;
 use App\Models\Server;
+use App\Services\Network\OwnAddress;
 use App\Services\Server\PortAllocator;
 use App\Services\Server\PortScanner;
 use App\Services\SSH\SSHConnection;
@@ -51,7 +53,10 @@ final class PreProvisioningAudit
     echo '== panel'
     BASH . "\n" . self::PANEL_CHECK . "\nexit 0";
 
-    public function __construct(private readonly PortScanner $ports) {}
+    public function __construct(
+        private readonly PortScanner $ports,
+        private readonly OwnAddress $own,
+    ) {}
 
     public function run(SSHConnection $connection): AuditReport
     {
@@ -68,7 +73,9 @@ final class PreProvisioningAudit
         $ownMachine = (bool) $server->runs_coresmith;
 
         if (($sections['panel'] ?? []) !== [] && !$ownMachine) {
-            return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs Coresmith itself', 'Add a different server for your apps.')]);
+            return new AuditReport([new AuditFinding('panel_host', AuditSeverity::Blocker, 'This server runs Coresmith itself', !Edition::current()->isCloud() && $this->own->is((string) $server->ip_address)
+                ? 'Delete it here, then add it again with This machine under Provider in Add server.'
+                : 'Add a different server for your apps.')]);
         }
 
         $listeners = $this->ports->parse(implode("\n", $sections['ports'] ?? []));

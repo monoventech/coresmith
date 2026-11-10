@@ -30,7 +30,9 @@ final class OsDetector
             throw UnsupportedOperatingSystemException::forOs($name);
         }
 
-        if ($connection->execute('systemctl --version')->failed()) {
+        $systemd = $connection->execute('systemctl --version');
+
+        if ($systemd->failed()) {
             throw UnsupportedOperatingSystemException::missingSystemd();
         }
 
@@ -40,6 +42,7 @@ final class OsDetector
             cpuCores: $this->cpuCores($connection),
             memoryMb: $this->memoryMb($connection),
             diskGb: $this->diskGb($connection),
+            systemd: preg_match('/^systemd (\d+)\b/', $systemd->output, $matches) === 1 ? (int) $matches[1] : null,
         );
     }
 
