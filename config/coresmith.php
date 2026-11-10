@@ -87,6 +87,7 @@ return [
         'tailscaled_defaults' => '/etc/default/tailscaled',
         'state_path' => env('CORESMITH_ADDRESS_STATE_PATH', '/var/lib/coresmith/address'),
         'reach_url' => (string) env('CORESMITH_REACH_URL', 'https://get.coresmith.io/v1/reach'),
+        'cloudflare_api' => (string) env('CORESMITH_CLOUDFLARE_API', 'https://api.cloudflare.com/client/v4'),
     ],
 
     'this_machine' => [
