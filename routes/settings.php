@@ -34,6 +34,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('settings/address', [AddressController::class, 'update'])
         ->middleware('throttle:6,1,settings-address')
         ->name('settings.address.update');
+    Route::post('settings/address/check', [AddressController::class, 'check'])
+        ->middleware('throttle:10,1,settings-address-check')
+        ->name('settings.address.check');
     Route::post('settings/backups', [GeneralSettingsController::class, 'backup'])
         ->middleware('throttle:6,1,backups')
         ->name('settings.backups.store');

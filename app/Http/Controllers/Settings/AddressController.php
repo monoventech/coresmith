@@ -10,6 +10,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Services\Address\AddressChange;
+use App\Services\Address\AddressCheck;
 use App\Services\Address\AddressGate;
 use App\Services\Address\AddressRequest;
 use App\Services\Address\InstallationAddress;
@@ -44,5 +45,15 @@ final class AddressController extends Controller
         }
 
         return back()->with('success', "Switching to {$host}. Coresmith keeps answering on {$from} until the certificate is ready.");
+    }
+
+    public function check(Request $request, AddressGate $gate): RedirectResponse
+    {
+        abort_unless($request->user()->managesInstance(), 403);
+
+        $host = InstallationAddress::normalise((string) $request->input('address'));
+        AddressCheck::record($host, $gate->check($host));
+
+        return back();
     }
 }

@@ -829,7 +829,7 @@ test('without a domain the panel answers on the address the server owns, not one
 
     expect($body)->toContain('SERVER_IP="$(ip -4 route get 1.1.1.1 2>/dev/null')
         ->and($body)->not->toContain('default_sni')
-        ->and($body)->toContain('through NAT. Without --domain Coresmith answers on');
+        ->and($body)->toContain('log "This server reaches the internet as ${PUBLIC_IP}, through NAT."');
 });
 
 test('the installer announces the version in the VERSION file', function () {

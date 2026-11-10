@@ -12,6 +12,7 @@ use App\Enums\Edition;
 use App\Models\GitHubApp;
 use App\Models\TeamSsoConnection;
 use App\Services\Address\AddressChange;
+use App\Services\Address\AddressCheck;
 use App\Services\Address\InstallationAddress;
 use App\Services\Sso\SignIn;
 
@@ -20,7 +21,7 @@ final class AddressPresenter
     public function __construct(private readonly InstallationAddress $address) {}
 
     /**
-     * @return array{host: string, url: string, certificate: string, managed: bool, change: ?array<string, mixed>, follow: ?array{github: ?string, sso: ?string}}|null
+     * @return array{host: string, url: string, certificate: string, managed: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, follow: ?array{github: ?string, sso: ?string}}|null
      */
     public function present(): ?array
     {
@@ -38,6 +39,7 @@ final class AddressPresenter
             'certificate' => InstallationAddress::certificate($host)->value,
             'managed' => $this->address->managed(),
             'change' => $change,
+            'check' => AddressCheck::current(),
             'follow' => ($change['state'] ?? null) !== 'done' ? null : [
                 'github' => GitHubApp::query()->exists() ? route('source-providers.index') : null,
                 'sso' => TeamSsoConnection::query()->exists() ? $url . SignIn::CALLBACK_PATH : null,
