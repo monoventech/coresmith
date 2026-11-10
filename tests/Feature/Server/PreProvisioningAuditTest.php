@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Server;
+use App\Services\Network\LocalAddresses;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\SSH\SSHConnection;
 use Tests\Support\FakeSSHTransport;
@@ -125,7 +126,7 @@ test("the panel's own host is refused with one blocker and none of the advice th
         'services' => ['caddy.service', 'coresmith-horizon.service', 'php8.5-fpm.service', 'redis-server.service'],
         'users' => ['coresmith'],
         'panel' => $panel,
-    ]), $server);
+    ]), ['ip_address' => '203.0.113.10', ...$server]);
 
     expect($findings)->toBe([[
         'key' => 'panel_host',
@@ -234,4 +235,22 @@ test("on Coresmith's own machine anything but its Caddy on port 80 or 443 still 
     expect(auditFinding($findings, 'port_80'))->toMatchArray(['severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'fix' => 'stop-nginx'])
         ->and(auditFinding($findings, 'port_443'))->toBeNull()
         ->and(auditFinding($findings, 'ports_coresmith'))->toMatchArray(['title' => "Coresmith's Caddy holds port 443"]);
+});
+
+test('this very Coresmith, added the ordinary way, is pointed to This machine rather than told to go elsewhere', function () {
+    app()->instance(LocalAddresses::class, new class implements LocalAddresses
+    {
+        public function all(): array
+        {
+            return ['127.0.0.1', '::1', '192.168.0.248'];
+        }
+    });
+
+    expect(auditFindings(auditProbe(['panel' => ['/opt/coresmith']]), ['ip_address' => '192.168.0.248']))->toBe([[
+        'key' => 'panel_host',
+        'severity' => 'blocker',
+        'title' => 'This server runs Coresmith itself',
+        'detail' => 'Delete it here, then add it again with This machine under Provider in Add server.',
+        'fix' => null,
+    ]]);
 });
