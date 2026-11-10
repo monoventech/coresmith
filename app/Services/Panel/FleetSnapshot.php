@@ -237,6 +237,12 @@ final class FleetSnapshot
             }
         }
 
+        foreach ($this->sharedApplications() as $application) {
+            if ($application->power_state === PowerState::Stopped) {
+                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => route('servers.applications.show', [$application->server_id, $application])];
+            }
+        }
+
         $failed = Deployment::query()
             ->whereIn('application_id', $this->applicationsQuery()->select('id'))
             ->whereIn('status', [DeploymentStatus::Succeeded->value, DeploymentStatus::Failed->value])

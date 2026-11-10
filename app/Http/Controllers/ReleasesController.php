@@ -85,7 +85,7 @@ final class ReleasesController extends Controller
                 'name' => $each->name,
                 'href' => route('servers.applications.releases.index', [$each->server_id, $each]),
                 'current' => $each->id === $application->id,
-            ])->values() ?? [],
+            ])->values(),
             'releases' => $deployments->map(fn(Deployment $deployment): array => [
                 'id' => $deployment->id,
                 'release' => $deployment->release,

@@ -330,6 +330,9 @@
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:text-[12.5px]">
             <span>{application.kind} · {application.runtime}</span>
+            {#if !server.href}<span data-testid="app-server"
+                    >· on <span class="font-mono text-[13px] max-sm:text-[12px]">{server.name}</span></span
+                >{/if}
             {#if application.domain}<span
                     >· <span class="font-mono text-[13px] max-sm:text-[12px]">{application.domain}</span>
                     <span class="max-sm:hidden">via Caddy</span></span

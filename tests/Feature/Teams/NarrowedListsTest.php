@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\DeploymentStatus;
+use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
@@ -11,6 +12,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\CommandPalette;
+use App\Services\Panel\FleetSnapshot;
 use App\Services\Teams\TeamAccess;
 use Inertia\Testing\AssertableInertia;
 
@@ -98,6 +100,15 @@ test('an app shared on its own is listed on the fleet and names its server witho
     $this->actingAs($member)
         ->get(route('servers.applications.show', [$db, $api]))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('server.name', 'db')->where('server.href', null));
+});
+
+test('a stopped app shared on its own still needs their attention', function () {
+    ['team' => $team, 'db' => $db, 'api' => $api, 'member' => $member] = narrowedListsSetup();
+    $api->forceFill(['power_state' => PowerState::Stopped])->save();
+    app(TeamAccess::class)->grant($team, $member, $api);
+
+    expect(collect((new FleetSnapshot($team, $member))->attention())->where('summary', 'stopped')->values()->all())
+        ->toBe([['severity' => 'warning', 'subject' => 'api', 'summary' => 'stopped', 'href' => route('servers.applications.show', [$db, $api])]]);
 });
 
 test('a narrowed member with nothing shared gets the empty fleet that says so', function () {
