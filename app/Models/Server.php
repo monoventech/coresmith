@@ -65,6 +65,11 @@ class Server extends Model
         return (((array) $this->meta)['ssh_hardening'] ?? null) === 'verified';
     }
 
+    public function sshSettled(): bool
+    {
+        return $this->runs_coresmith ? $this->sshLeftToOwner() : $this->sshHardened();
+    }
+
     public function sshLeftToOwner(): bool
     {
         return $this->runs_coresmith && (((array) $this->meta)['ssh_hardening'] ?? null) === SecurityHardening::LEFT_TO_OWNER;

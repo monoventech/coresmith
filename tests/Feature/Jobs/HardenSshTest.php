@@ -115,6 +115,20 @@ test('every hour, each active and reachable server not yet verified gets its SSH
     Queue::assertPushed(HardenSsh::class, fn(HardenSsh $job): bool => $job->server->is($failing));
 });
 
+test('the machine Coresmith runs on is handed back to its owner once, whatever an earlier version recorded', function (?string $recorded, bool $due) {
+    Queue::fake();
+    $server = Server::factory()->create(['status' => ServerStatus::Active, 'runs_coresmith' => true, 'meta' => $recorded === null ? ['cpu_cores' => 2] : ['ssh_hardening' => $recorded]]);
+
+    collect(app(Schedule::class)->events())->first(fn($event): bool => $event->description === 'coresmith:harden-ssh')->run(app());
+
+    expect(Queue::pushed(HardenSsh::class)->filter(fn(HardenSsh $job): bool => $job->server->is($server))->count())->toBe($due ? 1 : 0);
+})->with([
+    'never hardened' => [null, true],
+    'hardened by an earlier version' => ['verified', true],
+    'with passwords kept by an earlier version' => ['passwords_kept', true],
+    'already left to its owner' => ['owner', false],
+]);
+
 test('a server never gets its SSH settings from two jobs at once', function () {
     $server = Server::factory()->make(['id' => '01JC0000000000000000000000']);
 

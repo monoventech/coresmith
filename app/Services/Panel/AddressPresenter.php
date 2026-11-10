@@ -13,17 +13,25 @@ use App\Models\GitHubApp;
 use App\Models\TeamSsoConnection;
 use App\Services\Address\AddressChange;
 use App\Services\Address\AddressCheck;
+use App\Services\Address\CertificateSource;
 use App\Services\Address\CloudflareConnection;
 use App\Services\Address\InstallationAddress;
+use App\Services\Network\AddressResolver;
 use App\Services\Sso\SignIn;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 
 final class AddressPresenter
 {
-    public function __construct(private readonly InstallationAddress $address) {}
+    public const RECORDS_SECONDS = 600;
+
+    public function __construct(
+        private readonly InstallationAddress $address,
+        private readonly AddressResolver $resolver,
+    ) {}
 
     /**
-     * @return array{host: string, url: string, certificate: string, managed: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, follow: ?array{github: ?string, sso: ?string}}|null
+     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, follow: ?array{github: ?string, sso: ?string}}|null
      */
     public function present(): ?array
     {
@@ -40,6 +48,7 @@ final class AddressPresenter
             'url' => $url,
             'certificate' => InstallationAddress::certificate($host)->value,
             'managed' => $this->address->managed(),
+            'ipv6_only' => $this->ipv6Only($host),
             'change' => $change,
             'check' => AddressCheck::current(),
             'cloudflare' => $this->cloudflare(),
@@ -48,6 +57,18 @@ final class AddressPresenter
                 'sso' => TeamSsoConnection::query()->exists() ? $url . SignIn::CALLBACK_PATH : null,
             ],
         ];
+    }
+
+    private function ipv6Only(string $host): bool
+    {
+        if (InstallationAddress::certificate($host) !== CertificateSource::Public) {
+            return false;
+        }
+
+        $records = Cache::remember('address-records:' . $host, self::RECORDS_SECONDS, fn(): array => $this->resolver->addresses($host));
+        $family = fn(int $flag): bool => array_filter($records, fn(string $record): bool => filter_var($record, FILTER_VALIDATE_IP, $flag) !== false) !== [];
+
+        return $family(FILTER_FLAG_IPV6) && !$family(FILTER_FLAG_IPV4);
     }
 
     /**

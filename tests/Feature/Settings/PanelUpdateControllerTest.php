@@ -47,6 +47,15 @@ function updatesRunning(string $step = 'dependencies'): UpdateStatus
     return $status;
 }
 
+test('release notes reach the card as plain lines, without markdown or commit prefixes', function () {
+    updatesFeed(['latest' => '0.1.1', 'summary' => "### Added\n- feat: a server's page says what each number is (#42)\n\n### Fixed\n- fix(ssh): This machine keeps its SSH rules (#41)\n- a line with no prefix\n\nInstalls set up before 0.5.0: run the installer once.", 'changelog_url' => 'https://github.com/monoven/coresmith/releases/tag/v0.1.1', 'released_at' => '2026-10-17']);
+    updatesChecked();
+
+    $this->actingAs($this->owner)
+        ->get(route('settings.general'))
+        ->assertInertia(fn($page) => $page->where('updates.available.summary', "Added\n• A server's page says what each number is (#42)\n\nFixed\n• This machine keeps its SSH rules (#41)\n• A line with no prefix\n\nInstalls set up before 0.5.0: run the installer once."));
+});
+
 test('the card is told what is installed, what is available and what it may do', function () {
     updatesChecked();
 

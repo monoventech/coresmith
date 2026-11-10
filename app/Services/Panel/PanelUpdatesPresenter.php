@@ -20,6 +20,7 @@ use App\Services\Updates\UpdateState;
 use App\Services\Updates\UpdateStatus;
 use App\Services\Updates\Version;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 use Throwable;
 
 final class PanelUpdatesPresenter
@@ -94,7 +95,7 @@ final class PanelUpdatesPresenter
             'check' => ['enabled' => $this->checker->enabled(), 'when' => Formats::when($check?->checkedAt), 'error' => $check?->error],
             'available' => $available === null ? null : [
                 'version' => (string) $available,
-                'summary' => $check?->feed?->summary,
+                'summary' => self::readable($check?->feed?->summary),
                 'notes_url' => $check?->feed?->changelogUrl,
                 'released' => $check?->feed?->releasedAt?->format('M j'),
             ],
@@ -268,5 +269,18 @@ final class PanelUpdatesPresenter
     private function muted(string $text): array
     {
         return ['tone' => 'muted', 'text' => $text];
+    }
+
+    public static function readable(?string $summary): ?string
+    {
+        if ($summary === null || trim($summary) === '') {
+            return null;
+        }
+
+        return implode("\n", array_map(fn(string $line): string => match (true) {
+            str_starts_with($line, '### ') => substr($line, 4),
+            preg_match('/^- (?:[a-z]+(?:\([^)]*\))?!?: )?(.+)$/', $line, $matches) === 1 => '• ' . Str::ucfirst($matches[1]),
+            default => $line,
+        }, preg_split('/\R/', trim($summary)) ?: []));
     }
 }
