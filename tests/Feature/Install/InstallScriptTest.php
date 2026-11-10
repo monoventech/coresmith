@@ -371,12 +371,31 @@ test('continuous integration runs the feature tests on every database the panel 
 
 test('the installer clones from a directory the coresmith user can enter', function () {
     $body = installScriptBody();
-    $clone = strpos($body, 'sudo -u coresmith git clone');
+    $clone = preg_match('/sudo -u coresmith git [^\n]*\bclone\b/', $body, $match, PREG_OFFSET_CAPTURE) === 1 ? $match[0][1] : false;
     $leaves = strrpos(substr($body, 0, (int) $clone), "\n    cd /\n");
 
     expect($clone)->not->toBeFalse()
         ->and($leaves)->not->toBeFalse()
         ->and(substr_count(substr($body, (int) $leaves, (int) $clone - (int) $leaves), "\n    cd "))->toBe(1);
+});
+
+test("fetching a release prints nothing, though checking out its tag leaves git's checkout on a detached head", function () {
+    preg_match('/^\s*sudo -u coresmith (git [^\n]*\bclone\b[^\n]*"\$incoming") \|\|$/m', installScriptBody(), $clone);
+
+    expect($clone)->toHaveCount(2);
+
+    $root = sys_get_temp_dir() . '/install-clone-' . bin2hex(random_bytes(4));
+    $git = ['GIT_CONFIG_GLOBAL' => '/dev/null', 'GIT_CONFIG_NOSYSTEM' => '1'];
+    (new Process(['bash', '-c', 'git init -q -b main "$1/origin" && git -C "$1/origin" -c user.name=Release -c user.email=release@example.com commit -q --allow-empty -m release && git -C "$1/origin" tag v9.9.9', 'origin', $root], null, $git))->mustRun();
+
+    $process = new Process(['bash', '-c', "set -euo pipefail\nref=v9.9.9\nCORESMITH_REPO=\"file://\$1/origin\"\nincoming=\"\$1/incoming\"\n{$clone[1]}", 'clone', $root], null, $git);
+    $process->run();
+    $cloned = is_dir("{$root}/incoming/.git");
+    (new Process(['rm', '-rf', $root]))->run();
+
+    expect($process->isSuccessful())->toBeTrue()
+        ->and($cloned)->toBeTrue()
+        ->and($process->getOutput() . $process->getErrorOutput())->toBe('');
 });
 
 test('the local run checks everything continuous integration does', function () {

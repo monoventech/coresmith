@@ -385,6 +385,38 @@ test('phase 6 opens only ssh, http and https', function () {
         ->and($commands)->not->toContain('ufw allow 22/tcp');
 });
 
+test("phase 6 on Coresmith's own machine keeps the firewall it already has, opening only the web ports", function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'runs_coresmith' => true, 'meta' => ['cpu_cores' => 4]]);
+    $transport = provisioningTransport()->respondTo('caddy adapt', (string) file_get_contents(base_path('tests/Fixtures/Caddy/adapted-internal.json')));
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('ufw allow 80/tcp')
+        ->and($commands)->toContain('ufw allow 443/tcp')
+        ->and($commands)->not->toContain('ufw allow 22/tcp')
+        ->and($commands)->not->toContain('default deny incoming')
+        ->and($commands)->not->toContain('ufw --force enable')
+        ->and($server->fresh()->meta['firewall_ssh'] ?? null)->toBe('kept');
+});
+
+test("phase 6 on Coresmith's own machine turns a firewall that was off on with SSH open, so nobody is locked out", function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'runs_coresmith' => true]);
+    $transport = provisioningTransport()
+        ->respondTo('caddy adapt', (string) file_get_contents(base_path('tests/Fixtures/Caddy/adapted-internal.json')))
+        ->respondTo("ufw status | grep -q '^Status: active'", '', 1);
+
+    provision($server, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain('ufw allow 22/tcp')
+        ->and($commands)->toContain('default deny incoming')
+        ->and($commands)->toContain('ufw --force enable')
+        ->and($server->fresh()->meta)->not->toHaveKey('firewall_ssh');
+});
+
 test('phase 7 hardens ssh, installs fail2ban and applies sysctls', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = provisioningTransport();

@@ -37,6 +37,11 @@ final class UfwFirewallManager implements FirewallManager
         return 'ufw status verbose';
     }
 
+    public function isActive(): string
+    {
+        return "ufw status | grep -q '^Status: active'";
+    }
+
     public function enable(): string
     {
         return 'ufw --force enable';

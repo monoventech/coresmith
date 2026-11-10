@@ -81,8 +81,11 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="type-h1 m-0 font-mono font-medium">{server.name}</h1>
-            <Badge variant={server.state.tone} dot pulse={server.state.key === 'provisioning'}
-                >{server.state.label}</Badge
+            <Badge
+                variant={server.state.tone}
+                dot
+                pulse={server.state.key === 'provisioning'}
+                data-testid="server-state">{server.state.label}</Badge
             >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">{server.meta}</p>

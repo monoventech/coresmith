@@ -62,6 +62,28 @@ test.describe('this machine', () => {
         await expect(page.getByRole('button', { name: 'Use this machine' })).toBeEnabled()
     })
 
+    test('with no cloud account and this machine free, Add server starts on this machine, named after it, in Production', async ({
+        page
+    }) => {
+        await rewriteInertia(page, '/servers/create', (props) => {
+            if (props.thisMachine) {
+                props.thisMachine = { ...props.thisMachine, taken_by: null, installed: true }
+                props.cloud = { ...props.cloud, selected: 'manual' }
+            }
+        })
+        await page.goto('/servers/create')
+
+        await expect(page.getByLabel('Provider')).toHaveValue('this-machine')
+        await expect(page.getByLabel('Server name')).not.toHaveValue('')
+        await expect(page.getByLabel('Environment')).toHaveValue('Production')
+        await expect(page.getByRole('button', { name: 'Use this machine' })).toBeEnabled()
+
+        await page.getByLabel('Provider').selectOption('manual')
+
+        await expect(page.getByLabel('Server name')).toHaveValue('')
+        await expect(page.getByLabel('IP address')).toBeVisible()
+    })
+
     test('an install whose installer predates this shows the command that brings it up to date', async ({ page }) => {
         await rewriteInertia(page, '/servers/create', (props) => {
             if (props.thisMachine) {
@@ -149,6 +171,23 @@ test.describe('this machine', () => {
 
         await dialog(page).getByRole('button', { name: 'Keep it' }).click()
         await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test("on this machine, the firewall card says its own SSH rules were kept, and why port 22 can't be denied", async ({
+        page
+    }) => {
+        await rewriteInertia(page, '/servers/*/hardening', (props) => {
+            props.server.this_machine = true
+            props.firewall = { ...props.firewall, open: [80, 443], kept_ssh: true, ssh_port: 22 }
+        })
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        await expect(page.getByTestId('firewall-summary')).toHaveText(
+            "This machine's firewall was already on. Provisioning opened 80, 443 and kept its SSH rules. Changes Coresmith applied are listed here."
+        )
+        await expect(page.getByTestId('firewall-ssh-note')).toHaveText(
+            "Port 22 is how people sign in to this machine, so it can't be denied here."
+        )
     })
 
     test('until an owner or admin adds an SSH key, the Hardening tab says why password login stays on', async ({

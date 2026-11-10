@@ -8,10 +8,16 @@ declare(strict_types=1);
 
 namespace App\Services\Server;
 
+use App\Models\Server;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Arr;
 
 final class FirewallConfigurator
 {
+    public const KEPT_SSH = 'kept';
+
+    private const WEB_PORTS = [80, 443];
+
     public function configure(SSHConnection $connection): void
     {
         $server = $connection->server();
@@ -20,13 +26,21 @@ final class FirewallConfigurator
 
         $connection->execute($packages->install([FirewallManagerFactory::packageFor($server)]), sudo: true)->throw();
 
-        $connection->execute($firewall->denyIncomingByDefault(), sudo: true)->throw();
+        $keepsSsh = $server->runs_coresmith && $connection->execute($firewall->isActive(), sudo: true)->successful();
 
-        foreach ($this->requiredPorts($server->ssh_port) as $port) {
+        if (!$keepsSsh) {
+            $connection->execute($firewall->denyIncomingByDefault(), sudo: true)->throw();
+        }
+
+        foreach ($keepsSsh ? self::WEB_PORTS : $this->requiredPorts($server->ssh_port) as $port) {
             $connection->execute($firewall->allow($port), sudo: true)->throw();
         }
 
-        $connection->execute($firewall->enable(), sudo: true)->throw();
+        if (!$keepsSsh) {
+            $connection->execute($firewall->enable(), sudo: true)->throw();
+        }
+
+        $server->forceFill(['meta' => [...Arr::except((array) $server->meta, 'firewall_ssh'), ...($keepsSsh ? ['firewall_ssh' => self::KEPT_SSH] : [])]])->save();
     }
 
     /**
@@ -34,6 +48,19 @@ final class FirewallConfigurator
      */
     public function requiredPorts(int $sshPort): array
     {
-        return array_values(array_unique([$sshPort, 80, 443]));
+        return array_values(array_unique([$sshPort, ...self::WEB_PORTS]));
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function openedPorts(Server $server): array
+    {
+        return self::keptSsh($server) ? self::WEB_PORTS : $this->requiredPorts($server->ssh_port);
+    }
+
+    public static function keptSsh(Server $server): bool
+    {
+        return (((array) $server->meta)['firewall_ssh'] ?? null) === self::KEPT_SSH;
     }
 }

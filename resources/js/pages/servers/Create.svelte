@@ -42,7 +42,7 @@
     const note = $derived(teams.find((row) => row.id === chosenTeam)?.limit ?? null)
     const providerNote = $derived(teams.find((row) => row.id === (current ?? teams[0]?.id))?.limit ?? null)
     let picks = $state<CloudPicks>({})
-    let name = $state('')
+    let typedName = $state<string | null>(null)
 
     const options = $derived([
         ...(thisMachine ? [{ value: 'this-machine', label: 'This machine' }] : []),
@@ -53,9 +53,13 @@
         ...cloud.types.map((type) => ({ value: `connect:${type.value}`, label: `${type.label}, not connected yet` })),
         { value: 'manual', label: 'Bring your own VM' }
     ])
-    const choice = $derived(
-        picked !== null && options.some((option) => option.value === picked) ? picked : cloud.selected
+    const fallback = $derived(
+        thisMachine !== null && thisMachine.taken_by === null && cloud.selected === 'manual'
+            ? 'this-machine'
+            : cloud.selected
     )
+    const choice = $derived(picked !== null && options.some((option) => option.value === picked) ? picked : fallback)
+    const name = $derived(typedName ?? (choice === 'this-machine' && thisMachine ? thisMachine.name : ''))
     const account = $derived(cloud.accounts.find((row) => `account:${row.id}` === choice) ?? null)
     const connecting = $derived(cloud.types.find((type) => `connect:${type.value}` === choice) ?? null)
 
@@ -65,10 +69,6 @@
         }
 
         picked = value
-
-        if (value === 'this-machine' && name === '' && thisMachine) {
-            name = thisMachine.name
-        }
 
         if (value.startsWith('account:')) {
             router.get(
@@ -89,7 +89,8 @@
             required
             placeholder="outpost-02"
             autocomplete="off"
-            bind:value={name}
+            value={name}
+            oninput={(event) => (typedName = (event.currentTarget as HTMLInputElement).value)}
             aria-invalid={error ? true : undefined}
         />
         <FieldError message={error} />
@@ -174,6 +175,15 @@
                                 Run your apps on the machine Coresmith runs on. Coresmith gets root here with a key that
                                 only works from this machine, then checks and provisions it like any server.
                             </p>
+                            <div>
+                                <Label for="environment" class="mb-1.5">Environment</Label>
+                                <NativeSelect
+                                    id="environment"
+                                    name="environment"
+                                    options={environments}
+                                    value="Production"
+                                />
+                            </div>
                             {@render teamField(errors.team_id)}
                             <Button type="submit" class="w-full" disabled={processing}>Use this machine</Button>
                         {/if}

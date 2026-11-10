@@ -46,6 +46,11 @@ final class FirewalldFirewallManager implements FirewallManager
         return 'firewall-cmd --list-all';
     }
 
+    public function isActive(): string
+    {
+        return 'firewall-cmd --state';
+    }
+
     public function enable(): string
     {
         return 'systemctl enable --now firewalld';
