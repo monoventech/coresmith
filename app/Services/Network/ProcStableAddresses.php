@@ -10,11 +10,13 @@ namespace App\Services\Network;
 
 final class ProcStableAddresses implements StableAddresses
 {
+    public const PATH = '/proc/net/if_inet6';
+
     private const GLOBAL_SCOPE = '00';
 
     private const UNSTABLE = 0x01 | 0x08 | 0x20 | 0x40;
 
-    public function __construct(private readonly string $path = '/proc/net/if_inet6') {}
+    public function __construct(private readonly string $path = self::PATH) {}
 
     public function ipv6(): array
     {
