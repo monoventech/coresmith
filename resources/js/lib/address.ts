@@ -4,5 +4,6 @@ export type Address = {
     certificate: 'public' | 'internal' | 'tailscale'
     managed: boolean
     change: { state: 'running' | 'failed' | 'done'; from: string; to: string; error: string | null } | null
+    check: { host: string; ok: boolean; problems: string[]; notes: string[]; checked_at: string } | null
     follow: { github: string | null; sso: string | null } | null
 }

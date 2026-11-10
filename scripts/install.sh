@@ -83,6 +83,8 @@ VERBOSE=false
 
 PKG_MANAGER=""
 SERVER_IP=""
+PUBLIC_IP=""
+ON_CLOUD=false
 SSH_PORT="22"
 PANEL_HOST=""
 PANEL_URL=""
@@ -255,10 +257,15 @@ preflight() {
     [ -n "$SERVER_IP" ] || fatal "Could not determine this server's IP address."
     success "Server IP: $SERVER_IP"
 
-    local public_ip
-    public_ip="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
-    if [ -n "$public_ip" ] && [ "$public_ip" != "$SERVER_IP" ]; then
-        log "Reachable from the internet as ${public_ip}, through NAT. Without --domain Coresmith answers on ${SERVER_IP}; point a domain at ${public_ip} to use it from outside."
+    PUBLIC_IP="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+    [[ "$PUBLIC_IP" =~ ^[0-9]+(\.[0-9]+){3}$ ]] || PUBLIC_IP=""
+
+    if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "$SERVER_IP" ]; then
+        log "This server reaches the internet as ${PUBLIC_IP}, through NAT."
+
+        if on_cloud; then
+            ON_CLOUD=true
+        fi
     fi
 
     if command -v ss >/dev/null 2>&1; then
@@ -950,6 +957,22 @@ configure_environment() {
 
 is_ip_address() {
     [[ "$1" =~ ^[0-9]+(\.[0-9]+){3}$ || "$1" == *:* ]]
+}
+
+is_private_ip() {
+    [[ "$1" =~ ^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.) ]]
+}
+
+on_cloud() {
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 http://169.254.169.254/ 2>/dev/null)" != "000" ]
+}
+
+cloud_note() {
+    if ! $ON_CLOUD || [ -z "$PUBLIC_IP" ] || [ "$PANEL_HOST" != "$SERVER_IP" ] || [ "$PUBLIC_IP" = "$SERVER_IP" ] || ! is_private_ip "$SERVER_IP"; then
+        return 0
+    fi
+
+    printf '%s' "https://${SERVER_IP} only opens inside your provider's network. To open Coresmith from the internet, point a domain at ${PUBLIC_IP}, allow TCP ports 80 and 443 in your provider's firewall, then run the installer again with --domain and that domain."
 }
 
 caddy_signs_itself() {
@@ -1791,7 +1814,7 @@ print_wrapped() {
 }
 
 print_summary() {
-    local setup_link="$1" healthy="$2" already_set_up="${3:-false}" loads=false
+    local setup_link="$1" healthy="$2" already_set_up="${3:-false}" loads=false note
     local colour="$YELLOW" title="   Coresmith is installed, but isn't answering    "
 
     if [ "$healthy" = "true" ] && link_loads "$PANEL_HOST"; then
@@ -1819,6 +1842,9 @@ print_summary() {
     if caddy_signs_itself "$PANEL_HOST"; then
         print_wrapped "Your browser will warn about the certificate at ${PANEL_URL}, because Caddy signs it itself. Continue past the warning to open Coresmith."
     fi
+
+    note="$(cloud_note)"
+    [ -z "$note" ] || print_wrapped "$note"
 
     if [ -n "$TARGET_DOMAIN" ] && [ "$PANEL_HOST" != "$TARGET_DOMAIN" ]; then
         printf "  %s%s⚠  Coresmith isn't on %s yet:%s\n\n" "$BOLD" "$YELLOW" "$TARGET_DOMAIN" "$NC"

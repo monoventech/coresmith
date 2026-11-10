@@ -42,12 +42,12 @@ function installAddressRun(string $body, array $variables = [], ?string $env = n
         . 'SHARED_DIR=' . escapeshellarg($directory) . ' INSTALL_DIR=' . escapeshellarg($directory) . "\n"
         . "BOLD='' GREEN='' YELLOW='' CYAN='' NC=''\n"
         . "DB_DRIVER=sqlite RELEASE_DIR=/opt/coresmith/releases/1 DATA_DIR=/var/lib/coresmith HORIZON_LOG=/var/log/coresmith/horizon.log\n"
-        . "SERVER_IP=192.168.0.248 DOMAIN='' PANEL_HOST='' PANEL_URL='' TARGET_DOMAIN='' ADDRESS_LINES=''\n"
+        . "SERVER_IP=192.168.0.248 PUBLIC_IP='' ON_CLOUD=false DOMAIN='' PANEL_HOST='' PANEL_URL='' TARGET_DOMAIN='' ADDRESS_LINES=''\n"
         . collect($variables)->map(fn(string $value, string $name): string => $name . '=' . escapeshellarg($value) . "\n")->implode('')
         . "log() { printf 'log: %s\\n' \"\$1\"; }\n"
         . "success() { printf 'ok: %s\\n' \"\$1\"; }\n"
         . "warn() { printf 'warn: %s\\n' \"\$1\"; }\n"
-        . installAddressFunctions('env_value', 'is_ip_address', 'caddy_signs_itself', 'choose_address', 'move_to_domain', 'link_loads', 'print_wrapped', 'print_summary') . "\n"
+        . installAddressFunctions('env_value', 'is_ip_address', 'caddy_signs_itself', 'is_private_ip', 'on_cloud', 'cloud_note', 'choose_address', 'move_to_domain', 'link_loads', 'print_wrapped', 'print_summary') . "\n"
         . $body;
 
     $process = new Process(['bash', '-c', $script]);
@@ -241,3 +241,57 @@ test('a re-run refreshes Coresmith\'s own Caddy site once the services are up, s
         ->and(strpos($finalize, 'wait_for_service coresmith-reverb'))->toBeLessThan(strpos($finalize, 'coresmith:site-refresh'))
         ->and(strpos($finalize, 'coresmith:site-refresh'))->toBeLessThan(strpos($finalize, 'move_to_domain'));
 });
+
+const INSTALL_ADDRESS_CLOUD_NOTE = "https://172.31.5.10 only opens inside your provider's network. To open Coresmith from the internet, point a domain at 203.0.113.5, allow TCP ports 80 and 443 in your provider's firewall, then run the installer again with --domain and that domain.";
+
+test("on a cloud server behind NAT, the summary says the link only opens inside the provider's network, and how to get in from outside", function () {
+    $process = installAddressRun(<<<'BASH'
+        link_loads() { return 0; }
+        print_summary "https://172.31.5.10/install?token=abc" true false
+        BASH, ['SERVER_IP' => '172.31.5.10', 'PUBLIC_IP' => '203.0.113.5', 'ON_CLOUD' => 'true', 'PANEL_HOST' => '172.31.5.10', 'PANEL_URL' => 'https://172.31.5.10']);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(installAddressFlat($process))->toContain(INSTALL_ADDRESS_CLOUD_NOTE);
+});
+
+test("the cloud note stays out wherever it isn't true", function (array $variables) {
+    $process = installAddressRun(<<<'BASH'
+        link_loads() { return 0; }
+        print_summary "$PANEL_URL/install?token=abc" true false
+        BASH, [...['SERVER_IP' => '172.31.5.10', 'PUBLIC_IP' => '203.0.113.5', 'ON_CLOUD' => 'true', 'PANEL_HOST' => '172.31.5.10', 'PANEL_URL' => 'https://172.31.5.10'], ...$variables]);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(installAddressFlat($process))->not->toContain('only opens inside');
+})->with([
+    'a home network, with no cloud metadata' => [['ON_CLOUD' => 'false']],
+    'a cloud server with its public address on the interface' => [['SERVER_IP' => '203.0.113.5', 'PANEL_HOST' => '203.0.113.5', 'PANEL_URL' => 'https://203.0.113.5']],
+    'a cloud server that moved to its domain' => [['PANEL_HOST' => 'coresmith.example.com', 'PANEL_URL' => 'https://coresmith.example.com', 'TARGET_DOMAIN' => 'coresmith.example.com']],
+    'no public address found' => [['PUBLIC_IP' => '']],
+]);
+
+test('a cloud machine is one whose metadata address answers, whatever it answers', function (string $code, bool $cloud) {
+    $process = installAddressRun(<<<'BASH'
+        curl() { printf '%s' "$*" >"$SHARED_DIR/called"; printf '%s' "$CODE"; }
+        on_cloud && printf 'cloud' || printf 'not'
+        printf '|%s' "$(cat "$SHARED_DIR/called")"
+        BASH, ['CODE' => $code]);
+
+    [$answer, $arguments] = explode('|', $process->getOutput());
+
+    expect($answer)->toBe($cloud ? 'cloud' : 'not')
+        ->and($arguments)->toContain('http://169.254.169.254/')
+        ->toContain('--max-time 1');
+})->with([
+    'aws asking for a token' => ['401', true],
+    'google wanting its header' => ['403', true],
+    'a plain answer' => ['200', true],
+    'nothing there' => ['000', false],
+]);
+
+test('private addresses are the ones a cloud or a home network hands out behind NAT', function (string $address, bool $private) {
+    $process = installAddressRun('is_private_ip ' . escapeshellarg($address) . ' && printf private || printf public');
+
+    expect($process->getOutput())->toBe($private ? 'private' : 'public');
+})->with([
+    ['10.0.3.7', true], ['172.31.5.10', true], ['172.15.0.1', false], ['192.168.0.248', true], ['100.64.0.9', true], ['203.0.113.5', false], ['8.8.8.8', false],
+]);

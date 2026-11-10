@@ -7,11 +7,16 @@
     import { Label } from '@/components/ui/label'
     import type { Address } from '@/lib/address'
     import { Form, router } from '@inertiajs/svelte'
+    import { CircleAlert, CircleCheck, Info } from '@lucide/svelte'
 
     let { address, canManage }: { address: Address; canManage: boolean } = $props()
 
     let changing = $state(false)
-    let suggested = $state('')
+    let domain = $state('')
+    let checkedFor = $state<string | null>(null)
+    let checking = $state(false)
+
+    const result = $derived(checkedFor !== null && checkedFor === domain ? address.check : null)
 
     const running = $derived(address.change?.state === 'running')
     const failed = $derived(address.change?.state === 'failed' ? address.change : null)
@@ -42,8 +47,25 @@
     )
 
     function change(value = '') {
-        suggested = value
+        domain = value
+        checkedFor = null
         changing = true
+    }
+
+    function check() {
+        const asked = domain
+        checking = true
+
+        router.post(
+            route('settings.address.check'),
+            { address: asked },
+            {
+                preserveScroll: true,
+                only: ['address'],
+                onSuccess: () => (checkedFor = asked),
+                onFinish: () => (checking = false)
+            }
+        )
     }
 
     $effect(() => {
@@ -162,8 +184,9 @@
                 <Dialog.Header>
                     <Dialog.Title>Change Coresmith's address</Dialog.Title>
                     <Dialog.Description
-                        >Point the domain at this server first. Coresmith switches once Caddy has a certificate for it,
-                        and the current address then sends people there. You'll sign in again at the new address.</Dialog.Description
+                        >Check the domain first: Coresmith tests it from outside and says what to fix. Once it passes,
+                        Coresmith switches when Caddy has a certificate for it, and the current address then sends
+                        people there. You'll sign in again at the new address.</Dialog.Description
                     >
                 </Dialog.Header>
                 <div class="mt-4">
@@ -171,7 +194,7 @@
                     <Input
                         id="address"
                         name="address"
-                        value={suggested}
+                        bind:value={domain}
                         required
                         placeholder="coresmith.example.com"
                         autocomplete="off"
@@ -184,10 +207,42 @@
                     <p id="address-hint" class="mt-2 text-[12px] text-muted-foreground">
                         A Tailscale name like beelink.tail1234.ts.net works too.
                     </p>
+                    {#if result}
+                        <div class="mt-3 flex flex-col gap-2 text-[12.5px]" role="status" data-testid="address-check">
+                            {#if result.ok}
+                                <p class="m-0 flex gap-2">
+                                    <CircleCheck class="mt-0.5 size-3.75 shrink-0 text-success" />
+                                    <span
+                                        >Coresmith can move to <span class="font-mono text-[12px] wrap-anywhere"
+                                            >{result.host}</span
+                                        >.</span
+                                    >
+                                </p>
+                            {:else}
+                                {#each result.problems as problem (problem)}
+                                    <p class="m-0 flex gap-2 text-destructive-strong">
+                                        <CircleAlert class="mt-0.5 size-3.75 shrink-0" />
+                                        <span class="wrap-anywhere">{problem}</span>
+                                    </p>
+                                {/each}
+                            {/if}
+                            {#each result.notes as note (note)}
+                                <p class="m-0 flex gap-2 text-muted-foreground">
+                                    <Info class="mt-0.5 size-3.75 shrink-0" />
+                                    <span class="wrap-anywhere">{note}</span>
+                                </p>
+                            {/each}
+                        </div>
+                    {/if}
                 </div>
                 <Dialog.Footer>
                     <Button variant="ghost" type="button" onclick={() => (changing = false)}>Cancel</Button>
-                    <Button type="submit" disabled={processing}>{processing ? 'Checking…' : 'Switch address'}</Button>
+                    <Button variant="outline" type="button" disabled={checking || domain.trim() === ''} onclick={check}
+                        >{checking ? 'Checking…' : result ? 'Check again' : 'Check'}</Button
+                    >
+                    <Button type="submit" disabled={processing || !result?.ok}
+                        >{processing ? 'Switching…' : 'Switch address'}</Button
+                    >
                 </Dialog.Footer>
             {/snippet}
         </Form>

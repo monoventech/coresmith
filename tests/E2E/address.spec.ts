@@ -50,15 +50,50 @@ test.describe("Coresmith's address", () => {
         await expect(card(page)).toContainText('browsers warn until Coresmith has a domain or a Tailscale name')
     })
 
-    test('an address that is not a domain is refused next to the field', async ({ page }) => {
+    test("a name that isn't a domain is checked, and the check says what's wrong without allowing a switch", async ({
+        page
+    }) => {
         await gotoSettings(page, 'General')
         await card(page).getByRole('button', { name: 'Change' }).click()
+        await expect(dialog(page).getByRole('button', { name: 'Switch address' })).toBeDisabled()
         await dialog(page).getByLabel('Domain').fill('beelink')
-        await dialog(page).getByRole('button', { name: 'Switch address' }).click()
+        await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
 
-        await expect(dialog(page)).toContainText("That doesn't look like a domain. Try coresmith.example.com.")
-        await expect(dialog(page).getByLabel('Domain')).toHaveAttribute('aria-invalid', 'true')
+        await expect(page.getByTestId('address-check')).toHaveText(
+            "That doesn't look like a domain. Try coresmith.example.com."
+        )
+        await expect(dialog(page).getByRole('button', { name: 'Check again' })).toBeVisible()
+        await expect(dialog(page).getByRole('button', { name: 'Switch address' })).toBeDisabled()
     })
+
+    test('a check that passes allows the switch, and changing the name asks for a new check', async ({ page }) => {
+        await gotoSettings(page, 'General')
+        await card(page).getByRole('button', { name: 'Change' }).click()
+        await dialog(page).getByLabel('Domain').fill('[::1]')
+        await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
+
+        await expect(page.getByTestId('address-check')).toHaveText('Coresmith can move to ::1.')
+        await expect(dialog(page).getByRole('button', { name: 'Switch address' })).toBeEnabled()
+
+        await dialog(page).getByLabel('Domain').fill('[::1]x')
+
+        await expect(page.getByTestId('address-check')).toHaveCount(0)
+        await expect(dialog(page).getByRole('button', { name: 'Switch address' })).toBeDisabled()
+        await expect(dialog(page).getByRole('button', { name: 'Check', exact: true })).toBeVisible()
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the check's findings are accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await gotoSettings(page, 'General')
+            await card(page).getByRole('button', { name: 'Change' }).click()
+            await dialog(page).getByLabel('Domain').fill('beelink')
+            await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
+            await expect(page.getByTestId('address-check')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 
     test('a switch under way says what it waits for, and offers no second one', async ({ page }) => {
         await settingsShowing(page, {
