@@ -109,7 +109,7 @@ function thisMachineBlock(string $key): string
 
 function thisMachineRule(): string
 {
-    return "Match Address 127.0.0.1,::1\n    PermitRootLogin prohibit-password\nMatch all\n";
+    return "Match User root Address 127.0.0.1,::1\n    PermitRootLogin prohibit-password\n    AllowUsers root\n    AllowGroups root\nMatch all\n";
 }
 
 beforeEach(function () {
@@ -256,6 +256,37 @@ test('an sshd that still turns root away from this machine, or never listens on 
         "sshd doesn't listen on 127.0.0.1, so Coresmith can't reach it from this machine and the old settings are back. Check ListenAddress in /etc/ssh/sshd_config.",
     ],
 ]);
+
+test('a guest list or deny list that still keeps root out from this machine gets the old settings back, and says which', function (string $lists, string $error) {
+    $base = thisMachineBase();
+    $keys = (string) file_get_contents("{$base}/root-ssh/authorized_keys");
+
+    $process = thisMachineRun($base, 'one add ' . thisMachineKey(), ['effective' => "port 22\npermitrootlogin prohibit-password\nlistenaddress 0.0.0.0:22\n{$lists}hostkey /etc/ssh/ssh_host_ed25519_key\n"]);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(thisMachineAnswer($base)['error'] ?? null)->toBe($error)
+        ->and(file_get_contents("{$base}/root-ssh/authorized_keys"))->toBe($keys)
+        ->and(file_exists("{$base}/ssh/sshd_config.d/00-coresmith-local.conf"))->toBeFalse()
+        ->and(thisMachineCalls($base))->not->toContain('systemctl reload ssh');
+})->with([
+    'a guest list without root' => ["allowusers oseughu\n", "sshd's AllowUsers still leaves root out on this machine, so the old settings are back. Check AllowUsers in /etc/ssh/sshd_config and the files it includes."],
+    'a group list without root' => ["allowgroups ssh-users\n", "sshd's AllowGroups still leaves root out on this machine, so the old settings are back. Check AllowGroups in /etc/ssh/sshd_config and the files it includes."],
+    'root denied by name' => ["denyusers root\n", "sshd's DenyUsers turns root away, so the old settings are back. Take root out of DenyUsers in /etc/ssh/sshd_config or the files it includes, then try again."],
+    'everyone denied by a pattern' => ["denyusers *@*\n", "sshd's DenyUsers turns root away, so the old settings are back. Take root out of DenyUsers in /etc/ssh/sshd_config or the files it includes, then try again."],
+    "root's group denied" => ["denygroups root\n", "sshd's DenyGroups turns root's group away, so the old settings are back. Take root out of DenyGroups in /etc/ssh/sshd_config or the files it includes, then try again."],
+]);
+
+test('a guest list for people still lets Coresmith in as root from this machine, through its own rule', function () {
+    $base = thisMachineBase();
+    file_put_contents("{$base}/ssh/sshd_config.d/99-hardening.conf", "PermitRootLogin no\nAllowUsers oseughu\n");
+
+    $process = thisMachineRun($base, 'one add ' . thisMachineKey(), ['effective' => "port 22\npermitrootlogin without-password\nlistenaddress 0.0.0.0:22\nallowusers root\nallowgroups root\ndenyusers nobody\nhostkey /etc/ssh/ssh_host_ed25519_key\n"]);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(thisMachineAnswer($base)['ok'] ?? null)->toBeTrue()
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/00-coresmith-local.conf"))->toBe(thisMachineRule())
+        ->and(file_get_contents("{$base}/ssh/sshd_config.d/99-hardening.conf"))->toBe("PermitRootLogin no\nAllowUsers oseughu\n");
+});
 
 test('Coresmith is told the port sshd listens on for this machine', function () {
     $base = thisMachineBase();

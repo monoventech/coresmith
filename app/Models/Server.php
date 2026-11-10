@@ -70,6 +70,13 @@ class Server extends Model
         return (((array) $this->meta)['ssh_hardening'] ?? null) === SecurityHardening::PASSWORDS_KEPT;
     }
 
+    public function systemdVersion(): ?int
+    {
+        $version = ((array) $this->meta)['systemd'] ?? null;
+
+        return is_int($version) ? $version : null;
+    }
+
     public function runtimeUser(): string
     {
         return $this->runs_coresmith ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;

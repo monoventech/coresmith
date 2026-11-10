@@ -370,3 +370,27 @@ test('php-fpm logs to the journal, because the runtime folder is read only to it
 
     expect($pool)->toStartWith("[global]\nerror_log = syslog\nsyslog.ident = coresmith-app-my-app-fpm\n\n[coresmith-app-my-app]\n");
 });
+
+test("on Coresmith's own machine an app's processes and its PHP-FPM run in the apps slice, out of sight of Coresmith", function () {
+    $server = Server::factory()->create(['runs_coresmith' => true, 'meta' => ['systemd' => 255]]);
+    $app = managedApp(['server_id' => $server->id]);
+    $sandbox = "Slice=coresmith-apps.slice\nInaccessiblePaths=-/opt/coresmith -/var/lib/coresmith -/var/lib/coresmith-this-machine -/etc/caddy -/run/caddy-admin -/var/log/coresmith-install.log -/var/log/coresmith-horizon.log -/var/log/coresmith-reverb.log -/var/log/coresmith-fpm-error.log\nProtectProc=invisible\n\n[Install]";
+
+    expect((new SystemdUnitBuilder(new AsdfManager))->build($app, 'web', '/bin/true'))->toContain("ProtectControlGroups=true\n{$sandbox}")
+        ->and((new FpmPoolBuilder(new AsdfManager))->unit($app))->toContain("PrivateTmp=true\n{$sandbox}");
+});
+
+test("on every other server an app's units stay exactly as they were", function () {
+    $app = managedApp();
+    $unit = (new SystemdUnitBuilder(new AsdfManager))->build($app, 'web', '/bin/true');
+    $fpm = (new FpmPoolBuilder(new AsdfManager))->unit($app);
+
+    foreach ([$unit, $fpm] as $text) {
+        expect($text)->not->toContain('Slice=')
+            ->not->toContain('InaccessiblePaths=')
+            ->not->toContain('ProtectProc=');
+    }
+
+    expect($unit)->toContain("ProtectControlGroups=true\n\n[Install]")
+        ->and($fpm)->toContain("PrivateTmp=true\n\n[Install]");
+});

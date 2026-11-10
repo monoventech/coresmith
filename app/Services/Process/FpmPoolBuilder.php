@@ -81,6 +81,7 @@ final class FpmPoolBuilder
         $installs = AsdfManager::DATA_DIR;
         $envFile = (new ReleasePaths($application))->envFile();
         $umask = AppAccount::UMASK;
+        $sandbox = implode('', array_map(fn(string $property): string => $property . "\n", AppSandbox::properties($application->server)));
 
         return <<<UNIT
         [Unit]
@@ -101,7 +102,7 @@ final class FpmPoolBuilder
         ReadWritePaths={$base} /var/run/php /tmp
         ReadOnlyPaths={$installs}
         PrivateTmp=true
-
+        {$sandbox}
         [Install]
         WantedBy=multi-user.target
 

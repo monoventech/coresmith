@@ -59,7 +59,7 @@ test('phase 1 persists the detected os and hardware', function () {
 
     expect($fresh->os_name)->toBe('ubuntu')
         ->and($fresh->os_version)->toBe('24.04')
-        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified']);
+        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'systemd' => 255, 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified']);
 });
 
 test('phase 2 installs base packages through the abstraction', function () {

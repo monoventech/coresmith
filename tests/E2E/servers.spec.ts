@@ -475,7 +475,7 @@ test.describe('provisioning a server', () => {
         await page.goto('/servers/create')
         await page.getByLabel('Provider').selectOption('manual')
         await page.getByLabel('Server name').fill(name)
-        await page.getByLabel('IP address').fill('127.0.0.1')
+        await page.getByLabel('IP address').fill('0.0.0.1')
         await page.getByLabel('SSH port').fill('1')
         await page.getByLabel('SSH user').fill('maya')
         await page.getByLabel('Password, optional').fill('not-a-real-password')
@@ -504,5 +504,20 @@ test.describe('provisioning a server', () => {
 
         await expect(page.getByLabel('IP address')).toHaveAttribute('aria-invalid', 'true')
         await expect(page.getByText("That doesn't look like an IP address. Try 203.0.113.40.")).toBeVisible()
+    })
+
+    test("the machine Coresmith runs on isn't taken as a VM, and the form says it's already a server", async ({
+        page
+    }) => {
+        await page.goto('/servers/create')
+        await page.getByLabel('Provider').selectOption('manual')
+        await page.getByLabel('Server name').fill('own-machine')
+        await page.getByLabel('IP address').fill('127.0.0.1')
+        await page.getByRole('button', { name: 'Add server' }).click()
+
+        await expect(page.getByLabel('IP address')).toHaveAttribute('aria-invalid', 'true')
+        await expect(
+            page.getByText("That's the machine Coresmith runs on, and it's already a server in Monoven Ltd.")
+        ).toBeVisible()
     })
 })
