@@ -59,6 +59,11 @@ test('the rest of the probe is still parsed alongside uptime', function () {
         'rx' => 1000,
         'tx' => 2000,
         'uptime' => 93630,
+        'memory_used_mb' => null,
+        'memory_total_mb' => null,
+        'disk_used_mb' => null,
+        'disk_free_mb' => null,
+        'disk_total_mb' => null,
     ]);
 });
 

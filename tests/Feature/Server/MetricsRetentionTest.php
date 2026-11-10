@@ -125,9 +125,53 @@ test('the server page carries the latest reading and a day of hourly averages', 
         ->get(route('servers.show', $server))
         ->assertOk()
         ->assertInertia(fn($page) => $page
-            ->where('server.metrics.cpu', ['now' => 30, 'series' => [12.3, 30.5]])
-            ->where('server.metrics.memory', ['now' => 51, 'series' => [44.3, 50.5]])
-            ->where('server.metrics.disk', ['now' => 62, 'series' => [61.2, 62.2]]));
+            ->where('server.metrics.cpu.now', 30)
+            ->where('server.metrics.cpu.series', [12.3, 30.5])
+            ->where('server.metrics.memory.now', 51)
+            ->where('server.metrics.memory.series', [44.3, 50.5])
+            ->where('server.metrics.disk.now', 62)
+            ->where('server.metrics.disk.series', [61.2, 62.2]));
+});
+
+test('each reading card says, in plain amounts, what its percentage is of', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['meta' => [
+        'cpu_cores' => 16,
+        'cpu_physical_cores' => 8,
+        'cpu_model' => 'AMD Ryzen 7 6800H with Radeon Graphics',
+        'memory_mb' => 27833,
+        'memory_installed_mb' => 32768,
+        'disk_gb' => 913,
+    ]]);
+
+    ServerMetric::factory()->for($server)->create([
+        'load_1m' => 0.1,
+        'memory_used_mb' => 1637,
+        'memory_total_mb' => 27833,
+        'disk_used_mb' => 16384,
+        'disk_free_mb' => 872448,
+        'disk_total_mb' => 934912,
+        'recorded_at' => now()->subMinute(),
+    ]);
+
+    $this->actingAs(metricsUser($team, TeamRole::Member))
+        ->get(route('servers.show', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('server.metrics.cpu.detail', 'AMD Ryzen 7 6800H with Radeon Graphics · 8 cores, 16 threads · load 0.10')
+            ->where('server.metrics.memory.detail', '1.6 GB of 27 GB used · 32 GB installed')
+            ->where('server.metrics.disk.detail', '16 GB of 913 GB used · 852 GB free'));
+});
+
+test('without a current reading, the cards still say what the server has', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'memory_installed_mb' => 4096, 'disk_gb' => 80]]);
+
+    $this->actingAs(metricsUser($team, TeamRole::Member))
+        ->get(route('servers.show', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('server.metrics.cpu.detail', '2 cores')
+            ->where('server.metrics.memory.detail', '4 GB total')
+            ->where('server.metrics.disk.detail', '80 GB total'));
 });
 
 test('a server that has never been read reports no metrics rather than failing', function () {
@@ -138,9 +182,9 @@ test('a server that has never been read reports no metrics rather than failing',
         ->get(route('servers.show', $server))
         ->assertOk()
         ->assertInertia(fn($page) => $page->where('server.metrics', [
-            'cpu' => ['now' => null, 'series' => []],
-            'memory' => ['now' => null, 'series' => []],
-            'disk' => ['now' => null, 'series' => []],
+            'cpu' => ['now' => null, 'series' => [], 'detail' => null],
+            'memory' => ['now' => null, 'series' => [], 'detail' => null],
+            'disk' => ['now' => null, 'series' => [], 'detail' => null],
         ]));
 });
 
