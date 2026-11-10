@@ -711,7 +711,7 @@ test('re-running the installer keeps the keys that existing data was encrypted w
         ->and($body)->toContain('ensure_env_secret REVERB_APP_KEY')
         ->and($body)->toContain('ensure_env_secret REVERB_APP_SECRET')
         ->and($body)->not->toContain('    update_env CORESMITH_VAULT_KEY "$(openssl rand')
-        ->and($body)->toContain("preflight\n    refuse_linked_layout\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
+        ->and($body)->toContain("preflight\n    refuse_linked_layout\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    choose_address\n    ensure_database_password");
 });
 
 test('the browser is given the reverb key so live updates use the socket', function () {

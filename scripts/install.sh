@@ -86,6 +86,8 @@ SERVER_IP=""
 SSH_PORT="22"
 PANEL_HOST=""
 PANEL_URL=""
+TARGET_DOMAIN=""
+ADDRESS_LINES=""
 OS_ID=""
 OS_NAME=""
 OS_VERSION=""
@@ -328,6 +330,23 @@ interactive_prompts() {
         esac
         [ "$DB_DRIVER" = "pgsql" ] && DB_PORT="${DB_PORT:-5432}"
         [ "$DB_DRIVER" = "mysql" ] && DB_PORT="${DB_PORT:-3306}"
+    fi
+}
+
+choose_address() {
+    local existing wanted
+
+    existing="$(env_value APP_URL)"
+    existing="${existing#*://}"
+    existing="${existing%%/*}"
+    wanted="$(printf '%s' "$DOMAIN" | tr '[:upper:]' '[:lower:]')"
+
+    PANEL_HOST="${existing:-$SERVER_IP}"
+    PANEL_URL="https://${PANEL_HOST}"
+    TARGET_DOMAIN=""
+
+    if [ -n "$wanted" ] && [ "$wanted" != "$PANEL_HOST" ]; then
+        TARGET_DOMAIN="$wanted"
     fi
 }
 
@@ -848,9 +867,6 @@ configure_environment() {
     cd "$RELEASE_DIR"
     [ -f "$SHARED_DIR/.env" ] || sudo -u coresmith cp "$RELEASE_DIR/.env.example" "$SHARED_DIR/.env"
 
-    PANEL_HOST="${DOMAIN:-$SERVER_IP}"
-    PANEL_URL="https://${PANEL_HOST}"
-
     update_env APP_NAME "Coresmith"
     update_env APP_ENV "production"
     update_env APP_DEBUG "false"
@@ -932,10 +948,18 @@ configure_environment() {
 
 # ── Phase 6: Caddy configuration ─────────────────────────────────────────────
 
+is_ip_address() {
+    [[ "$1" =~ ^[0-9]+(\.[0-9]+){3}$ || "$1" == *:* ]]
+}
+
+caddy_signs_itself() {
+    is_ip_address "$1" || [[ "$1" == localhost || "$1" =~ \.(localhost|local|internal|home\.arpa)$ ]]
+}
+
 render_site() {
     local host="$1" ip_lines='/__IF_IP__/d'
 
-    if [[ "$host" =~ ^[0-9]+(\.[0-9]+){3}$ || "$host" == *:* ]]; then
+    if is_ip_address "$host"; then
         ip_lines='s/__IF_IP__//'
     fi
 
@@ -1142,7 +1166,7 @@ UNIT
 
     cat >/etc/systemd/system/coresmith-address.service <<UNIT
 [Unit]
-Description=Coresmith address change, started from Settings
+Description=Coresmith address change, started from Settings or the installer
 After=network-online.target redis-server.service caddy.service
 Wants=network-online.target
 
@@ -1624,6 +1648,35 @@ wait_for_service() {
     fi
 }
 
+move_to_domain() {
+    local output="" moved=false
+
+    log "Moving Coresmith to ${TARGET_DOMAIN}. This can take a few minutes while its certificate is issued..."
+
+    if output="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:address-request "$TARGET_DOMAIN" --wait 2>&1)"; then
+        moved=true
+    fi
+
+    ADDRESS_LINES="$(printf '%s\n' "$output" | grep -vE '^(Switching to |Coresmith now answers on )' || true)"
+
+    if $moved; then
+        PANEL_HOST="$TARGET_DOMAIN"
+        PANEL_URL="https://${PANEL_HOST}"
+        success "Coresmith now answers on ${PANEL_HOST}"
+    else
+        [ -n "$ADDRESS_LINES" ] || ADDRESS_LINES="Coresmith couldn't move to ${TARGET_DOMAIN}, and didn't say why."
+        warn "Coresmith stays on ${PANEL_HOST} for now. The summary below says why."
+    fi
+}
+
+link_loads() {
+    if is_ip_address "$1"; then
+        curl -fsk -o /dev/null --max-time 10 "https://${1}/up"
+    else
+        curl -fsk -o /dev/null --max-time 10 --resolve "${1}:443:127.0.0.1" "https://${1}/up"
+    fi
+}
+
 finalize() {
     log "Phase 8/8: starting services..."
 
@@ -1666,6 +1719,14 @@ finalize() {
         prune_releases
     fi
 
+    if [ -n "$TARGET_DOMAIN" ]; then
+        if $healthy; then
+            move_to_domain
+        else
+            ADDRESS_LINES="Some of Coresmith's services didn't start, so it didn't move to ${TARGET_DOMAIN}."
+        fi
+    fi
+
     local setup_link="" setup_output="" already_set_up=false
 
     refuse_link "$SETUP_TOKEN_FILE"
@@ -1692,12 +1753,22 @@ setup_link_from() {
     printf '%s\n' "$1" | tail -n 1 | grep -E '^https?://[^[:space:]/?#]+/install\?token=[A-Za-z0-9]{64}$' || true
 }
 
-print_summary() {
-    local setup_link="$1" healthy="$2" already_set_up="${3:-false}"
+print_wrapped() {
+    printf '%s\n' "$1" | fold -s -w 72 | sed -e 's/[[:space:]]*$//' -e 's/^/  /'
+    printf '\n'
+}
 
-    printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$GREEN" "$NC"
-    printf '%s%s║        Coresmith installed successfully!         ║%s\n' "$BOLD" "$GREEN" "$NC"
-    printf '%s%s╚══════════════════════════════════════════════════╝%s\n\n' "$BOLD" "$GREEN" "$NC"
+print_summary() {
+    local setup_link="$1" healthy="$2" already_set_up="${3:-false}" loads=false
+    local colour="$YELLOW" title="   Coresmith is installed, but isn't answering    "
+
+    if [ "$healthy" = "true" ] && link_loads "$PANEL_HOST"; then
+        loads=true colour="$GREEN" title="        Coresmith installed successfully!         "
+    fi
+
+    printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$colour" "$NC"
+    printf '%s%s║%s║%s\n' "$BOLD" "$colour" "$title" "$NC"
+    printf '%s%s╚══════════════════════════════════════════════════╝%s\n\n' "$BOLD" "$colour" "$NC"
 
     printf '  %sAddress:%s      %s\n' "$BOLD" "$NC" "$PANEL_URL"
     printf '  %sDatabase:%s     %s\n' "$BOLD" "$NC" "$DB_DRIVER"
@@ -1713,6 +1784,18 @@ print_summary() {
         printf '  Coresmith is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
 
+    if caddy_signs_itself "$PANEL_HOST"; then
+        print_wrapped "Your browser will warn about the certificate at ${PANEL_URL}, because Caddy signs it itself. Continue past the warning to open Coresmith."
+    fi
+
+    if [ -n "$TARGET_DOMAIN" ] && [ "$PANEL_HOST" != "$TARGET_DOMAIN" ]; then
+        printf "  %s%s⚠  Coresmith isn't on %s yet:%s\n\n" "$BOLD" "$YELLOW" "$TARGET_DOMAIN" "$NC"
+        print_wrapped "$ADDRESS_LINES"
+        print_wrapped "Once that is fixed, move Coresmith to ${TARGET_DOMAIN} in Settings, General."
+    elif [ -n "$ADDRESS_LINES" ]; then
+        print_wrapped "$ADDRESS_LINES"
+    fi
+
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"
     printf '    Status:  systemctl status caddy coresmith-horizon coresmith-reverb\n'
     printf '    Logs:    tail -f %s\n' "$HORIZON_LOG"
@@ -1721,6 +1804,8 @@ print_summary() {
 
     if [ "$healthy" != "true" ]; then
         warn "Some services did not start. Coresmith may be unreachable until they do."
+    elif ! $loads; then
+        warn "${PANEL_URL} didn't load from this server. Check Caddy's log with journalctl -u caddy -n 50."
     fi
 }
 
@@ -1733,6 +1818,7 @@ main() {
     adopt_legacy_layout
     adopt_existing_install
     interactive_prompts
+    choose_address
     ensure_database_password
 
     mkdir -p "$(dirname "$LOG_FILE")"

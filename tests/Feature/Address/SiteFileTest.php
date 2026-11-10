@@ -17,8 +17,8 @@ function siteFileTemp(): string
 
 function siteFileFromInstaller(string $host): string
 {
-    preg_match('/^render_site\(\) \{.*?^\}$/ms', (string) file_get_contents(base_path('scripts/install.sh')), $function);
-    $process = new Process(['bash', '-c', "set -euo pipefail\nRELEASE_DIR=" . escapeshellarg(base_path()) . "\n" . ($function[0] ?? '') . "\nrender_site " . escapeshellarg($host)]);
+    preg_match_all('/^(?:is_ip_address|render_site)\(\) \{.*?^\}$/ms', (string) file_get_contents(base_path('scripts/install.sh')), $functions);
+    $process = new Process(['bash', '-c', "set -euo pipefail\nRELEASE_DIR=" . escapeshellarg(base_path()) . "\n" . implode("\n", $functions[0]) . "\nrender_site " . escapeshellarg($host)]);
     $process->mustRun();
 
     return $process->getOutput();
