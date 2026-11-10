@@ -67,6 +67,7 @@ class TeamInvitation extends Model
     {
         return [
             'role' => TeamRole::class,
+            'sees_everything' => 'boolean',
             'link_offered' => 'boolean',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',

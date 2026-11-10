@@ -77,7 +77,7 @@ class Team extends Model
 
     public function members(): BelongsToMany
     {
-        return $this->belongsToMany(User::class)->withPivot('role')->withTimestamps();
+        return $this->belongsToMany(User::class)->withPivot('role', 'sees_everything')->withTimestamps();
     }
 
     public function owners(): BelongsToMany

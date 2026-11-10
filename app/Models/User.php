@@ -76,7 +76,7 @@ class User extends Authenticatable
 
     public function teams(): BelongsToMany
     {
-        return $this->belongsToMany(Team::class)->withPivot('role')->withTimestamps();
+        return $this->belongsToMany(Team::class)->withPivot('role', 'sees_everything')->withTimestamps();
     }
 
     public function managesInstance(): bool
