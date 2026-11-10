@@ -43,6 +43,8 @@ final class ServerTabsController extends Controller
 
     public const SSH_KEY_ONLY = 'SSH key-only, modern ciphers (curve25519, ed25519)';
 
+    public const SSH_LEFT_TO_OWNER = "SSH as you set it up, and Coresmith's key only works from this machine";
+
     public const NO_SITE_FOR_UNKNOWN_HOSTS = 'Caddy serves no site for unknown hostnames';
 
     public const UNKNOWN_HOSTS_CLOSED = 'Caddy closes the connection for unknown hostnames';
@@ -65,8 +67,6 @@ final class ServerTabsController extends Controller
 
         $this->authorize('view', $server);
 
-        $keyOnly = $server->sshHardened() || $server->sshPasswordsOffByOwner();
-
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
             'isolation' => $sharedRedis->state($server) === null
@@ -76,15 +76,17 @@ final class ServerTabsController extends Controller
                 array_map(fn(string $item): string => match (true) {
                     $item === self::ADMIN_API_ON_LOCALHOST && $server->caddyAdminOnSocket() => self::ADMIN_API_ON_SOCKET,
                     $item === self::NO_SITE_FOR_UNKNOWN_HOSTS && $server->unknownHostsClosed() => self::UNKNOWN_HOSTS_CLOSED,
+                    $item === self::SSH_KEY_ONLY && $server->sshLeftToOwner() => self::SSH_LEFT_TO_OWNER,
                     default => $item,
                 }, self::HARDENING),
-                fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $keyOnly,
+                fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $server->sshHardened(),
             )),
             'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
             'ssh' => [
-                'verified' => $keyOnly,
-                'passwords_kept' => $server->sshPasswordsKept() && !$keyOnly,
-                'error' => $keyOnly ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
+                'verified' => $server->sshHardened(),
+                'owner' => $server->sshLeftToOwner(),
+                'passwords_off' => $server->sshLeftToOwner() && $server->sshPasswordsOff(),
+                'error' => $server->sshHardened() || $server->sshLeftToOwner() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
             ],
             'firewall' => [
                 'open' => (new FirewallConfigurator)->openedPorts($server),
