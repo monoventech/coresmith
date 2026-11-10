@@ -26,6 +26,7 @@ FPM_POOLS="/etc/php/*/fpm/pool.d /etc/php-fpm.d /etc/php/fpm/pool.d"
 FPM_POOL="coresmith-panel.conf"
 FAIL2BAN_JAIL="/etc/fail2ban/jail.d/coresmith.conf"
 FAIL2BAN_FILTER="/etc/fail2ban/filter.d/coresmith-login.conf"
+NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
 LOGS="/var/log/coresmith-*.log"
 SAVE_ROOT="/root"
 DEFAULT_REPOSITORY="https://github.com/monoventech/coresmith.git"
@@ -344,7 +345,7 @@ remove_files() {
     local file
 
     rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}"
-    rm -f "$THIS_MACHINE_HELPER" "$CADDY_PERSIST"
+    rm -f "$THIS_MACHINE_HELPER" "$CADDY_PERSIST" "$NEEDRESTART_CONF"
     rmdir "${THIS_MACHINE_HELPER%/*}" >/dev/null 2>&1 || true
 
     for file in $LOGS; do

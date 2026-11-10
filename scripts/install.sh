@@ -47,6 +47,7 @@ readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
 readonly CADDY_DROP_IN="/etc/systemd/system/caddy.service.d/coresmith.conf"
 readonly THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
 readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+readonly NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
 readonly CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
 readonly APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 readonly REDIS_CONFIGS="/etc/redis/redis.conf /etc/redis.conf"
@@ -1069,6 +1070,16 @@ FPMCONF
 
 # ── Phase 7: systemd ─────────────────────────────────────────────────────────
 
+defer_library_restarts() {
+    [ -d "${NEEDRESTART_CONF%/conf.d/*}" ] || return 0
+
+    mkdir -p "${NEEDRESTART_CONF%/*}"
+    cat >"$NEEDRESTART_CONF" <<'NEEDRESTART'
+$nrconf{override_rc}{qr(^coresmith-(?:horizon|reverb)\.service$)} = 0;
+$nrconf{override_rc}{qr(^redis-server\.service$)} = 0;
+NEEDRESTART
+}
+
 create_systemd_services() {
     log "Phase 7/8: creating systemd services..."
 
@@ -1248,6 +1259,7 @@ Unit=coresmith-this-machine.service
 WantedBy=multi-user.target
 UNIT
 
+    defer_library_restarts
     secure_logs
     systemctl daemon-reload
     success "Systemd services created"
