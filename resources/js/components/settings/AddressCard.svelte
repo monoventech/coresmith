@@ -128,6 +128,17 @@
         {/if}
     </div>
 
+    {#if address.ipv6_only && !running}
+        <p
+            class="tint-warning mt-2 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-normal"
+            data-testid="address-ipv6-only"
+        >
+            <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people on networks without
+            IPv6 can't open Coresmith. To reach them too, add an A record for this server's public IPv4 address, and forward
+            TCP ports 80 and 443 to this server if it's behind a router.
+        </p>
+    {/if}
+
     {#if running && address.change}
         <p class="mt-2 text-[12.5px] text-muted-foreground" role="status">
             Switching to <span class="font-mono text-[12px]">{address.change.to}</span>.

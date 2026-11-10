@@ -65,10 +65,10 @@ final class Formats
         $gigabytes = $megabytes / 1024;
 
         return match (true) {
-            $megabytes < 1024 => max(0, $megabytes) . ' MB',
-            $gigabytes < 10 => self::oneDecimal($gigabytes) . ' GB',
-            $gigabytes < 1024 => (int) round($gigabytes) . ' GB',
-            default => self::oneDecimal($gigabytes / 1024) . ' TB',
+            $megabytes < 1024 => max(0, $megabytes) . "\u{00A0}MB",
+            $gigabytes < 10 => self::oneDecimal($gigabytes) . "\u{00A0}GB",
+            $gigabytes < 1024 => (int) round($gigabytes) . "\u{00A0}GB",
+            default => self::oneDecimal($gigabytes / 1024) . "\u{00A0}TB",
         };
     }
 
