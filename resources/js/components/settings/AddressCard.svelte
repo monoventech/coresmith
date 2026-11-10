@@ -185,8 +185,8 @@
                     <Dialog.Title>Change Coresmith's address</Dialog.Title>
                     <Dialog.Description
                         >Check the domain first: Coresmith tests it from outside and says what to fix. Once it passes,
-                        Coresmith switches when Caddy has a certificate for it, and the current address then sends people
-                        there. You'll sign in again at the new address.</Dialog.Description
+                        Coresmith switches when Caddy has a certificate for it, and the current address then sends
+                        people there. You'll sign in again at the new address.</Dialog.Description
                     >
                 </Dialog.Header>
                 <div class="mt-4">

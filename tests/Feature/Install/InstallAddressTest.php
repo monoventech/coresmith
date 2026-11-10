@@ -289,7 +289,7 @@ test('a cloud machine is one whose metadata address answers, whatever it answers
 ]);
 
 test('private addresses are the ones a cloud or a home network hands out behind NAT', function (string $address, bool $private) {
-    $process = installAddressRun("is_private_ip " . escapeshellarg($address) . " && printf private || printf public");
+    $process = installAddressRun('is_private_ip ' . escapeshellarg($address) . ' && printf private || printf public');
 
     expect($process->getOutput())->toBe($private ? 'private' : 'public');
 })->with([

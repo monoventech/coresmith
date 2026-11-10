@@ -69,13 +69,13 @@ test.describe("Coresmith's address", () => {
     test('a check that passes allows the switch, and changing the name asks for a new check', async ({ page }) => {
         await gotoSettings(page, 'General')
         await card(page).getByRole('button', { name: 'Change' }).click()
-        await dialog(page).getByLabel('Domain').fill('::1')
+        await dialog(page).getByLabel('Domain').fill('[::1]')
         await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
 
         await expect(page.getByTestId('address-check')).toHaveText('Coresmith can move to ::1.')
         await expect(dialog(page).getByRole('button', { name: 'Switch address' })).toBeEnabled()
 
-        await dialog(page).getByLabel('Domain').fill('::1x')
+        await dialog(page).getByLabel('Domain').fill('[::1]x')
 
         await expect(page.getByTestId('address-check')).toHaveCount(0)
         await expect(dialog(page).getByRole('button', { name: 'Switch address' })).toBeDisabled()
