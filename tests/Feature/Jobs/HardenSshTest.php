@@ -148,6 +148,14 @@ test("on Coresmith's own machine, password logins stay on until an owner or admi
         ->and($server->fresh()->sshHardened())->toBeFalse();
 });
 
+test("where Coresmith's own machine already refuses passwords by its own settings, that is recorded while Coresmith leaves them alone", function () {
+    $server = hardenSshThisMachine(false);
+    $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings()));
+
+    expect((string) $transport->uploads()['/etc/ssh/sshd_config.d/00-coresmith.conf'])->not->toContain('PasswordAuthentication')
+        ->and($server->fresh()->meta)->toBe(['ssh_hardening' => 'passwords_kept', 'ssh_passwords' => 'off']);
+});
+
 test("once an owner or admin has a key there, Coresmith's own machine turns password logins off like every server", function () {
     $server = hardenSshThisMachine(true);
     $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings()));

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.0 (2026-11-10)
+
+### Added
+- feat: a server's page says what each number is: cores, RAM, disk and the system's name, and each reading card shows the amounts behind its percentage (#42)
+
+### Fixed
+- fix: This machine keeps the SSH rules its firewall already has, says what is true about passwords and its state, and Add server starts on it (#41)
+
 ## v0.5.0 (2026-11-10)
 
 ### Added

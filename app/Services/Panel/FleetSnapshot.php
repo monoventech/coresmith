@@ -107,7 +107,8 @@ final class FleetSnapshot
             $server->status === ServerStatus::Disconnected => ['key' => 'disconnected', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->unreachable_since !== null => ['key' => 'unreachable', 'label' => 'Unreachable', 'tone' => 'destructive'],
             $server->status === ServerStatus::Provisioning => ['key' => 'provisioning', 'label' => 'Provisioning', 'tone' => 'accent'],
-            $server->status === ServerStatus::Pending => ['key' => 'pending', 'label' => 'Not connected', 'tone' => 'default'],
+            $server->status === ServerStatus::Pending && $server->last_connected_at === null => ['key' => 'pending', 'label' => 'Not connected', 'tone' => 'default'],
+            $server->status === ServerStatus::Pending => ['key' => 'pending', 'label' => 'Not provisioned', 'tone' => 'default'],
             CloudTask::running($server, CloudTask::RESIZE) => ['key' => 'resizing', 'label' => 'Resizing', 'tone' => 'accent'],
             CloudTask::of($server)?->type === CloudTask::RESIZE && CloudTask::of($server)?->state === CloudTask::FAILED => ['key' => 'resize_failed', 'label' => 'Resize failed', 'tone' => 'warning'],
             $this->runningOn($server) !== null => ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
@@ -121,15 +122,31 @@ final class FleetSnapshot
     {
         $count = $server->applications->count();
         $meta = (array) $server->meta;
+        $memory = Formats::memory(isset($meta['memory_mb']) ? (int) $meta['memory_mb'] : null);
+        $cores = (int) ($meta['cpu_physical_cores'] ?? $meta['cpu_cores'] ?? 0);
+        $disk = (int) ($meta['disk_gb'] ?? 0);
 
         return implode(' · ', array_values(array_filter([
             $server->environment,
             $server->region,
-            Formats::memory(isset($meta['memory_mb']) ? (int) $meta['memory_mb'] : null),
-            $long && $server->os_name ? trim(ucfirst((string) $server->os_name) . ' ' . $server->os_version) : null,
+            $long && $cores > 0 ? $cores . ' ' . ($cores === 1 ? 'core' : 'cores') : null,
+            $memory === null ? null : $memory . ' RAM',
+            $long && $disk > 0 ? Formats::size($disk * 1024) . ' disk' : null,
+            $long ? $this->system($server) : null,
             $long ? $server->ip_address : $count . ' ' . ($count === 1 ? 'app' : 'apps'),
             Formats::uptime($server->booted_at),
         ])));
+    }
+
+    private function system(Server $server): ?string
+    {
+        $pretty = ((array) $server->meta)['os_pretty'] ?? null;
+
+        return match (true) {
+            is_string($pretty) && $pretty !== '' => $pretty,
+            (bool) $server->os_name => trim(ucfirst((string) $server->os_name) . ' ' . $server->os_version),
+            default => null,
+        };
     }
 
     public function compactMeta(Server $server): string

@@ -81,8 +81,11 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="type-h1 m-0 font-mono font-medium">{server.name}</h1>
-            <Badge variant={server.state.tone} dot pulse={server.state.key === 'provisioning'}
-                >{server.state.label}</Badge
+            <Badge
+                variant={server.state.tone}
+                dot
+                pulse={server.state.key === 'provisioning'}
+                data-testid="server-state">{server.state.label}</Badge
             >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">{server.meta}</p>
@@ -180,6 +183,11 @@
                     >
                 </div>
                 <Sparkline values={metric.value.series} stroke={metric.stroke} />
+                {#if metric.value.detail}
+                    <p class="mt-2 mb-0 text-[12px] leading-snug text-muted-foreground" data-testid="metric-detail">
+                        {metric.value.detail}
+                    </p>
+                {/if}
             </div>
         {/each}
     </div>

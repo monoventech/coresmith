@@ -20,6 +20,8 @@ use Carbon\CarbonImmutable;
 
 final class ServerPresenter
 {
+    private const INSTALLED_BEYOND_USABLE_MB = 512;
+
     public const PROVISIONING_PHASES = [
         ['name' => 'Operating system', 'desc' => 'detected and checked'],
         ['name' => 'Base system', 'desc' => 'packages and build tools'],
@@ -92,14 +94,14 @@ final class ServerPresenter
     }
 
     /**
-     * @return array<string, array{now: int|null, series: list<float>}>
+     * @return array<string, array{now: int|null, series: list<float>, detail: string|null}>
      */
     public function metrics(Server $server): array
     {
         $readings = $server->metrics()
             ->where('recorded_at', '>=', now()->subDay())
             ->orderBy('recorded_at')
-            ->get(['cpu_percent', 'memory_percent', 'disk_percent', 'recorded_at']);
+            ->get(['cpu_percent', 'memory_percent', 'disk_percent', 'load_1m', 'memory_used_mb', 'memory_total_mb', 'disk_used_mb', 'disk_free_mb', 'disk_total_mb', 'recorded_at']);
 
         $latest = $readings->last();
         $buckets = $readings->groupBy(fn(ServerMetric $metric): int => (int) floor(now()->diffInMinutes($metric->recorded_at, true) / 60));
@@ -119,12 +121,71 @@ final class ServerPresenter
         }
 
         $fresh = $latest !== null && $latest->recorded_at?->gte(now()->subMinutes(FleetSnapshot::FRESH_METRIC_MINUTES));
+        $now = $fresh ? $latest : null;
 
         return [
-            'cpu' => ['now' => $fresh ? (int) round((float) $latest->cpu_percent) : null, 'series' => $series['cpu']],
-            'memory' => ['now' => $fresh ? (int) round((float) $latest->memory_percent) : null, 'series' => $series['memory']],
-            'disk' => ['now' => $fresh ? (int) round((float) $latest->disk_percent) : null, 'series' => $series['disk']],
+            'cpu' => ['now' => $now === null ? null : (int) round((float) $now->cpu_percent), 'series' => $series['cpu'], 'detail' => $this->cpuDetail($server, $now)],
+            'memory' => ['now' => $now === null ? null : (int) round((float) $now->memory_percent), 'series' => $series['memory'], 'detail' => $this->memoryDetail($server, $now)],
+            'disk' => ['now' => $now === null ? null : (int) round((float) $now->disk_percent), 'series' => $series['disk'], 'detail' => $this->diskDetail($server, $now)],
         ];
+    }
+
+    private function cpuDetail(Server $server, ?ServerMetric $now): ?string
+    {
+        $meta = (array) $server->meta;
+        $threads = (int) ($meta['cpu_cores'] ?? 0);
+        $cores = (int) ($meta['cpu_physical_cores'] ?? 0);
+
+        return $this->detail([
+            is_string($meta['cpu_model'] ?? null) ? $meta['cpu_model'] : null,
+            match (true) {
+                $cores > 0 && $threads > $cores => "{$cores} cores, {$threads} threads",
+                $threads > 0 => $threads . ' ' . ($threads === 1 ? 'core' : 'cores'),
+                default => null,
+            },
+            $now === null ? null : 'load ' . number_format((float) $now->load_1m, 2),
+        ]);
+    }
+
+    private function memoryDetail(Server $server, ?ServerMetric $now): ?string
+    {
+        $meta = (array) $server->meta;
+        $total = $now?->memory_total_mb ?? (isset($meta['memory_mb']) ? (int) $meta['memory_mb'] : 0);
+        $installed = (int) ($meta['memory_installed_mb'] ?? 0);
+
+        return $this->detail([
+            $this->amount($now?->memory_used_mb, $total),
+            $installed - $total >= self::INSTALLED_BEYOND_USABLE_MB ? Formats::size($installed) . ' installed' : null,
+        ]);
+    }
+
+    private function diskDetail(Server $server, ?ServerMetric $now): ?string
+    {
+        $meta = (array) $server->meta;
+
+        return $this->detail([
+            $this->amount($now?->disk_used_mb, $now?->disk_total_mb ?? (int) ($meta['disk_gb'] ?? 0) * 1024),
+            $now?->disk_free_mb === null ? null : Formats::size($now->disk_free_mb) . ' free',
+        ]);
+    }
+
+    private function amount(?int $used, int $total): ?string
+    {
+        return match (true) {
+            $total <= 0 => null,
+            $used === null => Formats::size($total) . ' total',
+            default => Formats::size($used) . ' of ' . Formats::size($total) . ' used',
+        };
+    }
+
+    /**
+     * @param  list<string|null>  $parts
+     */
+    private function detail(array $parts): ?string
+    {
+        $kept = array_values(array_filter($parts, fn(?string $part): bool => $part !== null && $part !== ''));
+
+        return $kept === [] ? null : implode(' · ', $kept);
     }
 
     /**

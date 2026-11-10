@@ -177,7 +177,7 @@ final class MonovenTenant
                 'status' => ServerStatus::Active,
                 'os_name' => 'ubuntu',
                 'os_version' => '24.04',
-                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'memory_mb' => $memory, 'disk_gb' => 160, 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified', 'caddy_unknown_hosts' => 'closed'],
+                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'cpu_model' => 'AMD EPYC-Milan Processor', 'memory_mb' => $memory, 'disk_gb' => 160, 'os_pretty' => 'Ubuntu 24.04.3 LTS', 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified', 'caddy_unknown_hosts' => 'closed'],
                 'provisioning_phase' => 8,
                 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $name, true)), 0, 43),
                 'last_connected_at' => now(),
@@ -208,14 +208,25 @@ final class MonovenTenant
         $now = CarbonImmutable::now()->startOfMinute();
         $rows = [];
 
+        $memoryTotal = (int) ((array) $server->meta)['memory_mb'];
+        $diskTotal = (int) ((array) $server->meta)['disk_gb'] * 1024;
+
         foreach (range(24 * 60, -$this->metricsAhead) as $minutesAgo) {
             $hours = (24 * 60 - $minutesAgo) / 60;
+            $memoryPercent = $this->wave($mem, $hours, $minutesAgo);
+            $diskPercent = $minutesAgo <= 0 ? $disk[0] : $this->wave($disk, $hours, $minutesAgo);
+            $diskUsed = (int) round($diskTotal * $diskPercent / 100);
 
             $rows[] = [
                 'server_id' => $server->id,
                 'cpu_percent' => $this->wave($cpu, $hours, $minutesAgo),
-                'memory_percent' => $this->wave($mem, $hours, $minutesAgo),
-                'disk_percent' => $minutesAgo <= 0 ? $disk[0] : $this->wave($disk, $hours, $minutesAgo),
+                'memory_percent' => $memoryPercent,
+                'disk_percent' => $diskPercent,
+                'memory_used_mb' => (int) round($memoryTotal * $memoryPercent / 100),
+                'memory_total_mb' => $memoryTotal,
+                'disk_used_mb' => $diskUsed,
+                'disk_free_mb' => max(0, $diskTotal - $diskUsed - intdiv($diskTotal, 20)),
+                'disk_total_mb' => $diskTotal,
                 'load_1m' => round($cpu[0] / 25, 2),
                 'load_5m' => round($cpu[0] / 28, 2),
                 'load_15m' => round($cpu[0] / 30, 2),

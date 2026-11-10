@@ -65,6 +65,8 @@ final class ServerTabsController extends Controller
 
         $this->authorize('view', $server);
 
+        $keyOnly = $server->sshHardened() || $server->sshPasswordsOffByOwner();
+
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
             'isolation' => $sharedRedis->state($server) === null
@@ -76,16 +78,17 @@ final class ServerTabsController extends Controller
                     $item === self::NO_SITE_FOR_UNKNOWN_HOSTS && $server->unknownHostsClosed() => self::UNKNOWN_HOSTS_CLOSED,
                     default => $item,
                 }, self::HARDENING),
-                fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $server->sshHardened(),
+                fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $keyOnly,
             )),
             'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
             'ssh' => [
-                'verified' => $server->sshHardened(),
-                'passwords_kept' => $server->sshPasswordsKept(),
-                'error' => $server->sshHardened() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
+                'verified' => $keyOnly,
+                'passwords_kept' => $server->sshPasswordsKept() && !$keyOnly,
+                'error' => $keyOnly ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
             ],
             'firewall' => [
-                'open' => (new FirewallConfigurator)->requiredPorts($server->ssh_port),
+                'open' => (new FirewallConfigurator)->openedPorts($server),
+                'kept_ssh' => FirewallConfigurator::keptSsh($server),
                 'ssh_port' => $server->ssh_port,
                 'changes' => Activity::query()
                     ->where('subject_type', $server->getMorphClass())

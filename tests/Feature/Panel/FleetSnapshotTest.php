@@ -61,6 +61,7 @@ test('a server state follows a fixed precedence from broken to healthy', functio
     'unreachable' => [['status' => ServerStatus::Disconnected], 95.0, true, 'disconnected', 'Unreachable', 'destructive'],
     'provisioning' => [['status' => ServerStatus::Provisioning], null, false, 'provisioning', 'Provisioning', 'accent'],
     'not connected' => [['status' => ServerStatus::Pending], null, false, 'pending', 'Not connected', 'default'],
+    'connected, waiting to provision' => [['status' => ServerStatus::Pending, 'last_connected_at' => '2026-09-13 14:00:00'], null, false, 'pending', 'Not provisioned', 'default'],
     'deploying beats a full disk' => [[], 95.0, true, 'deploying', 'Deploying', 'accent'],
     'disk at the warning line' => [[], 80.0, false, 'warning', 'Disk 80%', 'warning'],
     'disk rounded in the label' => [[], 91.6, false, 'warning', 'Disk 92%', 'warning'],
@@ -126,9 +127,28 @@ test('the meta line summarises where a server runs and how long it has been up',
     $fleet = new FleetSnapshot($team);
     $loaded = $fleet->servers()->first();
 
-    expect($fleet->meta($loaded))->toBe('Production · fra1 · 8 GB · 2 apps · up 3 days')
-        ->and($fleet->meta($loaded, long: true))->toBe('Production · fra1 · 8 GB · Ubuntu 24.04 · 203.0.113.10 · up 3 days')
+    expect($fleet->meta($loaded))->toBe('Production · fra1 · 8 GB RAM · 2 apps · up 3 days')
+        ->and($fleet->meta($loaded, long: true))->toBe('Production · fra1 · 8 GB RAM · Ubuntu 24.04 · 203.0.113.10 · up 3 days')
         ->and($fleet->compactMeta($loaded))->toBe('Production · fra1 · 2 apps');
+});
+
+test("the server page's meta line names each figure: cores, RAM, disk and the system's own name", function () {
+    $team = Team::factory()->create();
+    $server = fleetServer($team, [
+        'environment' => 'Production',
+        'region' => null,
+        'meta' => ['cpu_cores' => 16, 'cpu_physical_cores' => 8, 'memory_mb' => 27833, 'disk_gb' => 913, 'os_pretty' => 'Ubuntu 24.04.5 LTS'],
+        'os_name' => 'ubuntu',
+        'os_version' => '24.04',
+        'ip_address' => '127.0.0.1',
+        'booted_at' => now()->subDays(5),
+    ]);
+
+    $fleet = new FleetSnapshot($team);
+    $loaded = $fleet->servers()->first();
+
+    expect($fleet->meta($loaded, long: true))->toBe('Production · 8 cores · 27 GB RAM · 913 GB disk · Ubuntu 24.04.5 LTS · 127.0.0.1 · up 5 days')
+        ->and($fleet->meta($loaded))->toBe('Production · 27 GB RAM · 0 apps · up 5 days');
 });
 
 test('the meta line drops what it does not know and counts a single app', function () {

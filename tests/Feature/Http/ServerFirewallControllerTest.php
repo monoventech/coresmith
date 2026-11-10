@@ -60,3 +60,13 @@ test('denying the SSH port Coresmith uses is refused everywhere', function () {
 
     Queue::assertNothingPushed();
 });
+
+test("on Coresmith's own machine, which Coresmith reaches over loopback, denying the SSH port is refused for the people who sign in there", function () {
+    Queue::fake();
+    [$owner, $server] = firewallRuleOwner(['runs_coresmith' => true]);
+
+    $this->actingAs($owner)->post(route('servers.firewall.store', $server), ['action' => 'deny', 'port' => 22])
+        ->assertSessionHas('error', "That is this machine's SSH port. Denying it would lock you out of the machine.");
+
+    Queue::assertNothingPushed();
+});
