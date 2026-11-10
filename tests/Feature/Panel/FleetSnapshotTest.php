@@ -147,7 +147,7 @@ test("the server page's meta line names each figure: cores, RAM, disk and the sy
     $fleet = new FleetSnapshot($team);
     $loaded = $fleet->servers()->first();
 
-    expect($fleet->meta($loaded, long: true))->toBe('Production · 8 cores · 27 GB RAM · 913 GB disk · Ubuntu 24.04.5 LTS · 127.0.0.1 · up 5 days')
+    expect($fleet->meta($loaded, long: true))->toBe("Production · 8 cores · 27 GB RAM · 913\u{00A0}GB disk · Ubuntu 24.04.5 LTS · 127.0.0.1 · up 5 days")
         ->and($fleet->meta($loaded))->toBe('Production · 27 GB RAM · 0 apps · up 5 days');
 });
 

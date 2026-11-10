@@ -24,13 +24,13 @@ test('memory is shown in megabytes below a gigabyte and whole gigabytes above', 
 test('a size reads in the unit people expect, with a decimal only where it matters', function (int $megabytes, string $expected) {
     expect(Formats::size($megabytes))->toBe($expected);
 })->with([
-    'megabytes' => [512, '512 MB'],
-    'a gigabyte and a half' => [1536, '1.5 GB'],
-    'memory in use' => [1637, '1.6 GB'],
-    'two gigabytes exactly' => [2048, '2 GB'],
-    'usable memory' => [27833, '27 GB'],
-    'a disk' => [934912, '913 GB'],
-    'a terabyte and a half' => [1610612, '1.5 TB'],
+    'megabytes' => [512, "512\u{00A0}MB"],
+    'a gigabyte and a half' => [1536, "1.5\u{00A0}GB"],
+    'memory in use' => [1637, "1.6\u{00A0}GB"],
+    'two gigabytes exactly' => [2048, "2\u{00A0}GB"],
+    'usable memory' => [27833, "27\u{00A0}GB"],
+    'a disk' => [934912, "913\u{00A0}GB"],
+    'a terabyte and a half' => [1610612, "1.5\u{00A0}TB"],
 ]);
 
 test('uptime is counted in days once a day has passed and in hours before that', function (?string $bootedAt, ?string $expected) {

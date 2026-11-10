@@ -157,9 +157,9 @@ test('each reading card says, in plain amounts, what its percentage is of', func
     $this->actingAs(metricsUser($team, TeamRole::Member))
         ->get(route('servers.show', $server))
         ->assertInertia(fn($page) => $page
-            ->where('server.metrics.cpu.detail', 'AMD Ryzen 7 6800H with Radeon Graphics · 8 cores, 16 threads · load 0.10')
-            ->where('server.metrics.memory.detail', '1.6 GB of 27 GB used · 32 GB installed')
-            ->where('server.metrics.disk.detail', '16 GB of 913 GB used · 852 GB free'));
+            ->where('server.metrics.cpu.detail', "AMD Ryzen 7 6800H with Radeon Graphics · 8\u{00A0}cores, 16\u{00A0}threads · load\u{00A0}0.10")
+            ->where('server.metrics.memory.detail', "1.6\u{00A0}GB of 27\u{00A0}GB used · 32\u{00A0}GB installed")
+            ->where('server.metrics.disk.detail', "16\u{00A0}GB of 913\u{00A0}GB used · 852\u{00A0}GB free"));
 });
 
 test('without a current reading, the cards still say what the server has', function () {
@@ -169,9 +169,9 @@ test('without a current reading, the cards still say what the server has', funct
     $this->actingAs(metricsUser($team, TeamRole::Member))
         ->get(route('servers.show', $server))
         ->assertInertia(fn($page) => $page
-            ->where('server.metrics.cpu.detail', '2 cores')
-            ->where('server.metrics.memory.detail', '4 GB total')
-            ->where('server.metrics.disk.detail', '80 GB total'));
+            ->where('server.metrics.cpu.detail', "2\u{00A0}cores")
+            ->where('server.metrics.memory.detail', "4\u{00A0}GB total")
+            ->where('server.metrics.disk.detail', "80\u{00A0}GB total"));
 });
 
 test('a server that has never been read reports no metrics rather than failing', function () {
