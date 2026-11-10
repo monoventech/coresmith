@@ -92,6 +92,7 @@ final class ApplicationController extends Controller
         SlugGenerator $slugs,
         PortAllocator $ports,
         SubscriptionCheck $subscriptions,
+        TeamAccess $access,
     ): RedirectResponse {
         $subscriptions->confirm($server->team);
 
@@ -121,6 +122,7 @@ final class ApplicationController extends Controller
         ]);
 
         activity()->performedOn($application)->log('application_created');
+        $access->grant($server->team, $request->user(), $application);
 
         if ($line !== null && $request->isEndOfLife((string) $runtime, $line)) {
             activity()->performedOn($application)->withProperties(['runtime' => $runtime, 'line' => $line])->log('runtime_eol_chosen');
