@@ -107,7 +107,7 @@ final class TeamMemberController extends Controller
         return back()->with('success', 'Role updated.');
     }
 
-    public function destroy(Request $request, Team $team, User $user): RedirectResponse
+    public function destroy(Request $request, Team $team, User $user, TeamAccess $access): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
 
@@ -120,6 +120,7 @@ final class TeamMemberController extends Controller
         }
 
         $team->members()->detach($user->getKey());
+        $access->remove($team, $user);
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email])->log('member_removed');
 

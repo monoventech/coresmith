@@ -8,6 +8,7 @@ use App\Enums\Edition;
 use App\Enums\TeamRole;
 use App\Jobs\SyncStripeCustomerEmail;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
+use App\Services\Teams\TeamAccess;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -64,7 +65,11 @@ class User extends Authenticatable
 
     public function hasTeamAbility(?Team $team, Ability $ability): bool
     {
-        return $this->roleIn($team)?->can($ability) ?? false;
+        if ($team === null || !($this->roleIn($team)?->can($ability) ?? false)) {
+            return false;
+        }
+
+        return !$ability->coversWholeTeam() || app(TeamAccess::class)->seesEverything($this, $team);
     }
 
     public function hasAbilityInAnyTeam(Ability $ability): bool

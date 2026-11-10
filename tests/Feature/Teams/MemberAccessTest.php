@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\TeamRole;
+use App\Models\AccessGrant;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\Team;
@@ -112,6 +113,15 @@ test('an owner gives a narrowed member everything again', function () {
     memberAccessSave($owner, $team, $member, ['everything' => true, 'servers' => [$web->id], 'applications' => []])->assertSessionHas('success', 'Saved.');
 
     expect(app(TeamAccess::class)->seesEverything($member, $team))->toBeTrue();
+});
+
+test('removing someone takes what was shared with them, so being invited back starts from nothing', function () {
+    ['team' => $team, 'owner' => $owner, 'member' => $member, 'web' => $web, 'api' => $api] = memberAccessTeam();
+    app(TeamAccess::class)->sync($team, $member, false, [$web->id], [$api->id]);
+
+    $this->actingAs($owner)->delete(route('teams.members.destroy', [$team, $member]))->assertSessionHas('success', 'Member removed.');
+
+    expect(AccessGrant::query()->where('user_id', $member->id)->exists())->toBeFalse();
 });
 
 test('the team page shows owners what each member sees and everything there is to share', function () {

@@ -132,6 +132,13 @@ final class TeamAccess
         $this->forget($user, $team);
     }
 
+    public function remove(Team $team, User $user): void
+    {
+        AccessGrant::query()->where('team_id', $team->getKey())->where('user_id', $user->getKey())->delete();
+
+        $this->forget($user, $team);
+    }
+
     /**
      * @return array{everything: bool, servers: list<string>, applications: list<string>}
      */

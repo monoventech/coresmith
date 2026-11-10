@@ -1,8 +1,18 @@
 import type { Page } from '@playwright/test'
-import { blockingViolations, expect, main, asNarrowed as test, useTheme } from './support/fixtures'
+import { blockingViolations, expect, main, nav, asNarrowed as test, useTheme, withProps } from './support/fixtures'
 
 function palette(page: Page) {
     return page.getByRole('dialog', { name: 'Command palette' })
+}
+
+async function emptyFleet(page: Page) {
+    await withProps(page, /\/dashboard$/, (props) => {
+        props.servers = []
+        props.shared = []
+    })
+    await page.goto('/deployments')
+    await nav(page).getByRole('link', { name: 'Fleet', exact: true }).click()
+    await page.waitForURL(/\/dashboard$/)
 }
 
 async function openShared(page: Page, name: string) {
@@ -52,6 +62,14 @@ test.describe('an admin who sees only what is shared', () => {
         await expect(main(page).getByRole('link', { name: 'Fleet' })).toBeVisible()
     })
 
+    test('with nothing shared, the fleet says so and who can share', async ({ page }) => {
+        await emptyFleet(page)
+
+        await expect(main(page)).toContainText('Nothing is shared with you yet.')
+        await expect(main(page)).toContainText('Ask an owner of your team to share a server or app with you.')
+        await expect(page.getByTestId('server-card')).toHaveCount(0)
+    })
+
     test('deployments and releases list only shared apps', async ({ page }) => {
         await page.goto('/deployments')
 
@@ -86,6 +104,14 @@ test.describe('accessibility of what a narrowed admin sees', () => {
             await expect(page.getByRole('heading', { level: 1, name: 'warehouse' })).toBeVisible()
 
             expect(await blockingViolations(page), `warehouse in ${theme}`).toEqual([])
+        })
+
+        test(`the fleet with nothing shared has no serious or critical violations in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await emptyFleet(page)
+            await expect(main(page)).toContainText('Nothing is shared with you yet.')
+
+            expect(await blockingViolations(page), `empty fleet in ${theme}`).toEqual([])
         })
     }
 })
