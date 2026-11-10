@@ -3,6 +3,7 @@
 use App\Enums\ServerStatus;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
+use App\Jobs\CloseUnknownHosts;
 use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\HardenSsh;
@@ -57,6 +58,19 @@ Schedule::call(function (): void {
             }
         });
 })->hourly()->name('coresmith:move-caddy-admin')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->where('runs_coresmith', false)
+        ->whereNull('unreachable_since')
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(function (Server $server): void {
+            if (!$server->unknownHostsClosed()) {
+                CloseUnknownHosts::dispatch($server);
+            }
+        });
+})->hourly()->name('coresmith:close-unknown-hosts')->withoutOverlapping();
 
 Schedule::call(function (): void {
     Server::query()

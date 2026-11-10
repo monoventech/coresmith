@@ -77,6 +77,11 @@ class Server extends Model
         return is_int($version) ? $version : null;
     }
 
+    public function unknownHostsClosed(): bool
+    {
+        return !$this->runs_coresmith && (((array) $this->meta)['caddy_unknown_hosts'] ?? null) === 'closed';
+    }
+
     public function runtimeUser(): string
     {
         return $this->runs_coresmith ? AsdfManager::CORESMITH_HOST_USER : AsdfManager::SYSTEM_USER;

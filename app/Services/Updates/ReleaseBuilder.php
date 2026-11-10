@@ -141,6 +141,11 @@ final class ReleaseBuilder
         }
     }
 
+    public function refreshSite(string $path, UpdateRun $run): bool
+    {
+        return $this->exec([PHP_BINARY, 'artisan', 'coresmith:site-refresh', '--no-interaction'], $path, 120, $run)->successful();
+    }
+
     private function link(string $path): void
     {
         foreach (['storage', '.env'] as $shared) {

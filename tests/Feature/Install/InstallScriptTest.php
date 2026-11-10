@@ -1330,7 +1330,7 @@ test('switching releases remembers the one it replaced', function () {
 });
 
 test('old releases are removed only once the services are up on the new one', function () {
-    expect(installScriptFunctions('finalize'))->toContain("    wait_for_service coresmith-reverb || healthy=false\n\n    if \$healthy; then\n        prune_releases\n    fi\n");
+    expect(installScriptFunctions('finalize'))->toContain("    wait_for_service coresmith-reverb || healthy=false\n\n    if \$healthy; then\n        prune_releases\n");
 });
 
 test('the installer workflow runs whenever a file the machine test depends on changes', function () {
