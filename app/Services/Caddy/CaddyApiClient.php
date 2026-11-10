@@ -31,6 +31,8 @@ final class CaddyApiClient
 
     public const AFTER_CORESMITH_SITE = self::ROUTES_PATH . '/1';
 
+    public const FIRST_ROUTE = self::ROUTES_PATH . '/0';
+
     public const POLICIES_PATH = '/config/apps/tls/automation/policies';
 
     public const FIRST_POLICY = self::POLICIES_PATH . '/0';
@@ -96,6 +98,17 @@ final class CaddyApiClient
         });
     }
 
+    public function closeUnknownHosts(SSHConnection $connection): void
+    {
+        $this->changing($connection, function () use ($connection): void {
+            if (!$this->exists($connection, '/id/' . CaddyInstaller::UNKNOWN_HOSTS_ROUTE)) {
+                $this->request($connection, 'POST', self::ROUTES_PATH, CaddyInstaller::unknownHostsRoute(), retry: false);
+            }
+
+            $this->persistConfig($connection);
+        });
+    }
+
     public function removeSite(SSHConnection $connection, Application $application): void
     {
         $this->changing($connection, function () use ($connection, $application): void {
@@ -141,7 +154,7 @@ final class CaddyApiClient
     private function insertSite(SSHConnection $connection, Application $application, array $config): void
     {
         if (!$this->onCoresmithsMachine($connection)) {
-            $this->request($connection, 'POST', self::ROUTES_PATH, $config);
+            $this->request($connection, 'PUT', self::FIRST_ROUTE, $config, retry: false);
 
             return;
         }

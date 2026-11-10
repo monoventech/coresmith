@@ -72,12 +72,13 @@ test('caddy starts from the config the panel keeps, so app routes come back afte
         ->and(strpos(implode("\n", $transport->commands()), 'daemon-reload'))->toBeLessThan(strpos(implode("\n", $transport->commands()), 'systemctl restart caddy'));
 });
 
-test('app routes go to a server caddy actually has, listening for https with nothing in front of them', function () {
+test('app routes go to a server caddy actually has, listening for https, with only the catch-all that closes unknown hostnames', function () {
     $config = json_decode((new CaddyInstaller)->config(), true);
     $server = $config['apps']['http']['servers'][CaddyInstaller::SERVER];
 
     expect($server['listen'])->toBe([':443'])
-        ->and($server['routes'])->toBe([])
+        ->and($server['routes'])->toBe([CaddyInstaller::unknownHostsRoute()])
+        ->and(CaddyInstaller::unknownHostsRoute())->toBe(['@id' => 'coresmith-unknown', 'handle' => [['handler' => 'static_response', 'abort' => true]]])
         ->and(CaddyApiClient::ROUTES_PATH)->toBe('/config/apps/http/servers/' . CaddyInstaller::SERVER . '/routes');
 });
 
@@ -101,13 +102,22 @@ test('a reprovisioned server keeps the app routes caddy already had', function (
 
     $written = json_decode($transport->uploads()[CaddyInstaller::CONFIG_FILE], true);
 
-    expect($written['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([$route]);
+    expect($written['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([$route, CaddyInstaller::unknownHostsRoute()])
+        ->and(Server::query()->latest('id')->first()->unknownHostsClosed())->toBeTrue();
 });
 
-test('a config that is not ours, or not json, starts with no routes', function (string $current) {
+test('reprovisioning keeps one catch-all, after every app route', function () {
+    $route = ['@id' => 'app-01', 'match' => [['host' => ['shop.example.com']]], 'terminal' => true];
+    $current = json_encode(['apps' => ['http' => ['servers' => [CaddyInstaller::SERVER => ['routes' => [CaddyInstaller::unknownHostsRoute(), $route]]]]]]);
+    $config = json_decode((new CaddyInstaller)->config(null, (string) $current), true);
+
+    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([$route, CaddyInstaller::unknownHostsRoute()]);
+});
+
+test('a config that is not ours, or not json, starts with only the catch-all', function (string $current) {
     $config = json_decode((new CaddyInstaller)->config(null, $current), true);
 
-    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([]);
+    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([CaddyInstaller::unknownHostsRoute()]);
 })->with(['{}', 'not json', '[1,2]', '{"apps":[]}', '{"apps":{"http":{"servers":{"coresmith":{"routes":{"a":1}}}}}}']);
 
 test('kept routes stay exactly as caddy wrote them, empty objects included', function () {

@@ -338,3 +338,17 @@ test('the activity log is the only firewall source, so nothing is invented', fun
         ->get(route('servers.hardening', $server))
         ->assertInertia(fn($page) => $page->has('firewall.changes', 0));
 });
+
+test('the hardening tab says Caddy closes the connection for unknown hostnames once it does, and only then', function (array $attributes, string $line, string $not) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create($attributes);
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->get(route('servers.hardening', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('hardening', fn($items): bool => collect($items)->contains($line) && !collect($items)->contains($not)));
+})->with([
+    'closed' => [['meta' => ['caddy_unknown_hosts' => 'closed']], ServerTabsController::UNKNOWN_HOSTS_CLOSED, ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS],
+    'not yet' => [['meta' => []], ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS, ServerTabsController::UNKNOWN_HOSTS_CLOSED],
+    "Coresmith's own machine, whose own catch-all serves no site" => [['runs_coresmith' => true, 'meta' => ['caddy_unknown_hosts' => 'closed']], ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS, ServerTabsController::UNKNOWN_HOSTS_CLOSED],
+]);

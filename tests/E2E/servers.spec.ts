@@ -225,7 +225,7 @@ test.describe('hardening', () => {
         const hardening = page.getByRole('heading', { name: 'Server hardening' }).locator('..')
 
         await expect(hardening).toContainText('SSH key-only, modern ciphers (curve25519, ed25519)')
-        await expect(hardening).toContainText('Caddy serves no site for unknown hostnames')
+        await expect(hardening).toContainText('Caddy closes the connection for unknown hostnames')
         await expect(hardening).not.toContainText('444')
         await expect(page.getByTestId('ssh-hardening-error')).toHaveCount(0)
         await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveCount(0)

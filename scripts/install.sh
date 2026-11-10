@@ -1748,6 +1748,7 @@ finalize() {
 
     if $healthy; then
         prune_releases
+        run sudo -u coresmith php "$INSTALL_DIR/artisan" coresmith:site-refresh || warn "Coresmith couldn't refresh its Caddy site. See why with: cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:site-refresh"
     fi
 
     if [ -n "$TARGET_DOMAIN" ]; then
