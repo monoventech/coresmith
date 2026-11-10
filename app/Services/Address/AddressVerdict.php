@@ -12,9 +12,19 @@ final readonly class AddressVerdict
 {
     /**
      * @param  list<string>  $notes
+     * @param  list<string>  $problems
      */
     public function __construct(
         public ?string $refusal,
         public array $notes = [],
+        private array $problems = [],
     ) {}
+
+    /**
+     * @return list<string>
+     */
+    public function problems(): array
+    {
+        return $this->problems !== [] ? $this->problems : ($this->refusal === null ? [] : [$this->refusal]);
+    }
 }

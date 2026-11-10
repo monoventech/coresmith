@@ -49,7 +49,7 @@ final class AddressGate
         $report = $this->reachability->check($host);
 
         return match ($report->ready) {
-            false => new AddressVerdict(implode(' ', $report->problems)),
+            false => new AddressVerdict(implode(' ', $report->problems), [], $report->problems),
             true => new AddressVerdict(null, $report->notes),
             null => new AddressVerdict($this->address->dnsRefusal($host), $report->notes),
         };
