@@ -44,6 +44,14 @@ final class SecurityHardening
         'X11Forwarding no',
     ];
 
+    private const PASSWORD_SETTINGS = [
+        'PasswordAuthentication no',
+        'KbdInteractiveAuthentication no',
+        'ChallengeResponseAuthentication no',
+    ];
+
+    public const PASSWORDS_KEPT = 'passwords_kept';
+
     private const SSHD_KEX = 'curve25519-sha256,curve25519-sha256@libssh.org';
 
     private const SSHD_CRYPTO = [
@@ -199,20 +207,26 @@ final class SecurityHardening
     {
         $server = $connection->server();
 
+        $keepPasswords = $this->keepsPasswords($server);
+
         $connection->execute('mkdir -p /etc/ssh/sshd_config.d', sudo: true)->throw();
-        $connection->uploadContent($this->sshdConfig($server->ssh_port), self::SSHD_CONFIG);
+        $connection->uploadContent($this->sshdConfig($server->ssh_port, $keepPasswords), self::SSHD_CONFIG);
         $connection->execute('chmod 600 ' . self::SSHD_CONFIG . ' && rm -f ' . self::LEGACY_SSHD_CONFIG, sudo: true)->throw();
 
         $atTop = !$connection->execute(self::READS_DROP_INS, sudo: true)->successful();
-        $this->applySsh($connection, $atTop);
-        $problem = $this->passwordProblem($connection);
+        $this->applySsh($connection, $atTop, $keepPasswords);
+        $problem = $this->passwordProblem($connection, $keepPasswords);
 
         if ($problem !== null && !$atTop) {
-            $this->applySsh($connection, true);
-            $problem = $this->passwordProblem($connection);
+            $this->applySsh($connection, true, $keepPasswords);
+            $problem = $this->passwordProblem($connection, $keepPasswords);
         }
 
-        $this->recordSsh($server, $problem === null ? ['ssh_hardening' => 'verified'] : ['ssh_hardening_error' => $problem]);
+        $this->recordSsh($server, match (true) {
+            $problem !== null => ['ssh_hardening_error' => $problem],
+            $keepPasswords => ['ssh_hardening' => self::PASSWORDS_KEPT],
+            default => ['ssh_hardening' => 'verified'],
+        });
     }
 
     /**
@@ -228,16 +242,29 @@ final class SecurityHardening
     /**
      * @return list<string>
      */
-    private function sshdBlock(): array
+    private function sshdBlock(bool $keepPasswords): array
     {
-        return [...self::SSHD_SETTINGS, 'KexAlgorithms ' . self::SSHD_KEX, ...self::SSHD_CRYPTO];
+        return [...self::sshdSettings($keepPasswords), 'KexAlgorithms ' . self::SSHD_KEX, ...self::SSHD_CRYPTO];
     }
 
-    private function applySsh(SSHConnection $connection, bool $atTop): void
+    /**
+     * @return list<string>
+     */
+    private static function sshdSettings(bool $keepPasswords): array
+    {
+        return $keepPasswords ? array_values(array_diff(self::SSHD_SETTINGS, self::PASSWORD_SETTINGS)) : self::SSHD_SETTINGS;
+    }
+
+    public function keepsPasswords(Server $server): bool
+    {
+        return (bool) $server->runs_coresmith && $this->userKeys($server) === [];
+    }
+
+    private function applySsh(SSHConnection $connection, bool $atTop, bool $keepPasswords): void
     {
         $main = self::SSHD_MAIN_CONFIG;
         $block = $atTop
-            ? "printf '%s\\n' " . implode(' ', array_map(escapeshellarg(...), [self::SSHD_BLOCK_BEGIN, ...$this->sshdBlock(), self::SSHD_BLOCK_END])) . ' && '
+            ? "printf '%s\\n' " . implode(' ', array_map(escapeshellarg(...), [self::SSHD_BLOCK_BEGIN, ...$this->sshdBlock($keepPasswords), self::SSHD_BLOCK_END])) . ' && '
             : '';
         $strip = 'awk -v start=' . escapeshellarg(self::SSHD_BLOCK_BEGIN) . ' -v stop=' . escapeshellarg(self::SSHD_BLOCK_END) . ' ' . escapeshellarg(self::STRIP_SSHD_BLOCK) . ' ' . $main;
         $rewrite = 'tmp=$(mktemp ' . $main . '.XXXXXX) && { { ' . $block . $strip . '; } > "$tmp" && sshd -t -f "$tmp" && cat "$tmp" > ' . $main . '; status=$?; rm -f "$tmp"; [ "$status" -eq 0 ]; }';
@@ -250,7 +277,7 @@ final class SecurityHardening
         $connection->execute('sshd -t && { systemctl reload sshd || systemctl reload ssh; }', sudo: true)->throw();
     }
 
-    private function passwordProblem(SSHConnection $connection): ?string
+    private function passwordProblem(SSHConnection $connection, bool $keepPasswords): ?string
     {
         $settings = [];
 
@@ -267,9 +294,9 @@ final class SecurityHardening
         }
 
         $open = array_keys(array_filter([
-            'passwordauthentication' => $settings['passwordauthentication'] !== 'no',
-            'kbdinteractiveauthentication' => ($settings['kbdinteractiveauthentication'] ?? 'no') !== 'no',
-            'challengeresponseauthentication' => ($settings['challengeresponseauthentication'] ?? 'no') !== 'no',
+            'passwordauthentication' => !$keepPasswords && $settings['passwordauthentication'] !== 'no',
+            'kbdinteractiveauthentication' => !$keepPasswords && ($settings['kbdinteractiveauthentication'] ?? 'no') !== 'no',
+            'challengeresponseauthentication' => !$keepPasswords && ($settings['challengeresponseauthentication'] ?? 'no') !== 'no',
             'permitrootlogin' => !in_array($settings['permitrootlogin'], self::ROOT_WITHOUT_PASSWORD, true),
         ]));
 
@@ -346,11 +373,11 @@ final class SecurityHardening
             : 0;
     }
 
-    public function sshdConfig(int $sshPort): string
+    public function sshdConfig(int $sshPort, bool $keepPasswords = false): string
     {
         return implode("\n", [
             "Port {$sshPort}",
-            ...self::SSHD_SETTINGS,
+            ...self::sshdSettings($keepPasswords),
             '',
             'KexAlgorithms sntrup761x25519-sha512@openssh.com,' . self::SSHD_KEX,
             ...self::SSHD_CRYPTO,

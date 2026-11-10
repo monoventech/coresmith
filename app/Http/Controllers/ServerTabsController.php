@@ -45,6 +45,8 @@ final class ServerTabsController extends Controller
 
     public const NO_SITE_FOR_UNKNOWN_HOSTS = 'Caddy serves no site for unknown hostnames';
 
+    public const UNKNOWN_HOSTS_CLOSED = 'Caddy closes the connection for unknown hostnames';
+
     public const HARDENING = [
         self::SSH_KEY_ONLY,
         'fail2ban active, SSH jail after 5 failures',
@@ -69,12 +71,17 @@ final class ServerTabsController extends Controller
                 ? self::ISOLATION_LAYERS
                 : array_map(fn(string $layer): string => $layer === self::DEDICATED_CREDENTIALS ? self::DEDICATED_CREDENTIALS_EXCEPT_SHARED_REDIS : $layer, self::ISOLATION_LAYERS),
             'hardening' => array_values(array_filter(
-                array_map(fn(string $item): string => $item === self::ADMIN_API_ON_LOCALHOST && $server->caddyAdminOnSocket() ? self::ADMIN_API_ON_SOCKET : $item, self::HARDENING),
+                array_map(fn(string $item): string => match (true) {
+                    $item === self::ADMIN_API_ON_LOCALHOST && $server->caddyAdminOnSocket() => self::ADMIN_API_ON_SOCKET,
+                    $item === self::NO_SITE_FOR_UNKNOWN_HOSTS && $server->unknownHostsClosed() => self::UNKNOWN_HOSTS_CLOSED,
+                    default => $item,
+                }, self::HARDENING),
                 fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $server->sshHardened(),
             )),
             'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
             'ssh' => [
                 'verified' => $server->sshHardened(),
+                'passwords_kept' => $server->sshPasswordsKept(),
                 'error' => $server->sshHardened() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
             ],
             'firewall' => [

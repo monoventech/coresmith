@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ApplicationType;
 use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Application;
+use App\Models\Server;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
 use App\Services\Runtime\AsdfManager;
@@ -211,4 +212,18 @@ test('handing storage to caddy regroups and marks only the folders that need it,
         ->and($linked)->toBe(['755', $primary])
         ->and($again->getExitCode())->toBe(0, $again->getErrorOutput())
         ->and($again->getOutput())->toBe('');
+});
+
+test("on Coresmith's own machine every step, script and scheduled command runs in the apps slice, out of sight of Coresmith's files", function () {
+    $server = Server::factory()->create(['runs_coresmith' => true, 'meta' => ['systemd' => 255]]);
+    $application = Application::factory()->for($server)->make(['slug' => 'shop', 'system_user' => 'coresmith-app-shop']);
+    $shell = new AppShell(new AsdfManager);
+
+    foreach ([
+        $shell->run($application, 'npm ci', '/tmp'),
+        $shell->runScript($application, '/etc/coresmith/blueprints/shop.sh', '/tmp'),
+        $shell->scheduled($application, '/etc/coresmith/cron/shop/0.sh', '/var/coresmith/apps/shop/current'),
+    ] as $command) {
+        expect($command)->toContain(" -p 'Slice=coresmith-apps.slice' -p 'InaccessiblePaths=-/opt/coresmith -/var/lib/coresmith -/var/lib/coresmith-this-machine -/etc/caddy -/run/caddy-admin -/var/log/coresmith-install.log -/var/log/coresmith-horizon.log -/var/log/coresmith-reverb.log -/var/log/coresmith-fpm-error.log' -p 'ProtectProc=invisible' -p UMask=0027 ");
+    }
 });

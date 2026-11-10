@@ -461,7 +461,7 @@ test('a deploy puts the route in place so the domain reaches the new release', f
 
     deploy($deployment, $transport);
 
-    expect(implode("\n", $transport->commands()))->toContain("-X POST 'http://localhost:2019/config/apps/http/servers/coresmith/routes'")
+    expect(implode("\n", $transport->commands()))->toContain("-X PUT 'http://localhost:2019/config/apps/http/servers/coresmith/routes/0'")
         ->and($deployment->fresh()->log)->toContain('caddy: route for app.example.com is in place');
 });
 

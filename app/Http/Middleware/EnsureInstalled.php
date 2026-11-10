@@ -10,6 +10,7 @@ namespace App\Http\Middleware;
 
 use App\Enums\Edition;
 use App\Models\User;
+use App\Services\Updates\UpdatePaths;
 use Closure;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -28,6 +29,8 @@ final class EnsureInstalled
             return response()->json(['message' => 'Coresmith is installed but not yet configured.'], 503);
         }
 
-        return Inertia::render('auth/SetupRequired')->toResponse($request)->setStatusCode(503);
+        return Inertia::render('auth/SetupRequired', [
+            'command' => 'cd ' . app(UpdatePaths::class)->current() . ' && sudo -u coresmith php artisan coresmith:setup-token --force',
+        ])->toResponse($request)->setStatusCode(503);
     }
 }

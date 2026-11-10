@@ -9,9 +9,14 @@ use App\Models\Team;
 use App\Models\TeamSsoConnection;
 use App\Models\User;
 use App\Services\Address\AddressChange;
+use App\Services\Address\AddressCheck;
 use App\Services\Address\AddressRequest;
 use App\Services\Network\AddressResolver;
+use App\Services\Network\DirectReach;
+use App\Services\Network\HostReach;
 use App\Services\Network\LocalAddresses;
+use App\Services\Network\ReachProbe;
+use App\Services\Network\StableAddresses;
 use Illuminate\Support\Facades\File;
 use Inertia\Testing\AssertableInertia;
 use Tests\Support\CloudBilling;
@@ -46,6 +51,42 @@ function addressSettingsResolving(array $addresses): void
     });
 }
 
+function addressSettingsReach(?DirectReach $direct): object
+{
+    app()->instance(StableAddresses::class, new class implements StableAddresses
+    {
+        public function ipv6(): array
+        {
+            return [];
+        }
+    });
+
+    $probe = new class($direct) implements ReachProbe
+    {
+        public int $asked = 0;
+
+        public function __construct(private readonly ?DirectReach $reach) {}
+
+        public function direct(): ?DirectReach
+        {
+            $this->asked++;
+
+            return $this->reach;
+        }
+
+        public function host(string $host, string $from): ?HostReach
+        {
+            $this->asked++;
+
+            return null;
+        }
+    };
+
+    app()->instance(ReachProbe::class, $probe);
+
+    return $probe;
+}
+
 beforeEach(function () {
     $this->addressState = sys_get_temp_dir() . '/coresmith-address-state-' . bin2hex(random_bytes(4));
     File::ensureDirectoryExists($this->addressState);
@@ -76,11 +117,45 @@ test('an address that would not work is refused next to the field, and nothing s
 
     $this->actingAs(addressSettingsUser())
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
-        ->assertSessionHasErrors(['address' => "coresmith.example.com doesn't point anywhere yet. Add a DNS record that points it at this server, then try again."]);
+        ->assertSessionHasErrors(['address' => "coresmith.example.com doesn't point anywhere yet. Add a DNS record that points it at this server, then check again."]);
 
     expect(AddressChange::current())->toBeNull();
 
     expect(file_exists(AddressRequest::file()))->toBeFalse();
+});
+
+test('a domain the internet cannot reach is refused with what to fix, and nothing starts', function () {
+    addressSettingsResolving(['151.226.169.196']);
+    addressSettingsReach(new DirectReach('151.226.169.196', false, false));
+
+    $this->actingAs(addressSettingsUser())
+        ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
+        ->assertSessionHasErrors(['address' => 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again.']);
+
+    expect(AddressChange::current())->toBeNull()
+        ->and(file_exists(AddressRequest::file()))->toBeFalse();
+});
+
+test('a domain the internet reaches starts the switch', function () {
+    addressSettingsResolving(['151.226.169.196']);
+    addressSettingsReach(new DirectReach('151.226.169.196', true, true));
+
+    $this->actingAs(addressSettingsUser())
+        ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
+        ->assertSessionHasNoErrors();
+
+    expect(AddressChange::current())->toMatchArray(['state' => 'running', 'to' => 'coresmith.example.com']);
+});
+
+test('an internal name never asks get.coresmith.io', function () {
+    addressSettingsResolving(['192.168.0.248']);
+    $probe = addressSettingsReach(null);
+
+    $this->actingAs(addressSettingsUser())
+        ->put(route('settings.address.update'), ['address' => 'coresmith.internal'])
+        ->assertSessionHasNoErrors();
+
+    expect($probe->asked)->toBe(0);
 });
 
 test('an install from before Coresmith could change its address says to run the installer', function () {
@@ -188,4 +263,65 @@ test('cloud has no address card', function () {
     $this->actingAs(addressSettingsUser())
         ->get(route('settings.general'))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('address', null));
+});
+
+test('checking a domain keeps what the check found, one problem at a time, and starts nothing', function () {
+    addressSettingsResolving(['151.226.169.196']);
+    addressSettingsReach(new DirectReach('151.226.169.196', false, false));
+
+    $this->actingAs(addressSettingsUser())
+        ->post(route('settings.address.check'), ['address' => 'Coresmith.Example.com'])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(AddressCheck::current())->toMatchArray([
+        'host' => 'coresmith.example.com',
+        'ok' => false,
+        'problems' => ['coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again.'],
+        'notes' => [],
+    ])
+        ->and(AddressCheck::current()['checked_at'] ?? null)->not->toBeNull()
+        ->and(AddressChange::current())->toBeNull()
+        ->and(file_exists(AddressRequest::file()))->toBeFalse();
+});
+
+test('a domain that passes the check is kept as ready, with its notes', function () {
+    addressSettingsResolving(['151.226.169.196']);
+    addressSettingsReach(new DirectReach('151.226.169.196', true, true));
+
+    $this->actingAs(addressSettingsUser())->post(route('settings.address.check'), ['address' => 'coresmith.example.com']);
+
+    expect(AddressCheck::current())->toMatchArray([
+        'host' => 'coresmith.example.com',
+        'ok' => true,
+        'problems' => [],
+        'notes' => ["Inside your own network, your router may not loop back to 151.226.169.196. If coresmith.example.com doesn't load there, add 192.168.0.248 coresmith.example.com to your local DNS or /etc/hosts."],
+    ]);
+});
+
+test('an address the form would refuse is kept as its one problem', function () {
+    $this->actingAs(addressSettingsUser())->post(route('settings.address.check'), ['address' => 'not a domain']);
+
+    expect(AddressCheck::current())->toMatchArray(['host' => 'not a domain', 'ok' => false, 'problems' => ["That doesn't look like a domain. Try coresmith.example.com."]]);
+});
+
+test('the settings page carries the last check, for the dialog to show', function () {
+    addressSettingsResolving(['151.226.169.196']);
+    addressSettingsReach(new DirectReach('151.226.169.196', true, true));
+    $user = addressSettingsUser();
+    $this->actingAs($user)->post(route('settings.address.check'), ['address' => 'coresmith.example.com']);
+
+    $this->actingAs($user)
+        ->get(route('settings.general'))
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('address.check.host', 'coresmith.example.com')
+            ->where('address.check.ok', true));
+});
+
+test('only an owner of a team here may check an address', function () {
+    $this->actingAs(addressSettingsUser(TeamRole::Admin))
+        ->post(route('settings.address.check'), ['address' => 'coresmith.example.com'])
+        ->assertForbidden();
+
+    expect(AddressCheck::current())->toBeNull();
 });

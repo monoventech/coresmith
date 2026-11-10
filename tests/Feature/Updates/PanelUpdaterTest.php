@@ -544,3 +544,20 @@ test('a finished run is not undone when the activity log cannot be written', fun
     expect($status->state)->toBe(UpdateStatus::SUCCEEDED)
         ->and(app(UpdateState::class)->log($status->id))->toContain("Warning: Coresmith couldn't record this run in the activity log.");
 });
+
+test("once the new release is healthy, it rewrites Coresmith's own Caddy site from its own template", function () {
+    $status = updatesUpdater()->run(Version::parse('0.1.1'));
+
+    expect($status->state)->toBe(UpdateStatus::SUCCEEDED)
+        ->and(collect(updatesProcesses())->firstWhere('command', PHP_BINARY . ' artisan coresmith:site-refresh --no-interaction'))
+        ->path->toBe(app(ReleaseLayout::class)->current()->path);
+});
+
+test('a site refresh Caddy refuses leaves the update standing, since the release runs on the old site too', function () {
+    updatesMachine(['artisan:coresmith:site-refresh' => [1, "Caddy refused the new configuration\n"]]);
+
+    $status = updatesUpdater()->run(Version::parse('0.1.1'));
+
+    expect($status->state)->toBe(UpdateStatus::SUCCEEDED)
+        ->and(app(ReleaseLayout::class)->current()->name)->toBe('0.1.1-a1b2c3d');
+});

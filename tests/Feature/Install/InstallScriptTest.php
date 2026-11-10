@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Middleware\ContentSecurityPolicy;
-use App\Services\Git\DeployKeyManager;
 use App\Services\Install\SetupToken;
+use App\Services\Network\ProcStableAddresses;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseLayout;
@@ -120,8 +120,8 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
 
     expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
         ->and($body)->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
-        ->and($body)->toContain('chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"')
-        ->and($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
+        ->and($body)->toContain("chown -R coresmith:coresmith \"\$DATA_DIR\"\n")
+        ->and(installScriptBasedir())->toContain('${DATA_DIR}')
         ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
 
@@ -140,18 +140,33 @@ test('the installer issues the token through artisan rather than minting its own
     expect(installScriptBody())->toContain('php artisan coresmith:setup-token --force');
 });
 
-test('a token the installer could not issue comes with the link to use it in', function () {
+test('a link the installer could not issue comes with the command that prints one', function () {
     expect(installScriptBody())
-        ->toContain('warn "Could not issue a setup token. Run this on the server, then open ${PANEL_URL}/install?token= followed by the token it prints:"')
-        ->not->toContain('open the URL it prints');
+        ->toContain('warn "Coresmith could not issue the link that creates the owner account. Run this on the server, then open the link it prints:"')
+        ->toContain('warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"')
+        ->not->toContain('followed by the token it prints');
 });
+
+test('the installer only takes a link to its own address that carries a whole token, and prints it as it is', function (string $output, string $link) {
+    $process = new Process(['bash', '-c', "set -euo pipefail\n" . installScriptFunctions('setup_link_from') . "\nsetup_link_from \"\$1\"", 'setup', $output]);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(trim($process->getOutput()))->toBe($link)
+        ->and(installScriptFunctions('print_summary'))->toContain("printf '  %s%s%s\\n\\n' \"\$BOLD\" \"\$setup_link\" \"\$NC\"");
+})->with([
+    'the link the command prints' => ["Open this link to create the owner account. It works once:\nhttps://coresmith.example.com/install?token=" . str_repeat('a', 64), 'https://coresmith.example.com/install?token=' . str_repeat('a', 64)],
+    'an address without a domain' => ["Open this link to create the owner account. It works once:\nhttps://203.0.113.40/install?token=" . str_repeat('B', 64), 'https://203.0.113.40/install?token=' . str_repeat('B', 64)],
+    'setup already done' => ['This instance already has an account. Setup is closed.', ''],
+    'a link with more after it' => ['https://coresmith.example.com/install?token=' . str_repeat('a', 64) . '; reboot', ''],
+    'a short token' => ['https://coresmith.example.com/install?token=abc', ''],
+]);
 
 test('secrets are written with restrictive permissions', function () {
     $body = installScriptBody();
 
     expect($body)->toContain('chmod 600 "$SHARED_DIR/.env"')
-        ->and($body)->toContain('chmod 600 "$DATA_DIR/database.sqlite"')
-        ->and($body)->toContain('chmod 700 "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"');
+        ->and($body)->toContain('chmod 600 "$DATA_DIR/database.sqlite"');
 });
 
 test('the vault key is generated rather than left at a default', function () {
@@ -257,11 +272,6 @@ test('only a caddy new enough for the panel config counts as already installed',
 
 test('a caddy still too old after installing stops the install with the version it found', function () {
     expect(installScriptBody())->toContain('is too old: Coresmith needs 2.8 or newer');
-});
-
-test('the deploy key directory the deployment code expects is created', function () {
-    expect(installScriptBody())->toContain('deploy-keys')
-        ->and(DeployKeyManager::KEY_DIR)->toBe('/etc/coresmith/deploy-keys');
 });
 
 test('the php version the installer installs satisfies what the project requires', function () {
@@ -419,7 +429,8 @@ test('the installer workflow proves the instance it built actually works', funct
         ->and($workflow)->toContain('ubuntu-24.04')
         ->and($workflow)->toContain('/var/lib/coresmith/setup-token')
         ->and($workflow)->toContain('expected 403')
-        ->and($workflow)->toContain('expected 503');
+        ->and($workflow)->toContain('expected 503')
+        ->and($workflow)->not->toContain('/etc/coresmith');
 });
 
 test('the installer workflow updates, rolls back and uninstalls the instance it built', function () {
@@ -450,7 +461,9 @@ test('the machine test checks each scenario it promises', function () {
         expect($script)->toContain("ok \"{$scenario}\"");
     }
 
-    expect($script)->toContain("printf 'ok %s\\n'");
+    expect($script)->toContain("printf 'ok %s\\n'")
+        ->and($script)->toContain('$APP/VERSION')
+        ->and($script)->not->toMatch('/(tag_release|feed|succeeded_on) \d/');
 });
 
 test('the machine test is valid bash that the shell lint covers', function () {
@@ -580,13 +593,6 @@ test('caddy can read what it serves without being able to read or change the res
         ->and($body)->not->toMatch('/usermod\s+-aG\s+coresmith\s+caddy/');
 });
 
-test('an empty saved route config never replaces the panel config when caddy starts', function () {
-    $body = installScriptBody();
-
-    expect($body)->toContain('grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS --unix-socket /run/caddy-admin/admin.sock -X POST http://localhost/load')
-        ->and($body)->not->toContain("echo '{}' >/etc/caddy/caddy-config.json");
-});
-
 test("Coresmith's Caddy admin API is a socket in a folder only Caddy, root and the coresmith group can enter", function () {
     $body = installScriptBody();
 
@@ -709,7 +715,7 @@ test('re-running the installer keeps the keys that existing data was encrypted w
         ->and($body)->toContain('ensure_env_secret REVERB_APP_KEY')
         ->and($body)->toContain('ensure_env_secret REVERB_APP_SECRET')
         ->and($body)->not->toContain('    update_env CORESMITH_VAULT_KEY "$(openssl rand')
-        ->and($body)->toContain("preflight\n    refuse_linked_layout\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    ensure_database_password");
+        ->and($body)->toContain("preflight\n    refuse_linked_layout\n    adopt_legacy_layout\n    adopt_existing_install\n    interactive_prompts\n    choose_address\n    ensure_database_password");
 });
 
 test('the browser is given the reverb key so live updates use the socket', function () {
@@ -824,7 +830,7 @@ test('without a domain the panel answers on the address the server owns, not one
 
     expect($body)->toContain('SERVER_IP="$(ip -4 route get 1.1.1.1 2>/dev/null')
         ->and($body)->not->toContain('default_sni')
-        ->and($body)->toContain('through NAT. Without --domain Coresmith answers on');
+        ->and($body)->toContain('log "This server reaches the internet as ${PUBLIC_IP}, through NAT."');
 });
 
 test('the installer announces the version in the VERSION file', function () {
@@ -838,11 +844,67 @@ function installScriptUnits(): string
     return $matches[0] ?? '';
 }
 
-test('php-fpm never reaches the release through the symlink', function () {
-    $body = installScriptBody();
+function installScriptBasedir(): array
+{
+    preg_match('/^php_admin_value\[open_basedir\] = (.+)$/m', installScriptBody(), $line);
 
-    expect($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
-        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', $body))->toBe(0);
+    return explode(':', $line[1] ?? '');
+}
+
+test('php-fpm never reaches the release through the symlink', function () {
+    expect(installScriptBasedir())->toContain('${RELEASES_DIR}')
+        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', installScriptBody()))->toBe(0);
+});
+
+test("php-fpm may open only the releases, Coresmith's data, the helper for this machine, the IPv6 address table and /tmp", function () {
+    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', ProcStableAddresses::PATH, '/tmp'])
+        ->and(installScriptBody())->toContain('readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"')
+        ->and((string) file_get_contents(config_path('coresmith.php')))->toContain("env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine')");
+});
+
+function installScriptNeedrestart(): string
+{
+    preg_match("/cat >\"\\\$NEEDRESTART_CONF\" <<'NEEDRESTART'\n(.*?)\nNEEDRESTART\n/s", installScriptBody(), $conf);
+
+    return $conf[1] ?? '';
+}
+
+test("needrestart leaves Coresmith's queue, sockets and Redis running after a library update, and still restarts the rest", function () {
+    $conf = tempnam(sys_get_temp_dir(), 'needrestart');
+    file_put_contents($conf, installScriptNeedrestart());
+    $needrestart = <<<'PERL'
+        my ($conf, @units) = @ARGV;
+        my %nrconf = (override_rc => {qr(^dbus) => 0});
+        eval do { local(@ARGV, $/) = $conf; <> };
+        die "Error parsing $conf: $@" if($@);
+        foreach my $rc (@units) {
+            my $restart = 1;
+            foreach my $re (keys %{$nrconf{override_rc}}) {
+                next unless($rc =~ /$re/);
+                $restart = $nrconf{override_rc}->{$re};
+                last;
+            }
+            print "$rc ", ($restart ? 'restarts' : 'deferred'), "\n";
+        }
+        PERL;
+
+    $run = new Process(['perl', '-e', $needrestart, $conf, 'coresmith-horizon.service', 'coresmith-reverb.service', 'redis-server.service', 'dbus.service', 'php8.5-fpm.service', 'coresmith-app-shop-web.service', 'coresmith-redis-6380.service']);
+    $run->run();
+    unlink($conf);
+
+    expect($run->getErrorOutput())->toBe('')
+        ->and($run->getOutput())->toBe(implode("\n", [
+            'coresmith-horizon.service deferred',
+            'coresmith-reverb.service deferred',
+            'redis-server.service deferred',
+            'dbus.service deferred',
+            'php8.5-fpm.service restarts',
+            'coresmith-app-shop-web.service restarts',
+            'coresmith-redis-6380.service restarts',
+        ]) . "\n")
+        ->and(installScriptBody())->toContain('readonly NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"')
+        ->and(installScriptFunctions('defer_library_restarts'))->toContain('[ -d "${NEEDRESTART_CONF%/conf.d/*}" ] || return 0')
+        ->and(installScriptUnits())->toContain("    defer_library_restarts\n");
 });
 
 test('the installer lays out the paths the updater reads', function () {
@@ -1325,7 +1387,7 @@ test('switching releases remembers the one it replaced', function () {
 });
 
 test('old releases are removed only once the services are up on the new one', function () {
-    expect(installScriptFunctions('finalize'))->toContain("    wait_for_service coresmith-reverb || healthy=false\n\n    if \$healthy; then\n        prune_releases\n    fi\n");
+    expect(installScriptFunctions('finalize'))->toContain("    wait_for_service coresmith-reverb || healthy=false\n\n    if \$healthy; then\n        prune_releases\n");
 });
 
 test('the installer workflow runs whenever a file the machine test depends on changes', function () {
@@ -1506,4 +1568,70 @@ test('the Redis password never reaches a command line', function () {
 
     expect(installScriptRedisCalls($directory, 'redis-cli'))->not->toBeEmpty()
         ->and(file_get_contents("{$directory}/calls"))->not->toContain('Gener4tedRedisPassw0rd');
+});
+
+test('the installer leaves the app and config folders to provisioning, so a rerun never hands apps\' files to Coresmith\'s user', function () {
+    $body = installScriptBody();
+    $directories = installScriptFunctions('create_user_and_dirs');
+
+    expect($directories)->not->toContain('/var/coresmith')
+        ->and($directories)->not->toContain('APPS_DIR')
+        ->and($directories)->not->toContain('CONFIG_DIR')
+        ->and($body)->not->toContain('readonly APPS_DIR=')
+        ->and($body)->not->toContain('readonly CONFIG_DIR=')
+        ->and($body)->toContain("ReadWritePaths=\${SHARED_DIR}/storage \${DATA_DIR}\nProtectKernelTunables=true");
+});
+
+function installScriptLogsRun(string $directory): Process
+{
+    $script = "set -euo pipefail\n"
+        . 'D=' . escapeshellarg($directory) . "\n"
+        . "HORIZON_LOG=\"\$D/horizon.log\"\nREVERB_LOG=\"\$D/reverb.log\"\nFPM_ERROR_LOG=\"\$D/fpm-error.log\"\n"
+        . "fatal() { echo \"fatal: \$*\"; exit 1; }\n"
+        . "chown() { echo \"chown \$*\" >>\"\$D/calls\"; }\n"
+        . installScriptFunctions('refuse_link', 'secure_logs')
+        . "\nsecure_logs\nsecure_logs\n";
+
+    $process = new Process(['bash', '-c', $script]);
+    $process->run();
+
+    return $process;
+}
+
+test('Coresmith\'s logs are readable by Coresmith and root only, never by apps on its machine', function () {
+    $directory = installScriptScratch();
+    file_put_contents("{$directory}/horizon.log", "an old line\n");
+    chmod("{$directory}/horizon.log", 0644);
+
+    $process = installScriptLogsRun($directory);
+    $mode = fn(string $file): string => substr(sprintf('%o', fileperms("{$directory}/{$file}")), -3);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($mode('horizon.log'))->toBe('640')
+        ->and($mode('reverb.log'))->toBe('640')
+        ->and($mode('fpm-error.log'))->toBe('640')
+        ->and(file_get_contents("{$directory}/horizon.log"))->toBe("an old line\n")
+        ->and(array_unique(array_filter(explode("\n", (string) file_get_contents("{$directory}/calls")))))->toBe([
+            "chown root:coresmith {$directory}/horizon.log",
+            "chown root:coresmith {$directory}/reverb.log",
+            "chown coresmith:coresmith {$directory}/fpm-error.log",
+        ]);
+});
+
+test('a log that is a symbolic link stops the installer instead of being followed as root', function () {
+    $directory = installScriptScratch();
+    symlink('/etc/passwd', "{$directory}/reverb.log");
+
+    $process = installScriptLogsRun($directory);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and($process->getOutput())->toContain("fatal: {$directory}/reverb.log is a symbolic link");
+});
+
+test('the install log, which holds the setup link, is readable by root only, before anything is written to it', function () {
+    $main = installScriptFunctions('main');
+
+    expect($main)->toContain("touch \"\$LOG_FILE\"\n    chmod 600 \"\$LOG_FILE\"\n    exec > >(tee -a \"\$LOG_FILE\") 2>&1")
+        ->and(installScriptBody())->toContain("    create_systemd_services\n")
+        ->and(installScriptFunctions('create_systemd_services'))->toContain("    secure_logs\n");
 });

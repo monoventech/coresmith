@@ -81,8 +81,8 @@ test('an address that would not work is refused with what to do', function (stri
     'not a name' => ['core smith.example.com', [], "That doesn't look like a domain. Try coresmith.example.com."],
     'a wildcard' => ['*.example.com', [], "That doesn't look like a domain. Try coresmith.example.com."],
     'an ip of another machine' => ['192.168.0.9', [], "192.168.0.9 isn't one of this server's addresses."],
-    'a name with no records' => ['coresmith.example.com', [], "coresmith.example.com doesn't point anywhere yet. Add a DNS record that points it at this server, then try again."],
-    'a name for another machine on the network' => ['coresmith.example.com', ['coresmith.example.com' => ['192.168.0.9']], "coresmith.example.com points at 192.168.0.9, which isn't this server. Point it at this server, then try again."],
+    'a name with no records' => ['coresmith.example.com', [], "coresmith.example.com doesn't point anywhere yet. Add a DNS record that points it at this server, then check again."],
+    'a name for another machine on the network' => ['coresmith.example.com', ['coresmith.example.com' => ['192.168.0.9']], "coresmith.example.com points at 192.168.0.9, which isn't this server. Point it at this server, then check again."],
 ]);
 
 test('a name another team already opens on is refused', function () {

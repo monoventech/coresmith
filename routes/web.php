@@ -14,6 +14,7 @@ use App\Http\Controllers\DatabasePasswordController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NoTeamController;
@@ -29,12 +30,10 @@ use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberController;
+use App\Http\Controllers\ThisMachineController;
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Features;
 
-Route::inertia('/', 'Welcome', [
-    'canRegister' => Features::enabled(Features::registration()),
-])->name('home');
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -47,6 +46,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('start.store');
 
     Route::get('servers', fn() => to_route('dashboard'))->name('servers.index');
+    Route::post('servers/this-machine', [ThisMachineController::class, 'store'])
+        ->middleware('throttle:6,1,this-machine')
+        ->name('servers.this-machine.store');
+    Route::post('servers/{server}/this-machine/retry', [ThisMachineController::class, 'retry'])
+        ->middleware('throttle:6,1,this-machine-retry')
+        ->name('servers.this-machine.retry');
     Route::post('servers/cloud', [CloudServerController::class, 'store'])
         ->middleware('throttle:10,1,cloud-server-create')
         ->name('servers.cloud.store');

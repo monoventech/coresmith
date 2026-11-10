@@ -21,7 +21,7 @@ test.describe('a free plan on coresmith cloud', () => {
 
         const banner = page.getByTestId('billing-banner')
 
-        await expect(banner).toContainText('Your free plan ends in 2 days.')
+        await expect(banner.locator('.font-semibold')).toHaveText(/^Your free plan ends (in 2 days|tomorrow)\.$/)
         await expect(banner).toContainText('this team becomes read-only. Choose a plan to keep making changes.')
 
         await banner.getByRole('link', { name: 'Choose a plan' }).click()

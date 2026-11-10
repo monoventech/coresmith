@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Services\Server;
 
-use App\Services\Runtime\AsdfManager;
 use App\Services\SSH\SSHConnection;
 
 final class DirectoryStructure
@@ -29,7 +28,7 @@ final class DirectoryStructure
 
     public function create(SSHConnection $connection): void
     {
-        $user = AsdfManager::SYSTEM_USER;
+        $user = $connection->server()->runtimeUser();
 
         foreach (self::SHARED as $directory => $mode) {
             $connection->execute(

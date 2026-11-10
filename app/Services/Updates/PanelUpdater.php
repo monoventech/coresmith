@@ -176,6 +176,8 @@ final class PanelUpdater
                 return $this->rollBack($run, $previous, $units, $e);
             }
 
+            $this->refreshSite($release, $run);
+
             return $this->succeed($run, $release, $previous);
         } finally {
             $lock->release();
@@ -424,6 +426,15 @@ final class PanelUpdater
         $this->notify($run, $final);
 
         return $final;
+    }
+
+    private function refreshSite(Release $release, UpdateRun $run): void
+    {
+        try {
+            $this->builder->refreshSite($release->path, $run);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     private function abort(UpdateRun $run, Throwable $e): UpdateStatus

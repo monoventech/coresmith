@@ -16,10 +16,11 @@ final readonly class OsInfo
         public int $cpuCores,
         public int $memoryMb,
         public int $diskGb,
+        public ?int $systemd = null,
     ) {}
 
     /**
-     * @return array{cpu_cores: int, memory_mb: int, disk_gb: int}
+     * @return array{cpu_cores: int, memory_mb: int, disk_gb: int, systemd: ?int}
      */
     public function toMeta(): array
     {
@@ -27,6 +28,7 @@ final readonly class OsInfo
             'cpu_cores' => $this->cpuCores,
             'memory_mb' => $this->memoryMb,
             'disk_gb' => $this->diskGb,
+            'systemd' => $this->systemd,
         ];
     }
 }

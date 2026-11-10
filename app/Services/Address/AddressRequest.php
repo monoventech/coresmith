@@ -25,6 +25,11 @@ final class AddressRequest
         AtomicFile::write(self::file(), (string) json_encode(['host' => $host, 'requested_at' => now()->toIso8601String()]), 0640, "Coresmith couldn't ask for the change");
     }
 
+    public static function withdraw(): bool
+    {
+        return is_file(self::file()) && @unlink(self::file());
+    }
+
     public static function take(): ?string
     {
         foreach ([self::takenFile(), self::file()] as $file) {

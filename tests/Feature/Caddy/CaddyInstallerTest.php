@@ -5,8 +5,12 @@ declare(strict_types=1);
 use App\Models\Server;
 use App\Services\Caddy\CaddyApiClient;
 use App\Services\Caddy\CaddyInstaller;
+use App\Services\Caddy\CoresmithSite;
 use App\Services\Server\MetricsCollector;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Sleep;
 use Tests\Support\FakeSSHTransport;
 
 function caddyInstall(FakeSSHTransport $transport, string $user = 'root'): void
@@ -68,12 +72,13 @@ test('caddy starts from the config the panel keeps, so app routes come back afte
         ->and(strpos(implode("\n", $transport->commands()), 'daemon-reload'))->toBeLessThan(strpos(implode("\n", $transport->commands()), 'systemctl restart caddy'));
 });
 
-test('app routes go to a server caddy actually has, listening for https with nothing in front of them', function () {
+test('app routes go to a server caddy actually has, listening for https, with only the catch-all that closes unknown hostnames', function () {
     $config = json_decode((new CaddyInstaller)->config(), true);
     $server = $config['apps']['http']['servers'][CaddyInstaller::SERVER];
 
     expect($server['listen'])->toBe([':443'])
-        ->and($server['routes'])->toBe([])
+        ->and($server['routes'])->toBe([CaddyInstaller::unknownHostsRoute()])
+        ->and(CaddyInstaller::unknownHostsRoute())->toBe(['@id' => 'coresmith-unknown', 'handle' => [['handler' => 'static_response', 'abort' => true]]])
         ->and(CaddyApiClient::ROUTES_PATH)->toBe('/config/apps/http/servers/' . CaddyInstaller::SERVER . '/routes');
 });
 
@@ -97,13 +102,22 @@ test('a reprovisioned server keeps the app routes caddy already had', function (
 
     $written = json_decode($transport->uploads()[CaddyInstaller::CONFIG_FILE], true);
 
-    expect($written['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([$route]);
+    expect($written['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([$route, CaddyInstaller::unknownHostsRoute()])
+        ->and(Server::query()->latest('id')->first()->unknownHostsClosed())->toBeTrue();
 });
 
-test('a config that is not ours, or not json, starts with no routes', function (string $current) {
+test('reprovisioning keeps one catch-all, after every app route', function () {
+    $route = ['@id' => 'app-01', 'match' => [['host' => ['shop.example.com']]], 'terminal' => true];
+    $current = json_encode(['apps' => ['http' => ['servers' => [CaddyInstaller::SERVER => ['routes' => [CaddyInstaller::unknownHostsRoute(), $route]]]]]]);
+    $config = json_decode((new CaddyInstaller)->config(null, (string) $current), true);
+
+    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([$route, CaddyInstaller::unknownHostsRoute()]);
+});
+
+test('a config that is not ours, or not json, starts with only the catch-all', function (string $current) {
     $config = json_decode((new CaddyInstaller)->config(null, $current), true);
 
-    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([]);
+    expect($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'])->toBe([CaddyInstaller::unknownHostsRoute()]);
 })->with(['{}', 'not json', '[1,2]', '{"apps":[]}', '{"apps":{"http":{"servers":{"coresmith":{"routes":{"a":1}}}}}}']);
 
 test('kept routes stay exactly as caddy wrote them, empty objects included', function () {
@@ -151,4 +165,76 @@ test('a sudo user probes the admin socket through sudo, since only caddy and roo
     caddyInstall($transport, 'deploy');
 
     expect($transport->commands())->toContain('sudo bash -c ' . escapeshellarg("curl -fsS --max-time 10 --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/' >/dev/null"));
+});
+
+function caddyThisMachineInstall(FakeSSHTransport $transport): Server
+{
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'runs_coresmith' => true, 'ip_address' => '127.0.0.1']);
+
+    app(CaddyInstaller::class)->install((new SSHConnection($server, $transport))->connect());
+
+    return $server;
+}
+
+function caddyThisMachineAdapted(): string
+{
+    return (string) file_get_contents(base_path('tests/Fixtures/Caddy/adapted-public.json'));
+}
+
+test("on Coresmith's own machine, provisioning folds Coresmith's site into the config instead of replacing it", function () {
+    $transport = (new FakeSSHTransport)->respondTo('caddy adapt', caddyThisMachineAdapted());
+
+    caddyThisMachineInstall($transport);
+
+    $written = (string) $transport->uploads()[CaddyInstaller::CONFIG_FILE];
+    $config = json_decode($written, true);
+
+    expect($transport->commands())->toContain('caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null')
+        ->and(array_column($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'], '@id'))->toBe(['coresmith-site', 'coresmith-any'])
+        ->and(array_keys($config['apps']['http']['servers']))->toBe([CaddyInstaller::SERVER, 'coresmith-internal'])
+        ->and($config['admin'])->toBe(['listen' => 'unix//run/caddy-admin/admin.sock|0222'])
+        ->and($written)->toContain('"gzip": {}');
+});
+
+test("on Coresmith's own machine the admin socket stays open to Coresmith's group, which its address changes use", function () {
+    $transport = (new FakeSSHTransport)->respondTo('caddy adapt', caddyThisMachineAdapted());
+
+    $server = caddyThisMachineInstall($transport);
+
+    expect($transport->uploads()['/etc/tmpfiles.d/coresmith-caddy.conf'] ?? null)->toBe("d /run/caddy-admin 0750 caddy coresmith -\n")
+        ->and($server->fresh()->caddyAdminOnSocket())->toBeTrue();
+});
+
+test("on Coresmith's own machine, reprovisioning keeps the apps between Coresmith's site and its catch-all", function () {
+    $current = (new CaddyInstaller)->thisMachineConfig(CoresmithSite::fromAdapted(caddyThisMachineAdapted()), null);
+    $decoded = json_decode($current, false);
+    array_splice($decoded->apps->http->servers->coresmith->routes, 1, 0, [json_decode('{"@id":"app-01","match":[{"host":["shop.example.com"]}],"terminal":true}')]);
+    $transport = (new FakeSSHTransport)
+        ->respondTo('caddy adapt', caddyThisMachineAdapted())
+        ->respondTo('cat ' . CaddyInstaller::CONFIG_FILE, (string) json_encode($decoded));
+
+    caddyThisMachineInstall($transport);
+
+    $config = json_decode($transport->uploads()[CaddyInstaller::CONFIG_FILE], true);
+
+    expect(array_column($config['apps']['http']['servers'][CaddyInstaller::SERVER]['routes'], '@id'))->toBe(['coresmith-site', 'app-01', 'coresmith-any'])
+        ->and(array_column($config['apps']['tls']['automation']['policies'], '@id'))->toBe(['app-01-tls', 'coresmith-site-tls', 'coresmith-any-tls']);
+});
+
+test("if Caddy can't read Coresmith's own site, provisioning stops before it changes Caddy", function () {
+    $transport = (new FakeSSHTransport)->respondTo('caddy adapt', 'Error: adapting config using caddyfile: open /etc/caddy/Caddyfile: no such file');
+
+    expect(fn() => caddyThisMachineInstall($transport))->toThrow(RuntimeException::class, CoresmithSite::UNREADABLE)
+        ->and($transport->uploads())->not->toHaveKey(CaddyInstaller::CONFIG_FILE)
+        ->and($transport->commands())->not->toContain('systemctl restart caddy');
+});
+
+test("provisioning Coresmith's own machine waits for an address change to finish with Caddy, so neither undoes the other", function () {
+    Sleep::fake(syncWithCarbon: true);
+    Cache::lock(CaddyApiClient::THIS_MACHINE_LOCK, 600)->get();
+    $transport = (new FakeSSHTransport)->respondTo('caddy adapt', caddyThisMachineAdapted());
+
+    expect(fn() => caddyThisMachineInstall($transport))->toThrow(LockTimeoutException::class)
+        ->and($transport->uploads())->not->toHaveKey(CaddyInstaller::CONFIG_FILE)
+        ->and($transport->commands())->not->toContain('systemctl restart caddy');
 });

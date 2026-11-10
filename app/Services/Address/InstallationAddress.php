@@ -58,6 +58,11 @@ final class InstallationAddress
 
     public function refusal(string $host): ?string
     {
+        return $this->formRefusal($host) ?? (filter_var($host, FILTER_VALIDATE_IP) !== false ? null : $this->dnsRefusal($host));
+    }
+
+    public function formRefusal(string $host): ?string
+    {
         if ($host === '') {
             return 'Enter the address Coresmith should answer on, like coresmith.example.com.';
         }
@@ -78,17 +83,22 @@ final class InstallationAddress
             return "A team already opens on {$host}. Remove it from that team first.";
         }
 
+        return null;
+    }
+
+    public function dnsRefusal(string $host): ?string
+    {
         $addresses = array_values(array_filter($this->resolver->addresses($host), fn(string $address): bool => filter_var($address, FILTER_VALIDATE_IP) !== false));
 
         if ($addresses === []) {
-            return "{$host} doesn't point anywhere yet. Add a DNS record that points it at this server, then try again.";
+            return "{$host} doesn't point anywhere yet. Add a DNS record that points it at this server, then check again.";
         }
 
         if ($this->isLocal($addresses) || array_filter($addresses, fn(string $address): bool => filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false) !== []) {
             return null;
         }
 
-        return "{$host} points at {$addresses[0]}, which isn't this server. Point it at this server, then try again.";
+        return "{$host} points at {$addresses[0]}, which isn't this server. Point it at this server, then check again.";
     }
 
     /**

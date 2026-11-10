@@ -232,9 +232,10 @@ test('the hardening tab claims key-only SSH only once sshd has reported it, and 
                 && collect($items)->contains(ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS))
             ->where('ssh', $ssh));
 })->with([
-    'verified' => [['ssh_hardening' => 'verified'], true, ['verified' => true, 'error' => null]],
-    'still accepting passwords' => [['ssh_hardening_error' => 'sshd reports passwordauthentication yes'], false, ['verified' => false, 'error' => 'sshd reports passwordauthentication yes']],
-    'not checked yet' => [[], false, ['verified' => false, 'error' => null]],
+    'verified' => [['ssh_hardening' => 'verified'], true, ['verified' => true, 'passwords_kept' => false, 'error' => null]],
+    'still accepting passwords' => [['ssh_hardening_error' => 'sshd reports passwordauthentication yes'], false, ['verified' => false, 'passwords_kept' => false, 'error' => 'sshd reports passwordauthentication yes']],
+    'not checked yet' => [[], false, ['verified' => false, 'passwords_kept' => false, 'error' => null]],
+    "keeping passwords on Coresmith's machine until a key is in" => [['ssh_hardening' => 'passwords_kept'], false, ['verified' => false, 'passwords_kept' => true, 'error' => null]],
 ]);
 
 test('an admin can queue a firewall change', function () {
@@ -337,3 +338,17 @@ test('the activity log is the only firewall source, so nothing is invented', fun
         ->get(route('servers.hardening', $server))
         ->assertInertia(fn($page) => $page->has('firewall.changes', 0));
 });
+
+test('the hardening tab says Caddy closes the connection for unknown hostnames once it does, and only then', function (array $attributes, string $line, string $not) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create($attributes);
+
+    $this->actingAs(tabUser($team, TeamRole::Member))
+        ->get(route('servers.hardening', $server))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->where('hardening', fn($items): bool => collect($items)->contains($line) && !collect($items)->contains($not)));
+})->with([
+    'closed' => [['meta' => ['caddy_unknown_hosts' => 'closed']], ServerTabsController::UNKNOWN_HOSTS_CLOSED, ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS],
+    'not yet' => [['meta' => []], ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS, ServerTabsController::UNKNOWN_HOSTS_CLOSED],
+    "Coresmith's own machine, whose own catch-all serves no site" => [['runs_coresmith' => true, 'meta' => ['caddy_unknown_hosts' => 'closed']], ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS, ServerTabsController::UNKNOWN_HOSTS_CLOSED],
+]);

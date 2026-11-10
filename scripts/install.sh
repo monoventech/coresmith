@@ -29,7 +29,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="0.4.2"
+readonly CORESMITH_VERSION="0.5.0"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoventech/coresmith.git}"
 readonly CORESMITH_ROOT="/opt/coresmith"
 readonly RELEASES_DIR="$CORESMITH_ROOT/releases"
@@ -38,17 +38,24 @@ readonly INSTALL_DIR="$CORESMITH_ROOT/app"
 readonly DATA_DIR="/var/lib/coresmith"
 readonly UPDATES_DIR="$DATA_DIR/updates"
 readonly ADDRESS_DIR="$DATA_DIR/address"
-readonly APPS_DIR="/var/coresmith"
-readonly CONFIG_DIR="/etc/coresmith"
 readonly CADDY_SITE_DIR="/etc/caddy/coresmith"
 readonly CADDY_SITE="$CADDY_SITE_DIR/panel.caddy"
 readonly LEGACY_CADDY_SITE="/etc/caddy/panel.caddy"
 readonly CADDY_ADMIN_DIR="/run/caddy-admin"
 readonly CADDY_ADMIN_SOCKET="$CADDY_ADMIN_DIR/admin.sock"
 readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
+readonly CADDY_DROP_IN="/etc/systemd/system/caddy.service.d/coresmith.conf"
+readonly THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
+readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+readonly NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
+readonly CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
+readonly APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 readonly REDIS_CONFIGS="/etc/redis/redis.conf /etc/redis.conf"
 readonly SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"
 readonly LOG_FILE="/var/log/coresmith-install.log"
+readonly HORIZON_LOG="/var/log/coresmith-horizon.log"
+readonly REVERB_LOG="/var/log/coresmith-reverb.log"
+readonly FPM_ERROR_LOG="/var/log/coresmith-fpm-error.log"
 readonly PHP_VERSION="8.5"
 
 if [ -t 1 ]; then
@@ -77,9 +84,13 @@ VERBOSE=false
 
 PKG_MANAGER=""
 SERVER_IP=""
+PUBLIC_IP=""
+ON_CLOUD=false
 SSH_PORT="22"
 PANEL_HOST=""
 PANEL_URL=""
+TARGET_DOMAIN=""
+ADDRESS_LINES=""
 OS_ID=""
 OS_NAME=""
 OS_VERSION=""
@@ -247,10 +258,15 @@ preflight() {
     [ -n "$SERVER_IP" ] || fatal "Could not determine this server's IP address."
     success "Server IP: $SERVER_IP"
 
-    local public_ip
-    public_ip="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
-    if [ -n "$public_ip" ] && [ "$public_ip" != "$SERVER_IP" ]; then
-        log "Reachable from the internet as ${public_ip}, through NAT. Without --domain Coresmith answers on ${SERVER_IP}; point a domain at ${public_ip} to use it from outside."
+    PUBLIC_IP="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+    [[ "$PUBLIC_IP" =~ ^[0-9]+(\.[0-9]+){3}$ ]] || PUBLIC_IP=""
+
+    if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "$SERVER_IP" ]; then
+        log "This server reaches the internet as ${PUBLIC_IP}, through NAT."
+
+        if on_cloud; then
+            ON_CLOUD=true
+        fi
     fi
 
     if command -v ss >/dev/null 2>&1; then
@@ -322,6 +338,23 @@ interactive_prompts() {
         esac
         [ "$DB_DRIVER" = "pgsql" ] && DB_PORT="${DB_PORT:-5432}"
         [ "$DB_DRIVER" = "mysql" ] && DB_PORT="${DB_PORT:-3306}"
+    fi
+}
+
+choose_address() {
+    local existing wanted
+
+    existing="$(env_value APP_URL)"
+    existing="${existing#*://}"
+    existing="${existing%%/*}"
+    wanted="$(printf '%s' "$DOMAIN" | tr '[:upper:]' '[:lower:]')"
+
+    PANEL_HOST="${existing:-$SERVER_IP}"
+    PANEL_URL="https://${PANEL_HOST}"
+    TARGET_DOMAIN=""
+
+    if [ -n "$wanted" ] && [ "$wanted" != "$PANEL_HOST" ]; then
+        TARGET_DOMAIN="$wanted"
     fi
 }
 
@@ -679,19 +712,12 @@ create_user_and_dirs() {
         useradd --system --shell /bin/bash --home-dir /opt/coresmith --create-home coresmith
 
     refuse_link "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
-    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$ADDRESS_DIR" "$RELEASES_DIR" "$SHARED_DIR" "$APPS_DIR"/{apps,logs,backups,scripts} \
-        "$CONFIG_DIR"/env "$CONFIG_DIR"/deploy-keys /etc/caddy /var/log/caddy
+    mkdir -p "$DATA_DIR" "$UPDATES_DIR" "$ADDRESS_DIR" "$RELEASES_DIR" "$SHARED_DIR" /etc/caddy /var/log/caddy
 
-    chown -R coresmith:coresmith "$DATA_DIR" "$APPS_DIR"
+    chown -R coresmith:coresmith "$DATA_DIR"
     chown coresmith:coresmith "$CORESMITH_ROOT" "$RELEASES_DIR" "$SHARED_DIR" "$UPDATES_DIR" "$ADDRESS_DIR"
     chmod 700 "$DATA_DIR"
     chmod 700 "$UPDATES_DIR" "$ADDRESS_DIR"
-    chmod 755 "$APPS_DIR"
-
-    # Application environment files and deploy keys are root-only.
-    chown root:root "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"
-    chmod 700 "$CONFIG_DIR/env" "$CONFIG_DIR/deploy-keys"
-
 
     success "User and directories created"
 }
@@ -849,9 +875,6 @@ configure_environment() {
     cd "$RELEASE_DIR"
     [ -f "$SHARED_DIR/.env" ] || sudo -u coresmith cp "$RELEASE_DIR/.env.example" "$SHARED_DIR/.env"
 
-    PANEL_HOST="${DOMAIN:-$SERVER_IP}"
-    PANEL_URL="https://${PANEL_HOST}"
-
     update_env APP_NAME "Coresmith"
     update_env APP_ENV "production"
     update_env APP_DEBUG "false"
@@ -933,10 +956,34 @@ configure_environment() {
 
 # ── Phase 6: Caddy configuration ─────────────────────────────────────────────
 
+is_ip_address() {
+    [[ "$1" =~ ^[0-9]+(\.[0-9]+){3}$ || "$1" == *:* ]]
+}
+
+is_private_ip() {
+    [[ "$1" =~ ^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.) ]]
+}
+
+on_cloud() {
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 http://169.254.169.254/ 2>/dev/null)" != "000" ]
+}
+
+cloud_note() {
+    if ! $ON_CLOUD || [ -z "$PUBLIC_IP" ] || [ "$PANEL_HOST" != "$SERVER_IP" ] || [ "$PUBLIC_IP" = "$SERVER_IP" ] || ! is_private_ip "$SERVER_IP"; then
+        return 0
+    fi
+
+    printf '%s' "https://${SERVER_IP} only opens inside your provider's network. To open Coresmith from the internet, point a domain at ${PUBLIC_IP}, allow TCP ports 80 and 443 in your provider's firewall, then run the installer again with --domain and that domain."
+}
+
+caddy_signs_itself() {
+    is_ip_address "$1" || [[ "$1" == localhost || "$1" =~ \.(localhost|local|internal|home\.arpa)$ ]]
+}
+
 render_site() {
     local host="$1" ip_lines='/__IF_IP__/d'
 
-    if [[ "$host" =~ ^[0-9]+(\.[0-9]+){3}$ || "$host" == *:* ]]; then
+    if is_ip_address "$host"; then
         ip_lines='s/__IF_IP__//'
     fi
 
@@ -993,12 +1040,12 @@ pm.max_spare_servers = 4
 pm.max_requests = 500
 chdir = ${INSTALL_DIR}/public
 
-php_admin_value[error_log] = /var/log/coresmith-fpm-error.log
+php_admin_value[error_log] = ${FPM_ERROR_LOG}
 php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv
-php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp
+php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:/proc/net/if_inet6:/tmp
 FPMCONF
 
     mkdir -p "$CADDY_SITE_DIR"
@@ -1023,14 +1070,22 @@ FPMCONF
 
 # ── Phase 7: systemd ─────────────────────────────────────────────────────────
 
+defer_library_restarts() {
+    [ -d "${NEEDRESTART_CONF%/conf.d/*}" ] || return 0
+
+    mkdir -p "${NEEDRESTART_CONF%/*}"
+    cat >"$NEEDRESTART_CONF" <<'NEEDRESTART'
+$nrconf{override_rc}{qr(^coresmith-(?:horizon|reverb)\.service$)} = 0;
+$nrconf{override_rc}{qr(^redis-server\.service$)} = 0;
+NEEDRESTART
+}
+
 create_systemd_services() {
     log "Phase 7/8: creating systemd services..."
 
-    mkdir -p /etc/systemd/system/caddy.service.d
-    cat >/etc/systemd/system/caddy.service.d/coresmith.conf <<'UNIT'
-[Service]
-ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs "\"apps\"" /etc/caddy/caddy-config.json && curl -fsS --unix-socket /run/caddy-admin/admin.sock -X POST http://localhost/load -H "Content-Type: application/json" -d @/etc/caddy/caddy-config.json || true'
-UNIT
+    remove_legacy_caddy_drop_in
+    install_this_machine_helper
+    create_apps_slice
 
     cat >/etc/systemd/system/coresmith-horizon.service <<UNIT
 [Unit]
@@ -1045,13 +1100,13 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/php artisan horizon
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/coresmith-horizon.log
-StandardError=append:/var/log/coresmith-horizon.log
+StandardOutput=append:${HORIZON_LOG}
+StandardError=append:${HORIZON_LOG}
 
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR} ${APPS_DIR} ${CONFIG_DIR}
+ReadWritePaths=${SHARED_DIR}/storage ${DATA_DIR} -${THIS_MACHINE_DIR}
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -1073,8 +1128,8 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/php artisan reverb:start --host=127.0.0.1 --port=6001
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/coresmith-reverb.log
-StandardError=append:/var/log/coresmith-reverb.log
+StandardOutput=append:${REVERB_LOG}
+StandardError=append:${REVERB_LOG}
 
 NoNewPrivileges=true
 PrivateTmp=true
@@ -1145,7 +1200,7 @@ UNIT
 
     cat >/etc/systemd/system/coresmith-address.service <<UNIT
 [Unit]
-Description=Coresmith address change, started from Settings
+Description=Coresmith address change, started from Settings or the installer
 After=network-online.target redis-server.service caddy.service
 Wants=network-online.target
 
@@ -1156,6 +1211,7 @@ Group=coresmith
 WorkingDirectory=${INSTALL_DIR}
 ExecStartPre=-/bin/mv -f ${ADDRESS_DIR}/request.json ${ADDRESS_DIR}/request.taken.json
 ExecStart=/usr/bin/php artisan coresmith:address --no-interaction
+ExecStartPost=+${CADDY_PERSIST}
 TimeoutStartSec=10min
 NoNewPrivileges=true
 PrivateTmp=true
@@ -1175,8 +1231,415 @@ Unit=coresmith-address.service
 WantedBy=multi-user.target
 UNIT
 
+    cat >/etc/systemd/system/coresmith-this-machine.service <<UNIT
+[Unit]
+Description=Coresmith access to this machine, started from Add server
+
+[Service]
+Type=oneshot
+ExecStart=${THIS_MACHINE_HELPER}
+TimeoutStartSec=2min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/root/.ssh /etc/ssh ${THIS_MACHINE_DIR}
+RuntimeDirectory=sshd
+RuntimeDirectoryPreserve=yes
+UNIT
+
+    cat >/etc/systemd/system/coresmith-this-machine.path <<UNIT
+[Unit]
+Description=Answer Coresmith when it asks to manage this machine
+
+[Path]
+PathExists=${THIS_MACHINE_DIR}/request
+Unit=coresmith-this-machine.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+    defer_library_restarts
+    secure_logs
     systemctl daemon-reload
     success "Systemd services created"
+}
+
+remove_legacy_caddy_drop_in() {
+    if [ -f "$CADDY_DROP_IN" ] && grep -qF "ExecStartPost=/bin/bash -c 'sleep 2 && grep -qs" "$CADDY_DROP_IN"; then
+        rm -f "$CADDY_DROP_IN"
+        rmdir "${CADDY_DROP_IN%/*}" 2>/dev/null || true
+    fi
+}
+
+create_apps_slice() {
+    local total apps reserve=1024 limit=MemoryMax
+
+    total="$(free -m | awk '/^Mem:/ {print $2}')"
+
+    if [ "$DB_DRIVER" != "sqlite" ]; then
+        case "$DB_HOST" in
+        127.0.0.1 | localhost | ::1) reserve=$((reserve + 512)) ;;
+        esac
+    fi
+
+    apps=$((total - reserve))
+    [ "$apps" -ge $((total / 2)) ] || apps=$((total / 2))
+    [ "$(systemctl --version | awk 'NR == 1 {print $2}')" -ge 231 ] || limit=MemoryLimit
+
+    cat >"$APPS_SLICE" <<UNIT
+[Unit]
+Description=Apps Coresmith deploys on the machine it runs on
+
+[Slice]
+${limit}=${apps}M
+UNIT
+}
+
+install_this_machine_helper() {
+    local tmp
+
+    refuse_link "${THIS_MACHINE_HELPER%/*}" "$THIS_MACHINE_HELPER" "$THIS_MACHINE_DIR"
+    mkdir -p "${THIS_MACHINE_HELPER%/*}" "$THIS_MACHINE_DIR"
+    chown root:root "${THIS_MACHINE_HELPER%/*}"
+    chmod 0755 "${THIS_MACHINE_HELPER%/*}"
+    chown root:coresmith "$THIS_MACHINE_DIR"
+    chmod 1770 "$THIS_MACHINE_DIR"
+    [ -d /root/.ssh ] || install -d -m 0700 /root/.ssh
+
+    tmp="$(mktemp "${THIS_MACHINE_HELPER}.XXXXXX")"
+    cat >"$tmp" <<'HELPER'
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+readonly EXCHANGE=/var/lib/coresmith-this-machine
+readonly KEYS=/root/.ssh/authorized_keys
+readonly SSHD_CONFIG=/etc/ssh/sshd_config
+readonly DROP_IN=/etc/ssh/sshd_config.d/00-coresmith-local.conf
+readonly BEGIN='# coresmith-this-machine begin'
+readonly END='# coresmith-this-machine end'
+readonly KEY_OPTIONS='from="127.0.0.1,::1",no-agent-forwarding,no-port-forwarding,no-X11-forwarding'
+readonly REQUEST='^([A-Za-z0-9]{1,64}) (add (ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})|remove)$'
+readonly REQUEST_ID='^([A-Za-z0-9]{1,64}) '
+readonly FINGERPRINT='^SHA256:[A-Za-z0-9+/]{43}$'
+readonly KEY_KIND='^[A-Z0-9-]{1,16}$'
+readonly REFUSED="The request wasn't one Coresmith's helper accepts, so nothing changed."
+readonly UNEXPECTED="Coresmith's helper stopped before it finished, so the old settings are back. See journalctl -u coresmith-this-machine."
+
+ID=''
+WORK=''
+ANSWERED=''
+EFFECTIVE=''
+PORT=''
+
+answer() {
+    local tmp
+
+    tmp="$(mktemp "$EXCHANGE/.result.XXXXXX")"
+    printf '{"id":"%s",%s}\n' "$ID" "$1" >"$tmp"
+    chgrp coresmith "$tmp"
+    chmod 0640 "$tmp"
+    mv -f -- "$tmp" "$EXCHANGE/result.json"
+    ANSWERED=1
+}
+
+copy_out() {
+    if [ -e "$1" ]; then
+        cp -p -- "$1" "$WORK/$2"
+    else
+        : >"$WORK/$2.absent"
+    fi
+}
+
+copy_back() {
+    if [ -e "$WORK/$2" ]; then
+        cp -p -- "$WORK/$2" "$1"
+    elif [ -e "$WORK/$2.absent" ]; then
+        rm -f -- "$1"
+    fi
+}
+
+save() {
+    WORK="$(mktemp -d)"
+    copy_out "$KEYS" keys
+    copy_out "$SSHD_CONFIG" sshd_config
+    copy_out "$DROP_IN" drop_in
+}
+
+restore() {
+    [ -n "$WORK" ] || return 0
+    copy_back "$KEYS" keys
+    copy_back "$SSHD_CONFIG" sshd_config
+    copy_back "$DROP_IN" drop_in
+}
+
+fail() {
+    restore
+    answer "\"ok\":false,\"error\":\"$1\""
+    exit 1
+}
+
+finish() {
+    local status=$?
+
+    if [ "$status" -ne 0 ] && [ -z "$ANSWERED" ]; then
+        restore || true
+        answer "\"ok\":false,\"error\":\"$UNEXPECTED\"" || true
+    fi
+
+    [ -z "$WORK" ] || rm -rf -- "$WORK"
+}
+
+strip() {
+    awk -v start="$BEGIN" -v stop="$END" '$0 == start { printf "%s", held; held = ""; inside = 1; next } $0 == stop { held = ""; inside = 0; next } inside { held = held $0 ORS; next } { print } END { printf "%s", held }' "$1"
+}
+
+has_block() {
+    [ -f "$1" ] && grep -qxF "$BEGIN" "$1"
+}
+
+reads_drop_ins() {
+    grep -Eqi '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf([[:space:]]|$)' "$SSHD_CONFIG"
+}
+
+rule() {
+    printf '%s\n' 'Match User root Address 127.0.0.1,::1' '    PermitRootLogin prohibit-password' '    AllowUsers root' '    AllowGroups root' 'Match all'
+}
+
+lists() {
+    awk -v key="$1" '$1 == key { found = 1 } END { exit !found }' <<<"$EFFECTIVE"
+}
+
+names_root() {
+    local pattern
+
+    while read -r pattern; do
+        # shellcheck disable=SC2053
+        [[ root == ${pattern%%@*} ]] && return 0
+    done < <(awk -v key="$1" '$1 == key { print $2 }' <<<"$EFFECTIVE")
+
+    return 1
+}
+
+write_keys() {
+    local tmp
+
+    tmp="$(mktemp "$KEYS.XXXXXX")"
+    cat -- "$1" >"$tmp"
+    chmod 0600 "$tmp"
+    mv -f -- "$tmp" "$KEYS"
+}
+
+write_config() {
+    cat -- "$1" >"$SSHD_CONFIG"
+}
+
+reload_sshd() {
+    local unit
+
+    for unit in sshd ssh; do
+        if systemctl is-active --quiet "$unit"; then
+            systemctl reload "$unit"
+            return 0
+        fi
+    done
+}
+
+check_sshd() {
+    sshd -t >/dev/null 2>&1 || fail 'sshd refused the new settings, so the old ones are back. Run sshd -t to see why.'
+    EFFECTIVE="$(sshd -T -C user=root,host=localhost,addr=127.0.0.1 2>/dev/null)" || fail "sshd didn't report its settings, so the old ones are back. Run sshd -T to see why."
+
+    case "$(awk '$1 == "permitrootlogin" { print $2; exit }' <<<"$EFFECTIVE")" in
+    prohibit-password | without-password | yes) ;;
+    *) fail 'sshd still turns root away from this machine, so the old settings are back. Check PermitRootLogin in /etc/ssh/sshd_config.' ;;
+    esac
+
+    if lists allowusers && ! names_root allowusers; then
+        fail "sshd's AllowUsers still leaves root out on this machine, so the old settings are back. Check AllowUsers in /etc/ssh/sshd_config and the files it includes."
+    fi
+
+    if lists allowgroups && ! names_root allowgroups; then
+        fail "sshd's AllowGroups still leaves root out on this machine, so the old settings are back. Check AllowGroups in /etc/ssh/sshd_config and the files it includes."
+    fi
+
+    if names_root denyusers; then
+        fail "sshd's DenyUsers turns root away, so the old settings are back. Take root out of DenyUsers in /etc/ssh/sshd_config or the files it includes, then try again."
+    fi
+
+    if names_root denygroups; then
+        fail "sshd's DenyGroups turns root's group away, so the old settings are back. Take root out of DenyGroups in /etc/ssh/sshd_config or the files it includes, then try again."
+    fi
+
+    PORT="$(awk '$1 == "listenaddress" && $2 ~ /^(0\.0\.0\.0|127\.0\.0\.1):[0-9]+$/ { sub(/^.*:/, "", $2); print $2; exit }' <<<"$EFFECTIVE")"
+    [ -n "$PORT" ] || fail "sshd doesn't listen on 127.0.0.1, so Coresmith can't reach it from this machine and the old settings are back. Check ListenAddress in /etc/ssh/sshd_config."
+}
+
+host_keys() {
+    local path line fingerprint kind separator=''
+
+    printf '{'
+    while read -r path; do
+        line="$(ssh-keygen -l -E sha256 -f "$path" 2>/dev/null)" || continue
+        fingerprint="$(awk '{ print $2 }' <<<"$line")"
+        kind="$(awk '{ print $NF }' <<<"$line" | tr -d '()')"
+        [[ "$fingerprint" =~ $FINGERPRINT && "$kind" =~ $KEY_KIND ]] || continue
+        printf '%s"%s":"%s"' "$separator" "$kind" "$fingerprint"
+        separator=','
+    done < <(awk '$1 == "hostkey" { print $2 }' <<<"$EFFECTIVE")
+    printf '}'
+}
+
+add() {
+    local keys
+
+    save
+    {
+        [ ! -f "$KEYS" ] || strip "$KEYS"
+        printf '%s\n%s %s coresmith-this-machine\n%s\n' "$BEGIN" "$KEY_OPTIONS" "$1" "$END"
+    } >"$WORK/keys.new"
+    write_keys "$WORK/keys.new"
+
+    if reads_drop_ins; then
+        mkdir -p -- "${DROP_IN%/*}"
+        rule >"$DROP_IN"
+
+        if has_block "$SSHD_CONFIG"; then
+            strip "$SSHD_CONFIG" >"$WORK/sshd_config.new"
+            write_config "$WORK/sshd_config.new"
+        fi
+    else
+        {
+            strip "$SSHD_CONFIG"
+            printf '%s\n' "$BEGIN"
+            rule
+            printf '%s\n' "$END"
+        } >"$WORK/sshd_config.new"
+        write_config "$WORK/sshd_config.new"
+        rm -f -- "$DROP_IN"
+    fi
+
+    check_sshd
+    keys="$(host_keys)"
+    reload_sshd
+    answer "\"ok\":true,\"port\":${PORT},\"host_keys\":${keys}"
+}
+
+remove() {
+    save
+
+    if has_block "$KEYS"; then
+        strip "$KEYS" >"$WORK/keys.new"
+        write_keys "$WORK/keys.new"
+    fi
+
+    rm -f -- "$DROP_IN"
+
+    if has_block "$SSHD_CONFIG"; then
+        strip "$SSHD_CONFIG" >"$WORK/sshd_config.new"
+        write_config "$WORK/sshd_config.new"
+    fi
+
+    sshd -t >/dev/null 2>&1 || fail 'sshd refused the new settings, so the old ones are back. Run sshd -t to see why.'
+    reload_sshd
+    answer '"ok":true'
+}
+
+handle_request() {
+    local request
+
+    [ -e "$EXCHANGE/request" ] || [ -L "$EXCHANGE/request" ] || exit 0
+
+    if [ -L "$EXCHANGE/request" ] || [ ! -f "$EXCHANGE/request" ]; then
+        rm -f -- "$EXCHANGE/request"
+        fail "$REFUSED"
+    fi
+
+    request="$(head -c 513 -- "$EXCHANGE/request" 2>/dev/null)" || exit 0
+    rm -f -- "$EXCHANGE/request"
+
+    if [[ "$request" =~ $REQUEST_ID ]]; then
+        ID="${BASH_REMATCH[1]}"
+    fi
+
+    if [ "${#request}" -gt 512 ] || ! [[ "$request" =~ $REQUEST ]]; then
+        fail "$REFUSED"
+    fi
+
+    if [ "${BASH_REMATCH[2]}" = remove ]; then
+        remove
+    else
+        add "${BASH_REMATCH[3]}"
+    fi
+}
+
+trap finish EXIT
+handle_request
+HELPER
+    chown root:root "$tmp"
+    chmod 0755 "$tmp"
+    mv -f "$tmp" "$THIS_MACHINE_HELPER"
+
+    tmp="$(mktemp "${CADDY_PERSIST}.XXXXXX")"
+    cat >"$tmp" <<'PERSIST'
+#!/bin/bash
+set -euo pipefail
+umask 022
+
+readonly CONFIG=/etc/caddy/caddy-config.json
+readonly DROP_IN=/etc/systemd/system/caddy.service.d/coresmith.conf
+readonly LOCK=/run/lock/coresmith-caddy-config.lock
+
+grep -qsF -- '--config /etc/caddy/caddy-config.json' "$DROP_IN" || exit 0
+
+exec 9>"$LOCK"
+flock -w 60 9
+
+staged="$(mktemp "${CONFIG%/*}/.caddy-config.XXXXXX")"
+trap 'rm -f "$staged"' EXIT
+
+curl -fsS --max-time 30 --unix-socket /run/caddy-admin/admin.sock http://localhost/config/ >"$staged"
+[ "$(head -c 1 "$staged")" = "{" ]
+chmod 0644 "$staged"
+mv -f "$staged" "$CONFIG"
+PERSIST
+    chown root:root "$tmp"
+    chmod 0755 "$tmp"
+    mv -f "$tmp" "$CADDY_PERSIST"
+}
+
+caddy_runs_managed_config() {
+    grep -qsF -- "--config /etc/caddy/caddy-config.json" "$CADDY_DROP_IN"
+}
+
+wait_for_caddy_admin() {
+    local _
+
+    for _ in $(seq 1 30); do
+        if curl -fsS --max-time 2 --unix-socket "$CADDY_ADMIN_SOCKET" http://localhost/config/ >/dev/null 2>&1; then
+            return 0
+        fi
+
+        sleep 1
+    done
+
+    fatal "Caddy didn't answer on its admin socket after it restarted. See journalctl -u caddy, then run the installer again."
+}
+
+secure_logs() {
+    local log
+
+    for log in "$HORIZON_LOG" "$REVERB_LOG"; do
+        refuse_link "$log"
+        touch "$log"
+        chown root:coresmith "$log"
+        chmod 640 "$log"
+    done
+
+    refuse_link "$FPM_ERROR_LOG"
+    touch "$FPM_ERROR_LOG"
+    chown coresmith:coresmith "$FPM_ERROR_LOG"
+    chmod 640 "$FPM_ERROR_LOG"
 }
 
 # ── Phase 8: start, harden, finish ───────────────────────────────────────────
@@ -1251,6 +1714,35 @@ wait_for_service() {
     fi
 }
 
+move_to_domain() {
+    local output="" moved=false
+
+    log "Moving Coresmith to ${TARGET_DOMAIN}. This can take a few minutes while its certificate is issued..."
+
+    if output="$(cd "$INSTALL_DIR" && sudo -u coresmith php artisan coresmith:address-request "$TARGET_DOMAIN" --wait 2>&1)"; then
+        moved=true
+    fi
+
+    ADDRESS_LINES="$(printf '%s\n' "$output" | grep -vE '^(Switching to |Coresmith now answers on )' || true)"
+
+    if $moved; then
+        PANEL_HOST="$TARGET_DOMAIN"
+        PANEL_URL="https://${PANEL_HOST}"
+        success "Coresmith now answers on ${PANEL_HOST}"
+    else
+        [ -n "$ADDRESS_LINES" ] || ADDRESS_LINES="Coresmith couldn't move to ${TARGET_DOMAIN}, and didn't say why."
+        warn "Coresmith stays on ${PANEL_HOST} for now. The summary below says why."
+    fi
+}
+
+link_loads() {
+    if is_ip_address "$1"; then
+        curl -fsk -o /dev/null --max-time 10 "https://${1}/up"
+    else
+        curl -fsk -o /dev/null --max-time 10 --resolve "${1}:443:127.0.0.1" "https://${1}/up"
+    fi
+}
+
 finalize() {
     log "Phase 8/8: starting services..."
 
@@ -1258,6 +1750,12 @@ finalize() {
     run systemctl restart "php${PHP_VERSION}-fpm" || run systemctl restart php-fpm || true
     run systemctl enable caddy
     run systemctl restart caddy
+
+    if caddy_runs_managed_config; then
+        wait_for_caddy_admin
+        run sudo -u coresmith php "$INSTALL_DIR/artisan" coresmith:caddy-sync
+        run "$CADDY_PERSIST"
+    fi
     run systemctl enable coresmith-horizon coresmith-reverb
 
     local horizon_pid=""
@@ -1273,6 +1771,7 @@ finalize() {
     run systemctl enable --now coresmith-scheduler.timer
     run systemctl enable --now coresmith-update.path
     run systemctl enable --now coresmith-address.path
+    run systemctl enable --now coresmith-this-machine.path
 
     configure_firewall
     configure_fail2ban
@@ -1284,9 +1783,18 @@ finalize() {
 
     if $healthy; then
         prune_releases
+        run sudo -u coresmith php "$INSTALL_DIR/artisan" coresmith:site-refresh || warn "Coresmith couldn't refresh its Caddy site. See why with: cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:site-refresh"
     fi
 
-    local setup_token="" setup_output="" already_set_up=false
+    if [ -n "$TARGET_DOMAIN" ]; then
+        if $healthy; then
+            move_to_domain
+        else
+            ADDRESS_LINES="Some of Coresmith's services didn't start, so it didn't move to ${TARGET_DOMAIN}."
+        fi
+    fi
+
+    local setup_link="" setup_output="" already_set_up=false
 
     refuse_link "$SETUP_TOKEN_FILE"
     install -o coresmith -g coresmith -m 600 /dev/null "$SETUP_TOKEN_FILE"
@@ -1295,46 +1803,79 @@ finalize() {
     if printf '%s\n' "$setup_output" | grep -q 'already has an account'; then
         already_set_up=true
         rm -f "$SETUP_TOKEN_FILE"
-    elif printf '%s\n' "$setup_output" | tail -1 | grep -qE '^[A-Za-z0-9]{64}$'; then
-        setup_token="$(printf '%s\n' "$setup_output" | tail -1)"
     else
-        printf '%s\n' "$setup_output" >>"$LOG_FILE"
-        warn "Could not issue a setup token. Run this on the server, then open ${PANEL_URL}/install?token= followed by the token it prints:"
-        warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"
+        setup_link="$(setup_link_from "$setup_output")"
+
+        if [ -z "$setup_link" ]; then
+            printf '%s\n' "$setup_output" >>"$LOG_FILE"
+            warn "Coresmith could not issue the link that creates the owner account. Run this on the server, then open the link it prints:"
+            warn "  cd ${INSTALL_DIR} && sudo -u coresmith php artisan coresmith:setup-token --force"
+        fi
     fi
 
-    print_summary "$setup_token" "$healthy" "$already_set_up"
+    print_summary "$setup_link" "$healthy" "$already_set_up"
+}
+
+setup_link_from() {
+    printf '%s\n' "$1" | tail -n 1 | grep -E '^https?://[^[:space:]/?#]+/install\?token=[A-Za-z0-9]{64}$' || true
+}
+
+print_wrapped() {
+    printf '%s\n' "$1" | fold -s -w 72 | sed -e 's/[[:space:]]*$//' -e 's/^/  /'
+    printf '\n'
 }
 
 print_summary() {
-    local setup_token="$1" healthy="$2" already_set_up="${3:-false}"
+    local setup_link="$1" healthy="$2" already_set_up="${3:-false}" loads=false note
+    local colour="$YELLOW" title="   Coresmith is installed, but isn't answering    "
 
-    printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$GREEN" "$NC"
-    printf '%s%s║        Coresmith installed successfully!         ║%s\n' "$BOLD" "$GREEN" "$NC"
-    printf '%s%s╚══════════════════════════════════════════════════╝%s\n\n' "$BOLD" "$GREEN" "$NC"
+    if [ "$healthy" = "true" ] && link_loads "$PANEL_HOST"; then
+        loads=true colour="$GREEN" title="        Coresmith installed successfully!         "
+    fi
+
+    printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$colour" "$NC"
+    printf '%s%s║%s║%s\n' "$BOLD" "$colour" "$title" "$NC"
+    printf '%s%s╚══════════════════════════════════════════════════╝%s\n\n' "$BOLD" "$colour" "$NC"
 
     printf '  %sAddress:%s      %s\n' "$BOLD" "$NC" "$PANEL_URL"
     printf '  %sDatabase:%s     %s\n' "$BOLD" "$NC" "$DB_DRIVER"
     printf '  %sInstalled in:%s %s\n' "$BOLD" "$NC" "$RELEASE_DIR"
     printf '  %sData in:%s      %s\n\n' "$BOLD" "$NC" "$DATA_DIR"
 
-    if [ -n "$setup_token" ]; then
+    if [ -n "$setup_link" ]; then
         printf '  %s%s⚠  Finish setup now:%s\n\n' "$BOLD" "$YELLOW" "$NC"
-        printf '  %s%s/install?token=%s%s\n\n' "$BOLD" "$PANEL_URL" "$setup_token" "$NC"
+        printf '  %s%s%s\n\n' "$BOLD" "$setup_link" "$NC"
         printf '  %sThis link works once. After the owner account exists it is%s\n' "$YELLOW" "$NC"
         printf '  %scleared from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
     elif [ "$already_set_up" = "true" ]; then
         printf '  Coresmith is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
 
+    if caddy_signs_itself "$PANEL_HOST"; then
+        print_wrapped "Your browser will warn about the certificate at ${PANEL_URL}, because Caddy signs it itself. Continue past the warning to open Coresmith."
+    fi
+
+    note="$(cloud_note)"
+    [ -z "$note" ] || print_wrapped "$note"
+
+    if [ -n "$TARGET_DOMAIN" ] && [ "$PANEL_HOST" != "$TARGET_DOMAIN" ]; then
+        printf "  %s%s⚠  Coresmith isn't on %s yet:%s\n\n" "$BOLD" "$YELLOW" "$TARGET_DOMAIN" "$NC"
+        print_wrapped "$ADDRESS_LINES"
+        print_wrapped "Once that is fixed, move Coresmith to ${TARGET_DOMAIN} in Settings, General."
+    elif [ -n "$ADDRESS_LINES" ]; then
+        print_wrapped "$ADDRESS_LINES"
+    fi
+
     printf '  %sManaging this instance:%s\n' "$CYAN" "$NC"
     printf '    Status:  systemctl status caddy coresmith-horizon coresmith-reverb\n'
-    printf '    Logs:    tail -f /var/log/coresmith-horizon.log\n'
+    printf '    Logs:    tail -f %s\n' "$HORIZON_LOG"
     printf '    Health:  cd %s && sudo -u coresmith php artisan coresmith:health\n' "$INSTALL_DIR"
     printf '    Update:  cd %s && sudo -u coresmith php artisan coresmith:update\n\n' "$INSTALL_DIR"
 
     if [ "$healthy" != "true" ]; then
         warn "Some services did not start. Coresmith may be unreachable until they do."
+    elif ! $loads; then
+        warn "${PANEL_URL} didn't load from this server. Check Caddy's log with journalctl -u caddy -n 50."
     fi
 }
 
@@ -1347,9 +1888,12 @@ main() {
     adopt_legacy_layout
     adopt_existing_install
     interactive_prompts
+    choose_address
     ensure_database_password
 
     mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE"
+    chmod 600 "$LOG_FILE"
     exec > >(tee -a "$LOG_FILE") 2>&1
     trap on_failure ERR
 

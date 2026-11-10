@@ -12,6 +12,10 @@ APPS_DIR="/var/coresmith"
 CONFIG_DIR="/etc/coresmith"
 SYSTEMD_DIR="/etc/systemd/system"
 CADDY_DROPIN="/etc/systemd/system/caddy.service.d/coresmith.conf"
+THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
+CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
+THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 CADDYFILE="/etc/caddy/Caddyfile"
 PANEL_SITE_DIR="/etc/caddy/coresmith"
 LEGACY_PANEL_SITE="/etc/caddy/panel.caddy"
@@ -22,10 +26,11 @@ FPM_POOLS="/etc/php/*/fpm/pool.d /etc/php-fpm.d /etc/php/fpm/pool.d"
 FPM_POOL="coresmith-panel.conf"
 FAIL2BAN_JAIL="/etc/fail2ban/jail.d/coresmith.conf"
 FAIL2BAN_FILTER="/etc/fail2ban/filter.d/coresmith-login.conf"
+NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
 LOGS="/var/log/coresmith-*.log"
 SAVE_ROOT="/root"
 DEFAULT_REPOSITORY="https://github.com/monoventech/coresmith.git"
-UNITS="coresmith-update.path coresmith-update.service coresmith-address.path coresmith-address.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service"
+UNITS="coresmith-update.path coresmith-update.service coresmith-address.path coresmith-address.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service coresmith-this-machine.path coresmith-this-machine.service"
 
 YES=false
 PURGE=false
@@ -197,6 +202,25 @@ stop_units() {
     done
 }
 
+forget_this_machine() {
+    local request
+
+    if [ ! -x "$THIS_MACHINE_HELPER" ] || [ ! -d "$THIS_MACHINE_DIR" ]; then
+        return 0
+    fi
+
+    rm -f "$THIS_MACHINE_DIR/result.json"
+    request="$(mktemp "$THIS_MACHINE_DIR/.request.XXXXXX")"
+    printf 'uninstall remove\n' >"$request"
+    mv -f "$request" "$THIS_MACHINE_DIR/request"
+
+    if systemctl start coresmith-this-machine.service >/dev/null 2>&1 && grep -qF '"ok":true' "$THIS_MACHINE_DIR/result.json" 2>/dev/null; then
+        success "Took Coresmith's key and sshd rule off this machine"
+    else
+        warn "Couldn't take Coresmith's key off this machine. Remove the coresmith-this-machine lines from /root/.ssh/authorized_keys and /etc/ssh/sshd_config, and delete /etc/ssh/sshd_config.d/00-coresmith-local.conf."
+    fi
+}
+
 remove_units() {
     local unit
 
@@ -205,7 +229,7 @@ remove_units() {
     done
 
     if [ -z "$APPS" ]; then
-        rm -f "$CADDY_DROPIN"
+        rm -f "$CADDY_DROPIN" "$APPS_SLICE"
         rmdir "${CADDY_DROPIN%/*}" >/dev/null 2>&1 || true
     fi
 
@@ -213,7 +237,35 @@ remove_units() {
     success "Removed Coresmith's services"
 }
 
+take_coresmith_out_of_caddy() {
+    local socket="$CADDY_ADMIN_DIR/admin.sock" policies id path
+
+    if ! grep -qsF -- "--config /etc/caddy/caddy-config.json" "$CADDY_DROPIN"; then
+        return 0
+    fi
+
+    policies="$(curl -fsS --max-time 30 --unix-socket "$socket" http://localhost/config/apps/tls/automation/policies 2>/dev/null || true)"
+
+    for id in coresmith-site coresmith-any $(printf '%s' "$policies" | grep -oE '"@id":"coresmith-[a-z]+-tls(-[0-9]+)?"' | cut -d'"' -f4 || true); do
+        curl -fsS --max-time 30 --unix-socket "$socket" -X DELETE "http://localhost/id/$id" >/dev/null 2>&1 || true
+    done
+
+    for path in apps/http/servers/coresmith-internal apps/tls/automation/on_demand logging/logs/coresmith; do
+        curl -fsS --max-time 30 --unix-socket "$socket" -X DELETE "http://localhost/config/$path" >/dev/null 2>&1 || true
+    done
+
+    if [ -x "$CADDY_PERSIST" ] && "$CADDY_PERSIST"; then
+        success "Took Coresmith's routes out of Caddy, which keeps serving the apps"
+    else
+        warn "Took Coresmith's routes out of Caddy, but couldn't save its config. Run curl --unix-socket ${socket} http://localhost/config/ > ${CADDY_CONFIG} so a restart keeps it."
+    fi
+}
+
 remove_caddy_site() {
+    if [ -n "$APPS" ]; then
+        take_coresmith_out_of_caddy
+    fi
+
     rm -rf "$PANEL_SITE_DIR"
     rm -f "$LEGACY_PANEL_SITE"
 
@@ -292,7 +344,9 @@ forget_safe_directories() {
 remove_files() {
     local file
 
-    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}"
+    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}"
+    rm -f "$THIS_MACHINE_HELPER" "$CADDY_PERSIST" "$NEEDRESTART_CONF"
+    rmdir "${THIS_MACHINE_HELPER%/*}" >/dev/null 2>&1 || true
 
     for file in $LOGS; do
         rm -f "$file"
@@ -335,7 +389,7 @@ summary() {
     esac
 
     if [ -n "$APPS" ]; then
-        printf '  Kept for the apps still deployed here: %s, %s, %s, %s and the coresmith user.\n' "$APPS_DIR" "$CONFIG_DIR" "$CADDY_CONFIG" "$CADDY_DROPIN"
+        printf '  Kept for the apps still deployed here: %s, %s, %s, %s, %s and the coresmith user.\n' "$APPS_DIR" "$CONFIG_DIR" "$CADDY_CONFIG" "$CADDY_DROPIN" "$APPS_SLICE"
     fi
 
     printf '  Caddy, Redis, PHP, Node.js, Bun, Composer and any database server are still installed, as other software may use them.\n'
@@ -351,6 +405,7 @@ main() {
     confirm
     save_copy
     stop_units
+    forget_this_machine
     remove_units
     remove_caddy_site
     remove_fpm_pool
