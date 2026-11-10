@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Edition;
 use App\Enums\ServerStatus;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
@@ -16,6 +17,10 @@ use App\Models\InstanceSetting;
 use App\Models\MoveCode;
 use App\Models\Server;
 use App\Models\StripeEvent;
+use App\Services\Address\CertificateSource;
+use App\Services\Address\CloudflareConnection;
+use App\Services\Address\InstallationAddress;
+use App\Services\Address\PointAddress;
 use App\Services\Deployment\RemovedApplicationFolders;
 use App\Services\Updates\UpdateChecker;
 use App\Services\Updates\UpdateState;
@@ -83,6 +88,16 @@ Schedule::call(function (): void {
             }
         });
 })->hourly()->name('coresmith:harden-ssh')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    $host = app(InstallationAddress::class)->host();
+
+    if (Edition::current()->isCloud() || CloudflareConnection::token() === null || InstallationAddress::certificate($host) !== CertificateSource::Public) {
+        return;
+    }
+
+    app(PointAddress::class)->point($host);
+})->everyTenMinutes()->name('coresmith:point-address')->withoutOverlapping();
 
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
 

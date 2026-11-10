@@ -37,6 +37,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/address/check', [AddressController::class, 'check'])
         ->middleware('throttle:10,1,settings-address-check')
         ->name('settings.address.check');
+    Route::post('settings/address/cloudflare', [AddressController::class, 'connectCloudflare'])
+        ->middleware('throttle:6,1,settings-address-cloudflare')
+        ->name('settings.address.cloudflare.store');
+    Route::delete('settings/address/cloudflare', [AddressController::class, 'disconnectCloudflare'])
+        ->name('settings.address.cloudflare.destroy');
+    Route::post('settings/address/point', [AddressController::class, 'point'])
+        ->middleware('throttle:6,1,settings-address-point')
+        ->name('settings.address.point');
     Route::post('settings/backups', [GeneralSettingsController::class, 'backup'])
         ->middleware('throttle:6,1,backups')
         ->name('settings.backups.store');

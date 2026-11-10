@@ -161,3 +161,71 @@ asMember("a member sees Coresmith's address but cannot change it", async ({ page
     await expect(card(page).getByRole('button', { name: 'Change' })).toHaveCount(0)
     await expect(card(page)).not.toContainText('run the installer again')
 })
+
+test.describe('Cloudflare DNS for the address', () => {
+    test("without Cloudflare the card offers to connect it, and a token Cloudflare doesn't accept is refused next to the field", async ({
+        page
+    }) => {
+        await gotoSettings(page, 'General')
+        await expect(page.getByTestId('address-dns')).toContainText(
+            "Coresmith can keep its domain's DNS records pointed here, with a Cloudflare API token."
+        )
+        await page.getByTestId('address-dns').getByRole('button', { name: 'Connect Cloudflare' }).click()
+        await dialog(page).getByLabel('API token').fill('not-a-token')
+        await dialog(page).getByRole('button', { name: 'Connect', exact: true }).click()
+
+        await expect(dialog(page)).toContainText(
+            "Cloudflare doesn't accept that token. Create one in Cloudflare under My Profile, API Tokens, from the Edit zone DNS template, then paste it here."
+        )
+        await expect(dialog(page).getByLabel('API token')).toHaveAttribute('aria-invalid', 'true')
+    })
+
+    test('a connected Cloudflare says what it keeps pointed here, or what it refused', async ({ page }) => {
+        await settingsShowing(page, {
+            cloudflare: { connected: true, host: 'coresmith.example.com', error: null, synced: '3 minutes ago' }
+        })
+
+        await expect(page.getByTestId('address-dns')).toContainText(
+            'Keeps coresmith.example.com pointed at this server. Checked 3 minutes ago.'
+        )
+        await expect(page.getByTestId('address-dns').getByRole('button', { name: 'Disconnect' })).toBeVisible()
+
+        await settingsShowing(page, {
+            cloudflare: {
+                connected: true,
+                host: 'coresmith.example.com',
+                error: 'Cloudflare refused the change: Authentication error.',
+                synced: '3 minutes ago'
+            }
+        })
+
+        await expect(page.getByTestId('address-dns')).toContainText(
+            'Cloudflare refused the change: Authentication error.'
+        )
+    })
+
+    test('with Cloudflare connected, a check that fails offers to point the domain here', async ({ page }) => {
+        const connected = { cloudflare: { connected: true, host: null, error: null, synced: null } }
+
+        await withProps(page, /\/settings\/address\/check$/, (props) => {
+            props.address = { ...(props.address as Record<string, unknown>), ...connected }
+        })
+        await settingsShowing(page, connected)
+        await card(page).getByRole('button', { name: 'Change' }).click()
+        await dialog(page).getByLabel('Domain').fill('coresmith.example.com')
+        await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
+
+        await expect(dialog(page).getByRole('button', { name: 'Point it here with Cloudflare' })).toBeVisible()
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the Cloudflare section and its dialog are accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await gotoSettings(page, 'General')
+            await page.getByTestId('address-dns').getByRole('button', { name: 'Connect Cloudflare' }).click()
+            await expect(dialog(page).getByLabel('API token')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
+})
