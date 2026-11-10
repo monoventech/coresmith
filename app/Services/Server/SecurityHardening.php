@@ -11,8 +11,10 @@ namespace App\Services\Server;
 use App\Enums\TeamRole;
 use App\Models\Server;
 use App\Models\SshKey;
+use App\Models\User;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
@@ -151,9 +153,12 @@ final class SecurityHardening
             return [];
         }
 
+        $access = app(TeamAccess::class);
         $managers = $team->members()
             ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value])
-            ->pluck('users.id');
+            ->get()
+            ->filter(fn(User $manager): bool => $access->canSeeServer($manager, $server))
+            ->modelKeys();
 
         return SshKey::query()
             ->whereIn('user_id', $managers)

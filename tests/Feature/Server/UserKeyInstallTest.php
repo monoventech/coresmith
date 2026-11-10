@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use App\Enums\TeamRole;
 use App\Exceptions\UnsafeNameException;
+use App\Models\Application;
 use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Server\SecurityHardening;
 use App\Services\SSH\SSHConnection;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -75,6 +77,20 @@ test('the keys of owners and admins are installed, a deployer key is not', funct
     $keys = (new SecurityHardening)->userKeys(Server::factory()->for($team)->create());
 
     expect($keys)->toBe(['ssh-ed25519 AAAAowner owner@laptop', 'ssh-ed25519 AAAAadmin admin@laptop']);
+});
+
+test("a narrowed admin's key goes only on the servers shared with them, never with an app shared on its own", function () {
+    [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner, 'admin' => TeamRole::Admin]);
+    $team->members()->updateExistingPivot($users['admin']->id, ['sees_everything' => false]);
+    userKeysAdd($users['owner'], 'ssh-ed25519 AAAAowner owner@laptop');
+    userKeysAdd($users['admin'], 'ssh-ed25519 AAAAadmin admin@laptop');
+    $shared = Server::factory()->for($team)->create();
+    $hidden = Server::factory()->for($team)->create();
+    app(TeamAccess::class)->grant($team, $users['admin'], $shared);
+    app(TeamAccess::class)->grant($team, $users['admin'], Application::factory()->for($team)->for($hidden)->create());
+
+    expect((new SecurityHardening)->userKeys($shared))->toBe(['ssh-ed25519 AAAAowner owner@laptop', 'ssh-ed25519 AAAAadmin admin@laptop'])
+        ->and((new SecurityHardening)->userKeys($hidden))->toBe(['ssh-ed25519 AAAAowner owner@laptop']);
 });
 
 test('a stored key that would add a second line to authorized_keys is never installed', function () {

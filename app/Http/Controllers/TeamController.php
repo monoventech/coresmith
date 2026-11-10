@@ -9,8 +9,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\TeamRole;
+use App\Models\Application;
 use App\Models\BackupDestination;
 use App\Models\ManagedDatabase;
+use App\Models\Server;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
@@ -18,6 +20,7 @@ use App\Models\User;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Sso\SsoConnections;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamDomains;
 use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamUrls;
@@ -44,6 +47,8 @@ final class TeamController extends Controller
         $urls = app(TeamUrls::class);
         $domain = $team->domain()->first();
         $manages = $user->can('manageMembers', $team);
+        $shares = $user->can('shareAccess', $team);
+        $access = app(TeamAccess::class);
 
         return Inertia::render('settings/Team', [
             'team' => ['id' => $team->id, 'name' => $team->name, 'slug' => $team->slug],
@@ -65,7 +70,9 @@ final class TeamController extends Controller
                 'role_label' => TeamRole::tryFrom((string) $member->pivot->role)?->label(),
                 'two_factor' => $member->two_factor_confirmed_at !== null,
                 'is_you' => $member->id === $user->id,
+                'access' => $shares && $member->pivot->role !== TeamRole::Owner->value ? $access->summary($team, $member) : null,
             ]),
+            'shareable' => $shares ? $this->shareable($team) : null,
             'invitations' => $this->invitations($request, $team, $user, $manages),
             'invite_links' => app(TeamInvitations::class)->offersLinks(),
             'roles' => array_map(
@@ -76,6 +83,7 @@ final class TeamController extends Controller
                 'update' => $user->can('update', $team),
                 'manageMembers' => $manages,
                 'grantOwner' => $user->roleIn($team) === TeamRole::Owner,
+                'shareAccess' => $shares,
             ],
         ]);
     }
@@ -96,6 +104,20 @@ final class TeamController extends Controller
             'expires' => $invitation->expires_at->format('M j'),
             'link' => $manages && $invitation->invited_by === $user->id ? $invitations->issuedLink($invitation, $issued) : null,
         ])->values()->all();
+    }
+
+    /**
+     * @return array{servers: list<array{id: string, name: string, applications: list<array{id: string, name: string}>}>}
+     */
+    private function shareable(Team $team): array
+    {
+        $applications = $team->applications()->orderBy('name')->get(['id', 'name', 'server_id'])->groupBy('server_id');
+
+        return ['servers' => $team->servers()->orderBy('name')->get(['id', 'name'])->map(fn(Server $server): array => [
+            'id' => $server->id,
+            'name' => $server->name,
+            'applications' => $applications->get($server->id, collect())->map(fn(Application $application): array => ['id' => $application->id, 'name' => $application->name])->values()->all(),
+        ])->values()->all()];
     }
 
     /**

@@ -35,7 +35,7 @@ function teamExporterTeam(): Team
 {
     $team = Team::factory()->create(['name' => 'Acme', 'slug' => 'acme', 'stripe_id' => 'cus_never_moves']);
     $team->members()->attach(User::factory()->create(['email' => 'ada@acme.test']), ['role' => TeamRole::Admin->value]);
-    $team->members()->attach(User::factory()->create(['email' => 'lin@acme.test']), ['role' => TeamRole::Member->value]);
+    $team->members()->attach(User::factory()->create(['email' => 'lin@acme.test']), ['role' => TeamRole::Member->value, 'sees_everything' => false]);
 
     $hetzner = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner', 'api_token' => 'hetzner-token-moves']);
     $server = Server::factory()->active()->fromProvider($hetzner)->create([
@@ -83,7 +83,7 @@ test('the export carries the team, its servers, apps and databases with their se
     expect($payload['team'])->toBe(['name' => 'Acme', 'slug' => 'acme'])
         ->and($payload['from'])->toBe('https://app.coresmith.io')
         ->and($payload['id'])->toBeString()->not->toBeEmpty()
-        ->and(collect($payload['members'])->sortBy('email')->values()->all())->toBe([['email' => 'ada@acme.test', 'role' => 'admin'], ['email' => 'lin@acme.test', 'role' => 'member']])
+        ->and(collect($payload['members'])->sortBy('email')->values()->all())->toBe([['email' => 'ada@acme.test', 'role' => 'admin', 'sees_everything' => true], ['email' => 'lin@acme.test', 'role' => 'member', 'sees_everything' => false]])
         ->and($server)->toMatchArray(['name' => 'web-01', 'ip_address' => '203.0.113.10', 'ssh_user' => 'root', 'host_key_fingerprint' => 'SHA256:webkey', 'provisioning_phase' => 8, 'installed_runtimes' => ['php' => ['8.5.5']], 'provider_size' => 'cx22'])
         ->and($server['ssh_private_key'])->toContain('OPENSSH PRIVATE KEY')
         ->and($server['cloud_provider'])->toBe($payload['cloud_providers'][0]['ref'])
