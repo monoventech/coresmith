@@ -233,3 +233,11 @@ test('the move waits for healthy services, and the first sign-in link comes afte
         ->and(strpos($finalize, 'wait_for_service coresmith-reverb'))->toBeLessThan(strpos($finalize, 'move_to_domain'))
         ->and(strpos($finalize, 'move_to_domain'))->toBeLessThan(strpos($finalize, 'coresmith:setup-token --force'));
 });
+
+test('a re-run refreshes Coresmith\'s own Caddy site once the services are up, so the redirect from an earlier move survives it', function () {
+    $finalize = installAddressFunctions('finalize');
+
+    expect($finalize)->toContain('run sudo -u coresmith php "$INSTALL_DIR/artisan" coresmith:site-refresh || warn ')
+        ->and(strpos($finalize, 'wait_for_service coresmith-reverb'))->toBeLessThan(strpos($finalize, 'coresmith:site-refresh'))
+        ->and(strpos($finalize, 'coresmith:site-refresh'))->toBeLessThan(strpos($finalize, 'move_to_domain'));
+});

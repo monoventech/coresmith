@@ -49,15 +49,14 @@ function routableApp(array $attributes = []): Application
     ], $attributes));
 }
 
-test('adding a site posts the route to the admin api on localhost', function () {
+test('adding a site puts its route first, ahead of the catch-all for unknown hostnames, through the admin api on localhost', function () {
     $transport = new FakeSSHTransport;
 
     caddyClient()->addSite(caddyConnection($transport), routableApp());
 
     $post = $transport->commands()[0];
 
-    expect($post)->toContain('-X POST')
-        ->and($post)->toContain('http://localhost:2019/config/apps/http/servers/coresmith/routes')
+    expect($post)->toContain("-X PUT 'http://localhost:2019/config/apps/http/servers/coresmith/routes/0'")
         ->and($post)->toContain('app.example.com');
 });
 
@@ -91,7 +90,7 @@ test('putting a site adds the route when caddy has never seen it', function () {
 
     caddyClient()->putSite(caddyConnection($transport), routableApp());
 
-    expect(implode("\n", $transport->commands()))->toContain("-X POST 'http://localhost:2019/config/apps/http/servers/coresmith/routes'")
+    expect(implode("\n", $transport->commands()))->toContain("-X PUT 'http://localhost:2019/config/apps/http/servers/coresmith/routes/0'")
         ->not->toContain('-X PATCH');
 });
 
@@ -164,11 +163,11 @@ test('a persist that fails never truncates the config caddy would reload', funct
     expect(implode("\n", $transport->commands()))->not->toContain('> ' . CaddyInstaller::CONFIG_FILE);
 });
 
-test('only idempotent verbs are retried', function () {
-    $transport = (new FakeSSHTransport)->respondTo('-X POST', 'curl: (28) Operation timed out', 28);
+test('inserting a route is never retried, since a second try could add it twice', function () {
+    $transport = (new FakeSSHTransport)->respondTo('/routes/0', 'curl: (28) Operation timed out', 28);
 
     expect(fn() => caddyClient()->addSite(caddyConnection($transport), routableApp()))->toThrow(SSHCommandFailedException::class);
-    expect(caddyCalls($transport, '-X POST'))->toBe(1);
+    expect(caddyCalls($transport, '/routes/0'))->toBe(1);
 });
 
 test('syncing a route puts the site and persists, and a domainless app touches nothing', function () {
@@ -269,7 +268,7 @@ test('a server whose admin api moved to the socket is only ever reached through 
     caddyClient()->addSite(caddySocketConnection($transport), routableApp());
 
     expect($transport->commands())->not->toBeEmpty()
-        ->and($transport->commands()[0])->toContain("-X POST --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/apps/http/servers/coresmith/routes'");
+        ->and($transport->commands()[0])->toContain("-X PUT --unix-socket /run/caddy-admin/admin.sock 'http://localhost/config/apps/http/servers/coresmith/routes/0'");
 
     foreach ($transport->commands() as $command) {
         expect($command)->toContain('--unix-socket /run/caddy-admin/admin.sock')

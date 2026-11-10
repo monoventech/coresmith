@@ -23,6 +23,8 @@ final class CaddyInstaller
 
     public const SERVER = 'coresmith';
 
+    public const UNKNOWN_HOSTS_ROUTE = 'coresmith-unknown';
+
     public const SERVICE_DROP_IN = '/etc/systemd/system/caddy.service.d/coresmith.conf';
 
     public const ADMIN_TMPFILES = '/etc/tmpfiles.d/coresmith-caddy.conf';
@@ -98,7 +100,7 @@ final class CaddyInstaller
         $this->prepareAdminSocket($connection);
 
         $server = $connection->server();
-        $server->forceFill(['meta' => [...(array) $server->meta, 'caddy_admin' => 'socket']])->save();
+        $server->forceFill(['meta' => [...(array) $server->meta, 'caddy_admin' => 'socket', ...($server->runs_coresmith ? [] : ['caddy_unknown_hosts' => 'closed'])]])->save();
     }
 
     public function prepareAdminSocket(SSHConnection $connection): void
@@ -121,7 +123,11 @@ final class CaddyInstaller
 
     public function config(?string $email = null, string $current = ''): string
     {
-        $config = $this->base(['listen' => CaddyApiClient::ADMIN_LISTEN], $this->existingRoutes($current));
+        $routes = array_values(array_filter(
+            $this->existingRoutes($current),
+            fn(mixed $route): bool => !$route instanceof stdClass || ($route->{'@id'} ?? null) !== self::UNKNOWN_HOSTS_ROUTE,
+        ));
+        $config = $this->base(['listen' => CaddyApiClient::ADMIN_LISTEN], [...$routes, self::unknownHostsRoute()]);
         $issuers = self::issuers($email);
 
         if ($issuers !== null) {
@@ -161,6 +167,14 @@ final class CaddyInstaller
         ];
 
         return $this->encode($config);
+    }
+
+    /**
+     * @return array{'@id': string, handle: list<array{handler: string, abort: bool}>}
+     */
+    public static function unknownHostsRoute(): array
+    {
+        return ['@id' => self::UNKNOWN_HOSTS_ROUTE, 'handle' => [['handler' => 'static_response', 'abort' => true]]];
     }
 
     /**
