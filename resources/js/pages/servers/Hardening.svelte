@@ -21,7 +21,7 @@
         isolation = [],
         hardening = [],
         admin_move_error = null,
-        ssh = { verified: false, passwords_kept: false, error: null },
+        ssh = { verified: false, owner: false, passwords_off: false, error: null },
         firewall,
         access
     }: {
@@ -29,7 +29,7 @@
         isolation: string[]
         hardening: string[]
         admin_move_error?: string | null
-        ssh?: { verified: boolean; passwords_kept: boolean; error: string | null }
+        ssh?: { verified: boolean; owner: boolean; passwords_off: boolean; error: string | null }
         firewall: { open: number[]; kept_ssh: boolean; ssh_port: number; changes: Change[] }
         access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
     } = $props()
@@ -104,13 +104,7 @@
                 SSH may still accept passwords on this server. Coresmith tries to turn them off every hour, and the last
                 try found: <span class="font-mono wrap-anywhere">{ssh.error}</span>
             </p>
-        {:else if ssh.passwords_kept}
-            <p class="mt-3.5 text-[12.5px] text-muted-foreground" data-testid="ssh-passwords-kept">
-                Password login stays on for this machine until an owner or admin adds an SSH key in
-                <a href={route('settings.general')} class="underline underline-offset-2">Settings</a>, so nobody is
-                locked out of the machine Coresmith runs on. Coresmith turns it off then.
-            </p>
-        {:else if !ssh.verified}
+        {:else if !ssh.verified && !ssh.owner}
             <p class="mt-3.5 text-[12.5px] text-muted-foreground" data-testid="ssh-hardening-unchecked">
                 Coresmith hasn't checked this server's SSH settings yet. It checks them within the hour.
             </p>
@@ -217,12 +211,15 @@
 
     <div class="flex flex-col rounded-xl border border-border bg-card px-5.5 py-5">
         <h3 class="type-h3 m-0 mb-1">SSH access</h3>
-        <p class="mb-3 text-[12.5px] text-muted-foreground">
-            Coresmith signs in with a key it generated for this server alone.{ssh.verified
-                ? ' Password login is off.'
-                : ssh.passwords_kept
-                  ? ' Password login stays on until an owner or admin adds an SSH key.'
-                  : ''}
+        <p class="mb-3 text-[12.5px] text-muted-foreground" data-testid="ssh-access-summary">
+            {#if ssh.owner}
+                Coresmith signs in as root with a key that only works from this machine itself. Password login is
+                {ssh.passwords_off ? 'off' : 'on'} in this machine's own SSH settings, which Coresmith leaves to you.
+            {:else}
+                Coresmith signs in with a key it generated for this server alone.{ssh.verified
+                    ? ' Password login is off.'
+                    : ''}
+            {/if}
         </p>
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div class="text-foreground">{access.ssh ?? 'no address yet'}</div>

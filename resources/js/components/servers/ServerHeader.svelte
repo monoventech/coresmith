@@ -259,10 +259,10 @@
                     : server.cloud?.uncertain
                       ? `Coresmith could not confirm whether ${server.cloud.provider} created ${server.name}. Check your ${server.cloud.provider} account and delete it there if it exists.`
                       : server.cloud?.instance
-                        ? `Coresmith stops managing ${server.name}. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
+                        ? `Coresmith takes its key off ${server.name} and stops managing it. It keeps running at ${server.cloud.provider}, and ${server.cloud.provider} keeps billing for it.`
                         : server.cloud
                           ? `Nothing was created at ${server.cloud.provider}, so ${server.name} only leaves Coresmith.`
-                          : 'Coresmith stops managing this server. The VM itself, and everything on it, is untouched.'}</Dialog.Description
+                          : 'Coresmith takes its key off this server and stops managing it. Everything else on it is untouched.'}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>

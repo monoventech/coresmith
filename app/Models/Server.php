@@ -65,14 +65,14 @@ class Server extends Model
         return (((array) $this->meta)['ssh_hardening'] ?? null) === 'verified';
     }
 
-    public function sshPasswordsKept(): bool
+    public function sshLeftToOwner(): bool
     {
-        return (((array) $this->meta)['ssh_hardening'] ?? null) === SecurityHardening::PASSWORDS_KEPT;
+        return $this->runs_coresmith && (((array) $this->meta)['ssh_hardening'] ?? null) === SecurityHardening::LEFT_TO_OWNER;
     }
 
-    public function sshPasswordsOffByOwner(): bool
+    public function sshPasswordsOff(): bool
     {
-        return $this->sshPasswordsKept() && (((array) $this->meta)['ssh_passwords'] ?? null) === SecurityHardening::PASSWORDS_OFF;
+        return (((array) $this->meta)['ssh_passwords'] ?? null) === SecurityHardening::PASSWORDS_OFF;
     }
 
     public function systemdVersion(): ?int

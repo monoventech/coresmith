@@ -162,7 +162,9 @@
         </div>
         <p class="mb-2 text-[12.5px] text-muted-foreground" data-testid="ssh-keys-reach">
             {can.reachServers
-                ? 'Installed on every server you manage. Password login stays off.'
+                ? cloud
+                    ? 'Installed on every server you manage. Password login stays off.'
+                    : 'Installed on every server you manage, except the machine Coresmith runs on. Password login stays off.'
                 : "Deployers don't get shell access, so these aren't installed on any server."}
         </p>
         <div class="flex max-h-72 flex-col overflow-y-auto">
