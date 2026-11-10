@@ -83,7 +83,7 @@ Schedule::call(function (): void {
         ->whereNull('unreachable_since')
         ->whereNull('pending_host_key_fingerprint')
         ->each(function (Server $server): void {
-            if (!$server->sshHardened()) {
+            if (!$server->sshSettled()) {
                 HardenSsh::dispatch($server);
             }
         });
