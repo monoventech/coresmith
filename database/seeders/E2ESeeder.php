@@ -405,6 +405,8 @@ final class E2ESeeder extends Seeder
         $this->server('checking-server', '203.0.113.61', ServerStatus::Pending)->forceFill(['audit' => ['state' => 'running', 'started_at' => now()->addHours(5)->toIso8601String()], 'last_connected_at' => $connected])->save();
         $panelHost = $this->server('panel-host', '203.0.113.63', ServerStatus::Pending);
         $panelHost->forceFill(['audit' => $done(app(PreProvisioningAudit::class)->report("== users\ncoresmith\n== panel\n/opt/coresmith\n/etc/systemd/system/coresmith-horizon.service\n", $panelHost)->toArray()), 'last_connected_at' => $connected])->save();
+        $ownHost = $this->server('own-host', '127.0.0.2', ServerStatus::Pending);
+        $ownHost->forceFill(['audit' => $done(app(PreProvisioningAudit::class)->report("== users\ncoresmith\n== panel\n/opt/coresmith\n", $ownHost)->toArray()), 'last_connected_at' => $connected])->save();
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $this->server("blocked-{$code}", '203.0.113.' . (70 + $index), ServerStatus::Pending)->forceFill(['audit' => $done($blocked), 'last_connected_at' => $connected])->save();

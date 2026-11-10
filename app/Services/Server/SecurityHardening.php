@@ -52,6 +52,8 @@ final class SecurityHardening
 
     public const PASSWORDS_KEPT = 'passwords_kept';
 
+    public const PASSWORDS_OFF = 'off';
+
     private const SSHD_KEX = 'curve25519-sha256,curve25519-sha256@libssh.org';
 
     private const SSHD_CRYPTO = [
@@ -215,16 +217,18 @@ final class SecurityHardening
 
         $atTop = !$connection->execute(self::READS_DROP_INS, sudo: true)->successful();
         $this->applySsh($connection, $atTop, $keepPasswords);
-        $problem = $this->passwordProblem($connection, $keepPasswords);
+        $settings = $this->effectiveSsh($connection);
+        $problem = $this->passwordProblem($settings, $keepPasswords);
 
         if ($problem !== null && !$atTop) {
             $this->applySsh($connection, true, $keepPasswords);
-            $problem = $this->passwordProblem($connection, $keepPasswords);
+            $settings = $this->effectiveSsh($connection);
+            $problem = $this->passwordProblem($settings, $keepPasswords);
         }
 
         $this->recordSsh($server, match (true) {
             $problem !== null => ['ssh_hardening_error' => $problem],
-            $keepPasswords => ['ssh_hardening' => self::PASSWORDS_KEPT],
+            $keepPasswords => ['ssh_hardening' => self::PASSWORDS_KEPT, ...($this->passwordProblem($settings, false) === null ? ['ssh_passwords' => self::PASSWORDS_OFF] : [])],
             default => ['ssh_hardening' => 'verified'],
         });
     }
@@ -236,7 +240,7 @@ final class SecurityHardening
     {
         $fresh = $server->fresh() ?? $server;
 
-        $fresh->forceFill(['meta' => [...Arr::except((array) $fresh->meta, ['ssh_hardening', 'ssh_hardening_error']), ...$result]])->save();
+        $fresh->forceFill(['meta' => [...Arr::except((array) $fresh->meta, ['ssh_hardening', 'ssh_hardening_error', 'ssh_passwords']), ...$result]])->save();
     }
 
     /**
@@ -277,7 +281,10 @@ final class SecurityHardening
         $connection->execute('sshd -t && { systemctl reload sshd || systemctl reload ssh; }', sudo: true)->throw();
     }
 
-    private function passwordProblem(SSHConnection $connection, bool $keepPasswords): ?string
+    /**
+     * @return array<string, string>
+     */
+    private function effectiveSsh(SSHConnection $connection): array
     {
         $settings = [];
 
@@ -289,6 +296,14 @@ final class SecurityHardening
             }
         }
 
+        return $settings;
+    }
+
+    /**
+     * @param  array<string, string>  $settings
+     */
+    private function passwordProblem(array $settings, bool $keepPasswords): ?string
+    {
         if (!isset($settings['passwordauthentication'], $settings['permitrootlogin'])) {
             return "sshd didn't report its settings";
         }

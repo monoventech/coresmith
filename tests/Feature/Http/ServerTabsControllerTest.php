@@ -94,6 +94,26 @@ test('a server still running the shared Redis says its databases are dedicated e
                 && $layers->count() === 9));
 });
 
+test("on Coresmith's own machine whose firewall was already on, only the web ports are listed as opened", function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['runs_coresmith' => true, 'ssh_port' => 22, 'meta' => ['firewall_ssh' => 'kept']]);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page->where('firewall.open', [80, 443])->where('firewall.kept_ssh', true));
+});
+
+test("Coresmith's own machine that already refuses passwords by its own settings reads as key-only, though Coresmith leaves them alone", function () {
+    $team = Team::factory()->create();
+    $server = serverTabServer($team, ['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'passwords_kept', 'ssh_passwords' => 'off']]);
+
+    $this->actingAs(serverTabMember($team))
+        ->get(route('servers.hardening', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('ssh', ['verified' => true, 'passwords_kept' => false, 'error' => null])
+            ->where('hardening', fn($items) => collect($items)->contains(ServerTabsController::SSH_KEY_ONLY)));
+});
+
 test('the default ssh port is not listed twice among the open ports', function () {
     $team = Team::factory()->create();
     $server = serverTabServer($team, ['ssh_port' => 22]);

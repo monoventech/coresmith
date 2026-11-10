@@ -20,5 +20,7 @@ interface FirewallManager
 
     public function status(): string;
 
+    public function isActive(): string;
+
     public function enable(): string;
 }

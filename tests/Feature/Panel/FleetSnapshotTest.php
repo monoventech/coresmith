@@ -61,6 +61,7 @@ test('a server state follows a fixed precedence from broken to healthy', functio
     'unreachable' => [['status' => ServerStatus::Disconnected], 95.0, true, 'disconnected', 'Unreachable', 'destructive'],
     'provisioning' => [['status' => ServerStatus::Provisioning], null, false, 'provisioning', 'Provisioning', 'accent'],
     'not connected' => [['status' => ServerStatus::Pending], null, false, 'pending', 'Not connected', 'default'],
+    'connected, waiting to provision' => [['status' => ServerStatus::Pending, 'last_connected_at' => '2026-09-13 14:00:00'], null, false, 'pending', 'Not provisioned', 'default'],
     'deploying beats a full disk' => [[], 95.0, true, 'deploying', 'Deploying', 'accent'],
     'disk at the warning line' => [[], 80.0, false, 'warning', 'Disk 80%', 'warning'],
     'disk rounded in the label' => [[], 91.6, false, 'warning', 'Disk 92%', 'warning'],
