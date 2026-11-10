@@ -45,6 +45,8 @@ function uninstallerTree(): string
         'usr/local/libexec/coresmith/persist-caddy-config' => "#!/bin/bash\n",
         'var/lib/coresmith-this-machine/.keep' => '',
         'etc/systemd/system/coresmith-apps.slice' => "[Slice]\n",
+        'etc/needrestart/conf.d/coresmith.conf' => "\$nrconf{override_rc}{qr(^redis-server\\.service\$)} = 0;\n",
+        'etc/needrestart/conf.d/README.needrestart' => "Files ending with .conf\n",
     ];
 
     foreach (['coresmith-horizon.service', 'coresmith-reverb.service', 'coresmith-scheduler.service', 'coresmith-scheduler.timer', 'coresmith-update.service', 'coresmith-update.path', 'coresmith-address.service', 'coresmith-address.path', 'coresmith-this-machine.service', 'coresmith-this-machine.path'] as $unit) {
@@ -185,6 +187,7 @@ test('everything the installer creates, the uninstaller removes', function () {
         'coresmith-panel.conf' => 'coresmith-panel.conf',
         '/etc/fail2ban/jail.d/coresmith.conf' => '/etc/fail2ban/jail.d/coresmith.conf',
         '/etc/fail2ban/filter.d/coresmith-login.conf' => '/etc/fail2ban/filter.d/coresmith-login.conf',
+        '/etc/needrestart/conf.d/coresmith.conf' => '/etc/needrestart/conf.d/coresmith.conf',
         'safe.directory' => 'safe.directory',
         '/opt/coresmith' => '/opt/coresmith',
         '/var/lib/coresmith' => '/var/lib/coresmith',
@@ -229,7 +232,8 @@ test('the uninstaller removes the panel and keeps a copy of its data', function 
         ->and(file_get_contents("{$base}/etc/caddy/Caddyfile"))->toBe("{\n    admin localhost:2019\n}\n")
         ->and(is_file("{$base}/etc/php/8.5/fpm/pool.d/www.conf"))->toBeTrue()
         ->and(is_file("{$base}/var/log/syslog"))->toBeTrue()
-        ->and(is_file("{$base}/etc/systemd/system/coresmith-app-shop-web.service"))->toBeTrue();
+        ->and(is_file("{$base}/etc/systemd/system/coresmith-app-shop-web.service"))->toBeTrue()
+        ->and(is_file("{$base}/etc/needrestart/conf.d/README.needrestart"))->toBeTrue();
 
     foreach ([
         'opt/coresmith', 'var/lib/coresmith', 'var/coresmith', 'etc/coresmith', 'etc/caddy/coresmith', 'etc/caddy/caddy-config.json',
@@ -241,6 +245,7 @@ test('the uninstaller removes the panel and keeps a copy of its data', function 
         'etc/systemd/system/coresmith-address.service', 'etc/systemd/system/coresmith-address.path',
         'etc/systemd/system/coresmith-this-machine.service', 'etc/systemd/system/coresmith-this-machine.path',
         'etc/systemd/system/coresmith-apps.slice', 'usr/local/libexec/coresmith', 'var/lib/coresmith-this-machine',
+        'etc/needrestart/conf.d/coresmith.conf',
     ] as $path) {
         expect(file_exists("{$base}/{$path}"))->toBeFalse("{$path} is still there");
     }

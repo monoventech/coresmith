@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Services\Install\SetupToken;
+use App\Services\Network\ProcStableAddresses;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseLayout;
@@ -120,7 +121,7 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
     expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
         ->and($body)->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
         ->and($body)->toContain("chown -R coresmith:coresmith \"\$DATA_DIR\"\n")
-        ->and($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
+        ->and(installScriptBasedir())->toContain('${DATA_DIR}')
         ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
 
@@ -843,11 +844,67 @@ function installScriptUnits(): string
     return $matches[0] ?? '';
 }
 
-test('php-fpm never reaches the release through the symlink', function () {
-    $body = installScriptBody();
+function installScriptBasedir(): array
+{
+    preg_match('/^php_admin_value\[open_basedir\] = (.+)$/m', installScriptBody(), $line);
 
-    expect($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
-        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', $body))->toBe(0);
+    return explode(':', $line[1] ?? '');
+}
+
+test('php-fpm never reaches the release through the symlink', function () {
+    expect(installScriptBasedir())->toContain('${RELEASES_DIR}')
+        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', installScriptBody()))->toBe(0);
+});
+
+test("php-fpm may open only the releases, Coresmith's data, the helper for this machine, the IPv6 address table and /tmp", function () {
+    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', ProcStableAddresses::PATH, '/tmp'])
+        ->and(installScriptBody())->toContain('readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"')
+        ->and((string) file_get_contents(config_path('coresmith.php')))->toContain("env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine')");
+});
+
+function installScriptNeedrestart(): string
+{
+    preg_match("/cat >\"\\\$NEEDRESTART_CONF\" <<'NEEDRESTART'\n(.*?)\nNEEDRESTART\n/s", installScriptBody(), $conf);
+
+    return $conf[1] ?? '';
+}
+
+test("needrestart leaves Coresmith's queue, sockets and Redis running after a library update, and still restarts the rest", function () {
+    $conf = tempnam(sys_get_temp_dir(), 'needrestart');
+    file_put_contents($conf, installScriptNeedrestart());
+    $needrestart = <<<'PERL'
+        my ($conf, @units) = @ARGV;
+        my %nrconf = (override_rc => {qr(^dbus) => 0});
+        eval do { local(@ARGV, $/) = $conf; <> };
+        die "Error parsing $conf: $@" if($@);
+        foreach my $rc (@units) {
+            my $restart = 1;
+            foreach my $re (keys %{$nrconf{override_rc}}) {
+                next unless($rc =~ /$re/);
+                $restart = $nrconf{override_rc}->{$re};
+                last;
+            }
+            print "$rc ", ($restart ? 'restarts' : 'deferred'), "\n";
+        }
+        PERL;
+
+    $run = new Process(['perl', '-e', $needrestart, $conf, 'coresmith-horizon.service', 'coresmith-reverb.service', 'redis-server.service', 'dbus.service', 'php8.5-fpm.service', 'coresmith-app-shop-web.service', 'coresmith-redis-6380.service']);
+    $run->run();
+    unlink($conf);
+
+    expect($run->getErrorOutput())->toBe('')
+        ->and($run->getOutput())->toBe(implode("\n", [
+            'coresmith-horizon.service deferred',
+            'coresmith-reverb.service deferred',
+            'redis-server.service deferred',
+            'dbus.service deferred',
+            'php8.5-fpm.service restarts',
+            'coresmith-app-shop-web.service restarts',
+            'coresmith-redis-6380.service restarts',
+        ]) . "\n")
+        ->and(installScriptBody())->toContain('readonly NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"')
+        ->and(installScriptFunctions('defer_library_restarts'))->toContain('[ -d "${NEEDRESTART_CONF%/conf.d/*}" ] || return 0')
+        ->and(installScriptUnits())->toContain("    defer_library_restarts\n");
 });
 
 test('the installer lays out the paths the updater reads', function () {
