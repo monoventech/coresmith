@@ -31,7 +31,7 @@ final class ThisMachine
 
     public function installed(): bool
     {
-        return is_dir($this->folder());
+        return @is_dir($this->folder());
     }
 
     public function server(): ?Server

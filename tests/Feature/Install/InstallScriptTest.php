@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Services\Install\SetupToken;
+use App\Services\Network\ProcStableAddresses;
 use App\Services\Updates\PanelServices;
 use App\Services\Updates\Release;
 use App\Services\Updates\ReleaseLayout;
@@ -120,7 +121,7 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
     expect($body)->toContain('readonly DATA_DIR="/var/lib/coresmith"')
         ->and($body)->toContain('SETUP_TOKEN_FILE="/var/lib/coresmith/setup-token"')
         ->and($body)->toContain("chown -R coresmith:coresmith \"\$DATA_DIR\"\n")
-        ->and($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
+        ->and(installScriptBasedir())->toContain('${DATA_DIR}')
         ->and($body)->not->toContain('SETUP_TOKEN_FILE="/etc/');
 });
 
@@ -843,11 +844,22 @@ function installScriptUnits(): string
     return $matches[0] ?? '';
 }
 
-test('php-fpm never reaches the release through the symlink', function () {
-    $body = installScriptBody();
+function installScriptBasedir(): array
+{
+    preg_match('/^php_admin_value\[open_basedir\] = (.+)$/m', installScriptBody(), $line);
 
-    expect($body)->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp')
-        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', $body))->toBe(0);
+    return explode(':', $line[1] ?? '');
+}
+
+test('php-fpm never reaches the release through the symlink', function () {
+    expect(installScriptBasedir())->toContain('${RELEASES_DIR}')
+        ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', installScriptBody()))->toBe(0);
+});
+
+test("php-fpm may open only the releases, Coresmith's data, the helper for this machine, the IPv6 address table and /tmp", function () {
+    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', ProcStableAddresses::PATH, '/tmp'])
+        ->and(installScriptBody())->toContain('readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"')
+        ->and((string) file_get_contents(config_path('coresmith.php')))->toContain("env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine')");
 });
 
 test('the installer lays out the paths the updater reads', function () {

@@ -1044,7 +1044,7 @@ php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv
-php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:/tmp
+php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:/proc/net/if_inet6:/tmp
 FPMCONF
 
     mkdir -p "$CADDY_SITE_DIR"

@@ -8,6 +8,7 @@ use App\Services\Server\ThisMachine;
 use Carbon\CarbonInterval;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Sleep;
+use Symfony\Component\Process\Process;
 
 function thisMachineServiceFolder(): string
 {
@@ -137,6 +138,16 @@ test("an install whose installer predates the helper can't use this machine yet"
     thisMachineServiceFolder();
 
     expect(app(ThisMachine::class)->installed())->toBeTrue();
+});
+
+test('a php-fpm pool from before the helper, which may not open its folder, reads it as not installed instead of failing the page', function () {
+    $folder = thisMachineServiceFolder();
+    $ask = 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\\Contracts\\Console\\Kernel::class)->bootstrap(); echo json_encode(app(App\\Services\\Server\\ThisMachine::class)->installed());';
+
+    $pool = new Process([PHP_BINARY, '-d', 'open_basedir=' . base_path(), '-r', $ask], base_path(), ['CORESMITH_THIS_MACHINE_STATE_PATH' => $folder]);
+    $pool->run();
+
+    expect($pool->getOutput())->toBe('false');
 });
 
 test('the server that is this machine is found across every team, and a deleted one no longer counts', function () {
