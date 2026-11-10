@@ -43,6 +43,8 @@ final class MetricsCollector
 
     private const MEMORY_PRESSURE_WINDOW_MINUTES = 4;
 
+    public function __construct(private readonly HardwareFacts $facts = new HardwareFacts) {}
+
     public function collect(SSHConnection $connection): ServerMetric
     {
         $output = $connection->execute($this->probe(), timeout: self::PROBE_SECONDS)->throw()->output;
@@ -51,6 +53,10 @@ final class MetricsCollector
 
         if ($values['uptime'] !== null) {
             $server->forceFill(['booted_at' => now()->subSeconds($values['uptime'])->startOfMinute()])->save();
+        }
+
+        if ($this->facts->due($server)) {
+            $server->forceFill(['meta' => [...(array) ($server->fresh()?->meta ?? $server->meta), ...$this->facts->toMeta($this->facts->read($connection))]])->save();
         }
 
         if ($values['disk'] >= self::DISK_PRESSURE_PERCENT) {
@@ -67,6 +73,11 @@ final class MetricsCollector
             'load_15m' => $values['load15'],
             'network_rx_bytes' => $values['rx'],
             'network_tx_bytes' => $values['tx'],
+            'memory_used_mb' => $values['memory_used_mb'],
+            'memory_total_mb' => $values['memory_total_mb'],
+            'disk_used_mb' => $values['disk_used_mb'],
+            'disk_free_mb' => $values['disk_free_mb'],
+            'disk_total_mb' => $values['disk_total_mb'],
             'recorded_at' => now(),
         ]);
 
@@ -278,11 +289,13 @@ final class MetricsCollector
             "awk '{print \"load=\" \$1 \",\" \$2 \",\" \$3}' /proc/loadavg",
             "awk '/^ *(eth|ens|enp|eno)[0-9]/ {rx+=\$2; tx+=\$10} END {print \"net=\" rx+0 \",\" tx+0}' /proc/net/dev",
             "awk '{print \"uptime=\" int(\$1)}' /proc/uptime",
+            "free -m | awk '/^Mem:/ {print \"memory_mb=\" \$3 \",\" \$2}'",
+            "df -Pk / | awk 'NR==2 {print \"disk_kb=\" \$2 \",\" \$3 \",\" \$4}'",
         ]);
     }
 
     /**
-     * @return array{cpu: float, memory: float, disk: float, load1: float, load5: float, load15: float, rx: ?int, tx: ?int, uptime: ?int}
+     * @return array{cpu: float, memory: float, disk: float, load1: float, load5: float, load15: float, rx: ?int, tx: ?int, uptime: ?int, memory_used_mb: ?int, memory_total_mb: ?int, disk_used_mb: ?int, disk_free_mb: ?int, disk_total_mb: ?int}
      */
     public function parse(string $output): array
     {
@@ -305,6 +318,10 @@ final class MetricsCollector
         }
 
         $uptime = preg_match('/uptime=([0-9]+)/', $output, $matches) === 1 ? (int) $matches[1] : null;
+        $memorySizes = preg_match('/memory_mb=([0-9]+),([0-9]+)/', $output, $matches) === 1 && (int) $matches[2] > 0 ? [(int) $matches[1], (int) $matches[2]] : [null, null];
+        $diskSizes = preg_match('/disk_kb=([0-9]+),([0-9]+),([0-9]+)/', $output, $matches) === 1 && (int) $matches[1] > 0
+            ? [intdiv((int) $matches[2], 1024), intdiv((int) $matches[3], 1024), intdiv((int) $matches[1], 1024)]
+            : [null, null, null];
 
         return [
             'cpu' => $cpu,
@@ -316,6 +333,11 @@ final class MetricsCollector
             'rx' => $rx,
             'tx' => $tx,
             'uptime' => $uptime,
+            'memory_used_mb' => $memorySizes[0],
+            'memory_total_mb' => $memorySizes[1],
+            'disk_used_mb' => $diskSizes[0],
+            'disk_free_mb' => $diskSizes[1],
+            'disk_total_mb' => $diskSizes[2],
         ];
     }
 

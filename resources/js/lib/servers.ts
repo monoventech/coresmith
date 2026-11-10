@@ -2,7 +2,7 @@ import type { CloudServer } from '@/lib/cloud'
 import type { EntityState } from '@/lib/fleet'
 import type { ServerMove } from '@/lib/moves'
 
-export type MetricSeries = { now: number | null; series: number[] }
+export type MetricSeries = { now: number | null; series: number[]; detail: string | null }
 
 export type ProvisioningPhase = { name: string; desc: string; state: 'done' | 'running' | 'failed' | 'pending' }
 

@@ -20,6 +20,7 @@ use App\Services\Runtime\AsdfInstaller;
 use App\Services\Server\BasePackages;
 use App\Services\Server\DirectoryStructure;
 use App\Services\Server\FirewallConfigurator;
+use App\Services\Server\HardwareFacts;
 use App\Services\Server\OsDetector;
 use App\Services\Server\PackageManagerFactory;
 use App\Services\Server\ProvisioningLog;
@@ -146,11 +147,12 @@ final class ProvisionServer implements ShouldQueue
     private function detectOperatingSystem(SSHConnection $connection, OsDetector $detector): void
     {
         $info = $detector->detect($connection);
+        $facts = app(HardwareFacts::class);
 
         $this->server->forceFill([
             'os_name' => $info->name,
             'os_version' => $info->version,
-            'meta' => $info->toMeta(),
+            'meta' => [...$info->toMeta(), ...$facts->toMeta($facts->read($connection))],
         ])->save();
     }
 

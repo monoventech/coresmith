@@ -122,15 +122,31 @@ final class FleetSnapshot
     {
         $count = $server->applications->count();
         $meta = (array) $server->meta;
+        $memory = Formats::memory(isset($meta['memory_mb']) ? (int) $meta['memory_mb'] : null);
+        $cores = (int) ($meta['cpu_physical_cores'] ?? $meta['cpu_cores'] ?? 0);
+        $disk = (int) ($meta['disk_gb'] ?? 0);
 
         return implode(' · ', array_values(array_filter([
             $server->environment,
             $server->region,
-            Formats::memory(isset($meta['memory_mb']) ? (int) $meta['memory_mb'] : null),
-            $long && $server->os_name ? trim(ucfirst((string) $server->os_name) . ' ' . $server->os_version) : null,
+            $long && $cores > 0 ? $cores . ' ' . ($cores === 1 ? 'core' : 'cores') : null,
+            $memory === null ? null : $memory . ' RAM',
+            $long && $disk > 0 ? Formats::size($disk * 1024) . ' disk' : null,
+            $long ? $this->system($server) : null,
             $long ? $server->ip_address : $count . ' ' . ($count === 1 ? 'app' : 'apps'),
             Formats::uptime($server->booted_at),
         ])));
+    }
+
+    private function system(Server $server): ?string
+    {
+        $pretty = ((array) $server->meta)['os_pretty'] ?? null;
+
+        return match (true) {
+            is_string($pretty) && $pretty !== '' => $pretty,
+            (bool) $server->os_name => trim(ucfirst((string) $server->os_name) . ' ' . $server->os_version),
+            default => null,
+        };
     }
 
     public function compactMeta(Server $server): string

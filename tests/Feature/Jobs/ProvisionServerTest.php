@@ -51,6 +51,7 @@ function provision(Server $server, FakeSSHTransport $transport): void
 }
 
 test('phase 1 persists the detected os and hardware', function () {
+    $this->freezeTime();
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
 
     provision($server, provisioningTransport());
@@ -59,7 +60,7 @@ test('phase 1 persists the detected os and hardware', function () {
 
     expect($fresh->os_name)->toBe('ubuntu')
         ->and($fresh->os_version)->toBe('24.04')
-        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'systemd' => 255, 'caddy_admin' => 'socket', 'caddy_unknown_hosts' => 'closed', 'ssh_hardening' => 'verified']);
+        ->and($fresh->meta)->toBeInAnyKeyOrder(['cpu_cores' => 4, 'memory_mb' => 8000, 'disk_gb' => 40, 'systemd' => 255, 'facts_at' => now()->toIso8601String(), 'caddy_admin' => 'socket', 'caddy_unknown_hosts' => 'closed', 'ssh_hardening' => 'verified']);
 });
 
 test('phase 2 installs base packages through the abstraction', function () {
@@ -217,6 +218,7 @@ test('starting over runs every phase again from the first', function () {
 test('a failure marks the server failed and preserves the completed phase', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = (new FakeSSHTransport)
+        ->respondTo('lscpu', '', 0)
         ->queueResult("ID=ubuntu\nVERSION_ID=\"24.04\"\n", 0)
         ->queueResult('systemd 255', 0)
         ->queueResult("4\n", 0)
@@ -253,6 +255,22 @@ test('an unsupported distribution fails provisioning cleanly', function () {
 
     expect($server->fresh()->status)->toBe(ServerStatus::Failed)
         ->and($server->fresh()->provisioning_phase)->toBeNull();
+});
+
+test('phase 1 also records the processor, the system name and the memory installed', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = provisioningTransport()->respondTo('lscpu', "cpu_model=AMD EPYC-Milan Processor\ncpu_cores=2\nos=Ubuntu 24.04.3 LTS\ninstalled_mb=4096\n");
+
+    provision($server, $transport);
+
+    expect($server->fresh()->meta)->toMatchArray([
+        'cpu_cores' => 4,
+        'memory_mb' => 8000,
+        'cpu_model' => 'AMD EPYC-Milan Processor',
+        'cpu_physical_cores' => 2,
+        'os_pretty' => 'Ubuntu 24.04.3 LTS',
+        'memory_installed_mb' => 4096,
+    ]);
 });
 
 test('on the machine Coresmith runs on, runtimes and app folders belong to a user of their own, so nothing borrows Coresmith\'s user', function () {

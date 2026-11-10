@@ -24,7 +24,20 @@ test.describe('a server', () => {
 
         await expect(page.getByTestId('back-link')).toHaveText('← Fleet')
         await expect(page.getByRole('main')).toContainText('Healthy')
-        await expect(page.getByRole('main')).toContainText('Production · fra1 · 8 GB · Ubuntu 24.04 · 203.0.113.14')
+        await expect(page.getByRole('main')).toContainText(
+            'Production · fra1 · 4 cores · 8 GB RAM · 160 GB disk · Ubuntu 24.04.3 LTS · 203.0.113.14'
+        )
+    })
+
+    test('each reading card says what its percentage is of, in plain amounts', async ({ page }) => {
+        await gotoServer(page, 'forge-01')
+
+        const detail = (label: string) =>
+            page.getByText(label, { exact: true }).locator('xpath=../..').getByTestId('metric-detail')
+
+        await expect(detail('CPU · 24h')).toHaveText('AMD EPYC-Milan Processor · 4 cores · load 1.36')
+        await expect(detail('Memory · 24h')).toHaveText(/^\d+(\.\d)? GB of 8 GB used$/)
+        await expect(detail('Disk · 24h')).toHaveText('67 GB of 160 GB used · 85 GB free')
     })
 
     test('the last day of readings is drawn for cpu, memory and disk', async ({ page }) => {

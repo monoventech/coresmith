@@ -33,6 +33,11 @@ class ServerMetric extends Model
     protected function casts(): array
     {
         return [
+            'memory_used_mb' => 'integer',
+            'memory_total_mb' => 'integer',
+            'disk_used_mb' => 'integer',
+            'disk_free_mb' => 'integer',
+            'disk_total_mb' => 'integer',
             'recorded_at' => 'datetime',
         ];
     }
