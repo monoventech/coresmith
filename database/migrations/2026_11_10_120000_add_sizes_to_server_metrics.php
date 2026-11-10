@@ -1,0 +1,32 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('server_metrics', function (Blueprint $table) {
+            $table->unsignedInteger('memory_used_mb')->nullable();
+            $table->unsignedInteger('memory_total_mb')->nullable();
+            $table->unsignedBigInteger('disk_used_mb')->nullable();
+            $table->unsignedBigInteger('disk_free_mb')->nullable();
+            $table->unsignedBigInteger('disk_total_mb')->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('server_metrics', function (Blueprint $table) {
+            $table->dropColumn(['memory_used_mb', 'memory_total_mb', 'disk_used_mb', 'disk_free_mb', 'disk_total_mb']);
+        });
+    }
+};

@@ -60,6 +60,23 @@ final class Formats
         return $gigabytes < 1 ? $megabytes . ' MB' : round($gigabytes) . ' GB';
     }
 
+    public static function size(int $megabytes): string
+    {
+        $gigabytes = $megabytes / 1024;
+
+        return match (true) {
+            $megabytes < 1024 => max(0, $megabytes) . ' MB',
+            $gigabytes < 10 => self::oneDecimal($gigabytes) . ' GB',
+            $gigabytes < 1024 => (int) round($gigabytes) . ' GB',
+            default => self::oneDecimal($gigabytes / 1024) . ' TB',
+        };
+    }
+
+    private static function oneDecimal(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 1, '.', ''), '0'), '.');
+    }
+
     public static function uptime(?CarbonInterface $bootedAt): ?string
     {
         if ($bootedAt === null) {

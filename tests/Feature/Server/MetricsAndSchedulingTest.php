@@ -49,6 +49,40 @@ test('a probe is parsed into a metric row', function () {
         ->and(ServerMetric::count())->toBe(1);
 });
 
+test('a reading keeps the amounts behind its percentages: memory and disk used, free and in all', function () {
+    $connection = metricsConnection((new FakeSSHTransport)->respondTo('top -bn1', PROBE_OUTPUT . "memory_mb=1637,27833\ndisk_kb=957349888,16777216,893386752\n", 0));
+
+    $metric = (new MetricsCollector)->collect($connection);
+
+    expect($metric->fresh()->only(['memory_used_mb', 'memory_total_mb', 'disk_used_mb', 'disk_free_mb', 'disk_total_mb']))->toBe([
+        'memory_used_mb' => 1637,
+        'memory_total_mb' => 27833,
+        'disk_used_mb' => 16384,
+        'disk_free_mb' => 872448,
+        'disk_total_mb' => 934912,
+    ]);
+});
+
+test('the processor, the system name and the memory installed are read when a server has none, and not again within the day', function () {
+    $transport = (new FakeSSHTransport)
+        ->respondTo('top -bn1', PROBE_OUTPUT, 0)
+        ->respondTo('lscpu', "cpu_model=AMD Ryzen 7 6800H with Radeon Graphics\ncpu_cores=8\nos=Ubuntu 24.04.5 LTS\ninstalled_mb=32768\n", 0);
+    $connection = metricsConnection($transport, ['meta' => ['cpu_cores' => 16, 'memory_mb' => 27833]]);
+
+    (new MetricsCollector)->collect($connection);
+    (new MetricsCollector)->collect($connection);
+
+    expect($connection->server()->fresh()->meta)->toMatchArray([
+        'cpu_cores' => 16,
+        'memory_mb' => 27833,
+        'cpu_model' => 'AMD Ryzen 7 6800H with Radeon Graphics',
+        'cpu_physical_cores' => 8,
+        'os_pretty' => 'Ubuntu 24.04.5 LTS',
+        'memory_installed_mb' => 32768,
+    ])
+        ->and(collect($transport->commands())->filter(fn(string $command): bool => str_contains($command, 'lscpu'))->count())->toBe(1);
+});
+
 test('a probe that returns nothing still records zeroes rather than failing', function () {
     $connection = metricsConnection((new FakeSSHTransport)->respondTo('top -bn1', '', 0));
 

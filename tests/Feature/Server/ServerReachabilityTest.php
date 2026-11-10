@@ -52,6 +52,7 @@ function reachabilityServer(array $attributes = []): Server
         'ip_address' => '192.0.2.10',
         'status' => ServerStatus::Active,
         'host_key_fingerprint' => null,
+        'meta' => ['facts_at' => now()->toIso8601String()],
     ], $attributes));
 
     Application::factory()->for($team)->for($server)->create([

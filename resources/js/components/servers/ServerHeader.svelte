@@ -183,6 +183,11 @@
                     >
                 </div>
                 <Sparkline values={metric.value.series} stroke={metric.stroke} />
+                {#if metric.value.detail}
+                    <p class="mt-2 mb-0 text-[12px] leading-snug text-muted-foreground" data-testid="metric-detail">
+                        {metric.value.detail}
+                    </p>
+                {/if}
             </div>
         {/each}
     </div>
