@@ -38,6 +38,16 @@ test('a trial about to end counts down', function (string $ends, string $title) 
     'today' => ['2026-10-18 18:00:00', 'Your trial ends today.'],
 ]);
 
+test('a free plan about to end counts down to the day', function (string $ends, string $title) {
+    $team = Team::factory()->owned()->free(Plan::Business, CarbonImmutable::parse($ends))->create();
+
+    expect(billingBannerSummary($team)['banner'])->toMatchArray(['tone' => 'warning', 'title' => $title, 'action' => 'Choose a plan']);
+})->with([
+    'two days' => ['2026-10-20 23:59:59', 'Your free plan ends in 2 days.'],
+    'tomorrow' => ['2026-10-19 23:59:59', 'Your free plan ends tomorrow.'],
+    'today' => ['2026-10-18 23:59:59', 'Your free plan ends today.'],
+]);
+
 test('a free plan about to end counts down, and one with time to spare stays quiet', function () {
     $ending = Team::factory()->owned()->free(Plan::Business, CarbonImmutable::parse('2026-10-20 23:59:59'))->create();
     $spare = Team::factory()->owned()->free(Plan::Business, CarbonImmutable::parse('2026-11-20 23:59:59'))->create();
