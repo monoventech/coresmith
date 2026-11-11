@@ -109,7 +109,7 @@ An owner can remove Coresmith from Settings, General: Remove Coresmith asks twic
 
     cd /opt/coresmith/app && sudo php artisan coresmith:uninstall
 
-It asks you to type `uninstall` to confirm. Either way, Coresmith saves the `.env`, the backups and, on SQLite, a copy of the database under `/root`, takes its key off each server it can reach, then removes its services, files, Caddy site and user. Servers it can't reach are listed with the line to remove. If apps are deployed on the same machine, they keep running and the `coresmith` user stays for them.
+It asks you to type `uninstall` to confirm, and from there both ways do the same: save the `.env`, the backups and, on SQLite, a copy of the database under `/root`, take Coresmith's key off each server it can reach, and remove its services, files, Caddy site and user. Servers it can't reach are listed with the line to remove. If apps are deployed on the same machine, they keep running and the `coresmith` user stays for them.
 
 ## Development
 

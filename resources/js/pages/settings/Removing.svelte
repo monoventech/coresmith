@@ -77,10 +77,11 @@
     </header>
 
     <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-12 pb-12 max-sm:px-5 max-sm:pt-6">
+        <h1 class="type-h1 m-0 mb-1.5" data-testid="removal-heading">
+            {gone ? 'Coresmith is' : 'Removing'}
+            <MarkerUnderline>{gone ? 'gone' : 'Coresmith'}</MarkerUnderline>
+        </h1>
         {#if gone}
-            <h1 class="type-h1 m-0 mb-1.5" data-testid="removal-heading">
-                Coresmith is <MarkerUnderline>gone</MarkerUnderline>
-            </h1>
             <div class="type-body-sm flex max-w-[64ch] flex-col gap-3 text-muted-foreground" data-testid="removal-gone">
                 <p class="m-0">
                     Your servers keep running.{status.saved
@@ -108,9 +109,6 @@
                 </p>
             </div>
         {:else}
-            <h1 class="type-h1 m-0 mb-1.5" data-testid="removal-heading">
-                Removing <MarkerUnderline>Coresmith</MarkerUnderline>
-            </h1>
             <p class="type-body-sm mb-6 max-w-[64ch] text-muted-foreground">
                 Coresmith is removing itself from {address}. Keep this page open to see how it goes; closing it doesn't
                 stop the removal.
