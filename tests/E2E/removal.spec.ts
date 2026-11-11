@@ -181,6 +181,9 @@ test.describe('removing Coresmith', () => {
         await expect(page.getByTestId('removal-gone')).toContainText(
             'Your servers keep running. A copy of its settings and backups is in /root/coresmith-uninstalled-20261111-133400 on this server.'
         )
+        await expect(
+            page.getByTestId('removal-gone').getByText('/root/coresmith-uninstalled-20261111-133400', { exact: true })
+        ).toBeVisible()
         await expect(page.getByTestId('removal-unreached')).toHaveText(
             'outpost-02: remove the line ending in coresmith@outpost-02 from /root/.ssh/authorized_keys.'
         )

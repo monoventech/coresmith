@@ -84,9 +84,10 @@
         {#if gone}
             <div class="type-body-sm flex max-w-[64ch] flex-col gap-3 text-muted-foreground" data-testid="removal-gone">
                 <p class="m-0">
-                    Your servers keep running.{status.saved
-                        ? ` A copy of its settings and backups is in ${status.saved} on this server.`
-                        : ''}
+                    Your servers keep running.
+                    {#if status.saved}
+                        A copy of its settings and backups is in <span class="font-mono">{status.saved}</span> on this server.
+                    {/if}
                 </p>
                 {#if status.failed.length > 0}
                     <div>
