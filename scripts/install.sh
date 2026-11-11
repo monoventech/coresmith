@@ -29,7 +29,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="0.6.0"
+readonly CORESMITH_VERSION="0.7.0"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoventech/coresmith.git}"
 readonly CORESMITH_ROOT="/opt/coresmith"
 readonly RELEASES_DIR="$CORESMITH_ROOT/releases"

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0 (2026-11-11)
+
+### Added
+- feat: each team member sees everything, or only the servers and apps an owner shares with them (#46)
+- feat: Coresmith warns when its domain has only an IPv6 address, release notes read as plain lines, sizes never wrap, and the machine Coresmith runs on is handed back to its owner once (#45)
+
+### Fixed
+- fix: Coresmith leaves SSH on its own machine to its owner, and Detach takes Coresmith's key off a server before forgetting it (#44)
+
 ## v0.6.0 (2026-11-10)
 
 ### Added
