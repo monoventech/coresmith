@@ -13,7 +13,9 @@ use App\Enums\ServerStatus;
 use App\Models\Application;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
+use App\Models\Environment;
 use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -60,16 +62,22 @@ final class TeamExporter
                 'name' => $provider->name,
                 'custom_host' => $provider->custom_host,
             ])->values()->all(),
+            'projects' => $team->projects()->with('environments')->orderBy('id')->get()->map(fn(Project $project): array => [
+                'ref' => $project->id,
+                'name' => $project->name,
+                'environments' => $project->environments->map(fn(Environment $environment): array => ['ref' => $environment->id, 'name' => $environment->name, 'position' => $environment->position])->values()->all(),
+            ])->values()->all(),
             'applications' => $applications->map(fn(Application $application): array => [
                 'ref' => $application->id,
                 'server' => $application->server_id,
                 'source_provider' => $application->source_provider_id,
+                'environment' => $application->environment_id,
                 ...MoveColumns::read($application, MoveColumns::APPLICATIONS),
             ])->values()->all(),
             'webhook_endpoints' => WebhookEndpoint::query()->whereIn('application_id', $applications->pluck('id'))->orderBy('id')->get()
                 ->map(fn(WebhookEndpoint $endpoint): array => ['application' => $endpoint->application_id, ...MoveColumns::read($endpoint, MoveColumns::WEBHOOK_ENDPOINTS)])->values()->all(),
             'databases' => ManagedDatabase::query()->where('team_id', $team->id)->orderBy('id')->get()
-                ->map(fn(ManagedDatabase $database): array => ['server' => $database->server_id, ...MoveColumns::read($database, MoveColumns::DATABASES)])->values()->all(),
+                ->map(fn(ManagedDatabase $database): array => ['server' => $database->server_id, 'environment' => $database->environment_id, ...MoveColumns::read($database, MoveColumns::DATABASES)])->values()->all(),
             'backup_destination' => $team->backupDestination === null ? null : MoveColumns::read($team->backupDestination, MoveColumns::BACKUP_DESTINATION),
         ];
     }
