@@ -20,9 +20,10 @@ use Spatie\Activitylog\Models\Activity;
 function removalFolder(): string
 {
     $folder = sys_get_temp_dir() . '/coresmith-uninstall-' . bin2hex(random_bytes(4));
-    test()->scratchFolders = [...test()->scratchFolders, $folder];
+    test()->scratchFolders = [...test()->scratchFolders, $folder, "{$folder}-answers"];
     File::ensureDirectoryExists($folder);
-    config(['coresmith.removal.state_path' => $folder]);
+    File::ensureDirectoryExists("{$folder}-answers");
+    config(['coresmith.removal.state_path' => $folder, 'coresmith.removal.answer_path' => "{$folder}-answers"]);
 
     return $folder;
 }
@@ -41,7 +42,7 @@ function removalHelper(string $folder, bool $answers = true): void
 
         if ($what === 'ping') {
             unlink("{$folder}/request");
-            file_put_contents("{$folder}/result.json", json_encode(['id' => $id, 'ok' => true]));
+            file_put_contents("{$folder}-answers/result.json", json_encode(['id' => $id, 'ok' => true]));
         }
     });
 }
@@ -176,14 +177,14 @@ test('a helper that does not answer is named', function () {
 test('a second removal while one runs is refused', function () {
     $folder = removalFolder();
     removalHelper($folder);
-    file_put_contents("{$folder}/status.json", json_encode(['id' => 'abc', 'stage' => 'releasing', 'saved' => '/root/coresmith-uninstalled-20261111-1334']));
+    file_put_contents("{$folder}-answers/status.json", json_encode(['id' => 'abc', 'stage' => 'releasing', 'saved' => '/root/coresmith-uninstalled-20261111-1334']));
 
     removalAsk(removalOwner())->assertSessionHasErrors(['removal' => 'Coresmith is already being removed.']);
 });
 
 test('status reports the stage, the saved copy and the servers Coresmith could not reach', function () {
     $folder = removalFolder();
-    file_put_contents("{$folder}/status.json", json_encode(['id' => 'abc', 'stage' => 'stopping', 'saved' => '/root/coresmith-uninstalled-20261111-1334']));
+    file_put_contents("{$folder}-answers/status.json", json_encode(['id' => 'abc', 'stage' => 'stopping', 'saved' => '/root/coresmith-uninstalled-20261111-1334']));
     file_put_contents("{$folder}/released.json", json_encode(['removed' => ['anvil-01'], 'failed' => [['name' => 'outpost-02', 'file' => '/root/.ssh/authorized_keys', 'comment' => 'coresmith@outpost-02']]]));
 
     $this->actingAs(removalOwner())
@@ -207,7 +208,7 @@ test('status before anything started says so', function () {
 
 test('the progress page is the owner’s once removal starts', function () {
     $folder = removalFolder();
-    file_put_contents("{$folder}/status.json", json_encode(['id' => 'abc', 'stage' => 'saving', 'saved' => '']));
+    file_put_contents("{$folder}-answers/status.json", json_encode(['id' => 'abc', 'stage' => 'saving', 'saved' => '']));
 
     $this->actingAs(removalOwner())
         ->get(route('settings.removal.show'))

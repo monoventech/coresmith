@@ -42,7 +42,10 @@ test('the embedded uninstaller is the same as scripts/uninstall.sh', function ()
 
 test('requests reach the uninstall helper through a folder Coresmith can add to but not rewrite', function () {
     expect(uninstallHelperFunction())->toContain("chown root:coresmith \"\$UNINSTALL_DIR\"\n    chmod 1770 \"\$UNINSTALL_DIR\"")
-        ->and(uninstallHelperInstaller())->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:${UNINSTALL_DIR}:/proc/net/if_inet6:/tmp');
+        ->and(uninstallHelperInstaller())->toContain('readonly UNINSTALL_ANSWERS="/run/coresmith-uninstall"')
+        ->and(uninstallHelperInstaller())->toContain('php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:${UNINSTALL_DIR}:${UNINSTALL_ANSWERS}:/proc/net/if_inet6:/tmp')
+        ->and((string) file_get_contents(base_path('scripts/uninstall.sh')))->toContain('ANSWER_DIR="/run/coresmith-uninstall"')
+        ->and((string) file_get_contents(config_path('coresmith.php')))->toContain("env('CORESMITH_REMOVAL_ANSWER_PATH', '/run/coresmith-uninstall')");
 });
 
 test('its service runs as root without a sandbox, so it can remove what the installer made, and its path unit is enabled', function () {

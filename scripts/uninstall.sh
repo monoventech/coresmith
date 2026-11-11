@@ -17,6 +17,7 @@ CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
 THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
 UNINSTALL_HELPER="/usr/local/libexec/coresmith/uninstall"
 UNINSTALL_DIR="/var/lib/coresmith-uninstall"
+ANSWER_DIR="/run/coresmith-uninstall"
 APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 CADDYFILE="/etc/caddy/Caddyfile"
 PANEL_SITE_DIR="/etc/caddy/coresmith"
@@ -108,7 +109,9 @@ parse_args() {
 answer() {
     local tmp
 
-    tmp="$(mktemp "$REQUEST/.result.XXXXXX")"
+    mkdir -p "$ANSWER_DIR"
+    chmod 0755 "$ANSWER_DIR"
+    tmp="$(mktemp "$ANSWER_DIR/.result.XXXXXX")"
 
     if [ "$1" = true ]; then
         printf '{"id":"%s","ok":true}\n' "$REQUEST_ID" >"$tmp"
@@ -117,7 +120,7 @@ answer() {
     fi
 
     chmod 0644 "$tmp"
-    mv -f "$tmp" "$REQUEST/result.json"
+    mv -f "$tmp" "$ANSWER_DIR/result.json"
 }
 
 take_request() {
@@ -151,18 +154,20 @@ take_request() {
         exit 0
     fi
 
-    STATUS="$REQUEST/status.json"
+    mkdir -p "$ANSWER_DIR"
+    chmod 0755 "$ANSWER_DIR"
+    STATUS="$ANSWER_DIR/status.json"
     RELEASED="$REQUEST/released.json"
 }
 
 progress() {
     local tmp
 
-    if [ -z "$STATUS" ] || [ ! -d "$REQUEST" ]; then
+    if [ -z "$STATUS" ] || [ ! -d "$ANSWER_DIR" ]; then
         return 0
     fi
 
-    tmp="$(mktemp "$REQUEST/.status.XXXXXX")"
+    tmp="$(mktemp "$ANSWER_DIR/.status.XXXXXX")"
     printf '{"id":"%s","stage":"%s","saved":"%s"}\n' "$REQUEST_ID" "$1" "$SAVED" >"$tmp"
     chmod 0644 "$tmp"
     mv -f "$tmp" "$STATUS"
@@ -446,7 +451,7 @@ forget_safe_directories() {
 remove_files() {
     local file
 
-    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}" "${UNINSTALL_DIR:?}"
+    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}" "${UNINSTALL_DIR:?}" "${ANSWER_DIR:?}"
     rm -f "$THIS_MACHINE_HELPER" "$UNINSTALL_HELPER" "$CADDY_PERSIST" "$NEEDRESTART_CONF"
     rmdir "${THIS_MACHINE_HELPER%/*}" >/dev/null 2>&1 || true
 

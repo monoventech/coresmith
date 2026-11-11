@@ -96,6 +96,7 @@ return [
 
     'removal' => [
         'state_path' => env('CORESMITH_REMOVAL_STATE_PATH', '/var/lib/coresmith-uninstall'),
+        'answer_path' => env('CORESMITH_REMOVAL_ANSWER_PATH', '/run/coresmith-uninstall'),
     ],
 
     'live' => [

@@ -49,6 +49,7 @@ readonly THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
 readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
 readonly UNINSTALL_HELPER="/usr/local/libexec/coresmith/uninstall"
 readonly UNINSTALL_DIR="/var/lib/coresmith-uninstall"
+readonly UNINSTALL_ANSWERS="/run/coresmith-uninstall"
 readonly NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
 readonly CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
 readonly APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
@@ -1047,7 +1048,7 @@ php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv
-php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:${UNINSTALL_DIR}:/proc/net/if_inet6:/tmp
+php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:${UNINSTALL_DIR}:${UNINSTALL_ANSWERS}:/proc/net/if_inet6:/tmp
 FPMCONF
 
     mkdir -p "$CADDY_SITE_DIR"
@@ -1328,6 +1329,7 @@ install_uninstall_helper() {
 	THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
 	UNINSTALL_HELPER="/usr/local/libexec/coresmith/uninstall"
 	UNINSTALL_DIR="/var/lib/coresmith-uninstall"
+	ANSWER_DIR="/run/coresmith-uninstall"
 	APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
 	CADDYFILE="/etc/caddy/Caddyfile"
 	PANEL_SITE_DIR="/etc/caddy/coresmith"
@@ -1419,7 +1421,9 @@ install_uninstall_helper() {
 	answer() {
 	    local tmp
 
-	    tmp="$(mktemp "$REQUEST/.result.XXXXXX")"
+	    mkdir -p "$ANSWER_DIR"
+	    chmod 0755 "$ANSWER_DIR"
+	    tmp="$(mktemp "$ANSWER_DIR/.result.XXXXXX")"
 
 	    if [ "$1" = true ]; then
 	        printf '{"id":"%s","ok":true}\n' "$REQUEST_ID" >"$tmp"
@@ -1428,7 +1432,7 @@ install_uninstall_helper() {
 	    fi
 
 	    chmod 0644 "$tmp"
-	    mv -f "$tmp" "$REQUEST/result.json"
+	    mv -f "$tmp" "$ANSWER_DIR/result.json"
 	}
 
 	take_request() {
@@ -1462,18 +1466,20 @@ install_uninstall_helper() {
 	        exit 0
 	    fi
 
-	    STATUS="$REQUEST/status.json"
+	    mkdir -p "$ANSWER_DIR"
+	    chmod 0755 "$ANSWER_DIR"
+	    STATUS="$ANSWER_DIR/status.json"
 	    RELEASED="$REQUEST/released.json"
 	}
 
 	progress() {
 	    local tmp
 
-	    if [ -z "$STATUS" ] || [ ! -d "$REQUEST" ]; then
+	    if [ -z "$STATUS" ] || [ ! -d "$ANSWER_DIR" ]; then
 	        return 0
 	    fi
 
-	    tmp="$(mktemp "$REQUEST/.status.XXXXXX")"
+	    tmp="$(mktemp "$ANSWER_DIR/.status.XXXXXX")"
 	    printf '{"id":"%s","stage":"%s","saved":"%s"}\n' "$REQUEST_ID" "$1" "$SAVED" >"$tmp"
 	    chmod 0644 "$tmp"
 	    mv -f "$tmp" "$STATUS"
@@ -1757,7 +1763,7 @@ install_uninstall_helper() {
 	remove_files() {
 	    local file
 
-	    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}" "${UNINSTALL_DIR:?}"
+	    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}" "${UNINSTALL_DIR:?}" "${ANSWER_DIR:?}"
 	    rm -f "$THIS_MACHINE_HELPER" "$UNINSTALL_HELPER" "$CADDY_PERSIST" "$NEEDRESTART_CONF"
 	    rmdir "${THIS_MACHINE_HELPER%/*}" >/dev/null 2>&1 || true
 

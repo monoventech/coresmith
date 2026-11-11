@@ -557,7 +557,7 @@ function uninstallerRequest(string $base, string $line): string
 
 function uninstallerAnswer(string $base): ?array
 {
-    $answer = json_decode((string) @file_get_contents("{$base}/var/lib/coresmith-uninstall/result.json"), true);
+    $answer = json_decode((string) @file_get_contents("{$base}/run/coresmith-uninstall/result.json"), true);
 
     return is_array($answer) ? $answer : null;
 }
@@ -569,18 +569,22 @@ function uninstallerReleasing(string $base, int $exit = 0): string
     $calls = escapeshellarg("{$base}/calls.log");
 
     return "runuser() { printf 'runuser %s\\n' \"\$*\" >>{$calls}; "
-        . "if [ -f \"\$UNINSTALL_DIR/status.json\" ]; then if [ -L \"\$UNINSTALL_DIR/status.json\" ]; then printf 'status link\\n' >>{$calls}; else printf 'status %s %s\\n' \"\$(ls -l \"\$UNINSTALL_DIR/status.json\" | cut -c1-10)\" \"\$(cat \"\$UNINSTALL_DIR/status.json\")\" >>{$calls}; fi; fi; "
+        . "if [ -f \"\$ANSWER_DIR/status.json\" ]; then printf 'status %s %s\\n' \"\$(ls -l \"\$ANSWER_DIR/status.json\" | cut -c1-10)\" \"\$(cat \"\$ANSWER_DIR/status.json\")\" >>{$calls}; fi; "
         . "printf '%s\\n' \"Took Coresmith's key off anvil-01.\" \"Couldn't reach outpost-02. Remove the line ending in coresmith@outpost-02 from /root/.ssh/authorized_keys there.\" \"Took Coresmith's key off 1 of 2 servers.\"; return {$exit}; }";
 }
 
-test('a ping is answered without removing anything', function () {
+test('a ping is answered without removing anything, in a folder only root can write', function () {
     $base = uninstallerTree();
     $folder = uninstallerRequest($base, "abc123 ping\n");
+    File::ensureDirectoryExists("{$base}/elsewhere");
+    symlink("{$base}/elsewhere", "{$folder}/result.json");
 
     $process = runUninstaller($base, ['--request', $folder]);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
         ->and(uninstallerAnswer($base))->toBe(['id' => 'abc123', 'ok' => true])
+        ->and(substr(sprintf('%o', fileperms("{$base}/run/coresmith-uninstall")), -3))->toBe('755')
+        ->and(glob("{$base}/elsewhere/{,.}*", GLOB_BRACE) ?: [])->toBe(["{$base}/elsewhere/.", "{$base}/elsewhere/.."])
         ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
         ->and(uninstallerCalls($base))->toBe([])
         ->and(file_exists("{$folder}/request"))->toBeFalse();
@@ -635,11 +639,12 @@ test('requests are only taken from the folder the installer made for them', func
         ->and(file_exists("{$base}/tmp/elsewhere/request"))->toBeTrue();
 });
 
-test('an uninstall request removes Coresmith without asking, writing its progress where Coresmith can read it', function () {
+test('an uninstall request removes Coresmith without asking, writing its progress where only root can write and Coresmith can read', function () {
     $base = uninstallerTree();
     $folder = uninstallerRequest($base, "abc123 uninstall\n");
-    file_put_contents("{$base}/outside", 'untouched');
+    File::ensureDirectoryExists("{$base}/outside");
     symlink("{$base}/outside", "{$folder}/status.json");
+    symlink("{$base}/outside", "{$folder}/result.json");
 
     $process = runUninstaller($base, ['--request', $folder], stubs: uninstallerReleasing($base));
     $calls = uninstallerCalls($base);
@@ -648,7 +653,8 @@ test('an uninstall request removes Coresmith without asking, writing its progres
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
         ->and($status)->toBe('status -rw-r--r-- {"id":"abc123","stage":"releasing","saved":"' . $saved . '"}')
-        ->and(file_get_contents("{$base}/outside"))->toBe('untouched')
+        ->and(glob("{$base}/outside/*") ?: [])->toBe([])
+        ->and(glob("{$base}/outside/.*") ?: [])->toBe(["{$base}/outside/.", "{$base}/outside/.."])
         ->and(is_dir("{$base}/opt/coresmith"))->toBeFalse()
         ->and($saved)->not->toBeNull();
 });

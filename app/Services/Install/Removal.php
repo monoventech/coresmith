@@ -39,7 +39,7 @@ final class Removal
         while (now()->lessThan($deadline)) {
             Sleep::for(self::POLL_MILLISECONDS)->milliseconds();
 
-            $answer = json_decode((string) @file_get_contents($this->folder() . '/result.json'), true);
+            $answer = json_decode((string) @file_get_contents($this->answers() . '/result.json'), true);
 
             if (is_array($answer) && ($answer['id'] ?? null) === $id) {
                 return;
@@ -61,7 +61,7 @@ final class Removal
      */
     public function status(): array
     {
-        $status = json_decode((string) @file_get_contents($this->folder() . '/status.json'), true);
+        $status = json_decode((string) @file_get_contents($this->answers() . '/status.json'), true);
         $released = json_decode((string) @file_get_contents($this->folder() . '/released.json'), true);
         $stage = is_array($status) && is_string($status['stage'] ?? null) ? $status['stage'] : null;
         $saved = is_array($status) && is_string($status['saved'] ?? null) && $status['saved'] !== '' ? $status['saved'] : null;
@@ -91,5 +91,10 @@ final class Removal
     private function folder(): string
     {
         return rtrim((string) config('coresmith.removal.state_path'), '/');
+    }
+
+    private function answers(): string
+    {
+        return rtrim((string) config('coresmith.removal.answer_path'), '/');
     }
 }

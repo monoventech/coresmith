@@ -876,7 +876,7 @@ test('php-fpm never reaches the release through the symlink', function () {
 });
 
 test("php-fpm may open only the releases, Coresmith's data, the helpers for this machine and for removal, the IPv6 address table and /tmp", function () {
-    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', '${UNINSTALL_DIR}', ProcStableAddresses::PATH, '/tmp'])
+    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', '${UNINSTALL_DIR}', '${UNINSTALL_ANSWERS}', ProcStableAddresses::PATH, '/tmp'])
         ->and(installScriptBody())->toContain('readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"')
         ->and((string) file_get_contents(config_path('coresmith.php')))->toContain("env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine')");
 });
