@@ -13,9 +13,11 @@
     import AddressCard from '@/components/settings/AddressCard.svelte'
     import MoveTeamCard from '@/components/settings/MoveTeamCard.svelte'
     import PanelUpdatesCard from '@/components/settings/PanelUpdatesCard.svelte'
+    import RemoveCoresmithDialog from '@/components/settings/RemoveCoresmithDialog.svelte'
     import type { Address } from '@/lib/address'
     import type { Moves } from '@/lib/moves'
     import type { PanelUpdates } from '@/lib/panelUpdates.svelte'
+    import type { Removal } from '@/lib/removal'
     import { cn } from '@/lib/utils'
 
     type Key = { id: string; name: string; type: string; fingerprint: string; added: string | null }
@@ -38,6 +40,7 @@
         keys = [],
         updates,
         moves = null,
+        removal = null,
         can
     }: {
         instance: {
@@ -49,12 +52,13 @@
         }
         address?: Address | null
         backups: { last: { when: string; size: string; verified: boolean } | null; keep: number }
-        account: { refusal: string | null }
+        account: { refusal: string | null; hidden: boolean }
         team_deletion?: TeamDeletion | null
         timezones: string[]
         keys: Key[]
         updates: PanelUpdates
         moves?: Moves | null
+        removal?: Removal | null
         can: { manageInstance: boolean; reachServers: boolean }
     } = $props()
 
@@ -62,6 +66,7 @@
     const cardsBeforeDanger = $derived(3 + (moves ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0))
 
     let dialog = $state<'key' | 'delete' | 'team' | null>(null)
+    let removing = $state(false)
     let backingUp = $state(false)
     let typed = $state('')
 
@@ -288,26 +293,50 @@
                 </div>
             </div>
         {/if}
-        <div
-            class={cn('flex flex-1 flex-col', teamDeletion && 'mt-5 border-t border-border pt-4')}
-            data-testid="close-account"
-        >
-            <p class="mb-3 text-[12.5px] text-muted-foreground">
-                Closing your account signs you out everywhere and removes your SSH keys and API tokens. {account.refusal ??
-                    'Your teams keep running without you.'}
-            </p>
-            <div class="mt-auto self-start pt-3">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    class="text-destructive-strong"
-                    disabled={account.refusal !== null}
-                    onclick={() => (dialog = 'delete')}>Close your account</Button
-                >
+        {#if removal}
+            <div
+                class={cn('flex flex-col', teamDeletion && 'mt-5 border-t border-border pt-4')}
+                data-testid="remove-coresmith"
+            >
+                <p class="mb-3 text-[12.5px] text-muted-foreground">
+                    Removing Coresmith detaches every server. The servers, and everything on them, keep running.
+                </p>
+                <div class="self-start pt-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="text-destructive-strong"
+                        onclick={() => (removing = true)}>Remove Coresmith</Button
+                    >
+                </div>
             </div>
-        </div>
+        {/if}
+        {#if !account.hidden}
+            <div
+                class={cn('flex flex-1 flex-col', (teamDeletion || removal) && 'mt-5 border-t border-border pt-4')}
+                data-testid="close-account"
+            >
+                <p class="mb-3 text-[12.5px] text-muted-foreground">
+                    Closing your account signs you out everywhere and removes your SSH keys and API tokens. {account.refusal ??
+                        'Your teams keep running without you.'}
+                </p>
+                <div class="mt-auto self-start pt-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="text-destructive-strong"
+                        disabled={account.refusal !== null}
+                        onclick={() => (dialog = 'delete')}>Close your account</Button
+                    >
+                </div>
+            </div>
+        {/if}
     </div>
 </div>
+
+{#if removal}
+    <RemoveCoresmithDialog bind:open={removing} {removal} />
+{/if}
 
 <Dialog.Root open={dialog === 'key'} onOpenChange={(open) => !open && (dialog = null)}>
     <Dialog.Content>

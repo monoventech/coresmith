@@ -14,6 +14,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Address\InstallationAddress;
 use App\Services\Install\Removal;
+use App\Services\Server\ThisMachine;
 
 final class RemovalPresenter
 {
@@ -23,7 +24,7 @@ final class RemovalPresenter
     ) {}
 
     /**
-     * @return array{address: string, servers: int, other_teams: list<string>, this_machine_apps: bool, database: string, database_name: string|null, two_factor: bool, helper: bool}|null
+     * @return array{address: string, servers: int, other_teams: list<string>, this_machine_apps: bool, database: string, database_name: string|null, two_factor: bool, helper: bool, installer: string}|null
      */
     public function present(User $user, ?Team $current): ?array
     {
@@ -43,6 +44,7 @@ final class RemovalPresenter
             'database_name' => $driver === 'sqlite' ? null : (string) config("database.connections.{$connection}.database"),
             'two_factor' => $user->two_factor_confirmed_at !== null,
             'helper' => $this->removal->installed(),
+            'installer' => ThisMachine::INSTALLER,
         ];
     }
 }

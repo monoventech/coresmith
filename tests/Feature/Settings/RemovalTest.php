@@ -248,5 +248,6 @@ test('General carries what the removal dialog needs, with real numbers', functio
             'database_name' => $driver === 'sqlite' ? null : (string) config('database.connections.' . config('database.default') . '.database'),
             'two_factor' => false,
             'helper' => true,
+            'installer' => ThisMachine::INSTALLER,
         ]));
 });

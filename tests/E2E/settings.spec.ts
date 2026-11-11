@@ -176,9 +176,7 @@ test.describe('general settings', () => {
 
         const closing = page.getByTestId('close-account')
 
-        await expect(closing).toContainText(
-            'Make someone else an owner of Foundry first.'
-        )
+        await expect(closing).toContainText('Make someone else an owner of Foundry first.')
         await expect(closing.getByRole('button', { name: 'Close your account' })).toBeDisabled()
         await expect(page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' })).toHaveCount(0)
     })
