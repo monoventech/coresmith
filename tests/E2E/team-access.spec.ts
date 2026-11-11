@@ -23,7 +23,7 @@ test.describe('what each member sees', () => {
         await expect(everything).toBeChecked()
         await everything.click()
         await expect(dialog(page)).toContainText(
-            `${name} sees only the servers and apps you tick. A server brings every app on it.`
+            `${name} sees only what you tick. A project brings every environment in it, and a server every app on it.`
         )
 
         await dialog(page).getByRole('checkbox', { name: 'forge-02', exact: true }).click()
@@ -44,6 +44,18 @@ test.describe('what each member sees', () => {
 
         await page.reload()
         await expect(member(page, email).getByTestId('member-access')).toHaveText('1 server, 1 app')
+
+        await member(page, email)
+            .getByRole('button', { name: `Access for ${name}` })
+            .click()
+        await dialog(page)
+            .getByRole('button', { name: /environments? in Storefront$/ })
+            .click()
+        await dialog(page).getByRole('checkbox', { name: 'Staging', exact: true }).click()
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+
+        await expect(toast(page)).toContainText('Saved.')
+        await expect(member(page, email).getByTestId('member-access')).toHaveText('1 environment, 1 server, 1 app')
     })
 
     test('an owner invites someone to only what they share', async ({ page }, testInfo) => {
