@@ -40,6 +40,7 @@ use App\Services\Server\CertificateCheck;
 use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
+use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -91,6 +92,7 @@ final class ApplicationController extends Controller
         SlugGenerator $slugs,
         PortAllocator $ports,
         SubscriptionCheck $subscriptions,
+        TeamAccess $access,
     ): RedirectResponse {
         $subscriptions->confirm($server->team);
 
@@ -120,6 +122,7 @@ final class ApplicationController extends Controller
         ]);
 
         activity()->performedOn($application)->log('application_created');
+        $access->grant($server->team, $request->user(), $application);
 
         if ($line !== null && $request->isEndOfLife((string) $runtime, $line)) {
             activity()->performedOn($application)->withProperties(['runtime' => $runtime, 'line' => $line])->log('runtime_eol_chosen');
@@ -155,7 +158,7 @@ final class ApplicationController extends Controller
         $publicKey = $usesKey ? $keys->ensure($application)->deploy_key_public : null;
 
         return Inertia::render('applications/Show', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => app(TeamAccess::class)->canSeeServer($user, $server) ? route('servers.show', $server) : null],
             'application' => [
                 'id' => $application->id,
                 'name' => $application->name,

@@ -338,6 +338,14 @@ const PAGES: [string, Visit][] = [
     ],
     ['Invitation for another account', direct(`/invitations/${WAITING_INVITATION}`)],
     [
+        'Access dialog',
+        async (page) => {
+            await page.goto('/settings/team')
+            await page.getByRole('button', { name: 'Access for Noor Haddad' }).click()
+            await dialog(page).getByRole('checkbox', { name: 'forge-01', exact: true }).waitFor()
+        }
+    ],
+    [
         'Add a provider dialog',
         async (page) => {
             await page.goto('/settings/team')

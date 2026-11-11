@@ -11,6 +11,8 @@ namespace App\Policies;
 use App\Enums\Ability;
 use App\Models\Application;
 use App\Models\User;
+use App\Services\Teams\TeamAccess;
+use Illuminate\Auth\Access\Response;
 
 final class ApplicationPolicy
 {
@@ -19,9 +21,9 @@ final class ApplicationPolicy
         return $user->teams()->exists();
     }
 
-    public function view(User $user, Application $application): bool
+    public function view(User $user, Application $application): Response|bool
     {
-        return $user->hasTeamAbility($application->team, Ability::ViewApplication);
+        return $this->within($user, $application, Ability::ViewApplication);
     }
 
     public function create(User $user): bool
@@ -29,28 +31,33 @@ final class ApplicationPolicy
         return $user->hasAbilityInAnyTeam(Ability::CreateApplication);
     }
 
-    public function update(User $user, Application $application): bool
+    public function update(User $user, Application $application): Response|bool
     {
-        return $user->hasTeamAbility($application->team, Ability::UpdateApplication);
+        return $this->within($user, $application, Ability::UpdateApplication);
     }
 
-    public function delete(User $user, Application $application): bool
+    public function delete(User $user, Application $application): Response|bool
     {
-        return $user->hasTeamAbility($application->team, Ability::DeleteApplication);
+        return $this->within($user, $application, Ability::DeleteApplication);
     }
 
-    public function deploy(User $user, Application $application): bool
+    public function deploy(User $user, Application $application): Response|bool
     {
-        return $user->hasTeamAbility($application->team, Ability::DeployApplication);
+        return $this->within($user, $application, Ability::DeployApplication);
     }
 
-    public function viewLogs(User $user, Application $application): bool
+    public function viewLogs(User $user, Application $application): Response|bool
     {
-        return $user->hasTeamAbility($application->team, Ability::ViewApplicationLogs);
+        return $this->within($user, $application, Ability::ViewApplicationLogs);
     }
 
-    public function manageEnvironment(User $user, Application $application): bool
+    public function manageEnvironment(User $user, Application $application): Response|bool
     {
-        return $user->hasTeamAbility($application->team, Ability::ManageApplicationEnv);
+        return $this->within($user, $application, Ability::ManageApplicationEnv);
+    }
+
+    private function within(User $user, Application $application, Ability $ability): Response|bool
+    {
+        return app(TeamAccess::class)->hidesApplication($user, $application) ? Response::denyAsNotFound() : $user->hasTeamAbility($application->team, $ability);
     }
 }

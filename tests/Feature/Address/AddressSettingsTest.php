@@ -230,6 +230,36 @@ test('the settings page shows the address, its certificate and whether it can ch
             ->where('address.follow', null));
 });
 
+test('a domain with only an IPv6 address is flagged, since people without IPv6 cannot open Coresmith there', function (array $records, bool $flagged) {
+    config(['app.url' => 'https://coresmith.example.com']);
+    addressSettingsResolving($records);
+
+    $this->actingAs(addressSettingsUser())
+        ->get(route('settings.general'))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('address.host', 'coresmith.example.com')->where('address.ipv6_only', $flagged));
+})->with([
+    'only IPv6' => [['2001:db8::10'], true],
+    'IPv4 and IPv6' => [['203.0.113.10', '2001:db8::10'], false],
+    'only IPv4' => [['203.0.113.10'], false],
+    'not resolving yet' => [[], false],
+]);
+
+test('an address with an internal certificate is never looked up or flagged', function (string $url) {
+    config(['app.url' => $url]);
+    app()->instance(AddressResolver::class, new class implements AddressResolver
+    {
+        public function addresses(string $host): array
+        {
+            throw new RuntimeException("Looked up {$host}.");
+        }
+    });
+
+    $this->actingAs(addressSettingsUser())
+        ->get(route('settings.general'))
+        ->assertOk()
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('address.ipv6_only', false));
+})->with(['localhost' => 'http://localhost', 'an IP' => 'https://192.168.0.248', 'a .local name' => 'https://beelink.local']);
+
 test('a change under way or failed is shown with what happened', function () {
     AddressChange::begin('192.168.0.248', 'coresmith.example.com');
     AddressChange::fail('No certificate for coresmith.example.com after 3 minutes.');

@@ -137,6 +137,27 @@ test('changing a role syncs the teams active servers', function () {
     expect(keySyncQueued())->toBe(keySyncIds($server));
 });
 
+test("changing what an admin sees syncs the team's active servers, and a deployer's syncs nothing", function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    [$server] = keySyncServers($team);
+    $owner = keySyncJoin($team, TeamRole::Owner);
+    $admin = keySyncJoin($team, TeamRole::Admin);
+    $deployer = keySyncJoin($team, TeamRole::Member);
+
+    $this->actingAs($owner)
+        ->put(route('teams.members.access.update', [$team, $deployer]), ['everything' => false, 'servers' => [$server->id], 'applications' => []])
+        ->assertSessionHas('success', 'Saved.');
+
+    expect(keySyncQueued())->toBe([]);
+
+    $this->actingAs($owner)
+        ->put(route('teams.members.access.update', [$team, $admin]), ['everything' => false, 'servers' => [$server->id], 'applications' => []])
+        ->assertSessionHas('success', 'Saved.');
+
+    expect(keySyncQueued())->toBe(keySyncIds($server));
+});
+
 test('removing a member syncs the teams active servers', function () {
     Queue::fake();
     $team = Team::factory()->create();

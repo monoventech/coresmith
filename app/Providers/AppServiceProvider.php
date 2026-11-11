@@ -14,6 +14,7 @@ use App\Services\Dns\NativeDnsResolver;
 use App\Services\Install\NativeProcessHandOff;
 use App\Services\Install\ProcessHandOff;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
 use App\Services\Updates\UpdatePaths;
 use App\Services\VaultEncryptor;
@@ -42,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(SSHConnectionManager::class);
 
         $this->app->scoped(TeamContext::class);
+        $this->app->scoped(TeamAccess::class);
 
         $this->app->bind(DnsResolver::class, NativeDnsResolver::class);
         $this->app->bind(EnvironmentFile::class, fn(): EnvironmentFile => new EnvironmentFile($this->app->environmentFilePath()));

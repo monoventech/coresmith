@@ -45,6 +45,7 @@ use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\Teams\TeamAccess;
 use App\Services\Updates\ReleaseLayout;
 use App\Services\Updates\UpdatePaths;
 use Carbon\CarbonImmutable;
@@ -70,6 +71,8 @@ final class E2ESeeder extends Seeder
     public const SIGNOUT_EMAIL = 'signout@coresmith.test';
 
     public const ROLE_EMAIL = 'rowan@coresmith.test';
+
+    public const NARROWED_EMAIL = 'narrowed@coresmith.test';
 
     public const ACME_OWNER_EMAIL = 'elin@coresmith.test';
 
@@ -110,6 +113,11 @@ final class E2ESeeder extends Seeder
 
         $this->team->members()->attach(User::factory()->create(['name' => 'Sam Okafor', 'email' => self::SIGNOUT_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
         $this->team->members()->attach(User::factory()->create(['name' => 'Rowan Hale', 'email' => self::ROLE_EMAIL, 'password' => $password]), ['role' => TeamRole::Member->value]);
+
+        $narrowed = User::factory()->create(['name' => 'Noor Haddad', 'email' => self::NARROWED_EMAIL, 'password' => $password]);
+        $this->team->members()->attach($narrowed, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
+        app(TeamAccess::class)->grant($this->team, $narrowed, $tenant->servers['forge-01']);
+        app(TeamAccess::class)->grant($this->team, $narrowed, $tenant->applications['warehouse']);
 
         $this->movers();
 
@@ -158,6 +166,7 @@ final class E2ESeeder extends Seeder
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             User::factory()->create(['name' => 'Invitee ' . $code, 'email' => "invitee-{$code}@coresmith.test", 'password' => $password]);
+            $this->team->members()->attach(User::factory()->create(['name' => 'Narrow ' . $code, 'email' => "narrow-{$code}@coresmith.test", 'password' => $password]), ['role' => TeamRole::Member->value]);
 
             $newPassword = User::factory()->create(['name' => 'New password ' . $code, 'email' => "new-password-{$code}@coresmith.test", 'password' => $password]);
             $newPasswordTeam = Team::factory()->create(['name' => 'New password ' . $code, 'slug' => 'new-password-' . $code, 'owner_id' => $newPassword->id]);
@@ -172,7 +181,7 @@ final class E2ESeeder extends Seeder
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
-            $this->server("detach-{$code}", '198.51.100.' . (60 + $index), ServerStatus::Active);
+            $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
             $this->application("busy-{$code}", 9200 + $index * 10);

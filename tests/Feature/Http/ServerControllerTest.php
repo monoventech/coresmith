@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Network\LocalAddresses;
 use App\Services\Panel\ServerPresenter;
+use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
@@ -196,14 +197,87 @@ test('a member cannot delete a server', function () {
 test('an admin can delete a server', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
+    $transport = new FakeSSHTransport;
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
-    $this->actingAs(teamMember($team, TeamRole::Admin))
-        ->delete(route('servers.destroy', $server))
-        ->assertRedirect(route('dashboard'))
-        ->assertSessionHas('success', "Detached. {$server->name} was removed from Coresmith. The VM is untouched.");
+    try {
+        $this->actingAs(teamMember($team, TeamRole::Admin))
+            ->delete(route('servers.destroy', $server))
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('success', "Detached. If Coresmith's key is on {$server->name}, remove the line ending in coresmith from /root/.ssh/authorized_keys there.");
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
 
     expect(Server::find($server->id))->toBeNull()
-        ->and(Server::withTrashed()->find($server->id))->not->toBeNull();
+        ->and(Server::withTrashed()->find($server->id))->not->toBeNull()
+        ->and($transport->commands())->toBe([]);
+});
+
+function detachReachedServer(Team $team, array $attributes = []): Server
+{
+    return Server::factory()->for($team)->create([
+        'name' => 'web-9',
+        'ssh_user' => 'deploy',
+        'status' => ServerStatus::Active,
+        'last_connected_at' => now()->subHour(),
+        'host_key_fingerprint' => HostKeyFingerprint::fromPublicKey(FakeSSHTransport::HOST_KEY),
+        ...$attributes,
+    ]);
+}
+
+function detachWith(Server $server, User $user, FakeSSHTransport $transport): TestResponse
+{
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
+
+    try {
+        return test()->actingAs($user)->delete(route('servers.destroy', $server));
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+}
+
+test('detaching a server Coresmith has reached takes its key off first, then forgets it', function () {
+    $team = Team::factory()->create();
+    $server = detachReachedServer($team);
+    $transport = new FakeSSHTransport;
+    $blob = explode(' ', $server->ssh_public_key)[1];
+
+    detachWith($server, teamMember($team, TeamRole::Admin), $transport)
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('success', 'Detached. Coresmith took its key off web-9.');
+
+    expect(implode("\n", $transport->commands()))->toContain("grep -v -F '{$blob}'")
+        ->and(Server::find($server->id))->toBeNull();
+});
+
+test('a server Coresmith can no longer reach is still detached, and the message names the line to remove', function () {
+    $team = Team::factory()->create();
+    $server = detachReachedServer($team);
+
+    detachWith($server, teamMember($team, TeamRole::Admin), (new FakeSSHTransport)->refuseConnections())
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('error', "Detached. Coresmith couldn't take its key off web-9, so remove the line ending in coresmith from /home/deploy/.ssh/authorized_keys there.");
+
+    expect(Server::find($server->id))->toBeNull();
+});
+
+test('a key that will not come off leaves the key file as it was and says which line to remove', function () {
+    $team = Team::factory()->create();
+    $server = detachReachedServer($team);
+    $transport = (new FakeSSHTransport)->respondTo('grep -v -F', 'grep: authorized_keys: Permission denied', 2);
+
+    detachWith($server, teamMember($team, TeamRole::Admin), $transport)
+        ->assertSessionHas('error', "Detached. Coresmith couldn't take its key off web-9, so remove the line ending in coresmith from /home/deploy/.ssh/authorized_keys there.");
+});
+
+test('detaching a provider server Coresmith has reached takes its key off and says it keeps running and billing', function () {
+    $team = Team::factory()->create();
+    $account = CloudProvider::factory()->for($team)->create();
+    $server = detachReachedServer($team, ['name' => 'outpost-02', 'ssh_user' => 'root', 'cloud_provider_id' => $account->getKey(), 'provider_server_id' => '4711']);
+
+    detachWith($server, teamMember($team, TeamRole::Admin), new FakeSSHTransport)
+        ->assertSessionHas('success', 'Detached. Coresmith took its key off outpost-02. It keeps running at Hetzner Cloud, and Hetzner Cloud keeps billing for it.');
 });
 
 test('a server still being created cannot be detached', function () {
@@ -229,7 +303,7 @@ test('detaching a provider server says it keeps running and billing', function (
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->delete(route('servers.destroy', $server))
         ->assertRedirect(route('dashboard'))
-        ->assertSessionHas('success', 'Detached. outpost-02 keeps running at Hetzner Cloud, and Hetzner Cloud keeps billing for it.');
+        ->assertSessionHas('success', "Detached. outpost-02 keeps running at Hetzner Cloud, and Hetzner Cloud keeps billing for it. If Coresmith's key is on outpost-02, remove the line ending in coresmith from /root/.ssh/authorized_keys there.");
 
     expect(Server::find($server->id))->toBeNull();
 });

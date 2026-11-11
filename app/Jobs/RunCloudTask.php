@@ -177,6 +177,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
             $fresh->team,
             Preferences::PROVISIONING,
             new CloudTaskFailedNotification($fresh, $task->type, (string) $result->reason),
+            about: $fresh,
         ), report: true);
     }
 }

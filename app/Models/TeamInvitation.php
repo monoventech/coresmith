@@ -26,7 +26,7 @@ class TeamInvitation extends Model
 
     public const TOKEN_LENGTH = 40;
 
-    protected $fillable = ['team_id', 'email', 'role', 'token_hash', 'link_offered', 'invited_by', 'expires_at', 'accepted_at'];
+    protected $fillable = ['team_id', 'email', 'role', 'token_hash', 'link_offered', 'invited_by', 'expires_at', 'accepted_at', 'sees_everything'];
 
     protected $hidden = ['token_hash'];
 
@@ -67,6 +67,7 @@ class TeamInvitation extends Model
     {
         return [
             'role' => TeamRole::class,
+            'sees_everything' => 'boolean',
             'link_offered' => 'boolean',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',

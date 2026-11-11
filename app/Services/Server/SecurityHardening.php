@@ -11,8 +11,10 @@ namespace App\Services\Server;
 use App\Enums\TeamRole;
 use App\Models\Server;
 use App\Models\SshKey;
+use App\Models\User;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
@@ -44,13 +46,7 @@ final class SecurityHardening
         'X11Forwarding no',
     ];
 
-    private const PASSWORD_SETTINGS = [
-        'PasswordAuthentication no',
-        'KbdInteractiveAuthentication no',
-        'ChallengeResponseAuthentication no',
-    ];
-
-    public const PASSWORDS_KEPT = 'passwords_kept';
+    public const LEFT_TO_OWNER = 'owner';
 
     public const PASSWORDS_OFF = 'off';
 
@@ -87,7 +83,10 @@ final class SecurityHardening
         $this->installFail2ban($connection);
         $this->applySysctls($connection);
         $this->configureAutomaticUpdates($connection);
-        $this->setTimezone($connection);
+
+        if (!$connection->server()->runs_coresmith) {
+            $this->setTimezone($connection);
+        }
         $this->checkAppArmor($connection);
         $this->configureAuditd($connection);
     }
@@ -150,13 +149,16 @@ final class SecurityHardening
     {
         $team = $server->team;
 
-        if ($team === null) {
+        if ($team === null || $server->runs_coresmith) {
             return [];
         }
 
+        $access = app(TeamAccess::class);
         $managers = $team->members()
             ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value])
-            ->pluck('users.id');
+            ->get()
+            ->filter(fn(User $manager): bool => $access->canSeeServer($manager, $server))
+            ->modelKeys();
 
         return SshKey::query()
             ->whereIn('user_id', $managers)
@@ -209,28 +211,40 @@ final class SecurityHardening
     {
         $server = $connection->server();
 
-        $keepPasswords = $this->keepsPasswords($server);
+        if ($server->runs_coresmith) {
+            $this->leaveSshToOwner($connection);
+
+            return;
+        }
 
         $connection->execute('mkdir -p /etc/ssh/sshd_config.d', sudo: true)->throw();
-        $connection->uploadContent($this->sshdConfig($server->ssh_port, $keepPasswords), self::SSHD_CONFIG);
+        $connection->uploadContent($this->sshdConfig($server->ssh_port), self::SSHD_CONFIG);
         $connection->execute('chmod 600 ' . self::SSHD_CONFIG . ' && rm -f ' . self::LEGACY_SSHD_CONFIG, sudo: true)->throw();
 
         $atTop = !$connection->execute(self::READS_DROP_INS, sudo: true)->successful();
-        $this->applySsh($connection, $atTop, $keepPasswords);
-        $settings = $this->effectiveSsh($connection);
-        $problem = $this->passwordProblem($settings, $keepPasswords);
+        $this->applySsh($connection, $atTop);
+        $problem = $this->passwordProblem($this->effectiveSsh($connection));
 
         if ($problem !== null && !$atTop) {
-            $this->applySsh($connection, true, $keepPasswords);
-            $settings = $this->effectiveSsh($connection);
-            $problem = $this->passwordProblem($settings, $keepPasswords);
+            $this->applySsh($connection, true);
+            $problem = $this->passwordProblem($this->effectiveSsh($connection));
         }
 
-        $this->recordSsh($server, match (true) {
-            $problem !== null => ['ssh_hardening_error' => $problem],
-            $keepPasswords => ['ssh_hardening' => self::PASSWORDS_KEPT, ...($this->passwordProblem($settings, false) === null ? ['ssh_passwords' => self::PASSWORDS_OFF] : [])],
-            default => ['ssh_hardening' => 'verified'],
-        });
+        $this->recordSsh($server, $problem === null ? ['ssh_hardening' => 'verified'] : ['ssh_hardening_error' => $problem]);
+    }
+
+    private function leaveSshToOwner(SSHConnection $connection): void
+    {
+        $server = $connection->server();
+
+        $connection->execute($this->authorizedKeysSyncCommand((string) $server->ssh_user, []))->throw();
+        $connection->execute('rm -f ' . self::SSHD_CONFIG . ' ' . self::LEGACY_SSHD_CONFIG, sudo: true)->throw();
+        $this->applySsh($connection, false);
+
+        $this->recordSsh($server, [
+            'ssh_hardening' => self::LEFT_TO_OWNER,
+            ...($this->passwordProblem($this->effectiveSsh($connection)) === null ? ['ssh_passwords' => self::PASSWORDS_OFF] : []),
+        ]);
     }
 
     /**
@@ -246,29 +260,16 @@ final class SecurityHardening
     /**
      * @return list<string>
      */
-    private function sshdBlock(bool $keepPasswords): array
+    private function sshdBlock(): array
     {
-        return [...self::sshdSettings($keepPasswords), 'KexAlgorithms ' . self::SSHD_KEX, ...self::SSHD_CRYPTO];
+        return [...self::SSHD_SETTINGS, 'KexAlgorithms ' . self::SSHD_KEX, ...self::SSHD_CRYPTO];
     }
 
-    /**
-     * @return list<string>
-     */
-    private static function sshdSettings(bool $keepPasswords): array
-    {
-        return $keepPasswords ? array_values(array_diff(self::SSHD_SETTINGS, self::PASSWORD_SETTINGS)) : self::SSHD_SETTINGS;
-    }
-
-    public function keepsPasswords(Server $server): bool
-    {
-        return (bool) $server->runs_coresmith && $this->userKeys($server) === [];
-    }
-
-    private function applySsh(SSHConnection $connection, bool $atTop, bool $keepPasswords): void
+    private function applySsh(SSHConnection $connection, bool $atTop): void
     {
         $main = self::SSHD_MAIN_CONFIG;
         $block = $atTop
-            ? "printf '%s\\n' " . implode(' ', array_map(escapeshellarg(...), [self::SSHD_BLOCK_BEGIN, ...$this->sshdBlock($keepPasswords), self::SSHD_BLOCK_END])) . ' && '
+            ? "printf '%s\\n' " . implode(' ', array_map(escapeshellarg(...), [self::SSHD_BLOCK_BEGIN, ...$this->sshdBlock(), self::SSHD_BLOCK_END])) . ' && '
             : '';
         $strip = 'awk -v start=' . escapeshellarg(self::SSHD_BLOCK_BEGIN) . ' -v stop=' . escapeshellarg(self::SSHD_BLOCK_END) . ' ' . escapeshellarg(self::STRIP_SSHD_BLOCK) . ' ' . $main;
         $rewrite = 'tmp=$(mktemp ' . $main . '.XXXXXX) && { { ' . $block . $strip . '; } > "$tmp" && sshd -t -f "$tmp" && cat "$tmp" > ' . $main . '; status=$?; rm -f "$tmp"; [ "$status" -eq 0 ]; }';
@@ -302,16 +303,16 @@ final class SecurityHardening
     /**
      * @param  array<string, string>  $settings
      */
-    private function passwordProblem(array $settings, bool $keepPasswords): ?string
+    private function passwordProblem(array $settings): ?string
     {
         if (!isset($settings['passwordauthentication'], $settings['permitrootlogin'])) {
             return "sshd didn't report its settings";
         }
 
         $open = array_keys(array_filter([
-            'passwordauthentication' => !$keepPasswords && $settings['passwordauthentication'] !== 'no',
-            'kbdinteractiveauthentication' => !$keepPasswords && ($settings['kbdinteractiveauthentication'] ?? 'no') !== 'no',
-            'challengeresponseauthentication' => !$keepPasswords && ($settings['challengeresponseauthentication'] ?? 'no') !== 'no',
+            'passwordauthentication' => $settings['passwordauthentication'] !== 'no',
+            'kbdinteractiveauthentication' => ($settings['kbdinteractiveauthentication'] ?? 'no') !== 'no',
+            'challengeresponseauthentication' => ($settings['challengeresponseauthentication'] ?? 'no') !== 'no',
             'permitrootlogin' => !in_array($settings['permitrootlogin'], self::ROOT_WITHOUT_PASSWORD, true),
         ]));
 
@@ -388,11 +389,11 @@ final class SecurityHardening
             : 0;
     }
 
-    public function sshdConfig(int $sshPort, bool $keepPasswords = false): string
+    public function sshdConfig(int $sshPort): string
     {
         return implode("\n", [
             "Port {$sshPort}",
-            ...self::sshdSettings($keepPasswords),
+            ...self::SSHD_SETTINGS,
             '',
             'KexAlgorithms sntrup761x25519-sha512@openssh.com,' . self::SSHD_KEX,
             ...self::SSHD_CRYPTO,

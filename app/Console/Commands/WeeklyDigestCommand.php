@@ -15,6 +15,7 @@ use App\Models\Server;
 use App\Models\User;
 use App\Notifications\Preferences;
 use App\Notifications\WeeklyDigestNotification;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Console\Command;
 use Spatie\Activitylog\Models\Activity;
 
@@ -35,10 +36,16 @@ final class WeeklyDigestCommand extends Command
                 return;
             }
 
-            $teams = $user->teams->modelKeys();
             $since = now()->subWeek();
-            $applications = Application::withTrashed()->whereIn('team_id', $teams)->pluck('id');
-            $servers = Server::withTrashed()->whereIn('team_id', $teams)->pluck('id');
+            $access = app(TeamAccess::class);
+            $applications = collect();
+            $servers = collect();
+
+            foreach ($user->teams as $team) {
+                $everything = $access->seesEverything($user, $team);
+                $applications = $applications->concat($everything ? Application::withTrashed()->where('team_id', $team->getKey())->pluck('id') : $access->applications($user, $team)->pluck('id'));
+                $servers = $servers->concat($everything ? Server::withTrashed()->where('team_id', $team->getKey())->pluck('id') : $access->servers($user, $team)->pluck('id'));
+            }
 
             $deployments = Deployment::query()->whereIn('application_id', $applications)->where('created_at', '>=', $since);
 

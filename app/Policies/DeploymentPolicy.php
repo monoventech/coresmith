@@ -11,16 +11,23 @@ namespace App\Policies;
 use App\Enums\Ability;
 use App\Models\Deployment;
 use App\Models\User;
+use App\Services\Teams\TeamAccess;
+use Illuminate\Auth\Access\Response;
 
 final class DeploymentPolicy
 {
-    public function view(User $user, Deployment $deployment): bool
+    public function view(User $user, Deployment $deployment): Response|bool
     {
-        return $user->hasTeamAbility($deployment->application?->team, Ability::ViewApplicationLogs);
+        return $this->within($user, $deployment, Ability::ViewApplicationLogs);
     }
 
-    public function create(User $user, Deployment $deployment): bool
+    public function create(User $user, Deployment $deployment): Response|bool
     {
-        return $user->hasTeamAbility($deployment->application?->team, Ability::DeployApplication);
+        return $this->within($user, $deployment, Ability::DeployApplication);
+    }
+
+    private function within(User $user, Deployment $deployment, Ability $ability): Response|bool
+    {
+        return $deployment->application !== null && app(TeamAccess::class)->hidesApplication($user, $deployment->application) ? Response::denyAsNotFound() : $user->hasTeamAbility($deployment->application?->team, $ability);
     }
 }

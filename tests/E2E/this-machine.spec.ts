@@ -190,23 +190,18 @@ test.describe('this machine', () => {
         )
     })
 
-    test('until an owner or admin adds an SSH key, the Hardening tab says why password login stays on', async ({
+    test('on this machine the Hardening tab says SSH is left as you set it up, and whether it takes passwords', async ({
         page
     }) => {
         await rewriteInertia(page, '/servers/*/hardening', (props) => {
-            props.ssh = { verified: false, passwords_kept: true, error: null }
-
-            if (Array.isArray(props.hardening)) {
-                props.hardening = props.hardening.filter((item: string) => !item.startsWith('SSH key-only'))
-            }
+            props.server.this_machine = true
+            props.ssh = { verified: false, owner: true, passwords_off: true, error: null }
         })
         await gotoServerTab(page, 'outpost-01', 'Hardening')
 
-        const kept = page.getByTestId('ssh-passwords-kept')
-        await expect(kept).toContainText(
-            'Password login stays on for this machine until an owner or admin adds an SSH key'
+        await expect(page.getByTestId('ssh-access-summary')).toHaveText(
+            "Coresmith signs in as root with a key that only works from this machine itself. Password login is off in this machine's own SSH settings, which Coresmith leaves to you."
         )
-        await expect(kept.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', /\/settings$/)
         await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveCount(0)
     })
 })

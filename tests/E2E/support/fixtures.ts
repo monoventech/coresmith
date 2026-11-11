@@ -8,6 +8,10 @@ export const asMember = base.extend({
     storageState: 'tests/E2E/.auth/member.json'
 })
 
+export const asNarrowed = base.extend({
+    storageState: 'tests/E2E/.auth/narrowed.json'
+})
+
 export const asGuest = base.extend({
     storageState: { cookies: [], origins: [] }
 })

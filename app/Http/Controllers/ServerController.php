@@ -33,9 +33,11 @@ use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
+use App\Services\Server\CoresmithKey;
 use App\Services\Server\ServerConnector;
 use App\Services\Server\ThisMachine;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Http\RedirectResponse;
@@ -78,7 +80,7 @@ final class ServerController extends Controller
         ]);
     }
 
-    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls, ServerConnector $connector): HttpResponse
+    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls, ServerConnector $connector, TeamAccess $access): HttpResponse
     {
         $team = Team::query()->findOrFail($request->validated('team_id'));
 
@@ -94,6 +96,7 @@ final class ServerController extends Controller
         });
 
         activity()->performedOn($server)->log('server_added');
+        $access->grant($team, $request->user(), $server);
 
         [$tone, $added] = $this->added($server, $connector, $request->safe()->string('password')->value());
 
@@ -150,7 +153,7 @@ final class ServerController extends Controller
         return back()->with('success', 'Saved.');
     }
 
-    public function destroy(Server $server, ThisMachine $machine): RedirectResponse
+    public function destroy(Server $server, ThisMachine $machine, CoresmithKey $keys): RedirectResponse
     {
         $this->authorize('delete', $server);
 
@@ -165,16 +168,26 @@ final class ServerController extends Controller
         }
 
         $uncertain = CreateServerTask::uncertain($server);
+        $exists = $label === null || (!$uncertain && $server->provider_server_id !== null);
+        $key = $exists ? $keys->takeOff($server) : null;
 
         activity()->performedOn($server)->log('server_detached');
 
         $server->delete();
 
-        return to_route('dashboard')->with('success', match (true) {
-            $label === null => "Detached. {$server->name} was removed from Coresmith. The VM is untouched.",
+        $line = 'the line ending in ' . CoresmithKey::comment($server) . ' from ' . CoresmithKey::file($server) . ' there';
+        $note = match ($key) {
+            CoresmithKey::REMOVED => "Coresmith took its key off {$server->name}.",
+            CoresmithKey::FAILED => "Coresmith couldn't take its key off {$server->name}, so remove {$line}.",
+            default => "If Coresmith's key is on {$server->name}, remove {$line}.",
+        };
+
+        return to_route('dashboard')->with($key === CoresmithKey::FAILED ? 'error' : 'success', match (true) {
+            $label === null => "Detached. {$note}",
             $uncertain => "Removed. Coresmith could not confirm whether {$label} created {$server->name}. Check your {$label} account and delete it there if it exists.",
             $server->provider_server_id === null => "Removed. Nothing was created at {$label}.",
-            default => "Detached. {$server->name} keeps running at {$label}, and {$label} keeps billing for it.",
+            $key === CoresmithKey::REMOVED => "Detached. {$note} It keeps running at {$label}, and {$label} keeps billing for it.",
+            default => "Detached. {$server->name} keeps running at {$label}, and {$label} keeps billing for it. {$note}",
         });
     }
 

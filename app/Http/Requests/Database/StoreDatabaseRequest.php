@@ -25,6 +25,7 @@ final class StoreDatabaseRequest extends FormRequest
         $server = $this->route('server');
 
         return $server instanceof Server
+            && $this->user()->can('view', $server)
             && $this->user()->hasTeamAbility($server->team, Ability::CreateDatabase);
     }
 

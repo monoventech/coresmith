@@ -220,9 +220,9 @@ test('the hardening tab lists only the firewall changes coresmith applied to tha
             ->where('firewall.changes.0.port', 8080));
 });
 
-test('the hardening tab claims key-only SSH only once sshd has reported it, and says what sshd reported otherwise', function (array $meta, bool $listed, array $ssh) {
+test('the hardening tab claims key-only SSH only once sshd has reported it, and says what sshd reported otherwise', function (array $attributes, bool $listed, array $ssh) {
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['meta' => $meta]);
+    $server = Server::factory()->for($team)->create($attributes);
 
     $this->actingAs(tabUser($team, TeamRole::Member))
         ->get(route('servers.hardening', $server))
@@ -232,10 +232,10 @@ test('the hardening tab claims key-only SSH only once sshd has reported it, and 
                 && collect($items)->contains(ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS))
             ->where('ssh', $ssh));
 })->with([
-    'verified' => [['ssh_hardening' => 'verified'], true, ['verified' => true, 'passwords_kept' => false, 'error' => null]],
-    'still accepting passwords' => [['ssh_hardening_error' => 'sshd reports passwordauthentication yes'], false, ['verified' => false, 'passwords_kept' => false, 'error' => 'sshd reports passwordauthentication yes']],
-    'not checked yet' => [[], false, ['verified' => false, 'passwords_kept' => false, 'error' => null]],
-    "keeping passwords on Coresmith's machine until a key is in" => [['ssh_hardening' => 'passwords_kept'], false, ['verified' => false, 'passwords_kept' => true, 'error' => null]],
+    'verified' => [['meta' => ['ssh_hardening' => 'verified']], true, ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null]],
+    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => 'sshd reports passwordauthentication yes']],
+    'not checked yet' => [['meta' => []], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => null]],
+    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], false, ['verified' => false, 'owner' => true, 'passwords_off' => true, 'error' => null]],
 ]);
 
 test('an admin can queue a firewall change', function () {

@@ -5,6 +5,8 @@
     import CloudProvidersCard from '@/components/settings/CloudProvidersCard.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
     import type { Invitation } from '@/components/settings/InvitationsCard.svelte'
+    import type { MemberAccess, Shareable } from '@/components/settings/MemberAccessDialog.svelte'
+    import MemberAccessDialog, { reach } from '@/components/settings/MemberAccessDialog.svelte'
     import InvitationsCard from '@/components/settings/InvitationsCard.svelte'
     import type { OffsiteDestination } from '@/components/settings/OffsiteBackupsCard.svelte'
     import OffsiteBackupsCard from '@/components/settings/OffsiteBackupsCard.svelte'
@@ -31,6 +33,7 @@
         role_label: string | null
         two_factor: boolean
         is_you: boolean
+        access: MemberAccess | null
     }
 
     type Address = {
@@ -54,6 +57,7 @@
         invite_links: inviteLinks = false,
         roles = [],
         can,
+        shareable = null,
         sso,
         cloud,
         offsite = null
@@ -64,7 +68,8 @@
         invitations?: Invitation[]
         invite_links?: boolean
         roles: { value: string; label: string }[]
-        can: { update: boolean; manageMembers: boolean; grantOwner: boolean }
+        can: { update: boolean; manageMembers: boolean; grantOwner: boolean; shareAccess: boolean }
+        shareable?: Shareable | null
         sso: SingleSignOn
         cloud: CloudAccounts
         offsite?: OffsiteDestination | null
@@ -83,11 +88,23 @@
     let inviting = $state(false)
     let removing = $state<Member | null>(null)
     let removeOpen = $state(false)
+    let sharing = $state<Member | null>(null)
+    let shareOpen = $state(false)
+
+    const ACCESS = [
+        { value: 'everything', label: 'Everything' },
+        { value: 'shared', label: 'Only what I share' }
+    ]
 
     const assignable = $derived(can.grantOwner ? roles : roles.filter((role) => role.value !== 'owner'))
 
     function changeRole(member: Member, role: string) {
         router.put(route('teams.members.update', [team.id, member.id]), { role }, { preserveScroll: true })
+    }
+
+    function share(member: Member) {
+        sharing = member
+        shareOpen = true
     }
 
     function ask(member: Member) {
@@ -159,8 +176,27 @@
                 {:else}
                     <span class="w-17.5 text-[12.5px] text-muted-foreground">{member.role_label}</span>
                 {/if}
-                <Badge variant={member.two_factor ? 'success' : 'outline'}>{member.two_factor ? '2FA' : 'No 2FA'}</Badge
+                <span class="w-15 shrink-0"
+                    ><Badge variant={member.two_factor ? 'success' : 'outline'}
+                        >{member.two_factor ? '2FA' : 'No 2FA'}</Badge
+                    ></span
                 >
+                {#if member.access}
+                    <span class="flex items-center gap-2.5 max-sm:order-last max-sm:basis-full">
+                        <span
+                            class="w-30 truncate text-[12.5px] text-muted-foreground max-sm:w-auto"
+                            title={reach(member.access)}
+                            data-testid="member-access">{reach(member.access)}</span
+                        >
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            class="h-8"
+                            aria-label="Access for {member.name}"
+                            onclick={() => share(member)}>Access</Button
+                        >
+                    </span>
+                {/if}
                 {#if manageable}
                     <button
                         type="button"
@@ -238,6 +274,22 @@
                         <NativeSelect id="invite-role" name="role" options={assignable} value="member" />
                         <FieldError message={errors.role} />
                     </div>
+                    {#if can.shareAccess}
+                        <div>
+                            <Label for="invite-access" class="mb-1.5">Access</Label>
+                            <NativeSelect
+                                id="invite-access"
+                                name="access"
+                                options={ACCESS}
+                                value="everything"
+                                aria-describedby="invite-access-help"
+                            />
+                            <p id="invite-access-help" class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                                You can change this any time from their row.
+                            </p>
+                            <FieldError message={errors.access} />
+                        </div>
+                    {/if}
                 </div>
                 <Dialog.Footer>
                     <Button variant="ghost" type="button" onclick={() => (inviting = false)}>Cancel</Button>
@@ -247,6 +299,10 @@
         </Form>
     </Dialog.Content>
 </Dialog.Root>
+
+{#if shareable}
+    <MemberAccessDialog bind:open={shareOpen} {team} member={sharing} {shareable} />
+{/if}
 
 <Dialog.Root bind:open={removeOpen}>
     <Dialog.Content>

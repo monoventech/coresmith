@@ -50,6 +50,19 @@ test.describe("Coresmith's address", () => {
         await expect(card(page)).toContainText('browsers warn until Coresmith has a domain or a Tailscale name')
     })
 
+    test('a domain with only an IPv6 address says who cannot open it and what would fix that', async ({ page }) => {
+        await settingsShowing(page, {
+            host: 'coresmith.example.com',
+            url: 'https://coresmith.example.com',
+            certificate: 'public',
+            ipv6_only: true
+        })
+
+        await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
+            "coresmith.example.com has only an IPv6 address, so people on networks without IPv6 can't open Coresmith. To reach them too, add an A record for this server's public IPv4 address, and forward TCP ports 80 and 443 to this server if it's behind a router."
+        )
+    })
+
     test("a name that isn't a domain is checked, and the check says what's wrong without allowing a switch", async ({
         page
     }) => {

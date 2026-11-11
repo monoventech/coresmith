@@ -16,13 +16,14 @@ use App\Models\Team;
 use App\Services\Billing\PlanGate;
 use App\Services\Server\ThisMachine;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 final class ThisMachineController extends Controller
 {
-    public function store(StoreThisMachineRequest $request, ThisMachine $machine, KeyPairGenerator $keys, PlanGate $plans): RedirectResponse
+    public function store(StoreThisMachineRequest $request, ThisMachine $machine, KeyPairGenerator $keys, PlanGate $plans, TeamAccess $access): RedirectResponse
     {
         if (!$machine->installed()) {
             return back()->with('error', "This install's installer is from before Coresmith could use its own machine. Run it again with " . ThisMachine::INSTALLER . ', then try again.');
@@ -60,6 +61,7 @@ final class ThisMachineController extends Controller
         }
 
         activity()->performedOn($server)->log('server_added');
+        $access->grant($team, $request->user(), $server);
 
         ConnectThisMachine::dispatch($server);
 

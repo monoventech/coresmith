@@ -139,11 +139,11 @@ final class ServerPresenter
         return $this->detail([
             is_string($meta['cpu_model'] ?? null) ? $meta['cpu_model'] : null,
             match (true) {
-                $cores > 0 && $threads > $cores => "{$cores} cores, {$threads} threads",
-                $threads > 0 => $threads . ' ' . ($threads === 1 ? 'core' : 'cores'),
+                $cores > 0 && $threads > $cores => "{$cores}\u{00A0}cores, {$threads}\u{00A0}threads",
+                $threads > 0 => $threads . "\u{00A0}" . ($threads === 1 ? 'core' : 'cores'),
                 default => null,
             },
-            $now === null ? null : 'load ' . number_format((float) $now->load_1m, 2),
+            $now === null ? null : "load\u{00A0}" . number_format((float) $now->load_1m, 2),
         ]);
     }
 

@@ -180,7 +180,7 @@ final class CertificateCheck
         }
 
         try {
-            app(TeamNotifier::class)->send($application->team, Preferences::SERVER_ALERTS, new CertificateExpiringNotification($application, $domain, $days));
+            app(TeamNotifier::class)->send($application->team, Preferences::SERVER_ALERTS, new CertificateExpiringNotification($application, $domain, $days), about: $application);
         } catch (Throwable $e) {
             report($e);
 

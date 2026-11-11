@@ -36,7 +36,7 @@ test.describe('a server', () => {
             page.getByText(label, { exact: true }).locator('xpath=../..').getByTestId('metric-detail')
 
         await expect(detail('CPU · 24h')).toHaveText('AMD EPYC-Milan Processor · 4 cores · load 1.36')
-        await expect(detail('Memory · 24h')).toHaveText(/^\d+(\.\d)? GB of 8 GB used$/)
+        await expect(detail('Memory · 24h')).toHaveText(/^\d+(\.\d)?\sGB of 8\sGB used$/)
         await expect(detail('Disk · 24h')).toHaveText('67 GB of 160 GB used · 85 GB free')
     })
 
@@ -168,11 +168,13 @@ test.describe('a server', () => {
 
         await page.getByRole('button', { name: 'Detach' }).click()
         await expect(dialog(page)).toContainText(`Detach ${name}?`)
-        await expect(dialog(page)).toContainText('The VM itself, and everything on it, is untouched.')
+        await expect(dialog(page)).toContainText('Coresmith takes its key off this server and stops managing it.')
         await dialog(page).getByRole('button', { name: 'Detach server' }).click()
 
         await page.waitForURL(/\/dashboard$/)
-        await expect(toast(page)).toContainText('Detached.')
+        await expect(toast(page)).toContainText(
+            `Detached. Coresmith couldn't take its key off ${name}, so remove the line ending in coresmith from /root/.ssh/authorized_keys there.`
+        )
         await expect(page.getByTestId('server-card').getByRole('link', { name, exact: true })).toHaveCount(0)
     })
 

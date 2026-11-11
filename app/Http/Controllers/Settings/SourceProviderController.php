@@ -18,6 +18,7 @@ use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Repository;
 use App\Services\SSH\HostKeyFingerprint;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,7 +38,7 @@ final class SourceProviderController extends Controller
 
         $github->recheckSuspended($team);
 
-        $applications = $team->applications()->with(['server', 'webhookEndpoints'])->orderBy('name')->get();
+        $applications = app(TeamAccess::class)->applications($request->user(), $team)->with(['server', 'webhookEndpoints'])->orderBy('name')->get();
         $providers = $team->sourceProviders()->latest()->get();
         $lastDelivery = $applications->flatMap(fn(Application $application) => $application->webhookEndpoints)
             ->concat($providers)

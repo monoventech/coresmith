@@ -93,6 +93,7 @@ final class ApplicationPowerController extends Controller
             Preferences::TOGGLE_CHANGES,
             new ApplicationToggledNotification($application, $change, $actor?->name),
             $actor instanceof User ? $actor : null,
+            $application,
         );
     }
 }
