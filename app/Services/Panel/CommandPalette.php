@@ -17,6 +17,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\BillingPresenter;
+use App\Services\Teams\TeamAccess;
 
 final class CommandPalette
 {
@@ -28,7 +29,7 @@ final class CommandPalette
     public function commands(): array
     {
         $commands = [];
-        $fleet = $this->team === null ? null : new FleetSnapshot($this->team);
+        $fleet = $this->team === null ? null : new FleetSnapshot($this->team, $this->user);
 
         $running = $fleet?->running()->first();
 
@@ -62,7 +63,7 @@ final class CommandPalette
             $commands[] = ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => $this->team === null ? Edition::Cloud->label() : app(BillingPresenter::class)->paletteHint($this->team), 'href' => route('settings.billing')];
         }
 
-        foreach ($this->team?->applications()->with('server')->orderBy('name')->get() ?? [] as $application) {
+        foreach ($this->team === null ? [] : app(TeamAccess::class)->applications($this->user, $this->team)->with('server')->orderBy('name')->get() as $application) {
             $commands[] = [
                 'label' => 'Open ' . $application->name,
                 'icon' => 'layers',
@@ -102,7 +103,7 @@ final class CommandPalette
         }
 
         $latest = Deployment::query()
-            ->whereIn('application_id', $this->team->applications()->select('id'))
+            ->whereIn('application_id', app(TeamAccess::class)->applications($this->user, $this->team)->select('id'))
             ->where('status', DeploymentStatus::Succeeded->value)
             ->whereNotNull('release')
             ->with('application')

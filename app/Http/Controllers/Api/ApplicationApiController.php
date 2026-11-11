@@ -13,6 +13,7 @@ use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\Deployment\DeployGuard;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,7 +21,7 @@ final class ApplicationApiController extends ApiController
 {
     public function index(Request $request): JsonResponse
     {
-        $applications = $this->team($request)->applications()->orderBy('name')->paginate(
+        $applications = app(TeamAccess::class)->applications($request->user(), $this->team($request))->orderBy('name')->paginate(
             perPage: min((int) $request->integer('per_page', 25), 100),
         );
 
@@ -36,14 +37,14 @@ final class ApplicationApiController extends ApiController
 
     public function show(Request $request, Application $application): JsonResponse
     {
-        abort_unless($application->team_id === $this->team($request)->getKey(), 404);
+        $this->seenApplication($request, $application);
 
         return response()->json(['data' => $this->present($application)]);
     }
 
     public function deploy(Request $request, Application $application): JsonResponse
     {
-        abort_unless($application->team_id === $this->team($request)->getKey(), 404);
+        $this->seenApplication($request, $application);
 
         $refusal = app(DeployGuard::class)->refusal($application);
 
@@ -71,7 +72,7 @@ final class ApplicationApiController extends ApiController
 
     public function maintenance(Request $request, Application $application): JsonResponse
     {
-        abort_unless($application->team_id === $this->team($request)->getKey(), 404);
+        $this->seenApplication($request, $application);
 
         $validated = $request->validate(['enabled' => ['required', 'boolean']]);
 

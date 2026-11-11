@@ -14,6 +14,7 @@ use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\PlanGate;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamInvitations;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,7 +33,7 @@ final class TeamMemberController extends Controller
 
     private const LAST_OWNER = 'A team must keep at least one owner. Make someone else an owner first.';
 
-    public function store(Request $request, Team $team, PlanGate $plans, TeamInvitations $invitations): RedirectResponse
+    public function store(Request $request, Team $team, PlanGate $plans, TeamInvitations $invitations, TeamAccess $access): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
 
@@ -41,6 +42,7 @@ final class TeamMemberController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255'],
             'role' => ['required', Rule::enum(TeamRole::class)],
+            'access' => ['sometimes', Rule::in(['everything', 'shared'])],
         ]);
 
         $email = Str::lower($validated['email']);
@@ -56,11 +58,15 @@ final class TeamMemberController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
+        $everything = $request->user()->roleIn($team) === TeamRole::Owner
+            ? ($validated['access'] ?? 'everything') === 'everything'
+            : $access->seesEverything($request->user(), $team);
+
         if (!$user instanceof User || !$this->joinsAtOnce($user)) {
-            return $this->invite($request, $team, $email, $role, $invitations);
+            return $this->invite($request, $team, $email, $role, $everything, $invitations);
         }
 
-        $team->members()->attach($user, ['role' => $role->value]);
+        $team->members()->attach($user, ['role' => $role->value, 'sees_everything' => $everything]);
         $team->invitations()->where('email', $email)->delete();
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'role' => $role->value])->log('member_added');
@@ -101,7 +107,7 @@ final class TeamMemberController extends Controller
         return back()->with('success', 'Role updated.');
     }
 
-    public function destroy(Request $request, Team $team, User $user): RedirectResponse
+    public function destroy(Request $request, Team $team, User $user, TeamAccess $access): RedirectResponse
     {
         $this->authorize('manageMembers', $team);
 
@@ -114,6 +120,7 @@ final class TeamMemberController extends Controller
         }
 
         $team->members()->detach($user->getKey());
+        $access->remove($team, $user);
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email])->log('member_removed');
 
@@ -122,7 +129,7 @@ final class TeamMemberController extends Controller
         return back()->with('success', 'Member removed.');
     }
 
-    private function invite(Request $request, Team $team, string $email, TeamRole $role, TeamInvitations $invitations): RedirectResponse
+    private function invite(Request $request, Team $team, string $email, TeamRole $role, bool $everything, TeamInvitations $invitations): RedirectResponse
     {
         $key = 'team-invitations:' . $team->getKey();
         $limit = (int) config('coresmith.teams.invitations_per_hour', 20);
@@ -135,7 +142,7 @@ final class TeamMemberController extends Controller
 
         RateLimiter::hit($key, 3600);
 
-        [$invitation, $token] = $invitations->invite($team, $email, $role, $request->user());
+        [$invitation, $token] = $invitations->invite($team, $email, $role, $request->user(), $everything);
 
         if (!$invitation->link_offered) {
             return back()->with('success', "Invitation sent to {$invitation->email}.");

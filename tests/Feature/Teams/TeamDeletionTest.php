@@ -7,6 +7,7 @@ use App\Enums\Plan;
 use App\Enums\ReadOnlyReason;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Models\AccessGrant;
 use App\Models\ApiToken;
 use App\Models\Application;
 use App\Models\BackupDestination;
@@ -248,6 +249,7 @@ test('deleting a team leaves its id in no table but the trial history', function
     $app = GitHubApp::factory()->for($team)->create();
     BackupDestination::factory()->for($team)->create();
     TeamInvitation::factory()->for($team)->create();
+    AccessGrant::query()->create(['team_id' => $team->id, 'user_id' => $owner->id, 'server_id' => $server->id]);
     $owner->createToken('ci');
     ApiToken::query()->where('tokenable_id', $owner->id)->update(['team_id' => $team->id]);
     app(TrialHistory::class)->claim((string) $owner->email, $team);
@@ -267,7 +269,7 @@ test('deleting a team leaves its id in no table but the trial history', function
         ->all();
 
     expect($holding)->toBe([])
-        ->and($tables->all())->toContain('servers', 'applications', 'databases', 'source_providers', 'cloud_providers', 'subscriptions', 'team_invoices', 'team_user', 'team_domains', 'team_sso_connections', 'sso_identities', 'github_apps', 'backup_destinations', 'team_invitations', 'personal_access_tokens', 'trial_history')
+        ->and($tables->all())->toContain('servers', 'applications', 'databases', 'source_providers', 'cloud_providers', 'subscriptions', 'team_invoices', 'team_user', 'team_domains', 'team_sso_connections', 'sso_identities', 'github_apps', 'backup_destinations', 'team_invitations', 'access_grants', 'personal_access_tokens', 'trial_history')
         ->and(DB::table('trial_history')->where('team_id', $team->id)->exists())->toBeTrue()
         ->and(User::query()->where('current_team_id', $team->id)->exists())->toBeFalse()
         ->and(Deployment::query()->whereKey($deployment->id)->exists())->toBeFalse()

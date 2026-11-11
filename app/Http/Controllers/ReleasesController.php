@@ -15,6 +15,7 @@ use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\Formats;
 use App\Services\Panel\RollbackHistory;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ final class ReleasesController extends Controller
         $team = $this->currentTeam();
 
         $deployment = $team === null ? null : Deployment::query()
-            ->whereIn('application_id', $team->applications()->select('id'))
+            ->whereIn('application_id', app(TeamAccess::class)->applications($request->user(), $team)->select('id'))
             ->where('status', DeploymentStatus::Succeeded->value)
             ->whereNotNull('release')
             ->with('application')
@@ -79,12 +80,12 @@ final class ReleasesController extends Controller
                 'rollback_href' => route('servers.applications.rollback', [$server, $application]),
                 'rolled_back' => $rolledBack ? Formats::release($current) : null,
             ],
-            'applications' => $team?->applications()->orderBy('name')->get()->map(fn(Application $each): array => [
+            'applications' => ($team === null ? collect() : app(TeamAccess::class)->applications($request->user(), $team)->orderBy('name')->get())->map(fn(Application $each): array => [
                 'id' => $each->id,
                 'name' => $each->name,
                 'href' => route('servers.applications.releases.index', [$each->server_id, $each]),
                 'current' => $each->id === $application->id,
-            ])->values() ?? [],
+            ])->values(),
             'releases' => $deployments->map(fn(Deployment $deployment): array => [
                 'id' => $deployment->id,
                 'release' => $deployment->release,

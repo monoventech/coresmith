@@ -348,6 +348,7 @@ final class SmartToggles
             Preferences::TOGGLE_CHANGES,
             new ApplicationToggledNotification($application, $this->label($key) . ' turned ' . ($on ? 'on' : 'off'), $actor?->name, withoutDeployment: $key !== self::AUTO_DEPLOY && !($on && in_array($key, [self::REVERB, self::INERTIA_SSR], true))),
             $actor instanceof User ? $actor : null,
+            $application,
         );
     }
 

@@ -27,13 +27,14 @@ use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Server\ProvisioningLog;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 
 final class CloudServerController extends Controller
 {
-    public function store(StoreCloudServerRequest $request, KeyPairGenerator $keys, TeamContext $context, PlanGate $plans): RedirectResponse
+    public function store(StoreCloudServerRequest $request, KeyPairGenerator $keys, TeamContext $context, PlanGate $plans, TeamAccess $access): RedirectResponse
     {
         $team = $context->teamOrFail();
         $account = $request->account();
@@ -73,6 +74,7 @@ final class CloudServerController extends Controller
             ->performedOn($server)
             ->withProperties(['provider' => $label, 'size' => $size->id, 'region' => $region])
             ->log('server_creation_started');
+        $access->grant($team, $request->user(), $server);
 
         RunCloudTask::dispatch($server);
 

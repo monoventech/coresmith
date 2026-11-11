@@ -11,6 +11,8 @@ namespace App\Policies;
 use App\Enums\Ability;
 use App\Models\ManagedDatabase;
 use App\Models\User;
+use App\Services\Teams\TeamAccess;
+use Illuminate\Auth\Access\Response;
 
 final class ManagedDatabasePolicy
 {
@@ -19,9 +21,9 @@ final class ManagedDatabasePolicy
         return $user->teams()->exists();
     }
 
-    public function view(User $user, ManagedDatabase $managedDatabase): bool
+    public function view(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $user->hasTeamAbility($managedDatabase->team, Ability::ViewDatabase);
+        return $this->within($user, $managedDatabase, Ability::ViewDatabase);
     }
 
     public function create(User $user): bool
@@ -29,28 +31,33 @@ final class ManagedDatabasePolicy
         return $user->hasAbilityInAnyTeam(Ability::CreateDatabase);
     }
 
-    public function update(User $user, ManagedDatabase $managedDatabase): bool
+    public function update(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $user->hasTeamAbility($managedDatabase->team, Ability::ViewDatabase);
+        return $this->within($user, $managedDatabase, Ability::ViewDatabase);
     }
 
-    public function delete(User $user, ManagedDatabase $managedDatabase): bool
+    public function delete(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $user->hasTeamAbility($managedDatabase->team, Ability::DeleteDatabase);
+        return $this->within($user, $managedDatabase, Ability::DeleteDatabase);
     }
 
-    public function backup(User $user, ManagedDatabase $managedDatabase): bool
+    public function backup(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $user->hasTeamAbility($managedDatabase->team, Ability::BackupDatabase);
+        return $this->within($user, $managedDatabase, Ability::BackupDatabase);
     }
 
-    public function restore(User $user, ManagedDatabase $managedDatabase): bool
+    public function restore(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $user->hasTeamAbility($managedDatabase->team, Ability::RestoreDatabase);
+        return $this->within($user, $managedDatabase, Ability::RestoreDatabase);
     }
 
-    public function viewCredentials(User $user, ManagedDatabase $managedDatabase): bool
+    public function viewCredentials(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $user->hasTeamAbility($managedDatabase->team, Ability::ViewDatabaseCredentials);
+        return $this->within($user, $managedDatabase, Ability::ViewDatabaseCredentials);
+    }
+
+    private function within(User $user, ManagedDatabase $managedDatabase, Ability $ability): Response|bool
+    {
+        return $managedDatabase->server !== null && app(TeamAccess::class)->hidesServer($user, $managedDatabase->server) ? Response::denyAsNotFound() : $user->hasTeamAbility($managedDatabase->team, $ability);
     }
 }

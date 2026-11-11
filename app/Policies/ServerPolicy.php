@@ -11,6 +11,8 @@ namespace App\Policies;
 use App\Enums\Ability;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Teams\TeamAccess;
+use Illuminate\Auth\Access\Response;
 
 final class ServerPolicy
 {
@@ -19,9 +21,9 @@ final class ServerPolicy
         return $user->teams()->exists();
     }
 
-    public function view(User $user, Server $server): bool
+    public function view(User $user, Server $server): Response|bool
     {
-        return $user->hasTeamAbility($server->team, Ability::ViewServer);
+        return $this->within($user, $server, Ability::ViewServer);
     }
 
     public function create(User $user): bool
@@ -29,23 +31,28 @@ final class ServerPolicy
         return $user->hasAbilityInAnyTeam(Ability::CreateServer);
     }
 
-    public function update(User $user, Server $server): bool
+    public function update(User $user, Server $server): Response|bool
     {
-        return $user->hasTeamAbility($server->team, Ability::UpdateServer);
+        return $this->within($user, $server, Ability::UpdateServer);
     }
 
-    public function delete(User $user, Server $server): bool
+    public function delete(User $user, Server $server): Response|bool
     {
-        return $user->hasTeamAbility($server->team, Ability::DeleteServer);
+        return $this->within($user, $server, Ability::DeleteServer);
     }
 
-    public function viewCredentials(User $user, Server $server): bool
+    public function viewCredentials(User $user, Server $server): Response|bool
     {
-        return $user->hasTeamAbility($server->team, Ability::ViewServerCredentials);
+        return $this->within($user, $server, Ability::ViewServerCredentials);
     }
 
-    public function manageFirewall(User $user, Server $server): bool
+    public function manageFirewall(User $user, Server $server): Response|bool
     {
-        return $user->hasTeamAbility($server->team, Ability::ManageFirewall);
+        return $this->within($user, $server, Ability::ManageFirewall);
+    }
+
+    private function within(User $user, Server $server, Ability $ability): Response|bool
+    {
+        return app(TeamAccess::class)->hidesServer($user, $server) ? Response::denyAsNotFound() : $user->hasTeamAbility($server->team, $ability);
     }
 }
