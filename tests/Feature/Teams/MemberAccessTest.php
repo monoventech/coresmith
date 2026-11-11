@@ -130,7 +130,7 @@ test('the team page shows owners what each member sees and everything there is t
 
     $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
         ->where('can.shareAccess', true)
-        ->where('members', fn($members): bool => collect($members)->firstWhere('id', $member->id)['access'] === ['everything' => false, 'servers' => [$web->id], 'applications' => []]
+        ->where('members', fn($members): bool => collect($members)->firstWhere('id', $member->id)['access'] === ['everything' => false, 'servers' => [$web->id], 'applications' => [], 'projects' => [], 'environments' => []]
             && collect($members)->firstWhere('id', $owner->id)['access'] === null)
         ->where('shareable', ['servers' => [
             ['id' => $cache->id, 'name' => 'cache', 'applications' => [['id' => $api->id, 'name' => 'api']]],
@@ -200,7 +200,7 @@ test('an invitation to only what I share narrows the member when they accept', f
 
     $this->actingAs($newcomer)->post(route('invitations.accept', memberAccessInviteToken('newcomer@example.test')))->assertRedirect();
 
-    expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => []]);
+    expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => []]);
 });
 
 test('an invitation from an owner who picks nothing sees everything', function () {
