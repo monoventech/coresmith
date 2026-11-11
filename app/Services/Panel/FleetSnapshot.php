@@ -230,6 +230,10 @@ final class FleetSnapshot
                 $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'disk ' . (int) round((float) $this->latestMetric($server)?->disk_percent) . '%', 'href' => route('servers.show', $server)];
             }
 
+            if ($server->sshLeftToOwner() && $server->sshPasswordsOn()) {
+                $items[] = ['severity' => 'warning', 'subject' => $server->name, 'summary' => 'password login on', 'href' => route('servers.hardening', $server)];
+            }
+
             foreach ($server->applications as $application) {
                 if ($application->power_state === PowerState::Stopped) {
                     $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => route('servers.applications.show', [$server, $application])];

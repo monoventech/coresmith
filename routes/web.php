@@ -32,6 +32,7 @@ use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberAccessController;
 use App\Http\Controllers\TeamMemberController;
 use App\Http\Controllers\ThisMachineController;
+use App\Http\Controllers\ThisMachineSshController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -104,6 +105,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.activity');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
+    Route::post('servers/{server}/ssh-check', [ThisMachineSshController::class, 'store'])
+        ->middleware('throttle:6,1,ssh-check')
+        ->name('servers.ssh-check');
 
     Route::post('servers/{server}/host-key/accept', [ServerHostKeyController::class, 'accept'])
         ->name('servers.host-key.accept');
