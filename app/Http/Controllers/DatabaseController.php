@@ -105,7 +105,7 @@ final class DatabaseController extends Controller
         $restore = $user->can('restore', $database) && $database->takesBackups();
 
         return Inertia::render('databases/Show', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.databases.index', $server)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => $access->canSeeServer($user, $server) ? route('servers.databases.index', $server) : null],
             'database' => $this->summarise($database),
             'can' => [
                 'viewCredentials' => $user->can('viewCredentials', $database),
@@ -210,7 +210,9 @@ final class DatabaseController extends Controller
 
         activity()->performedOn($database)->log('database_deleted');
 
-        return to_route('servers.databases.index', $server)->with('success', match (true) {
+        $back = app(TeamAccess::class)->canSeeServer($request->user(), $server) ? to_route('servers.databases.index', $server) : to_route('dashboard');
+
+        return $back->with('success', match (true) {
             $database->onSharedRedis() => "Removed {$database->name}. The shared Redis on {$server->name} keeps what's in it.",
             $database->type === DatabaseType::Redis => "Deleted {$database->name} and its Redis instance from {$server->name}.",
             default => "Deleted {$database->name} and its user from {$server->name}.",

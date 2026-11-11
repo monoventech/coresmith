@@ -11,11 +11,13 @@ use App\Jobs\ListDatabaseBackups;
 use App\Jobs\RestoreDatabase;
 use App\Models\Application;
 use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Database\DatabaseBackups;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Queue;
@@ -241,3 +243,20 @@ test('a restore that finished today is shown, and an old one is not', function (
     'an hour ago' => ['2026-11-11 13:00:00', true],
     'two days ago' => ['2026-11-09 13:00:00', false],
 ]);
+
+test("a narrowed member can't stop an app they can't see while restoring", function () {
+    Queue::fake();
+    $database = databaseRestoreFixture();
+    $staging = Project::factory()->for($database->team)->withEnvironments(['Staging'])->create()->environments()->sole();
+    $database->update(['environment_id' => $staging->id]);
+    $seen = Application::factory()->for($database->team)->for($database->server)->create(['name' => 'shop-staging', 'environment_id' => $staging->id]);
+    $hidden = Application::factory()->for($database->team)->for($database->server)->create(['name' => 'billing']);
+    $admin = databaseRestoreMember($database->team, TeamRole::Admin, seesEverything: false);
+    app(TeamAccess::class)->grant($database->team, $admin, $staging);
+    databaseRestoreListing();
+
+    databaseRestorePost($admin, $database, ['stop' => [$seen->id, $hidden->id]])
+        ->assertSessionHasErrors(['stop.1' => "One of those apps isn't one you can see. Reload the page and choose again."]);
+
+    Queue::assertNothingPushed();
+});

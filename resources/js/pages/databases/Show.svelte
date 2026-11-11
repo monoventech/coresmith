@@ -25,7 +25,7 @@
         restore = null,
         apps = []
     }: {
-        server: { id: string; name: string; href: string }
+        server: { id: string; name: string; href: string | null }
         database: {
             id: string
             name: string
@@ -132,7 +132,7 @@
 
 <AppHead title={database.name} />
 
-<BackLink href={server.href} label={server.name} />
+<BackLink href={server.href ?? route('dashboard')} label={server.href ? server.name : 'Fleet'} />
 
 <div class="mb-6 flex flex-wrap items-end justify-between gap-6">
     <div class="min-w-0">
