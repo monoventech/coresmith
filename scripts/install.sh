@@ -60,6 +60,7 @@ readonly HORIZON_LOG="/var/log/coresmith-horizon.log"
 readonly REVERB_LOG="/var/log/coresmith-reverb.log"
 readonly FPM_ERROR_LOG="/var/log/coresmith-fpm-error.log"
 readonly PHP_VERSION="8.5"
+readonly APT_SOURCES="/etc/apt/sources.list.d"
 
 if [ -t 1 ]; then
     readonly RED=$'\033[0;31m' GREEN=$'\033[0;32m' YELLOW=$'\033[1;33m'
@@ -544,6 +545,20 @@ ensure_database_password() {
 
 # ── Phase 1: packages ────────────────────────────────────────────────────────
 
+add_php_repository() {
+    local source
+
+    for source in "$APT_SOURCES"/ondrej-ubuntu-php-*.sources "$APT_SOURCES"/ondrej-ubuntu-php-*.list; do
+        if [ -f "$source" ]; then
+            log "Ondřej Surý's PHP archive is already set up."
+
+            return 0
+        fi
+    done
+
+    run add-apt-repository -y ppa:ondrej/php
+}
+
 install_system_packages() {
     log "Phase 1/8: installing system packages..."
 
@@ -554,7 +569,7 @@ install_system_packages() {
         run apt-get install -y -qq ca-certificates curl gnupg lsb-release software-properties-common
 
         if [ "$OS_ID" = "ubuntu" ]; then
-            run add-apt-repository -y ppa:ondrej/php
+            add_php_repository
         elif [ "$OS_ID" = "debian" ]; then
             curl -fsSLo /tmp/debsuryorg-archive-keyring.deb https://packages.sury.org/debsuryorg-archive-keyring.deb
             run dpkg -i /tmp/debsuryorg-archive-keyring.deb

@@ -1654,3 +1654,25 @@ test('the install log, which holds the setup link, is readable by root only, bef
         ->and(installScriptBody())->toContain("    create_systemd_services\n")
         ->and(installScriptFunctions('create_systemd_services'))->toContain("    secure_logs\n");
 });
+
+test("a re-run on Ubuntu leaves Ondřej Surý's PHP archive as it is, so it never needs Launchpad's API again", function (array $sources, bool $added) {
+    $directory = sys_get_temp_dir() . '/coresmith-apt-' . bin2hex(random_bytes(4));
+    mkdir($directory, 0700, true);
+
+    foreach ($sources as $source) {
+        file_put_contents("{$directory}/{$source}", "Types: deb\n");
+    }
+
+    $process = new Process(['bash', '-c', "set -euo pipefail\nOS_ID=ubuntu\nAPT_SOURCES=" . escapeshellarg($directory) . "\nlog() { printf 'log %s\\n' \"\$1\"; }\nrun() { printf 'run %s\\n' \"\$*\"; }\n"
+        . installScriptFunctions('add_php_repository') . "\nadd_php_repository\n"]);
+    $process->run();
+    (new Process(['rm', '-rf', $directory]))->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(str_contains($process->getOutput(), 'run add-apt-repository -y ppa:ondrej/php'))->toBe($added);
+})->with([
+    'a fresh machine' => [[], true],
+    'Ubuntu 24.04 with the archive set up' => [['ondrej-ubuntu-php-noble.sources'], false],
+    'Ubuntu 22.04 with the archive set up' => [['ondrej-ubuntu-php-jammy.list'], false],
+    'another archive only' => [['nodesource.sources'], true],
+]);
