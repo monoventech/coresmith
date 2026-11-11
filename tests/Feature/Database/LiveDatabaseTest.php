@@ -3,11 +3,16 @@
 declare(strict_types=1);
 
 use App\Enums\DatabaseType;
+use App\Jobs\BackupDatabase;
+use App\Jobs\RestoreDatabase;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Services\Database\DatabaseBackups;
 use App\Services\Database\DatabaseManager;
+use App\Services\Server\SecurityHardening;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
 function liveDatabaseSettings(): ?array
@@ -190,3 +195,64 @@ test('a real database comes back exactly as its backup, with what changed since 
         $connection->disconnect();
     }
 })->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+test('on a real server, the restore job backs up first, lists the backups and puts the chosen one back', function (DatabaseType $type) {
+    Notification::fake();
+    $connection = liveDatabaseConnection();
+    $server = $connection->server();
+    $databases = app(DatabaseManager::class);
+    $suffix = Str::lower(Str::random(8));
+    $postgres = $type === DatabaseType::Postgresql;
+    $database = ManagedDatabase::factory()->for($server->team)->for($server)->create([
+        'type' => $type,
+        'name' => "live_job_{$suffix}",
+        'db_user' => "live_job_{$suffix}",
+        'privilege_level' => 'standard',
+        'port' => $postgres ? 5432 : 3306,
+    ]);
+    $password = DatabaseManager::generatePassword();
+    $database->forceFill(['db_password' => $password])->save();
+    $as = fn(string $sql): string => trim($connection->execute(liveDatabaseAs($database, $password, $sql))->throw()->output);
+
+    try {
+        $databases->create($connection, $database, $password);
+        $as('CREATE TABLE notes (id INT PRIMARY KEY, body TEXT)');
+        $as("INSERT INTO notes VALUES (1, 'kept')");
+        $stamp = now()->subMinute()->format('YmdHis');
+        app()->call([new BackupDatabase($database, $stamp), 'handle']);
+        $as("INSERT INTO notes VALUES (2, 'lost')");
+
+        $listing = app(DatabaseBackups::class)->refresh($database);
+
+        expect(collect($listing->backups)->pluck('stamp')->all())->toContain($stamp)
+            ->and($listing->serverError)->toBeNull();
+
+        app()->call([new RestoreDatabase($database, $stamp, null, collect($listing->backups)->firstWhere('stamp', $stamp)->size, [], ''), 'handle']);
+
+        expect($database->fresh()->restore)->toMatchArray(['state' => 'done', 'error' => null])
+            ->and($as('SELECT body FROM notes ORDER BY id'))->toBe('kept')
+            ->and(collect(app(DatabaseBackups::class)->refresh($database)->backups)->pluck('stamp')->all())->toContain((string) $database->fresh()->restore['safety'])
+            ->and(trim($connection->execute('ls -a ' . escapeshellarg(DatabaseManager::BACKUP_ROOT . '/' . $database->name), sudo: true)->output))->not->toContain('.restore-');
+    } finally {
+        $databases->drop($connection, $database);
+        $connection->execute('rm -rf ' . escapeshellarg(DatabaseManager::BACKUP_ROOT . '/' . $database->name), sudo: true);
+        $connection->disconnect();
+    }
+})->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+test("a real sshd's password logins are read with the file behind each, and only read", function () {
+    $connection = liveDatabaseConnection();
+
+    try {
+        $before = trim($connection->execute('md5sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf', sudo: true)->output);
+        $logins = app(SecurityHardening::class)->readPasswordLogins($connection);
+        $after = trim($connection->execute('md5sum /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf', sudo: true)->output);
+
+        expect($logins)->not->toBeNull()
+            ->and($after)->toBe($before)
+            ->and(array_diff($logins->on, ['password', 'keyboard', 'root']))->toBe([])
+            ->and(array_diff(array_keys($logins->sources), $logins->on))->toBe([]);
+    } finally {
+        $connection->disconnect();
+    }
+});
