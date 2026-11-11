@@ -91,7 +91,7 @@
                     <div>
                         <p class="m-0 mb-1.5">Coresmith couldn't reach these servers, so its key is still on them:</p>
                         <ul
-                            class="m-0 flex flex-col gap-1 pl-4.5 font-mono text-[12.5px]"
+                            class="m-0 flex list-disc flex-col gap-1 pl-4.5 font-mono text-[12.5px]"
                             data-testid="removal-unreached"
                         >
                             {#each status.failed as server (server.name)}
@@ -116,7 +116,7 @@
                 stop the removal.
             </p>
             <ol
-                class="m-0 flex max-w-[64ch] flex-col gap-2 pl-4.5 text-[13.5px]"
+                class="m-0 flex max-w-[64ch] list-decimal flex-col gap-2 pl-4.5 text-[13.5px]"
                 data-testid="removal-steps"
                 aria-live="polite"
             >

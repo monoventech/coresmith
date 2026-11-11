@@ -65,7 +65,10 @@
                 <Dialog.Title>Remove Coresmith?</Dialog.Title>
                 <Dialog.Description>This is permanent and can't be undone.</Dialog.Description>
             </Dialog.Header>
-            <ul class="mt-4 mb-0 flex flex-col gap-2 pl-4.5 text-[13px] leading-normal" data-testid="removal-what">
+            <ul
+                class="mt-4 mb-0 flex list-disc flex-col gap-2 pl-4.5 text-[13px] leading-normal"
+                data-testid="removal-what"
+            >
                 {#if removal.servers > 0}
                     <li>{servers} keep running. Deploys stop until you point another Coresmith at them.</li>
                     <li>Coresmith takes its key off each server it can reach.</li>
