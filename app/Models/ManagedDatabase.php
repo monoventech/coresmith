@@ -60,6 +60,11 @@ class ManagedDatabase extends Model
         return $this->type !== DatabaseType::Redis;
     }
 
+    public function restoring(): bool
+    {
+        return (((array) $this->restore)['state'] ?? null) === 'running';
+    }
+
     public function credentialsLock(): Lock
     {
         return Cache::lock('database-credentials:' . $this->getKey(), self::CREDENTIALS_LOCK_SECONDS);
@@ -77,6 +82,7 @@ class ManagedDatabase extends Model
             'is_external' => 'boolean',
             'last_offsite_at' => 'datetime',
             'credentials_shown_at' => 'datetime',
+            'restore' => 'array',
         ];
     }
 }
