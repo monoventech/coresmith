@@ -115,6 +115,11 @@ class Application extends Model
         return $this->belongsTo(Team::class);
     }
 
+    public function environment(): BelongsTo
+    {
+        return $this->belongsTo(Environment::class);
+    }
+
     public function deployments(): HasMany
     {
         return $this->hasMany(Deployment::class);
