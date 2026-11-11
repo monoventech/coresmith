@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ApplicationApiController;
 use App\Http\Controllers\Api\DeploymentApiController;
+use App\Http\Controllers\Api\ProjectApiController;
 use App\Http\Controllers\Api\ServerApiController;
 use App\Http\Controllers\CaddyAskController;
 use App\Http\Controllers\GitHubWebhookController;
@@ -49,6 +50,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:120,1,api-v1', 'plan'
         ->middleware('token.can:server.view')->name('api.servers.index');
     Route::get('servers/{server}', [ServerApiController::class, 'show'])
         ->middleware('token.can:server.view')->name('api.servers.show');
+
+    Route::get('projects', [ProjectApiController::class, 'index'])
+        ->middleware('token.can:application.view')->name('api.projects.index');
+    Route::get('projects/{project}', [ProjectApiController::class, 'show'])
+        ->middleware('token.can:application.view')->name('api.projects.show');
 
     Route::get('applications', [ApplicationApiController::class, 'index'])
         ->middleware('token.can:application.view')->name('api.applications.index');

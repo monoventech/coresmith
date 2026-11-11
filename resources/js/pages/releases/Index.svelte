@@ -3,6 +3,7 @@
     import { Undo2 } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
+    import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { cn } from '@/lib/utils'
@@ -37,13 +38,17 @@
         applications = [],
         releases = [],
         rollback = null,
-        can
+        can,
+        scope = '',
+        scopes = []
     }: {
         application: AppRef | null
         applications: { id: string; name: string; href: string; current: boolean }[]
         releases: Release[]
         rollback?: string | null
         can: { deploy: boolean }
+        scope?: string
+        scopes?: { value: string; label: string }[]
     } = $props()
 
     let target = $state<Release | null>(null)
@@ -103,6 +108,8 @@
         <Button disabled={working} onclick={deploy}>Deploy</Button>
     {/if}
 </div>
+
+<ProjectScopeSelect {scopes} {scope} class="mt-4 block w-56 max-sm:w-full" />
 
 {#if applications.length > 1}
     <nav class="mt-4 flex flex-wrap gap-2" aria-label="Applications">
