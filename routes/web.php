@@ -11,6 +11,7 @@ use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabasePasswordController;
+use App\Http\Controllers\DatabaseRestoreController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
@@ -157,6 +158,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update'])->withTrashed(['index']);
     Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
         ->name('servers.databases.backup');
+    Route::post('servers/{server}/databases/{database}/restore', [DatabaseRestoreController::class, 'store'])
+        ->middleware('throttle:6,1,database-restore')
+        ->name('servers.databases.restore');
     Route::post('servers/{server}/databases/{database}/password', [DatabasePasswordController::class, 'show'])
         ->middleware('throttle:30,1,database-password')
         ->name('servers.databases.password.show');

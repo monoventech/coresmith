@@ -12,11 +12,14 @@ use App\Exceptions\OffsiteListFailed;
 use App\Models\BackupDestination;
 use App\Models\ManagedDatabase;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 final class DatabaseBackups
 {
     public const LIST_SECONDS = 10;
+
+    public const CACHE_SECONDS = 120;
 
     private const CHECK_S3 = 'Check the bucket name, region and keys in Settings, General.';
 
@@ -59,6 +62,27 @@ final class DatabaseBackups
         return new BackupListing(array_values($found), $serverError, $s3Error);
     }
 
+    public function cached(ManagedDatabase $database): ?BackupListing
+    {
+        $listing = Cache::get($this->cacheKey($database));
+
+        return $listing instanceof BackupListing ? $listing : null;
+    }
+
+    public function refresh(ManagedDatabase $database): BackupListing
+    {
+        $listing = $this->list($database);
+
+        Cache::put($this->cacheKey($database), $listing, self::CACHE_SECONDS);
+
+        return $listing;
+    }
+
+    public function forget(ManagedDatabase $database): void
+    {
+        Cache::forget($this->cacheKey($database));
+    }
+
     public function find(ManagedDatabase $database, string $stamp): ?Backup
     {
         foreach ($this->list($database)->backups as $backup) {
@@ -68,6 +92,11 @@ final class DatabaseBackups
         }
 
         return null;
+    }
+
+    private function cacheKey(ManagedDatabase $database): string
+    {
+        return 'database-backups:' . $database->getKey();
     }
 
     /**

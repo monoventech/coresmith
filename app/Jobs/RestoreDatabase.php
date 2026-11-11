@@ -18,6 +18,7 @@ use App\Notifications\DatabaseRestoreNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\Database\Backup;
+use App\Services\Database\DatabaseBackups;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\OffsiteBackups;
 use App\Services\SSH\SSHConnectionManager;
@@ -225,6 +226,8 @@ final class RestoreDatabase implements ShouldQueue
             'error' => $error,
             'finished_at' => now()->toIso8601String(),
         ]])->save();
+
+        app(DatabaseBackups::class)->forget($fresh);
 
         $by = User::query()->find($this->by);
         $when = Backup::at($this->stamp)->format('M j, H:i');

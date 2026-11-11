@@ -6,18 +6,24 @@
     import { Form, page, router } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
+    import BackupsCard from '@/components/databases/BackupsCard.svelte'
+    import RestoreDialog from '@/components/databases/RestoreDialog.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import type { BackupList, BackupRow, RestoreApp, RestoreState } from '@/lib/databases'
 
     let {
         server,
         database,
         can,
-        offsite = null
+        offsite = null,
+        backups = null,
+        restore = null,
+        apps = []
     }: {
         server: { id: string; name: string; href: string }
         database: {
@@ -34,8 +40,11 @@
             password_shown: boolean
             shared_redis: boolean
         }
-        can: { viewCredentials: boolean; backup: boolean; delete: boolean }
+        can: { viewCredentials: boolean; backup: boolean; delete: boolean; restore: boolean }
         offsite?: { sent: string | null; error: string | null } | null
+        backups?: BackupList | null
+        restore?: RestoreState | null
+        apps?: RestoreApp[]
     } = $props()
 
     const ENGINES: Record<string, string> = { mysql: 'MySQL', postgresql: 'PostgreSQL', redis: 'Redis' }
@@ -46,6 +55,30 @@
     let working = $state(false)
     let copied = $state<'password' | 'url' | null>(null)
     let typed = $state('')
+    let restoring = $state<BackupRow | null>(null)
+    let polls = $state(0)
+
+    const LISTING_POLLS = 15
+    const takesBackups = $derived(database.type !== 'redis')
+    const running = $derived(restore?.state === 'running')
+
+    $effect(() => {
+        const listing = takesBackups && !backups && polls < LISTING_POLLS
+
+        if (!listing && !running) {
+            return
+        }
+
+        const timer = setInterval(
+            () => {
+                polls += backups ? 0 : 1
+                router.reload({ only: ['backups', 'restore'] })
+            },
+            running ? 3000 : 2000
+        )
+
+        return () => clearInterval(timer)
+    })
 
     const password = $derived(database.has_password ? (page.flash?.databasePassword ?? null) : null)
     const redis = $derived(database.type === 'redis')
@@ -123,7 +156,7 @@
         {/if}
     </div>
     {#if can.backup}
-        <Button variant="outline" onclick={backup}>Back up now</Button>
+        <Button variant="outline" disabled={running} onclick={backup}>Back up now</Button>
     {/if}
 </div>
 
@@ -209,6 +242,20 @@
                 <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
         </div>
+        {#if takesBackups}
+            <BackupsCard
+                serverName={server.name}
+                databaseName={database.name}
+                {backups}
+                {restore}
+                s3={offsite !== null}
+                canRestore={can.restore}
+                canBackup={can.backup}
+                gaveUp={polls >= LISTING_POLLS}
+                onRestore={(row) => (restoring = row)}
+                onBackup={backup}
+            />
+        {/if}
         {#if can.delete}
             <div class="border-danger flex-1 rounded-xl border bg-card px-5.5 py-5">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
@@ -299,3 +346,13 @@
         </Form>
     </Dialog.Content>
 </Dialog.Root>
+
+{#if can.restore}
+    <RestoreDialog
+        bind:backup={restoring}
+        serverId={server.id}
+        databaseId={database.id}
+        databaseName={database.name}
+        {apps}
+    />
+{/if}

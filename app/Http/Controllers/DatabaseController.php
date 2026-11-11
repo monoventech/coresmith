@@ -9,20 +9,29 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\DatabaseType;
+use App\Enums\PowerState;
 use App\Enums\PrivilegeLevel;
 use App\Http\Requests\Database\DestroyDatabaseRequest;
 use App\Http\Requests\Database\StoreDatabaseRequest;
 use App\Jobs\BackupDatabase;
 use App\Jobs\CreateDatabase;
+use App\Jobs\ListDatabaseBackups;
+use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Services\Database\Backup;
+use App\Services\Database\BackupListing;
+use App\Services\Database\DatabaseBackups;
 use App\Services\Database\DatabaseManager;
+use App\Services\Database\DatabaseUsage;
 use App\Services\Database\OffsiteBackups;
 use App\Services\Database\RedisPorts;
 use App\Services\Database\SharedRedis;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Teams\TeamAccess;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -87,24 +96,96 @@ final class DatabaseController extends Controller
             ->with('success', 'Database queued for creation.');
     }
 
-    public function show(Server $server, ManagedDatabase $database): Response
+    public function show(Request $request, Server $server, ManagedDatabase $database, DatabaseBackups $backups, DatabaseUsage $usage, TeamAccess $access): Response
     {
         $this->authorize('view', $database);
         $this->assertBelongsTo($server, $database);
+
+        $user = $request->user();
+        $restore = $user->can('restore', $database) && $database->takesBackups();
 
         return Inertia::render('databases/Show', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.databases.index', $server)],
             'database' => $this->summarise($database),
             'can' => [
-                'viewCredentials' => auth()->user()?->can('viewCredentials', $database) ?? false,
-                'backup' => (auth()->user()?->can('backup', $database) ?? false) && $database->takesBackups(),
-                'delete' => auth()->user()?->can('delete', $database) ?? false,
+                'viewCredentials' => $user->can('viewCredentials', $database),
+                'backup' => $user->can('backup', $database) && $database->takesBackups(),
+                'delete' => $user->can('delete', $database),
+                'restore' => $restore,
             ],
             'offsite' => !$this->goesToS3($database) ? null : [
                 'sent' => Formats::when($database->last_offsite_at),
                 'error' => $database->last_offsite_error,
             ],
+            'backups' => $this->listedBackups($database, $backups),
+            'restore' => $this->restoreState($database),
+            'apps' => !$restore ? [] : $server->applications()->orderBy('name')->get()
+                ->filter(fn(Application $application): bool => $access->canSeeApplication($user, $application))
+                ->map(fn(Application $application): array => [
+                    'id' => $application->id,
+                    'name' => $application->name,
+                    'uses' => $usage->mentions($application, $database),
+                    'running' => $application->power_state === PowerState::Active,
+                ])->values()->all(),
         ]);
+    }
+
+    /**
+     * @return array{rows: list<array{stamp: string, when: string, size: string, on_server: bool, in_s3: bool}>, server_error: string|null, s3_error: string|null}|null
+     */
+    private function listedBackups(ManagedDatabase $database, DatabaseBackups $backups): ?array
+    {
+        if (!$database->takesBackups()) {
+            return null;
+        }
+
+        $listing = $backups->cached($database);
+
+        if ($listing === null) {
+            ListDatabaseBackups::dispatch($database);
+
+            return null;
+        }
+
+        return $this->backups($listing);
+    }
+
+    /**
+     * @return array{rows: list<array{stamp: string, when: string, size: string, on_server: bool, in_s3: bool}>, server_error: string|null, s3_error: string|null}
+     */
+    private function backups(BackupListing $listing): array
+    {
+        return [
+            'rows' => array_map(fn(Backup $backup): array => [
+                'stamp' => $backup->stamp,
+                'when' => $backup->at->format('M j, H:i'),
+                'size' => Formats::bytes($backup->size),
+                'on_server' => $backup->onServer(),
+                'in_s3' => $backup->inS3(),
+            ], $listing->backups),
+            'server_error' => $listing->serverError,
+            's3_error' => $listing->s3Error,
+        ];
+    }
+
+    /**
+     * @return array{state: string, when: string, step: string|null, error: string|null}|null
+     */
+    private function restoreState(ManagedDatabase $database): ?array
+    {
+        $restore = (array) $database->restore;
+        $finished = is_string($restore['finished_at'] ?? null) ? CarbonImmutable::parse($restore['finished_at']) : null;
+
+        if (!is_string($restore['stamp'] ?? null) || ($database->restoring() === false && ($finished === null || $finished->lt(now()->subDay())))) {
+            return null;
+        }
+
+        return [
+            'state' => (string) ($restore['state'] ?? 'failed'),
+            'when' => Backup::at($restore['stamp'])->format('M j, H:i'),
+            'step' => is_string($restore['step'] ?? null) ? $restore['step'] : null,
+            'error' => is_string($restore['error'] ?? null) ? $restore['error'] : null,
+        ];
     }
 
     public function destroy(DestroyDatabaseRequest $request, Server $server, ManagedDatabase $database, SSHConnectionManager $connections, DatabaseManager $databases): RedirectResponse
@@ -156,6 +237,10 @@ final class DatabaseController extends Controller
         $this->authorize('backup', $database);
         $this->assertBelongsTo($server, $database);
         abort_unless($database->takesBackups(), 404);
+
+        if ($database->restoring()) {
+            return back()->with('error', "Wait for the restore of {$database->name} to finish, then back up.");
+        }
 
         BackupDatabase::dispatch($database, now()->format('YmdHis'), offsite: $this->goesToS3($database));
 
