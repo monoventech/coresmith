@@ -15,10 +15,13 @@ use App\Http\Controllers\DatabaseRestoreController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
+use App\Http\Controllers\EnvironmentContentsController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NoTeamController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectEnvironmentController;
 use App\Http\Controllers\ReleasesController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
@@ -42,6 +45,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'latest'])->name('releases.index');
+
+    Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
+    Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
+    Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
+    Route::put('projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
+    Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
+    Route::scopeBindings()->group(function () {
+        Route::post('projects/{project}/environments', [ProjectEnvironmentController::class, 'store'])->name('projects.environments.store');
+        Route::put('projects/{project}/environments/{environment}', [ProjectEnvironmentController::class, 'update'])->name('projects.environments.update');
+        Route::delete('projects/{project}/environments/{environment}', [ProjectEnvironmentController::class, 'destroy'])->name('projects.environments.destroy');
+        Route::post('projects/{project}/environments/{environment}/contents', [EnvironmentContentsController::class, 'store'])->name('projects.environments.contents.store');
+        Route::delete('projects/{project}/environments/{environment}/applications/{application}', [EnvironmentContentsController::class, 'destroyApplication'])->name('projects.environments.applications.destroy');
+        Route::delete('projects/{project}/environments/{environment}/databases/{database}', [EnvironmentContentsController::class, 'destroyDatabase'])->name('projects.environments.databases.destroy');
+    });
     Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
     Route::get('start', [NoTeamController::class, 'show'])->middleware('cloud')->name('start.show');
     Route::post('start', [NoTeamController::class, 'store'])

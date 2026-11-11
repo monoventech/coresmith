@@ -60,7 +60,7 @@ export function sectionFor(path: string): Section | null {
         return 'releases'
     }
 
-    if (path.startsWith('/dashboard') || path.startsWith('/servers')) {
+    if (path.startsWith('/dashboard') || path.startsWith('/servers') || path.startsWith('/projects')) {
         return 'fleet'
     }
 
