@@ -12,6 +12,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 function projectAccessMember(Team $team): User
 {
@@ -154,4 +155,21 @@ test('an owner sees every project in full', function () {
     expect(projectAccessNames($access->projects($owner, $team)))->toBe(['Storefront'])
         ->and($access->seesWholeProject($owner, $fleet['storefront']))->toBeTrue()
         ->and(projectAccessNames($access->databases($owner, $team)))->toBe(['blog_db', 'shop_db', 'staging_db']);
+});
+
+test('checking many projects reached through environments looks the projects up once', function () {
+    $team = Team::factory()->create();
+    $member = projectAccessMember($team);
+    $projects = collect(['One', 'Two', 'Three'])->map(fn(string $name): Project => Project::factory()->for($team)->withEnvironments(['Staging'])->create(['name' => $name]));
+    $projects->each(fn(Project $project) => app(TeamAccess::class)->grant($team, $member, $project->environments()->sole()));
+    app()->forgetScopedInstances();
+    $access = app(TeamAccess::class);
+    $access->canSeeProject($member, $projects->first());
+    $projects->each(fn(Project $project) => $project->loadMissing('team'));
+
+    DB::enableQueryLog();
+    $seen = $projects->every(fn(Project $project): bool => $access->canSeeProject($member, $project));
+    $lookups = collect(DB::getQueryLog())->filter(fn(array $query): bool => str_contains($query['query'], 'environments'))->count();
+
+    expect($seen)->toBeTrue()->and($lookups)->toBe(0);
 });

@@ -32,6 +32,9 @@ final class TeamAccess
     /** @var array<string, list<string>> */
     private array $environments = [];
 
+    /** @var array<string, list<string>> */
+    private array $reached = [];
+
     public function seesEverything(User $user, Team $team): bool
     {
         return $this->membership($user, $team)['everything'];
@@ -323,9 +326,10 @@ final class TeamAccess
      */
     private function projectIds(User $user, Team $team): array
     {
+        $key = $team->getKey() . ':' . $user->getKey();
         $granted = $this->granted($user, $team);
 
-        return array_values(array_unique([
+        return $this->reached[$key] ??= array_values(array_unique([
             ...$granted['projects'],
             ...Environment::query()->whereIn('id', $granted['environments'])->pluck('project_id')->all(),
         ]));
@@ -335,6 +339,6 @@ final class TeamAccess
     {
         $key = $team->getKey() . ':' . $user->getKey();
 
-        unset($this->memberships[$key], $this->grants[$key], $this->environments[$key]);
+        unset($this->memberships[$key], $this->grants[$key], $this->environments[$key], $this->reached[$key]);
     }
 }
