@@ -3,9 +3,9 @@
     import { onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import ActivityRow from '@/components/fleet/ActivityRow.svelte'
+    import FleetHeader from '@/components/fleet/FleetHeader.svelte'
     import MetricBar from '@/components/fleet/MetricBar.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
@@ -47,10 +47,6 @@
         })
     )
 
-    function plural(count: number, one: string, many: string): string {
-        return `${count} ${count === 1 ? one : many}`
-    }
-
     function quickDeploy(event: MouseEvent, server: ServerCard) {
         event.stopPropagation()
 
@@ -72,21 +68,13 @@
 <AppHead title="Fleet" />
 
 <div data-screen="fleet">
-    <div class="mb-7 flex flex-wrap items-end justify-between gap-6 max-sm:mt-3.5 max-sm:mb-4">
-        <div>
-            <h1 class="type-h1 m-0 max-sm:text-[26px]">Your <MarkerUnderline>fleet</MarkerUnderline></h1>
-            <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:mt-1 max-sm:text-[13px]">
-                {plural(counts.servers, 'server', 'servers')} · {plural(
-                    counts.applications,
-                    'application',
-                    'applications'
-                )} <span class="max-sm:hidden">· everything deployed from git</span>
-            </p>
-        </div>
-        {#if can.createServer && servers.length > 0}
-            <Button href={route('servers.create')} class="max-sm:hidden">Provision a server</Button>
-        {/if}
-    </div>
+    <FleetHeader {counts}>
+        {#snippet action()}
+            {#if can.createServer && servers.length > 0}
+                <Button href={route('servers.create')} class="max-sm:hidden">Provision a server</Button>
+            {/if}
+        {/snippet}
+    </FleetHeader>
 
     {#if servers.length === 0 && shared.length === 0 && narrowed}
         <EmptyState
