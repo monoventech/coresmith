@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.1 (2026-11-11)
+
+### Added
+- feat: Coresmith can be removed from Settings, databases restore from their backups, and This machine warns while password login is on (#48)
+
 ## v0.7.0 (2026-11-11)
 
 ### Added
