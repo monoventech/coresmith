@@ -622,7 +622,7 @@ test("Coresmith's Caddy admin API is a socket in a folder only Caddy, root and t
         ->and($body)->toContain('run systemd-tmpfiles --create "$CADDY_ADMIN_TMPFILES"')
         ->and($body)->toContain("printf '    admin unix/%s|0222\\n' \"\$CADDY_ADMIN_SOCKET\"")
         ->and($body)->toContain('update_env CORESMITH_CADDY_ADMIN_SOCKET "$CADDY_ADMIN_SOCKET"')
-        ->and($body)->not->toContain('localhost:2019');
+        ->and(preg_replace("/<<-'UNINSTALLER'\n.*?\n\tUNINSTALLER\n/s", '', $body))->not->toContain('localhost:2019');
 });
 
 test('the setup token is written by the panel user into a file it owns', function () {
@@ -875,8 +875,8 @@ test('php-fpm never reaches the release through the symlink', function () {
         ->and(preg_match('/open_basedir.*\$\{INSTALL_DIR\}/', installScriptBody()))->toBe(0);
 });
 
-test("php-fpm may open only the releases, Coresmith's data, the helper for this machine, the IPv6 address table and /tmp", function () {
-    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', ProcStableAddresses::PATH, '/tmp'])
+test("php-fpm may open only the releases, Coresmith's data, the helpers for this machine and for removal, the IPv6 address table and /tmp", function () {
+    expect(installScriptBasedir())->toBe(['${RELEASES_DIR}', '${SHARED_DIR}', '${DATA_DIR}', '${THIS_MACHINE_DIR}', '${UNINSTALL_DIR}', ProcStableAddresses::PATH, '/tmp'])
         ->and(installScriptBody())->toContain('readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"')
         ->and((string) file_get_contents(config_path('coresmith.php')))->toContain("env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine')");
 });

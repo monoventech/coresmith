@@ -178,6 +178,8 @@ test('everything the installer creates, the uninstaller removes', function () {
         '/usr/local/libexec/coresmith/this-machine' => '/usr/local/libexec/coresmith/this-machine',
         '/usr/local/libexec/coresmith/persist-caddy-config' => '/usr/local/libexec/coresmith/persist-caddy-config',
         '/var/lib/coresmith-this-machine' => '/var/lib/coresmith-this-machine',
+        '/usr/local/libexec/coresmith/uninstall' => '/usr/local/libexec/coresmith/uninstall',
+        '/var/lib/coresmith-uninstall' => '/var/lib/coresmith-uninstall',
         '/etc/systemd/system/coresmith-apps.slice' => '/etc/systemd/system/coresmith-apps.slice',
         'caddy.service.d/coresmith.conf' => 'caddy.service.d/coresmith.conf',
         '/etc/caddy/coresmith' => '/etc/caddy/coresmith',
@@ -424,7 +426,7 @@ test('only files root owns are given back to the panel', function () {
 });
 
 test('the app and config folders older installers created are still removed, unless apps are deployed there', function () {
-    expect(file_get_contents(base_path('scripts/install.sh')))->not->toContain('/var/coresmith')
+    expect(preg_replace("/<<-'UNINSTALLER'\n.*?\n\tUNINSTALLER\n/s", '', (string) file_get_contents(base_path('scripts/install.sh'))))->not->toContain('/var/coresmith')
         ->and(uninstallerBody())->toContain('APPS_DIR="/var/coresmith"')
         ->and(uninstallerBody())->toContain('CONFIG_DIR="/etc/coresmith"')
         ->and(uninstallerBody())->toContain('rm -rf "${APPS_DIR:?}" "${CONFIG_DIR:?}"');
