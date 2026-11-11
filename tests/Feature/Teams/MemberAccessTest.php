@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\TeamRole;
 use App\Models\AccessGrant;
 use App\Models\Application;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\TeamInvitation;
@@ -136,7 +137,7 @@ test('the team page shows owners what each member sees and everything there is t
             ['id' => $cache->id, 'name' => 'cache', 'applications' => [['id' => $api->id, 'name' => 'api']]],
             ['id' => $db->id, 'name' => 'db', 'applications' => []],
             ['id' => $web->id, 'name' => 'web', 'applications' => [['id' => $shop->id, 'name' => 'shop']]],
-        ]]));
+        ], 'projects' => []]));
 });
 
 test('an admin sees nobody\'s access and has nothing to share', function () {
@@ -228,3 +229,44 @@ test("an admin's invitee starts with what the admin sees, whatever the form says
 
     expect(TeamInvitation::query()->sole()->sees_everything)->toBe($adminSeesEverything);
 })->with(['an admin who sees everything' => [true], 'a narrowed admin' => [false]]);
+
+test('the team page offers each project and its environments to share', function () {
+    ['team' => $team, 'owner' => $owner] = memberAccessTeam();
+    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
+    [$production, $staging] = $project->environments()->get()->all();
+
+    $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
+        ->where('shareable.projects', [['id' => $project->id, 'name' => 'Storefront', 'environments' => [
+            ['id' => $production->id, 'name' => 'Production'],
+            ['id' => $staging->id, 'name' => 'Staging'],
+        ]]]));
+});
+
+test('an owner shares one environment of a project with a member', function () {
+    ['team' => $team, 'owner' => $owner, 'member' => $member] = memberAccessTeam();
+    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
+    $staging = $project->environments()->where('name', 'Staging')->sole();
+
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$staging->id]])
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved.');
+
+    expect(app(TeamAccess::class)->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id]])
+        ->and(Activity::query()->where('description', 'member_access_changed')->sole()->properties['environments'])->toBe([$staging->id]);
+
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$project->id]])->assertSessionHasNoErrors();
+
+    expect(app(TeamAccess::class)->summary($team, $member)['projects'])->toBe([$project->id]);
+});
+
+test('a project or environment from another team is refused', function () {
+    ['team' => $team, 'owner' => $owner, 'member' => $member] = memberAccessTeam();
+    $theirs = Project::factory()->withEnvironments(['Production'])->create();
+
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$theirs->id]])
+        ->assertSessionHasErrors(['projects' => "One of those projects isn't in Acme any more. Reload the page and choose again."]);
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$theirs->environments()->sole()->id]])
+        ->assertSessionHasErrors(['environments' => "One of those environments isn't in Acme any more. Reload the page and choose again."]);
+
+    expect(app(TeamAccess::class)->seesEverything($member, $team))->toBeTrue();
+});
