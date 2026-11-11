@@ -29,6 +29,7 @@ use App\Http\Controllers\SharedRedisController;
 use App\Http\Controllers\SshKeyController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
+use App\Http\Controllers\TeamMemberAccessController;
 use App\Http\Controllers\TeamMemberController;
 use App\Http\Controllers\ThisMachineController;
 use Illuminate\Support\Facades\Route;
@@ -172,6 +173,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
+    Route::put('teams/{team}/members/{user}/access', [TeamMemberAccessController::class, 'update'])->name('teams.members.access.update');
     Route::delete('teams/{team}/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('teams.invitations.destroy');
 });
 

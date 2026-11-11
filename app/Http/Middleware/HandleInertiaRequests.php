@@ -125,7 +125,7 @@ class HandleInertiaRequests extends Middleware
         $context = app(TeamContext::class);
         $teams = $user->teams()->withCount(['servers', 'members'])->orderBy('teams.name')->get();
         $team = $context->team();
-        $fleet = $team === null ? null : new FleetSnapshot($team);
+        $fleet = $team === null ? null : new FleetSnapshot($team, $user);
         [$current, $others] = $teams->partition(fn(Team $each): bool => $each->id === $team?->id);
 
         return [

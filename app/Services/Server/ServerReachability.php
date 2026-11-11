@@ -170,7 +170,7 @@ final class ServerReachability
     private function alert(Server $server, Notification $notification): void
     {
         try {
-            app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, $notification);
+            app(TeamNotifier::class)->send($server->team, Preferences::SERVER_ALERTS, $notification, about: $server);
         } catch (Throwable $e) {
             report($e);
         }

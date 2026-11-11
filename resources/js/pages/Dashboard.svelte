@@ -21,6 +21,8 @@
         live = null,
         tiles = [],
         servers = [],
+        shared = [],
+        narrowed = false,
         activity = [],
         can
     }: {
@@ -29,6 +31,8 @@
         live: { application: string; server: string; phase: string; href: string } | null
         tiles: Tile[]
         servers: ServerCard[]
+        shared: { id: string; name: string; server: string | null; href: string }[]
+        narrowed: boolean
         activity: ActivityItem[]
         can: { createServer: boolean }
     } = $props()
@@ -37,7 +41,10 @@
     let deploying = $state<string | null>(null)
 
     onMount(() =>
-        follow({ only: ['counts', 'live', 'tiles', 'servers', 'activity', 'panel'], paused: () => deploying !== null })
+        follow({
+            only: ['counts', 'live', 'tiles', 'servers', 'shared', 'activity', 'panel'],
+            paused: () => deploying !== null
+        })
     )
 
     function plural(count: number, one: string, many: string): string {
@@ -81,7 +88,12 @@
         {/if}
     </div>
 
-    {#if servers.length === 0}
+    {#if servers.length === 0 && shared.length === 0 && narrowed}
+        <EmptyState
+            title="Nothing is shared with you yet."
+            description="Ask an owner of your team to share a server or app with you."
+        />
+    {:else if servers.length === 0 && shared.length === 0}
         <EmptyState
             title="No servers yet."
             description="Coresmith deploys to machines you connect. Provision your first one and it is hardened before anything runs on it."
@@ -198,6 +210,30 @@
                 </article>
             {/each}
         </div>
+
+        {#if shared.length > 0}
+            <section
+                class="mb-4 rounded-xl border border-border bg-card px-5.5 py-5"
+                aria-labelledby="shared-apps"
+                data-testid="shared-apps"
+            >
+                <h3 id="shared-apps" class="type-label mb-2 text-muted-foreground">Apps shared with you</h3>
+                <ul class="m-0 flex list-none flex-col p-0">
+                    {#each shared as app (app.id)}
+                        <li
+                            class="flex min-h-11 items-center gap-3 border-t border-border text-[13.5px] first:border-t-0"
+                        >
+                            <Link href={app.href} class="focus-ring rounded-sm font-mono font-medium text-foreground">
+                                {app.name}
+                            </Link>
+                            {#if app.server}
+                                <span class="text-[12.5px] text-muted-foreground">on {app.server}</span>
+                            {/if}
+                        </li>
+                    {/each}
+                </ul>
+            </section>
+        {/if}
 
         <section
             class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"

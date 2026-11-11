@@ -10,11 +10,13 @@ namespace App\Http\Controllers;
 
 use App\Enums\Ability;
 use App\Enums\Edition;
+use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -43,9 +45,10 @@ final class DashboardController extends Controller
             ]);
         }
 
-        $fleet = new FleetSnapshot($team);
+        $fleet = new FleetSnapshot($team, $user);
         $servers = $fleet->servers();
-        $applications = $servers->sum(fn(Server $server): int => $server->applications->count());
+        $shared = $fleet->sharedApplications();
+        $applications = $servers->sum(fn(Server $server): int => $server->applications->count()) + $shared->count();
         $attention = $fleet->attention();
         $running = $fleet->running();
         $uptime = $fleet->uptime();
@@ -90,7 +93,14 @@ final class DashboardController extends Controller
                 ],
             ],
             'servers' => $servers->map(fn(Server $server): array => $fleet->card($server))->values(),
-            'activity' => $feed->forTeam($team),
+            'shared' => $shared->map(fn(Application $application): array => [
+                'id' => $application->id,
+                'name' => $application->name,
+                'server' => $application->server?->name,
+                'href' => route('servers.applications.show', [$application->server_id, $application]),
+            ])->values(),
+            'narrowed' => !app(TeamAccess::class)->seesEverything($user, $team),
+            'activity' => $feed->forTeam($team, viewer: $user),
             'can' => ['createServer' => $user->hasTeamAbility($team, Ability::CreateServer)],
         ]);
     }

@@ -133,7 +133,7 @@ test.describe('general settings', () => {
     })
 
     test('an ssh key is added and removed', async ({ page }, testInfo) => {
-        const name = own(testInfo, 'laptop')
+        const name = `${own(testInfo, 'laptop')}${testInfo.retry > 0 ? `-${testInfo.retry}` : ''}`
         const material = Buffer.from(`e2e-key-${testInfo.project.name}-${Date.now()}`).toString('base64')
 
         await gotoSettings(page, 'General')
@@ -154,7 +154,7 @@ test.describe('general settings', () => {
         await expect(toast(page)).toContainText('Saved.')
         await expect(keys).toContainText(name)
 
-        await keys.getByRole('button', { name: `Remove ${name}` }).click()
+        await keys.getByRole('button', { name: `Remove ${name}`, exact: true }).click()
 
         await expect(toast(page)).toContainText('Removed.')
         await expect(keys).not.toContainText(name)

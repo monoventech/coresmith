@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\Panel\DeploymentPresenter;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -33,7 +34,7 @@ final class DeploymentsController extends Controller
         $filter = array_key_exists((string) $request->query('status'), self::FILTERS) ? (string) $request->query('status') : 'all';
 
         $base = fn(): Builder => Deployment::query()
-            ->whereIn('application_id', $team === null ? [] : $team->applications()->select('id'));
+            ->whereIn('application_id', $team === null ? [] : app(TeamAccess::class)->applications($request->user(), $team)->select('id'));
 
         $status = self::FILTERS[$filter];
 

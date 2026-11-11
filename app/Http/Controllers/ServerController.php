@@ -37,6 +37,7 @@ use App\Services\Server\CoresmithKey;
 use App\Services\Server\ServerConnector;
 use App\Services\Server\ThisMachine;
 use App\Services\SSH\KeyPairGenerator;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Http\RedirectResponse;
@@ -79,7 +80,7 @@ final class ServerController extends Controller
         ]);
     }
 
-    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls, ServerConnector $connector): HttpResponse
+    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls, ServerConnector $connector, TeamAccess $access): HttpResponse
     {
         $team = Team::query()->findOrFail($request->validated('team_id'));
 
@@ -95,6 +96,7 @@ final class ServerController extends Controller
         });
 
         activity()->performedOn($server)->log('server_added');
+        $access->grant($team, $request->user(), $server);
 
         [$tone, $added] = $this->added($server, $connector, $request->safe()->string('password')->value());
 

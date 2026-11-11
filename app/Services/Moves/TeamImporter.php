@@ -73,7 +73,7 @@ final class TeamImporter
             $email = Str::lower(trim((string) ($member['email'] ?? '')));
 
             if ($email !== '' && $email !== Str::lower((string) $owner->email) && filter_var($email, FILTER_VALIDATE_EMAIL) !== false) {
-                $this->invitations->invite($team, $email, TeamRole::tryFrom((string) ($member['role'] ?? '')) ?? TeamRole::Member, $owner);
+                $this->invitations->invite($team, $email, TeamRole::tryFrom((string) ($member['role'] ?? '')) ?? TeamRole::Member, $owner, ($member['sees_everything'] ?? true) !== false);
             }
         }
 

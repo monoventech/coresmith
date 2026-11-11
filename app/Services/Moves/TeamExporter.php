@@ -46,7 +46,7 @@ final class TeamExporter
             'from' => rtrim($this->urls->canonical(), '/'),
             'team' => ['name' => $team->name, 'slug' => $team->slug],
             'members' => $team->members()->whereKeyNot($owner->getKey())->orderBy('email')->get()
-                ->map(fn(User $member): array => ['email' => $member->email, 'role' => (string) $member->pivot->role])->values()->all(),
+                ->map(fn(User $member): array => ['email' => $member->email, 'role' => (string) $member->pivot->role, 'sees_everything' => (bool) $member->pivot->sees_everything])->values()->all(),
             'cloud_providers' => CloudProvider::query()->where('team_id', $team->id)->orderBy('id')->get()
                 ->map(fn(CloudProvider $account): array => ['ref' => $account->id, ...MoveColumns::read($account, MoveColumns::CLOUD_PROVIDERS)])->values()->all(),
             'servers' => $servers->map(fn(Server $server): array => [

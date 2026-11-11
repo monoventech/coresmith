@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Enums\Ability;
+use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
 
@@ -42,5 +43,10 @@ final class TeamPolicy
     public function manageMembers(User $user, Team $team): bool
     {
         return $user->hasTeamAbility($team, Ability::ManageMembers);
+    }
+
+    public function shareAccess(User $user, Team $team): bool
+    {
+        return $user->roleIn($team) === TeamRole::Owner;
     }
 }

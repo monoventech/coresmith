@@ -128,6 +128,16 @@ test('teammates are invited with their roles and the importer is not', function 
         ->toBe([['lin@acme.test', 'member']]);
 });
 
+test('a teammate who saw only what was shared is invited the same way, and one from before this was recorded sees everything', function () {
+    $owner = User::factory()->create(['email' => 'owner@acme.test']);
+    $payload = teamImporterPayload(['members' => [['email' => 'ada@acme.test', 'role' => 'admin'], ['email' => 'lin@acme.test', 'role' => 'member', 'sees_everything' => false]]]);
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    expect(TeamInvitation::query()->where('team_id', $team->id)->orderBy('email')->pluck('sees_everything', 'email')->all())
+        ->toBe(['ada@acme.test' => true, 'lin@acme.test' => false]);
+});
+
 test('apps on coresmith cloud\'s github app wait on a connection that never works until github is connected here', function () {
     $owner = User::factory()->create();
 

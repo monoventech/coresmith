@@ -23,6 +23,7 @@ final class NotifyDeploymentFailed
             $event->deployment->application?->team,
             Preferences::DEPLOY_FAILED,
             new DeploymentFailedNotification($event->deployment),
+            about: $event->deployment->application,
         );
     }
 }

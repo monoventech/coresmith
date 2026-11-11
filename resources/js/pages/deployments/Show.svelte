@@ -51,7 +51,7 @@
         streaming,
         can
     }: {
-        server: { id: string; name: string; href: string }
+        server: { id: string; name: string; href: string | null }
         application: {
             id: string
             name: string

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Models\Server;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -16,7 +17,7 @@ final class ServerApiController extends ApiController
 {
     public function index(Request $request): JsonResponse
     {
-        $servers = $this->team($request)->servers()->orderBy('name')->paginate(
+        $servers = app(TeamAccess::class)->servers($request->user(), $this->team($request))->orderBy('name')->paginate(
             perPage: min((int) $request->integer('per_page', 25), 100),
         );
 
@@ -32,7 +33,7 @@ final class ServerApiController extends ApiController
 
     public function show(Request $request, Server $server): JsonResponse
     {
-        abort_unless($server->team_id === $this->team($request)->getKey(), 404);
+        $this->seenServer($request, $server);
 
         return response()->json(['data' => $this->present($server)]);
     }

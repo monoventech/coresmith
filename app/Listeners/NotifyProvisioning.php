@@ -30,6 +30,7 @@ final class NotifyProvisioning
             $event instanceof ServerProvisioned
                 ? new ServerProvisionedNotification($event->server, $event->durationSeconds)
                 : new ProvisioningFailedNotification($event->server, $event->phase, $event->phaseName),
+            about: $event->server,
         ), report: true);
     }
 }

@@ -16,8 +16,11 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
+use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Server\CertificateCheck;
+use App\Services\Teams\TeamAccess;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
 
@@ -40,14 +43,30 @@ final class FleetSnapshot
     /** @var Collection<int, Deployment>|null */
     private ?Collection $running = null;
 
-    public function __construct(private readonly Team $team) {}
+    public function __construct(private readonly Team $team, private readonly ?User $viewer = null) {}
+
+    /**
+     * @return Collection<int, Application>
+     */
+    public function sharedApplications(): Collection
+    {
+        if ($this->viewer === null || app(TeamAccess::class)->seesEverything($this->viewer, $this->team)) {
+            return new Collection;
+        }
+
+        return $this->applicationsQuery()
+            ->whereNotIn('server_id', $this->servers()->modelKeys())
+            ->with('server')
+            ->orderBy('name')
+            ->get();
+    }
 
     /**
      * @return Collection<int, Server>
      */
     public function servers(): Collection
     {
-        return $this->servers ??= $this->team->servers()
+        return $this->servers ??= $this->serversQuery()
             ->with(['applications' => fn($query) => $query->orderBy('name'), 'cloudProvider'])
             ->oldest()
             ->orderBy('name')
@@ -73,7 +92,7 @@ final class FleetSnapshot
     public function running(): Collection
     {
         return $this->running ??= Deployment::query()
-            ->whereIn('application_id', $this->team->applications()->select('id'))
+            ->whereIn('application_id', $this->applicationsQuery()->select('id'))
             ->where('status', DeploymentStatus::Running->value)
             ->with('application.server')
             ->latest('started_at')
@@ -218,8 +237,14 @@ final class FleetSnapshot
             }
         }
 
+        foreach ($this->sharedApplications() as $application) {
+            if ($application->power_state === PowerState::Stopped) {
+                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => route('servers.applications.show', [$application->server_id, $application])];
+            }
+        }
+
         $failed = Deployment::query()
-            ->whereIn('application_id', $this->team->applications()->select('id'))
+            ->whereIn('application_id', $this->applicationsQuery()->select('id'))
             ->whereIn('status', [DeploymentStatus::Succeeded->value, DeploymentStatus::Failed->value])
             ->with('application.server')
             ->latest('created_at')
@@ -236,7 +261,7 @@ final class FleetSnapshot
             ];
         }
 
-        $applications = $this->team->applications()->with('server')->get()->keyBy('id');
+        $applications = $this->applicationsQuery()->with('server')->get()->keyBy('id');
         $killed = Activity::query()
             ->where('subject_type', (new Application)->getMorphClass())
             ->whereIn('subject_id', $applications->keys())
@@ -284,7 +309,7 @@ final class FleetSnapshot
     public function deploysThisWeek(): int
     {
         return Deployment::query()
-            ->whereIn('application_id', $this->team->applications()->select('id'))
+            ->whereIn('application_id', $this->applicationsQuery()->select('id'))
             ->where('created_at', '>=', now()->subDays(7))
             ->whereNot('status', DeploymentStatus::Cancelled->value)
             ->count();
@@ -314,5 +339,15 @@ final class FleetSnapshot
         }
 
         return $expected === 0 ? null : round($observed / $expected * 100, 2);
+    }
+
+    private function serversQuery(): HasMany
+    {
+        return $this->viewer === null ? $this->team->servers() : app(TeamAccess::class)->servers($this->viewer, $this->team);
+    }
+
+    private function applicationsQuery(): HasMany
+    {
+        return $this->viewer === null ? $this->team->applications() : app(TeamAccess::class)->applications($this->viewer, $this->team);
     }
 }

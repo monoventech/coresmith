@@ -17,7 +17,7 @@ final class DeploymentApiController extends ApiController
 {
     public function index(Request $request, Application $application): JsonResponse
     {
-        abort_unless($application->team_id === $this->team($request)->getKey(), 404);
+        $this->seenApplication($request, $application);
 
         $deployments = $application->deployments()->latest()->limit(
             min((int) $request->integer('limit', 20), 100),
@@ -30,7 +30,7 @@ final class DeploymentApiController extends ApiController
 
     public function show(Request $request, Application $application, Deployment $deployment): JsonResponse
     {
-        abort_unless($application->team_id === $this->team($request)->getKey(), 404);
+        $this->seenApplication($request, $application);
         abort_unless($deployment->application_id === $application->id, 404);
 
         return response()->json([
