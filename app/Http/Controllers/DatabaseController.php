@@ -9,7 +9,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\DatabaseType;
-use App\Enums\PlanFeature;
 use App\Enums\PrivilegeLevel;
 use App\Http\Requests\Database\DestroyDatabaseRequest;
 use App\Http\Requests\Database\StoreDatabaseRequest;
@@ -17,8 +16,8 @@ use App\Jobs\BackupDatabase;
 use App\Jobs\CreateDatabase;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
-use App\Services\Billing\TeamBilling;
 use App\Services\Database\DatabaseManager;
+use App\Services\Database\OffsiteBackups;
 use App\Services\Database\RedisPorts;
 use App\Services\Database\SharedRedis;
 use App\Services\Panel\Formats;
@@ -165,11 +164,7 @@ final class DatabaseController extends Controller
 
     private function goesToS3(ManagedDatabase $database): bool
     {
-        $team = $database->team;
-
-        return in_array($database->type, [DatabaseType::Mysql, DatabaseType::Postgresql], true)
-            && $team?->backupDestination !== null
-            && app(TeamBilling::class)->status($team)->allows(PlanFeature::OffsiteBackups);
+        return app(OffsiteBackups::class)->covers($database);
     }
 
     private function assertBelongsTo(Server $server, ManagedDatabase $database): void
