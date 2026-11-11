@@ -94,6 +94,11 @@ return [
         'state_path' => env('CORESMITH_THIS_MACHINE_STATE_PATH', '/var/lib/coresmith-this-machine'),
     ],
 
+    'removal' => [
+        'state_path' => env('CORESMITH_REMOVAL_STATE_PATH', '/var/lib/coresmith-uninstall'),
+        'answer_path' => env('CORESMITH_REMOVAL_ANSWER_PATH', '/run/coresmith-uninstall'),
+    ],
+
     'live' => [
         'refresh_seconds' => max(15, (int) env('CORESMITH_LIVE_REFRESH_SECONDS', 60)),
         'socket' => [

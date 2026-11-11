@@ -232,10 +232,10 @@ test('the hardening tab claims key-only SSH only once sshd has reported it, and 
                 && collect($items)->contains(ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS))
             ->where('ssh', $ssh));
 })->with([
-    'verified' => [['meta' => ['ssh_hardening' => 'verified']], true, ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null]],
-    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => 'sshd reports passwordauthentication yes']],
-    'not checked yet' => [['meta' => []], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => null]],
-    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], false, ['verified' => false, 'owner' => true, 'passwords_off' => true, 'error' => null]],
+    'verified' => [['meta' => ['ssh_hardening' => 'verified']], true, ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => 'sshd reports passwordauthentication yes', 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'not checked yet' => [['meta' => []], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], false, ['verified' => false, 'owner' => true, 'passwords_off' => true, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
 ]);
 
 test('an admin can queue a firewall change', function () {

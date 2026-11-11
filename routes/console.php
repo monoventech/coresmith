@@ -4,6 +4,7 @@ use App\Enums\Edition;
 use App\Enums\ServerStatus;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
+use App\Jobs\CheckThisMachineSsh;
 use App\Jobs\CloseUnknownHosts;
 use App\Jobs\CollectServerMetrics;
 use App\Jobs\DetectStaleDeployments;
@@ -85,6 +86,8 @@ Schedule::call(function (): void {
         ->each(function (Server $server): void {
             if (!$server->sshSettled()) {
                 HardenSsh::dispatch($server);
+            } elseif ($server->sshLeftToOwner()) {
+                CheckThisMachineSsh::dispatch($server);
             }
         });
 })->hourly()->name('coresmith:harden-ssh')->withoutOverlapping();

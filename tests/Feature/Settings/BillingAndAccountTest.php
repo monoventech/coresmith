@@ -31,7 +31,7 @@ test('the last owner of a team cannot close their account until someone else own
         ->from(route('profile.edit'))
         ->delete(route('profile.destroy'), ['password' => 'password'])
         ->assertRedirect(route('profile.edit'))
-        ->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.']);
+        ->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first.']);
 
     expect(User::find($user->id))->not->toBeNull();
 

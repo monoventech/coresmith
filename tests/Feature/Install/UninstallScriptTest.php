@@ -178,6 +178,8 @@ test('everything the installer creates, the uninstaller removes', function () {
         '/usr/local/libexec/coresmith/this-machine' => '/usr/local/libexec/coresmith/this-machine',
         '/usr/local/libexec/coresmith/persist-caddy-config' => '/usr/local/libexec/coresmith/persist-caddy-config',
         '/var/lib/coresmith-this-machine' => '/var/lib/coresmith-this-machine',
+        '/usr/local/libexec/coresmith/uninstall' => '/usr/local/libexec/coresmith/uninstall',
+        '/var/lib/coresmith-uninstall' => '/var/lib/coresmith-uninstall',
         '/etc/systemd/system/coresmith-apps.slice' => '/etc/systemd/system/coresmith-apps.slice',
         'caddy.service.d/coresmith.conf' => 'caddy.service.d/coresmith.conf',
         '/etc/caddy/coresmith' => '/etc/caddy/coresmith',
@@ -335,7 +337,7 @@ test('nothing is removed until uninstall is typed', function () {
     $process = runUninstaller($base, [], "yes\n");
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getOutput())->toContain("This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith, its logs and the coresmith user.\nA copy of its .env, backups and database is saved under {$base}/root first.\n")
+        ->and($process->getOutput())->toContain("This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, {$base}/opt/coresmith, {$base}/var/lib/coresmith, its logs and the coresmith user.\nCoresmith's key comes off each server it can reach. The servers, and everything on them, keep running.\nA copy of its .env, backups and database is saved under {$base}/root first.\n")
         ->and($process->getOutput())->toContain('Type uninstall to remove Coresmith from this server:')
         ->and($process->getErrorOutput())->toContain('Nothing was removed.')
         ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
@@ -424,7 +426,7 @@ test('only files root owns are given back to the panel', function () {
 });
 
 test('the app and config folders older installers created are still removed, unless apps are deployed there', function () {
-    expect(file_get_contents(base_path('scripts/install.sh')))->not->toContain('/var/coresmith')
+    expect(preg_replace("/<<-'UNINSTALLER'\n.*?\n\tUNINSTALLER\n/s", '', (string) file_get_contents(base_path('scripts/install.sh'))))->not->toContain('/var/coresmith')
         ->and(uninstallerBody())->toContain('APPS_DIR="/var/coresmith"')
         ->and(uninstallerBody())->toContain('CONFIG_DIR="/etc/coresmith"')
         ->and(uninstallerBody())->toContain('rm -rf "${APPS_DIR:?}" "${CONFIG_DIR:?}"');
@@ -466,7 +468,7 @@ test('an install from before the helper has no key on this machine to take off',
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
         ->and(uninstallerCalls($base))->not->toContain('systemctl start coresmith-this-machine.service')
-        ->and($process->getOutput())->not->toContain("Coresmith's key");
+        ->and($process->getOutput())->not->toContain('off this machine');
 });
 
 test('the request to take the key off replaces a link planted in its place rather than writing through it', function () {
@@ -543,3 +545,179 @@ test("where Caddy runs Coresmith's own Caddyfile, or nothing is left for apps, t
     'apps, Caddyfile' => [true, "[Service]\n"],
     'no apps, managed config' => [false, "[Service]\nExecStart=\nExecStart=/usr/bin/caddy run --environ --config /etc/caddy/caddy-config.json\n"],
 ]);
+
+function uninstallerRequest(string $base, string $line): string
+{
+    $folder = "{$base}/var/lib/coresmith-uninstall";
+    File::ensureDirectoryExists($folder);
+    file_put_contents("{$folder}/request", $line);
+
+    return $folder;
+}
+
+function uninstallerAnswer(string $base): ?array
+{
+    $answer = json_decode((string) @file_get_contents("{$base}/run/coresmith-uninstall/result.json"), true);
+
+    return is_array($answer) ? $answer : null;
+}
+
+function uninstallerReleasing(string $base, int $exit = 0): string
+{
+    File::ensureDirectoryExists("{$base}/opt/coresmith/app");
+    file_put_contents("{$base}/opt/coresmith/app/artisan", "<?php\n");
+    $calls = escapeshellarg("{$base}/calls.log");
+
+    return "runuser() { printf 'runuser %s\\n' \"\$*\" >>{$calls}; "
+        . "if [ -f \"\$ANSWER_DIR/status.json\" ]; then printf 'status %s %s\\n' \"\$(ls -l \"\$ANSWER_DIR/status.json\" | cut -c1-10)\" \"\$(cat \"\$ANSWER_DIR/status.json\")\" >>{$calls}; fi; "
+        . "printf '%s\\n' \"Took Coresmith's key off anvil-01.\" \"Couldn't reach outpost-02. Remove the line ending in coresmith@outpost-02 from /root/.ssh/authorized_keys there.\" \"Took Coresmith's key off 1 of 2 servers.\"; return {$exit}; }";
+}
+
+test('a ping is answered without removing anything, in a folder only root can write', function () {
+    $base = uninstallerTree();
+    $folder = uninstallerRequest($base, "abc123 ping\n");
+    File::ensureDirectoryExists("{$base}/elsewhere");
+    symlink("{$base}/elsewhere", "{$folder}/result.json");
+
+    $process = runUninstaller($base, ['--request', $folder]);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and(uninstallerAnswer($base))->toBe(['id' => 'abc123', 'ok' => true])
+        ->and(substr(sprintf('%o', fileperms("{$base}/run/coresmith-uninstall")), -3))->toBe('755')
+        ->and(glob("{$base}/elsewhere/{,.}*", GLOB_BRACE) ?: [])->toBe(["{$base}/elsewhere/.", "{$base}/elsewhere/.."])
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
+        ->and(uninstallerCalls($base))->toBe([])
+        ->and(file_exists("{$folder}/request"))->toBeFalse();
+});
+
+test('anything but a ping or an uninstall request is refused and answered', function (string $request) {
+    $base = uninstallerTree();
+    $folder = uninstallerRequest($base, $request);
+
+    $process = runUninstaller($base, ['--request', $folder]);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(uninstallerAnswer($base)['ok'] ?? null)->toBeFalse()
+        ->and(uninstallerAnswer($base)['error'] ?? null)->toBe("The request wasn't one Coresmith's uninstaller accepts, so nothing changed.")
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
+        ->and(uninstallerCalls($base))->toBe([])
+        ->and(file_exists("{$folder}/request"))->toBeFalse();
+})->with([
+    'an extra option' => ["abc123 uninstall --purge\n"],
+    'a command' => ["abc123 rm -rf /\n"],
+    'a path for an id' => ["../x ping\n"],
+    'nothing' => [''],
+    'two spaces' => ["abc123  ping\n"],
+    'an id too long' => [str_repeat('a', 65) . " ping\n"],
+]);
+
+test('a request that is a link is refused and never read', function () {
+    $base = uninstallerTree();
+    $folder = "{$base}/var/lib/coresmith-uninstall";
+    File::ensureDirectoryExists($folder);
+    file_put_contents("{$base}/secret", "abc123 uninstall\n");
+    symlink("{$base}/secret", "{$folder}/request");
+
+    $process = runUninstaller($base, ['--request', $folder]);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(uninstallerAnswer($base))->toBe(['id' => '', 'ok' => false, 'error' => "The request wasn't one Coresmith's uninstaller accepts, so nothing changed."])
+        ->and(is_link("{$folder}/request"))->toBeFalse()
+        ->and(file_get_contents("{$base}/secret"))->toBe("abc123 uninstall\n")
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue();
+});
+
+test('requests are only taken from the folder the installer made for them', function () {
+    $base = uninstallerTree();
+    File::ensureDirectoryExists("{$base}/tmp/elsewhere");
+    file_put_contents("{$base}/tmp/elsewhere/request", "abc123 uninstall\n");
+
+    $process = runUninstaller($base, ['--request', "{$base}/tmp/elsewhere"]);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeTrue()
+        ->and(file_exists("{$base}/tmp/elsewhere/request"))->toBeTrue();
+});
+
+test('an uninstall request removes Coresmith without asking, writing its progress where only root can write and Coresmith can read', function () {
+    $base = uninstallerTree();
+    $folder = uninstallerRequest($base, "abc123 uninstall\n");
+    File::ensureDirectoryExists("{$base}/outside");
+    symlink("{$base}/outside", "{$folder}/status.json");
+    symlink("{$base}/outside", "{$folder}/result.json");
+
+    $process = runUninstaller($base, ['--request', $folder], stubs: uninstallerReleasing($base));
+    $calls = uninstallerCalls($base);
+    $status = collect($calls)->first(fn(string $call): bool => str_starts_with($call, 'status '));
+    $saved = uninstallerSaved($base);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($status)->toBe('status -rw-r--r-- {"id":"abc123","stage":"releasing","saved":"' . $saved . '"}')
+        ->and(glob("{$base}/outside/*") ?: [])->toBe([])
+        ->and(glob("{$base}/outside/.*") ?: [])->toBe(["{$base}/outside/.", "{$base}/outside/.."])
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeFalse()
+        ->and($saved)->not->toBeNull();
+});
+
+test('the key step runs as the coresmith user after the copy is saved and before anything stops', function () {
+    $base = uninstallerTree();
+
+    $process = runUninstaller($base, ['--yes'], stubs: uninstallerReleasing($base));
+    $calls = uninstallerCalls($base);
+    $release = array_search("runuser -u coresmith -- php {$base}/opt/coresmith/app/artisan coresmith:release-servers --no-interaction", $calls, true);
+    $stop = array_search('systemctl stop coresmith-update.path', $calls, true);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($release)->toBeInt()
+        ->and($stop)->toBeInt()
+        ->and($release)->toBeLessThan($stop)
+        ->and($process->getOutput())->toContain("Took Coresmith's key off 1 of 2 servers.")
+        ->and($process->getOutput())->toContain("Couldn't reach outpost-02. Remove the line ending in coresmith@outpost-02 from /root/.ssh/authorized_keys there.")
+        ->and($process->getOutput())->not->toContain('Its public key stays in their authorized_keys');
+});
+
+test('a request writes what Coresmith released where Coresmith can read it', function () {
+    $base = uninstallerTree();
+    $folder = uninstallerRequest($base, "abc123 uninstall\n");
+
+    runUninstaller($base, ['--request', $folder], stubs: uninstallerReleasing($base));
+
+    expect(uninstallerCalls($base))->toContain("runuser -u coresmith -- php {$base}/opt/coresmith/app/artisan coresmith:release-servers --no-interaction --report={$folder}/released.json");
+});
+
+test('when the key step cannot run, removal carries on and says the keys stayed', function () {
+    $base = uninstallerTree();
+
+    $process = runUninstaller($base, ['--yes'], stubs: uninstallerReleasing($base, exit: 1));
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput() . $process->getOutput())
+        ->and($process->getOutput())->toContain("Couldn't take Coresmith's key off its servers.")
+        ->and($process->getOutput())->toContain('Servers Coresmith managed keep running. Its public key stays in their authorized_keys until you remove it.')
+        ->and(is_dir("{$base}/opt/coresmith"))->toBeFalse();
+});
+
+test('the uninstaller never stops its own service, takes its path unit down first and removes both', function () {
+    $base = uninstallerTree();
+    file_put_contents("{$base}/etc/systemd/system/coresmith-uninstall.service", "[Unit]\n");
+    file_put_contents("{$base}/etc/systemd/system/coresmith-uninstall.path", "[Unit]\n");
+
+    runUninstaller($base, ['--yes']);
+    $calls = uninstallerCalls($base);
+
+    expect($calls)->toContain('systemctl stop coresmith-uninstall.path')
+        ->and($calls)->toContain('systemctl disable coresmith-uninstall.path')
+        ->and($calls)->not->toContain('systemctl stop coresmith-uninstall.service')
+        ->and(file_exists("{$base}/etc/systemd/system/coresmith-uninstall.service"))->toBeFalse()
+        ->and(file_exists("{$base}/etc/systemd/system/coresmith-uninstall.path"))->toBeFalse();
+});
+
+test('the request folder and the uninstall helper are removed', function () {
+    $base = uninstallerTree();
+    $folder = uninstallerRequest($base, "abc123 uninstall\n");
+    file_put_contents("{$base}/usr/local/libexec/coresmith/uninstall", "#!/bin/bash\n");
+
+    runUninstaller($base, ['--request', $folder]);
+
+    expect(file_exists($folder))->toBeFalse()
+        ->and(file_exists("{$base}/usr/local/libexec/coresmith/uninstall"))->toBeFalse();
+});

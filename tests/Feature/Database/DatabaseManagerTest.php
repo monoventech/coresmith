@@ -15,6 +15,7 @@ use App\Services\Database\MysqlDriver;
 use App\Services\Database\PostgresDriver;
 use App\Services\Database\SqliteDriver;
 use App\Services\SSH\SSHConnection;
+use Symfony\Component\Process\Process;
 use Tests\Support\FakeSSHTransport;
 
 function databaseManager(): DatabaseManager
@@ -187,34 +188,114 @@ test('a sqlite backup uses the consistent snapshot command', function () {
     expect($command)->toContain('.backup')->and($command)->toContain('gzip');
 });
 
-test('restoring pipes the compressed backup back into the database', function () {
-    $transport = new FakeSSHTransport;
-    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
+function databaseManagerRestoreTransport(): FakeSSHTransport
+{
+    return (new FakeSSHTransport)->respondTo('mktemp', "/tmp/tmp.ReStOrE123\n");
+}
 
-    databaseManager()->restore(databaseConnection($transport), $database, '/var/coresmith/backups/app_db/app_db-1.sql.gz');
+test('restoring mysql recreates the database as root, then runs the dump as its own user', function () {
+    $transport = databaseManagerRestoreTransport();
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db', 'db_user' => 'app_user', 'db_password' => 'S3cretPassw0rd']);
 
-    $commands = implode("\n", $transport->commands());
+    databaseManager()->restore(databaseConnection($transport), $database, '/var/coresmith/backups/app_db/app_db-20261110023000.sql.gz');
 
-    expect($commands)->toContain('gunzip -c')->and($commands)->toContain('| mysql');
+    expect($transport->commands())->toBe([
+        "test -f '/var/coresmith/backups/app_db/app_db-20261110023000.sql.gz'",
+        'mktemp',
+        "mysql --protocol=socket -e 'SET SESSION lock_wait_timeout = 30; DROP DATABASE IF EXISTS `app_db`; CREATE DATABASE `app_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'",
+        "gunzip -c '/var/coresmith/backups/app_db/app_db-20261110023000.sql.gz' | mysql --defaults-file='/tmp/tmp.ReStOrE123' 'app_db'",
+        "rm -f '/tmp/tmp.ReStOrE123'",
+    ])
+        ->and($transport->uploads())->toBe(['/tmp/tmp.ReStOrE123' => "[client]\nuser=\"app_user\"\npassword=\"S3cretPassw0rd\"\nprotocol=socket\n"]);
 });
 
-test('restoring a postgres database uses psql', function () {
-    $transport = new FakeSSHTransport;
-    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Postgresql, 'name' => 'app_db']);
+test('restoring postgres recreates it owned by its user with its grants and extensions, then runs the dump as that user in one transaction', function () {
+    $transport = databaseManagerRestoreTransport();
+    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Postgresql, 'name' => 'app_db', 'db_user' => 'app_user', 'db_password' => 'S3cretPassw0rd', 'port' => 5432, 'extensions' => ['pg_trgm'], 'privilege_level' => PrivilegeLevel::Standard->value]);
+    $postgres = new PostgresDriver;
+
+    databaseManager()->restore(databaseConnection($transport), $database, '/var/coresmith/backups/app_db/app_db-20261110023000.sql.gz');
+
+    expect($transport->commands())->toBe([
+        "test -f '/var/coresmith/backups/app_db/app_db-20261110023000.sql.gz'",
+        'mktemp',
+        $postgres->command($postgres->endSessions('app_db')),
+        $postgres->command($postgres->dropDatabase('app_db')),
+        $postgres->command($postgres->createDatabase('app_db', 'app_user')),
+        $postgres->command($postgres->grant('app_db', 'app_user', PrivilegeLevel::Standard), 'app_db'),
+        $postgres->command($postgres->createExtension('pg_trgm', 'app_db'), 'app_db'),
+        "gunzip -c '/var/coresmith/backups/app_db/app_db-20261110023000.sql.gz' | awk " . escapeshellarg(PostgresDriver::EXTENSION_COMMENTS) . " | PGPASSFILE='/tmp/tmp.ReStOrE123' psql -h 127.0.0.1 -p 5432 -U 'app_user' -d 'app_db' -v ON_ERROR_STOP=1 --single-transaction -q",
+        "rm -f '/tmp/tmp.ReStOrE123'",
+    ])
+        ->and($transport->uploads())->toBe(['/tmp/tmp.ReStOrE123' => "127.0.0.1:5432:app_db:app_user:S3cretPassw0rd\n"]);
+});
+
+test('on a server reached as a sudo user, the credentials file belongs to root, so root can write it in /tmp', function () {
+    $transport = (new FakeSSHTransport)->respondTo('coresmith-upload', "/tmp/coresmith-upload.AbCdEfGhIj\n")->respondTo('mktemp', "/tmp/tmp.ReStOrE123\n");
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu', 'ssh_user' => 'deploy']);
+    $database = ManagedDatabase::factory()->for($server)->create(['type' => DatabaseType::Mysql, 'name' => 'app_db', 'db_user' => 'app_user', 'db_password' => 'S3cretPassw0rd']);
+
+    databaseManager()->restore((new SSHConnection($server, $transport))->connect(), $database, '/tmp/app_db.sql.gz');
+
+    expect($transport->commands())->toContain('sudo mktemp')
+        ->and(collect($transport->commands())->last())->toBe("sudo rm -f '/tmp/tmp.ReStOrE123'");
+});
+
+test('a dump never runs through the superuser', function (DatabaseType $type) {
+    $transport = databaseManagerRestoreTransport();
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user', 'db_password' => 'S3cretPassw0rd']);
 
     databaseManager()->restore(databaseConnection($transport), $database, '/tmp/app_db.sql.gz');
 
-    expect(implode("\n", $transport->commands()))->toContain('sudo -u postgres psql');
-});
+    $dump = collect($transport->commands())->first(fn(string $command): bool => str_starts_with($command, 'gunzip -c'));
 
-test('restoring refuses when the backup file is missing rather than truncating the database', function () {
-    $transport = (new FakeSSHTransport)->respondTo('test -f', '', 1);
-    $database = ManagedDatabase::factory()->create(['type' => DatabaseType::Mysql, 'name' => 'app_db']);
+    expect($dump)->not->toContain('sudo -u postgres')
+        ->and($dump)->not->toContain('mysql --protocol=socket')
+        ->and($dump)->toMatch($type === DatabaseType::Mysql ? '/\| mysql --defaults-file=/' : "/-U 'app_user'/");
+})->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+test('the credentials file goes even when the dump fails', function (DatabaseType $type) {
+    $transport = databaseManagerRestoreTransport()->respondTo('gunzip -c', 'ERROR 1050 (42S01) at line 25: Table already exists', 1);
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user', 'db_password' => 'S3cretPassw0rd']);
+
+    expect(fn() => databaseManager()->restore(databaseConnection($transport), $database, '/tmp/app_db.sql.gz'))->toThrow(SSHCommandFailedException::class);
+
+    expect($transport->commands())->toContain("rm -f '/tmp/tmp.ReStOrE123'");
+})->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+test('a missing backup is refused before the database is touched', function (DatabaseType $type) {
+    $transport = databaseManagerRestoreTransport()->respondTo('test -f', '', 1);
+    $database = ManagedDatabase::factory()->create(['type' => $type, 'name' => 'app_db', 'db_user' => 'app_user', 'db_password' => 'S3cretPassw0rd']);
 
     expect(fn() => databaseManager()->restore(databaseConnection($transport), $database, '/tmp/missing.sql.gz'))
         ->toThrow(BackupNotFoundException::class);
 
-    expect(implode("\n", $transport->commands()))->not->toContain('gunzip');
+    expect(implode("\n", $transport->commands()))->not->toContain('DROP')
+        ->and(implode("\n", $transport->commands()))->not->toContain('gunzip');
+})->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+test('quotes, colons and backslashes in a password cannot break out of either credentials file', function () {
+    expect((new MysqlDriver)->credentials('app_user', 'pa"ss\\wo#rd'))->toBe("[client]\nuser=\"app_user\"\npassword=\"pa\\\"ss\\\\wo#rd\"\nprotocol=socket\n")
+        ->and((new PostgresDriver)->passfile('app_db', 'app_user', 5432, 'pa:ss\\word'))->toBe("127.0.0.1:5432:app_db:app_user:pa\\:ss\\\\word\n");
+});
+
+test('the extension comment filter keeps data rows and drops only comment statements', function () {
+    $dump = "SET client_encoding = 'UTF8';\n"
+        . "CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n"
+        . "COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';\n"
+        . "COPY public.notes (id, body) FROM stdin;\n"
+        . "1\tCOMMENT ON EXTENSION is my note\n"
+        . "\\.\n"
+        . "COMMENT ON TABLE public.notes IS 'kept';\n";
+
+    $filtered = (new Process(['awk', PostgresDriver::EXTENSION_COMMENTS]))->setInput($dump)->mustRun()->getOutput();
+
+    expect($filtered)->toBe("SET client_encoding = 'UTF8';\n"
+        . "CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n"
+        . "COPY public.notes (id, body) FROM stdin;\n"
+        . "1\tCOMMENT ON EXTENSION is my note\n"
+        . "\\.\n"
+        . "COMMENT ON TABLE public.notes IS 'kept';\n");
 });
 
 test('a mysql password change keeps the user and quotes the new password', function () {

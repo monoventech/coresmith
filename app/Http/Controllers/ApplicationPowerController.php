@@ -29,7 +29,7 @@ final class ApplicationPowerController extends Controller
         abort_unless($application->server_id === $server->id, 404);
 
         if ($application->power_state === PowerState::Stopped) {
-            return back()->with('success', 'That application is already stopped.');
+            return back()->with('success', 'That app is already stopped.');
         }
 
         $application->forceFill(['power_state' => PowerState::Stopped])->save();
@@ -49,7 +49,7 @@ final class ApplicationPowerController extends Controller
         abort_unless($application->server_id === $server->id, 404);
 
         if ($application->power_state === PowerState::Active) {
-            return back()->with('success', 'That application is already running.');
+            return back()->with('success', 'That app is already running.');
         }
 
         $application->forceFill(['power_state' => PowerState::Active])->save();
@@ -60,7 +60,7 @@ final class ApplicationPowerController extends Controller
         activity()->performedOn($application)->log('application_started');
         $this->notify($application, 'The app was started');
 
-        return back()->with('success', 'Starting. The site will be reachable again shortly.');
+        return back()->with('success', 'Starting. The app will be reachable again shortly.');
     }
 
     public function maintenance(Request $request, Server $server, Application $application): RedirectResponse
