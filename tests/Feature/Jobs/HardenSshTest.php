@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Jobs\CheckThisMachineSsh;
 use App\Jobs\HardenSsh;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Server;
@@ -150,6 +151,7 @@ function hardenSshThisMachine(bool $withKey, array $attributes = []): Server
 }
 
 test("on Coresmith's own machine, SSH stays as the owner set it up: Coresmith writes no settings, takes back what it wrote, and records what sshd reports", function () {
+    $this->freezeTime();
     $server = hardenSshThisMachine(true);
     $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings()));
     $commands = implode("\n", $transport->commands());
@@ -158,17 +160,37 @@ test("on Coresmith's own machine, SSH stays as the owner set it up: Coresmith wr
         ->and($commands)->toContain('rm -f ' . SecurityHardening::SSHD_CONFIG . ' ' . SecurityHardening::LEGACY_SSHD_CONFIG)
         ->and($commands)->toContain(SecurityHardening::MANAGED_KEYS_BEGIN)
         ->and($commands)->not->toContain('owner@laptop')
-        ->and($server->fresh()->meta)->toBe(['ssh_hardening' => 'owner', 'ssh_passwords' => 'off'])
+        ->and($server->fresh()->meta)->toBe(['ssh_hardening' => 'owner', 'ssh_passwords' => 'off', 'ssh_passwords_checked_at' => now()->toIso8601String()])
         ->and($server->fresh()->sshLeftToOwner())->toBeTrue()
         ->and($server->fresh()->sshHardened())->toBeFalse();
 });
 
 test("where the owner's own SSH settings still take passwords on Coresmith's machine, that is recorded and left alone", function () {
+    $this->freezeTime();
     $server = hardenSshThisMachine(false);
     $transport = hardenSshRun($server, (new FakeSSHTransport)->respondTo('sshd -T', hardenSshSettings('yes', 'yes', 'yes')));
 
     expect($transport->uploads())->not->toHaveKey(SecurityHardening::SSHD_CONFIG)
-        ->and($server->fresh()->meta)->toBe(['ssh_hardening' => 'owner']);
+        ->and($server->fresh()->meta)->toBe([
+            'ssh_hardening' => 'owner',
+            'ssh_passwords' => 'on',
+            'ssh_password_logins' => ['password', 'keyboard', 'root'],
+            'ssh_password_sources' => [],
+            'ssh_passwords_checked_at' => now()->toIso8601String(),
+        ]);
+});
+
+test('every hour, the machine left to its owner has its password logins read again, and no other server does', function () {
+    Queue::fake();
+    $machine = Server::factory()->create(['status' => ServerStatus::Active, 'runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner']]);
+    Server::factory()->create(['status' => ServerStatus::Active, 'meta' => ['ssh_hardening' => 'verified']]);
+    Server::factory()->create(['status' => ServerStatus::Active, 'meta' => ['cpu_cores' => 2]]);
+
+    collect(app(Schedule::class)->events())->first(fn($event): bool => $event->description === 'coresmith:harden-ssh')->run(app());
+
+    Queue::assertPushed(CheckThisMachineSsh::class, 1);
+    Queue::assertPushed(CheckThisMachineSsh::class, fn(CheckThisMachineSsh $job): bool => $job->server->is($machine));
+    Queue::assertNotPushed(HardenSsh::class, fn(HardenSsh $job): bool => $job->server->is($machine));
 });
 
 test("owners' and admins' keys never go onto root on Coresmith's own machine, and any put there before come off", function () {
