@@ -76,11 +76,25 @@ final class MysqlDriver
             . escapeshellarg($database) . ' | gzip > ' . escapeshellarg($destination);
     }
 
-    public function restore(string $database, string $source): string
+    public function recreateDatabase(string $name): string
+    {
+        $name = SafeName::assertDatabaseIdentifier($name);
+
+        return 'SET SESSION lock_wait_timeout = 30; ' . $this->dropDatabase($name) . " CREATE DATABASE `{$name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+    }
+
+    public function credentials(string $user, #[\SensitiveParameter] string $password): string
+    {
+        $user = SafeName::assertDatabaseIdentifier($user);
+
+        return "[client]\nuser=\"{$user}\"\npassword=\"" . addcslashes($password, '\\"') . "\"\nprotocol=socket\n";
+    }
+
+    public function restore(string $database, string $source, string $credentials): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);
 
-        return 'gunzip -c ' . escapeshellarg($source) . ' | mysql ' . escapeshellarg($database);
+        return 'gunzip -c ' . escapeshellarg($source) . ' | mysql --defaults-file=' . escapeshellarg($credentials) . ' ' . escapeshellarg($database);
     }
 
     public function bindToLoopback(): string

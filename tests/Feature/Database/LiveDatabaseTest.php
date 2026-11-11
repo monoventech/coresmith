@@ -135,3 +135,58 @@ test('a real database and its user are gone once Coresmith drops them, even with
         $connection->disconnect();
     }
 })->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
+
+function liveDatabaseAs(ManagedDatabase $database, string $password, string $sql): string
+{
+    return match ($database->type) {
+        DatabaseType::Mysql => 'MYSQL_PWD=' . escapeshellarg($password) . ' mysql --protocol=socket -u ' . escapeshellarg((string) $database->db_user) . ' ' . escapeshellarg((string) $database->name) . ' -N -e ' . escapeshellarg($sql),
+        DatabaseType::Postgresql => 'PGPASSWORD=' . escapeshellarg($password) . ' psql -h 127.0.0.1 -U ' . escapeshellarg((string) $database->db_user) . ' -d ' . escapeshellarg((string) $database->name) . ' -v ON_ERROR_STOP=1 -tAc ' . escapeshellarg($sql),
+    };
+}
+
+test('a real database comes back exactly as its backup, with what changed since gone and its own user still in charge', function (DatabaseType $type) {
+    $connection = liveDatabaseConnection();
+    $databases = app(DatabaseManager::class);
+    $suffix = Str::lower(Str::random(8));
+    $postgres = $type === DatabaseType::Postgresql;
+    $database = ManagedDatabase::factory()->for($connection->server())->create([
+        'type' => $type,
+        'name' => "live_restore_{$suffix}",
+        'db_user' => "live_restore_{$suffix}",
+        'privilege_level' => 'standard',
+        'port' => $postgres ? 5432 : 3306,
+        'extensions' => $postgres ? ['pg_trgm'] : [],
+    ]);
+    $password = DatabaseManager::generatePassword();
+    $database->forceFill(['db_password' => $password])->save();
+    $as = fn(string $sql): string => trim($connection->execute(liveDatabaseAs($database, $password, $sql))->throw()->output);
+    $tableSchema = $postgres ? 'public' : (string) $database->name;
+
+    try {
+        $databases->create($connection, $database, $password);
+        $as('CREATE TABLE notes (id INT PRIMARY KEY, body TEXT)');
+        $as("INSERT INTO notes VALUES (1, 'kept'), (2, 'COMMENT ON EXTENSION is my note')");
+        $dump = $databases->backup($connection, $database, now()->format('YmdHis'));
+        $as("INSERT INTO notes VALUES (3, 'lost')");
+        $as("UPDATE notes SET body = 'changed' WHERE id = 1");
+        $as('CREATE TABLE later (id INT)');
+
+        $databases->restore($connection, $database, $dump);
+
+        expect($as('SELECT body FROM notes ORDER BY id'))->toBe("kept\nCOMMENT ON EXTENSION is my note")
+            ->and($as("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '{$tableSchema}' AND table_name = 'later'"))->toBe('0');
+
+        $as("INSERT INTO notes VALUES (4, 'after')");
+
+        expect($as('SELECT COUNT(*) FROM notes'))->toBe('3');
+
+        if ($postgres) {
+            expect($as("SELECT tableowner FROM pg_tables WHERE tablename = 'notes'"))->toBe((string) $database->db_user)
+                ->and($as("SELECT COUNT(*) FROM pg_extension WHERE extname = 'pg_trgm'"))->toBe('1');
+        }
+    } finally {
+        $databases->drop($connection, $database);
+        $connection->execute('rm -rf ' . escapeshellarg(DatabaseManager::BACKUP_ROOT . '/' . $database->name), sudo: true);
+        $connection->disconnect();
+    }
+})->with([DatabaseType::Mysql, DatabaseType::Postgresql]);
