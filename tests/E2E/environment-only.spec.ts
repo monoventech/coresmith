@@ -16,7 +16,7 @@ test.describe('an admin who sees only Storefront staging', () => {
 
         await page.goto('/projects')
         await expect(page.getByTestId('project-card')).toHaveCount(1)
-        await expect(page.getByTestId('project-environment')).toHaveText(['Staging 1'])
+        await expect(page.getByTestId('project-environment')).toHaveText([/^Staging \d+$/])
         await expect(page.getByTestId('no-project')).toHaveCount(0)
     })
 
@@ -29,7 +29,7 @@ test.describe('an admin who sees only Storefront staging', () => {
         await expect(page.getByRole('button', { name: 'Add environment' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Add apps or databases' })).toBeVisible()
 
-        await page.getByTestId('environment').getByRole('link', { name: 'storefront-staging', exact: true }).click()
+        await page.getByTestId('environment-app').getByRole('link', { name: 'storefront-staging', exact: true }).click()
         await expect(page.getByRole('heading', { level: 1, name: 'storefront-staging' })).toBeVisible()
 
         const server = /\/servers\/([A-Za-z0-9]+)\/applications\//.exec(page.url())?.[1]

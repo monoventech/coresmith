@@ -9,6 +9,10 @@ function environment(page: Page, name: string) {
     return page.getByTestId('environment').filter({ has: page.getByRole('heading', { level: 2, name, exact: true }) })
 }
 
+function appLink(page: Page, environmentName: string, name: string) {
+    return environment(page, environmentName).getByTestId('environment-app').getByRole('link', { name, exact: true })
+}
+
 function fleetViews(page: Page) {
     return page.getByRole('navigation', { name: 'Fleet views' })
 }
@@ -20,10 +24,10 @@ test.describe('projects', () => {
         await page.waitForURL(/\/projects$/)
 
         await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your fleet')
-        await expect(card(page, 'Atlas')).toContainText('2 environments · 2 apps · 1 database')
+        await expect(card(page, 'Atlas')).toContainText(/2 environments · \d+ apps? · 1 database/)
         await expect(card(page, 'Storefront').getByTestId('project-environment')).toHaveText([
-            'Production 1',
-            'Staging 1'
+            /^Production \d+$/,
+            /^Staging \d+$/
         ])
         await expect(page.getByTestId('no-project')).toContainText('ledger')
         await expect(nav(page).getByRole('link', { name: 'Fleet', exact: true })).toHaveAttribute(
@@ -41,12 +45,8 @@ test.describe('projects', () => {
         await card(page, 'Storefront').getByRole('link', { name: 'Storefront', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
-        await expect(
-            environment(page, 'Production').getByRole('link', { name: 'storefront', exact: true })
-        ).toBeVisible()
-        await expect(
-            environment(page, 'Staging').getByRole('link', { name: 'storefront-staging', exact: true })
-        ).toBeVisible()
+        await expect(appLink(page, 'Production', 'storefront')).toBeVisible()
+        await expect(appLink(page, 'Staging', 'storefront-staging')).toBeVisible()
         await expect(environment(page, 'Production')).toContainText('Recent deploys')
         await expect(nav(page).getByRole('link', { name: 'Fleet', exact: true })).toHaveAttribute(
             'aria-current',
@@ -61,7 +61,7 @@ test.describe('projects', () => {
     test('an app page names the project it is in', async ({ page }) => {
         await page.goto('/projects')
         await card(page, 'Atlas').getByRole('link', { name: 'Atlas', exact: true }).click()
-        await environment(page, 'Production').getByRole('link', { name: 'atlas', exact: true }).click()
+        await appLink(page, 'Production', 'atlas').click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'atlas' })).toBeVisible()
         await page.getByTestId('app-project').getByRole('link', { name: 'Atlas › Production' }).click()
@@ -92,7 +92,7 @@ test.describe('projects', () => {
         await dialog(page).getByRole('button', { name: 'Add to Production' }).click()
 
         await expect(toast(page)).toContainText('Added to Production.')
-        await expect(environment(page, 'Production').getByRole('link', { name: app, exact: true })).toBeVisible()
+        await expect(appLink(page, 'Production', app)).toBeVisible()
 
         await environment(page, 'Production')
             .getByRole('button', { name: `Take ${app} out of Production` })

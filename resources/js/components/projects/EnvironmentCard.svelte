@@ -54,9 +54,11 @@
             </h2>
             <p class="m-0 mt-0.5 text-[12.5px] text-muted-foreground">{environment.meta}</p>
         </div>
-        <div class="flex flex-wrap gap-1.5">
+        <div class="flex flex-wrap gap-1.5 max-sm:grid max-sm:w-full max-sm:grid-cols-2">
             {#if environment.can.fill}
-                <Button variant="outline" size="sm" onclick={onfill}>Add apps or databases</Button>
+                <Button variant="outline" size="sm" class="max-sm:col-span-2" onclick={onfill}
+                    >Add apps or databases</Button
+                >
             {/if}
             {#if manage}
                 <Button variant="ghost" size="sm" onclick={onrename} aria-label="Rename {environment.name}"
@@ -144,11 +146,14 @@
                             {#if deploy.href}
                                 <Link
                                     href={deploy.href}
+                                    aria-label="{deploy.application} deploy {deploy.release}"
                                     class="focus-ring min-w-0 truncate rounded-sm font-mono text-foreground"
-                                    >{deploy.application} · {deploy.release}</Link
+                                    >{deploy.application}<span class="max-sm:hidden"> · {deploy.release}</span></Link
                                 >
                             {:else}
-                                <span class="min-w-0 truncate font-mono">{deploy.application} · {deploy.release}</span>
+                                <span class="min-w-0 truncate font-mono"
+                                    >{deploy.application}<span class="max-sm:hidden"> · {deploy.release}</span></span
+                                >
                             {/if}
                             <span class="text-[12.5px] whitespace-nowrap text-muted-foreground" title={deploy.full}
                                 >{deploy.when}</span

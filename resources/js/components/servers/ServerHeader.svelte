@@ -221,9 +221,10 @@
             </Dialog.Header>
             <div class="mt-4 flex flex-col gap-3.5">
                 <div>
+                    <Label for="server-name" class="mb-1.5">Server name</Label>
                     <Input
+                        id="server-name"
                         bind:value={name}
-                        aria-label="Server name"
                         required
                         maxlength={255}
                         aria-invalid={renameErrors.name ? true : undefined}
