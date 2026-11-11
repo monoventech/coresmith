@@ -21,7 +21,17 @@
         isolation = [],
         hardening = [],
         admin_move_error = null,
-        ssh = { verified: false, owner: false, passwords_off: false, error: null },
+        ssh = {
+            verified: false,
+            owner: false,
+            passwords_off: false,
+            error: null,
+            logins: null,
+            source: null,
+            lines: [],
+            reload: 'ssh',
+            checked: null
+        },
         firewall,
         access
     }: {
@@ -29,12 +39,37 @@
         isolation: string[]
         hardening: string[]
         admin_move_error?: string | null
-        ssh?: { verified: boolean; owner: boolean; passwords_off: boolean; error: string | null }
+        ssh?: {
+            verified: boolean
+            owner: boolean
+            passwords_off: boolean
+            error: string | null
+            logins: { password: boolean; keyboard: boolean; root: boolean } | null
+            source: string | null
+            lines: string[]
+            reload: string
+            checked: string | null
+        }
         firewall: { open: number[]; kept_ssh: boolean; ssh_port: number; changes: Change[] }
         access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
     } = $props()
 
     let auditBusy = $state(false)
+    let checking = $state(false)
+
+    const quoted = (line: string) => `'${line}'`
+    const commands = $derived(
+        `printf '%s\\n' ${ssh.lines.map(quoted).join(' ')} | sudo tee /etc/ssh/sshd_config.d/01-no-passwords.conf\nsudo sshd -t && sudo systemctl reload ${ssh.reload}`
+    )
+
+    function checkAgain() {
+        checking = true
+        router.post(
+            route('servers.ssh-check', server.id),
+            {},
+            { preserveScroll: true, onFinish: () => (checking = false) }
+        )
+    }
 
     function setAudit(on: boolean) {
         auditBusy = true
@@ -221,6 +256,42 @@
                     : ''}
             {/if}
         </p>
+        {#if ssh.owner && ssh.logins}
+            <div
+                class="tint-warning mb-3 rounded-xl border px-4.5 py-3 text-[13px]"
+                data-testid="ssh-passwords-warning"
+            >
+                <p class="m-0 font-medium">
+                    {ssh.logins.password || ssh.logins.keyboard
+                        ? 'Password login is on.'
+                        : 'Root can sign in with a password.'}
+                </p>
+                <p class="m-0 mt-1">
+                    Anyone can try passwords against this machine's SSH. {ssh.source
+                        ? `${ssh.source} turns it on.`
+                        : 'sshd turns it on by default.'}
+                </p>
+                <ol class="mt-2.5 mb-0 flex list-decimal flex-col gap-1.5 pl-4.5">
+                    <li>Check that you can sign in with your SSH key, and keep that session open.</li>
+                    <li>
+                        Run this on the machine:
+                        <pre
+                            class="terminal mt-1.5 text-[11px] leading-[1.6] break-all whitespace-pre-wrap"
+                            data-testid="ssh-passwords-commands">{commands}</pre>
+                    </li>
+                    <li>Then check again.</li>
+                </ol>
+                {#if server.can.update}
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
+                        <Button variant="outline" size="sm" disabled={checking} onclick={checkAgain}>Check again</Button
+                        >
+                        {#if ssh.checked}
+                            <span class="text-[12px] text-muted-foreground">Last checked {ssh.checked}</span>
+                        {/if}
+                    </div>
+                {/if}
+            </div>
+        {/if}
         <div class="font-mono text-[12.5px] leading-[1.9] text-muted-foreground">
             <div class="text-foreground">{access.ssh ?? 'no address yet'}</div>
             <div class="break-all">host key {access.fingerprint ?? 'not recorded yet'}</div>

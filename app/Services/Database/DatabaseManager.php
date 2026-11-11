@@ -186,22 +186,54 @@ final class DatabaseManager
 
     public function restore(SSHConnection $connection, ManagedDatabase $database, string $source): void
     {
-        $name = (string) $database->name;
-
-        $exists = $connection->execute('test -f ' . escapeshellarg($source), sudo: true);
-
-        if ($exists->failed()) {
+        if ($connection->execute('test -f ' . escapeshellarg($source), sudo: true)->failed()) {
             throw BackupNotFoundException::at($source);
         }
 
-        $command = match ($database->type) {
-            DatabaseType::Mysql => $this->mysql->restore($name, $source),
-            DatabaseType::Postgresql => $this->postgres->restore($name, $source),
-            DatabaseType::Redis => null,
-        };
+        if (!$database->takesBackups()) {
+            return;
+        }
 
-        if ($command !== null) {
-            $connection->execute($command, sudo: true)->throw();
+        $name = (string) $database->name;
+        $user = (string) $database->db_user;
+        $port = (int) $database->port;
+        $credentials = trim($connection->execute('mktemp', sudo: true)->throw()->output);
+
+        try {
+            $connection->uploadContent($database->type === DatabaseType::Mysql
+                ? $this->mysql->credentials($user, (string) $database->db_password)
+                : $this->postgres->passfile($name, $user, $port, (string) $database->db_password), $credentials);
+
+            $this->recreate($connection, $database);
+
+            $connection->execute($database->type === DatabaseType::Mysql
+                ? $this->mysql->restore($name, $source, $credentials)
+                : $this->postgres->restore($name, $user, $port, $source, $credentials), sudo: true)->throw();
+        } finally {
+            $connection->execute('rm -f ' . escapeshellarg($credentials), sudo: true);
+        }
+    }
+
+    private function recreate(SSHConnection $connection, ManagedDatabase $database): void
+    {
+        $name = (string) $database->name;
+        $user = (string) $database->db_user;
+
+        if ($database->type === DatabaseType::Mysql) {
+            $this->run($connection, [$this->mysql->command($this->mysql->recreateDatabase($name))]);
+
+            return;
+        }
+
+        $this->run($connection, [
+            $this->postgres->command($this->postgres->endSessions($name)),
+            $this->postgres->command($this->postgres->dropDatabase($name)),
+            $this->postgres->command($this->postgres->createDatabase($name, $user)),
+            $this->postgres->command($this->postgres->grant($name, $user, PrivilegeLevel::tryFrom((string) $database->privilege_level) ?? PrivilegeLevel::Standard), $name),
+        ]);
+
+        foreach ((array) $database->extensions as $extension) {
+            $connection->execute($this->postgres->command($this->postgres->createExtension((string) $extension, $name), $name), sudo: true)->throw();
         }
     }
 

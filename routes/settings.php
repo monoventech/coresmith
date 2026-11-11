@@ -12,6 +12,7 @@ use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\OffsiteBackupController;
 use App\Http\Controllers\Settings\PanelUpdateController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\RemovalController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
 use App\Http\Controllers\Settings\SourceProviderController;
@@ -30,6 +31,11 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings', [GeneralSettingsController::class, 'show'])->name('settings.general');
+    Route::post('settings/removal', [RemovalController::class, 'store'])
+        ->middleware('throttle:5,1,removal')
+        ->name('settings.removal.store');
+    Route::get('settings/removal', [RemovalController::class, 'show'])->name('settings.removal.show');
+    Route::get('settings/removal/status', [RemovalController::class, 'status'])->name('settings.removal.status');
     Route::put('settings/instance', [GeneralSettingsController::class, 'update'])->name('settings.instance.update');
     Route::put('settings/address', [AddressController::class, 'update'])
         ->middleware('throttle:6,1,settings-address')

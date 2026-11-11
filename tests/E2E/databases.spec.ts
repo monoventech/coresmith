@@ -312,6 +312,192 @@ test.describe('database passwords', () => {
     })
 })
 
+test.describe('backups and restore', () => {
+    const rows = [
+        { stamp: '20261111020000', when: 'Nov 11, 02:00', size: '2 KB', on_server: true, in_s3: true },
+        { stamp: '20261110023000', when: 'Nov 10, 02:30', size: '1.5 MB', on_server: true, in_s3: false },
+        { stamp: '20261109023000', when: 'Nov 9, 02:30', size: '1.4 MB', on_server: false, in_s3: true }
+    ]
+
+    async function dialogSettled(page: Page) {
+        await dialog(page).evaluate((element) =>
+            Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished))
+        )
+    }
+
+    async function backupsShowing(page: Page, props: Record<string, unknown> = {}) {
+        await withProps(page, /\/databases\/[A-Za-z0-9]+$/, (current) => {
+            current.backups = { rows, server_error: null, s3_error: null }
+            current.offsite = { sent: 'today 02:30', error: null }
+            current.restore = null
+            current.apps = [
+                { id: 'app-storefront', name: 'atlas', uses: true, running: true },
+                { id: 'app-relay', name: 'relay', uses: false, running: true },
+                { id: 'app-ledger', name: 'ledger', uses: true, running: false }
+            ]
+            current.can = { ...(current.can as Record<string, unknown>), restore: true, backup: true }
+            Object.assign(current, props)
+        })
+    }
+
+    test('the Backups card lists dumps on the server and copies in S3', async ({ page }) => {
+        await backupsShowing(page)
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        const card = page.getByTestId('backups-card')
+        await expect(card).toContainText(
+            'Dumps on forge-01, and copies in S3. Restoring replaces everything in atlas_production.'
+        )
+        await expect(card.getByTestId('backup-row')).toHaveText([
+            'Nov 11, 02:00 · 2 KB · on forge-01 and in S3 Restore',
+            'Nov 10, 02:30 · 1.5 MB · on forge-01 Restore',
+            'Nov 9, 02:30 · 1.4 MB · in S3 Restore'
+        ])
+    })
+
+    test('no backups explains and offers Back up now', async ({ page }) => {
+        await backupsShowing(page, { backups: { rows: [], server_error: null, s3_error: null } })
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        const card = page.getByTestId('backups-card')
+        await expect(card.getByTestId('backups-empty')).toHaveText('No backups yet. Back up now to make the first one.')
+        await expect(card.getByRole('button', { name: 'Back up now' })).toBeVisible()
+    })
+
+    test('an unreachable server is named and S3 copies still show', async ({ page }) => {
+        await backupsShowing(page, {
+            backups: {
+                rows: [rows[2]],
+                server_error: "Coresmith couldn't reach forge-01 to list its backups.",
+                s3_error: null
+            }
+        })
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        const card = page.getByTestId('backups-card')
+        await expect(card.getByTestId('backups-server-error')).toHaveText(
+            "Coresmith couldn't reach forge-01 to list its backups."
+        )
+        await expect(card.getByTestId('backup-row')).toHaveText(['Nov 9, 02:30 · 1.4 MB · in S3 Restore'])
+    })
+
+    test('while the list is on its way, the card says so', async ({ page }) => {
+        await backupsShowing(page, { backups: null })
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        await expect(page.getByTestId('backups-loading')).toHaveText('Listing backups…')
+    })
+
+    test('restoring takes two steps and names what is lost', async ({ page }) => {
+        await backupsShowing(page)
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        await page.getByRole('button', { name: 'Restore the backup from Nov 10, 02:30' }).click()
+        await expect(
+            dialog(page).getByRole('heading', { name: 'Restore atlas_production from Nov 10, 02:30?' })
+        ).toBeVisible()
+        await expect(dialog(page)).toContainText(
+            'Everything in atlas_production is replaced with the backup from Nov 10, 02:30. Changes since then are lost.'
+        )
+        await expect(dialog(page)).toContainText(
+            'Coresmith backs up atlas_production as it is now first, so you can go back.'
+        )
+        await expect(dialog(page).getByLabel('atlas')).toBeChecked()
+        await expect(dialog(page).getByLabel('relay')).not.toBeChecked()
+        await expect(dialog(page).getByLabel('ledger')).toHaveCount(0)
+        await expect(dialog(page)).toContainText("Visitors see the maintenance page and workers stop until it's done.")
+
+        await dialog(page).getByLabel('relay').click()
+        await dialog(page).getByRole('button', { name: 'Continue' }).click()
+
+        await expect(dialog(page).getByRole('heading', { name: 'Type atlas_production to restore it.' })).toBeVisible()
+        const restore = dialog(page).getByRole('button', { name: 'Restore atlas_production' })
+        await expect(restore).toBeDisabled()
+        await dialog(page).getByLabel('Type atlas_production to restore it').fill('atlas_productio')
+        await expect(restore).toBeDisabled()
+        await dialog(page).getByLabel('Type atlas_production to restore it').fill('atlas_production')
+
+        await page.route('**/databases/*/restore', (route) =>
+            route.fulfill({ status: 409, headers: { 'x-inertia-location': page.url() } })
+        )
+        const sent = page.waitForRequest((request) => request.url().endsWith('/restore') && request.method() === 'POST')
+        await restore.click()
+
+        expect((await sent).postDataJSON()).toEqual({
+            stamp: '20261110023000',
+            name: 'atlas_production',
+            stop: ['app-storefront', 'app-relay']
+        })
+    })
+
+    test('cancelling either step restores nothing', async ({ page }) => {
+        await backupsShowing(page)
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        await page.getByRole('button', { name: 'Restore the backup from Nov 11, 02:00' }).click()
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog(page)).toHaveCount(0)
+
+        await page.getByRole('button', { name: 'Restore the backup from Nov 11, 02:00' }).click()
+        await dialog(page).getByRole('button', { name: 'Continue' }).click()
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('a running restore shows its progress and a failed one says why', async ({ page }) => {
+        await backupsShowing(page, {
+            restore: { state: 'running', when: 'Nov 10, 02:30', step: 'restoring', error: null }
+        })
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        const status = page.getByTestId('restore-status')
+        await expect(status).toContainText('Restoring atlas_production from Nov 10, 02:30…')
+        await expect(status).toContainText("Replacing what's in atlas_production.")
+        await expect(page.getByRole('button', { name: 'Restore the backup from Nov 11, 02:00' })).toBeDisabled()
+        await expect(page.getByRole('button', { name: 'Back up now' }).first()).toBeDisabled()
+        await page.unrouteAll({ behavior: 'ignoreErrors' })
+
+        await backupsShowing(page, {
+            restore: {
+                state: 'failed',
+                when: 'Nov 10, 02:30',
+                step: null,
+                error: "Coresmith couldn't restore the backup from Nov 10, 02:30, so it put back the copy it took first. ERROR 1064"
+            }
+        })
+        await page.reload()
+
+        await expect(page.getByTestId('restore-status')).toHaveText(
+            "Coresmith couldn't restore the backup from Nov 10, 02:30, so it put back the copy it took first. ERROR 1064"
+        )
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the Backups card and both restore steps have no serious or critical violations in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+            await backupsShowing(page, {
+                restore: { state: 'done', when: 'Nov 9, 02:30', step: null, error: null }
+            })
+            await gotoDatabase(page, 'forge-01', 'atlas_production')
+            await expect(page.getByTestId('backup-row').first()).toBeVisible()
+            expect(await blockingViolations(page), `backups card in ${theme}`).toEqual([])
+
+            await page.getByRole('button', { name: 'Restore the backup from Nov 10, 02:30' }).click()
+            await expect(dialog(page)).toBeVisible()
+            await dialogSettled(page)
+            expect(await blockingViolations(page), `restore step 1 in ${theme}`).toEqual([])
+
+            await dialog(page).getByRole('button', { name: 'Continue' }).click()
+            await expect(
+                dialog(page).getByRole('heading', { name: 'Type atlas_production to restore it.' })
+            ).toBeVisible()
+            expect(await blockingViolations(page), `restore step 2 in ${theme}`).toEqual([])
+        })
+    }
+})
+
 test.describe('the shared Redis', () => {
     test('a database on it is offered a Redis of its own, and a server Coresmith cannot reach keeps it shared', async ({
         page

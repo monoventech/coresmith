@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\DatabaseType;
 use App\Enums\Plan;
 use App\Enums\ServerStatus;
+use App\Exceptions\OffsiteDownloadFailed;
 use App\Exceptions\OffsiteUploadFailed;
 use App\Jobs\BackupDatabase;
 use App\Jobs\SendBackupOffsite;
@@ -385,4 +386,63 @@ test('the nightly run is scheduled', function () {
     expect($event)->not->toBeNull()
         ->and($event->expression)->toBe('30 2 * * *')
         ->and($event->withoutOverlapping)->toBeTrue();
+});
+
+test('on a server reached as a sudo user, the upload config belongs to root, so root can write it in /tmp', function () {
+    $database = offsiteDatabase(server: ['ssh_user' => 'deploy']);
+    $transport = (new FakeSSHTransport)->respondTo('coresmith-upload', "/tmp/coresmith-upload.AbCdEfGhIj\n")->respondTo('stat -c %s', "1024\n")->respondTo('mktemp', "/tmp/tmp.UpLoAd1234\n");
+
+    offsite()->send(offsiteConnection($database, $transport), $database, '/var/coresmith/backups/app_db/app_db-20261018023000.sql.gz', offsiteDestination($database->team));
+
+    expect($transport->commands())->toContain('sudo mktemp')
+        ->and(collect($transport->commands())->last())->toBe("sudo rm -f '/tmp/tmp.UpLoAd1234'");
+});
+
+test('a download travels in a config file and is checked against its size', function () {
+    $database = offsiteDatabase();
+    $transport = offsiteTransport();
+
+    offsite()->fetch(offsiteConnection($database, $transport), offsiteDestination($database->team), 'backups/monoven/forge-01/app_db/app_db-20261016023000.sql.gz', '/var/coresmith/backups/app_db/.restore-20261016023000.sql.gz', 1024);
+
+    $commands = $transport->commands();
+    $curl = collect($commands)->first(fn(string $command): bool => str_contains($command, 'curl '));
+
+    expect($transport->uploads()['/tmp/tmp.UpLoAd1234'])->toStartWith('url = "https://my-bucket.s3.eu-west-1.amazonaws.com/backups/monoven/forge-01/app_db/app_db-20261016023000.sql.gz?')
+        ->and(implode("\n", $commands))->not->toContain('X-Amz-Signature')
+        ->and($curl)->toBe("curl --fail --silent --show-error --max-time 1140 --config '/tmp/tmp.UpLoAd1234' -o '/var/coresmith/backups/app_db/.restore-20261016023000.sql.gz'")
+        ->and($commands)->toContain("chmod 600 '/var/coresmith/backups/app_db/.restore-20261016023000.sql.gz'")
+        ->and(end($commands))->toBe("rm -f '/tmp/tmp.UpLoAd1234'");
+});
+
+test('a short download is refused and removed', function () {
+    $database = offsiteDatabase();
+    $transport = offsiteTransport()->respondTo('stat -c %s', "512\n");
+
+    expect(fn() => offsite()->fetch(offsiteConnection($database, $transport), offsiteDestination($database->team), 'backups/monoven/forge-01/app_db/app_db-1.sql.gz', '/var/coresmith/backups/app_db/.restore-1.sql.gz', 1024))
+        ->toThrow(OffsiteDownloadFailed::class, 'The download from S3 stopped early: 512 of 1024 bytes arrived. Try again.');
+
+    expect($transport->commands())->toContain("rm -f '/var/coresmith/backups/app_db/.restore-1.sql.gz'")
+        ->and(collect($transport->commands())->last())->toBe("rm -f '/tmp/tmp.UpLoAd1234'");
+});
+
+test('a refused download says what S3 said and leaves nothing behind', function () {
+    $database = offsiteDatabase();
+    $transport = offsiteTransport()->respondTo('curl ', "\ncurl: (22) The requested URL returned error: 404\n", 22);
+
+    expect(fn() => offsite()->fetch(offsiteConnection($database, $transport), offsiteDestination($database->team), 'backups/monoven/forge-01/app_db/app_db-1.sql.gz', '/var/coresmith/backups/app_db/.restore-1.sql.gz', 1024))
+        ->toThrow(OffsiteDownloadFailed::class, 'S3 refused the download: curl: (22) The requested URL returned error: 404. Check the bucket name, region and keys.');
+
+    expect($transport->commands())->toContain("rm -f '/var/coresmith/backups/app_db/.restore-1.sql.gz'");
+});
+
+test('only MySQL and PostgreSQL databases of a team with S3 have copies there', function () {
+    $database = offsiteDatabase();
+    $redis = ManagedDatabase::factory()->for($database->team)->for($database->server)->create(['type' => DatabaseType::Redis, 'name' => 'cache']);
+
+    expect(offsite()->covers($database))->toBeFalse();
+
+    offsiteDestination($database->team);
+
+    expect(offsite()->covers($database->fresh()))->toBeTrue()
+        ->and(offsite()->covers($redis->fresh()))->toBeFalse();
 });

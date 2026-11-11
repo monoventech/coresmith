@@ -90,10 +90,10 @@ test('a duplicate name gets a suffixed slug rather than colliding', function () 
     $this->actingAs($admin)->post(route('servers.applications.store', $server), payload(['name' => 'shop']));
     $this->actingAs($admin)->post(route('servers.applications.store', $server), payload(['name' => 'shop']));
 
-    $slugs = Application::pluck('slug')->all();
+    $slugs = Application::pluck('slug')->sort()->values()->all();
 
     expect($slugs)->toHaveCount(2)
-        ->and(count(array_unique($slugs)))->toBe(2)
+        ->and($slugs[0])->toBe('shop')
         ->and($slugs[1])->toStartWith('shop-');
 });
 

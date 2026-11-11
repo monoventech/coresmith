@@ -80,6 +80,11 @@ class Server extends Model
         return (((array) $this->meta)['ssh_passwords'] ?? null) === SecurityHardening::PASSWORDS_OFF;
     }
 
+    public function sshPasswordsOn(): bool
+    {
+        return (((array) $this->meta)['ssh_passwords'] ?? null) === SecurityHardening::PASSWORDS_ON;
+    }
+
     public function systemdVersion(): ?int
     {
         $version = ((array) $this->meta)['systemd'] ?? null;

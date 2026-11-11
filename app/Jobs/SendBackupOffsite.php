@@ -11,6 +11,7 @@ namespace App\Jobs;
 use App\Exceptions\OffsiteUploadFailed;
 use App\Models\BackupDestination;
 use App\Models\ManagedDatabase;
+use App\Services\Database\DatabaseBackups;
 use App\Services\Database\OffsiteBackups;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -56,6 +57,7 @@ final class SendBackupOffsite implements ShouldQueue
             $this->database->forceFill(['last_offsite_error' => Str::limit($exception->getMessage(), 497)])->save();
         } finally {
             $connections->disconnect($server);
+            app(DatabaseBackups::class)->forget($this->database);
         }
     }
 

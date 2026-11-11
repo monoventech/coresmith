@@ -11,6 +11,7 @@ namespace App\Services\Panel;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Carbon\CarbonInterval;
+use Illuminate\Support\Number;
 
 final class Formats
 {
@@ -58,6 +59,11 @@ final class Formats
         $gigabytes = $megabytes / 1024;
 
         return $gigabytes < 1 ? $megabytes . ' MB' : round($gigabytes) . ' GB';
+    }
+
+    public static function bytes(int $bytes): string
+    {
+        return str_replace(' ', "\u{00A0}", Number::fileSize(max(0, $bytes), maxPrecision: 1));
     }
 
     public static function size(int $megabytes): string

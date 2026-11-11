@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { dialog, expect, gotoServer, gotoServerTab, test } from './support/fixtures'
+import { blockingViolations, dialog, expect, gotoServer, gotoServerTab, test, useTheme } from './support/fixtures'
 
 async function rewriteInertia(page: Page, path: string, change: (props: Record<string, any>) => void) {
     await page.route(`**${path}`, async (route) => {
@@ -25,6 +25,24 @@ async function rewriteInertia(page: Page, path: string, change: (props: Record<s
         )
 
         await route.fulfill({ response, body: rewritten })
+    })
+}
+
+async function passwordsOn(page: Page, ssh: Record<string, unknown> = {}) {
+    await rewriteInertia(page, '/servers/*/hardening', (props) => {
+        props.server.this_machine = true
+        props.ssh = {
+            verified: false,
+            owner: true,
+            passwords_off: false,
+            error: null,
+            logins: { password: true, keyboard: false, root: true },
+            source: '/etc/ssh/sshd_config.d/50-cloud-init.conf',
+            lines: ['PasswordAuthentication no', 'PermitRootLogin prohibit-password'],
+            reload: 'ssh',
+            checked: 'today 13:00',
+            ...ssh
+        }
     })
 }
 
@@ -204,4 +222,92 @@ test.describe('this machine', () => {
         )
         await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveCount(0)
     })
+
+    test('when password login is on, this machine shows the exact steps to turn it off', async ({ page }) => {
+        await passwordsOn(page)
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        const warning = page.getByTestId('ssh-passwords-warning')
+        await expect(warning.getByText('Password login is on.', { exact: true })).toBeVisible()
+        await expect(warning).toContainText(
+            "Anyone can try passwords against this machine's SSH. /etc/ssh/sshd_config.d/50-cloud-init.conf turns it on."
+        )
+        await expect(warning).toContainText('Check that you can sign in with your SSH key, and keep that session open.')
+        await expect(warning.getByTestId('ssh-passwords-commands')).toHaveText(
+            "printf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' | sudo tee /etc/ssh/sshd_config.d/01-no-passwords.conf\nsudo sshd -t && sudo systemctl reload ssh"
+        )
+        await expect(warning).toContainText('Then check again.')
+    })
+
+    test('only root by password on Rocky reloads sshd and writes one line', async ({ page }) => {
+        await passwordsOn(page, {
+            logins: { password: false, keyboard: false, root: true },
+            source: '/etc/ssh/sshd_config',
+            lines: ['PermitRootLogin prohibit-password'],
+            reload: 'sshd'
+        })
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        const warning = page.getByTestId('ssh-passwords-warning')
+        await expect(warning.getByText('Root can sign in with a password.', { exact: true })).toBeVisible()
+        await expect(warning.getByTestId('ssh-passwords-commands')).toHaveText(
+            "printf '%s\\n' 'PermitRootLogin prohibit-password' | sudo tee /etc/ssh/sshd_config.d/01-no-passwords.conf\nsudo sshd -t && sudo systemctl reload sshd"
+        )
+    })
+
+    test('a login sshd turns on by itself says so', async ({ page }) => {
+        await passwordsOn(page, {
+            logins: { password: false, keyboard: true, root: false },
+            source: null,
+            lines: ['KbdInteractiveAuthentication no']
+        })
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        await expect(page.getByTestId('ssh-passwords-warning')).toContainText(
+            "Anyone can try passwords against this machine's SSH. sshd turns it on by default."
+        )
+    })
+
+    test('Check again asks Coresmith to read the settings', async ({ page }) => {
+        await passwordsOn(page)
+        await page.route('**/ssh-check', (route) =>
+            route.fulfill({ status: 409, headers: { 'x-inertia-location': page.url() } })
+        )
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        const request = page.waitForRequest((sent) => sent.url().endsWith('/ssh-check') && sent.method() === 'POST')
+        await page.getByTestId('ssh-passwords-warning').getByRole('button', { name: 'Check again' }).click()
+        await request
+    })
+
+    test('no warning once password login is off', async ({ page }) => {
+        await rewriteInertia(page, '/servers/*/hardening', (props) => {
+            props.server.this_machine = true
+            props.ssh = {
+                ...props.ssh,
+                verified: false,
+                owner: true,
+                passwords_off: true,
+                error: null,
+                logins: null,
+                source: null,
+                lines: []
+            }
+        })
+        await gotoServerTab(page, 'outpost-01', 'Hardening')
+
+        await expect(page.getByTestId('ssh-access-summary')).toBeVisible()
+        await expect(page.getByTestId('ssh-passwords-warning')).toHaveCount(0)
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the password login warning has no serious or critical violations in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await passwordsOn(page)
+            await gotoServerTab(page, 'outpost-01', 'Hardening')
+            await expect(page.getByTestId('ssh-passwords-warning')).toBeVisible()
+
+            expect(await blockingViolations(page), `password warning in ${theme}`).toEqual([])
+        })
+    }
 })

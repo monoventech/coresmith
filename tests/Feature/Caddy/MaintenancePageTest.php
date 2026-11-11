@@ -251,3 +251,21 @@ test('the route sync job leaves the server alone for an application with no doma
         ->and($transport->connected())->toBeFalse()
         ->and($transport->loginAttempted())->toBeFalse();
 });
+
+test('starting and stopping say what happens to the app, in plain words', function (string $route, PowerState $state, string $message) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['power_state' => $state]);
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Admin->value]);
+
+    $this->actingAs($user->fresh())
+        ->post(route($route, [$server, $application]))
+        ->assertSessionHas('success', $message);
+})->with([
+    'starting a stopped app' => ['servers.applications.start', PowerState::Stopped, 'Starting. The app will be reachable again shortly.'],
+    'starting a running app' => ['servers.applications.start', PowerState::Active, 'That app is already running.'],
+    'stopping a running app' => ['servers.applications.stop', PowerState::Active, 'Stopping. Visitors will see a maintenance page until you start it again.'],
+    'stopping a stopped app' => ['servers.applications.stop', PowerState::Stopped, 'That app is already stopped.'],
+]);

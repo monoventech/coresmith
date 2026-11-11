@@ -15,6 +15,10 @@ final class PostgresDriver
 {
     public const PORT = 5432;
 
+    public const EXTENSION_COMMENTS = <<<'AWK'
+        /^COPY .* FROM stdin;$/ { copy = 1 } copy && /^\\\.$/ { copy = 0; print; next } !copy && /^COMMENT ON EXTENSION / { next } { print }
+        AWK;
+
     public function createDatabase(string $name, string $owner): string
     {
         $name = SafeName::assertDatabaseIdentifier($name);
@@ -97,11 +101,22 @@ final class PostgresDriver
             . escapeshellarg($database) . ' | gzip > ' . escapeshellarg($destination);
     }
 
-    public function restore(string $database, string $source): string
+    public function passfile(string $database, string $user, int $port, #[\SensitiveParameter] string $password): string
     {
         $database = SafeName::assertDatabaseIdentifier($database);
+        $user = SafeName::assertDatabaseIdentifier($user);
 
-        return 'gunzip -c ' . escapeshellarg($source) . ' | sudo -u postgres psql ' . escapeshellarg($database);
+        return "127.0.0.1:{$port}:{$database}:{$user}:" . addcslashes($password, '\\:') . "\n";
+    }
+
+    public function restore(string $database, string $user, int $port, string $source, string $passfile): string
+    {
+        $database = SafeName::assertDatabaseIdentifier($database);
+        $user = SafeName::assertDatabaseIdentifier($user);
+
+        return 'gunzip -c ' . escapeshellarg($source) . ' | awk ' . escapeshellarg(self::EXTENSION_COMMENTS)
+            . ' | PGPASSFILE=' . escapeshellarg($passfile) . " psql -h 127.0.0.1 -p {$port} -U " . escapeshellarg($user)
+            . ' -d ' . escapeshellarg($database) . ' -v ON_ERROR_STOP=1 --single-transaction -q';
     }
 
     public function bindToLoopback(): string

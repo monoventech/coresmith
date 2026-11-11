@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\DatabaseType;
 use App\Models\ManagedDatabase;
+use App\Services\Database\DatabaseBackups;
 use App\Services\Database\DatabaseManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -33,7 +34,7 @@ final class BackupDatabase implements ShouldQueue
         $this->onQueue('server-tasks');
     }
 
-    public function handle(SSHConnectionManager $connections, DatabaseManager $databases): string
+    public function handle(SSHConnectionManager $connections, DatabaseManager $databases, DatabaseBackups $backups): string
     {
         $server = $this->database->server;
         $connection = $connections->for($server);
@@ -42,6 +43,7 @@ final class BackupDatabase implements ShouldQueue
             $path = $databases->backup($connection, $this->database, $this->timestamp);
         } finally {
             $connections->disconnect($server);
+            $backups->forget($this->database);
         }
 
         if ($this->offsite && in_array($this->database->type, [DatabaseType::Mysql, DatabaseType::Postgresql], true)) {
