@@ -15,6 +15,7 @@ use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
+use App\Models\Team;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Facades\Gate;
@@ -111,6 +112,47 @@ final class ProjectPresenter
             })->values()->all(),
             'can' => ['manage' => Gate::forUser($viewer)->allows('manage', $project)],
             'candidates' => $fills->contains(true) ? $this->candidates($project, $viewer) : ['applications' => [], 'databases' => []],
+        ];
+    }
+
+    /**
+     * @return list<array{id: string, name: string, environments: list<array{id: string, name: string}>}>
+     */
+    public function choices(User $viewer, ?Team $team): array
+    {
+        if (!$team instanceof Team) {
+            return [];
+        }
+
+        return $this->access->projects($viewer, $team)->orderBy('name')->get()
+            ->map(fn(Project $project): array => [
+                'id' => $project->getKey(),
+                'name' => $project->name,
+                'environments' => $this->access->environmentsOf($viewer, $project)
+                    ->filter(fn(Environment $environment): bool => Gate::forUser($viewer)->allows('fill', $environment))
+                    ->map(fn(Environment $environment): array => ['id' => $environment->getKey(), 'name' => $environment->name])
+                    ->values()
+                    ->all(),
+            ])
+            ->filter(fn(array $project): bool => $project['environments'] !== [])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{label: string, href: string|null}|null
+     */
+    public function place(User $viewer, Application|ManagedDatabase $subject): ?array
+    {
+        $project = $subject->environment?->project;
+
+        if (!$project instanceof Project) {
+            return null;
+        }
+
+        return [
+            'label' => $project->name . ' › ' . $subject->environment->name,
+            'href' => $this->access->canSeeProject($viewer, $project) ? route('projects.show', $project) : null,
         ];
     }
 

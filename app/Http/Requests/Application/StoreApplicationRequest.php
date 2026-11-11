@@ -16,6 +16,7 @@ use App\Exceptions\GitHubLinkProofException;
 use App\Exceptions\GitProviderException;
 use App\Models\Server;
 use App\Models\SourceProvider;
+use App\Rules\FillableEnvironment;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\RepositoryCatalog;
@@ -74,6 +75,7 @@ final class StoreApplicationRequest extends FormRequest
             'web_directory' => ['required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
             'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['boolean'],
+            'environment_id' => ['nullable', 'string', new FillableEnvironment($server?->team, $this->user())],
         ];
     }
 

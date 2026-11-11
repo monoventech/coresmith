@@ -28,6 +28,7 @@ use App\Services\Database\OffsiteBackups;
 use App\Services\Database\RedisPorts;
 use App\Services\Database\SharedRedis;
 use App\Services\Panel\Formats;
+use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Teams\TeamAccess;
@@ -64,12 +65,13 @@ final class DatabaseController extends Controller
         ]);
     }
 
-    public function create(Server $server): Response
+    public function create(Request $request, Server $server, ProjectPresenter $projects): Response
     {
         $this->authorize('view', $server);
 
         return Inertia::render('databases/Create', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.databases.index', $server)],
+            'projects' => $projects->choices($request->user(), $server->team),
         ]);
     }
 
@@ -107,6 +109,7 @@ final class DatabaseController extends Controller
         return Inertia::render('databases/Show', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => $access->canSeeServer($user, $server) ? route('servers.databases.index', $server) : null],
             'database' => $this->summarise($database),
+            'place' => app(ProjectPresenter::class)->place($user, $database),
             'can' => [
                 'viewCredentials' => $user->can('viewCredentials', $database),
                 'backup' => $user->can('backup', $database) && $database->takesBackups(),
