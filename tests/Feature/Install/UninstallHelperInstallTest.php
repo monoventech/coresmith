@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Symfony\Component\Process\Process;
 
 function uninstallHelperInstaller(): string
 {
@@ -65,7 +66,7 @@ test('the helper the installer writes is the uninstaller, byte for byte', functi
             . "UNINSTALL_HELPER='{$base}/libexec/coresmith/uninstall'\nUNINSTALL_DIR='{$base}/lib/coresmith-uninstall'\n"
             . "refuse_link() { :; }\nchown() { :; }\n"
             . "install_uninstall_helper() {\n" . uninstallHelperFunction() . "\n}\ninstall_uninstall_helper\n";
-        $process = new Symfony\Component\Process\Process(['bash', '-c', $script]);
+        $process = new Process(['bash', '-c', $script]);
         $process->run();
 
         expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
@@ -73,6 +74,6 @@ test('the helper the installer writes is the uninstaller, byte for byte', functi
             ->and(substr(sprintf('%o', fileperms("{$base}/libexec/coresmith/uninstall")), -4))->toBe('0755')
             ->and(substr(sprintf('%o', fileperms("{$base}/lib/coresmith-uninstall")), -4))->toBe('1770');
     } finally {
-        (new Symfony\Component\Process\Process(['rm', '-rf', $base]))->run();
+        (new Process(['rm', '-rf', $base]))->run();
     }
 });
