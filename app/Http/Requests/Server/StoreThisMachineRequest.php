@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Server;
 
 use App\Enums\Ability;
+use App\Http\Controllers\ServerController;
 use App\Models\Team;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -30,7 +31,15 @@ final class StoreThisMachineRequest extends FormRequest
         return [
             'team_id' => ['required', 'string', Rule::exists('teams', 'id')],
             'name' => ['required', 'string', 'max:255'],
-            'environment' => ['nullable', 'string', 'max:32'],
+            'environment' => ['nullable', Rule::in(ServerController::ENVIRONMENTS)],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return ['environment.in' => ServerController::PICK_ENVIRONMENT];
     }
 }
