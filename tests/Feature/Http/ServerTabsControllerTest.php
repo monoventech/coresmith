@@ -47,7 +47,7 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
             ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
             ->where('hardening', ServerTabsController::HARDENING)
             ->where('admin_move_error', null)
-            ->where('ssh', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null])
+            ->where('ssh', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null])
             ->where('firewall.open', [2222, 80, 443])
             ->where('firewall.ssh_port', 2222)
             ->where('firewall.changes', [])
@@ -110,7 +110,7 @@ test("on Coresmith's own machine the hardening tab says SSH is left as its owner
     $this->actingAs(serverTabMember($team))
         ->get(route('servers.hardening', $server))
         ->assertInertia(fn($page) => $page
-            ->where('ssh', ['verified' => false, 'owner' => true, 'passwords_off' => $off, 'error' => null])
+            ->where('ssh', ['verified' => false, 'owner' => true, 'passwords_off' => $off, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null])
             ->where('hardening', fn($items) => collect($items)->contains(ServerTabsController::SSH_LEFT_TO_OWNER) && !collect($items)->contains(ServerTabsController::SSH_KEY_ONLY)));
 })->with([
     'passwords off' => [['ssh_hardening' => 'owner', 'ssh_passwords' => 'off'], true],

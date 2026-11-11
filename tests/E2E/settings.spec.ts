@@ -11,7 +11,8 @@ import {
     tabs,
     tabStaysInViewAsTabsWiden,
     test,
-    toast
+    toast,
+    withProps
 } from './support/fixtures'
 
 test.describe('settings', () => {
@@ -171,16 +172,28 @@ test.describe('general settings', () => {
         await expect(dialog(page)).toContainText("That isn't an OpenSSH public key.")
     })
 
-    test('the last owner of a team is told what has to happen before the account can close', async ({ page }) => {
+    test('an owner alone in a team, who could never close their account, is offered Remove Coresmith instead', async ({
+        page
+    }) => {
+        await gotoSettings(page, 'General')
+
+        await expect(page.getByTestId('close-account')).toHaveCount(0)
+        await expect(
+            page.getByTestId('remove-coresmith').getByRole('button', { name: 'Remove Coresmith' })
+        ).toBeVisible()
+        await expect(page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' })).toHaveCount(0)
+    })
+
+    test('the last owner of a team someone else could take over is told what has to happen first', async ({ page }) => {
+        await withProps(page, /\/settings$/, (props) => {
+            props.account = { refusal: 'Make someone else an owner of Monoven first.', hidden: false }
+        })
         await gotoSettings(page, 'General')
 
         const closing = page.getByTestId('close-account')
 
-        await expect(closing).toContainText(
-            'Make someone else an owner of Foundry first. To remove Coresmith instead, run coresmith:uninstall on its server.'
-        )
+        await expect(closing).toContainText('Make someone else an owner of Monoven first.')
         await expect(closing.getByRole('button', { name: 'Close your account' })).toBeDisabled()
-        await expect(page.getByTestId('danger-zone').getByRole('button', { name: 'Delete this team' })).toHaveCount(0)
     })
 })
 

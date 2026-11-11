@@ -46,7 +46,7 @@ test('the last owner of a team with other members is told what to do first', fun
     $this->assertAuthenticatedAs($owner);
 })->with([
     'on cloud' => ['cloud', 'Make someone else an owner of Monoven first, remove the other members, or delete the team.'],
-    'on a self-hosted panel' => ['self-hosted', 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.'],
+    'on a self-hosted panel' => ['self-hosted', 'Make someone else an owner of Monoven first.'],
 ]);
 
 test('a cloud owner alone on their team is told to delete it first', function () {
@@ -64,7 +64,7 @@ test('the only person on a self-hosted panel keeps their account, so the panel i
     $owner = User::factory()->create();
     accountClosingTeam($owner);
 
-    accountClosingAsk($owner)->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.']);
+    accountClosingAsk($owner)->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first.']);
 
     expect(User::find($owner->id))->not->toBeNull();
 });
@@ -145,7 +145,7 @@ test('the last owner of a team whose founder is now an admin is told what to do 
     accountClosingAsk($owner)->assertSessionHasErrors(['password' => 'Make someone else an owner of Monoven first, remove the other members, or delete the team.']);
 });
 
-test('settings say what has to happen before the account can close', function (string $edition, bool $alone, ?string $refusal) {
+test('settings say what has to happen before the account can close', function (string $edition, bool $alone, ?string $refusal, bool $hidden) {
     config(['coresmith.edition' => $edition]);
     $owner = User::factory()->create();
     $team = accountClosingTeam($owner);
@@ -157,9 +157,22 @@ test('settings say what has to happen before the account can close', function (s
 
     $this->actingAs($owner)
         ->get(route('settings.general'))
-        ->assertInertia(fn($page) => $page->where('account', ['refusal' => $refusal]));
+        ->assertInertia(fn($page) => $page->where('account', ['refusal' => $refusal, 'hidden' => $hidden]));
 })->with([
-    'alone on cloud' => ['cloud', true, 'Delete Monoven from Settings, General first, then close your account.'],
-    'another owner on cloud' => ['cloud', false, null],
-    'alone on a self-hosted panel' => ['self-hosted', true, 'Make someone else an owner of Monoven first. To remove Coresmith instead, run coresmith:uninstall on its server.'],
+    'alone on cloud' => ['cloud', true, 'Delete Monoven from Settings, General first, then close your account.', false],
+    'another owner on cloud' => ['cloud', false, null, false],
+    'alone on a self-hosted panel' => ['self-hosted', true, 'Make someone else an owner of Monoven first.', true],
+    'another owner on a self-hosted panel' => ['self-hosted', false, null, false],
 ]);
+
+test('on a self-hosted panel, closing stays in sight with its reason while someone in the team could take over', function () {
+    config(['coresmith.edition' => 'self-hosted']);
+    $owner = User::factory()->create();
+    $team = accountClosingTeam($owner);
+    $owner->forceFill(['current_team_id' => $team->id])->save();
+    accountClosingJoin($team, TeamRole::Member, '-1 year');
+
+    $this->actingAs($owner)
+        ->get(route('settings.general'))
+        ->assertInertia(fn($page) => $page->where('account', ['refusal' => 'Make someone else an owner of Monoven first.', 'hidden' => false]));
+});

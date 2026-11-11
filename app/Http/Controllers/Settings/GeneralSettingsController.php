@@ -21,6 +21,7 @@ use App\Services\Moves\MovePresenter;
 use App\Services\Panel\AddressPresenter;
 use App\Services\Panel\PanelBackup;
 use App\Services\Panel\PanelUpdatesPresenter;
+use App\Services\Panel\RemovalPresenter;
 use App\Services\Teams\AccountClosing;
 use App\Services\Teams\TeamDeletion;
 use Carbon\CarbonImmutable;
@@ -43,7 +44,7 @@ final class GeneralSettingsController extends Controller
         return back()->with('success', 'Backing up. The database and environment are archived, the last ' . PanelBackup::KEEP . ' are kept.');
     }
 
-    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion, MovePresenter $moves, AddressPresenter $address): Response
+    public function show(Request $request, PanelBackup $backups, PanelUpdatesPresenter $updates, AccountClosing $closing, TeamDeletion $deletion, MovePresenter $moves, AddressPresenter $address, RemovalPresenter $removal): Response
     {
         $cloud = Edition::current()->isCloud();
         $installed = $cloud ? null : InstanceSetting::get('installed_at');
@@ -66,7 +67,8 @@ final class GeneralSettingsController extends Controller
                 ],
                 'keep' => PanelBackup::KEEP,
             ],
-            'account' => ['refusal' => $closing->refusal($request->user())],
+            'account' => ['refusal' => $closing->refusal($request->user()), 'hidden' => $closing->hidden($request->user())],
+            'removal' => $removal->present($request->user(), $this->currentTeam()),
             'team_deletion' => $this->teamDeletion($request, $this->currentTeam(), $deletion),
             'timezones' => DateTimeZone::listIdentifiers(),
             'keys' => $request->user()->sshKeys()->latest()->get()->map(fn(SshKey $key): array => [

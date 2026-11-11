@@ -17,6 +17,7 @@ createInertiaApp({
         switch (true) {
             case name === 'Install':
             case name === 'auth/SetupRequired':
+            case name === 'settings/Removing':
                 return null
             case name.startsWith('auth/'):
                 return AuthLayout

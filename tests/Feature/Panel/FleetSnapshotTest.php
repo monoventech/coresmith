@@ -496,3 +496,23 @@ test('a server being resized reads so, and a failed resize is a warning', functi
         ->and($fleet->attention())->toContain(['severity' => 'warning', 'subject' => 'outpost-07', 'summary' => 'resize failed', 'href' => route('servers.show', $failed)])
         ->and(collect($fleet->attention())->pluck('subject')->all())->not->toContain('outpost-06');
 });
+
+test('password login left on for the machine Coresmith runs on needs attention', function () {
+    $team = Team::factory()->create();
+    $machine = fleetServer($team, ['name' => 'beelink', 'runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'on', 'ssh_password_logins' => ['password'], 'ssh_password_sources' => []]]);
+    fleetMetric($machine, 40.0);
+
+    expect((new FleetSnapshot($team))->attention())->toBe([
+        ['severity' => 'warning', 'subject' => 'beelink', 'summary' => 'password login on', 'href' => route('servers.hardening', $machine)],
+    ]);
+});
+
+test('this machine with password login off, or not read yet, needs no attention for it', function (array $meta) {
+    $team = Team::factory()->create();
+    fleetMetric(fleetServer($team, ['name' => 'beelink', 'runs_coresmith' => true, 'meta' => $meta]), 40.0);
+
+    expect((new FleetSnapshot($team))->attention())->toBe([]);
+})->with([
+    'off' => [['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']],
+    'not read yet' => [['ssh_hardening' => 'owner']],
+]);

@@ -11,8 +11,11 @@ namespace App\Http\Controllers;
 use App\Models\Server;
 use App\Services\Database\SharedRedis;
 use App\Services\Panel\ActivityFeed;
+use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\FirewallConfigurator;
+use App\Services\Server\PasswordLogins;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -87,6 +90,7 @@ final class ServerTabsController extends Controller
                 'owner' => $server->sshLeftToOwner(),
                 'passwords_off' => $server->sshLeftToOwner() && $server->sshPasswordsOff(),
                 'error' => $server->sshHardened() || $server->sshLeftToOwner() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
+                ...$this->passwordLogins($server),
             ],
             'firewall' => [
                 'open' => (new FirewallConfigurator)->openedPorts($server),
@@ -128,5 +132,23 @@ final class ServerTabsController extends Controller
             'server' => $presenter->header($server, $request->user()),
             'activity' => $feed->forServer($server),
         ]);
+    }
+
+    /**
+     * @return array{logins: array{password: bool, keyboard: bool, root: bool}|null, source: string|null, lines: list<string>, reload: string, checked: string|null}
+     */
+    private function passwordLogins(Server $server): array
+    {
+        $logins = $server->sshLeftToOwner() ? PasswordLogins::fromMeta((array) $server->meta) : null;
+        $on = $logins === null || $logins->off() ? null : $logins;
+        $checked = ((array) $server->meta)['ssh_passwords_checked_at'] ?? null;
+
+        return [
+            'logins' => $on === null ? null : array_combine(['password', 'keyboard', 'root'], array_map(fn(string $login): bool => in_array($login, $on->on, true), ['password', 'keyboard', 'root'])),
+            'source' => $on === null ? null : collect($on->on)->map(fn(string $login): ?string => $on->sources[$login] ?? null)->filter()->first(),
+            'lines' => $on?->lines() ?? [],
+            'reload' => in_array($server->os_name, ['rocky', 'almalinux', 'fedora', 'amzn'], true) ? 'sshd' : 'ssh',
+            'checked' => $on === null || !is_string($checked) ? null : Formats::when(CarbonImmutable::parse($checked)),
+        ];
     }
 }

@@ -47,6 +47,9 @@ readonly CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
 readonly CADDY_DROP_IN="/etc/systemd/system/caddy.service.d/coresmith.conf"
 readonly THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
 readonly THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+readonly UNINSTALL_HELPER="/usr/local/libexec/coresmith/uninstall"
+readonly UNINSTALL_DIR="/var/lib/coresmith-uninstall"
+readonly UNINSTALL_ANSWERS="/run/coresmith-uninstall"
 readonly NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
 readonly CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
 readonly APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
@@ -57,6 +60,7 @@ readonly HORIZON_LOG="/var/log/coresmith-horizon.log"
 readonly REVERB_LOG="/var/log/coresmith-reverb.log"
 readonly FPM_ERROR_LOG="/var/log/coresmith-fpm-error.log"
 readonly PHP_VERSION="8.5"
+readonly APT_SOURCES="/etc/apt/sources.list.d"
 
 if [ -t 1 ]; then
     readonly RED=$'\033[0;31m' GREEN=$'\033[0;32m' YELLOW=$'\033[1;33m'
@@ -541,6 +545,20 @@ ensure_database_password() {
 
 # ── Phase 1: packages ────────────────────────────────────────────────────────
 
+add_php_repository() {
+    local source
+
+    for source in "$APT_SOURCES"/ondrej-ubuntu-php-*.sources "$APT_SOURCES"/ondrej-ubuntu-php-*.list; do
+        if [ -f "$source" ]; then
+            log "Ondřej Surý's PHP archive is already set up."
+
+            return 0
+        fi
+    done
+
+    run add-apt-repository -y ppa:ondrej/php
+}
+
 install_system_packages() {
     log "Phase 1/8: installing system packages..."
 
@@ -551,7 +569,7 @@ install_system_packages() {
         run apt-get install -y -qq ca-certificates curl gnupg lsb-release software-properties-common
 
         if [ "$OS_ID" = "ubuntu" ]; then
-            run add-apt-repository -y ppa:ondrej/php
+            add_php_repository
         elif [ "$OS_ID" = "debian" ]; then
             curl -fsSLo /tmp/debsuryorg-archive-keyring.deb https://packages.sury.org/debsuryorg-archive-keyring.deb
             run dpkg -i /tmp/debsuryorg-archive-keyring.deb
@@ -1045,7 +1063,7 @@ php_admin_flag[log_errors] = on
 
 ; The panel drives servers over SSH in pure PHP, so it never needs to spawn processes.
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv
-php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:/proc/net/if_inet6:/tmp
+php_admin_value[open_basedir] = ${RELEASES_DIR}:${SHARED_DIR}:${DATA_DIR}:${THIS_MACHINE_DIR}:${UNINSTALL_DIR}:${UNINSTALL_ANSWERS}:/proc/net/if_inet6:/tmp
 FPMCONF
 
     mkdir -p "$CADDY_SITE_DIR"
@@ -1085,6 +1103,7 @@ create_systemd_services() {
 
     remove_legacy_caddy_drop_in
     install_this_machine_helper
+    install_uninstall_helper
     create_apps_slice
 
     cat >/etc/systemd/system/coresmith-horizon.service <<UNIT
@@ -1259,6 +1278,28 @@ Unit=coresmith-this-machine.service
 WantedBy=multi-user.target
 UNIT
 
+    cat >/etc/systemd/system/coresmith-uninstall.service <<UNIT
+[Unit]
+Description=Remove Coresmith, started from Settings
+
+[Service]
+Type=oneshot
+ExecStart=${UNINSTALL_HELPER} --request ${UNINSTALL_DIR}
+TimeoutStartSec=30min
+UNIT
+
+    cat >/etc/systemd/system/coresmith-uninstall.path <<UNIT
+[Unit]
+Description=Remove Coresmith when an owner asks from Settings
+
+[Path]
+PathExists=${UNINSTALL_DIR}/request
+Unit=coresmith-uninstall.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
     defer_library_restarts
     secure_logs
     systemctl daemon-reload
@@ -1270,6 +1311,565 @@ remove_legacy_caddy_drop_in() {
         rm -f "$CADDY_DROP_IN"
         rmdir "${CADDY_DROP_IN%/*}" 2>/dev/null || true
     fi
+}
+
+install_uninstall_helper() {
+    local tmp
+
+    refuse_link "${UNINSTALL_HELPER%/*}" "$UNINSTALL_HELPER" "$UNINSTALL_DIR"
+    mkdir -p "${UNINSTALL_HELPER%/*}" "$UNINSTALL_DIR"
+    chown root:root "${UNINSTALL_HELPER%/*}"
+    chmod 0755 "${UNINSTALL_HELPER%/*}"
+    chown root:coresmith "$UNINSTALL_DIR"
+    chmod 1770 "$UNINSTALL_DIR"
+
+    tmp="$(mktemp "${UNINSTALL_HELPER}.XXXXXX")"
+    cat >"$tmp" <<-'UNINSTALLER'
+	#!/usr/bin/env bash
+	# Copyright 2026 Monoven Ltd. All rights reserved.
+	# Licensed under the Elastic License v2 (ELv2).
+	# See LICENSE file in the project root.
+
+	set -Eeuo pipefail
+
+	CORESMITH_ROOT="/opt/coresmith"
+	SHARED_DIR="$CORESMITH_ROOT/shared"
+	DATA_DIR="/var/lib/coresmith"
+	APPS_DIR="/var/coresmith"
+	CONFIG_DIR="/etc/coresmith"
+	SYSTEMD_DIR="/etc/systemd/system"
+	CADDY_DROPIN="/etc/systemd/system/caddy.service.d/coresmith.conf"
+	THIS_MACHINE_HELPER="/usr/local/libexec/coresmith/this-machine"
+	CADDY_PERSIST="/usr/local/libexec/coresmith/persist-caddy-config"
+	THIS_MACHINE_DIR="/var/lib/coresmith-this-machine"
+	UNINSTALL_HELPER="/usr/local/libexec/coresmith/uninstall"
+	UNINSTALL_DIR="/var/lib/coresmith-uninstall"
+	ANSWER_DIR="/run/coresmith-uninstall"
+	APPS_SLICE="/etc/systemd/system/coresmith-apps.slice"
+	CADDYFILE="/etc/caddy/Caddyfile"
+	PANEL_SITE_DIR="/etc/caddy/coresmith"
+	LEGACY_PANEL_SITE="/etc/caddy/panel.caddy"
+	CADDY_CONFIG="/etc/caddy/caddy-config.json"
+	CADDY_ADMIN_TMPFILES="/etc/tmpfiles.d/coresmith-caddy.conf"
+	CADDY_ADMIN_DIR="/run/caddy-admin"
+	FPM_POOLS="/etc/php/*/fpm/pool.d /etc/php-fpm.d /etc/php/fpm/pool.d"
+	FPM_POOL="coresmith-panel.conf"
+	FAIL2BAN_JAIL="/etc/fail2ban/jail.d/coresmith.conf"
+	FAIL2BAN_FILTER="/etc/fail2ban/filter.d/coresmith-login.conf"
+	NEEDRESTART_CONF="/etc/needrestart/conf.d/coresmith.conf"
+	LOGS="/var/log/coresmith-*.log"
+	SAVE_ROOT="/root"
+	DEFAULT_REPOSITORY="https://github.com/monoventech/coresmith.git"
+	UNITS="coresmith-update.path coresmith-update.service coresmith-address.path coresmith-address.service coresmith-horizon.service coresmith-reverb.service coresmith-scheduler.timer coresmith-scheduler.service coresmith-this-machine.path coresmith-this-machine.service coresmith-uninstall.path coresmith-uninstall.service"
+
+	YES=false
+	PURGE=false
+	SAVED=""
+	APPS=""
+	REPOSITORY=""
+	DB_CONNECTION=""
+	DB_DATABASE=""
+	REQUEST=""
+	REQUEST_ID=""
+	STATUS=""
+	RELEASED=""
+	RELEASE_OUTPUT=""
+
+	if [ -t 1 ]; then
+	    RED=$'\033[0;31m'
+	    GREEN=$'\033[0;32m'
+	    YELLOW=$'\033[1;33m'
+	    CYAN=$'\033[0;36m'
+	    NC=$'\033[0m'
+	else
+	    RED=""
+	    GREEN=""
+	    YELLOW=""
+	    CYAN=""
+	    NC=""
+	fi
+
+	log() { printf '%s[coresmith]%s %s\n' "$CYAN" "$NC" "$1"; }
+	success() { printf '%s[✓]%s %s\n' "$GREEN" "$NC" "$1"; }
+	warn() { printf '%s[!]%s %s\n' "$YELLOW" "$NC" "$1"; }
+
+	fatal() {
+	    printf '%s[✗]%s %s\n' "$RED" "$NC" "$1" >&2
+	    exit 1
+	}
+
+	usage() {
+	    cat <<USAGE
+	Remove Coresmith from this server.
+
+	Usage: sudo bash uninstall.sh [--yes] [--purge]
+
+	  --yes     Remove it without asking first
+	  --purge   Don't keep a copy of Coresmith's settings, backups and database
+	  --help    Show this message
+
+	Without --purge, Coresmith's .env, its backups and its SQLite database are saved under ${SAVE_ROOT} first.
+	Apps deployed on this machine keep running.
+	USAGE
+
+	    exit 0
+	}
+
+	parse_args() {
+	    while [ $# -gt 0 ]; do
+	        case "$1" in
+	        --yes) YES=true ;;
+	        --purge) PURGE=true ;;
+	        --request)
+	            shift
+	            REQUEST="${1:-}"
+	            YES=true
+	            ;;
+	        --help | -h) usage ;;
+	        *) fatal "Unknown option: $1. Run with --help to see the supported options." ;;
+	        esac
+
+	        shift
+	    done
+	}
+
+	answer() {
+	    local tmp
+
+	    mkdir -p "$ANSWER_DIR"
+	    chmod 0755 "$ANSWER_DIR"
+	    tmp="$(mktemp "$ANSWER_DIR/.result.XXXXXX")"
+
+	    if [ "$1" = true ]; then
+	        printf '{"id":"%s","ok":true}\n' "$REQUEST_ID" >"$tmp"
+	    else
+	        printf '{"id":"%s","ok":false,"error":"%s"}\n' "$REQUEST_ID" "$2" >"$tmp"
+	    fi
+
+	    chmod 0644 "$tmp"
+	    mv -f "$tmp" "$ANSWER_DIR/result.json"
+	}
+
+	take_request() {
+	    local file="$REQUEST/request"
+	    local line=""
+	    local pattern='^([A-Za-z0-9]{1,64}) (ping|uninstall)$'
+	    local refused="The request wasn't one Coresmith's uninstaller accepts, so nothing changed."
+
+	    if [ -z "$REQUEST" ] || [ "$REQUEST" != "$UNINSTALL_DIR" ] || [ ! -d "$REQUEST" ] || [ -L "$REQUEST" ]; then
+	        fatal "Requests are only taken from ${UNINSTALL_DIR}."
+	    fi
+
+	    if [ -L "$file" ] || [ ! -f "$file" ] || [ "$(wc -c <"$file")" -gt 128 ]; then
+	        rm -f "$file"
+	        answer false "$refused"
+	        exit 1
+	    fi
+
+	    IFS= read -r line <"$file" || true
+	    rm -f "$file"
+
+	    if [[ ! "$line" =~ $pattern ]]; then
+	        answer false "$refused"
+	        exit 1
+	    fi
+
+	    REQUEST_ID="${BASH_REMATCH[1]}"
+
+	    if [ "${BASH_REMATCH[2]}" = ping ]; then
+	        answer true ""
+	        exit 0
+	    fi
+
+	    mkdir -p "$ANSWER_DIR"
+	    chmod 0755 "$ANSWER_DIR"
+	    STATUS="$ANSWER_DIR/status.json"
+	    RELEASED="$REQUEST/released.json"
+	}
+
+	progress() {
+	    local tmp
+
+	    if [ -z "$STATUS" ] || [ ! -d "$ANSWER_DIR" ]; then
+	        return 0
+	    fi
+
+	    tmp="$(mktemp "$ANSWER_DIR/.status.XXXXXX")"
+	    printf '{"id":"%s","stage":"%s","saved":"%s"}\n' "$REQUEST_ID" "$1" "$SAVED" >"$tmp"
+	    chmod 0644 "$tmp"
+	    mv -f "$tmp" "$STATUS"
+	}
+
+	release_servers() {
+	    local args=(coresmith:release-servers --no-interaction)
+
+	    if [ -n "$RELEASED" ]; then
+	        args+=("--report=$RELEASED")
+	    fi
+
+	    if [ -f "$CORESMITH_ROOT/app/artisan" ] && id coresmith >/dev/null 2>&1; then
+	        log "Taking Coresmith's key off its servers..."
+
+	        if RELEASE_OUTPUT="$(runuser -u coresmith -- php "$CORESMITH_ROOT/app/artisan" "${args[@]}" 2>&1)"; then
+	            printf '%s\n' "$RELEASE_OUTPUT"
+
+	            return 0
+	        fi
+	    fi
+
+	    RELEASE_OUTPUT=""
+	    warn "Couldn't take Coresmith's key off its servers."
+	}
+
+	require_root() {
+	    if [ "$(id -u)" -ne 0 ]; then
+	        fatal "This uninstaller must be run as root. Use: sudo bash uninstall.sh"
+	    fi
+	}
+
+	env_value() {
+	    local file="$SHARED_DIR/.env"
+
+	    [ -f "$file" ] || return 0
+
+	    KEY="$1" awk '
+	        BEGIN { key = ENVIRON["KEY"] }
+	        index($0, key "=") == 1 { value = substr($0, length(key) + 2); gsub(/^"|"$/, "", value); print value; exit }
+	    ' "$file"
+	}
+
+	read_install() {
+	    local app
+
+	    REPOSITORY="$(env_value CORESMITH_REPOSITORY)"
+	    DB_CONNECTION="$(env_value DB_CONNECTION)"
+	    DB_DATABASE="$(env_value DB_DATABASE)"
+
+	    for app in "$APPS_DIR"/apps/*; do
+	        if [ -e "$app" ]; then
+	            APPS="${APPS:+$APPS, }${app##*/}"
+	        fi
+	    done
+	}
+
+	give_storage_back() {
+	    local path
+
+	    if [ ! -d "$SHARED_DIR/storage" ] || ! id coresmith >/dev/null 2>&1; then
+	        return 0
+	    fi
+
+	    find "$SHARED_DIR/storage" -uid 0 -print0 2>/dev/null | while IFS= read -r -d '' path; do
+	        chown -h coresmith:coresmith "$path" || true
+	    done || true
+	}
+
+	confirm() {
+	    local answer=""
+
+	    if $YES; then
+	        return 0
+	    fi
+
+	    if [ -n "$APPS" ]; then
+	        printf 'This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s and its logs.\n' "$CORESMITH_ROOT" "$DATA_DIR"
+	        printf 'Apps deployed here (%s) keep running, with %s, %s and the coresmith user.\n' "$APPS" "$APPS_DIR" "$CONFIG_DIR"
+	    else
+	        printf 'This removes Coresmith from this server: its services, its Caddy site, PHP-FPM pool and fail2ban jail, %s, %s, its logs and the coresmith user.\n' "$CORESMITH_ROOT" "$DATA_DIR"
+	    fi
+
+	    printf "Coresmith's key comes off each server it can reach. The servers, and everything on them, keep running.\n"
+
+	    if ! $PURGE; then
+	        printf 'A copy of its .env, backups and database is saved under %s first.\n' "$SAVE_ROOT"
+	    fi
+
+	    printf 'Type uninstall to remove Coresmith from this server: '
+	    read -r answer || true
+
+	    if [ "$answer" != "uninstall" ]; then
+	        give_storage_back
+	        fatal "Nothing was removed."
+	    fi
+	}
+
+	save_copy() {
+	    if $PURGE; then
+	        return 0
+	    fi
+
+	    SAVED="$SAVE_ROOT/coresmith-uninstalled-$(date +%Y%m%d-%H%M%S)"
+	    mkdir -p "$SAVED"
+	    chmod 700 "$SAVED"
+
+	    if [ -f "$SHARED_DIR/.env" ]; then
+	        cp -p "$SHARED_DIR/.env" "$SAVED/.env"
+	    fi
+
+	    if [ -d "$SHARED_DIR/storage/app/private/backups" ]; then
+	        cp -Rp "$SHARED_DIR/storage/app/private/backups" "$SAVED/backups"
+	    fi
+
+	    if [ -f "$DATA_DIR/database.sqlite" ]; then
+	        if command -v sqlite3 >/dev/null 2>&1; then
+	            sqlite3 "$DATA_DIR/database.sqlite" ".backup '$SAVED/database.sqlite'"
+	        else
+	            cp -p "$DATA_DIR/database.sqlite" "$SAVED/database.sqlite"
+	        fi
+	    fi
+
+	    success "Saved Coresmith's settings, backups and database to $SAVED"
+	}
+
+	stop_units() {
+	    local unit
+
+	    log "Stopping Coresmith's services..."
+
+	    for unit in $UNITS; do
+	        if [ "$unit" = coresmith-uninstall.service ]; then
+	            continue
+	        fi
+
+	        systemctl stop "$unit" >/dev/null 2>&1 || true
+	        systemctl disable "$unit" >/dev/null 2>&1 || true
+	    done
+	}
+
+	forget_this_machine() {
+	    local request
+
+	    if [ ! -x "$THIS_MACHINE_HELPER" ] || [ ! -d "$THIS_MACHINE_DIR" ]; then
+	        return 0
+	    fi
+
+	    rm -f "$THIS_MACHINE_DIR/result.json"
+	    request="$(mktemp "$THIS_MACHINE_DIR/.request.XXXXXX")"
+	    printf 'uninstall remove\n' >"$request"
+	    mv -f "$request" "$THIS_MACHINE_DIR/request"
+
+	    if systemctl start coresmith-this-machine.service >/dev/null 2>&1 && grep -qF '"ok":true' "$THIS_MACHINE_DIR/result.json" 2>/dev/null; then
+	        success "Took Coresmith's key and sshd rule off this machine"
+	    else
+	        warn "Couldn't take Coresmith's key off this machine. Remove the coresmith-this-machine lines from /root/.ssh/authorized_keys and /etc/ssh/sshd_config, and delete /etc/ssh/sshd_config.d/00-coresmith-local.conf."
+	    fi
+	}
+
+	remove_units() {
+	    local unit
+
+	    for unit in $UNITS; do
+	        rm -f "$SYSTEMD_DIR/$unit"
+	    done
+
+	    if [ -z "$APPS" ]; then
+	        rm -f "$CADDY_DROPIN" "$APPS_SLICE"
+	        rmdir "${CADDY_DROPIN%/*}" >/dev/null 2>&1 || true
+	    fi
+
+	    systemctl daemon-reload >/dev/null 2>&1 || true
+	    success "Removed Coresmith's services"
+	}
+
+	take_coresmith_out_of_caddy() {
+	    local socket="$CADDY_ADMIN_DIR/admin.sock" policies id path
+
+	    if ! grep -qsF -- "--config /etc/caddy/caddy-config.json" "$CADDY_DROPIN"; then
+	        return 0
+	    fi
+
+	    policies="$(curl -fsS --max-time 30 --unix-socket "$socket" http://localhost/config/apps/tls/automation/policies 2>/dev/null || true)"
+
+	    for id in coresmith-site coresmith-any $(printf '%s' "$policies" | grep -oE '"@id":"coresmith-[a-z]+-tls(-[0-9]+)?"' | cut -d'"' -f4 || true); do
+	        curl -fsS --max-time 30 --unix-socket "$socket" -X DELETE "http://localhost/id/$id" >/dev/null 2>&1 || true
+	    done
+
+	    for path in apps/http/servers/coresmith-internal apps/tls/automation/on_demand logging/logs/coresmith; do
+	        curl -fsS --max-time 30 --unix-socket "$socket" -X DELETE "http://localhost/config/$path" >/dev/null 2>&1 || true
+	    done
+
+	    if [ -x "$CADDY_PERSIST" ] && "$CADDY_PERSIST"; then
+	        success "Took Coresmith's routes out of Caddy, which keeps serving the apps"
+	    else
+	        warn "Took Coresmith's routes out of Caddy, but couldn't save its config. Run curl --unix-socket ${socket} http://localhost/config/ > ${CADDY_CONFIG} so a restart keeps it."
+	    fi
+	}
+
+	remove_caddy_site() {
+	    if [ -n "$APPS" ]; then
+	        take_coresmith_out_of_caddy
+	    fi
+
+	    rm -rf "$PANEL_SITE_DIR"
+	    rm -f "$LEGACY_PANEL_SITE"
+
+	    if [ -z "$APPS" ]; then
+	        rm -f "$CADDY_CONFIG"
+	    fi
+
+	    if [ -f "$CADDYFILE" ] && { grep -qF "import $PANEL_SITE_DIR/" "$CADDYFILE" || grep -qF "import $LEGACY_PANEL_SITE" "$CADDYFILE"; }; then
+	        if [ -n "$SAVED" ]; then
+	            cp -p "$CADDYFILE" "$SAVED/Caddyfile"
+	        fi
+
+	        if [ -n "$APPS" ]; then
+	            printf '{\n    admin unix/%s/admin.sock|0222\n}\n' "$CADDY_ADMIN_DIR" >"$CADDYFILE"
+	        else
+	            printf '{\n    admin localhost:2019\n}\n' >"$CADDYFILE"
+	        fi
+	    fi
+
+	    if [ -n "$APPS" ]; then
+	        systemctl restart caddy >/dev/null 2>&1 || warn "Caddy didn't restart. Run systemctl restart caddy so the apps' sites load."
+	    else
+	        systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
+	        rm -f "$CADDY_ADMIN_TMPFILES"
+	        rm -rf "$CADDY_ADMIN_DIR"
+	    fi
+
+	    success "Removed Coresmith's Caddy site"
+	}
+
+	remove_fpm_pool() {
+	    local pool service version
+
+	    for pool in $FPM_POOLS; do
+	        if [ ! -f "$pool/$FPM_POOL" ]; then
+	            continue
+	        fi
+
+	        rm -f "${pool:?}/$FPM_POOL"
+	        service="php-fpm"
+
+	        case "$pool" in
+	        */php/[0-9]*/fpm/pool.d)
+	            version="${pool%/fpm/pool.d}"
+	            service="php${version##*/}-fpm"
+	            ;;
+	        esac
+
+	        systemctl restart "$service" >/dev/null 2>&1 || warn "Couldn't restart ${service}. Restart it so Coresmith's pool stops."
+	        success "Removed Coresmith's PHP-FPM pool"
+	    done
+	}
+
+	remove_fail2ban() {
+	    if [ ! -f "$FAIL2BAN_JAIL" ] && [ ! -f "$FAIL2BAN_FILTER" ]; then
+	        return 0
+	    fi
+
+	    rm -f "$FAIL2BAN_JAIL" "$FAIL2BAN_FILTER"
+	    systemctl restart fail2ban >/dev/null 2>&1 || true
+	    success "Removed Coresmith's fail2ban jail"
+	}
+
+	forget_safe_directories() {
+	    local value repository="${REPOSITORY:-$DEFAULT_REPOSITORY}"
+
+	    if ! command -v git >/dev/null 2>&1; then
+	        return 0
+	    fi
+
+	    for value in "$repository" "$repository/.git" "$CORESMITH_ROOT/app"; do
+	        git config --system --fixed-value --unset-all safe.directory "$value" >/dev/null 2>&1 || true
+	    done
+	}
+
+	remove_files() {
+	    local file
+
+	    rm -rf "${CORESMITH_ROOT:?}" "${DATA_DIR:?}" "${THIS_MACHINE_DIR:?}" "${UNINSTALL_DIR:?}" "${ANSWER_DIR:?}"
+	    rm -f "$THIS_MACHINE_HELPER" "$UNINSTALL_HELPER" "$CADDY_PERSIST" "$NEEDRESTART_CONF"
+	    rmdir "${THIS_MACHINE_HELPER%/*}" >/dev/null 2>&1 || true
+
+	    for file in $LOGS; do
+	        rm -f "$file"
+	    done
+
+	    if [ -n "$APPS" ]; then
+	        warn "Apps are still deployed on this machine under ${APPS_DIR}/apps (${APPS}). They are left running; remove them yourself if you no longer need them."
+	    else
+	        rm -rf "${APPS_DIR:?}" "${CONFIG_DIR:?}"
+	    fi
+
+	    success "Removed Coresmith's files"
+	}
+
+	remove_user() {
+	    local reason
+
+	    if [ -n "$APPS" ] || ! id coresmith >/dev/null 2>&1; then
+	        return 0
+	    fi
+
+	    if reason="$(userdel coresmith 2>&1)"; then
+	        success "Removed the coresmith user"
+	    else
+	        warn "Couldn't remove the coresmith user: ${reason}."
+	    fi
+	}
+
+	summary() {
+	    printf '\n'
+	    success "Coresmith is removed from this server."
+
+	    if [ -n "$SAVED" ]; then
+	        printf '  A copy of its .env, backups and database is in %s.\n' "$SAVED"
+	    fi
+
+	    case "$DB_CONNECTION" in
+	    pgsql) printf '  Its PostgreSQL database %s is still on its database server. Drop it if you no longer need it.\n' "$DB_DATABASE" ;;
+	    mysql) printf '  Its MySQL database %s is still on its database server. Drop it if you no longer need it.\n' "$DB_DATABASE" ;;
+	    esac
+
+	    if [ -n "$APPS" ]; then
+	        printf '  Kept for the apps still deployed here: %s, %s, %s, %s, %s and the coresmith user.\n' "$APPS_DIR" "$CONFIG_DIR" "$CADDY_CONFIG" "$CADDY_DROPIN" "$APPS_SLICE"
+	    fi
+
+	    printf '  Caddy, Redis, PHP, Node.js, Bun, Composer and any database server are still installed, as other software may use them.\n'
+	    printf '  Firewall rules for SSH, 80 and 443 are unchanged.\n'
+	    if [ -z "$RELEASE_OUTPUT" ]; then
+	        printf "  Servers Coresmith managed keep running. Its public key stays in their authorized_keys until you remove it.\n"
+	    else
+	        printf '  Servers Coresmith managed keep running. %s\n' "$(printf '%s\n' "$RELEASE_OUTPUT" | tail -n 1)"
+	        printf '%s\n' "$RELEASE_OUTPUT" | grep "^Couldn't reach " | sed 's/^/  /' || true
+	    fi
+	}
+
+	main() {
+	    parse_args "$@"
+	    require_root
+	    cd /
+
+	    if [ -n "$REQUEST" ]; then
+	        take_request
+	    fi
+
+	    read_install
+	    confirm
+	    progress saving
+	    save_copy
+	    progress releasing
+	    release_servers
+	    progress stopping
+	    stop_units
+	    forget_this_machine
+	    progress removing
+	    remove_units
+	    remove_caddy_site
+	    remove_fpm_pool
+	    remove_fail2ban
+	    forget_safe_directories
+	    remove_files
+	    remove_user
+	    summary
+	}
+
+	main "$@"
+	UNINSTALLER
+    chown root:root "$tmp"
+    chmod 0755 "$tmp"
+    mv -f "$tmp" "$UNINSTALL_HELPER"
 }
 
 create_apps_slice() {
@@ -1772,6 +2372,7 @@ finalize() {
     run systemctl enable --now coresmith-update.path
     run systemctl enable --now coresmith-address.path
     run systemctl enable --now coresmith-this-machine.path
+    run systemctl enable --now coresmith-uninstall.path
 
     configure_firewall
     configure_fail2ban

@@ -25,13 +25,28 @@ final class AccountClosing
             }
 
             return match (true) {
-                Edition::current()->isSelfHosted() => "Make someone else an owner of {$team->name} first. To remove Coresmith instead, run coresmith:uninstall on its server.",
+                Edition::current()->isSelfHosted() => "Make someone else an owner of {$team->name} first.",
                 $team->members()->whereKeyNot($user->getKey())->exists() => "Make someone else an owner of {$team->name} first, remove the other members, or delete the team.",
                 default => "Delete {$team->name} from Settings, General first, then close your account.",
             };
         }
 
         return null;
+    }
+
+    public function hidden(User $user): bool
+    {
+        if (!Edition::current()->isSelfHosted()) {
+            return false;
+        }
+
+        foreach ($this->teams($user) as $team) {
+            if ($this->successor($team, $user) === null && !$team->members()->whereKeyNot($user->getKey())->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function handOver(User $user): void

@@ -50,6 +50,8 @@ final class SecurityHardening
 
     public const PASSWORDS_OFF = 'off';
 
+    public const PASSWORDS_ON = 'on';
+
     private const SSHD_KEX = 'curve25519-sha256,curve25519-sha256@libssh.org';
 
     private const SSHD_CRYPTO = [
@@ -58,7 +60,7 @@ final class SecurityHardening
         'HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256',
     ];
 
-    private const ROOT_WITHOUT_PASSWORD = ['without-password', 'prohibit-password', 'forced-commands-only', 'no'];
+    public const ROOT_WITHOUT_PASSWORD = ['without-password', 'prohibit-password', 'forced-commands-only', 'no'];
 
     private const STRIP_SSHD_BLOCK = '$0 == start { inside = 1; next } $0 == stop { inside = 0; next } !inside { print }';
 
@@ -241,10 +243,21 @@ final class SecurityHardening
         $connection->execute('rm -f ' . self::SSHD_CONFIG . ' ' . self::LEGACY_SSHD_CONFIG, sudo: true)->throw();
         $this->applySsh($connection, false);
 
-        $this->recordSsh($server, [
-            'ssh_hardening' => self::LEFT_TO_OWNER,
-            ...($this->passwordProblem($this->effectiveSsh($connection)) === null ? ['ssh_passwords' => self::PASSWORDS_OFF] : []),
-        ]);
+        $logins = $this->readPasswordLogins($connection);
+
+        $this->recordSsh($server, ['ssh_hardening' => self::LEFT_TO_OWNER, ...($logins?->toMeta(now()) ?? [])]);
+    }
+
+    public function readPasswordLogins(SSHConnection $connection): ?PasswordLogins
+    {
+        return PasswordLogins::parse($connection->execute(PasswordLogins::command(), sudo: true)->output);
+    }
+
+    public function recordPasswordLogins(Server $server, PasswordLogins $logins): void
+    {
+        $fresh = $server->fresh() ?? $server;
+
+        $fresh->forceFill(['meta' => [...Arr::except((array) $fresh->meta, PasswordLogins::META_KEYS), ...$logins->toMeta(now())]])->save();
     }
 
     /**
@@ -254,7 +267,7 @@ final class SecurityHardening
     {
         $fresh = $server->fresh() ?? $server;
 
-        $fresh->forceFill(['meta' => [...Arr::except((array) $fresh->meta, ['ssh_hardening', 'ssh_hardening_error', 'ssh_passwords']), ...$result]])->save();
+        $fresh->forceFill(['meta' => [...Arr::except((array) $fresh->meta, ['ssh_hardening', 'ssh_hardening_error', ...PasswordLogins::META_KEYS]), ...$result]])->save();
     }
 
     /**
