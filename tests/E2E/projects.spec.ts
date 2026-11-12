@@ -124,3 +124,18 @@ test.describe('projects', () => {
         await expect(dialog(page)).toContainText("There's already a project called Storefront.")
     })
 })
+
+test.describe('a team without projects', () => {
+    test.afterEach(async ({ page }) => {
+        await page.goto('/monoven/dashboard')
+    })
+
+    test('still lists the apps outside every project', async ({ page }) => {
+        await page.goto('/acme/projects')
+
+        await expect(page.getByText('No projects yet.')).toBeVisible()
+        await page.getByTestId('no-project').getByRole('link', { name: 'acme-portal', exact: true }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'acme-portal' })).toBeVisible()
+    })
+})

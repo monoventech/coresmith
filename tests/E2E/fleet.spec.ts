@@ -278,3 +278,20 @@ test.describe('quick actions on a server card', () => {
         await expect(page).toHaveURL(/\/dashboard$/)
     })
 })
+
+test.describe('the fleet of a team without projects', () => {
+    test.afterEach(async ({ page }) => {
+        await page.goto('/monoven/dashboard')
+    })
+
+    test('on a phone its Apps row opens the apps outside every project', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'From 640px up the explorer lists these apps itself')
+
+        await page.goto('/acme/dashboard')
+        await page.getByTestId('phone-projects').getByRole('link', { name: /^Apps/ }).click()
+        await page.waitForURL(/\/acme\/projects$/)
+        await page.getByTestId('no-project').getByRole('link', { name: 'acme-portal', exact: true }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'acme-portal' })).toBeVisible()
+    })
+})
