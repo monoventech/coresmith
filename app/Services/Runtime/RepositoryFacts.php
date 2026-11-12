@@ -61,8 +61,29 @@ final readonly class RepositoryFacts
     public function workspace(): bool
     {
         $workspaces = $this->json('package.json')['workspaces'] ?? null;
+        $packages = is_array($workspaces) ? (array_is_list($workspaces) ? $workspaces : (array) ($workspaces['packages'] ?? [])) : [];
 
-        return $this->exists('pnpm-workspace.yaml') || (is_array($workspaces) && $workspaces !== []);
+        return array_diff(array_map(fn(mixed $entry): string => is_string($entry) ? trim($entry) : '', [...$packages, ...$this->pnpmPackages()]), ['', '.', './']) !== [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function pnpmPackages(): array
+    {
+        $yaml = (string) $this->file('pnpm-workspace.yaml');
+
+        if (preg_match('/^packages:[ \t]*\[([^\]]*)\]/m', $yaml, $inline) === 1) {
+            return array_map(fn(string $entry): string => trim($entry, " \t'\""), explode(',', $inline[1]));
+        }
+
+        if (preg_match('/^packages:[ \t]*\R((?:[ \t]+-[^\r\n]*\R?)+)/m', $yaml, $block) !== 1) {
+            return [];
+        }
+
+        preg_match_all('/^[ \t]+-[ \t]*([^#\r\n]*)/m', $block[1], $entries);
+
+        return array_map(fn(string $entry): string => trim($entry, " \t'\""), $entries[1]);
     }
 
     public function file(string $file): ?string

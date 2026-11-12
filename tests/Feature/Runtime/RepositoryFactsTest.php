@@ -49,9 +49,12 @@ test('a dependency is found in dependencies or devDependencies', function () {
         ->and($facts->dependency('react'))->toBeNull();
 });
 
-test('a workspace root is recognised from package.json workspaces or pnpm-workspace.yaml', function () {
+test('a workspace root lists other packages in package.json workspaces or pnpm-workspace.yaml, not only itself', function () {
     expect((new RepositoryFacts(['package.json' => '{"workspaces":["apps/*"]}']))->workspace())->toBeTrue()
         ->and((new RepositoryFacts(['package.json' => '{"workspaces":{"packages":["apps/*"]}}']))->workspace())->toBeTrue()
-        ->and((new RepositoryFacts(['package.json' => '{}'], markers: ['pnpm-workspace.yaml']))->workspace())->toBeTrue()
+        ->and((new RepositoryFacts(['package.json' => '{}', 'pnpm-workspace.yaml' => "packages:\n  - 'apps/*'\n  - 'packages/*'\n"]))->workspace())->toBeTrue()
+        ->and((new RepositoryFacts(['package.json' => '{}', 'pnpm-workspace.yaml' => "packages: [\".\"]\nallowBuilds:\n  esbuild: true\n"]))->workspace())->toBeFalse()
+        ->and((new RepositoryFacts(['package.json' => '{}', 'pnpm-workspace.yaml' => "packages:\n    - '.'\n\npublicHoistPattern:\n    - '@inertiajs/core'\n"]))->workspace())->toBeFalse()
+        ->and((new RepositoryFacts(['package.json' => '{}', 'pnpm-workspace.yaml' => "onlyBuiltDependencies:\n  - esbuild\n"]))->workspace())->toBeFalse()
         ->and((new RepositoryFacts(['package.json' => '{"name":"app"}']))->workspace())->toBeFalse();
 });
