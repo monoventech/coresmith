@@ -11,7 +11,9 @@ namespace App\Http\Controllers;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\BackupDestination;
+use App\Models\Environment;
 use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\TeamDomain;
@@ -107,17 +109,24 @@ final class TeamController extends Controller
     }
 
     /**
-     * @return array{servers: list<array{id: string, name: string, applications: list<array{id: string, name: string}>}>}
+     * @return array{servers: list<array{id: string, name: string, applications: list<array{id: string, name: string}>}>, projects: list<array{id: string, name: string, environments: list<array{id: string, name: string}>}>}
      */
     private function shareable(Team $team): array
     {
         $applications = $team->applications()->orderBy('name')->get(['id', 'name', 'server_id'])->groupBy('server_id');
 
-        return ['servers' => $team->servers()->orderBy('name')->get(['id', 'name'])->map(fn(Server $server): array => [
-            'id' => $server->id,
-            'name' => $server->name,
-            'applications' => $applications->get($server->id, collect())->map(fn(Application $application): array => ['id' => $application->id, 'name' => $application->name])->values()->all(),
-        ])->values()->all()];
+        return [
+            'servers' => $team->servers()->orderBy('name')->get(['id', 'name'])->map(fn(Server $server): array => [
+                'id' => $server->id,
+                'name' => $server->name,
+                'applications' => $applications->get($server->id, collect())->map(fn(Application $application): array => ['id' => $application->id, 'name' => $application->name])->values()->all(),
+            ])->values()->all(),
+            'projects' => $team->projects()->with('environments')->orderBy('name')->get()->map(fn(Project $project): array => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'environments' => $project->environments->map(fn(Environment $environment): array => ['id' => $environment->id, 'name' => $environment->name])->values()->all(),
+            ])->values()->all(),
+        ];
     }
 
     /**

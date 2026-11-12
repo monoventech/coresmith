@@ -31,6 +31,7 @@ use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
+use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\Catalog;
@@ -52,13 +53,14 @@ final class ApplicationController extends Controller
 {
     public const SECRET_KEYS = '/(PASSWORD|SECRET|TOKEN|KEY|DSN|PRIVATE)/i';
 
-    public function create(Server $server, Catalog $catalog, RuntimeLifecycle $lifecycle): Response
+    public function create(Request $request, Server $server, Catalog $catalog, RuntimeLifecycle $lifecycle, ProjectPresenter $projects): Response
     {
         $this->authorize('view', $server);
         $this->authorize('create', Application::class);
 
         return Inertia::render('applications/Create', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'projects' => $projects->choices($request->user(), $server->team),
             'runtimes' => collect(['php', 'ruby', 'bun', 'nodejs', 'deno'])->mapWithKeys(fn(string $runtime): array => [$runtime => [
                 'label' => $catalog->label($runtime),
                 'recommended' => $catalog->recommendedLine($runtime),
@@ -159,6 +161,7 @@ final class ApplicationController extends Controller
 
         return Inertia::render('applications/Show', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => app(TeamAccess::class)->canSeeServer($user, $server) ? route('servers.show', $server) : null],
+            'place' => app(ProjectPresenter::class)->place($user, $application),
             'application' => [
                 'id' => $application->id,
                 'name' => $application->name,

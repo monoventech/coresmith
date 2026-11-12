@@ -5,10 +5,12 @@ declare(strict_types=1);
 use App\Enums\DatabaseType;
 use App\Enums\TeamRole;
 use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Teams\TeamAccess;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -189,4 +191,18 @@ test('a database from another server is not found for deletion', function () {
         ->assertNotFound();
 
     expect($database->fresh()->trashed())->toBeFalse();
+});
+
+test('deleting a database seen only through its environment goes back to the fleet', function () {
+    databaseDeletionTransport();
+    [$server, $database, $admin] = databaseDeletionSetup();
+    $staging = Project::factory()->for($database->team)->withEnvironments(['Staging'])->create()->environments()->sole();
+    $database->update(['environment_id' => $staging->id]);
+    $database->team->members()->updateExistingPivot($admin->id, ['sees_everything' => false]);
+    app(TeamAccess::class)->grant($database->team, $admin, $staging);
+
+    $this->actingAs($admin)
+        ->delete(route('servers.databases.destroy', [$server, $database]), ['confirm' => 'shop_production'])
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('success', 'Deleted shop_production and its user from forge-07.');
 });

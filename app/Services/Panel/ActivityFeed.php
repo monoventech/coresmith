@@ -286,6 +286,7 @@ final class ActivityFeed
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
+            'application_filed' => [$this->mono($application?->name), $this->text($this->filing($properties))],
             'toggle_changed' => match (true) {
                 ($properties['toggle'] ?? null) !== SmartToggles::AUTO_DEPLOY => [$this->text('Smart toggle ' . (($properties['on'] ?? false) ? 'enabled' : 'disabled') . ', ' . ($properties['label'] ?? 'a toggle') . ' on '), $this->mono($application?->name), $this->text(', no deployment needed')],
                 (bool) ($properties['on'] ?? false) => [$this->text('Auto deploy turned on for '), $this->mono($application?->name), $this->text(', it deploys the branch if the live release is behind')],
@@ -301,6 +302,7 @@ final class ActivityFeed
             'database_created' => [$this->text('Database '), $this->mono($database?->name), $this->text(' created')],
             'database_backed_up' => [$this->text('Backup taken of '), $this->mono($database?->name)],
             'database_deleted' => [$this->text('Database '), $this->mono($database?->name), $this->text(' deleted')],
+            'database_filed' => [$this->text('Database '), $this->mono($database?->name), $this->text($this->filing($properties))],
             'database_moved_off_shared_redis' => [$this->mono($database?->name), $this->text(' moved to a Redis of its own on port ' . (int) ($properties['port'] ?? 0))],
             'shared_redis_turned_off' => [$this->text('Shared Redis turned off on '), $this->mono($server?->name)],
             'database_password_shown' => [$this->text('Password of '), $this->mono($database?->name), $this->text(' shown')],
@@ -315,6 +317,18 @@ final class ActivityFeed
         $href = $application !== null ? $applicationHref : $serverHref;
 
         return $this->row($activity->created_at, $parts, $href);
+    }
+
+    /**
+     * @param  array<string, mixed>  $properties
+     */
+    private function filing(array $properties): string
+    {
+        $project = $properties['project'] ?? null;
+
+        return is_string($project)
+            ? ' filed in ' . $project . ' › ' . (string) ($properties['environment'] ?? '')
+            : ' taken out of ' . (string) ($properties['from'] ?? 'its project');
     }
 
     private function took(mixed $seconds): string

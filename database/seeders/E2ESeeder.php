@@ -74,6 +74,8 @@ final class E2ESeeder extends Seeder
 
     public const NARROWED_EMAIL = 'narrowed@coresmith.test';
 
+    public const ENVIRONMENT_EMAIL = 'environment@coresmith.test';
+
     public const ACME_OWNER_EMAIL = 'elin@coresmith.test';
 
     public const ACME_MEMBER_EMAIL = 'tomas@coresmith.test';
@@ -118,6 +120,10 @@ final class E2ESeeder extends Seeder
         $this->team->members()->attach($narrowed, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
         app(TeamAccess::class)->grant($this->team, $narrowed, $tenant->servers['forge-01']);
         app(TeamAccess::class)->grant($this->team, $narrowed, $tenant->applications['warehouse']);
+
+        $environmentOnly = User::factory()->create(['name' => 'Ines Duarte', 'email' => self::ENVIRONMENT_EMAIL, 'password' => $password]);
+        $this->team->members()->attach($environmentOnly, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
+        app(TeamAccess::class)->grant($this->team, $environmentOnly, $this->team->projects()->where('name', 'Storefront')->sole()->environments()->where('name', 'Staging')->sole());
 
         $this->movers();
 
@@ -176,11 +182,13 @@ final class E2ESeeder extends Seeder
             $this->failedLatest($this->application("deploy-{$code}", 8100 + $index * 30));
             $this->application("scratch-{$code}", 8110 + $index * 30);
             $this->application("doomed-{$code}", 8120 + $index * 30);
+            $this->application("filed-{$code}", 9400 + $index * 10);
 
             ManagedDatabase::factory()->redis()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
+            $this->server("label-{$code}", '198.51.100.' . (110 + $index), ServerStatus::Active)->forceFill(['environment' => null])->save();
             $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));

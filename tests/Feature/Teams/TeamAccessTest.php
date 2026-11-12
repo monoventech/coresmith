@@ -128,7 +128,7 @@ test('deleting a server or app takes its grants with it', function () {
 
     expect(teamAccessNames($access->servers($member, $team)))->toBe(['db'])
         ->and(teamAccessNames($access->applications($member, $team)))->toBe([])
-        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [$db->id], 'applications' => []]);
+        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [$db->id], 'applications' => [], 'projects' => [], 'environments' => []]);
 
     $api->forceDelete();
     $db->forceDelete();
@@ -147,7 +147,7 @@ test('sync replaces what is shared and ignores servers and apps from another tea
 
     $access->sync($team, $member, false, [$web->id, $theirs->id], [$theirApp->id]);
 
-    expect($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [$web->id], 'applications' => []])
+    expect($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [$web->id], 'applications' => [], 'projects' => [], 'environments' => []])
         ->and($access->seesEverything($member, $team))->toBeFalse();
 
     $access->sync($team, $member, true, [], []);

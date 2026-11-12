@@ -1,5 +1,14 @@
 import type { Page } from '@playwright/test'
-import { blockingViolations, expect, main, nav, asNarrowed as test, useTheme, withProps } from './support/fixtures'
+import {
+    blockingViolations,
+    expect,
+    gotoApplication,
+    main,
+    nav,
+    asNarrowed as test,
+    useTheme,
+    withProps
+} from './support/fixtures'
 
 function palette(page: Page) {
     return page.getByRole('dialog', { name: 'Command palette' })
@@ -22,6 +31,13 @@ async function openShared(page: Page, name: string) {
 }
 
 test.describe('an admin who sees only what is shared', () => {
+    test('an app in a project they were not given names the project without a link', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        await expect(page.getByTestId('app-project')).toContainText('Atlas › Production')
+        await expect(page.getByTestId('app-project').getByRole('link')).toHaveCount(0)
+    })
+
     test('the fleet shows only the shared server, and search finds only what is shared', async ({ page }) => {
         await page.goto('/dashboard')
 

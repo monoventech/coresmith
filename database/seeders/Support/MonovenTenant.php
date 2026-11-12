@@ -19,6 +19,7 @@ use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\SourceProvider;
@@ -85,6 +86,7 @@ final class MonovenTenant
         $this->servers();
         $this->applications();
         $this->databases();
+        $this->projects();
         $this->deployments();
         $this->activity();
 
@@ -311,6 +313,21 @@ final class MonovenTenant
         ManagedDatabase::factory()->for($this->team)->for($this->servers['anvil-01'])->create(['name' => 'warehouse', 'db_user' => 'warehouse_app']);
         ManagedDatabase::factory()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'legacy_reports', 'db_user' => 'reports_app', 'is_external' => true]);
         ManagedDatabase::factory()->redis()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'cache_production', 'db_user' => null, 'port' => 6380]);
+    }
+
+    private function projects(): void
+    {
+        foreach (['Atlas' => ['atlas', 'atlas-staging'], 'Storefront' => ['storefront', 'storefront-staging']] as $name => [$production, $staging]) {
+            $project = Project::factory()->for($this->team)->withEnvironments(['Production', 'Staging'])->create(['name' => $name]);
+            [$live, $trial] = $project->environments()->get()->all();
+
+            $this->applications[$production]->update(['environment_id' => $live->id]);
+            $this->applications[$staging]->update(['environment_id' => $trial->id]);
+
+            if ($name === 'Atlas') {
+                ManagedDatabase::query()->where('team_id', $this->team->id)->where('name', 'atlas_production')->update(['environment_id' => $live->id]);
+            }
+        }
     }
 
     private function deployments(): void

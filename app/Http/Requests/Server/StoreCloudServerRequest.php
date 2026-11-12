@@ -72,6 +72,7 @@ final class StoreCloudServerRequest extends FormRequest
             'cloud_provider_id.exists' => 'Pick a connected provider account.',
             'name.required' => self::NAME,
             'name.regex' => self::NAME,
+            'environment.in' => ServerController::PICK_ENVIRONMENT,
         ];
     }
 

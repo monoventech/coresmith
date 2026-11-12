@@ -7,12 +7,19 @@
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import EnvironmentSelect from '@/components/projects/EnvironmentSelect.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
 
-    let { server }: { server: { id: string; name: string; href: string } } = $props()
+    let {
+        server,
+        projects = []
+    }: {
+        server: { id: string; name: string; href: string }
+        projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
+    } = $props()
 
     let engine = $state('postgresql')
 
@@ -112,6 +119,7 @@
                             />
                         </div>
                     {/if}
+                    <EnvironmentSelect {projects} error={errors.environment_id} />
                     <Button type="submit" class="w-full" disabled={processing}>Create the database</Button>
                 </div>
             {/snippet}

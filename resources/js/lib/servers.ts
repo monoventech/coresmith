@@ -29,6 +29,7 @@ export type ServerHeader = {
     id: string
     name: string
     environment: string | null
+    environments: string[]
     region: string | null
     state: EntityState
     meta: string

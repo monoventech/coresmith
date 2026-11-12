@@ -93,7 +93,7 @@ test.describe('this machine', () => {
 
         await expect(page.getByLabel('Provider')).toHaveValue('this-machine')
         await expect(page.getByLabel('Server name')).not.toHaveValue('')
-        await expect(page.getByLabel('Environment')).toHaveValue('Production')
+        await expect(page.getByLabel('Environment')).toHaveValue('')
         await expect(page.getByRole('button', { name: 'Use this machine' })).toBeEnabled()
 
         await page.getByLabel('Provider').selectOption('manual')

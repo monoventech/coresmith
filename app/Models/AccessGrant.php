@@ -24,4 +24,14 @@ final class AccessGrant extends Model
     {
         return $this->belongsTo(Application::class);
     }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+    public function environment(): BelongsTo
+    {
+        return $this->belongsTo(Environment::class);
+    }
 }

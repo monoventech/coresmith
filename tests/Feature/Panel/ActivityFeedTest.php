@@ -88,6 +88,8 @@ test('application events are described in plain words and link to the applicatio
     'rolled back' => ['application_rolled_back', ['from' => '20260913140000', 'to' => '20260912090000'], 'shop rolled back to 20260912-090000, no rebuild'],
     'stopped' => ['application_stopped', [], 'shop stopped, visitors see the maintenance page'],
     'started' => ['application_started', [], 'shop started again'],
+    'filed in an environment' => ['application_filed', ['project' => 'Storefront', 'environment' => 'Staging'], 'shop filed in Storefront › Staging'],
+    'taken out of its project' => ['application_filed', ['project' => null, 'environment' => null, 'from' => 'Storefront'], 'shop taken out of Storefront'],
     'maintenance on' => ['maintenance_enabled', [], 'Maintenance page turned on for shop'],
     'toggle enabled' => ['toggle_changed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'on' => true], 'Smart toggle enabled, Queue worker on shop, no deployment needed'],
     'toggle disabled' => ['toggle_changed', ['toggle' => 'scheduler', 'label' => 'Scheduler', 'on' => false], 'Smart toggle disabled, Scheduler on shop, no deployment needed'],
@@ -446,3 +448,15 @@ test('an app that moved to a github connection that no longer exists still says 
 
     expect(feedSentence((new ActivityFeed)->forTeam($team)[0]))->toBe('shop now clones monoven-labs/shop through another GitHub connection');
 });
+
+test('filing a database in a project is described', function (array $properties, string $sentence) {
+    [$team, $server] = feedFixture();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'shop_production']);
+
+    feedLog($database, 'database_filed', $properties);
+
+    expect(feedSentence((new ActivityFeed)->forTeam($team)[0]))->toBe($sentence);
+})->with([
+    'filed' => [['project' => 'Storefront', 'environment' => 'Production'], 'Database shop_production filed in Storefront › Production'],
+    'taken out' => [['project' => null, 'environment' => null, 'from' => 'Storefront'], 'Database shop_production taken out of Storefront'],
+]);

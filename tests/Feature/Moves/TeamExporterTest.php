@@ -11,6 +11,7 @@ use App\Models\BackupDestination;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -119,7 +120,7 @@ test('the export leaves billing, history and sign-in settings behind', function 
 
     expect($json)->not->toContain('cus_never_moves')
         ->and($json)->not->toContain('history stays behind')
-        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'applications', 'webhook_endpoints', 'databases', 'backup_destination']);
+        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination']);
 });
 
 test('a server that is not ready stops the export', function (ServerStatus $status) {
@@ -148,4 +149,21 @@ test('a running deploy stops the export', function () {
     Deployment::factory()->create(['application_id' => $team->applications()->where('name', 'site')->first()->id, 'status' => DeploymentStatus::Running]);
 
     expect(teamExporterRefusal($team))->toBe('site is deploying. Wait for it to finish, then download the move file.');
+});
+
+test('the export carries projects, their environments and what is filed in them', function () {
+    $team = teamExporterTeam();
+    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
+    [$production, $staging] = $project->environments()->get()->all();
+    $team->applications()->where('name', 'site')->update(['environment_id' => $staging->id]);
+
+    $payload = app(TeamExporter::class)->payload($team, $team->owner);
+
+    expect($payload['projects'])->toBe([['ref' => $project->id, 'name' => 'Storefront', 'environments' => [
+        ['ref' => $production->id, 'name' => 'Production', 'position' => 0],
+        ['ref' => $staging->id, 'name' => 'Staging', 'position' => 1],
+    ]]])
+        ->and(collect($payload['applications'])->firstWhere('name', 'site')['environment'])->toBe($staging->id)
+        ->and(collect($payload['applications'])->firstWhere('name', 'docs')['environment'])->toBeNull()
+        ->and($payload['databases'][0]['environment'])->toBeNull();
 });

@@ -194,3 +194,48 @@ test('the preview says what moves and what needs reconnecting', function () {
         'webhooks' => 1,
     ]);
 });
+
+test('a move carries projects, their environments and what is filed in them', function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['projects'] = [['ref' => 'p1', 'name' => 'Storefront', 'environments' => [
+        ['ref' => 'e1', 'name' => 'Production', 'position' => 0],
+        ['ref' => 'e2', 'name' => 'Staging', 'position' => 1],
+    ]]];
+    $payload['applications'][0]['environment'] = 'e1';
+    $payload['applications'][1]['environment'] = 'e2';
+    $payload['databases'][0]['environment'] = 'e2';
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    $project = $team->projects()->sole();
+    [$production, $staging] = $project->environments()->get()->all();
+
+    expect($project->name)->toBe('Storefront')
+        ->and([$production->name, $staging->name])->toBe(['Production', 'Staging'])
+        ->and($team->applications()->where('name', 'site')->sole()->environment_id)->toBe($production->id)
+        ->and($team->applications()->where('name', 'api')->sole()->environment_id)->toBe($staging->id)
+        ->and($team->applications()->where('name', 'docs')->sole()->environment_id)->toBeNull()
+        ->and($team->databases()->sole()->environment_id)->toBe($staging->id);
+});
+
+test('a move file from before projects still imports, with everything in no project', function () {
+    $owner = User::factory()->create();
+
+    $team = app(TeamImporter::class)->import(teamImporterPayload(), teamImporterCode($owner), $owner);
+
+    expect($team->projects()->count())->toBe(0)
+        ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0);
+});
+
+test('an environment without a reference in the move file never collects apps that had none', function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['projects'] = [['ref' => 'p1', 'name' => 'Storefront', 'environments' => [['name' => 'Production', 'position' => 0]]]];
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    expect($team->projects()->sole()->environments()->sole()->name)->toBe('Production')
+        ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0)
+        ->and($team->databases()->whereNotNull('environment_id')->count())->toBe(0);
+});
