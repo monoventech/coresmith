@@ -153,7 +153,7 @@ test('the public deploy key is offered for an ssh repository', function () {
         ->where('application.deploy_key.public_key', $public)
         ->where('application.deploy_key.fingerprint', HostKeyFingerprint::fromPublicKey($public))
         ->where('application.deploy_key.short', Formats::fingerprint(HostKeyFingerprint::fromPublicKey($public)))
-        ->where('application.deploy_key.repository', 'monoven/coresmith'));
+        ->where('application.repository', 'monoven/coresmith'));
 });
 
 test('a public repository is offered no deploy key', function () {

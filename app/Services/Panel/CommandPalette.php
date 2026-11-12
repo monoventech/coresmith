@@ -141,12 +141,7 @@ final class CommandPalette
             return null;
         }
 
-        $previous = $application->deployments()
-            ->where('status', DeploymentStatus::Succeeded->value)
-            ->whereNotNull('release')
-            ->where('release', '!=', $application->current_release)
-            ->latest('finished_at')
-            ->first();
+        $previous = app(RollbackHistory::class)->previous($application);
 
         if ($previous === null) {
             return null;

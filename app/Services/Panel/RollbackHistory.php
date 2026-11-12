@@ -26,6 +26,16 @@ final class RollbackHistory
         return $this->after($this->latest($application), $this->lastWentLive($application));
     }
 
+    public function previous(Application $application): ?Deployment
+    {
+        return $application->deployments()
+            ->where('status', DeploymentStatus::Succeeded->value)
+            ->whereNotNull('release')
+            ->where('release', '!=', $application->current_release)
+            ->latest('finished_at')
+            ->first();
+    }
+
     public function rolledBack(Application $application): bool
     {
         $live = $this->lastWentLive($application);

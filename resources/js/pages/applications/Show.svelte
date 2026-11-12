@@ -11,9 +11,10 @@
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
-    import { Button } from '@/components/ui/button'
+    import { Button, buttonVariants } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Textarea } from '@/components/ui/textarea'
@@ -21,6 +22,7 @@
     import type { EntityState } from '@/lib/fleet'
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { follow } from '@/lib/live.svelte'
+    import { cn } from '@/lib/utils'
 
     type Toggle = {
         key: string
@@ -35,6 +37,15 @@
         failure: string | null
     }
     type LogLine = { time: string; text: string }
+    type Release = {
+        id: string
+        commit: string | null
+        message: string | null
+        author: string | null
+        branch: string | null
+        when: string | null
+        full: string | null
+    }
 
     let {
         server,
@@ -72,13 +83,14 @@
             repository: string | null
             branch: string
             current_release: string | null
+            release: Release | null
+            rollback_href: string | null
             stopped: boolean
             maintenance: boolean
             deploy_key: {
                 fingerprint: string | null
                 short: string | null
                 public_key: string
-                repository: string | null
             } | null
             github: {
                 repository: string
@@ -112,6 +124,8 @@
 
     const certificateTones = { valid: 'success', expiring: 'warning', expired: 'destructive', none: 'warning' } as const
 
+    const cardAction = cn(buttonVariants({ variant: 'link' }), 'min-h-6 max-sm:min-h-11')
+
     let busy = $state<Record<string, boolean>>({})
     let dialog = $state<'env' | 'domain' | 'remove' | 'runtime' | null>(null)
     let envText = $state('')
@@ -143,6 +157,17 @@
         application.rollback_failed?.worker
             ? `${application.rollback_failed.worker} did not start after the rollback.`
             : 'The rollback did not start the app.'
+    )
+    const sourceAccess = $derived(
+        !application.repository
+            ? null
+            : application.github?.usable
+              ? 'Cloned through the GitHub App with a one-hour, read-only token for this repository. Nothing long-lived is stored on the server.'
+              : application.github
+                ? 'Cloned through GitHub, which needs connecting again.'
+                : application.deploy_key
+                  ? "Cloned with this app's deploy key, Ed25519 and read-only. Provider tokens are never used for git operations."
+                  : 'Cloned over HTTPS without a key, so the repository has to be public.'
     )
     const starting = $derived(toggles.some((toggle) => toggle.starting))
     const failedToggles = $derived(toggles.filter((toggle) => toggle.failure))
@@ -198,6 +223,16 @@
             { on },
             { preserveScroll: true, onFinish: () => (busy = { ...busy, [toggle.key]: false }) }
         )
+    }
+
+    function releaseDetail(release: Release): string {
+        const where = [release.branch && `on ${release.branch}`, release.author && `by ${release.author}`]
+            .filter(Boolean)
+            .join(' ')
+        const when = release.when ? `${release.commit || where ? ', ' : ''}${release.when}` : ''
+        const text = `${where && release.commit ? ' ' : ''}${where}${when}`
+
+        return release.commit ? text : text.charAt(0).toUpperCase() + text.slice(1)
     }
 
     function deploy() {
@@ -331,7 +366,9 @@
 <div class="mb-6 flex flex-wrap items-end justify-between gap-6 max-sm:mb-3.5 max-sm:gap-4">
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3 max-sm:gap-2.5">
-            <h1 class="type-h1 m-0 font-mono font-medium max-sm:text-[24px]">{application.name}</h1>
+            <h1 class="type-h1 m-0 font-mono font-medium wrap-anywhere max-sm:text-[24px]">
+                <MarkerUnderline markClass="max-sm:hidden">{application.name}</MarkerUnderline>
+            </h1>
             <Badge variant={application.state.tone} dot pulse={application.state.key === 'deploying'}
                 >{application.state.label}</Badge
             >
@@ -356,12 +393,8 @@
                             >{place.label}</Link
                         >{:else}{place.label}{/if}</span
                 >{/if}
-            {#if application.domain}<span
-                    >· <span class="font-mono text-[13px] max-sm:text-[12px]">{application.domain}</span>
-                    <span class="max-sm:hidden">via Caddy</span></span
-                >{/if}
-            {#if application.current_release}<span class="max-sm:hidden"
-                    >· current release <span class="font-mono text-[13px]">{application.current_release}</span></span
+            {#if application.domain}<span class="sm:hidden"
+                    >· <span class="font-mono text-[12px]">{application.domain}</span></span
                 >{/if}
         </p>
     </div>
@@ -530,184 +563,248 @@
     </div>
 {/if}
 
-<div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1 max-sm:gap-3">
-    <div class="flex flex-col gap-4 max-sm:gap-3">
-        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4" data-testid="smart-toggles">
-            <h3 class="type-h3 m-0 mb-1 max-sm:mb-0.5 max-sm:text-[15px]">Smart toggles</h3>
-            <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
-                Based on what {application.kind} apps run.
-                <span class="max-sm:hidden"
-                    >Flipping a switch changes what runs on {server.name}, no deployment needed. Turning on Auto deploy
-                    deploys the branch if the live release is behind.</span
-                ><span class="sm:hidden">No deployment needed, except Auto deploy.</span>
-            </p>
-            <div class="flex flex-col">
-                {#each toggles as toggle (toggle.key)}
-                    <ToggleRow
-                        label={toggle.label}
-                        description={toggle.description}
-                        checked={toggle.on}
-                        busy={busy[toggle.key]}
-                        busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
-                        disabled={!can.update || toggle.disabled}
-                        onchange={(on) => flip(toggle, on)}
-                        testid="toggle-{toggle.key}"
-                    />
+<div class="@container flex flex-col gap-6 max-sm:gap-3">
+    <section aria-labelledby="app-now">
+        <h2
+            id="app-now"
+            class="mb-2.5 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground max-sm:hidden"
+        >
+            Now
+        </h2>
+        <div class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-3">
+            <div
+                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+                data-testid="release-card"
+            >
+                <h3 class="type-h3 m-0 mb-1.5 max-sm:text-[15px]">Current release</h3>
+                {#if application.release}
+                    {@const release = application.release}
+                    <p class="m-0 font-mono text-[13px] max-sm:text-[12px]">{release.id}</p>
+                    {#if release.message}
+                        <p class="m-0 mt-1.5 text-[13.5px] wrap-anywhere max-sm:text-[12.5px]">{release.message}</p>
+                    {/if}
+                    {#if release.commit || release.branch || release.author || release.when}
+                        <p
+                            class="m-0 mt-1 text-[12.5px] wrap-anywhere text-muted-foreground max-sm:text-[11.5px]"
+                            title={release.full ?? undefined}
+                            data-testid="release-detail"
+                        >
+                            {#if release.commit}<span class="font-mono text-[12px] max-sm:text-[11px]"
+                                    >{release.commit}</span
+                                >{/if}{releaseDetail(release)}
+                        </p>
+                    {/if}
+                {:else}
+                    <p class="m-0 text-[12.5px] text-muted-foreground">
+                        Nothing is live yet. Deploy to create the first release.
+                    </p>
+                {/if}
+                <div class="mt-auto flex flex-wrap gap-x-5 gap-y-2 pt-3">
+                    <Link href={application.releases_href} class={cardAction}>All releases</Link>
+                    {#if application.rollback_href}
+                        <Link href={application.rollback_href} class={cardAction}>Roll back</Link>
+                    {/if}
+                </div>
+            </div>
+
+            <div
+                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"
+                data-testid="domains-card"
+            >
+                <h3 class="type-h3 m-0 mb-1.5">Domains</h3>
+                {#each domains as domain, index (domain)}
+                    {@const certificate = application.certificates?.domains[domain]}
+                    <div
+                        class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]"
+                        data-testid="domain-row"
+                    >
+                        <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={domain}>{domain}</span>
+                        {#if certificate}
+                            <Badge variant={certificateTones[certificate.state]} title={certificate.title}
+                                >{certificate.label}</Badge
+                            >
+                        {/if}
+                        <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
+                    </div>
+                {:else}
+                    <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+                        No domain yet. Add one and Caddy requests the certificate.
+                    </p>
                 {/each}
+                {#if domains.length > 0}
+                    <p class="m-0 mt-2 text-[12px] text-muted-foreground">
+                        Routed by Caddy. Certificates renew themselves.
+                    </p>
+                {/if}
+                {#if can.update}
+                    <div class="mt-auto pt-3">
+                        <Button variant="link" class="min-h-6" onclick={openDomain}>Add domain</Button>
+                    </div>
+                {/if}
+            </div>
+
+            <div
+                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"
+                data-testid="source-card"
+            >
+                <h3 class="type-h3 m-0 mb-1.5">Source</h3>
+                {#if application.repository}
+                    <p class="m-0 font-mono text-[13px] break-all">{application.repository}</p>
+                    <p class="m-0 mt-1.5 text-[13.5px]">
+                        Branch <span class="font-mono text-[12.5px]">{application.branch}</span>
+                    </p>
+                {:else}
+                    <p class="m-0 text-[13.5px]">No repository is set.</p>
+                {/if}
+                {#if sourceAccess}
+                    <p class="m-0 mt-1.5 text-[12.5px] text-muted-foreground">{sourceAccess}</p>
+                {/if}
+                {#if application.deploy_key}
+                    <p
+                        class="m-0 mt-1.5 font-mono text-[12px] break-all text-muted-foreground"
+                        title={application.deploy_key.fingerprint ?? undefined}
+                    >
+                        {application.deploy_key.short}
+                    </p>
+                    <div class="mt-auto pt-3">
+                        <Button variant="link" class="min-h-6" onclick={copyKey}
+                            >{copied ? 'Copied' : 'Copy public key'}</Button
+                        >
+                    </div>
+                {/if}
             </div>
         </div>
+    </section>
 
-        <CronJobsCard
-            {cron}
-            server={server.name}
-            canUpdate={can.update}
-            canViewLogs={can.viewLogs}
-            busy={cronBusy}
-            send={sendCron}
-        />
+    <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="live-log-card">
+        <div class="mb-2.5 flex items-center justify-between gap-3">
+            <h3 class="type-h3 m-0">Live log</h3>
+            {#if !log.loading && !log.error}
+                <span class="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                    <span class="status-dot-pulse size-1.75 rounded-full bg-success" aria-hidden="true"></span>Following
+                </span>
+            {/if}
+        </div>
+        <div
+            class="terminal h-49 px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
+            data-testid="live-log"
+            role="log"
+            aria-live="polite"
+        >
+            {#if log.loading}
+                <div class="opacity-60">reading the access log…</div>
+            {:else if log.error}
+                <div class="opacity-70">{log.error}</div>
+            {:else if log.lines.length === 0}
+                <div class="opacity-60">No requests in the recent access log.</div>
+            {:else}
+                {#each log.lines as line, index (index)}
+                    <div class="truncate">{line.time} {line.text}</div>
+                {/each}
+            {/if}
+        </div>
     </div>
 
-    <div class="flex flex-col gap-4 max-sm:gap-3">
-        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
-            <h3 class="type-h3 m-0 mb-1">Environment</h3>
-            <p class="mb-3 text-[12.5px] text-muted-foreground">
-                Root-owned, injected via systemd at start. The app cannot read its own env file.
-            </p>
-            {#if application.environment.length > 0}
-                <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
-                    {#each application.environment as line (line.key)}
-                        <div class="truncate">{line.key}={line.value}{line.secret ? ' · redacted in logs' : ''}</div>
-                    {/each}
-                </div>
-            {:else}
-                <p class="text-[12.5px] text-muted-foreground">No variables yet.</p>
-            {/if}
-            {#if can.manageEnvironment}
-                <Button variant="outline" size="sm" class="mt-3" onclick={openEnv}>Edit variables</Button>
-            {/if}
-        </div>
-
-        {#if application.github?.usable}
-            <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
-                <h3 class="type-h3 m-0 mb-1">Repository access</h3>
-                <p class="mb-2.5 text-[12.5px] text-muted-foreground">
-                    Cloned through the GitHub App with a one-hour, read-only token for this repository. Nothing
-                    long-lived is stored on the server.
-                </p>
-                <div class="font-mono text-[12px] break-all text-muted-foreground">
-                    {application.github.repository} · {application.github.branch}
-                </div>
-            </div>
-        {:else if application.deploy_key}
-            <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
-                <h3 class="type-h3 m-0 mb-1">Deploy key</h3>
-                <p class="mb-2.5 text-[12.5px] text-muted-foreground">
-                    Per-app Ed25519, read-only. Provider tokens are never used for git operations.
-                </p>
-                <div
-                    class="font-mono text-[12px] break-all text-muted-foreground"
-                    title={application.deploy_key.fingerprint ?? undefined}
-                >
-                    {application.deploy_key.short}{application.deploy_key.repository
-                        ? ` · ${application.deploy_key.repository}`
-                        : ''}
-                </div>
-                <Button variant="ghost" size="sm" class="mt-2 -ml-3" onclick={copyKey}
-                    >{copied ? 'Copied' : 'Copy public key'}</Button
-                >
-            </div>
-        {/if}
-
-        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="domains-card">
-            <div class="mb-1 flex items-center justify-between">
-                <h3 class="type-h3 m-0">Domains</h3>
-                {#if can.update}
-                    <Button variant="ghost" size="sm" onclick={openDomain}>Add domain</Button>
-                {/if}
-            </div>
-            {#each domains as domain, index (domain)}
-                {@const certificate = application.certificates?.domains[domain]}
-                <div
-                    class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]"
-                    data-testid="domain-row"
-                >
-                    <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{domain}</span>
-                    {#if certificate}
-                        <Badge variant={certificateTones[certificate.state]} title={certificate.title}
-                            >{certificate.label}</Badge
-                        >
-                    {/if}
-                    <span class="text-[12px] text-muted-foreground">{index === 0 ? 'primary' : 'alias'}</span>
-                </div>
-            {:else}
-                <p class="border-t border-border pt-3 text-[12.5px] text-muted-foreground">
-                    No domain yet. Add one and Caddy requests the certificate.
-                </p>
-            {/each}
-            <p class="mt-2 text-[12px] text-muted-foreground">Routed by Caddy. Certificates renew themselves.</p>
-        </div>
-
-        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4">
-            <div class="mb-1.5 flex items-center justify-between">
-                <h3 class="type-h3 m-0 max-sm:text-[15px]">Current release</h3>
-                <Link
-                    href={application.releases_href}
-                    class="focus-ring rounded-sm text-[13px] font-medium text-primary-strong no-underline max-sm:hidden"
-                    >All releases →</Link
-                >
-            </div>
-            <div class="font-mono text-[12px] text-muted-foreground">
-                {application.current_release
-                    ? `current → releases/${application.current_release}`
-                    : 'Nothing is live yet. Deploy to create the first release.'}
-            </div>
-        </div>
-
-        <div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden">
-            <h3 class="type-h3 m-0 mb-2.5">Live log</h3>
+    <section aria-labelledby="app-settings">
+        <h2
+            id="app-settings"
+            class="mb-2.5 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground max-sm:hidden"
+        >
+            Settings
+        </h2>
+        <div class="grid gap-4 max-sm:gap-3 @3xl:grid-cols-2">
             <div
-                class="terminal h-30 px-3.5 py-2.5 text-[11.5px] leading-[1.7]"
-                data-testid="live-log"
-                role="log"
-                aria-live="polite"
+                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+                data-testid="smart-toggles"
             >
-                {#if log.loading}
-                    <div class="opacity-60">reading the access log…</div>
-                {:else if log.error}
-                    <div class="opacity-70">{log.error}</div>
-                {:else if log.lines.length === 0}
-                    <div class="opacity-60">No requests in the recent access log.</div>
-                {:else}
-                    {#each log.lines as line, index (index)}
-                        <div class="truncate">{line.time} {line.text}</div>
+                <h3 class="type-h3 m-0 mb-1 max-sm:mb-0.5 max-sm:text-[15px]">Smart toggles</h3>
+                <p class="mb-4 text-[12.5px] text-muted-foreground max-sm:mb-2 max-sm:text-[11.5px]">
+                    Based on what {application.kind} apps run.
+                    <span class="max-sm:hidden"
+                        >Flipping a switch changes what runs on {server.name}, no deployment needed. Turning on Auto
+                        deploy deploys the branch if the live release is behind.</span
+                    ><span class="sm:hidden">No deployment needed, except Auto deploy.</span>
+                </p>
+                <div class="flex flex-col">
+                    {#each toggles as toggle (toggle.key)}
+                        <ToggleRow
+                            label={toggle.label}
+                            description={toggle.description}
+                            checked={toggle.on}
+                            busy={busy[toggle.key]}
+                            busyDescription={toggle.on ? toggle.busy_off : toggle.busy_on}
+                            disabled={!can.update || toggle.disabled}
+                            onchange={(on) => flip(toggle, on)}
+                            testid="toggle-{toggle.key}"
+                        />
                     {/each}
+                </div>
+            </div>
+
+            <div
+                class="flex min-w-0 flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden"
+                data-testid="environment-card"
+            >
+                <h3 class="type-h3 m-0 mb-1">Environment</h3>
+                <p class="mb-3 text-[12.5px] text-muted-foreground">
+                    Root-owned, injected via systemd at start. The app cannot read its own env file.
+                </p>
+                {#if application.environment.length > 0}
+                    <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
+                        {#each application.environment as line (line.key)}
+                            <div class="truncate">
+                                {line.key}={line.value}{line.secret ? ' · redacted in logs' : ''}
+                            </div>
+                        {/each}
+                    </div>
+                {:else}
+                    <p class="text-[12.5px] text-muted-foreground">No variables yet.</p>
+                {/if}
+                {#if can.manageEnvironment}
+                    <div class="mt-auto pt-3">
+                        <Button variant="link" class="min-h-6" onclick={openEnv}>Edit variables</Button>
+                    </div>
                 {/if}
             </div>
-        </div>
 
-        {#if can.update || can.delete}
-            <div class="border-danger rounded-xl border bg-card px-5.5 py-5 max-sm:hidden">
+            <CronJobsCard
+                class="@3xl:col-span-2"
+                {cron}
+                server={server.name}
+                canUpdate={can.update}
+                canViewLogs={can.viewLogs}
+                busy={cronBusy}
+                send={sendCron}
+            />
+        </div>
+    </section>
+
+    {#if can.update || can.delete}
+        <div
+            class="border-danger flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border bg-card px-5.5 py-4.5 max-sm:hidden"
+        >
+            <div class="min-w-0 flex-1 basis-80">
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
-                <p class="mb-3 text-[12.5px] text-muted-foreground">
+                <p class="m-0 text-[12.5px] text-muted-foreground">
                     Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops
                     the app and detaches it from this server, its releases stay on disk for 7 days.
                 </p>
-                <div class="flex flex-wrap gap-2">
-                    {#if can.update && !application.stopped}
-                        <Button variant="outline" size="sm" onclick={power}>Stop the app</Button>
-                    {/if}
-                    {#if can.delete}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            class="text-destructive-strong"
-                            onclick={() => (dialog = 'remove')}>Remove this app</Button
-                        >
-                    {/if}
-                </div>
             </div>
-        {/if}
-    </div>
+            <div class="flex flex-wrap gap-2">
+                {#if can.update && !application.stopped}
+                    <Button variant="outline" size="sm" onclick={power}>Stop the app</Button>
+                {/if}
+                {#if can.delete}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="text-destructive-strong"
+                        onclick={() => (dialog = 'remove')}>Remove this app</Button
+                    >
+                {/if}
+            </div>
+        </div>
+    {/if}
 </div>
 
 <Dialog.Root open={dialog === 'env'} onOpenChange={(open) => !open && (dialog = null)}>
