@@ -70,7 +70,7 @@ test('every plan has its label and summary', function () {
         ->and(Plan::Starter->summary())->toBe('$9 per month · 3 servers · one person')
         ->and(Plan::Pro->summary())->toBe('$19 per month · unlimited servers · teammates and roles · custom domain')
         ->and(Plan::Business->summary())->toBe('$39 per month · everything in Pro · single sign-on · database backups to S3 · audit log export')
-        ->and(Plan::SelfHosted->summary())->toBe('Free · every feature · you run it yourself')
+        ->and(Plan::SelfHosted->summary())->toBe('On your own server · you install, update and back it up')
         ->and(Plan::Trial->summary())->toBe('Pro features on 1 server for 14 days');
 
     config(['coresmith.billing.trial_days' => 30]);

@@ -104,7 +104,7 @@
     <Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <Dialog.Header>
             <Dialog.Title>{choosing ? 'Choose a plan' : 'Change plan'}</Dialog.Title>
-            <Dialog.Description>Billed monthly, per team. Self-hosting is free under ELv2.</Dialog.Description>
+            <Dialog.Description>Billed monthly, per team.</Dialog.Description>
         </Dialog.Header>
 
         <RadioGroup.Root value={selected} onValueChange={choose} aria-label="Plans" class="mt-4 gap-2">
@@ -149,7 +149,7 @@
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span id="plan-self-hosted-label" class="text-[14px] font-medium">Self-hosted</span>
                     <span id="plan-self-hosted-summary" class="text-[12px] text-muted-foreground"
-                        >Free · every feature · you run it yourself</span
+                        >On your own server · you install, update and back it up</span
                     >
                 </span>
             </label>
