@@ -33,7 +33,7 @@ final class StackResolver
         $notes = $detection->notes;
 
         foreach ($detection->runtimes as $runtime) {
-            $resolved = $this->resolver->resolve($runtime, $detection->requirements[$runtime] ?? null, $pins[$runtime] ?? null, $installed($runtime));
+            $resolved = $this->resolver->resolve($runtime, $detection->requirements[$runtime] ?? null, $pins[$runtime] ?? null, $installed($runtime), $detection->limits[$runtime] ?? []);
 
             if ($resolved->note !== null) {
                 $notes[] = $resolved->note;
