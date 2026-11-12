@@ -227,3 +227,15 @@ test('a move file from before projects still imports, with everything in no proj
     expect($team->projects()->count())->toBe(0)
         ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0);
 });
+
+test('an environment without a reference in the move file never collects apps that had none', function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['projects'] = [['ref' => 'p1', 'name' => 'Storefront', 'environments' => [['name' => 'Production', 'position' => 0]]]];
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+
+    expect($team->projects()->sole()->environments()->sole()->name)->toBe('Production')
+        ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0)
+        ->and($team->databases()->whereNotNull('environment_id')->count())->toBe(0);
+});

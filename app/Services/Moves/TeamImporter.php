@@ -142,7 +142,10 @@ final class TeamImporter
 
             foreach (array_values(array_filter((array) ($record['environments'] ?? []), 'is_array')) as $position => $environment) {
                 $made = $project->environments()->create(['name' => (string) ($environment['name'] ?? '') ?: 'Production', 'position' => (int) ($environment['position'] ?? $position)]);
-                $environments[(string) ($environment['ref'] ?? '')] = $made->id;
+
+                if (is_string($environment['ref'] ?? null) && $environment['ref'] !== '') {
+                    $environments[$environment['ref']] = $made->id;
+                }
             }
         }
 
