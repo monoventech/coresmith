@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { asMember, dialog, expect, nav, test, toast } from './support/fixtures'
+import { asMember, dialog, expect, expectWayBack, nav, test, toast } from './support/fixtures'
 
 async function gotoReleases(page: Page) {
     await page.goto('/dashboard')
@@ -10,7 +10,10 @@ async function gotoReleases(page: Page) {
 async function gotoReleasesOf(page: Page, application: string) {
     await gotoReleases(page)
     await expect(page.getByRole('heading', { level: 1, name: 'Releases · atlas' })).toBeVisible()
-    await page.getByRole('navigation', { name: 'Applications' }).getByRole('link', { name: application, exact: true }).click()
+    await page
+        .getByRole('navigation', { name: 'Applications' })
+        .getByRole('link', { name: application, exact: true })
+        .click()
     await expect(page.getByRole('heading', { level: 1, name: `Releases · ${application}` })).toBeVisible()
 }
 
@@ -23,7 +26,10 @@ test.describe('releases', () => {
         await gotoReleases(page)
 
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · atlas' })).toBeVisible()
-        await expect(nav(page).getByRole('link', { name: 'Releases', exact: true })).toHaveAttribute('aria-current', 'page')
+        await expect(nav(page).getByRole('link', { name: 'Releases', exact: true })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
     })
 
     test('each release shows its directory, tag and signature, with the live one marked', async ({ page }) => {
@@ -42,10 +48,15 @@ test.describe('releases', () => {
     test('the app chips switch between apps', async ({ page }) => {
         await gotoReleases(page)
 
-        await page.getByRole('navigation', { name: 'Applications' }).getByRole('link', { name: 'ledger', exact: true }).click()
+        await page
+            .getByRole('navigation', { name: 'Applications' })
+            .getByRole('link', { name: 'ledger', exact: true })
+            .click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · ledger' })).toBeVisible()
-        await expect(page.getByRole('navigation', { name: 'Applications' }).getByRole('link', { name: 'ledger', exact: true })).toHaveAttribute('aria-current', 'page')
+        await expect(
+            page.getByRole('navigation', { name: 'Applications' }).getByRole('link', { name: 'ledger', exact: true })
+        ).toHaveAttribute('aria-current', 'page')
     })
 
     test('rolling back asks first and says what it will do', async ({ page }) => {
@@ -81,7 +92,9 @@ test.describe('releases', () => {
         await rows(page).filter({ hasText: 'v1.0.0' }).getByRole('button', { name: 'Roll back to this' }).click()
         await dialog(page).getByRole('button', { name: 'Roll back' }).click()
 
-        await expect(toast(page)).toContainText('A deploy is running for held-app. Cancel it or let it finish, then roll back.')
+        await expect(toast(page)).toContainText(
+            'A deploy is running for held-app. Cancel it or let it finish, then roll back.'
+        )
         await expect(dialog(page)).toHaveCount(0)
         await expect(live).toHaveAttribute('data-current', 'true')
         await expect(rows(page).filter({ hasText: 'v1.0.0' })).toHaveAttribute('data-current', 'false')
@@ -92,7 +105,9 @@ test.describe('releases', () => {
 
         await expect(page.getByTestId('rolled-back')).toContainText('Rolled back.')
         await expect(rows(page).filter({ hasText: 'v1.4.0' })).toHaveAttribute('data-current', 'true')
-        await expect(rows(page).filter({ hasText: 'v1.5.0' }).getByRole('button', { name: 'Roll back to this' })).toBeVisible()
+        await expect(
+            rows(page).filter({ hasText: 'v1.5.0' }).getByRole('button', { name: 'Roll back to this' })
+        ).toBeVisible()
     })
 
     test('a live release whose deploy failed is listed as current, and nothing claims a rollback', async ({ page }) => {
@@ -105,7 +120,9 @@ test.describe('releases', () => {
         await expect(current).toHaveAttribute('data-current', 'true')
         await expect(current).toContainText('commit 5e1d0a2 by Priya Nair')
         await expect(page.getByTestId('rolled-back')).toHaveCount(0)
-        await expect(rows(page).filter({ hasText: 'v1.2.0' }).getByRole('button', { name: 'Roll back to this' })).toBeVisible()
+        await expect(
+            rows(page).filter({ hasText: 'v1.2.0' }).getByRole('button', { name: 'Roll back to this' })
+        ).toBeVisible()
     })
 
     test('the palette can start a rollback straight to the confirmation', async ({ page }) => {
@@ -128,7 +145,7 @@ test.describe('releases', () => {
         await page.getByRole('button', { name: 'Deploy', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying rolled-back' })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText('← Releases')
+        await expectWayBack(page, 'Releases')
     })
 })
 

@@ -45,6 +45,7 @@
         />
     {:else if projects.length === 0}
         <EmptyState
+            class="mb-7 max-sm:mb-4"
             title="No projects yet."
             description="Group apps by what they're for. A project holds environments such as Production and Staging, and can be shared on its own."
         >
@@ -95,33 +96,31 @@
                 </article>
             {/each}
         </div>
+    {/if}
 
-        {#if unfiled.length > 0}
-            <section
-                class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
-                aria-labelledby="no-project"
-                data-testid="no-project"
-            >
-                <h2 id="no-project" class="type-label m-0 text-muted-foreground">No project</h2>
-                <p class="m-0 mt-1 mb-2 text-[12.5px] text-muted-foreground">
-                    Apps show here until someone adds them to a project.
-                </p>
-                <ul class="m-0 flex list-none flex-col p-0">
-                    {#each unfiled as app (app.id)}
-                        <li
-                            class="flex min-h-11 items-center gap-3 border-t border-border text-[13.5px] first:border-t-0"
-                        >
-                            <Link href={app.href} class="focus-ring rounded-sm font-mono font-medium text-foreground">
-                                {app.name}
-                            </Link>
-                            {#if app.server}
-                                <span class="text-[12.5px] text-muted-foreground">on {app.server}</span>
-                            {/if}
-                        </li>
-                    {/each}
-                </ul>
-            </section>
-        {/if}
+    {#if unfiled.length > 0}
+        <section
+            class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:p-4"
+            aria-labelledby="no-project"
+            data-testid="no-project"
+        >
+            <h2 id="no-project" class="type-label m-0 text-muted-foreground">No project</h2>
+            <p class="m-0 mt-1 mb-2 text-[12.5px] text-muted-foreground">
+                Apps show here until someone adds them to a project.
+            </p>
+            <ul class="m-0 flex list-none flex-col p-0">
+                {#each unfiled as app (app.id)}
+                    <li class="flex min-h-11 items-center gap-3 border-t border-border text-[13.5px] first:border-t-0">
+                        <Link href={app.href} class="focus-ring rounded-sm font-mono font-medium text-foreground">
+                            {app.name}
+                        </Link>
+                        {#if app.server}
+                            <span class="text-[12.5px] text-muted-foreground">on {app.server}</span>
+                        {/if}
+                    </li>
+                {/each}
+            </ul>
+        </section>
     {/if}
 </div>
 

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { applicationRow, dialog, expect, gotoServer, isMobile, main, nav, test } from './support/fixtures'
+import { applicationRow, dialog, expect, gotoServer, main, nav, test } from './support/fixtures'
 
 function palette(page: Page) {
     return page.getByRole('dialog', { name: 'Command palette' })
@@ -13,11 +13,11 @@ async function openPalette(page: Page) {
 }
 
 test.describe('the shell', () => {
-    test('every section is reachable from the main navigation', async ({ page }, testInfo) => {
+    test('every section is reachable from the main navigation', async ({ page }) => {
         await page.goto('/dashboard')
 
         const sections = [
-            [isMobile(testInfo) ? 'Deploys' : 'Deployments', /\/deployments$/],
+            ['Deploys', /\/deployments$/],
             ['Releases', /\/releases$/],
             ['Settings', /\/settings$/],
             ['Fleet', /\/dashboard$/]
@@ -43,33 +43,14 @@ test.describe('the shell', () => {
     })
 })
 
-test.describe('the sidebar', () => {
-    test.skip(({ isMobile }) => isMobile, 'The sidebar is hidden below 640px; phones navigate with the bottom tabs')
+test.describe('the rail', () => {
+    test.skip(({ isMobile }) => isMobile, 'The rail starts at 640px; phones navigate with the bottom tabs')
 
-    test('it carries the wordmark, the fleet status and the Monoven mark', async ({ page }) => {
+    test('it carries the Coresmith mark, and every page the Monoven mark', async ({ page }) => {
         await page.goto('/dashboard')
 
-        const sidebar = page.getByTestId('sidebar')
-
-        await expect(sidebar.getByText('Coresmith')).toBeVisible()
-        await expect(page.getByTestId('fleet-status')).toContainText(/needs? attention|All systems normal/)
-        await expect(sidebar.getByText('Made by Monoven')).toBeVisible()
-    })
-
-    test('it collapses to a rail and remembers it', async ({ page }) => {
-        await page.goto('/dashboard')
-
-        const sidebar = page.getByTestId('sidebar')
-
-        await page.getByRole('button', { name: 'Collapse sidebar' }).click()
-        await expect(sidebar).toHaveAttribute('data-collapsed', 'true')
-        await expect(sidebar.getByRole('link', { name: 'Deployments' })).toBeVisible()
-
-        await page.reload()
-        await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
-
-        await page.getByRole('button', { name: 'Expand sidebar' }).click()
-        await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
+        await expect(nav(page).getByRole('link', { name: 'Coresmith', exact: true })).toBeVisible()
+        await expect(main(page).getByText('Made by Monoven')).toBeVisible()
     })
 
     test('it starts dark, flips the theme and keeps it across a reload', async ({ page }) => {
@@ -85,15 +66,6 @@ test.describe('the sidebar', () => {
 
         await page.getByRole('button', { name: 'Dark mode' }).click()
         await expect(page.locator('html')).toHaveClass(/\bdark\b/)
-    })
-
-    test('the search button opens the command palette', async ({ page }) => {
-        await page.goto('/dashboard')
-
-        await page.getByRole('button', { name: 'Search' }).click()
-
-        await expect(palette(page)).toBeVisible()
-        await expect(palette(page).getByRole('combobox', { name: 'Search commands' })).toBeFocused()
     })
 })
 

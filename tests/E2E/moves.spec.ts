@@ -41,7 +41,9 @@ asMover.describe('moving a team in from coresmith cloud', () => {
         await page.getByTestId('move-team-card').getByRole('button', { name: 'Move team' }).click()
 
         await expect(page).toHaveURL(new RegExp(`/arrivals-${code}/dashboard$`))
-        await expect(toast(page)).toContainText(`Moved. Arrivals ${code} is here, and its servers are being taken over.`)
+        await expect(toast(page)).toContainText(
+            `Moved. Arrivals ${code} is here, and its servers are being taken over.`
+        )
         await expect(page.getByTestId('server-card')).toContainText('Moving here')
     })
 

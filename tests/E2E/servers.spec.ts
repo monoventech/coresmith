@@ -3,6 +3,7 @@ import {
     blockingViolations,
     dialog,
     expect,
+    expectWayBack,
     gotoServer,
     gotoServerTab,
     isMobile,
@@ -22,7 +23,7 @@ test.describe('a server', () => {
     test('the header names it, says how it is doing and what it is', async ({ page }) => {
         await gotoServer(page, 'forge-01')
 
-        await expect(page.getByTestId('back-link')).toHaveText('← Fleet')
+        await expectWayBack(page, 'Fleet')
         await expect(page.getByRole('main')).toContainText('Healthy')
         await expect(page.getByRole('main')).toContainText(
             'Production · fra1 · 4 cores · 8 GB RAM · 160 GB disk · Ubuntu 24.04.3 LTS · 203.0.113.14'
