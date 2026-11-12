@@ -3,7 +3,17 @@
 // See LICENSE file in the project root.
 
 import type { Page, Route } from '@playwright/test'
-import { dialog, expect, gotoApplication, gotoServer, isMobile, own, test } from './support/fixtures'
+import {
+    dialog,
+    expect,
+    gotoApplication,
+    gotoServer,
+    isMobile,
+    own,
+    streamFleet,
+    test,
+    toast
+} from './support/fixtures'
 
 function card(page: Page, name: string) {
     return page.getByTestId('server-card').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -95,5 +105,26 @@ test.describe('live pages', () => {
         await expect(scheduler).toBeDisabled()
 
         await Promise.all(held.map((route) => route.abort()))
+    })
+
+    test('a page whose server goes away elsewhere returns to the fleet and says so', async ({ page }) => {
+        const fleet = await streamFleet(page)
+
+        await gotoServer(page, 'forge-01')
+        await fleet.subscribed()
+        await page.route(/\/servers\/[A-Za-z0-9]+$/, (route) =>
+            route.request().headers()['x-inertia-partial-data'] === undefined
+                ? route.fallback()
+                : route.fulfill({
+                      status: 404,
+                      contentType: 'text/html',
+                      body: '<!doctype html><title>Not Found</title>'
+                  })
+        )
+        fleet.changed()
+
+        await page.waitForURL(/\/dashboard$/)
+        await expect(toast(page)).toContainText('That page is gone.')
+        await expect(page.locator('iframe')).toHaveCount(0)
     })
 })

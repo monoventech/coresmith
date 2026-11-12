@@ -11,7 +11,7 @@
     import * as Sheet from '@/components/ui/sheet'
     import { closeExplorer, explorerInline, explorerState, initializeExplorer } from '@/lib/explorer.svelte'
     import { getInitials } from '@/lib/initials'
-    import { follow } from '@/lib/live.svelte'
+    import { follow, SHARED } from '@/lib/live.svelte'
     import type { ExplorerProps, PanelProps } from '@/lib/panel'
     import { appPath } from '@/lib/panel'
     import { page, router } from '@inertiajs/svelte'
@@ -46,7 +46,7 @@
             return
         }
 
-        return untrack(() => follow({ only: ['explorer', 'panel'], async: true, shell: true }))
+        return untrack(() => follow({ only: [...SHARED], async: true, shell: true }))
     })
 
     onMount(() => {
