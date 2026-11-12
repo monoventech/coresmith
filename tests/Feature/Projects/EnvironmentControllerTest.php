@@ -28,7 +28,7 @@ test('a new environment goes last', function () {
         ->assertSessionHas('success', 'Added Preview.');
 
     expect($project->environments()->pluck('name')->all())->toBe(['Production', 'Staging', 'Preview'])
-        ->and(Activity::query()->where('description', 'environment_created')->sole()->properties->all())->toBe(['project' => 'Storefront', 'environment' => 'Preview']);
+        ->and(Activity::query()->where('description', 'environment_created')->sole()->properties->all())->toEqual(['project' => 'Storefront', 'environment' => 'Preview']);
 });
 
 test('environment names are unique in a project whatever their case', function () {

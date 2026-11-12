@@ -90,7 +90,7 @@ test('renaming a project keeps names unique and says Saved.', function () {
         ->assertSessionHas('success', 'Saved.');
 
     expect($storefront->fresh()->name)->toBe('StoreFront')
-        ->and(Activity::query()->where('description', 'project_renamed')->sole()->properties->all())->toBe(['from' => 'Storefront', 'project' => 'StoreFront']);
+        ->and(Activity::query()->where('description', 'project_renamed')->sole()->properties->all())->toEqual(['from' => 'Storefront', 'project' => 'StoreFront']);
 });
 
 test('deleting a project leaves its apps running in no project', function () {

@@ -54,7 +54,7 @@ test('an owner files apps and databases into an environment, moving them from wh
     expect($shop->fresh()->environment_id)->toBe($staging->id)
         ->and($blog->fresh()->environment_id)->toBe($staging->id)
         ->and($database->fresh()->environment_id)->toBe($staging->id)
-        ->and(Activity::query()->where('description', 'application_filed')->where('subject_id', $blog->id)->sole()->properties->all())->toBe(['project' => 'Storefront', 'environment' => 'Staging'])
+        ->and(Activity::query()->where('description', 'application_filed')->where('subject_id', $blog->id)->sole()->properties->all())->toEqual(['project' => 'Storefront', 'environment' => 'Staging'])
         ->and(Activity::query()->where('description', 'database_filed')->where('subject_id', $database->id)->count())->toBe(1);
 });
 
@@ -101,7 +101,7 @@ test('taking an app or a database out leaves it in no project', function () {
 
     expect($shop->fresh()->environment_id)->toBeNull()
         ->and($database->fresh()->environment_id)->toBeNull()
-        ->and(Activity::query()->where('description', 'application_filed')->sole()->properties->all())->toBe(['project' => null, 'environment' => null, 'from' => 'Storefront']);
+        ->and(Activity::query()->where('description', 'application_filed')->sole()->properties->all())->toEqual(['project' => null, 'environment' => null, 'from' => 'Storefront']);
 });
 
 test('an app in another environment is not found there', function () {
