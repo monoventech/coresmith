@@ -88,7 +88,7 @@ test('the repository is read right after the clone and its versions are recorded
     $composer = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, 'composer install')));
 
     expect($probe)->toBeGreaterThan($archive)->toBeLessThan($composer)
-        ->and($deployment->fresh()->stack['runtimes']['php'])->toBeInAnyKeyOrder(['runtime' => 'php', 'version' => '8.4.20', 'source' => 'composer.json', 'detail' => '^8.4'])
+        ->and($deployment->fresh()->stack['runtimes']['php'])->toBeInAnyKeyOrder(['runtime' => 'php', 'version' => '8.4.20', 'source' => 'composer.json', 'detail' => '^8.4', 'held_by' => [], 'newest' => null])
         ->and($deployment->fresh()->log)->toContain('PHP 8.4.20 from composer.json (^8.4)');
 });
 
@@ -667,4 +667,32 @@ test('the deploy log says where each version came from and whether it is still s
     stackDeploy($deployment, $transport);
 
     expect($deployment->fresh()->log)->toContain('PHP 8.4.20 from composer.json (^8.4), active until Dec 2026');
+});
+
+function stackNetteLock(): string
+{
+    return (string) json_encode(['packages' => [['name' => 'nette/utils', 'version' => 'v4.0.5', 'require' => ['php' => '8.0 - 8.4']]]]);
+}
+
+test('a lock that holds php back is named in the deploy log and kept on the deployment', function () {
+    Queue::fake();
+    $deployment = Deployment::factory()->for(stackApp())->create();
+    $transport = stackTransport(['composer.json' => '{"require":{"php":"^8.2"}}', 'composer.lock' => stackNetteLock()], [], ['php' => ['8.4.20', '8.5.10']]);
+
+    stackDeploy($deployment, $transport);
+
+    expect($deployment->fresh()->stack['runtimes']['php'])->toMatchArray(['version' => '8.4.20', 'held_by' => ['nette/utils 4.0.5'], 'newest' => '8.5.10'])
+        ->and($deployment->fresh()->log)->toContain('PHP 8.4.20, the newest your composer.lock allows: nette/utils 4.0.5 stops at 8.4');
+});
+
+test('a lock that rules out what composer.json asks for stops the deploy before anything installs', function () {
+    Queue::fake();
+    $deployment = Deployment::factory()->for(stackApp())->create();
+    $transport = stackTransport(['composer.json' => '{"require":{"php":"^8.5"}}', 'composer.lock' => stackNetteLock()]);
+
+    expect(fn() => stackDeploy($deployment, $transport))->toThrow(RuntimeUnavailable::class);
+
+    Queue::assertNotPushed(InstallRuntimes::class);
+    expect($deployment->fresh()->failure_reason)->toBe('require.php in composer.json asks for PHP ^8.5, but composer.lock holds nette/utils 4.0.5 (PHP 8.0 - 8.4). Run composer update nette/utils, commit composer.lock, then deploy.')
+        ->and(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'composer install')))->toBeFalse();
 });

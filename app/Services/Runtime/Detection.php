@@ -14,11 +14,13 @@ final readonly class Detection
      * @param  list<string>  $runtimes
      * @param  array<string, Requirement>  $requirements
      * @param  list<string>  $notes
+     * @param  array<string, list<Limit>>  $limits
      */
     public function __construct(
         public array $runtimes,
         public array $requirements,
         public ?JsTooling $tooling,
         public array $notes,
+        public array $limits = [],
     ) {}
 }

@@ -4,6 +4,7 @@ use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
+use App\Http\Controllers\ApplicationRuntimeController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
 use App\Http\Controllers\ApplicationToggleController;
 use App\Http\Controllers\CloudServerController;
@@ -146,6 +147,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.start');
     Route::put('servers/{server}/applications/{application}/maintenance', [ApplicationPowerController::class, 'maintenance'])
         ->name('servers.applications.maintenance');
+    Route::put('servers/{server}/applications/{application}/runtime', [ApplicationRuntimeController::class, 'update'])
+        ->name('servers.applications.runtime');
     Route::post('servers/{server}/applications/{application}/deploy', [DeploymentController::class, 'deploy'])
         ->name('servers.applications.deploy');
     Route::post('servers/{server}/applications/{application}/rollback', [DeploymentController::class, 'rollback'])

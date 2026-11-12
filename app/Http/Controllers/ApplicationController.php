@@ -35,6 +35,7 @@ use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeDetector;
 use App\Services\Runtime\RuntimeLifecycle;
 use App\Services\Server\CertificateCheck;
@@ -220,7 +221,65 @@ final class ApplicationController extends Controller
                 'manageEnvironment' => $canManageEnvironment,
                 'viewLogs' => $user->can('viewLogs', $application),
             ],
+            'runtime_choice' => $user->can('update', $application) ? $this->runtimeChoice($server, $application) : null,
+            'held' => $this->held($application),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function runtimeChoice(Server $server, Application $application): ?array
+    {
+        $runtime = $application->type?->runtime($application->js_runtime);
+
+        if ($runtime === null) {
+            return null;
+        }
+
+        $catalog = app(Catalog::class);
+
+        return [
+            'label' => $catalog->label($runtime),
+            'recommended' => $catalog->recommendedLine($runtime),
+            'sources' => RuntimeDetector::SOURCES[$runtime],
+            'options' => app(RuntimeLifecycle::class)->options($runtime),
+            'pin' => is_string($application->runtime_pins[$runtime] ?? null) ? $application->runtime_pins[$runtime] : null,
+            'href' => route('servers.applications.runtime', [$server, $application]),
+        ];
+    }
+
+    /**
+     * @return array{current: string, newest: string, packages: list<string>, command: string}|null
+     */
+    private function held(Application $application): ?array
+    {
+        $runtime = $application->type?->runtime($application->js_runtime);
+        $release = $application->current_release;
+
+        if ($runtime === null || $release === null) {
+            return null;
+        }
+
+        $stack = $application->deployments()->where('release', $release)->latest('id')->value('stack');
+        $data = is_array($stack) ? ($stack['runtimes'][$runtime] ?? null) : null;
+
+        if (!is_array($data)) {
+            return null;
+        }
+
+        $resolved = ResolvedRuntime::fromArray($data);
+
+        if ($resolved->heldBy === [] || $resolved->newest === null) {
+            return null;
+        }
+
+        return [
+            'current' => ResolvedRuntime::line($resolved->version),
+            'newest' => ResolvedRuntime::line($resolved->newest),
+            'packages' => $resolved->heldBy,
+            'command' => 'composer update ' . implode(' ', array_map(fn(string $held): string => strtok($held, ' ') ?: $held, $resolved->heldBy)),
+        ];
     }
 
     public function update(UpdateApplicationRequest $request, Server $server, Application $application): RedirectResponse

@@ -22,6 +22,10 @@ final class RepositoryProbe
 
     public const MAX_BYTES = 262144;
 
+    public const COMPOSER_LOCK = 'composer.lock';
+
+    public const COMPOSER_LOCK_MAX_BYTES = 8388608;
+
     private const SCRIPT = <<<'BASH'
     cd "$CORESMITH_PROBE_DIR" 2>/dev/null || exit 0
     for f in {files}; do
@@ -31,6 +35,7 @@ final class RepositoryProbe
       if [ -f "$f" ]; then printf '@@lock %s\n' "$f"; fi
     done
     if [ -f composer.lock ]; then
+      printf '@@file composer.lock '; head -c {lockbytes} composer.lock | base64 | tr -d '\n'; printf '\n'
       grep -A1 -E '"name": "(laravel/framework|symfony/framework-bundle)",' composer.lock | awk -F'"' '/"name"/ {n=$4} /"version"/ {print "@@locked " n " " $4}'
     fi
     if [ -f Gemfile.lock ]; then
@@ -59,6 +64,7 @@ final class RepositoryProbe
             '{files}' => implode(' ', self::FILES),
             '{lockfiles}' => implode(' ', self::LOCKFILES),
             '{bytes}' => (string) self::MAX_BYTES,
+            '{lockbytes}' => (string) self::COMPOSER_LOCK_MAX_BYTES,
         ]) . "\n";
     }
 
@@ -69,7 +75,7 @@ final class RepositoryProbe
         $locked = [];
 
         foreach (preg_split('/\R/', $output) ?: [] as $line) {
-            if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && in_array($matches[1], self::FILES, true)) {
+            if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && in_array($matches[1], [...self::FILES, self::COMPOSER_LOCK], true)) {
                 $content = base64_decode($matches[2], true);
 
                 if ($content !== false) {

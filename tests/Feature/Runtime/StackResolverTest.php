@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
+use App\Exceptions\RuntimeUnavailable;
 use App\Models\Application;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
@@ -25,16 +26,30 @@ test('the stack of a laravel app puts together versions, framework and tooling',
         ->and($stack->tooling?->manager)->toBe('bun');
 });
 
-test('a version chosen when the app was added applies only where the repository names none', function () {
+test('a version chosen for the app applies wherever the repository allows it, and is refused where it does not', function () {
     $application = new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']);
     $application->runtime_pins = ['php' => '8.3'];
 
     $bare = app(StackResolver::class)->resolve($application, new RepositoryFacts, fn(): array => []);
-    $declared = app(StackResolver::class)->resolve($application, new RepositoryFacts(['composer.json' => '{"require":{"php":"^8.4"}}']), fn(): array => []);
+    $allowed = app(StackResolver::class)->resolve($application, new RepositoryFacts(['composer.json' => '{"require":{"php":"^8.2"}}']), fn(): array => []);
 
     expect($bare->runtimes['php']->version)->toBe('8.3.33')
         ->and($bare->runtimes['php']->source)->toBe(ResolvedRuntime::FROM_PIN)
-        ->and($declared->runtimes['php']->source)->toBe('composer.json');
+        ->and($allowed->runtimes['php']->version)->toBe('8.3.33')
+        ->and($allowed->runtimes['php']->source)->toBe(ResolvedRuntime::FROM_PIN)
+        ->and(fn() => app(StackResolver::class)->resolve($application, new RepositoryFacts(['composer.json' => '{"require":{"php":"^8.4"}}']), fn(): array => []))
+        ->toThrow(RuntimeUnavailable::class, 'This app is set to PHP 8.3, but require.php in composer.json asks for ^8.4.');
+});
+
+test('the stack holds php where composer.lock stops', function () {
+    $application = new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']);
+    $lock = (string) json_encode(['packages' => [['name' => 'nette/utils', 'version' => 'v4.0.5', 'require' => ['php' => '8.0 - 8.4']]]]);
+
+    $stack = app(StackResolver::class)->resolve($application, new RepositoryFacts(['composer.json' => '{"require":{"php":"^8.2"}}', 'composer.lock' => $lock]), fn(): array => ['8.5.10']);
+
+    expect($stack->runtimes['php']->version)->toBe('8.4.25')
+        ->and($stack->runtimes['php']->heldBy)->toBe(['nette/utils 4.0.5'])
+        ->and($stack->runtimes['php']->newest)->toBe('8.5.10');
 });
 
 test('notes from reading and from resolving are both carried on the stack', function () {
