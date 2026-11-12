@@ -96,6 +96,8 @@ final class ApplicationApiController extends ApiController
             'name' => $application->name,
             'slug' => $application->slug,
             'server_id' => $application->server_id,
+            'project_id' => $application->environment?->project_id,
+            'environment_id' => $application->environment_id,
             'type' => $application->type?->value,
             'framework' => $application->framework,
             'domain' => $application->domain,

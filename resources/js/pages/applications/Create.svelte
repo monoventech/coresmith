@@ -8,6 +8,7 @@
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
+    import EnvironmentSelect from '@/components/projects/EnvironmentSelect.svelte'
     import TextLink from '@/components/TextLink.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
@@ -21,11 +22,13 @@
     let {
         server,
         runtimes,
-        github
+        github,
+        projects = []
     }: {
         server: { id: string; name: string; href: string }
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
+        projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
     } = $props()
 
     const GIT_URL = 'url'
@@ -281,6 +284,7 @@
                         Point the domain's A record at this server first. Caddy issues the certificate on the first
                         request.
                     </p>
+                    <EnvironmentSelect {projects} error={errors.environment_id} />
                     <Button type="submit" class="w-full" disabled={processing}>Add the app</Button>
                 </div>
             {/snippet}

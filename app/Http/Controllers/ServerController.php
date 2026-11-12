@@ -51,6 +51,8 @@ final class ServerController extends Controller
 {
     public const ENVIRONMENTS = ['Production', 'Staging', 'Development'];
 
+    public const PICK_ENVIRONMENT = 'Pick Production, Staging, Development or No environment.';
+
     public function create(Request $request, CloudPresenter $cloud, TeamContext $context, PlanGate $plans, ThisMachine $machine): Response
     {
         $this->authorize('create', Server::class);

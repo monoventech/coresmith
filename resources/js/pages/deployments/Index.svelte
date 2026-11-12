@@ -2,6 +2,7 @@
     import { Link } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
+    import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
     import { Badge } from '@/components/ui/badge'
     import type { EntityState } from '@/lib/fleet'
     import { cn } from '@/lib/utils'
@@ -22,11 +23,15 @@
     let {
         filter,
         filters = [],
-        deployments = []
+        deployments = [],
+        scope = '',
+        scopes = []
     }: {
         filter: string
         filters: { key: string; label: string; count: number; href: string }[]
         deployments: Row[]
+        scope: string
+        scopes: { value: string; label: string }[]
     } = $props()
 
     const columns = 'grid grid-cols-[1fr_0.9fr_1.3fr_0.6fr_0.9fr_0.7fr_1fr] gap-3 max-[900px]:grid-cols-[1fr_auto]'
@@ -43,22 +48,31 @@
     </div>
 </div>
 
-<nav class="mb-4 flex flex-wrap gap-2" aria-label="Filter deployments">
-    {#each filters as chip (chip.key)}
-        {@const selected = chip.key === filter}
-        <Link
-            href={chip.href}
-            preserveScroll
-            aria-current={selected ? 'page' : undefined}
-            class={cn(
-                'focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-medium no-underline transition-colors duration-(--dur-fast)',
-                selected ? 'chip-selected text-foreground' : 'border-border bg-transparent text-muted-foreground'
-            )}
-        >
-            {chip.label}<span class="font-mono text-[11.5px] text-muted-foreground">{chip.count}</span>
-        </Link>
-    {/each}
-</nav>
+<div class="mb-4 flex flex-wrap items-center gap-2">
+    <nav class="flex flex-wrap gap-2" aria-label="Filter deployments">
+        {#each filters as chip (chip.key)}
+            {@const selected = chip.key === filter}
+            <Link
+                href={chip.href}
+                preserveScroll
+                aria-current={selected ? 'page' : undefined}
+                class={cn(
+                    'focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[12.5px] font-medium no-underline transition-colors duration-(--dur-fast)',
+                    selected ? 'chip-selected text-foreground' : 'border-border bg-transparent text-muted-foreground'
+                )}
+            >
+                {chip.label}<span class="font-mono text-[11.5px] text-muted-foreground">{chip.count}</span>
+            </Link>
+        {/each}
+    </nav>
+    <ProjectScopeSelect
+        {scopes}
+        {scope}
+        href={route('deployments.index')}
+        keep={filter === 'all' ? {} : { status: filter }}
+        class="ml-auto w-56 max-sm:ml-0 max-sm:w-full"
+    />
+</div>
 
 {#if deployments.length === 0}
     <EmptyState

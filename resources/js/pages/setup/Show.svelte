@@ -391,7 +391,6 @@
                         <input type="hidden" name="team_id" value={team.id} />
                         <input type="hidden" name="ssh_port" value="22" />
                         <input type="hidden" name="ssh_user" value="root" />
-                        <input type="hidden" name="environment" value="Production" />
                         <div class="mb-5 flex flex-col gap-3.5">
                             <div>
                                 <Label for="setup-name" class="mb-1.5">Server name</Label>

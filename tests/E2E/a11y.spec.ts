@@ -31,6 +31,15 @@ const direct =
 
 const PAGES: [string, Visit][] = [
     ['Fleet', direct('/dashboard')],
+    ['Projects', direct('/projects')],
+    [
+        'Project',
+        async (page) => {
+            await page.goto('/projects')
+            await page.getByTestId('project-card').getByRole('link', { name: 'Storefront', exact: true }).click()
+            await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
+        }
+    ],
     ['Deployments', direct('/deployments')],
     ['Releases', direct('/releases')],
     ['Server apps', (page) => gotoServer(page, 'forge-01')],

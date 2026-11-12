@@ -452,10 +452,12 @@ test.describe('adding an application', () => {
         await page.getByLabel('Language').selectOption('js')
         await expect(page.getByLabel('Framework')).toHaveValue('sveltekit')
         await page.getByLabel('Domain').fill(`${name}.bench.monoven.io`)
+        await page.getByLabel('Project').selectOption({ label: 'Storefront › Staging' })
         await page.getByRole('button', { name: 'Add the app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
         await expect(toast(page)).toContainText('Application created.')
+        await expect(page.getByTestId('app-project')).toContainText('Storefront › Staging')
     })
 
     test('a malformed domain is refused next to the field', async ({ page }) => {

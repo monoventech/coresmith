@@ -21,6 +21,7 @@ use App\Services\Moves\MoveFile;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\CronJobs;
 use App\Services\Server\SchedulerLogReader;
+use App\Services\Teams\TeamAccess;
 use Database\Seeders\E2ESeeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -168,4 +169,22 @@ test('the browser seed gives every browser an owner with a move file to import a
             ->and($server->status)->toBe(ServerStatus::Moving)
             ->and($server->takeover['state'])->toBe('failed');
     }
+});
+
+test('the browser seed files the monoven apps into projects and has a member who sees only one environment', function () {
+    e2eSeedRun();
+
+    $team = Team::query()->where('slug', 'monoven')->sole();
+    $storefront = $team->projects()->where('name', 'Storefront')->sole();
+    $staging = $storefront->environments()->where('name', 'Staging')->sole();
+    $member = User::query()->where('email', E2ESeeder::ENVIRONMENT_EMAIL)->sole();
+    $access = app(TeamAccess::class);
+
+    expect($team->projects()->orderBy('name')->pluck('name')->all())->toBe(['Atlas', 'Storefront'])
+        ->and($storefront->environments()->pluck('name')->all())->toBe(['Production', 'Staging'])
+        ->and($team->applications()->where('name', 'storefront-staging')->sole()->environment_id)->toBe($staging->id)
+        ->and($team->databases()->where('name', 'atlas_production')->sole()->environment?->name)->toBe('Production')
+        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id]])
+        ->and($team->applications()->whereIn('name', array_map(fn(string $code): string => "filed-{$code}", array_values(E2ESeeder::PROJECTS)))->count())->toBe(count(E2ESeeder::PROJECTS))
+        ->and($team->servers()->whereIn('name', array_map(fn(string $code): string => "label-{$code}", array_values(E2ESeeder::PROJECTS)))->whereNull('environment')->count())->toBe(count(E2ESeeder::PROJECTS));
 });

@@ -17,6 +17,7 @@ use App\Models\BackupDestination;
 use App\Models\CloudProvider;
 use App\Models\ManagedDatabase;
 use App\Models\MoveCode;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -134,6 +135,20 @@ final class TeamImporter
             $providers[(string) $record['ref']] = $provider->id;
         }
 
+        $environments = [];
+        foreach ($this->records($payload, 'projects') as $record) {
+            $project = new Project;
+            $project->forceFill(['team_id' => $team->id, 'name' => (string) ($record['name'] ?? '') ?: 'Moved project'])->save();
+
+            foreach (array_values(array_filter((array) ($record['environments'] ?? []), 'is_array')) as $position => $environment) {
+                $made = $project->environments()->create(['name' => (string) ($environment['name'] ?? '') ?: 'Production', 'position' => (int) ($environment['position'] ?? $position)]);
+
+                if (is_string($environment['ref'] ?? null) && $environment['ref'] !== '') {
+                    $environments[$environment['ref']] = $made->id;
+                }
+            }
+        }
+
         $applications = [];
         foreach ($this->records($payload, 'applications') as $record) {
             $application = new Application;
@@ -141,6 +156,7 @@ final class TeamImporter
                 'team_id' => $team->id,
                 'server_id' => $servers[(string) $record['server']]->id,
                 'source_provider_id' => $providers[(string) ($record['source_provider'] ?? '')] ?? null,
+                'environment_id' => $environments[(string) ($record['environment'] ?? '')] ?? null,
                 ...MoveColumns::pick($record, MoveColumns::APPLICATIONS),
                 'last_request_at' => now(),
             ])->save();
@@ -154,7 +170,7 @@ final class TeamImporter
         }
 
         foreach ($this->records($payload, 'databases') as $record) {
-            (new ManagedDatabase)->forceFill(['team_id' => $team->id, 'server_id' => $servers[(string) $record['server']]->id, ...MoveColumns::pick($record, MoveColumns::DATABASES)])->save();
+            (new ManagedDatabase)->forceFill(['team_id' => $team->id, 'server_id' => $servers[(string) $record['server']]->id, 'environment_id' => $environments[(string) ($record['environment'] ?? '')] ?? null, ...MoveColumns::pick($record, MoveColumns::DATABASES)])->save();
         }
 
         if (is_array($payload['backup_destination'] ?? null)) {

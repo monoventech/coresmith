@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-    import { Form, page, router } from '@inertiajs/svelte'
+    import { Form, Link, page, router } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import BackupsCard from '@/components/databases/BackupsCard.svelte'
@@ -18,6 +18,7 @@
 
     let {
         server,
+        place = null,
         database,
         can,
         offsite = null,
@@ -25,7 +26,8 @@
         restore = null,
         apps = []
     }: {
-        server: { id: string; name: string; href: string }
+        server: { id: string; name: string; href: string | null }
+        place?: { label: string; href: string | null } | null
         database: {
             id: string
             name: string
@@ -132,7 +134,7 @@
 
 <AppHead title={database.name} />
 
-<BackLink href={server.href} label={server.name} />
+<BackLink href={server.href ?? route('dashboard')} label={server.href ? server.name : 'Fleet'} />
 
 <div class="mb-6 flex flex-wrap items-end justify-between gap-6">
     <div class="min-w-0">
@@ -145,7 +147,11 @@
         <p class="type-body-sm mt-1.5 text-muted-foreground">
             {ENGINES[database.type] ?? database.type} · on {server.name} · {database.is_external
                 ? 'existing server'
-                : 'localhost only'}
+                : 'localhost only'}{#if place}<span data-testid="database-project">
+                    · {#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
+                            >{place.label}</Link
+                        >{:else}{place.label}{/if}</span
+                >{/if}
         </p>
         {#if offsite && !offsite.error}
             <p class="type-body-sm mt-1 text-muted-foreground" data-testid="offsite-status">

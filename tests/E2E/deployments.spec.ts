@@ -1,9 +1,23 @@
 import type { Page } from '@playwright/test'
-import { asMember, blockingViolations, expect, gotoApplication, isMobile, nav, noSidewaysScroll, own, test, toast, useTheme } from './support/fixtures'
+import {
+    asMember,
+    blockingViolations,
+    expect,
+    gotoApplication,
+    isMobile,
+    nav,
+    noSidewaysScroll,
+    own,
+    test,
+    toast,
+    useTheme
+} from './support/fixtures'
 
 async function gotoDeployments(page: Page, mobile: boolean) {
     await page.goto('/dashboard')
-    await nav(page).getByRole('link', { name: mobile ? 'Deploys' : 'Deployments', exact: true }).click()
+    await nav(page)
+        .getByRole('link', { name: mobile ? 'Deploys' : 'Deployments', exact: true })
+        .click()
     await page.waitForURL(/\/deployments$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Deployments' })).toBeVisible()
 }
@@ -72,6 +86,26 @@ async function streamDeploys(page: Page) {
 }
 
 test.describe('the deployments list', () => {
+    test('deploys filter by project and environment', async ({ page }) => {
+        await page.goto('/deployments')
+        await page.getByLabel('Project').selectOption({ label: 'Storefront › Staging' })
+
+        await page.waitForURL((url) => url.searchParams.has('project') && url.searchParams.has('environment'))
+        await expect(rows(page).first()).toBeVisible()
+        await expect(rows(page).filter({ hasNotText: 'storefront-staging' })).toHaveCount(0)
+        await expect(page.getByLabel('Project')).toHaveValue(/:/)
+
+        await filters(page)
+            .getByRole('link', { name: /^Deployed/ })
+            .click()
+        await page.waitForURL(
+            (url) =>
+                url.searchParams.get('status') === 'deployed' &&
+                url.searchParams.has('project') &&
+                url.searchParams.has('environment')
+        )
+    })
+
     test('every deploy across the fleet is listed with the running one pinned on top', async ({ page }, testInfo) => {
         await gotoDeployments(page, isMobile(testInfo))
 
@@ -84,7 +118,9 @@ test.describe('the deployments list', () => {
     test('the failed filter shows only failures, and says they had no impact', async ({ page }, testInfo) => {
         await gotoDeployments(page, isMobile(testInfo))
 
-        await filters(page).getByRole('link', { name: /^Failed\s*\d+$/ }).click()
+        await filters(page)
+            .getByRole('link', { name: /^Failed\s*\d+$/ })
+            .click()
         await page.waitForURL(/status=failed/)
 
         await expect(rows(page).filter({ hasText: 'storefront' })).toHaveCount(1)
@@ -97,7 +133,9 @@ test.describe('the deployments list', () => {
     test('the running filter shows the deploys in progress', async ({ page }, testInfo) => {
         await gotoDeployments(page, isMobile(testInfo))
 
-        await filters(page).getByRole('link', { name: /^Running\s*\d+$/ }).click()
+        await filters(page)
+            .getByRole('link', { name: /^Running\s*\d+$/ })
+            .click()
         await page.waitForURL(/status=running/)
 
         await expect(rows(page).first()).toContainText('atlas-staging')
@@ -162,7 +200,10 @@ test.describe('a deploy', () => {
 
         const output = page.getByLabel('Deployment output')
 
-        await stream.push((deployment) => ({ ...deployment, log: `${deployment.log}\n[12:00:00] build: compiling assets` }))
+        await stream.push((deployment) => ({
+            ...deployment,
+            log: `${deployment.log}\n[12:00:00] build: compiling assets`
+        }))
         await expect(output).toContainText('build: compiling assets')
         await expect(page.getByTestId('log-transport')).toHaveText('Streaming live')
 
@@ -180,8 +221,13 @@ test.describe('a deploy', () => {
         await expect(page.getByTestId('deployment-status')).toContainText('Failed')
         await expect(page.getByTestId('failure-banner')).toContainText('The build failed, so nothing changed.')
         await expect(page.getByTestId('failure-banner')).toContainText('users never saw an error page')
-        await expect(page.getByTestId('phase-rail').locator('[data-phase="build"]')).toHaveAttribute('data-state', 'failed')
-        await expect(page.getByLabel('Deployment output')).toContainText('deploy failed. the current release is untouched.')
+        await expect(page.getByTestId('phase-rail').locator('[data-phase="build"]')).toHaveAttribute(
+            'data-state',
+            'failed'
+        )
+        await expect(page.getByLabel('Deployment output')).toContainText(
+            'deploy failed. the current release is untouched.'
+        )
         await expect(page.getByTestId('log-transport')).toHaveText('Finished')
     })
 
@@ -277,7 +323,10 @@ test.describe('cancelling a deploy', () => {
     })
 
     test('on a phone a running deploy offers no cancel', async ({ page }, testInfo) => {
-        test.skip(!isMobile(testInfo), 'The desktop deploy page draws Cancel in its header, which the test above covers')
+        test.skip(
+            !isMobile(testInfo),
+            'The desktop deploy page draws Cancel in its header, which the test above covers'
+        )
 
         await watch(page, own(testInfo, 'cancel'))
 
@@ -289,7 +338,10 @@ test.describe('cancelling a deploy', () => {
         test.skip(isMobile(testInfo), "The mobile prototype's running deploy has no Cancel")
 
         await gotoDeployments(page, false)
-        await rows(page).filter({ hasText: own(testInfo, 'queued') }).first().click()
+        await rows(page)
+            .filter({ hasText: own(testInfo, 'queued') })
+            .first()
+            .click()
         await page.getByTestId('phase-rail').waitFor()
         await page.getByRole('button', { name: 'Cancel', exact: true }).click()
 
@@ -321,7 +373,9 @@ test.describe('cancelling a deploy', () => {
         const strip = page.getByTestId('cancelled-strip')
         const build = page.getByTestId('phase-rail').locator('[data-phase="build"]')
 
-        await expect(strip).toContainText('Maya Lindqvist cancelled this deploy, so nothing changed. The symlink still points at ')
+        await expect(strip).toContainText(
+            'Maya Lindqvist cancelled this deploy, so nothing changed. The symlink still points at '
+        )
         await expect(strip).toContainText(', users never saw a difference.')
         await expect(build).toHaveAttribute('data-state', 'cancelled')
         await expect(build).toContainText('cancelled')
@@ -338,7 +392,9 @@ test.describe('a deploy that failed with a known reason', () => {
 
         await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
 
-        await expect(page.getByTestId('failure-reason')).toContainText('Crash loop: coresmith-app-crashy-fpm kept stopping')
+        await expect(page.getByTestId('failure-reason')).toContainText(
+            'Crash loop: coresmith-app-crashy-fpm kept stopping'
+        )
         await expect(page.getByTestId('phase-rail')).not.toContainText('failed')
         await expect(page.getByTestId('deployment-log')).toContainText('Class "App\\Billing\\Gateway" not found')
 
@@ -356,7 +412,9 @@ test.describe('a deploy that failed with a known reason', () => {
         const rail = page.getByTestId('phase-rail')
 
         await expect(reason).toContainText('The processes did not start.')
-        await expect(reason).toContainText('coresmith-app-dev-mode-web did not start, systemd reports it as activating.')
+        await expect(reason).toContainText(
+            'coresmith-app-dev-mode-web did not start, systemd reports it as activating.'
+        )
         await expect(reason).not.toContainText('The deploy failed after the swap.')
         await expect(rail.locator('[data-phase="swap"]')).toHaveAttribute('data-state', 'done')
         await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
@@ -372,7 +430,9 @@ test.describe('a deploy that failed with a known reason', () => {
         const rail = page.getByTestId('phase-rail')
 
         await expect(reason).toContainText('Sidekiq did not start.')
-        await expect(reason).toContainText('coresmith-app-no-sidekiq-sidekiq did not start, systemd reports it as activating.')
+        await expect(reason).toContainText(
+            'coresmith-app-no-sidekiq-sidekiq did not start, systemd reports it as activating.'
+        )
         await expect(reason).not.toContainText('The processes did not start.')
         await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
         await expect(rail).toContainText('the swap went through')
@@ -396,8 +456,13 @@ test.describe('a deploy that failed with a known reason', () => {
         await expect(reason).toContainText("Preparing the app's storage failed, so nothing changed.")
         await expect(reason).toContainText("Fix the app's storage and push again, or retry.")
         await expect(reason).not.toContainText('clone')
-        await expect(page.getByTestId('phase-rail').locator('[data-phase="clone"]')).toHaveAttribute('data-state', 'failed')
-        await expect(page.getByTestId('deployment-log')).toContainText("Could not copy the live release's storage into shared/storage")
+        await expect(page.getByTestId('phase-rail').locator('[data-phase="clone"]')).toHaveAttribute(
+            'data-state',
+            'failed'
+        )
+        await expect(page.getByTestId('deployment-log')).toContainText(
+            "Could not copy the live release's storage into shared/storage"
+        )
     })
 })
 
@@ -408,7 +473,9 @@ test.describe('a deploy that installs a runtime first', () => {
             await page.getByTestId('live-deploy').click()
 
             await expect(page.locator('[data-phase="deps"]')).toHaveAttribute('data-state', 'running')
-            await expect(page.getByTestId('deployment-log')).toContainText('installing PHP 8.5.10, compiling it, usually 5–15 minutes the first time')
+            await expect(page.getByTestId('deployment-log')).toContainText(
+                'installing PHP 8.5.10, compiling it, usually 5–15 minutes the first time'
+            )
         } finally {
             await page.goto('/monoven/dashboard')
         }

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.0 (2026-11-12)
+
+### Added
+- feat: projects group apps and databases with their environments, and can be shared whole or one environment at a time (#50)
+
 ## v0.7.1 (2026-11-11)
 
 ### Added

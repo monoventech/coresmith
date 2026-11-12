@@ -45,6 +45,11 @@ class ManagedDatabase extends Model
         return $this->belongsTo(Team::class);
     }
 
+    public function environment(): BelongsTo
+    {
+        return $this->belongsTo(Environment::class);
+    }
+
     public function onSharedRedis(): bool
     {
         return $this->type === DatabaseType::Redis && (int) $this->port === self::SHARED_REDIS_PORT;
