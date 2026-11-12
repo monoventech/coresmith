@@ -43,6 +43,9 @@ final class FleetSnapshot
     /** @var Collection<int, Deployment>|null */
     private ?Collection $running = null;
 
+    /** @var list<array{severity: string, subject: string, summary: string, href: string}>|null */
+    private ?array $attention = null;
+
     public function __construct(private readonly Team $team, private readonly ?User $viewer = null) {}
 
     /**
@@ -214,6 +217,14 @@ final class FleetSnapshot
      * @return list<array{severity: string, subject: string, summary: string, href: string}>
      */
     public function attention(): array
+    {
+        return $this->attention ??= $this->gatherAttention();
+    }
+
+    /**
+     * @return list<array{severity: string, subject: string, summary: string, href: string}>
+     */
+    private function gatherAttention(): array
     {
         $items = [];
 
