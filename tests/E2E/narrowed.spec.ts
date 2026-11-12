@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import {
     blockingViolations,
     expect,
+    expectWayBack,
     gotoApplication,
     main,
     nav,
@@ -75,7 +76,7 @@ test.describe('an admin who sees only what is shared', () => {
 
         await expect(page.getByTestId('app-server')).toContainText('on anvil-01')
         await expect(main(page).getByRole('link', { name: 'anvil-01' })).toHaveCount(0)
-        await expect(main(page).getByRole('link', { name: 'Fleet' })).toBeVisible()
+        await expectWayBack(page, 'Fleet')
     })
 
     test('with nothing shared, the fleet says so and who can share', async ({ page }) => {

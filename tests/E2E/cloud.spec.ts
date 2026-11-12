@@ -169,10 +169,10 @@ test.describe('provisioning through a provider', () => {
 
         await expect(page.getByLabel('Region')).toHaveValue('fsn1')
         await expect(page.getByLabel('Region').locator('option', { hasText: 'Ashburn (ash)' })).toHaveCount(1)
-        await expect(page.getByLabel('Size')).toHaveValue('cx22')
+        await expect(page.getByLabel('Size', { exact: true })).toHaveValue('cx22')
         await expect(
             page
-                .getByLabel('Size')
+                .getByLabel('Size', { exact: true })
                 .locator('option', { hasText: /4 GB · 2 vCPU · €3\.79\/mo/ })
                 .first()
         ).toBeAttached()
@@ -183,9 +183,9 @@ test.describe('provisioning through a provider', () => {
 
         await page.getByLabel('Region').selectOption('ash')
 
-        await expect(page.getByLabel('Size').locator('option')).toHaveCount(1)
-        await expect(page.getByLabel('Size')).toHaveValue('cpx21')
-        await expect(page.getByLabel('Size').locator('option')).toContainText('€8.49/mo')
+        await expect(page.getByLabel('Size', { exact: true }).locator('option')).toHaveCount(1)
+        await expect(page.getByLabel('Size', { exact: true })).toHaveValue('cpx21')
+        await expect(page.getByLabel('Size', { exact: true }).locator('option')).toContainText('€8.49/mo')
     })
 
     test('a size with no price in the chosen region shows no price there, never its price elsewhere', async ({
@@ -214,8 +214,8 @@ test.describe('provisioning through a provider', () => {
         await page.goto('/servers/create')
         await provider(page).selectOption({ label: 'Hetzner Cloud' })
 
-        await expect(page.getByLabel('Size')).toHaveValue('cx22')
-        await expect(page.getByLabel('Size').locator('option[value="cx22"]')).not.toContainText('€')
+        await expect(page.getByLabel('Size', { exact: true })).toHaveValue('cx22')
+        await expect(page.getByLabel('Size', { exact: true }).locator('option[value="cx22"]')).not.toContainText('€')
         await expect(page.getByRole('main')).toContainText('cx22 · 40 GB disk, billed by Hetzner Cloud.')
         await expect(page.getByRole('main')).not.toContainText('€9.99')
     })

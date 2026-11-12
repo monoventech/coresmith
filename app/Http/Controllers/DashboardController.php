@@ -61,7 +61,7 @@ final class DashboardController extends Controller
             'tiles' => [
                 [
                     'id' => 'applications',
-                    'label' => 'Applications',
+                    'label' => 'Apps',
                     'value' => (string) $applications,
                     'sub' => 'across ' . $servers->count() . ' ' . ($servers->count() === 1 ? 'server' : 'servers'),
                     'tone' => 'default',
@@ -74,6 +74,7 @@ final class DashboardController extends Controller
                     'sub' => $running->isEmpty() ? 'none running' : $running->count() . ' running now',
                     'tone' => 'default',
                     'href' => route('deployments.index'),
+                    'bars' => $fleet->deploysPerDay(),
                 ],
                 [
                     'id' => 'attention',
@@ -86,10 +87,11 @@ final class DashboardController extends Controller
                 [
                     'id' => 'uptime',
                     'label' => 'Uptime, ' . FleetSnapshot::UPTIME_DAYS . ' days',
-                    'value' => $uptime === null ? '—' : preg_replace('/\.?0+$/', '', number_format($uptime, 2)) . '%',
-                    'sub' => $uptime === null ? 'no readings yet' : 'fleet-wide',
+                    'value' => $uptime === null ? 'No readings' : preg_replace('/\.?0+$/', '', number_format($uptime, 2)) . '%',
+                    'sub' => $uptime === null ? 'collected every minute' : 'fleet-wide',
                     'tone' => 'default',
                     'href' => route('deployments.index'),
+                    'strip' => $fleet->uptimeByDay(),
                 ],
             ],
             'servers' => $servers->map(fn(Server $server): array => $fleet->card($server))->values(),
@@ -106,7 +108,7 @@ final class DashboardController extends Controller
     }
 
     /**
-     * @return array<string, string>|null
+     * @return array<string, mixed>|null
      */
     private function live(?Deployment $deployment, DeploymentPhases $phases): ?array
     {
@@ -120,6 +122,7 @@ final class DashboardController extends Controller
             'application' => $application->name,
             'server' => (string) $application->server?->name,
             'phase' => $phases->progress($deployment) ?? 'starting',
+            'states' => array_column($phases->states($deployment), 'state'),
             'href' => route('servers.applications.deployments.show', [$application->server_id, $application, $deployment]),
         ];
     }

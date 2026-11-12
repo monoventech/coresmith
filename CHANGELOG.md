@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.1 (2026-11-12)
+
+### Added
+- feat: a rail and a live explorer replace the sidebar, every page gets a breadcrumb trail, and the fleet page draws deploys, uptime and each server's last hour (#53)
+
+### Changed
+- docs: the README sends people to Coresmith Cloud and S3 backups, and no copy says self-hosting has every feature (#52)
+
 ## v0.8.0 (2026-11-12)
 
 ### Added

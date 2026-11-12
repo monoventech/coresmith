@@ -8,13 +8,13 @@ Server management without the complexity. Coresmith sets up your own Linux serve
 - **Push to deploy.** Connect GitHub or your own Git host. Every deploy builds a new release beside the live one, health-checks it, then switches over in one step, and the previous release stays ready to roll back to.
 - **Everything an app needs.** HTTPS certificates, domains, environment variables, background processes, cron jobs, and MySQL, PostgreSQL and Redis databases, all set from the browser.
 
-> **Licence:** Elastic License v2 (ELv2). See [LICENSE](LICENSE). Self-hosting is free with every feature; offering Coresmith to others as a hosted service is not allowed.
+## Coresmith Cloud
 
-Coresmith Cloud runs Coresmith for you. Read about it at [coresmith.io](https://coresmith.io).
+Coresmith Cloud is coming to [app.coresmith.io](https://app.coresmith.io). It runs Coresmith for you, so there's no machine to set up for it and nothing to install, update or back up. Sign up, connect GitHub without creating a GitHub App of your own, add your servers and deploy. Most teams should start there.
 
 ## Self-hosting
 
-Run Coresmith yourself, free, with every feature. Setup takes four steps.
+Self-hosting is for teams who want full control and are happy to run Coresmith themselves, looking after its machine, its updates and its backups. Setup takes four steps.
 
 ### What you need
 
@@ -22,7 +22,7 @@ Run Coresmith yourself, free, with every feature. Setup takes four steps.
 - At least 5GB of free disk (10GB or more recommended) and 2GB of RAM or more (it runs with less, slowly).
 - Ports 80 and 443 open to your users. The installer opens them. If a firewall is already on, it leaves that firewall's SSH rules as they are; if it turns ufw on itself, it keeps your SSH port open.
 - For HTTPS on a name, a domain whose DNS points at the server. Without one Coresmith answers on the server's IP address.
-- Give Coresmith a server of its own. It can't provision the server it runs on, so add other servers for your apps.
+- Apps can go on the machine Coresmith runs on, under Add server, This machine, or on other servers you add.
 
 ### 1. Point a domain at the server
 
@@ -85,7 +85,12 @@ Coresmith's **Finish setup** list walks you through the rest: connect GitHub (Co
 | `/var/lib/coresmith` | The SQLite database, when you chose SQLite, and update state |
 | `/var/log/coresmith-*.log` | Coresmith's service logs |
 
-**Backups.** Every night at 04:00 Coresmith backs up its own database and `.env` to `/opt/coresmith/shared/storage/app/private/backups`, keeping the latest 14. Settings, General, Backups has **Back up now**. Your apps' databases are separate: **Back up now** on a database's page dumps it on its server, and a team can send every MySQL and PostgreSQL database to its own S3 bucket each night from Settings, Team.
+### Backups
+
+Send your backups to an S3 bucket. A backup kept on the machine it protects is lost with that machine, so the backups Coresmith keeps locally are there to cover you while you set S3 up, not instead of it.
+
+- **Your apps' databases.** In Settings, Team, **Database backups to S3** takes your bucket, and Coresmith copies every MySQL and PostgreSQL database there each night. On a database's page Coresmith restores it from any of its backups, in S3 or on its server. **Back up now** there saves a dump on the database's own server.
+- **Coresmith itself.** Every night at 04:00 Coresmith backs up its own database and `.env` to `/opt/coresmith/shared/storage/app/private/backups` on its own machine, keeping the latest 14, and Settings, General, Backups has **Back up now**. Copy these backups to another machine too.
 
 ### Email
 
@@ -119,3 +124,7 @@ It asks you to type `uninstall` to confirm, and from there both ways do the same
     composer dev
 
 `composer dev` starts maildev, the Laravel server, the queue listener and Vite. See [CONTRIBUTING.md](CONTRIBUTING.md) for the checks every change passes before it is committed.
+
+## Licence
+
+Elastic License v2 (ELv2). See [LICENSE](LICENSE). You can run Coresmith on your own servers; offering it to others as a hosted service is not allowed.

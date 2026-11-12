@@ -18,7 +18,9 @@ export type ServerCard = {
     href: string
     logs_href: string
     watch_href: string | null
-    applications: { id: string; name: string; kind: string; deploy_href: string }[]
+    cpu_trend: number[]
+    memory_trend: number[]
+    applications: { id: string; name: string; kind: string; state: EntityState; href: string; deploy_href: string }[]
     cost: string | null
     provider: string | null
 }

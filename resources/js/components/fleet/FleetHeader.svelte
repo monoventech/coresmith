@@ -22,7 +22,7 @@
     <div>
         <h1 class="type-h1 m-0 max-sm:text-[26px]">Your <MarkerUnderline>fleet</MarkerUnderline></h1>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:mt-1 max-sm:text-[13px]">
-            {plural(counts.servers, 'server', 'servers')} · {plural(counts.applications, 'application', 'applications')}
+            {plural(counts.servers, 'server', 'servers')} · {plural(counts.applications, 'app', 'apps')}
             <span class="max-sm:hidden">· everything deployed from git</span>
         </p>
     </div>

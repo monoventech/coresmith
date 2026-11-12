@@ -1,4 +1,4 @@
-import { asMember, backToMonoven, dialog, expect, isMobile, nav, own, tabs, test, toast } from './support/fixtures'
+import { asMember, backToMonoven, dialog, expect, goWayBack, nav, own, tabs, test, toast } from './support/fixtures'
 
 test.afterEach(async ({ page }) => {
     await backToMonoven(page)
@@ -34,21 +34,20 @@ test.describe('switching teams', () => {
 })
 
 test.describe('team addresses', () => {
-    test('every link inside a team address keeps it', async ({ page }, testInfo) => {
+    test('every link inside a team address keeps it', async ({ page }) => {
         await page.goto('/monoven/dashboard')
 
-        await nav(page)
-            .getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })
-            .click()
+        await nav(page).getByRole('link', { name: 'Deploys', exact: true }).click()
         await page.waitForURL(/\/monoven\/deployments$/)
-        await expect(
-            nav(page).getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })
-        ).toHaveAttribute('aria-current', 'page')
+        await expect(nav(page).getByRole('link', { name: 'Deploys', exact: true })).toHaveAttribute(
+            'aria-current',
+            'page'
+        )
 
         await page.getByTestId('deployment-row').filter({ hasText: 'ledger' }).first().click()
         await page.waitForURL(/\/monoven\/servers\/[A-Za-z0-9]+\/applications\/[A-Za-z0-9]+\/deployments\/[A-Za-z0-9]+/)
 
-        await page.getByTestId('back-link').click()
+        await goWayBack(page, 'Deployments')
         await page.waitForURL(/\/monoven\/deployments$/)
     })
 
@@ -150,7 +149,7 @@ test.describe('a team on its own domain', () => {
     test('a verified domain opens its team, keeps links on it and switching leaves for the panel address', async ({
         page,
         context
-    }, testInfo) => {
+    }) => {
         const cookies = await context.cookies(origin)
 
         await context.addCookies(
@@ -166,9 +165,7 @@ test.describe('a team on its own domain', () => {
             0
         )
 
-        await nav(page)
-            .getByRole('link', { name: isMobile(testInfo) ? 'Deploys' : 'Deployments', exact: true })
-            .click()
+        await nav(page).getByRole('link', { name: 'Deploys', exact: true }).click()
         await page.waitForURL('http://panel.northwind.test/deployments')
 
         expect((await page.goto('http://panel.northwind.test/monoven/dashboard'))?.status()).toBe(404)
