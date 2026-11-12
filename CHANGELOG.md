@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.3 (2026-11-12)
+
+### Added
+- feat: PHP follows composer.json and composer.lock together, a version chosen for an app is used, and the app page says when the lock holds PHP back (#57)
+
 ## v0.8.2 (2026-11-12)
 
 ### Fixed
