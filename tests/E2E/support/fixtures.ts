@@ -371,6 +371,46 @@ export async function withInertia(page: Page, url: RegExp, change: (body: Inerti
     })
 }
 
+export async function fakeReverb(page: Page) {
+    const channels: string[] = []
+    let send: ((message: string) => void) | null = null
+
+    await page.route('**/broadcasting/auth', (route) => route.fulfill({ json: { auth: 'coresmith-local:signature' } }))
+    await page.routeWebSocket(/\/app\//, (socket) => {
+        send = (message) => socket.send(message)
+        socket.send(
+            JSON.stringify({
+                event: 'pusher:connection_established',
+                data: JSON.stringify({ socket_id: '1234.5678', activity_timeout: 120 })
+            })
+        )
+        socket.onMessage((message) => {
+            const frame = JSON.parse(String(message))
+
+            if (frame.event === 'pusher:subscribe') {
+                channels.push(frame.data.channel)
+                socket.send(
+                    JSON.stringify({
+                        event: 'pusher_internal:subscription_succeeded',
+                        channel: frame.data.channel,
+                        data: '{}'
+                    })
+                )
+            }
+        })
+    })
+
+    return {
+        channels,
+        team(): string | null {
+            return channels.find((channel) => channel.startsWith('private-teams.')) ?? null
+        },
+        emit(channel: string, event: string, data: Record<string, unknown> = {}) {
+            send?.(JSON.stringify({ event, channel, data: JSON.stringify(data) }))
+        }
+    }
+}
+
 export async function withProps(page: Page, url: RegExp, change: (props: Record<string, unknown>) => void) {
     await withInertia(page, url, (body) => change(body.props))
 }

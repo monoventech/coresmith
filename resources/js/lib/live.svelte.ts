@@ -12,9 +12,11 @@ const DEBOUNCE_MS = 1500
 
 const listening: Record<string, number> = {}
 
-const SHARED = ['explorer', 'panel']
+export const SHARED: readonly string[] = ['explorer', 'panel', 'crumbs']
 
 let pages = 0
+
+let hearing = 0
 
 export function follow(options: FollowOptions): () => void {
     const panel = page.props.panel as PanelProps | null
@@ -32,12 +34,12 @@ export function follow(options: FollowOptions): () => void {
         )
     }
 
-    function reload() {
-        if (held()) {
-            return
-        }
+    function covered(event: boolean): boolean {
+        return options.shell === true && (event ? hearing : pages) > 0
+    }
 
-        if (options.shell && pages > 0) {
+    function reload(event = false) {
+        if (held() || covered(event)) {
             return
         }
 
@@ -56,7 +58,7 @@ export function follow(options: FollowOptions): () => void {
 
         pending = setTimeout(() => {
             pending = null
-            reload()
+            reload(true)
         }, DEBOUNCE_MS)
     }
 
@@ -78,19 +80,36 @@ export function follow(options: FollowOptions): () => void {
         pages += 1
     }
 
-    const ticker = setInterval(reload, seconds * 1000)
+    const ticker = setInterval(() => reload(), seconds * 1000)
     const echo = channel !== null && panel?.live.streaming && realtimeConfigured() ? realtime() : null
 
-    document.addEventListener('visibilitychange', visibility)
-
-    try {
-        if (echo !== null && channel !== null) {
-            echo.private(channel).listen('.fleet.changed', soon)
-            listening[channel] = (listening[channel] ?? 0) + 1
+    function join(): boolean {
+        if (echo === null || channel === null) {
+            return false
         }
-    } catch {
-        echo?.leave(channel as string)
+
+        try {
+            echo.private(channel).listen('.fleet.changed', soon)
+        } catch {
+            if (!listening[channel]) {
+                echo.leave(channel)
+            }
+
+            return false
+        }
+
+        listening[channel] = (listening[channel] ?? 0) + 1
+
+        return true
     }
+
+    const joined = join()
+
+    if (joined && !options.shell) {
+        hearing += 1
+    }
+
+    document.addEventListener('visibilitychange', visibility)
 
     return () => {
         clearInterval(ticker)
@@ -99,13 +118,17 @@ export function follow(options: FollowOptions): () => void {
             pages -= 1
         }
 
+        if (joined && !options.shell) {
+            hearing -= 1
+        }
+
         if (pending !== null) {
             clearTimeout(pending)
         }
 
         document.removeEventListener('visibilitychange', visibility)
 
-        if (echo !== null && channel !== null && listening[channel] !== undefined) {
+        if (joined && echo !== null && channel !== null) {
             echo.private(channel).stopListening('.fleet.changed', soon)
             const left = (listening[channel] ?? 1) - 1
 

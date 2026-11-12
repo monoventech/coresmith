@@ -1,5 +1,14 @@
 import type { Locator, Page } from '@playwright/test'
-import { asEnvironmentOnly, asNarrowed, expect, nav, test, withInertia } from './support/fixtures'
+import {
+    asEnvironmentOnly,
+    asNarrowed,
+    expect,
+    fakeReverb,
+    gotoServer,
+    nav,
+    test,
+    withInertia
+} from './support/fixtures'
 
 function explorer(page: Page): Locator {
     return page.getByRole('complementary', { name: 'Explorer' })
@@ -7,6 +16,76 @@ function explorer(page: Page): Locator {
 
 function trail(page: Page): Locator {
     return page.getByRole('navigation', { name: 'Breadcrumb' })
+}
+
+type FleetProps = {
+    panel?: { live?: { streaming: boolean } }
+    explorer?: { servers: unknown[] }
+    crumbs?: { label: string }[]
+}
+
+const PUSHED = {
+    id: 'pushed',
+    name: 'pushed-01',
+    href: '/dashboard',
+    state: { key: 'healthy', label: 'Healthy', tone: 'success' },
+    note: '0 apps'
+}
+
+async function streamFleet(page: Page, change: (props: FleetProps) => void) {
+    await withInertia(page, /.*/, (body) => {
+        const props = body.props as FleetProps
+
+        if (props.panel?.live) {
+            props.panel.live.streaming = true
+        }
+
+        change(props)
+    })
+
+    const reverb = await fakeReverb(page)
+
+    return {
+        async subscribed() {
+            await expect.poll(() => reverb.team()).not.toBeNull()
+        },
+        changed() {
+            reverb.emit(reverb.team() as string, 'fleet.changed')
+        }
+    }
+}
+
+async function failSecondFleetSubscription(page: Page) {
+    await page.addInitScript(() => {
+        type Subscription = { bind: (event: string, ...rest: unknown[]) => unknown }
+        type PusherClass = { prototype: { subscribe: (this: unknown, name: string) => Subscription } }
+        let pusher: PusherClass | undefined
+
+        Object.defineProperty(window, 'Pusher', {
+            configurable: true,
+            get: () => pusher,
+            set(value: PusherClass) {
+                const subscribe = value.prototype.subscribe
+
+                value.prototype.subscribe = function (this: unknown, name: string) {
+                    const subscription = subscribe.call(this, name)
+                    const bind = subscription.bind.bind(subscription)
+                    let binds = 0
+
+                    subscription.bind = (event, ...rest) => {
+                        if (event === 'fleet.changed' && ++binds > 1) {
+                            throw new Error('This subscription failed')
+                        }
+
+                        return bind(event, ...rest)
+                    }
+
+                    return subscription
+                }
+                pusher = value
+            }
+        })
+    })
 }
 
 test.describe('the explorer', () => {
@@ -131,55 +210,37 @@ test.describe('the explorer', () => {
     })
 
     test('it refreshes when the fleet changes', async ({ page }) => {
-        let channel: string | null = null
-        let send: ((message: string) => void) | null = null
-
-        await withInertia(page, /.*/, (body) => {
-            const props = body.props as { panel?: { live?: { streaming: boolean } }; explorer?: { servers: unknown[] } }
-
-            if (props.panel?.live) {
-                props.panel.live.streaming = true
+        let changed = false
+        const fleet = await streamFleet(page, (props) => {
+            if (changed) {
+                props.explorer?.servers.push(PUSHED)
             }
-
-            if (props.explorer && channel !== null) {
-                props.explorer.servers.push({
-                    id: 'pushed',
-                    name: 'pushed-01',
-                    href: '/dashboard',
-                    state: { key: 'healthy', label: 'Healthy', tone: 'success' },
-                    note: '0 apps'
-                })
-            }
-        })
-        await page.route('**/broadcasting/auth', (route) =>
-            route.fulfill({ json: { auth: 'coresmith-local:signature' } })
-        )
-        await page.routeWebSocket(/\/app\//, (socket) => {
-            send = (message) => socket.send(message)
-            socket.send(
-                JSON.stringify({
-                    event: 'pusher:connection_established',
-                    data: JSON.stringify({ socket_id: '1234.5678', activity_timeout: 120 })
-                })
-            )
-            socket.onMessage((message) => {
-                const frame = JSON.parse(String(message))
-
-                if (frame.event === 'pusher:subscribe') {
-                    channel = frame.data.channel
-                    socket.send(
-                        JSON.stringify({ event: 'pusher_internal:subscription_succeeded', channel, data: '{}' })
-                    )
-                }
-            })
         })
 
         await page.goto('/dashboard')
         await nav(page).getByRole('link', { name: 'Releases', exact: true }).click()
         await page.waitForURL(/\/releases|\/applications\//)
+        await fleet.subscribed()
+        changed = true
+        fleet.changed()
 
-        await expect.poll(() => channel !== null && channel.startsWith('private-teams.')).toBe(true)
-        send?.(JSON.stringify({ event: 'fleet.changed', channel, data: '{}' }))
+        await expect(explorer(page).getByRole('link', { name: /^pushed-01,/ })).toBeVisible({ timeout: 10_000 })
+    })
+
+    test('a subscription that fails leaves the others refreshing', async ({ page }) => {
+        await failSecondFleetSubscription(page)
+
+        let changed = false
+        const fleet = await streamFleet(page, (props) => {
+            if (changed) {
+                props.explorer?.servers.push(PUSHED)
+            }
+        })
+
+        await gotoServer(page, 'forge-01')
+        await fleet.subscribed()
+        changed = true
+        fleet.changed()
 
         await expect(explorer(page).getByRole('link', { name: /^pushed-01,/ })).toBeVisible({ timeout: 10_000 })
     })
@@ -201,6 +262,23 @@ test.describe('the breadcrumb trail', () => {
         await trail(page).getByRole('link', { name: 'Atlas', exact: true }).click()
         await page.waitForURL(/\/projects\/[^/]+$/)
         await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible()
+    })
+
+    test('a rename made elsewhere reaches it on the next live refresh', async ({ page }) => {
+        let renamed = false
+        const fleet = await streamFleet(page, (props) => {
+            if (renamed && props.crumbs) {
+                props.crumbs[props.crumbs.length - 1].label = 'forge-renamed'
+            }
+        })
+
+        await gotoServer(page, 'forge-01')
+        await expect(trail(page).getByRole('listitem').last()).toHaveText('forge-01')
+        await fleet.subscribed()
+        renamed = true
+        fleet.changed()
+
+        await expect(trail(page).getByRole('listitem').last()).toHaveText('forge-renamed', { timeout: 10_000 })
     })
 })
 
