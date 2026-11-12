@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Server\CertificateCheck;
 use App\Services\Teams\TeamAccess;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
@@ -45,6 +46,9 @@ final class FleetSnapshot
 
     /** @var list<array{severity: string, subject: string, summary: string, href: string}>|null */
     private ?array $attention = null;
+
+    /** @var Collection<string, Collection<int, ServerMetric>>|null */
+    private ?Collection $recent = null;
 
     public function __construct(private readonly Team $team, private readonly ?User $viewer = null) {}
 
@@ -199,6 +203,8 @@ final class FleetSnapshot
             'cpu' => $metric === null ? null : (int) round((float) $metric->cpu_percent),
             'memory' => $metric === null ? null : (int) round((float) $metric->memory_percent),
             'disk' => $metric === null ? null : (int) round((float) $metric->disk_percent),
+            'cpu_trend' => $this->trend($server, 'cpu_percent'),
+            'memory_trend' => $this->trend($server, 'memory_percent'),
             'href' => route('servers.show', $server),
             'logs_href' => route('servers.activity', $server),
             'watch_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $running->application_id, $running]),
@@ -206,6 +212,8 @@ final class FleetSnapshot
                 'id' => $application->getKey(),
                 'name' => $application->name,
                 'kind' => ApplicationPresenter::kind($application),
+                'state' => ApplicationPresenter::state($application),
+                'href' => route('servers.applications.show', [$server, $application]),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
             ])->values()->all(),
             'cost' => Formats::monthly($server->provider_monthly_cost === null ? null : (string) $server->provider_monthly_cost, $server->provider_currency),
@@ -328,6 +336,85 @@ final class FleetSnapshot
             ->where('created_at', '>=', now()->subDays(7))
             ->whereNot('status', DeploymentStatus::Cancelled->value)
             ->count();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function deploysPerDay(int $days = 7): array
+    {
+        $since = CarbonImmutable::now()->startOfDay()->subDays($days - 1);
+        $counts = Deployment::query()
+            ->whereIn('application_id', $this->applicationsQuery()->select('id'))
+            ->where('created_at', '>=', $since)
+            ->whereNot('status', DeploymentStatus::Cancelled->value)
+            ->pluck('created_at')
+            ->countBy(fn(mixed $at): string => CarbonImmutable::parse($at)->toDateString());
+
+        return array_map(fn(int $offset): int => (int) ($counts[$since->addDays($offset)->toDateString()] ?? 0), range(0, $days - 1));
+    }
+
+    /**
+     * @return list<?float>
+     */
+    public function uptimeByDay(): array
+    {
+        $now = CarbonImmutable::now();
+        $start = $now->startOfDay()->subDays(self::UPTIME_DAYS - 1);
+        $rows = ServerMetric::query()
+            ->whereIn('server_id', $this->servers()->modelKeys())
+            ->where('recorded_at', '>=', $start)
+            ->selectRaw('server_id, date(recorded_at) as reading_day, count(*) as readings, min(recorded_at) as first_reading')
+            ->groupBy('server_id', 'reading_day')
+            ->get();
+        $firsts = $rows->groupBy('server_id')->map(fn(Collection $days): CarbonImmutable => $days->map(fn(ServerMetric $row): CarbonImmutable => CarbonImmutable::parse($row->getAttribute('first_reading'))->startOfMinute())->min());
+        $days = [];
+
+        foreach (range(0, self::UPTIME_DAYS - 1) as $offset) {
+            $from = $start->addDays($offset);
+            $until = $from->addDay()->min($now);
+            $observed = 0;
+            $expected = 0;
+
+            foreach ($firsts as $server => $first) {
+                $since = $from->max($first);
+
+                if ($since >= $until) {
+                    continue;
+                }
+
+                $minutes = (int) ceil($since->diffInMinutes($until, true));
+                $row = $rows->first(fn(ServerMetric $row): bool => $row->getAttribute('server_id') === $server && substr((string) $row->getAttribute('reading_day'), 0, 10) === $from->toDateString());
+                $observed += min((int) ($row?->getAttribute('readings') ?? 0), $minutes);
+                $expected += $minutes;
+            }
+
+            $days[] = $expected === 0 ? null : round($observed / $expected * 100, 2);
+        }
+
+        return $days;
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function trend(Server $server, string $column, int $points = 12): array
+    {
+        $since = CarbonImmutable::now()->subHour();
+        $this->recent ??= ServerMetric::query()
+            ->whereIn('server_id', $this->servers()->modelKeys())
+            ->where('recorded_at', '>=', $since)
+            ->orderBy('recorded_at')
+            ->get()
+            ->groupBy('server_id');
+        $width = 60 / $points;
+
+        return ($this->recent->get($server->getKey()) ?? new Collection)
+            ->groupBy(fn(ServerMetric $metric): int => min($points - 1, (int) floor($since->diffInMinutes($metric->recorded_at, true) / $width)))
+            ->sortKeys()
+            ->map(fn(Collection $bucket): int => (int) round((float) $bucket->avg($column)))
+            ->values()
+            ->all();
     }
 
     public function uptime(): ?float
