@@ -746,7 +746,8 @@
             <Dialog.Header>
                 <Dialog.Title>Add a domain</Dialog.Title>
                 <Dialog.Description
-                    >Point an A record at the server first, Caddy handles the certificate.</Dialog.Description
+                    >Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6.
+                    Caddy handles the certificate.</Dialog.Description
                 >
             </Dialog.Header>
             <div class="mt-4">
