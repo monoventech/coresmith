@@ -4,6 +4,7 @@ import {
     blockingViolations,
     expect,
     expectWayBack,
+    fakeReverb,
     gotoApplication,
     goWayBack,
     isMobile,
@@ -34,8 +35,6 @@ type Pushed = Record<string, unknown> & { id: string; log: string }
 
 async function streamDeploys(page: Page) {
     let shown: Pushed | null = null
-    let channel: string | null = null
-    let send: ((message: string) => void) | null = null
 
     await page.route(
         (url) => /\/deployments\/[^/]+$/.test(url.pathname),
@@ -53,34 +52,17 @@ async function streamDeploys(page: Page) {
         }
     )
 
-    await page.route('**/broadcasting/auth', (route) => route.fulfill({ json: { auth: 'coresmith-local:signature' } }))
-
-    await page.routeWebSocket(/\/app\//, (socket) => {
-        send = (message) => socket.send(message)
-        socket.send(
-            JSON.stringify({
-                event: 'pusher:connection_established',
-                data: JSON.stringify({ socket_id: '1234.5678', activity_timeout: 120 })
-            })
-        )
-        socket.onMessage((message) => {
-            const frame = JSON.parse(String(message))
-
-            if (frame.event === 'pusher:subscribe') {
-                channel = frame.data.channel
-                socket.send(JSON.stringify({ event: 'pusher_internal:subscription_succeeded', channel, data: '{}' }))
-            }
-        })
-    })
+    const reverb = await fakeReverb(page)
 
     return {
         async push(change: (deployment: Pushed) => Record<string, unknown>) {
             await expect
-                .poll(() => channel !== null && shown !== null && channel === `private-deployments.${shown.id}`)
+                .poll(() => shown !== null && reverb.channels.includes(`private-deployments.${shown.id}`))
                 .toBe(true)
-            send?.(
-                JSON.stringify({ event: 'deployment.updated', channel, data: JSON.stringify(change(shown as Pushed)) })
-            )
+
+            const deployment = shown as Pushed
+
+            reverb.emit(`private-deployments.${deployment.id}`, 'deployment.updated', change(deployment))
         }
     }
 }

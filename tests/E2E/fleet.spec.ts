@@ -73,7 +73,7 @@ test.describe('the fleet', () => {
 
         await expect(projects.getByRole('link', { name: /^Atlas/ })).toBeVisible()
         await expect(projects.getByRole('link', { name: /^Storefront/ })).toBeVisible()
-        await expect(projects.getByRole('link', { name: /^Apps/ })).toBeVisible()
+        await expect(projects.getByRole('button', { name: /^Apps/ })).toBeVisible()
 
         await projects.getByRole('link', { name: /^Atlas/ }).click()
         await page.waitForURL(/\/projects\/[A-Za-z0-9]+$/)
@@ -284,13 +284,18 @@ test.describe('the fleet of a team without projects', () => {
         await page.goto('/monoven/dashboard')
     })
 
-    test('on a phone its Apps row opens the apps outside every project', async ({ page }, testInfo) => {
+    test('on a phone its Apps row opens to the apps outside every project', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'From 640px up the explorer lists these apps itself')
 
         await page.goto('/acme/dashboard')
-        await page.getByTestId('phone-projects').getByRole('link', { name: /^Apps/ }).click()
-        await page.waitForURL(/\/acme\/projects$/)
-        await page.getByTestId('no-project').getByRole('link', { name: 'acme-portal', exact: true }).click()
+
+        const projects = page.getByTestId('phone-projects')
+        const row = projects.getByRole('button', { name: /^Apps/ })
+
+        await expect(row).toHaveAttribute('aria-expanded', 'false')
+        await row.click()
+        await expect(row).toHaveAttribute('aria-expanded', 'true')
+        await projects.getByRole('link', { name: /^acme-portal,/ }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'acme-portal' })).toBeVisible()
     })
