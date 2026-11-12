@@ -2,36 +2,43 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Browser, Locator, Page, TestInfo } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 
-export const test = base
+const suite = base.extend({
+    page: async ({ page }, use) => {
+        await use(page)
+        await page.unrouteAll({ behavior: 'ignoreErrors' })
+    }
+})
 
-export const asMember = base.extend({
+export const test = suite
+
+export const asMember = suite.extend({
     storageState: 'tests/E2E/.auth/member.json'
 })
 
-export const asNarrowed = base.extend({
+export const asNarrowed = suite.extend({
     storageState: 'tests/E2E/.auth/narrowed.json'
 })
 
-export const asEnvironmentOnly = base.extend({
+export const asEnvironmentOnly = suite.extend({
     storageState: 'tests/E2E/.auth/environment.json'
 })
 
-export const asGuest = base.extend({
+export const asGuest = suite.extend({
     storageState: { cookies: [], origins: [] }
 })
 
-export const asCloudMember = base.extend({
+export const asCloudMember = suite.extend({
     storageState: 'tests/E2E/.auth/cloud-member.json'
 })
 
-export const asMover = base.extend({
+export const asMover = suite.extend({
     // eslint-disable-next-line no-empty-pattern
     storageState: async ({}, use, testInfo) => {
         await use(`tests/E2E/.auth/${own(testInfo, 'mover')}.json`)
     }
 })
 
-export const asCloudLeaver = base.extend({
+export const asCloudLeaver = suite.extend({
     // eslint-disable-next-line no-empty-pattern
     storageState: async ({}, use, testInfo) => {
         await use(`tests/E2E/.auth/cloud-${own(testInfo, 'leaver')}.json`)
