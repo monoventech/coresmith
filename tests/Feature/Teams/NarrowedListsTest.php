@@ -8,6 +8,7 @@ use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
@@ -47,6 +48,18 @@ test('the fleet, its counts and the attention count show only what a narrowed me
             ->where('shared', [])
             ->where('narrowed', true)
             ->where('panel.attention', 0));
+});
+
+test('the fleet counts only the apps of the environment a member was given', function () {
+    ['team' => $team, 'shop' => $shop, 'member' => $member] = narrowedListsSetup();
+    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create();
+    $production = $project->environments()->where('name', 'Production')->sole();
+    $shop->forceFill(['environment_id' => $production->id])->save();
+    app(TeamAccess::class)->grant($team, $member, $production);
+
+    $this->actingAs($member)
+        ->get(route('dashboard'))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('counts', ['servers' => 0, 'applications' => 1]));
 });
 
 test('search finds only shared servers and apps', function () {

@@ -22,6 +22,7 @@ use App\Services\Billing\TeamBilling;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as BaseCollection;
 
 final class ExplorerPresenter
 {
@@ -105,7 +106,6 @@ final class ExplorerPresenter
             'name' => $project->name,
             'href' => route('projects.show', $project),
             'deploying' => $rows->contains(fn(array $row): bool => collect($row['apps'])->contains(fn(array $app): bool => in_array($app['id'], $deploying, true))),
-            'count' => $rows->sum(fn(array $row): int => count($row['apps']) + count($row['databases'])),
             'environments' => $rows->all(),
         ];
     }
@@ -142,10 +142,10 @@ final class ExplorerPresenter
     }
 
     /**
-     * @param  Collection<int, Deployment>  $running
+     * @param  BaseCollection<int, Deployment>  $running
      * @return array<string, mixed>|null
      */
-    private function running(Collection $running): ?array
+    private function running(BaseCollection $running): ?array
     {
         $deployment = $running->first();
         $application = $deployment?->application;

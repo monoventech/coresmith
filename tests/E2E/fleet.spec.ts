@@ -143,7 +143,7 @@ test.describe('the fleet', () => {
         await expect(page.getByTestId('tile-applications')).toBeHidden()
         await expect(page.getByRole('region', { name: 'Recent activity' })).toBeHidden()
         await expect(page.getByTestId('mobile-nav')).toBeVisible()
-        await expect(page.getByTestId('sidebar')).toBeHidden()
+        await expect(page.getByTestId('rail')).toBeHidden()
         await expect(page.getByRole('link', { name: 'Provision a server' })).toBeHidden()
     })
 })

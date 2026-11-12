@@ -68,7 +68,7 @@ test('the owner sees every project with its environments, the other apps and eve
 
     expect($explorer['team'])->toBe(['name' => 'Monoven Ltd', 'detail' => 'Owner · 1 person'])
         ->and($explorer['projects'])->toHaveCount(1)
-        ->and($storefront)->toMatchArray(['name' => 'Storefront', 'href' => route('projects.show', $fleet['storefront']), 'deploying' => false, 'count' => 4])
+        ->and($storefront)->toMatchArray(['name' => 'Storefront', 'href' => route('projects.show', $fleet['storefront']), 'deploying' => false])
         ->and(collect($storefront['environments'])->pluck('name')->all())->toBe(['Production', 'Staging'])
         ->and(collect($storefront['environments'][0]['apps'])->pluck('name')->all())->toBe(['shop'])
         ->and(collect($storefront['environments'][0]['databases'])->pluck('name')->all())->toBe(['shop_db'])
@@ -94,7 +94,6 @@ test('an environment-only member sees that environment alone and no servers', fu
         ->and(collect($explorer['projects'][0]['environments'])->pluck('name')->all())->toBe(['Staging'])
         ->and(collect($explorer['projects'][0]['environments'][0]['apps'])->pluck('name')->all())->toBe(['shop-staging'])
         ->and(collect($explorer['projects'][0]['environments'][0]['databases'])->pluck('name')->all())->toBe(['staging_db'])
-        ->and($explorer['projects'][0]['count'])->toBe(2)
         ->and($explorer['unfiled'])->toBe([])
         ->and($explorer['servers'])->toBe([]);
 });
