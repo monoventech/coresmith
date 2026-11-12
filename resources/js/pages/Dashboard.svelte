@@ -54,6 +54,7 @@
     } = $props()
 
     const explorer = $derived(page.props.explorer as ExplorerProps | null)
+    const listed = $derived(explorer !== null && (explorer.projects.length > 0 || explorer.unfiled.length > 0))
 
     let deployFrom = $state<ServerCard | null>(null)
     let deploying = $state<string | null>(null)
@@ -133,7 +134,7 @@
             {/key}
         {/if}
 
-        {#if explorer}
+        {#if explorer && listed}
             <PhoneProjects {explorer} />
         {/if}
 
@@ -166,7 +167,7 @@
             {/each}
         </div>
 
-        {#if explorer && explorer.projects.length > 0}
+        {#if listed}
             <h2 class="mb-2 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground sm:hidden">Servers</h2>
         {/if}
         <div class="mb-7 grid grid-cols-2 gap-4 max-[900px]:grid-cols-1 max-sm:gap-2.5">

@@ -294,4 +294,13 @@ test.describe('the fleet of a team without projects', () => {
 
         await expect(page.getByRole('heading', { level: 1, name: 'acme-portal' })).toBeVisible()
     })
+
+    test('on a phone its server cards sit under their own label', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'From 640px up the explorer lists the servers')
+
+        await page.goto('/acme/dashboard')
+
+        await expect(page.getByTestId('phone-projects')).toBeVisible()
+        await expect(page.getByRole('heading', { level: 2, name: 'Servers', exact: true })).toBeVisible()
+    })
 })

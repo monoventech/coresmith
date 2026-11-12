@@ -33,52 +33,50 @@
     }
 </script>
 
-{#if explorer.projects.length > 0 || explorer.unfiled.length > 0}
-    <section class="mb-5 sm:hidden" aria-labelledby="phone-projects-label" data-testid="phone-projects">
-        <h2 id="phone-projects-label" class="mb-2 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">
-            Projects
-        </h2>
-        <ul class="m-0 flex list-none flex-col overflow-hidden rounded-xl border border-border bg-card p-0">
-            {#each explorer.projects as project (project.id)}
-                <li class="border-t border-border first:border-t-0">
-                    <Link
-                        href={project.href}
-                        class="focus-ring flex min-h-14 items-center gap-2.5 px-3.5 py-2 text-foreground no-underline"
-                    >
-                        <Folder class="size-4.25 shrink-0 text-muted-foreground" />
-                        <span class="flex min-w-0 flex-1 flex-col leading-snug">
-                            <span class="truncate text-[14.5px] font-medium">{project.name}</span>
-                            <span class="flex flex-wrap items-center gap-x-2.5 text-[12px] text-muted-foreground">
-                                {#each summary(project) as environment (environment.name)}
-                                    <span class="flex items-center gap-1.5">
-                                        <span
-                                            class={cn('size-1.5 shrink-0 rounded-full', statusDot(environment.tone))}
-                                            aria-hidden="true"
-                                        ></span>
-                                        {environment.name}
-                                        {environment.word}
-                                    </span>
-                                {/each}
-                            </span>
+<section class="mb-5 sm:hidden" aria-labelledby="phone-projects-label" data-testid="phone-projects">
+    <h2 id="phone-projects-label" class="mb-2 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">
+        Projects
+    </h2>
+    <ul class="m-0 flex list-none flex-col overflow-hidden rounded-xl border border-border bg-card p-0">
+        {#each explorer.projects as project (project.id)}
+            <li class="border-t border-border first:border-t-0">
+                <Link
+                    href={project.href}
+                    class="focus-ring flex min-h-14 items-center gap-2.5 px-3.5 py-2 text-foreground no-underline"
+                >
+                    <Folder class="size-4.25 shrink-0 text-muted-foreground" />
+                    <span class="flex min-w-0 flex-1 flex-col leading-snug">
+                        <span class="truncate text-[14.5px] font-medium">{project.name}</span>
+                        <span class="flex flex-wrap items-center gap-x-2.5 text-[12px] text-muted-foreground">
+                            {#each summary(project) as environment (environment.name)}
+                                <span class="flex items-center gap-1.5">
+                                    <span
+                                        class={cn('size-1.5 shrink-0 rounded-full', statusDot(environment.tone))}
+                                        aria-hidden="true"
+                                    ></span>
+                                    {environment.name}
+                                    {environment.word}
+                                </span>
+                            {/each}
                         </span>
-                        <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
-                    </Link>
-                </li>
-            {/each}
-            {#if explorer.unfiled.length > 0}
-                <li class="border-t border-border first:border-t-0">
-                    <Link
-                        href={route('projects.index')}
-                        class="focus-ring flex min-h-12 items-center gap-2.5 px-3.5 py-2 text-[13px] text-muted-foreground no-underline"
+                    </span>
+                    <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
+                </Link>
+            </li>
+        {/each}
+        {#if explorer.unfiled.length > 0}
+            <li class="border-t border-border first:border-t-0">
+                <Link
+                    href={route('projects.index')}
+                    class="focus-ring flex min-h-12 items-center gap-2.5 px-3.5 py-2 text-[13px] text-muted-foreground no-underline"
+                >
+                    <span>Apps</span>
+                    <span class="min-w-0 flex-1 truncate font-mono text-[12px]"
+                        >{explorer.unfiled.map((app) => app.name).join(', ')}</span
                     >
-                        <span>Apps</span>
-                        <span class="min-w-0 flex-1 truncate font-mono text-[12px]"
-                            >{explorer.unfiled.map((app) => app.name).join(', ')}</span
-                        >
-                        <ChevronRight class="size-4 shrink-0" />
-                    </Link>
-                </li>
-            {/if}
-        </ul>
-    </section>
-{/if}
+                    <ChevronRight class="size-4 shrink-0" />
+                </Link>
+            </li>
+        {/if}
+    </ul>
+</section>
