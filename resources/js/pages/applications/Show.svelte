@@ -36,12 +36,14 @@
 
     let {
         server,
+        place = null,
         application,
         toggles = [],
         cron,
         can
     }: {
         server: { id: string; name: string; href: string | null }
+        place: { label: string; href: string | null } | null
         application: {
             id: string
             name: string
@@ -332,6 +334,11 @@
             <span>{application.kind} · {application.runtime}</span>
             {#if !server.href}<span data-testid="app-server"
                     >· on <span class="font-mono text-[13px] max-sm:text-[12px]">{server.name}</span></span
+                >{/if}
+            {#if place}<span data-testid="app-project"
+                    >· {#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
+                            >{place.label}</Link
+                        >{:else}{place.label}{/if}</span
                 >{/if}
             {#if application.domain}<span
                     >· <span class="font-mono text-[13px] max-sm:text-[12px]">{application.domain}</span>

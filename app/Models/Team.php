@@ -105,6 +105,11 @@ class Team extends Model
         return $this->hasMany(ManagedDatabase::class);
     }
 
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
+    }
+
     public function sourceProviders(): HasMany
     {
         return $this->hasMany(SourceProvider::class);

@@ -11,6 +11,7 @@ namespace App\Http\Controllers;
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
 use App\Services\Panel\DeploymentPresenter;
+use App\Services\Projects\ProjectScope;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -32,9 +33,10 @@ final class DeploymentsController extends Controller
     {
         $team = $this->currentTeam();
         $filter = array_key_exists((string) $request->query('status'), self::FILTERS) ? (string) $request->query('status') : 'all';
+        $scope = ProjectScope::from($request, $request->user(), $team);
 
         $base = fn(): Builder => Deployment::query()
-            ->whereIn('application_id', $team === null ? [] : app(TeamAccess::class)->applications($request->user(), $team)->select('id'));
+            ->whereIn('application_id', $team === null ? [] : $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->select('id'));
 
         $status = self::FILTERS[$filter];
 
@@ -52,9 +54,11 @@ final class DeploymentsController extends Controller
                 'key' => $key,
                 'label' => ucfirst($key),
                 'count' => $base()->when($each !== null, fn(Builder $query) => $query->where('status', $each->value))->count(),
-                'href' => route('deployments.index', $key === 'all' ? [] : ['status' => $key]),
+                'href' => route('deployments.index', [...($key === 'all' ? [] : ['status' => $key]), ...$scope->query()]),
             ])->values(),
             'deployments' => $deployments->map(fn(Deployment $deployment): array => DeploymentPresenter::row($deployment))->values(),
+            'scope' => $scope->value(),
+            'scopes' => ProjectScope::options($request->user(), $team),
         ]);
     }
 }

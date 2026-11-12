@@ -6,6 +6,7 @@
     import { page, router } from '@inertiajs/svelte'
     import {
         CreditCard,
+        Folder,
         KeyRound,
         Layers,
         Plus,
@@ -32,7 +33,8 @@
         'sun-moon': SunMoon,
         'key-round': KeyRound,
         'credit-card': CreditCard,
-        layers: Layers
+        layers: Layers,
+        folder: Folder
     } as const
 
     let query = $state('')

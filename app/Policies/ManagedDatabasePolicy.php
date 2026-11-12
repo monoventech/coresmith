@@ -58,6 +58,6 @@ final class ManagedDatabasePolicy
 
     private function within(User $user, ManagedDatabase $managedDatabase, Ability $ability): Response|bool
     {
-        return $managedDatabase->server !== null && app(TeamAccess::class)->hidesServer($user, $managedDatabase->server) ? Response::denyAsNotFound() : $user->hasTeamAbility($managedDatabase->team, $ability);
+        return app(TeamAccess::class)->hidesDatabase($user, $managedDatabase) ? Response::denyAsNotFound() : $user->hasTeamAbility($managedDatabase->team, $ability);
     }
 }

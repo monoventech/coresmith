@@ -110,8 +110,8 @@
         <NativeSelect
             id="environment"
             name="environment"
-            options={environments}
-            value={picks.environment ?? 'Production'}
+            options={[{ value: '', label: 'No environment' }, ...environments]}
+            value={picks.environment ?? ''}
             onchange={(event) => pick('environment', event)}
         />
         <FieldError message={errors.environment} />

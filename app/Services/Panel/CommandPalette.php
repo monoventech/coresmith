@@ -13,6 +13,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\Edition;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
@@ -63,6 +64,10 @@ final class CommandPalette
             $commands[] = ['label' => 'Billing', 'icon' => 'credit-card', 'hint' => $this->team === null ? Edition::Cloud->label() : app(BillingPresenter::class)->paletteHint($this->team), 'href' => route('settings.billing')];
         }
 
+        foreach ($this->team === null ? [] : app(TeamAccess::class)->projects($this->user, $this->team)->orderBy('name')->get() as $project) {
+            $commands[] = $this->openProject($project);
+        }
+
         foreach ($this->team === null ? [] : app(TeamAccess::class)->applications($this->user, $this->team)->with('server')->orderBy('name')->get() as $application) {
             $commands[] = [
                 'label' => 'Open ' . $application->name,
@@ -90,6 +95,26 @@ final class CommandPalette
                 ? implode(' · ', array_filter([$server->environment === null ? null : strtolower($server->environment), $count . ' ' . ($count === 1 ? 'app' : 'apps')]))
                 : strtolower($state['label']),
             'href' => route('servers.show', $server),
+        ];
+    }
+
+    /**
+     * @return array{label: string, icon: string, hint: string, href: string}
+     */
+    private function openProject(Project $project): array
+    {
+        $access = app(TeamAccess::class);
+        $environments = $access->environmentsOf($this->user, $project);
+        $applications = Application::query()->whereIn('environment_id', $environments->modelKeys())->count();
+
+        return [
+            'label' => 'Open ' . $project->name,
+            'icon' => 'folder',
+            'hint' => implode(' · ', [
+                $environments->count() . ' ' . ($environments->count() === 1 ? 'environment' : 'environments'),
+                $applications . ' ' . ($applications === 1 ? 'app' : 'apps'),
+            ]),
+            'href' => route('projects.show', $project),
         ];
     }
 

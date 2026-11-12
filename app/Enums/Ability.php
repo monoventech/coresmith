@@ -41,6 +41,8 @@ enum Ability: string
     case ManageProviders = 'provider.manage';
     case ManageFirewall = 'server.firewall';
 
+    case ManageProjects = 'project.manage';
+
     public function coversWholeTeam(): bool
     {
         return $this === self::UpdateTeam || $this === self::ManageProviders;

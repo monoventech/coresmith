@@ -38,6 +38,7 @@
     let picked = $state<string | null>(null)
     let team = $state<string | null>(null)
 
+    const environmentOptions = $derived([{ value: '', label: 'No environment' }, ...environments])
     const chosenTeam = $derived(team ?? current ?? teams[0]?.id ?? null)
     const note = $derived(teams.find((row) => row.id === chosenTeam)?.limit ?? null)
     const providerNote = $derived(teams.find((row) => row.id === (current ?? teams[0]?.id))?.limit ?? null)
@@ -180,9 +181,11 @@
                                 <NativeSelect
                                     id="environment"
                                     name="environment"
-                                    options={environments}
-                                    value="Production"
+                                    options={environmentOptions}
+                                    value=""
+                                    aria-invalid={errors.environment ? true : undefined}
                                 />
+                                <FieldError message={errors.environment} />
                             </div>
                             {@render teamField(errors.team_id)}
                             <Button type="submit" class="w-full" disabled={processing}>Use this machine</Button>
@@ -338,9 +341,11 @@
                                 <NativeSelect
                                     id="environment"
                                     name="environment"
-                                    options={environments}
-                                    value="Production"
+                                    options={environmentOptions}
+                                    value=""
+                                    aria-invalid={errors.environment ? true : undefined}
                                 />
+                                <FieldError message={errors.environment} />
                             </div>
                             <div>
                                 <Label for="region" class="mb-1.5">Region</Label>
