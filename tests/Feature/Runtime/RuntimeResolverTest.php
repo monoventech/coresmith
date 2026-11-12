@@ -54,7 +54,7 @@ test('a version older than anything Coresmith builds is refused before compiling
     app(RuntimeResolver::class)->resolve('php', resolverComposer('7.4.33'), null, []);
 })->throws(RuntimeUnavailable::class, 'require.php in composer.json asks for PHP 7.4.33, older than the oldest version Coresmith builds (8.1). Set it to 8.1 or newer, then deploy.');
 
-test('with nothing in the repository the version chosen when the app was added applies', function () {
+test('with nothing in the repository the version chosen for the app applies', function () {
     $installed = app(RuntimeResolver::class)->resolve('php', null, '8.4', ['8.4.20']);
     $missing = app(RuntimeResolver::class)->resolve('php', null, '8.4', []);
 
@@ -102,7 +102,7 @@ test('a line that is no longer in the catalog is refused with what to do', funct
 test('a resolved runtime describes where its version came from', function () {
     expect((new ResolvedRuntime('php', '8.4.25', 'composer.json', '^8.4', true))->describe('PHP'))->toBe('PHP 8.4.25 from composer.json (^8.4)')
         ->and((new ResolvedRuntime('nodejs', '22.16.0', '.nvmrc', '22.16.0', true))->describe('Node.js'))->toBe('Node.js 22.16.0 from .nvmrc')
-        ->and((new ResolvedRuntime('php', '8.4.25', ResolvedRuntime::FROM_PIN, null, true))->describe('PHP'))->toBe('PHP 8.4.25, the version chosen when the app was added')
+        ->and((new ResolvedRuntime('php', '8.4.25', ResolvedRuntime::FROM_PIN, null, true))->describe('PHP'))->toBe('PHP 8.4.25, the version chosen for this app')
         ->and((new ResolvedRuntime('php', '8.5.10', ResolvedRuntime::FROM_DEFAULT, null, true))->describe('PHP'))->toBe('PHP 8.5.10, the recommended version, because the repository names none');
 });
 

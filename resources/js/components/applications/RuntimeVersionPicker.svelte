@@ -6,13 +6,14 @@
     import { Label } from '@/components/ui/label'
     import * as RadioGroup from '@/components/ui/radio-group'
     import type { RuntimeChoices, RuntimeOption } from '@/lib/runtimes'
+    import { untrack } from 'svelte'
 
-    let { runtime, error }: { runtime: RuntimeChoices; error?: string } = $props()
+    let { runtime, error, value = null }: { runtime: RuntimeChoices; error?: string; value?: string | null } = $props()
 
     const REPOSITORY = 'repository'
 
-    let selected = $state(REPOSITORY)
-    let previous = REPOSITORY
+    let selected = $state(untrack(() => value) ?? REPOSITORY)
+    let previous = untrack(() => value) ?? REPOSITORY
     let acknowledged = $state(false)
     let pending = $state<RuntimeOption | null>(null)
     let group = $state<HTMLElement | null>(null)
@@ -82,7 +83,9 @@
             </label>
         {/each}
     </RadioGroup.Root>
-    <p class="mt-1.5 text-[12px] text-muted-foreground">Used only when the repository does not name a version.</p>
+    <p class="mt-1.5 text-[12px] text-muted-foreground">
+        Used as long as the repository's own version files allow it. If they don't, the deploy stops and says why.
+    </p>
     <input type="hidden" name="runtime_version" value={selected === REPOSITORY ? '' : selected} />
     <input type="hidden" name="acknowledge_eol" value={acknowledged ? '1' : '0'} />
     <FieldError message={error} />

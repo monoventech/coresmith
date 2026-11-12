@@ -39,7 +39,7 @@ final readonly class ResolvedRuntime
         }
 
         return match ($this->source) {
-            self::FROM_PIN => "{$label} {$this->version}, the version chosen when the app was added",
+            self::FROM_PIN => "{$label} {$this->version}, the version chosen for this app",
             self::FROM_DEFAULT => "{$label} {$this->version}, the recommended version, because the repository names none",
             default => "{$label} {$this->version} from {$this->source}" . ($this->detail !== null && $this->detail !== $this->version ? " ({$this->detail})" : ''),
         };

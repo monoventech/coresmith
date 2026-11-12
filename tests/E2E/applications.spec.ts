@@ -484,7 +484,7 @@ test.describe('adding an application', () => {
         await expect(picker.getByRole('radio', { name: /^From the repository/ })).toBeChecked()
         await expect(picker.getByRole('radio', { name: /^8\.5\.10 recommended/ })).toBeVisible()
         await expect(picker.getByRole('radio', { name: /^8\.1\.34 End of life/ })).toBeVisible()
-        await expect(page.getByRole('main')).toContainText('Used only when the repository does not name a version.')
+        await expect(page.getByRole('main')).toContainText("Used as long as the repository's own version files allow it. If they don't, the deploy stops and says why.")
     })
 
     test('choosing an end-of-life version asks first, and backing out restores the previous choice', async ({
@@ -1439,5 +1439,35 @@ test.describe('what the repository installs', () => {
             'Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on'
         )
         await expect(toggle(page, 'Reverb websockets')).toBeDisabled()
+    })
+})
+
+test.describe('the PHP version on an app page', () => {
+    test('says when composer.lock holds PHP back, and how to move up', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'held'))
+
+        const banner = page.getByTestId('runtime-held-banner')
+
+        await expect(banner).toContainText('PHP 8.5 is out. composer.lock holds this app on 8.4.')
+        await expect(banner).toContainText('Run composer update nette/schema nette/utils, commit composer.lock and deploy.')
+    })
+
+    test('can be chosen, and handed back to the repository', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'held'))
+        await page.getByRole('button', { name: 'Change the PHP version' }).click()
+
+        const picker = dialog(page).getByRole('radiogroup', { name: 'PHP version' })
+
+        await expect(picker.getByRole('radio', { name: /^From the repository/ })).toBeChecked()
+        await picker.getByRole('radio', { name: /^8\.4\.\d+/ }).click()
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+        await expect(toast(page)).toContainText('Saved. The next deploy uses PHP 8.4.')
+        await expect(dialog(page)).toHaveCount(0)
+
+        await page.getByRole('button', { name: 'Change the PHP version' }).click()
+        await expect(picker.getByRole('radio', { name: /^8\.4\.\d+/ })).toBeChecked()
+        await picker.getByRole('radio', { name: /^From the repository/ }).click()
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+        await expect(toast(page)).toContainText('Saved. The next deploy uses the version the repository asks for.')
     })
 })
