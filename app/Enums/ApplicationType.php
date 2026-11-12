@@ -15,6 +15,20 @@ enum ApplicationType: string
     case Ruby = 'ruby';
     case Static = 'static';
 
+    public function runtime(?string $jsRuntime = null): ?string
+    {
+        return match ($this) {
+            self::Php => 'php',
+            self::Ruby => 'ruby',
+            self::Js => match ($jsRuntime) {
+                'node' => 'nodejs',
+                'deno' => 'deno',
+                default => 'bun',
+            },
+            self::Static => null,
+        };
+    }
+
     /**
      * @return array<string, string>
      */

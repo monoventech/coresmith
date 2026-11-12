@@ -72,6 +72,27 @@ test('the probe script reads a real directory', function () {
         ->and($facts->locked)->toBe(['laravel/framework' => '13.2.0', 'rails' => '8.0.2']);
 });
 
+test('the probe reads composer.lock whole, past the cap the other files have', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-probe-' . Str::random(8);
+    File::ensureDirectoryExists($directory);
+    $lock = json_encode(['packages' => array_map(fn(int $index): array => [
+        'name' => "vendor/package-{$index}",
+        'version' => '1.0.0',
+        'require' => ['php' => '8.1 - 8.4'],
+        'description' => str_repeat('x', 400),
+    ], range(1, 1000))], JSON_PRETTY_PRINT);
+    File::put($directory . '/composer.lock', $lock);
+
+    $result = Process::env([RepositoryProbe::DIRECTORY_VARIABLE => $directory])->input(app(RepositoryProbe::class)->script())->run('bash -s');
+    $facts = app(RepositoryProbe::class)->parse($result->output());
+
+    File::deleteDirectory($directory);
+
+    expect(strlen((string) $lock))->toBeGreaterThan(RepositoryProbe::MAX_BYTES)
+        ->and($facts->json('composer.lock')['packages'] ?? [])->toHaveCount(1000)
+        ->and($facts->json('composer.lock')['packages'][999]['require']['php'] ?? null)->toBe('8.1 - 8.4');
+});
+
 function probeLockfile(string $lockfile): array
 {
     $directory = sys_get_temp_dir() . '/coresmith-probe-' . Str::random(8);

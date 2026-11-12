@@ -43,7 +43,40 @@ final class RuntimeDetector
             }
         }
 
-        return new Detection($runtimes, $requirements, $tooling, $notes);
+        $limits = in_array('php', $runtimes, true) ? $this->composerLimits($facts, $notes) : [];
+
+        return new Detection($runtimes, $requirements, $tooling, $notes, $limits === [] ? [] : ['php' => $limits]);
+    }
+
+    /**
+     * @param  list<string>  $notes
+     * @return list<Limit>
+     */
+    private function composerLimits(RepositoryFacts $facts, array &$notes): array
+    {
+        if ($facts->file(RepositoryProbe::COMPOSER_LOCK) === null) {
+            return [];
+        }
+
+        $lock = $facts->json(RepositoryProbe::COMPOSER_LOCK);
+
+        if (!is_array($lock) || !is_array($lock['packages'] ?? null)) {
+            $notes[] = 'composer.lock could not be read, so PHP was chosen from composer.json alone.';
+
+            return [];
+        }
+
+        $limits = [];
+
+        foreach ($lock['packages'] as $package) {
+            $php = is_array($package) ? ($package['require']['php'] ?? null) : null;
+
+            if (is_string($php) && trim($php) !== '' && is_string($package['name'] ?? null)) {
+                $limits[] = new Limit($package['name'], ltrim((string) ($package['version'] ?? ''), 'v'), trim($php));
+            }
+        }
+
+        return $limits;
     }
 
     /**

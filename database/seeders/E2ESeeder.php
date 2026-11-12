@@ -193,6 +193,12 @@ final class E2ESeeder extends Seeder
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
             $this->application("busy-{$code}", 9200 + $index * 10);
+            $held = $this->application("held-{$code}", 9500 + $index * 10, ['current_release' => '20261112-091400', ...MonovenTenant::stack(['php' => ['8.4.20', 'composer.json', '^8.2']], ['name' => 'laravel', 'major' => 13])]);
+            Deployment::factory()->for($held)->create([
+                'release' => '20261112-091400',
+                'status' => DeploymentStatus::Succeeded,
+                'stack' => ['runtimes' => ['php' => ['runtime' => 'php', 'version' => '8.4.20', 'source' => 'composer.json', 'detail' => '^8.2', 'held_by' => ['nette/schema 1.3.2', 'nette/utils 4.0.5'], 'newest' => '8.5.10']]],
+            ]);
             $this->server("live-{$code}", '198.51.100.' . (80 + $index), ServerStatus::Active);
             $this->realtime("realtime-{$code}", 9120 + $index * 10, [
                 'env_variables' => "APP_ENV=staging\nREVERB_APP_ID=realtime-{$code}\nREVERB_APP_KEY=key-{$code}\nREVERB_APP_SECRET=" . bin2hex(random_bytes(16)),

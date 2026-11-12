@@ -3,11 +3,12 @@
 </script>
 
 <script lang="ts">
-    import { Link, page, router } from '@inertiajs/svelte'
-    import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
+    import { Form, Link, page, router } from '@inertiajs/svelte'
+    import { CircleArrowUp, OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
+    import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
@@ -18,6 +19,7 @@
     import { Textarea } from '@/components/ui/textarea'
     import type { CronCard, CronSend } from '@/lib/cron'
     import type { EntityState } from '@/lib/fleet'
+    import type { RuntimeChoices } from '@/lib/runtimes'
     import { follow } from '@/lib/live.svelte'
 
     type Toggle = {
@@ -40,7 +42,9 @@
         application,
         toggles = [],
         cron,
-        can
+        can,
+        runtime_choice = null,
+        held = null
     }: {
         server: { id: string; name: string; href: string | null }
         place: { label: string; href: string | null } | null
@@ -100,6 +104,8 @@
         toggles: Toggle[]
         cron: CronCard
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
+        runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
+        held: { current: string; newest: string; packages: string[]; command: string } | null
     } = $props()
 
     const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i
@@ -107,7 +113,7 @@
     const certificateTones = { valid: 'success', expiring: 'warning', expired: 'destructive', none: 'warning' } as const
 
     let busy = $state<Record<string, boolean>>({})
-    let dialog = $state<'env' | 'domain' | 'remove' | null>(null)
+    let dialog = $state<'env' | 'domain' | 'remove' | 'runtime' | null>(null)
     let envText = $state('')
     let envError = $state<string | null>(null)
     let domainInput = $state('')
@@ -332,6 +338,12 @@
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:text-[12.5px]">
             <span>{application.kind} · {application.runtime}</span>
+            {#if runtime_choice}<button
+                    type="button"
+                    class="focus-ring relative cursor-pointer rounded-sm bg-transparent p-0 text-primary-strong after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']"
+                    aria-label="Change the {runtime_choice.label} version"
+                    onclick={() => (dialog = 'runtime')}>Change</button
+                >{/if}
             <span data-testid="app-server"
                 >· on {#if server.href}<Link
                         href={server.href}
@@ -476,6 +488,21 @@
                 >{`This app runs ${application.runtime_eol.runtime}, which stopped getting security fixes on ${application.runtime_eol.ended}.`}</span
             >
             {` ${application.runtime_eol.fix}`}
+        </span>
+    </div>
+{/if}
+
+{#if held}
+    <div
+        class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
+        data-testid="runtime-held-banner"
+    >
+        <CircleArrowUp class="size-4.5 shrink-0 text-muted-foreground max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:text-[12.5px]">
+            <span class="font-semibold"
+                >{`PHP ${held.newest} is out. composer.lock holds this app on ${held.current}.`}</span
+            >
+            Run <code class="font-mono text-[12.5px]">{held.command}</code>, commit composer.lock and deploy.
         </span>
     </div>
 {/if}
@@ -719,7 +746,8 @@
             <Dialog.Header>
                 <Dialog.Title>Add a domain</Dialog.Title>
                 <Dialog.Description
-                    >Point an A record at the server first, Caddy handles the certificate.</Dialog.Description
+                    >Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6.
+                    Caddy handles the certificate.</Dialog.Description
                 >
             </Dialog.Header>
             <div class="mt-4">
@@ -740,6 +768,37 @@
         </form>
     </Dialog.Content>
 </Dialog.Root>
+
+{#if runtime_choice}
+    <Dialog.Root open={dialog === 'runtime'} onOpenChange={(open) => !open && (dialog = null)}>
+        <Dialog.Content>
+            <Form
+                method="put"
+                action={runtime_choice.href}
+                options={{ preserveScroll: true }}
+                onSuccess={() => (dialog = null)}
+            >
+                {#snippet children({ processing, errors })}
+                    <Dialog.Header>
+                        <Dialog.Title>{`Change the ${runtime_choice.label} version`}</Dialog.Title>
+                        <Dialog.Description>Coresmith uses it from the next deploy.</Dialog.Description>
+                    </Dialog.Header>
+                    <div class="mt-4">
+                        <RuntimeVersionPicker
+                            runtime={runtime_choice}
+                            value={runtime_choice.pin}
+                            error={errors.runtime_version}
+                        />
+                    </div>
+                    <Dialog.Footer>
+                        <Button variant="ghost" type="button" onclick={() => (dialog = null)}>Cancel</Button>
+                        <Button type="submit" disabled={processing}>Save</Button>
+                    </Dialog.Footer>
+                {/snippet}
+            </Form>
+        </Dialog.Content>
+    </Dialog.Root>
+{/if}
 
 <Dialog.Root open={dialog === 'remove'} onOpenChange={(open) => !open && (dialog = null)}>
     <Dialog.Content>

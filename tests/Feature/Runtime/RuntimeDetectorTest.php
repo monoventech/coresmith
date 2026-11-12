@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\Runtime\Limit;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RuntimeDetector;
 
@@ -149,3 +150,41 @@ test('a static site needs bun only when it has a build script', function (array 
     'plain html' => [[], []],
     'an astro build' => [['package.json' => '{"scripts":{"build":"astro build"}}'], ['bun']],
 ]);
+
+function detectorLockedNette(): string
+{
+    return (string) json_encode([
+        'packages' => [
+            ['name' => 'league/config', 'version' => 'v1.2.0', 'require' => ['php' => '^7.4 || ^8.0', 'nette/schema' => '^1.2']],
+            ['name' => 'nette/schema', 'version' => 'v1.3.2', 'require' => ['php' => '8.1 - 8.4']],
+            ['name' => 'nette/utils', 'version' => 'v4.0.5', 'require' => ['php' => '8.0 - 8.4']],
+            ['name' => 'psr/log', 'version' => '3.0.2', 'require' => []],
+        ],
+        'packages-dev' => [
+            ['name' => 'phpunit/phpunit', 'version' => '9.6.0', 'require' => ['php' => '>=7.3 <8.4']],
+        ],
+    ]);
+}
+
+test('composer.lock limits php by what each package a deploy installs allows', function () {
+    $detection = app(RuntimeDetector::class)->detect(detectorApp(), detectorFacts([
+        'composer.json' => '{"require":{"php":"^8.2"}}',
+        'composer.lock' => detectorLockedNette(),
+    ]));
+
+    expect(array_map(fn(Limit $limit): array => [$limit->package, $limit->version, $limit->constraint], $detection->limits['php'] ?? []))->toBe([
+        ['league/config', '1.2.0', '^7.4 || ^8.0'],
+        ['nette/schema', '1.3.2', '8.1 - 8.4'],
+        ['nette/utils', '4.0.5', '8.0 - 8.4'],
+    ]);
+});
+
+test('a composer.lock that cannot be read sets no limits and says why', function () {
+    $detection = app(RuntimeDetector::class)->detect(detectorApp(), detectorFacts([
+        'composer.json' => '{"require":{"php":"^8.2"}}',
+        'composer.lock' => '{"packages": [',
+    ]));
+
+    expect($detection->limits)->toBe([])
+        ->and($detection->notes)->toContain('composer.lock could not be read, so PHP was chosen from composer.json alone.');
+});
