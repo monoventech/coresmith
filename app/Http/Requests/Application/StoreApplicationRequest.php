@@ -101,16 +101,10 @@ final class StoreApplicationRequest extends FormRequest
 
     public function runtime(): ?string
     {
-        return match ($this->input('type')) {
-            'php' => 'php',
-            'ruby' => 'ruby',
-            'js' => match ($this->input('js_runtime')) {
-                'node' => 'nodejs',
-                'deno' => 'deno',
-                default => 'bun',
-            },
-            default => null,
-        };
+        $type = $this->input('type');
+        $js = $this->input('js_runtime');
+
+        return ApplicationType::tryFrom(is_string($type) ? $type : '')?->runtime(is_string($js) ? $js : null);
     }
 
     public function runtimeLine(): ?string
