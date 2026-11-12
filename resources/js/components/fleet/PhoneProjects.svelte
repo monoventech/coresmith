@@ -3,9 +3,11 @@
     import { statusDot } from '@/lib/panel'
     import { cn } from '@/lib/utils'
     import { Link } from '@inertiajs/svelte'
-    import { ChevronRight, Folder } from '@lucide/svelte'
+    import { ChevronDown, ChevronRight, Folder } from '@lucide/svelte'
 
     let { explorer }: { explorer: ExplorerProps } = $props()
+
+    let open = $state(false)
 
     function standing(apps: ExplorerApp[]): { tone: string; word: string } | null {
         if (apps.length === 0) {
@@ -66,16 +68,48 @@
         {/each}
         {#if explorer.unfiled.length > 0}
             <li class="border-t border-border first:border-t-0">
-                <Link
-                    href={route('projects.index')}
-                    class="focus-ring flex min-h-12 items-center gap-2.5 px-3.5 py-2 text-[13px] text-muted-foreground no-underline"
+                <button
+                    type="button"
+                    class="focus-ring flex min-h-12 w-full cursor-pointer items-center gap-2.5 bg-transparent px-3.5 py-2 text-left text-[13px] text-muted-foreground"
+                    aria-expanded={open}
+                    aria-controls="phone-apps"
+                    onclick={() => (open = !open)}
                 >
                     <span>Apps</span>
                     <span class="min-w-0 flex-1 truncate font-mono text-[12px]"
                         >{explorer.unfiled.map((app) => app.name).join(', ')}</span
                     >
-                    <ChevronRight class="size-4 shrink-0" />
-                </Link>
+                    {#if open}
+                        <ChevronDown class="size-4 shrink-0" />
+                    {:else}
+                        <ChevronRight class="size-4 shrink-0" />
+                    {/if}
+                </button>
+                {#if open}
+                    <ul id="phone-apps" class="m-0 flex list-none flex-col border-t border-border p-0">
+                        {#each explorer.unfiled as app (app.id)}
+                            <li class="border-t border-border first:border-t-0">
+                                <Link
+                                    href={app.href}
+                                    aria-label="{app.name}, {app.state.label}"
+                                    class="focus-ring flex min-h-11 items-center gap-2.5 px-3.5 py-2 text-foreground no-underline"
+                                >
+                                    <span
+                                        class={cn('size-1.75 shrink-0 rounded-full', statusDot(app.state.tone))}
+                                        aria-hidden="true"
+                                    ></span>
+                                    <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{app.name}</span>
+                                    {#if app.server}
+                                        <span
+                                            class="shrink-0 font-mono text-[11.5px] text-muted-foreground"
+                                            aria-hidden="true">{app.server}</span
+                                        >
+                                    {/if}
+                                </Link>
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
             </li>
         {/if}
     </ul>

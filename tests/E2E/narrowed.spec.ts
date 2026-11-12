@@ -4,6 +4,7 @@ import {
     expect,
     expectWayBack,
     gotoApplication,
+    isMobile,
     main,
     nav,
     asNarrowed as test,
@@ -59,6 +60,19 @@ test.describe('an admin who sees only what is shared', () => {
         await page.keyboard.type('atlas')
         await expect(palette(page).getByRole('option', { name: 'Open atlas on forge-01' })).toBeVisible()
         await expect(palette(page).getByRole('option', { name: /Open atlas-staging/ })).toHaveCount(0)
+    })
+
+    test('on a phone the Apps row opens an app in a project they were not given', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'From 640px up the explorer lists these apps itself')
+
+        await page.goto('/dashboard')
+
+        const projects = page.getByTestId('phone-projects')
+
+        await projects.getByRole('button', { name: /^Apps/ }).click()
+        await projects.getByRole('link', { name: /^atlas,/ }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'atlas' })).toBeVisible()
     })
 
     test("an unshared server's address answers with the not-found page", async ({ page }) => {
