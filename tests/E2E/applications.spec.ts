@@ -1328,7 +1328,10 @@ test.describe('an app whose GitHub connection is gone', () => {
         await expect(banner).toContainText(
             'Public repositories still deploy, private ones need GitHub connected again.'
         )
-        await expect(page.getByRole('heading', { name: 'Repository access' })).toHaveCount(0)
+        await expect(page.getByTestId('source-card')).toContainText(
+            'Cloned through GitHub, which needs connecting again.'
+        )
+        await expect(page.getByTestId('source-card')).not.toContainText('one-hour, read-only token')
 
         await banner.getByRole('link', { name: 'Open Git settings' }).click()
 
@@ -1403,10 +1406,10 @@ test.describe('action banners on a phone', () => {
         })
     }
 
-    test('the repository access card stays off a phone', async ({ page }) => {
+    test('the source card stays off a phone', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'linked-app')
 
-        await expect(page.getByRole('heading', { name: 'Repository access' })).toBeHidden()
+        await expect(page.getByTestId('source-card')).toBeHidden()
     })
 })
 
