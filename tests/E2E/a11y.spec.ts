@@ -21,6 +21,8 @@ import {
 
 test.use({ reducedMotion: 'reduce' })
 
+test.afterEach(({ page }) => page.unrouteAll({ behavior: 'ignoreErrors' }))
+
 type Visit = (page: Page) => Promise<void>
 
 const direct =

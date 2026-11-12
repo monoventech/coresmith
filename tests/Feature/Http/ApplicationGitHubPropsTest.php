@@ -120,7 +120,7 @@ test('a removed connection keeps the app on its deploy key when it was added by 
             ->where('application.github.usable', false)
             ->where('application.github.problem', 'removed')
             ->where('application.deploy_key.public_key', githubPropsKey()['deploy_key_public'])
-            ->where('application.deploy_key.repository', 'monoventech/relay'));
+            ->where('application.repository', 'monoventech/relay'));
 });
 
 test('an unlinked app has no github block', function (array $attributes, bool $keyed) {

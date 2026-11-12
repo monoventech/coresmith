@@ -126,11 +126,28 @@ test.describe('an application', () => {
         await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
 
-    test('the current release is shown', async ({ page }) => {
+    test('the current release names its commit and who shipped it', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        await expect(page.getByRole('heading', { name: 'Current release' })).toBeVisible()
-        await expect(page.getByRole('main')).toContainText(/current → releases\/\d{8}-\d{4}/)
+        const release = page.getByTestId('release-card')
+
+        await expect(release.getByRole('heading', { name: 'Current release' })).toBeVisible()
+        await expect(release).toContainText(/\d{8}-\d{6}/)
+        await expect(release).toContainText('Ship v2.14.0')
+        await expect(release.getByTestId('release-detail')).toHaveText(
+            /^9f3c2e1 on main by Maya Lindqvist, (today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
+        )
+    })
+
+    test('roll back opens the releases page ready to confirm the previous release', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        await page.getByTestId('release-card').getByRole('link', { name: 'Roll back' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Releases · atlas' })).toBeVisible()
+        await expect(dialog(page)).toContainText('Roll back to v2.13.2?')
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog(page)).toHaveCount(0)
     })
 
     test('the way back returns to the server', async ({ page }) => {
@@ -151,10 +168,13 @@ test.describe('an application', () => {
         await expect(preview).toContainText('redacted in logs')
     })
 
-    test('a public https repository needs no deploy key', async ({ page }, testInfo) => {
+    test('a public https repository is cloned without a deploy key', async ({ page }, testInfo) => {
         await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
 
-        await expect(page.getByRole('heading', { name: 'Deploy key' })).toHaveCount(0)
+        await expect(page.getByTestId('source-card')).toContainText(
+            'Cloned over HTTPS without a key, so the repository has to be public.'
+        )
+        await expect(page.getByRole('button', { name: 'Copy public key' })).toHaveCount(0)
     })
 
     test('the live log reads the access log in the background', async ({ page }) => {
@@ -210,8 +230,25 @@ test.describe('an application', () => {
             'Turning on Auto deploy deploys the branch if the live release is behind.'
         )
         await expect(page.getByRole('heading', { name: 'Current release' })).toBeVisible()
-        await expect(page.getByRole('heading', { name: 'Environment' })).toHaveCount(0)
-        await expect(page.getByRole('heading', { name: 'Domains' })).toHaveCount(0)
+
+        const release = await page.getByTestId('release-card').boundingBox()
+        const toggles = await page.getByTestId('smart-toggles').boundingBox()
+
+        expect(release?.y ?? Infinity).toBeLessThan(toggles?.y ?? 0)
+
+        for (const hidden of [
+            'Now',
+            'Settings',
+            'Environment',
+            'Domains',
+            'Source',
+            'Live log',
+            'Cron jobs',
+            'Danger zone'
+        ]) {
+            await expect(page.getByRole('heading', { name: hidden, exact: true })).toHaveCount(0)
+        }
+
         await expect(page.getByRole('button', { name: 'Rename' })).toHaveCount(0)
     })
 })
@@ -291,11 +328,11 @@ test.describe('what the full app page adds on a wider screen', () => {
     test('a repository cloned over ssh shows its read-only deploy key', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        const key = page.getByRole('heading', { name: 'Deploy key' }).locator('..')
+        const source = page.getByTestId('source-card')
 
-        await expect(key).toContainText('Per-app Ed25519, read-only.')
-        await expect(key).toContainText('monoventech/atlas')
-        await expect(key.getByRole('button', { name: 'Copy public key' })).toBeVisible()
+        await expect(source).toContainText("Cloned with this app's deploy key, Ed25519 and read-only.")
+        await expect(source).toContainText('monoventech/atlas')
+        await expect(source.getByRole('button', { name: 'Copy public key' })).toBeVisible()
 
         const html = await pageData(page)
 
@@ -307,13 +344,13 @@ test.describe('what the full app page adds on a wider screen', () => {
     test('an app picked from GitHub shows how it clones', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'linked-app')
 
-        const access = page.getByRole('heading', { name: 'Repository access' }).locator('..')
+        const source = page.getByTestId('source-card')
 
-        await expect(access).toContainText(
+        await expect(source).toContainText(
             'Cloned through the GitHub App with a one-hour, read-only token for this repository. Nothing long-lived is stored on the server.'
         )
-        await expect(access).toContainText('monoventech/relay · trunk')
-        await expect(page.getByRole('heading', { name: 'Deploy key' })).toHaveCount(0)
+        await expect(source).toContainText('monoventech/relay')
+        await expect(source).toContainText('Branch trunk')
         await expect(page.getByRole('button', { name: 'Copy public key' })).toHaveCount(0)
         await expect(page.getByTestId('github-banner')).toHaveCount(0)
     })
@@ -321,20 +358,59 @@ test.describe('what the full app page adds on a wider screen', () => {
     test('domains are listed with their certificates', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        const domains = page.getByRole('heading', { name: 'Domains' }).locator('../..')
+        const domains = page.getByTestId('domains-card')
 
         await expect(domains).toContainText('www.atlas.monoven.io')
         await expect(domains).toContainText('primary')
         await expect(domains).toContainText('alias')
-        await expect(page.getByRole('main')).toContainText('atlas.monoven.io via Caddy')
+        await expect(domains).toContainText('Routed by Caddy. Certificates renew themselves.')
     })
 
     test('the releases link opens this app’s releases', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        await page.getByRole('link', { name: 'All releases →' }).click()
+        await page.getByTestId('release-card').getByRole('link', { name: 'All releases' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · atlas' })).toBeVisible()
+    })
+
+    test('what changes sits in one row and the settings in rows that line up', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const box = async (id: string) => {
+            const found = await page.getByTestId(id).boundingBox()
+
+            expect(found, id).not.toBeNull()
+
+            return found ?? { x: 0, y: 0, width: 0, height: 0 }
+        }
+        const [release, domains, source] = await Promise.all(['release-card', 'domains-card', 'source-card'].map(box))
+        const [toggles, environment, cron] = await Promise.all(
+            ['smart-toggles', 'environment-card', 'cron-jobs'].map(box)
+        )
+
+        for (const card of [domains, source]) {
+            expect(card.y).toBeCloseTo(release.y, 0)
+            expect(card.height).toBeCloseTo(release.height, 0)
+        }
+
+        expect(domains.x).toBeGreaterThan(release.x + release.width)
+        expect(source.x).toBeGreaterThan(domains.x + domains.width)
+        expect(environment.y).toBeCloseTo(toggles.y, 0)
+        expect(environment.height).toBeCloseTo(toggles.height, 0)
+        expect(cron.x).toBeCloseTo(toggles.x, 0)
+        expect(cron.x + cron.width).toBeCloseTo(environment.x + environment.width, 0)
+        expect(cron.y).toBeGreaterThan(toggles.y + toggles.height)
+    })
+
+    test('the live log says it is following once the access log is read', async ({ page }) => {
+        await page.route('**/applications/*/logs', (route) =>
+            route.fulfill({ json: { lines: [{ time: '09:41:02', text: 'GET /invoices 200 in 38ms' }], error: null } })
+        )
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        await expect(page.getByTestId('live-log')).toContainText('09:41:02 GET /invoices 200 in 38ms')
+        await expect(page.getByTestId('live-log-card')).toContainText('Following')
     })
 
     test('stopping an app puts up the maintenance page until it starts again', async ({ page }, testInfo) => {
