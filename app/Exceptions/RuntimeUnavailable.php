@@ -38,7 +38,7 @@ final class RuntimeUnavailable extends RuntimeException implements ExplainsFailu
 
     public static function retired(string $label, string $line): self
     {
-        return new self("This app was added with {$label} {$line}, which Coresmith no longer builds. Add a version file to the repository, then deploy.");
+        return new self("This app is set to {$label} {$line}, which Coresmith no longer builds. Pick another version on the app's page, then deploy.");
     }
 
     /**

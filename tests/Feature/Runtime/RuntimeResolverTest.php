@@ -97,7 +97,7 @@ test('an unreadable requirement quotes its raw text only up to sixty characters'
 
 test('a line that is no longer in the catalog is refused with what to do', function () {
     app(RuntimeResolver::class)->resolve('php', null, '7.4', []);
-})->throws(RuntimeUnavailable::class, 'This app was added with PHP 7.4, which Coresmith no longer builds. Add a version file to the repository, then deploy.');
+})->throws(RuntimeUnavailable::class, "This app is set to PHP 7.4, which Coresmith no longer builds. Pick another version on the app's page, then deploy.");
 
 test('a resolved runtime describes where its version came from', function () {
     expect((new ResolvedRuntime('php', '8.4.25', 'composer.json', '^8.4', true))->describe('PHP'))->toBe('PHP 8.4.25 from composer.json (^8.4)')
