@@ -16,16 +16,52 @@ final readonly class RepositoryFacts
      * @param  array<string, string>  $files
      * @param  list<string>  $lockfiles
      * @param  array<string, string>  $locked
+     * @param  list<string>  $markers
+     * @param  list<string>  $envKeys
      */
     public function __construct(
         public array $files = [],
         public array $lockfiles = [],
         public array $locked = [],
+        public array $markers = [],
+        public array $envKeys = [],
     ) {}
 
     public function has(string $file): bool
     {
         return array_key_exists($file, $this->files);
+    }
+
+    public function exists(string $path): bool
+    {
+        return in_array($path, $this->markers, true);
+    }
+
+    public function gem(string $name): ?string
+    {
+        return preg_match('/^    ' . preg_quote($name, '/') . ' \(([^)]+)\)\r?$/m', (string) $this->file('Gemfile.lock'), $matches) === 1 ? $matches[1] : null;
+    }
+
+    public function dependency(string $package): ?string
+    {
+        $manifest = $this->json('package.json');
+
+        foreach (['dependencies', 'devDependencies'] as $section) {
+            $version = is_array($manifest[$section] ?? null) ? ($manifest[$section][$package] ?? null) : null;
+
+            if (is_string($version)) {
+                return $version;
+            }
+        }
+
+        return null;
+    }
+
+    public function workspace(): bool
+    {
+        $workspaces = $this->json('package.json')['workspaces'] ?? null;
+
+        return $this->exists('pnpm-workspace.yaml') || (is_array($workspaces) && $workspaces !== []);
     }
 
     public function file(string $file): ?string

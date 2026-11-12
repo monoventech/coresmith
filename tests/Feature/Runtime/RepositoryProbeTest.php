@@ -155,3 +155,96 @@ test('a deno.jsonc with comments and trailing commas is still read', function ()
     expect($facts->denoTask('start'))->toBeTrue()
         ->and($facts->denoTask('build'))->toBeFalse();
 });
+
+/**
+ * @param  array<string, string>  $files
+ * @param  array<string, string>  $links
+ * @return array{RepositoryFacts, string}
+ */
+function probeTree(array $files, array $links = []): array
+{
+    $directory = sys_get_temp_dir() . '/coresmith-probe-' . Str::random(8);
+    File::ensureDirectoryExists($directory);
+
+    foreach ($files as $path => $content) {
+        File::ensureDirectoryExists(dirname($directory . '/' . $path));
+        File::put($directory . '/' . $path, $content);
+    }
+
+    foreach ($links as $path => $target) {
+        File::ensureDirectoryExists(dirname($directory . '/' . $path));
+        symlink($target, $directory . '/' . $path);
+    }
+
+    $result = Process::env([RepositoryProbe::DIRECTORY_VARIABLE => $directory])->input(app(RepositoryProbe::class)->script())->run('bash -s');
+
+    File::deleteDirectory($directory);
+
+    return [app(RepositoryProbe::class)->parse($result->output()), $result->output()];
+}
+
+test('the probe reports which marker files exist and which secrets the committed .env sets, never their values', function () {
+    [$facts, $output] = probeTree([
+        'artisan' => '',
+        'public/index.php' => '<?php',
+        'composer.json' => '{}',
+        '.env' => "APP_KEY=base64:c2VjcmV0LXZhbHVl\nAPP_SECRET=\nSECRET_KEY_BASE=0f1e2d3c4b5a\n",
+    ]);
+
+    expect($facts->markers)->toBe(['artisan', 'public/index.php'])
+        ->and($facts->exists('artisan'))->toBeTrue()
+        ->and($facts->exists('bin/rails'))->toBeFalse()
+        ->and($facts->envKeys)->toBe(['APP_KEY', 'SECRET_KEY_BASE'])
+        ->and($output)->not->toContain('c2VjcmV0LXZhbHVl')
+        ->and($output)->not->toContain('0f1e2d3c4b5a')
+        ->and($output)->not->toContain(base64_encode('base64:c2VjcmV0LXZhbHVl'));
+});
+
+test('a symlinked file, marker or .env is never read or reported', function () {
+    $outside = sys_get_temp_dir() . '/coresmith-outside-' . Str::random(8);
+    File::put($outside, "APP_KEY=outside-secret\n");
+
+    [$facts, $output] = probeTree(['package.json' => '{}'], [
+        'composer.json' => $outside,
+        'artisan' => $outside,
+        '.env' => $outside,
+    ]);
+
+    File::delete($outside);
+
+    expect($facts->has('composer.json'))->toBeFalse()
+        ->and($facts->has('package.json'))->toBeTrue()
+        ->and($facts->exists('artisan'))->toBeFalse()
+        ->and($facts->envKeys)->toBe([])
+        ->and($output)->not->toContain(base64_encode("APP_KEY=outside-secret\n"));
+});
+
+test('the probe reads Gemfile.lock and each framework config file whole', function () {
+    [$facts] = probeTree([
+        'Gemfile.lock' => "GEM\n  specs:\n    puma (6.6.0)\n",
+        'svelte.config.js' => "import adapter from '@sveltejs/adapter-node';\n",
+        'next.config.mjs' => "export default { output: 'export' };\n",
+        'astro.config.mjs' => "import node from '@astrojs/node';\n",
+        'nuxt.config.ts' => "export default defineNuxtConfig({});\n",
+        'vite.config.ts' => "export default { build: { outDir: 'web' } };\n",
+    ]);
+
+    expect($facts->gem('puma'))->toBe('6.6.0')
+        ->and($facts->file('svelte.config.js'))->toContain('@sveltejs/adapter-node')
+        ->and($facts->file('next.config.mjs'))->toContain("output: 'export'")
+        ->and($facts->file('astro.config.mjs'))->toContain('@astrojs/node')
+        ->and($facts->has('nuxt.config.ts'))->toBeTrue()
+        ->and($facts->file('vite.config.ts'))->toContain('outDir');
+});
+
+test('only markers and secret names the probe asks for are kept', function () {
+    $facts = app(RepositoryProbe::class)->parse(implode("\n", [
+        '@@has artisan',
+        '@@has etc/passwd',
+        '@@envkey APP_KEY',
+        '@@envkey DB_PASSWORD',
+    ]));
+
+    expect($facts->markers)->toBe(['artisan'])
+        ->and($facts->envKeys)->toBe(['APP_KEY']);
+});
