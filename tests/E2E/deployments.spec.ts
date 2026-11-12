@@ -3,7 +3,9 @@ import {
     asMember,
     blockingViolations,
     expect,
+    expectWayBack,
     gotoApplication,
+    goWayBack,
     isMobile,
     nav,
     noSidewaysScroll,
@@ -13,11 +15,9 @@ import {
     useTheme
 } from './support/fixtures'
 
-async function gotoDeployments(page: Page, mobile: boolean) {
+async function gotoDeployments(page: Page) {
     await page.goto('/dashboard')
-    await nav(page)
-        .getByRole('link', { name: mobile ? 'Deploys' : 'Deployments', exact: true })
-        .click()
+    await nav(page).getByRole('link', { name: 'Deploys', exact: true }).click()
     await page.waitForURL(/\/deployments$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Deployments' })).toBeVisible()
 }
@@ -88,12 +88,12 @@ async function streamDeploys(page: Page) {
 test.describe('the deployments list', () => {
     test('deploys filter by project and environment', async ({ page }) => {
         await page.goto('/deployments')
-        await page.getByLabel('Project').selectOption({ label: 'Storefront › Staging' })
+        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront › Staging' })
 
         await page.waitForURL((url) => url.searchParams.has('project') && url.searchParams.has('environment'))
         await expect(rows(page).first()).toBeVisible()
         await expect(rows(page).filter({ hasNotText: 'storefront-staging' })).toHaveCount(0)
-        await expect(page.getByLabel('Project')).toHaveValue(/:/)
+        await expect(page.getByLabel('Project', { exact: true })).toHaveValue(/:/)
 
         await filters(page)
             .getByRole('link', { name: /^Deployed/ })
@@ -106,8 +106,8 @@ test.describe('the deployments list', () => {
         )
     })
 
-    test('every deploy across the fleet is listed with the running one pinned on top', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('every deploy across the fleet is listed with the running one pinned on top', async ({ page }) => {
+        await gotoDeployments(page)
 
         await expect(filters(page).getByRole('link', { name: /^All\s*\d+$/ })).toHaveAttribute('aria-current', 'page')
         await expect(rows(page).first()).toContainText('atlas-staging')
@@ -115,8 +115,8 @@ test.describe('the deployments list', () => {
         await expect(rows(page).first()).toContainText('Watch')
     })
 
-    test('the failed filter shows only failures, and says they had no impact', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('the failed filter shows only failures, and says they had no impact', async ({ page }) => {
+        await gotoDeployments(page)
 
         await filters(page)
             .getByRole('link', { name: /^Failed\s*\d+$/ })
@@ -130,8 +130,8 @@ test.describe('the deployments list', () => {
         }
     })
 
-    test('the running filter shows the deploys in progress', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('the running filter shows the deploys in progress', async ({ page }) => {
+        await gotoDeployments(page)
 
         await filters(page)
             .getByRole('link', { name: /^Running\s*\d+$/ })
@@ -145,8 +145,8 @@ test.describe('the deployments list', () => {
         }
     })
 
-    test('a deploy being cancelled keeps its dot and its Watch link', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('a deploy being cancelled keeps its dot and its Watch link', async ({ page }) => {
+        await gotoDeployments(page)
 
         const row = rows(page).filter({ hasText: 'stopping-app' }).first()
 
@@ -155,20 +155,20 @@ test.describe('the deployments list', () => {
         await expect(row.locator('[data-slot="badge"] > span[aria-hidden="true"]')).toHaveCount(1)
     })
 
-    test('a row opens its deploy and the back link returns to the list', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('a row opens its deploy and the back link returns to the list', async ({ page }) => {
+        await gotoDeployments(page)
 
         await rows(page).filter({ hasText: 'ledger' }).first().click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying ledger' })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText('← Deployments')
+        await expectWayBack(page, 'Deployments')
 
-        await page.getByTestId('back-link').click()
+        await goWayBack(page, 'Deployments')
         await page.waitForURL(/\/deployments$/)
     })
 
-    test('the list does not scroll sideways', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('the list does not scroll sideways', async ({ page }) => {
+        await gotoDeployments(page)
 
         await noSidewaysScroll(page)
     })
@@ -243,8 +243,8 @@ test.describe('a deploy', () => {
         await expect(page.getByLabel('Deployment output')).toContainText('Waiting for a worker to pick up the deploy')
     })
 
-    test('a finished deploy links to the releases it made', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('a finished deploy links to the releases it made', async ({ page }) => {
+        await gotoDeployments(page)
 
         const deployed = filters(page).getByRole('link', { name: /^Deployed\s*\d+$/ })
 
@@ -337,7 +337,7 @@ test.describe('cancelling a deploy', () => {
     test('a queued deploy is cancelled at once', async ({ page }, testInfo) => {
         test.skip(isMobile(testInfo), "The mobile prototype's running deploy has no Cancel")
 
-        await gotoDeployments(page, false)
+        await gotoDeployments(page)
         await rows(page)
             .filter({ hasText: own(testInfo, 'queued') })
             .first()
@@ -366,8 +366,8 @@ test.describe('cancelling a deploy', () => {
         await expect(page.getByRole('button', { name: 'Cancelling…' })).toBeDisabled()
     })
 
-    test('a cancelled deploy says who stopped it and that nothing changed', async ({ page }, testInfo) => {
-        await gotoDeployments(page, isMobile(testInfo))
+    test('a cancelled deploy says who stopped it and that nothing changed', async ({ page }) => {
+        await gotoDeployments(page)
         await rows(page).filter({ hasText: 'cancelled-app' }).first().click()
 
         const strip = page.getByTestId('cancelled-strip')

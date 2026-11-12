@@ -414,6 +414,24 @@ const PAGES: [string, Visit][] = [
             await page.getByRole('button', { name: 'Account' }).click()
             await page.getByTestId('team-switcher').waitFor()
         }
+    ],
+    [
+        'Explorer opened over the page',
+        async (page) => {
+            await page.setViewportSize({ width: 1024, height: 768 })
+            await page.goto('/dashboard')
+            await page.getByRole('button', { name: 'Show the explorer' }).click()
+            await page.getByRole('complementary', { name: 'Explorer' }).waitFor()
+        }
+    ],
+    [
+        'Attention list',
+        async (page) => {
+            await page.setViewportSize({ width: 1280, height: 800 })
+            await page.goto('/dashboard')
+            await page.getByTestId('fleet-status').click()
+            await page.getByRole('dialog', { name: 'Needs attention' }).waitFor()
+        }
     ]
 ]
 

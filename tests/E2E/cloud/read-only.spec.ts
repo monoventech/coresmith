@@ -19,13 +19,10 @@ test.describe('read-only teams on coresmith cloud', () => {
 
     test('a lapsed team cannot deploy', async ({ page }) => {
         await page.goto('/expired/dashboard')
+        await page.getByTestId('server-card').getByRole('link', { name: 'lapsed-01', exact: true }).click()
         await page
-            .getByRole('link', { name: /lapsed-01/ })
-            .first()
-            .click()
-        await page
-            .getByRole('link', { name: /lapsed-app/ })
-            .first()
+            .getByTestId('applications-table')
+            .getByRole('link', { name: /^lapsed-app/ })
             .click()
 
         await page.getByRole('button', { name: 'Deploy', exact: true }).click()

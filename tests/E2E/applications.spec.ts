@@ -4,9 +4,11 @@ import {
     blockingViolations,
     dialog,
     expect,
+    expectWayBack,
     gotoApplication,
     gotoServer,
     gotoServerTab,
+    goWayBack,
     isMobile,
     main,
     own,
@@ -92,7 +94,7 @@ test.describe('an application', () => {
     test('the header names it and says how it is served', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        await expect(page.getByTestId('back-link')).toHaveText('← forge-01')
+        await expectWayBack(page, 'forge-01')
         await expect(page.getByRole('main')).toContainText('Live')
         await expect(page.getByRole('main')).toContainText('atlas.monoven.io')
         await expect(page.getByRole('main')).toContainText('Laravel 13 · PHP 8.5')
@@ -131,10 +133,10 @@ test.describe('an application', () => {
         await expect(page.getByRole('main')).toContainText(/current → releases\/\d{8}-\d{4}/)
     })
 
-    test('the back link returns to the server', async ({ page }) => {
+    test('the way back returns to the server', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        await page.getByTestId('back-link').click()
+        await goWayBack(page, 'forge-01')
 
         await expect(page.getByRole('heading', { level: 1, name: 'forge-01' })).toBeVisible()
     })
@@ -171,7 +173,7 @@ test.describe('an application', () => {
         await banner.getByRole('link', { name: 'Read the log' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying storefront' })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText('← storefront')
+        await expectWayBack(page, 'storefront')
     })
 
     test('an app with a deploy running offers to watch it instead of deploying again', async ({ page }) => {
@@ -181,7 +183,7 @@ test.describe('an application', () => {
         await page.getByRole('link', { name: 'Watch deploy' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText('← atlas-staging')
+        await expectWayBack(page, 'atlas-staging')
     })
 
     test('deploying opens the deploy screen and returns to the app', async ({ page }, testInfo) => {
@@ -193,7 +195,7 @@ test.describe('an application', () => {
         await expect(page.getByRole('heading', { level: 1, name: `Deploying ${name}` })).toBeVisible()
         await expect(toast(page)).toContainText(`Deploying ${name}.`)
 
-        await page.getByTestId('back-link').click()
+        await goWayBack(page, name)
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
     })
 
@@ -452,7 +454,7 @@ test.describe('adding an application', () => {
         await page.getByLabel('Language').selectOption('js')
         await expect(page.getByLabel('Framework')).toHaveValue('sveltekit')
         await page.getByLabel('Domain').fill(`${name}.bench.monoven.io`)
-        await page.getByLabel('Project').selectOption({ label: 'Storefront › Staging' })
+        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront › Staging' })
         await page.getByRole('button', { name: 'Add the app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()

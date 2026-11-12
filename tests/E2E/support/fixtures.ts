@@ -112,6 +112,41 @@ export function nav(page: Page): Locator {
     return page.getByRole('navigation', { name: 'Main' }).filter({ visible: true })
 }
 
+const SECTIONS: Record<string, string> = { Fleet: 'Fleet', Deployments: 'Deploys', Releases: 'Releases' }
+
+function wayBack(page: Page, label: string): Locator {
+    if (isMobile(test.info())) {
+        return page.getByTestId('back-link')
+    }
+
+    const section = SECTIONS[label]
+
+    if (section !== undefined) {
+        return nav(page).getByRole('link', { name: section, exact: true })
+    }
+
+    return page
+        .getByRole('navigation', { name: 'Breadcrumb' })
+        .getByRole('link', { name: label, exact: true })
+        .or(main(page).getByRole('link', { name: label, exact: true }))
+        .first()
+}
+
+export async function expectWayBack(page: Page, label: string): Promise<void> {
+    if (isMobile(test.info())) {
+        await expect(page.getByTestId('back-link')).toHaveText(`← ${label}`)
+
+        return
+    }
+
+    await expect(page.getByTestId('back-link')).toBeHidden()
+    await expect(wayBack(page, label)).toBeVisible()
+}
+
+export async function goWayBack(page: Page, label: string): Promise<void> {
+    await wayBack(page, label).click()
+}
+
 export const NARROW_PHONE = { width: 280, height: 400 }
 
 export function tabOverhang(tab: Locator): Promise<number> {

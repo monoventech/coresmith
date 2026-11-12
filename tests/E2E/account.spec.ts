@@ -17,21 +17,21 @@ test.describe('your account', () => {
             'aria-current',
             'page'
         )
-        await expect(page.getByLabel('Name')).toHaveValue('Maya Lindqvist')
+        await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Maya Lindqvist')
         await expect(page.getByLabel('Email address')).toHaveValue('owner@coresmith.test')
     })
 
     test('the name is saved', async ({ page }) => {
         await gotoAccount(page)
 
-        await page.getByLabel('Name').fill('Maya L.')
+        await page.getByLabel('Name', { exact: true }).fill('Maya L.')
         await page.getByRole('button', { name: 'Save' }).click()
 
         await expect(toast(page)).toContainText('Saved.')
         await page.reload()
-        await expect(page.getByLabel('Name')).toHaveValue('Maya L.')
+        await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Maya L.')
 
-        await page.getByLabel('Name').fill('Maya Lindqvist')
+        await page.getByLabel('Name', { exact: true }).fill('Maya Lindqvist')
         await page.getByRole('button', { name: 'Save' }).click()
         await expect(toast(page)).toContainText('Saved.')
     })

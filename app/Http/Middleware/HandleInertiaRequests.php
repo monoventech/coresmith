@@ -8,7 +8,9 @@ use App\Models\InstanceSetting;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\BillingPresenter;
+use App\Services\Panel\Breadcrumbs;
 use App\Services\Panel\CommandPalette;
+use App\Services\Panel\ExplorerPresenter;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Panel\Realtime;
 use App\Services\Panel\SetupProgress;
@@ -27,6 +29,9 @@ class HandleInertiaRequests extends Middleware
      * @var string
      */
     protected $rootView = 'app';
+
+    /** @var array<string, FleetSnapshot> */
+    private array $fleets = [];
 
     /**
      * Determines the current asset version.
@@ -58,6 +63,8 @@ class HandleInertiaRequests extends Middleware
             'edition' => Edition::current()->value,
             'vaultKeyConfigured' => !empty(config('coresmith.vault_key')),
             'panel' => fn(): ?array => $this->panel($request),
+            'explorer' => fn(): ?array => $this->explorer($request),
+            'crumbs' => fn(): array => $this->crumbs($request),
             'billing' => fn(): ?array => $this->billing($request),
             'palette' => Inertia::optional(fn(): array => $request->user() === null
                 ? []
@@ -99,6 +106,32 @@ class HandleInertiaRequests extends Middleware
     /**
      * @return array<string, mixed>|null
      */
+    private function explorer(Request $request): ?array
+    {
+        $user = $request->user();
+        $team = $user instanceof User ? app(TeamContext::class)->team() : null;
+
+        return $team === null ? null : app(ExplorerPresenter::class)->present($user, $team, $this->fleet($user, $team));
+    }
+
+    /**
+     * @return list<array{label: string, href: ?string, mono: bool}>
+     */
+    private function crumbs(Request $request): array
+    {
+        $user = $request->user();
+
+        return $user instanceof User ? app(Breadcrumbs::class)->for($request, app(TeamContext::class)->team(), $user) : [];
+    }
+
+    private function fleet(User $user, Team $team): FleetSnapshot
+    {
+        return $this->fleets[$team->getKey()] ??= new FleetSnapshot($team, $user);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
     private function billing(Request $request): ?array
     {
         $user = $request->user();
@@ -125,7 +158,7 @@ class HandleInertiaRequests extends Middleware
         $context = app(TeamContext::class);
         $teams = $user->teams()->withCount(['servers', 'members'])->orderBy('teams.name')->get();
         $team = $context->team();
-        $fleet = $team === null ? null : new FleetSnapshot($team, $user);
+        $fleet = $team === null ? null : $this->fleet($user, $team);
         [$current, $others] = $teams->partition(fn(Team $each): bool => $each->id === $team?->id);
 
         return [
