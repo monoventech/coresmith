@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.2 (2026-11-12)
+
+### Fixed
+- fix: the phone Apps row opens in place, live refreshes carry the trail, a failed subscription cuts no one off, and a page that goes away returns to the fleet (#55)
+
 ## v0.8.1 (2026-11-12)
 
 ### Added
