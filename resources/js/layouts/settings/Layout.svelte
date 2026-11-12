@@ -34,7 +34,7 @@
         }
 
         if (path.startsWith('/settings/billing')) {
-            return 'Coresmith Cloud plans are billed monthly, per team. Self-hosting is free under ELv2, every feature included.'
+            return 'Coresmith Cloud plans are billed monthly, per team.'
         }
 
         return page.props.edition === 'cloud'
