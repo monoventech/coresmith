@@ -371,6 +371,35 @@ export async function withInertia(page: Page, url: RegExp, change: (body: Inerti
     })
 }
 
+export type FleetProps = {
+    panel?: { live?: { streaming: boolean } }
+    explorer?: { servers: unknown[] }
+    crumbs?: { label: string }[]
+}
+
+export async function streamFleet(page: Page, change: (props: FleetProps) => void = () => undefined) {
+    await withInertia(page, /.*/, (body) => {
+        const props = body.props as FleetProps
+
+        if (props.panel?.live) {
+            props.panel.live.streaming = true
+        }
+
+        change(props)
+    })
+
+    const reverb = await fakeReverb(page)
+
+    return {
+        async subscribed() {
+            await expect.poll(() => reverb.team()).not.toBeNull()
+        },
+        changed() {
+            reverb.emit(reverb.team() as string, 'fleet.changed')
+        }
+    }
+}
+
 export async function fakeReverb(page: Page) {
     const channels: string[] = []
     let send: ((message: string) => void) | null = null

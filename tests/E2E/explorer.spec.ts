@@ -1,14 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import {
-    asEnvironmentOnly,
-    asNarrowed,
-    expect,
-    fakeReverb,
-    gotoServer,
-    nav,
-    test,
-    withInertia
-} from './support/fixtures'
+import { asEnvironmentOnly, asNarrowed, expect, gotoServer, nav, streamFleet, test } from './support/fixtures'
 
 function explorer(page: Page): Locator {
     return page.getByRole('complementary', { name: 'Explorer' })
@@ -18,41 +9,12 @@ function trail(page: Page): Locator {
     return page.getByRole('navigation', { name: 'Breadcrumb' })
 }
 
-type FleetProps = {
-    panel?: { live?: { streaming: boolean } }
-    explorer?: { servers: unknown[] }
-    crumbs?: { label: string }[]
-}
-
 const PUSHED = {
     id: 'pushed',
     name: 'pushed-01',
     href: '/dashboard',
     state: { key: 'healthy', label: 'Healthy', tone: 'success' },
     note: '0 apps'
-}
-
-async function streamFleet(page: Page, change: (props: FleetProps) => void) {
-    await withInertia(page, /.*/, (body) => {
-        const props = body.props as FleetProps
-
-        if (props.panel?.live) {
-            props.panel.live.streaming = true
-        }
-
-        change(props)
-    })
-
-    const reverb = await fakeReverb(page)
-
-    return {
-        async subscribed() {
-            await expect.poll(() => reverb.team()).not.toBeNull()
-        },
-        changed() {
-            reverb.emit(reverb.team() as string, 'fleet.changed')
-        }
-    }
 }
 
 async function failSecondFleetSubscription(page: Page) {

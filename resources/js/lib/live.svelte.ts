@@ -4,6 +4,7 @@
 
 import { realtime, realtimeConfigured } from '@/lib/echo'
 import type { PanelProps } from '@/lib/panel'
+import { notify } from '@/lib/toast.svelte'
 import { page, router } from '@inertiajs/svelte'
 
 export type FollowOptions = { only: string[]; paused?: () => boolean; async?: boolean; shell?: boolean }
@@ -47,7 +48,15 @@ export function follow(options: FollowOptions): () => void {
             only: options.shell
                 ? options.only
                 : [...options.only, ...SHARED.filter((key) => !options.only.includes(key))],
-            async: options.async ?? false
+            async: options.async ?? false,
+            onHttpException: (response) => {
+                if (response.status === 403 || response.status === 404) {
+                    notify('That page is gone.', 'It was deleted, or your access to it changed.')
+                    router.visit(route('dashboard'))
+                }
+
+                return false
+            }
         })
     }
 
