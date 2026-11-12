@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.4 (2026-11-12)
+
+### Added
+- feat: the app page leads with its release, domains and source, runs the live log across, and lines its settings up in rows (#59)
+
 ## v0.8.3 (2026-11-12)
 
 ### Added

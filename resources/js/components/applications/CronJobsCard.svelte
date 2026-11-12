@@ -9,6 +9,7 @@
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import type { CronCard, CronJob, CronSend } from '@/lib/cron'
+    import { cn } from '@/lib/utils'
 
     let {
         cron,
@@ -16,9 +17,17 @@
         canUpdate,
         canViewLogs,
         busy,
-        send
-    }: { cron: CronCard; server: string; canUpdate: boolean; canViewLogs: boolean; busy: boolean; send: CronSend } =
-        $props()
+        send,
+        class: className = undefined
+    }: {
+        cron: CronCard
+        server: string
+        canUpdate: boolean
+        canViewLogs: boolean
+        busy: boolean
+        send: CronSend
+        class?: string
+    } = $props()
 
     let editing = $state<CronJob | null>(null)
     let editor = $state(false)
@@ -113,15 +122,11 @@
     }
 </script>
 
-<div class="rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden" data-testid="cron-jobs">
-    <div class="mb-1 flex min-h-9 items-center justify-between gap-3">
-        <h3 class="type-h3 m-0">Cron jobs</h3>
-        {#if canUpdate}
-            <Button variant="ghost" size="sm" disabled={cron.jobs.length >= cron.limit} onclick={add}
-                >Add cron job</Button
-            >
-        {/if}
-    </div>
+<div
+    class={cn('flex flex-col rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden', className)}
+    data-testid="cron-jobs"
+>
+    <h3 class="type-h3 m-0 mb-1">Cron jobs</h3>
     <p class="mb-3 text-[12.5px] text-muted-foreground">
         Each job runs as <span class="font-mono text-[12px]">{cron.user}</span>
         {`in the current release, with the app's environment. Saving changes what runs on ${server}, no deployment needed.`}
@@ -198,15 +203,23 @@
     <p class="mt-2 text-[12px] text-muted-foreground">
         Times are UTC, the server's clock. Every job writes to <span class="font-mono">shared/logs/scheduler.log</span>.
     </p>
-    {#if canViewLogs && cron.live}
-        <Button
-            variant="ghost"
-            size="sm"
-            class="mt-1 -ml-3"
-            aria-expanded={open}
-            aria-controls={open ? 'scheduler-log' : undefined}
-            onclick={() => (open = !open)}>{open ? 'Hide output' : 'Show output'}</Button
-        >
+    {#if canUpdate || (canViewLogs && cron.live)}
+        <div class="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 pt-3">
+            {#if canUpdate}
+                <Button variant="link" class="min-h-6" disabled={cron.jobs.length >= cron.limit} onclick={add}
+                    >Add cron job</Button
+                >
+            {/if}
+            {#if canViewLogs && cron.live}
+                <Button
+                    variant="link"
+                    class="min-h-6"
+                    aria-expanded={open}
+                    aria-controls={open ? 'scheduler-log' : undefined}
+                    onclick={() => (open = !open)}>{open ? 'Hide output' : 'Show output'}</Button
+                >
+            {/if}
+        </div>
     {/if}
 
     {#if open}

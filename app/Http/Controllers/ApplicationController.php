@@ -21,6 +21,7 @@ use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
@@ -156,6 +157,8 @@ final class ApplicationController extends Controller
         $running = $latest?->status === DeploymentStatus::Running ? $latest : null;
         $failedLive = $latest !== null && $latest->status === DeploymentStatus::Failed && DeploymentPresenter::reachedUsers($latest);
         $rollback = $rollbacks->sinceLastLive($application);
+        $live = $application->current_release === null ? null : $application->deployments()->where('release', $application->current_release)->with('triggeredBy')->latest('id')->first();
+        $previous = $application->current_release === null ? null : $rollbacks->previous($application);
         $github = $this->github($application);
         $usesKey = !($github['usable'] ?? false) && $keys->usesDeployKey($application);
         $publicKey = $usesKey ? $keys->ensure($application)->deploy_key_public : null;
@@ -175,6 +178,8 @@ final class ApplicationController extends Controller
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),
+                'release' => $application->current_release === null ? null : $this->release($application, $live),
+                'rollback_href' => $previous === null || !$user->can('deploy', $application) ? null : route('servers.applications.releases.index', [$server, $application, 'rollback' => $previous->release]),
                 'power_state' => $application->power_state?->value,
                 'stopped' => $application->power_state === PowerState::Stopped,
                 'maintenance' => (bool) (((array) $application->toggles)['maintenance_mode'] ?? false),
@@ -185,7 +190,6 @@ final class ApplicationController extends Controller
                     'fingerprint' => HostKeyFingerprint::fromPublicKey($publicKey),
                     'short' => Formats::fingerprint(HostKeyFingerprint::fromPublicKey($publicKey)),
                     'public_key' => $publicKey,
-                    'repository' => Repository::slug((string) $application->repository_url),
                 ],
                 'github' => $github,
                 'environment' => $this->environmentPreview((string) $application->env_variables, $canManageEnvironment),
@@ -222,7 +226,7 @@ final class ApplicationController extends Controller
                 'viewLogs' => $user->can('viewLogs', $application),
             ],
             'runtime_choice' => $user->can('update', $application) ? $this->runtimeChoice($server, $application) : null,
-            'held' => $this->held($application),
+            'held' => $this->held($application, $live),
         ]);
     }
 
@@ -250,18 +254,35 @@ final class ApplicationController extends Controller
     }
 
     /**
+     * @return array<string, string|null>
+     */
+    private function release(Application $application, ?Deployment $deployment): array
+    {
+        $message = trim(explode("\n", (string) $deployment?->commit_message, 2)[0]);
+
+        return [
+            'id' => Formats::release($application->current_release),
+            'commit' => $deployment?->commit_hash === null ? null : substr($deployment->commit_hash, 0, 7),
+            'message' => $message === '' ? null : $message,
+            'author' => $deployment === null ? null : ($deployment->commit_author ?? $deployment->triggeredBy?->name),
+            'branch' => $deployment === null ? null : ($deployment->branch ?? $application->repository_branch),
+            'when' => Formats::when($deployment?->finished_at),
+            'full' => Formats::absolute($deployment?->finished_at),
+        ];
+    }
+
+    /**
      * @return array{current: string, newest: string, packages: list<string>, command: string}|null
      */
-    private function held(Application $application): ?array
+    private function held(Application $application, ?Deployment $live): ?array
     {
         $runtime = $application->type?->runtime($application->js_runtime);
-        $release = $application->current_release;
+        $stack = $live?->stack;
 
-        if ($runtime === null || $release === null) {
+        if ($runtime === null) {
             return null;
         }
 
-        $stack = $application->deployments()->where('release', $release)->latest('id')->value('stack');
         $data = is_array($stack) ? ($stack['runtimes'][$runtime] ?? null) : null;
 
         if (!is_array($data)) {
