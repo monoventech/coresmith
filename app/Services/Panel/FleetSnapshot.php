@@ -368,6 +368,7 @@ final class FleetSnapshot
             ->groupBy('server_id', 'reading_day')
             ->get();
         $firsts = $rows->groupBy('server_id')->map(fn(Collection $days): CarbonImmutable => $days->map(fn(ServerMetric $row): CarbonImmutable => CarbonImmutable::parse($row->getAttribute('first_reading'))->startOfMinute())->min());
+        $readings = $rows->mapWithKeys(fn(ServerMetric $row): array => [$row->getAttribute('server_id') . '|' . substr((string) $row->getAttribute('reading_day'), 0, 10) => (int) $row->getAttribute('readings')]);
         $days = [];
 
         foreach (range(0, self::UPTIME_DAYS - 1) as $offset) {
@@ -384,8 +385,7 @@ final class FleetSnapshot
                 }
 
                 $minutes = (int) ceil($since->diffInMinutes($until, true));
-                $row = $rows->first(fn(ServerMetric $row): bool => $row->getAttribute('server_id') === $server && substr((string) $row->getAttribute('reading_day'), 0, 10) === $from->toDateString());
-                $observed += min((int) ($row?->getAttribute('readings') ?? 0), $minutes);
+                $observed += min($readings->get($server . '|' . $from->toDateString(), 0), $minutes);
                 $expected += $minutes;
             }
 

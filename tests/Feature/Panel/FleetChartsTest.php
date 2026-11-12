@@ -51,6 +51,15 @@ test('uptime by day is one entry per day, empty before the first reading', funct
         ->and(array_values(array_unique(array_slice($days, 0, -2))))->toBe([null]);
 });
 
+test("uptime by day weighs each server's own readings", function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-12 00:30:00'));
+    $team = Team::factory()->owned()->create();
+    fleetChartsReadings(Server::factory()->for($team)->create(), CarbonImmutable::parse('2026-11-12 00:00:00'), 30);
+    fleetChartsReadings(Server::factory()->for($team)->create(), CarbonImmutable::parse('2026-11-12 00:00:00'), 15);
+
+    expect(array_slice((new FleetSnapshot($team))->uptimeByDay(), -1))->toBe([75.0]);
+});
+
 test("a server's trend is its last hour in twelve points", function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-12 15:00:00'));
     $team = Team::factory()->owned()->create();
