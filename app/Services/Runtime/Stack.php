@@ -12,6 +12,8 @@ final readonly class Stack
 {
     public const GEMS = ['sidekiq', 'solid_queue'];
 
+    public const PIPELINE_GEMS = ['sprockets-rails', 'propshaft', 'sinatra-activerecord', 'puma'];
+
     public const PACKAGES = ['horizon', 'reverb', 'inertia'];
 
     /**
@@ -20,6 +22,7 @@ final readonly class Stack
      * @param  list<string>  $notes
      * @param  array<string, bool>  $gems
      * @param  array<string, bool>  $packages
+     * @param  list<string>|null  $files
      */
     public function __construct(
         public array $runtimes = [],
@@ -28,7 +31,26 @@ final readonly class Stack
         public array $notes = [],
         public array $gems = [],
         public array $packages = [],
+        public ?array $files = null,
     ) {}
+
+    /**
+     * @param  array<string, ResolvedRuntime>  $runtimes
+     */
+    public function withRuntimes(array $runtimes): self
+    {
+        return new self($runtimes, $this->framework, $this->tooling, $this->notes, $this->gems, $this->packages, $this->files);
+    }
+
+    public function locked(string $gem): ?bool
+    {
+        return $this->gems[$gem] ?? null;
+    }
+
+    public function present(string $file): ?bool
+    {
+        return $this->files === null ? null : in_array($file, $this->files, true);
+    }
 
     /**
      * @return array<string, string>
@@ -47,7 +69,7 @@ final readonly class Stack
     }
 
     /**
-     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>, packages: array<string, bool>}
+     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>, packages: array<string, bool>, files: list<string>|null}
      */
     public function toArray(): array
     {
@@ -57,6 +79,7 @@ final readonly class Stack
             'tooling' => $this->tooling?->toArray(),
             'gems' => $this->gems,
             'packages' => $this->packages,
+            'files' => $this->files,
         ];
     }
 
@@ -79,6 +102,8 @@ final readonly class Stack
         $gems = array_filter((array) ($data['gems'] ?? []), fn(mixed $locked, int|string $gem): bool => is_string($gem) && is_bool($locked), ARRAY_FILTER_USE_BOTH);
         $packages = array_filter((array) ($data['packages'] ?? []), fn(mixed $installed, int|string $package): bool => in_array($package, self::PACKAGES, true) && is_bool($installed), ARRAY_FILTER_USE_BOTH);
 
+        $files = is_array($data['files'] ?? null) ? array_values(array_filter($data['files'], 'is_string')) : null;
+
         uksort($runtimes, fn(int|string $a, int|string $b): int => ($a === $tool) <=> ($b === $tool));
 
         return new self(
@@ -87,6 +112,7 @@ final readonly class Stack
             $tooling,
             gems: $gems,
             packages: $packages,
+            files: $files,
         );
     }
 

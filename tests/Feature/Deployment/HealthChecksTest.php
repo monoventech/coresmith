@@ -64,3 +64,9 @@ test('health check paths are shell quoted', function () {
 
     expect(array_values($checks)[0])->toBe("test -f '/var/coresmith/apps/my-app/releases/20260913-140509/it'\\''s/public/index.php'");
 });
+
+test('a Deno app is healthy with deno.json, deno.jsonc or package.json', function () {
+    expect(healthChecksFor(['type' => ApplicationType::Js, 'js_runtime' => 'deno', 'directory' => '/']))->toBe([
+        'deno.json, deno.jsonc or package.json' => "test -f '/var/coresmith/apps/my-app/releases/20260913-140509/deno.json' || test -f '/var/coresmith/apps/my-app/releases/20260913-140509/deno.jsonc' || test -f '/var/coresmith/apps/my-app/releases/20260913-140509/package.json'",
+    ]);
+});

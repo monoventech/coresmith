@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Process\SystemdUnitBuilder;
 use App\Services\Runtime\JsTooling;
+use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\Stack;
 
 function repositoryStack(?JsTooling $tooling): Stack
@@ -95,6 +96,55 @@ test('the web process listens where caddy sends traffic, and only on loopback', 
     $application = Application::factory()->create(['slug' => 'shop', 'type' => ApplicationType::Js, 'framework' => 'sveltekit', 'js_runtime' => 'bun', 'php_version' => null, 'bun_version' => '1.4.2', 'base_port' => 8120]);
     $builder = app(SystemdUnitBuilder::class);
 
-    expect($builder->build($application, 'web', 'bun build/index.js'))->toContain("Environment=\"PORT=8120\"\nEnvironment=\"HOST=127.0.0.1\"\nEnvironment=\"HOSTNAME=127.0.0.1\"\nEnvironmentFile=")
+    expect($builder->build($application, 'web', 'bun build/index.js'))->toContain("Environment=\"PORT=8120\"\nEnvironment=\"HOST=127.0.0.1\"\nEnvironment=\"HOSTNAME=127.0.0.1\"\nEnvironment=\"NODE_ENV=production\"\nEnvironment=\"PROTOCOL_HEADER=x-forwarded-proto\"\nEnvironment=\"HOST_HEADER=x-forwarded-host\"\nEnvironment=\"ADDRESS_HEADER=x-forwarded-for\"\nEnvironmentFile=")
         ->and($builder->build($application, 'queue', 'bun worker.js'))->not->toContain('PORT=');
+});
+
+test('a PHP app without composer.json skips composer install', function () {
+    $application = new Application(['type' => ApplicationType::Php, 'framework' => null]);
+    $commands = app(DeploymentCommands::class);
+
+    expect($commands->dependencies($application, new Stack(files: ['index.php'])))->toBe([])
+        ->and($commands->dependencies($application, new Stack(files: ['composer.json', 'index.php'])))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction'])
+        ->and($commands->dependencies($application, new Stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
+});
+
+test('a JavaScript app with no start script starts the main file in package.json', function (string $runtime, ?string $framework, ?string $main, string $command) {
+    $application = Application::factory()->create([
+        'slug' => 'api',
+        'type' => ApplicationType::Js,
+        'framework' => $framework,
+        'js_runtime' => $runtime,
+        'php_version' => null,
+        'bun_version' => '1.4.2',
+        'node_version' => '24.21.0',
+        'stack' => ['runtimes' => [], 'framework' => null, 'tooling' => (new JsTooling($runtime === 'node' ? 'npm' : 'bun', true, false, false, main: $main))->toArray()],
+    ]);
+
+    expect(app(SystemdUnitBuilder::class)->webCommand($application))->toBe($command);
+})->with([
+    'bun' => ['bun', null, 'src/server.js', '/opt/asdf-data/installs/bun/1.4.2/bin/bun src/server.js'],
+    'node' => ['node', null, 'dist/index.js', '/opt/asdf-data/installs/nodejs/24.21.0/bin/node dist/index.js'],
+    'a framework entry wins' => ['bun', 'sveltekit', 'src/server.js', '/opt/asdf-data/installs/bun/1.4.2/bin/bun build/index.js'],
+    'no main keeps server.js' => ['bun', null, null, '/opt/asdf-data/installs/bun/1.4.2/bin/bun server.js'],
+]);
+
+test('a main that could break out of the unit file is never used', function (string $main) {
+    $facts = new RepositoryFacts(['package.json' => json_encode(['main' => $main])], ['bun.lock']);
+    $tooling = JsTooling::for(new Application(['type' => ApplicationType::Js, 'js_runtime' => 'bun']), $facts);
+
+    expect($tooling?->main)->toBeNull()
+        ->and(JsTooling::fromArray(['manager' => 'bun', 'main' => $main])?->main)->toBeNull();
+})->with([
+    'a newline' => ["server.js\nUser=root"],
+    'a parent folder' => ['../outside.js'],
+    'an absolute path' => ['/etc/passwd'],
+    'an option' => ['--inspect=0.0.0.0'],
+    'a space' => ['server.js --inspect'],
+]);
+
+test('a safe main in package.json is kept', function () {
+    $facts = new RepositoryFacts(['package.json' => json_encode(['main' => './src/index.mjs'])], ['bun.lock']);
+
+    expect(JsTooling::for(new Application(['type' => ApplicationType::Js, 'js_runtime' => 'bun']), $facts)?->main)->toBe('src/index.mjs');
 });

@@ -248,3 +248,11 @@ test('only markers and secret names the probe asks for are kept', function () {
     expect($facts->markers)->toBe(['artisan'])
         ->and($facts->envKeys)->toBe(['APP_KEY']);
 });
+
+test('only a probe that ran to the end can say a file is missing', function () {
+    [$facts] = probeTree(['composer.json' => '{}']);
+
+    expect($facts->complete)->toBeTrue()
+        ->and(app(RepositoryProbe::class)->parse('@@file composer.json ' . base64_encode('{}'))->complete)->toBeFalse()
+        ->and(app(RepositoryProbe::class)->parse('')->complete)->toBeFalse();
+});

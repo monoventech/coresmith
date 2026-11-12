@@ -41,7 +41,7 @@ final class DeploymentCommands
         $javascript = $stack->tooling?->install() ?? [];
 
         return match ($application->type) {
-            ApplicationType::Php => ['composer install --no-dev --optimize-autoloader --no-interaction', ...$javascript],
+            ApplicationType::Php => [...($stack->present('composer.json') === false ? [] : ['composer install --no-dev --optimize-autoloader --no-interaction']), ...$javascript],
             ApplicationType::Ruby => ['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install'],
             default => $javascript,
         };
@@ -56,7 +56,7 @@ final class DeploymentCommands
 
         return match ($application->type) {
             ApplicationType::Php => [...$javascript, ...($application->framework === 'laravel' ? ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'] : [])],
-            ApplicationType::Ruby => ['RAILS_ENV=production bundle exec rails assets:precompile'],
+            ApplicationType::Ruby => $this->rubyBuild($application, $stack),
             default => $javascript,
         };
     }
@@ -64,7 +64,19 @@ final class DeploymentCommands
     /**
      * @return list<string>
      */
-    public function migrations(Application $application): array
+    private function rubyBuild(Application $application, Stack $stack): array
+    {
+        if ($application->framework === 'sinatra' || ($stack->locked('sprockets-rails') === false && $stack->locked('propshaft') === false)) {
+            return [];
+        }
+
+        return ['RAILS_ENV=production bundle exec rails assets:precompile'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function migrations(Application $application, Stack $stack): array
     {
         if (!$application->run_migrations) {
             return [];
@@ -72,7 +84,9 @@ final class DeploymentCommands
 
         return match ($application->type) {
             ApplicationType::Php => $application->framework === 'laravel' ? ['php artisan migrate --force'] : [],
-            ApplicationType::Ruby => ['RAILS_ENV=production bundle exec rails db:migrate'],
+            ApplicationType::Ruby => $application->framework !== 'sinatra'
+                ? ['RAILS_ENV=production bundle exec rails db:migrate']
+                : ($stack->locked('sinatra-activerecord') === true && $stack->present('Rakefile') === true ? ['RACK_ENV=production bundle exec rake db:migrate'] : []),
             default => [],
         };
     }
@@ -89,7 +103,9 @@ final class DeploymentCommands
         return match ($application->type) {
             ApplicationType::Php => [($web === '' ? '' : $web . '/') . 'index.php' => 'test -f ' . escapeshellarg($root . '/index.php')],
             ApplicationType::Static => [($web === '' ? 'the release root' : $web . '/') => 'test -d ' . escapeshellarg($root)],
-            ApplicationType::Js => ['package.json' => 'test -f ' . escapeshellarg($base . '/package.json')],
+            ApplicationType::Js => $application->js_runtime === 'deno'
+                ? ['deno.json, deno.jsonc or package.json' => implode(' || ', array_map(fn(string $file): string => 'test -f ' . escapeshellarg($base . '/' . $file), ['deno.json', 'deno.jsonc', 'package.json']))]
+                : ['package.json' => 'test -f ' . escapeshellarg($base . '/package.json')],
             ApplicationType::Ruby => ['Gemfile' => 'test -f ' . escapeshellarg($base . '/Gemfile')],
         };
     }

@@ -478,7 +478,7 @@ final class DeployApplication implements ShouldQueue
                 : new ResolvedRuntime($resolved->runtime, $resolved->version, $resolved->source, $resolved->detail, $installed, $resolved->note);
         }
 
-        return new Stack($runtimes, $stack->framework, $stack->tooling, $stack->notes, $stack->gems, $stack->packages);
+        return $stack->withRuntimes($runtimes);
     }
 
     private function describe(ResolvedRuntime $runtime): string
@@ -845,7 +845,7 @@ final class DeployApplication implements ShouldQueue
 
     private function migrate(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void
     {
-        $steps = $commands->migrations($this->deployment->application);
+        $steps = $commands->migrations($this->deployment->application, $stack);
 
         if ($steps === []) {
             return;

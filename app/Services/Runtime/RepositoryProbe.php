@@ -62,6 +62,7 @@ final class RepositoryProbe
       sed -n 's/^    sidekiq (\([^)]*\))$/@@locked sidekiq \1/p' Gemfile.lock | head -n 1
       sed -n 's/^    solid_queue (\([^)]*\))$/@@locked solid_queue \1/p' Gemfile.lock | head -n 1
     fi
+    printf '@@done\n'
     exit 0
     BASH;
 
@@ -96,6 +97,7 @@ final class RepositoryProbe
         $locked = [];
         $markers = [];
         $envKeys = [];
+        $complete = false;
 
         foreach (preg_split('/\R/', $output) ?: [] as $line) {
             if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && in_array($matches[1], [...self::FILES, self::COMPOSER_LOCK], true)) {
@@ -108,6 +110,8 @@ final class RepositoryProbe
                 $lockfiles[] = $matches[1];
             } elseif (preg_match('/^@@locked (\S+) v?(\d[\w.+-]*)$/', $line, $matches) === 1) {
                 $locked[$matches[1]] = $matches[2];
+            } elseif ($line === '@@done') {
+                $complete = true;
             } elseif (preg_match('/^@@has (\S+)$/', $line, $matches) === 1 && in_array($matches[1], self::MARKERS, true)) {
                 $markers[] = $matches[1];
             } elseif (preg_match('/^@@envkey (\S+)$/', $line, $matches) === 1 && in_array($matches[1], self::ENV_SECRETS, true)) {
@@ -115,6 +119,6 @@ final class RepositoryProbe
             }
         }
 
-        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)));
+        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete);
     }
 }

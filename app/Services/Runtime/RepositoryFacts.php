@@ -25,6 +25,7 @@ final readonly class RepositoryFacts
         public array $locked = [],
         public array $markers = [],
         public array $envKeys = [],
+        public bool $complete = false,
     ) {}
 
     public function has(string $file): bool

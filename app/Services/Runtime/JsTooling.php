@@ -25,7 +25,19 @@ final readonly class JsTooling
         public ?string $managerVersion = null,
         public bool $manifest = true,
         public bool $ssr = false,
+        public ?string $main = null,
     ) {}
+
+    public static function safeMain(mixed $main): ?string
+    {
+        if (!is_string($main)) {
+            return null;
+        }
+
+        $main = (string) preg_replace('~^\./~', '', trim($main));
+
+        return preg_match('~^(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9_@][A-Za-z0-9._@/-]*$~D', $main) === 1 ? $main : null;
+    }
 
     public static function for(Application $application, RepositoryFacts $facts): ?self
     {
@@ -63,7 +75,7 @@ final readonly class JsTooling
         $declared = (string) ($facts->json('package.json')['packageManager'] ?? '');
         $version = preg_match('/^' . $manager . '@(\d[\w.+-]*)/', $declared, $matches) === 1 ? $matches[1] : null;
 
-        return new self($manager, $facts->lockfile() !== null, $build, $facts->script('start'), $version, ssr: $facts->script('build:ssr'));
+        return new self($manager, $facts->lockfile() !== null, $build, $facts->script('start'), $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null));
     }
 
     public function runtime(): string
@@ -110,7 +122,7 @@ final readonly class JsTooling
     }
 
     /**
-     * @return array{manager: string, locked: bool, build: bool, start: bool, manager_version: ?string, manifest: bool, ssr: bool}
+     * @return array{manager: string, locked: bool, build: bool, start: bool, manager_version: ?string, manifest: bool, ssr: bool, main: ?string}
      */
     public function toArray(): array
     {
@@ -122,6 +134,7 @@ final readonly class JsTooling
             'manager_version' => $this->managerVersion,
             'manifest' => $this->manifest,
             'ssr' => $this->ssr,
+            'main' => $this->main,
         ];
     }
 
@@ -144,6 +157,7 @@ final readonly class JsTooling
             isset($data['manager_version']) ? (string) $data['manager_version'] : null,
             (bool) ($data['manifest'] ?? true),
             (bool) ($data['ssr'] ?? false),
+            self::safeMain($data['main'] ?? null),
         );
     }
 
