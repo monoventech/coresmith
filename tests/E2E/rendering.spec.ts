@@ -1,6 +1,15 @@
 import { expect, gotoApplication, gotoServerTab, noSidewaysScroll, test } from './support/fixtures'
 
-const PATHS = ['/dashboard', '/deployments', '/releases', '/servers/create', '/settings', '/settings/team', '/settings/git', '/settings/profile']
+const PATHS = [
+    '/dashboard',
+    '/deployments',
+    '/releases',
+    '/servers/create',
+    '/settings',
+    '/settings/team',
+    '/settings/git',
+    '/settings/profile'
+]
 
 test.describe('rendering across browsers', () => {
     for (const path of PATHS) {
@@ -18,7 +27,9 @@ test.describe('rendering across browsers', () => {
             if (testInfo.project.name === 'webkit' || testInfo.project.name === 'mobile-safari') {
                 const reachable = await page.evaluate(() => {
                     const first = Array.from(
-                        document.querySelectorAll<HTMLElement>('main a[href], main button, main input:not([type=hidden]), main select, main textarea')
+                        document.querySelectorAll<HTMLElement>(
+                            'main a[href], main button, main input:not([type=hidden]), main select, main textarea'
+                        )
                     ).find((element) => element.getClientRects().length > 0)
 
                     first?.focus()

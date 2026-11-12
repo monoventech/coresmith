@@ -28,7 +28,7 @@
             <p class="m-0 px-2.5 py-2 text-[13px] text-muted-foreground">Nothing needs attention.</p>
         {:else}
             <ul class="m-0 flex list-none flex-col p-0">
-                {#each items as item, index (index)}
+                {#each items as item, index (`${index}:${item.href}`)}
                     <li>
                         <Link
                             href={item.href}

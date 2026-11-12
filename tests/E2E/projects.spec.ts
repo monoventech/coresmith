@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { dialog, expect, nav, own, test, toast } from './support/fixtures'
+import { dialog, expect, expectWayBack, goWayBack, nav, own, test, toast } from './support/fixtures'
 
 function card(page: Page, name: string) {
     return page.getByTestId('project-card').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -53,8 +53,8 @@ test.describe('projects', () => {
             'page'
         )
 
-        await expect(page.getByTestId('back-link')).toHaveText('← Projects')
-        await page.getByTestId('back-link').click()
+        await expectWayBack(page, 'Projects')
+        await goWayBack(page, 'Projects')
         await page.waitForURL(/\/projects$/)
     })
 

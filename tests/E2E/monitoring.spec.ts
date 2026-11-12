@@ -6,7 +6,9 @@ import type { Page } from '@playwright/test'
 import { expect, gotoApplication, gotoServer, gotoSettings, isMobile, test, toast } from './support/fixtures'
 
 function saved(page: Page) {
-    return page.waitForResponse((response) => response.request().method() === 'PUT' && response.url().includes('/settings/notifications'))
+    return page.waitForResponse(
+        (response) => response.request().method() === 'PUT' && response.url().includes('/settings/notifications')
+    )
 }
 
 function card(page: Page, name: string) {
@@ -34,7 +36,9 @@ test.describe('monitoring', () => {
 
         await expect(banner).toContainText("Coresmith can't reach down-01 over SSH.")
         await expect(banner).toContainText('The last answer was ')
-        await expect(banner).toContainText('The connection to port 22 was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.')
+        await expect(banner).toContainText(
+            'The connection to port 22 was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.'
+        )
         await expect(page.getByTestId('disk-warning')).toHaveCount(0)
     })
 
@@ -62,16 +66,26 @@ test.describe('monitoring', () => {
 
         await gotoApplication(page, 'bench-01', 'certs-app')
 
-        const badge = (domain: string) => page.getByTestId('domain-row').filter({ hasText: domain }).locator('[data-slot="badge"]')
+        const badge = (domain: string) =>
+            page.getByTestId('domain-row').filter({ hasText: domain }).locator('[data-slot="badge"]')
 
         await expect(badge('certs.monoven.io')).toHaveText('TLS')
         await expect(badge('certs.monoven.io')).toHaveAttribute('title', /^Valid until .+, checked .+$/)
         await expect(badge('soon.monoven.io')).toHaveText('Expires in 3 days')
-        await expect(badge('soon.monoven.io')).toHaveAttribute('title', 'Caddy should have renewed this by now. Check soon.monoven.io still points at 198.51.100.40.')
+        await expect(badge('soon.monoven.io')).toHaveAttribute(
+            'title',
+            'Caddy should have renewed this by now. Check soon.monoven.io still points at 198.51.100.40.'
+        )
         await expect(badge('gone.monoven.io')).toHaveText('Expired')
-        await expect(badge('gone.monoven.io')).toHaveAttribute('title', 'Caddy should have renewed this by now. Check gone.monoven.io still points at 198.51.100.40.')
+        await expect(badge('gone.monoven.io')).toHaveAttribute(
+            'title',
+            'Caddy should have renewed this by now. Check gone.monoven.io still points at 198.51.100.40.'
+        )
         await expect(badge('dark.monoven.io')).toHaveText('No certificate')
-        await expect(badge('dark.monoven.io')).toHaveAttribute('title', 'Caddy has no certificate for this name yet. Point its DNS at 198.51.100.40 and Caddy requests one.')
+        await expect(badge('dark.monoven.io')).toHaveAttribute(
+            'title',
+            'Caddy has no certificate for this name yet. Point its DNS at 198.51.100.40 and Caddy requests one.'
+        )
     })
 
     test('a domain not checked yet carries no badge', async ({ page }, testInfo) => {
@@ -107,7 +121,9 @@ test.describe('monitoring', () => {
         const alerts = page.getByTestId('notification-server_alerts')
 
         await expect(alerts).toContainText('Server problems')
-        await expect(alerts).toContainText('A server stops answering, runs out of memory, or a certificate is about to expire')
+        await expect(alerts).toContainText(
+            'A server stops answering, runs out of memory, or a certificate is about to expire'
+        )
         await expect(alerts.getByRole('switch')).toBeChecked()
 
         const provisioning = page.getByTestId('notification-provisioning').getByRole('switch')

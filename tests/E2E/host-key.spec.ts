@@ -1,4 +1,14 @@
-import { asMember, dialog, expect, gotoServer, ORIGINAL_HOST_KEY, own, PRESENTED_HOST_KEY, test, toast } from './support/fixtures'
+import {
+    asMember,
+    dialog,
+    expect,
+    gotoServer,
+    ORIGINAL_HOST_KEY,
+    own,
+    PRESENTED_HOST_KEY,
+    test,
+    toast
+} from './support/fixtures'
 
 test.describe('a changed host key', () => {
     test('the server page leads with the warning', async ({ page }) => {

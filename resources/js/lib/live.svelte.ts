@@ -6,11 +6,15 @@ import { realtime, realtimeConfigured } from '@/lib/echo'
 import type { PanelProps } from '@/lib/panel'
 import { page, router } from '@inertiajs/svelte'
 
-export type FollowOptions = { only: string[]; paused?: () => boolean; async?: boolean }
+export type FollowOptions = { only: string[]; paused?: () => boolean; async?: boolean; shell?: boolean }
 
 const DEBOUNCE_MS = 1500
 
 const listening: Record<string, number> = {}
+
+const SHARED = ['explorer', 'panel']
+
+let pages = 0
 
 export function follow(options: FollowOptions): () => void {
     const panel = page.props.panel as PanelProps | null
@@ -33,7 +37,16 @@ export function follow(options: FollowOptions): () => void {
             return
         }
 
-        router.reload({ only: options.only, async: options.async ?? false })
+        if (options.shell && pages > 0) {
+            return
+        }
+
+        router.reload({
+            only: options.shell
+                ? options.only
+                : [...options.only, ...SHARED.filter((key) => !options.only.includes(key))],
+            async: options.async ?? false
+        })
     }
 
     function soon() {
@@ -61,6 +74,10 @@ export function follow(options: FollowOptions): () => void {
         hiddenAt = null
     }
 
+    if (!options.shell) {
+        pages += 1
+    }
+
     const ticker = setInterval(reload, seconds * 1000)
     const echo = channel !== null && panel?.live.streaming && realtimeConfigured() ? realtime() : null
 
@@ -77,6 +94,10 @@ export function follow(options: FollowOptions): () => void {
 
     return () => {
         clearInterval(ticker)
+
+        if (!options.shell) {
+            pages -= 1
+        }
 
         if (pending !== null) {
             clearTimeout(pending)

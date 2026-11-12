@@ -332,9 +332,13 @@
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground max-sm:text-[12.5px]">
             <span>{application.kind} · {application.runtime}</span>
-            {#if !server.href}<span data-testid="app-server"
-                    >· on <span class="font-mono text-[13px] max-sm:text-[12px]">{server.name}</span></span
-                >{/if}
+            <span data-testid="app-server"
+                >· on {#if server.href}<Link
+                        href={server.href}
+                        class="focus-ring rounded-sm font-mono text-[13px] text-muted-foreground max-sm:text-[12px]"
+                        >{server.name}</Link
+                    >{:else}<span class="font-mono text-[13px] max-sm:text-[12px]">{server.name}</span>{/if}</span
+            >
             {#if place}<span data-testid="app-project"
                     >· {#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
                             >{place.label}</Link

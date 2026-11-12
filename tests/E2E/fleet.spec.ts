@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { dialog, expect, isMobile, main, NARROW_PHONE, nav, own, test, toast } from './support/fixtures'
+import { dialog, expect, expectWayBack, isMobile, main, NARROW_PHONE, nav, own, test, toast } from './support/fixtures'
 
 function card(page: Page, name: string) {
     return page.getByTestId('server-card').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -10,7 +10,7 @@ test.describe('the fleet', () => {
         await page.goto('/dashboard')
 
         await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
-        await expect(main(page).getByText(/^\d+ servers · \d+ applications/)).toBeVisible()
+        await expect(main(page).getByText(/^\d+ servers · \d+ apps/)).toBeVisible()
         await expect(nav(page).getByRole('link', { name: 'Fleet' })).toHaveAttribute('aria-current', 'page')
     })
 
@@ -24,7 +24,59 @@ test.describe('the fleet', () => {
 
         await page.waitForURL(/\/deployments\/[A-Za-z0-9]+/)
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText('← Fleet')
+        await expectWayBack(page, 'Fleet')
+    })
+
+    test('a deploy in progress shows how far it has got', async ({ page }, testInfo) => {
+        test.skip(
+            isMobile(testInfo),
+            'Below 640px the banner keeps to one line and leaves the phases to the deploy page'
+        )
+
+        await page.goto('/dashboard')
+
+        await expect(page.getByTestId('live-deploy').getByTestId('phase-segments').locator('span')).toHaveCount(6)
+    })
+
+    test('the deploys tile draws the last seven days and the uptime tile a bar per day', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'The tiles are hidden below 640px')
+
+        await page.goto('/dashboard')
+
+        await expect(page.getByTestId('tile-deploys').getByTestId('day-bars').locator('span')).toHaveCount(7)
+        await expect(page.getByTestId('tile-uptime').getByTestId('uptime-strip').locator('span')).toHaveCount(30)
+    })
+
+    test('a server card draws the last hour of CPU and memory and lists its apps by state', async ({
+        page
+    }, testInfo) => {
+        test.skip(isMobile(testInfo), 'Below 640px a card keeps its readings to one line of text')
+
+        await page.goto('/dashboard')
+
+        const forge = card(page, 'forge-01')
+
+        await expect(forge.getByTestId('sparkline')).toHaveCount(2)
+        await expect(forge.getByRole('link', { name: 'atlas, Live', exact: true })).toBeVisible()
+
+        await forge.getByRole('link', { name: 'ledger, Live', exact: true }).click()
+        await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+        await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
+    })
+
+    test('on a phone the fleet opens with the projects above the servers', async ({ page }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'From 640px up the explorer lists the projects')
+
+        await page.goto('/dashboard')
+
+        const projects = page.getByTestId('phone-projects')
+
+        await expect(projects.getByRole('link', { name: /^Atlas/ })).toBeVisible()
+        await expect(projects.getByRole('link', { name: /^Storefront/ })).toBeVisible()
+        await expect(projects.getByRole('link', { name: /^Apps/ })).toBeVisible()
+
+        await projects.getByRole('link', { name: /^Atlas/ }).click()
+        await page.waitForURL(/\/projects\/[A-Za-z0-9]+$/)
     })
 
     test('every server card opens its server', async ({ page }) => {
@@ -100,7 +152,7 @@ test.describe('the fleet', () => {
 
         await page.goto('/dashboard')
 
-        await expect(page.getByTestId('tile-applications')).toContainText('Applications')
+        await expect(page.getByTestId('tile-applications')).toContainText('Apps')
         await expect(page.getByTestId('tile-deploys')).toContainText('Deploys this week')
         await expect(page.getByTestId('tile-uptime')).toContainText('Uptime, 30 days')
 
@@ -185,7 +237,7 @@ test.describe('quick actions on a server card', () => {
         await card(page, server).getByRole('link', { name: 'Add an app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText(`← ${server}`)
+        await expectWayBack(page, server)
     })
 
     test('logs open the server activity', async ({ page }) => {
@@ -211,7 +263,7 @@ test.describe('quick actions on a server card', () => {
             .click()
 
         await expect(page.getByRole('heading', { level: 1, name: `Deploying ${application}` })).toBeVisible()
-        await expect(page.getByTestId('back-link')).toHaveText('← Fleet')
+        await expectWayBack(page, 'Fleet')
         await expect(toast(page)).toContainText(`Deploying ${application}.`)
     })
 

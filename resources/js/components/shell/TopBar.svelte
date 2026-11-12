@@ -26,11 +26,11 @@
     {#if crumbs.length > 0}
         <nav aria-label="Breadcrumb" class="min-w-0">
             <ol class="m-0 flex min-w-0 list-none items-center gap-2 p-0 text-[13px]">
-                {#each crumbs as crumb, index (index)}
+                {#each crumbs as crumb, index (`${index}:${crumb.href ?? ''}:${crumb.label}`)}
                     {@const last = index === crumbs.length - 1}
                     <li class="flex min-w-0 items-center gap-2">
                         {#if index > 0}
-                            <Slash class="size-3 shrink-0 text-border" aria-hidden="true" />
+                            <Slash class="size-3 shrink-0 text-muted-foreground/45" aria-hidden="true" />
                         {/if}
                         {#if crumb.href && !last}
                             <Link

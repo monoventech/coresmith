@@ -74,7 +74,7 @@
 
 <aside
     aria-label="Explorer"
-    class="panel flex h-full w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-card px-3 py-3.5"
+    class="panel flex h-full w-72 shrink-0 flex-col gap-3 border-r border-border bg-card px-3 py-3.5"
     data-testid="explorer"
 >
     <div class="flex items-center gap-1.5">
@@ -114,185 +114,193 @@
         <kbd class="rounded-sm border border-border px-1.25 py-px font-mono text-[11px]">{shortcut}</kbd>
     </button>
 
-    {#if empty}
-        <div class="flex flex-col gap-2 px-2 py-4 text-[13px] text-muted-foreground">
-            <p class="m-0">No servers yet.</p>
-            {#if explorer.can.createServer}
-                <Link href={route('servers.create')} class="focus-ring w-fit rounded-sm font-medium text-primary-strong"
-                    >Provision a server</Link
-                >
-            {/if}
-        </div>
-    {/if}
-
-    {#if explorer.projects.length > 0}
-        <div class="flex flex-col gap-0.5" role="group" aria-labelledby="explorer-projects-label">
-            <div class="flex h-7 items-center justify-between px-2">
-                <span
-                    id="explorer-projects-label"
-                    class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Projects</span
-                >
-                {#if explorer.can.createProject}
-                    <Link
-                        href={route('projects.index')}
-                        class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                        aria-label="Add a project"
-                        title="Add a project"><Plus class="size-3.5" /></Link
-                    >
-                {/if}
-            </div>
-            {#each explorer.projects as project (project.id)}
-                {@const open = !shell.folded.includes(project.id)}
-                <div class="flex flex-col gap-px" data-testid="explorer-project">
-                    <div class="flex h-8 items-center gap-1.5 pr-2">
-                        <button
-                            type="button"
-                            class="focus-ring inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-muted"
-                            aria-label="{project.name} environments"
-                            aria-expanded={open}
-                            aria-controls="explorer-project-{project.id}"
-                            onclick={() => toggleProject(project.id)}
-                        >
-                            {#if open}
-                                <ChevronDown class="size-3.5" />
-                            {:else}
-                                <ChevronRight class="size-3.5" />
-                            {/if}
-                        </button>
-                        <Folder class="size-3.75 shrink-0 text-muted-foreground" />
-                        <Link
-                            href={project.href}
-                            aria-current={path === pathOf(project.href) ? 'page' : undefined}
-                            class="focus-ring min-w-0 flex-1 truncate rounded-sm text-[13.5px] font-medium text-foreground no-underline"
-                            >{project.name}</Link
-                        >
-                        {#if project.deploying}
-                            <span
-                                class="status-dot-working size-1.75 shrink-0 rounded-full bg-primary"
-                                aria-hidden="true"
-                            ></span>
-                            <span class="sr-only">deploying</span>
-                        {:else}
-                            <span class="shrink-0 text-[11.5px] text-muted-foreground">{apps(project)}</span>
-                        {/if}
-                    </div>
-                    {#if open}
-                        <div id="explorer-project-{project.id}" class="flex flex-col gap-px">
-                            {#each project.environments as environment (environment.id)}
-                                <div class="flex h-5.5 items-center pl-9.5 text-[11.5px] text-muted-foreground">
-                                    {environment.name}
-                                </div>
-                                {#each environment.apps as app (app.id)}
-                                    <ExplorerRow
-                                        href={app.href}
-                                        name={app.name}
-                                        detail={app.state.label}
-                                        tone={app.state.tone}
-                                        aside={app.server}
-                                        asideClass="font-mono"
-                                        indent
-                                        current={current(app.href)}
-                                    />
-                                {/each}
-                                {#each environment.databases as database (database.id)}
-                                    <ExplorerRow
-                                        href={database.href}
-                                        name={database.name}
-                                        detail={ENGINES[database.engine] ?? database.engine}
-                                        aside={ENGINES[database.engine] ?? database.engine}
-                                        database
-                                        indent
-                                        current={current(database.href)}
-                                    />
-                                {/each}
-                            {/each}
-                        </div>
-                    {/if}
-                </div>
-            {/each}
-        </div>
-    {/if}
-
-    {#if explorer.unfiled.length > 0}
-        <div
-            class="flex flex-col gap-px"
-            role="group"
-            aria-labelledby="explorer-apps-label"
-            data-testid="explorer-apps"
-        >
-            <span
-                id="explorer-apps-label"
-                class="flex h-7 items-center px-2 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground"
-                >Apps</span
-            >
-            {#each explorer.unfiled as app (app.id)}
-                <ExplorerRow
-                    href={app.href}
-                    name={app.name}
-                    detail={app.state.label}
-                    tone={app.state.tone}
-                    aside={app.server}
-                    asideClass="font-mono"
-                    current={current(app.href)}
-                />
-            {/each}
-        </div>
-    {/if}
-
-    {#if explorer.servers.length > 0}
-        <div
-            class="flex flex-col gap-px"
-            role="group"
-            aria-labelledby="explorer-servers-label"
-            data-testid="explorer-servers"
-        >
-            <div class="flex h-7 items-center justify-between px-2">
-                <span
-                    id="explorer-servers-label"
-                    class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Servers</span
-                >
+    <div class="-mx-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3" data-testid="explorer-lists">
+        {#if empty}
+            <div class="flex flex-col gap-2 px-2 py-4 text-[13px] text-muted-foreground">
+                <p class="m-0">No servers yet.</p>
                 {#if explorer.can.createServer}
                     <Link
                         href={route('servers.create')}
-                        class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                        aria-label="Add a server"
-                        title="Add a server"><Plus class="size-3.5" /></Link
+                        class="focus-ring w-fit rounded-sm font-medium text-primary-strong">Provision a server</Link
                     >
                 {/if}
             </div>
-            {#each explorer.servers as server (server.id)}
-                <ExplorerRow
-                    href={server.href}
-                    name={server.name}
-                    detail={server.state.label}
-                    tone={server.state.tone}
-                    aside={server.note}
-                    asideClass={noteClass(server.state.tone)}
-                    current={serverCurrent(server.href)}
-                />
-            {/each}
-        </div>
-    {/if}
+        {/if}
+
+        {#if explorer.projects.length > 0}
+            <div class="flex flex-col gap-0.5" role="group" aria-labelledby="explorer-projects-label">
+                <div class="flex h-7 items-center justify-between px-2">
+                    <span
+                        id="explorer-projects-label"
+                        class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Projects</span
+                    >
+                    {#if explorer.can.createProject}
+                        <Link
+                            href={route('projects.index')}
+                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            aria-label="Add a project"
+                            title="Add a project"><Plus class="size-3.5" /></Link
+                        >
+                    {/if}
+                </div>
+                {#each explorer.projects as project (project.id)}
+                    {@const open = !shell.folded.includes(project.id)}
+                    <div class="flex flex-col gap-px" data-testid="explorer-project">
+                        <div class="flex h-8 items-center gap-1.5 pr-2">
+                            <button
+                                type="button"
+                                class="focus-ring inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-muted"
+                                aria-label="{project.name} environments"
+                                aria-expanded={open}
+                                aria-controls="explorer-project-{project.id}"
+                                onclick={() => toggleProject(project.id)}
+                            >
+                                {#if open}
+                                    <ChevronDown class="size-3.5" />
+                                {:else}
+                                    <ChevronRight class="size-3.5" />
+                                {/if}
+                            </button>
+                            <Folder class="size-3.75 shrink-0 text-muted-foreground" />
+                            <Link
+                                href={project.href}
+                                aria-current={path === pathOf(project.href) ? 'page' : undefined}
+                                class="focus-ring min-w-0 flex-1 truncate rounded-sm text-[13.5px] font-medium text-foreground no-underline"
+                                >{project.name}</Link
+                            >
+                            {#if project.deploying}
+                                <span
+                                    class="status-dot-working size-1.75 shrink-0 rounded-full bg-primary"
+                                    aria-hidden="true"
+                                ></span>
+                                <span class="sr-only">deploying</span>
+                            {:else}
+                                <span class="shrink-0 text-[11.5px] text-muted-foreground">{apps(project)}</span>
+                            {/if}
+                        </div>
+                        {#if open}
+                            <div id="explorer-project-{project.id}" class="flex flex-col gap-px">
+                                {#each project.environments as environment (environment.id)}
+                                    <div class="flex h-5.5 items-center pl-9.5 text-[11.5px] text-muted-foreground">
+                                        {environment.name}
+                                    </div>
+                                    {#each environment.apps as app (app.id)}
+                                        <ExplorerRow
+                                            href={app.href}
+                                            name={app.name}
+                                            detail={app.state.label}
+                                            tone={app.state.tone}
+                                            aside={app.server}
+                                            asideClass="font-mono"
+                                            indent
+                                            current={current(app.href)}
+                                        />
+                                    {/each}
+                                    {#each environment.databases as database (database.id)}
+                                        <ExplorerRow
+                                            href={database.href}
+                                            name={database.name}
+                                            detail={ENGINES[database.engine] ?? database.engine}
+                                            aside={ENGINES[database.engine] ?? database.engine}
+                                            database
+                                            indent
+                                            current={current(database.href)}
+                                        />
+                                    {/each}
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        {/if}
+
+        {#if explorer.unfiled.length > 0}
+            <div
+                class="flex flex-col gap-px"
+                role="group"
+                aria-labelledby="explorer-apps-label"
+                data-testid="explorer-apps"
+            >
+                <span
+                    id="explorer-apps-label"
+                    class="flex h-7 items-center px-2 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground"
+                    >Apps</span
+                >
+                {#each explorer.unfiled as app (app.id)}
+                    <ExplorerRow
+                        href={app.href}
+                        name={app.name}
+                        detail={app.state.label}
+                        tone={app.state.tone}
+                        aside={app.server}
+                        asideClass="font-mono"
+                        current={current(app.href)}
+                    />
+                {/each}
+            </div>
+        {/if}
+
+        {#if explorer.servers.length > 0}
+            <div
+                class="flex flex-col gap-px"
+                role="group"
+                aria-labelledby="explorer-servers-label"
+                data-testid="explorer-servers"
+            >
+                <div class="flex h-7 items-center justify-between px-2">
+                    <span
+                        id="explorer-servers-label"
+                        class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Servers</span
+                    >
+                    {#if explorer.can.createServer}
+                        <Link
+                            href={route('servers.create')}
+                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            aria-label="Add a server"
+                            title="Add a server"><Plus class="size-3.5" /></Link
+                        >
+                    {/if}
+                </div>
+                {#each explorer.servers as server (server.id)}
+                    <ExplorerRow
+                        href={server.href}
+                        name={server.name}
+                        detail={server.state.label}
+                        tone={server.state.tone}
+                        aside={server.note}
+                        asideClass={noteClass(server.state.tone)}
+                        current={serverCurrent(server.href)}
+                    />
+                {/each}
+            </div>
+        {/if}
+    </div>
 
     {#if explorer.running}
-        <Link
-            href={explorer.running.href}
-            class="focus-ring tint-primary mt-auto flex shrink-0 flex-col gap-2 rounded-xl border p-3 no-underline"
-        >
-            <span class="flex items-center gap-2 text-[12px] font-semibold text-primary-strong">
-                <span class="status-dot-working size-2 rounded-full bg-primary" aria-hidden="true"></span>
-                Deploying now
-            </span>
-            <span class="text-[12.5px] text-foreground">
-                <span class="font-mono">{explorer.running.application}</span>{#if explorer.running.server}
-                    to <span class="font-mono">{explorer.running.server}</span>{/if}
-            </span>
-            <PhaseSegments states={explorer.running.states} />
-            <span class="text-[11.5px] text-muted-foreground">
-                {sentence(explorer.running.phase)}{elapsed ? ` · ${elapsed}` : ''}{explorer.running.more > 0
-                    ? ` · and ${explorer.running.more} more`
-                    : ''}
-            </span>
-        </Link>
+        {#key explorer.running.href}
+            <Link
+                href={explorer.running.href}
+                class="focus-ring tint-primary flex shrink-0 flex-col gap-2 rounded-xl border p-3 no-underline"
+            >
+                <span class="flex items-center gap-2 text-[12px] font-semibold text-primary-strong">
+                    <span class="status-dot-working size-2 rounded-full bg-primary" aria-hidden="true"></span>
+                    Deploying now
+                </span>
+                <span class="text-[12.5px] text-foreground">
+                    <span class="font-mono">{explorer.running.application}</span>
+                    {#if explorer.running.server}
+                        <span>to</span>
+                        <span class="font-mono">{explorer.running.server}</span>
+                    {/if}
+                </span>
+                <PhaseSegments states={explorer.running.states} />
+                <span class="text-[11.5px] text-muted-foreground">
+                    {sentence(explorer.running.phase)}{elapsed ? ` · ${elapsed}` : ''}{explorer.running.more > 0
+                        ? ` · and ${explorer.running.more} more`
+                        : ''}
+                </span>
+            </Link>
+        {/key}
     {/if}
 </aside>

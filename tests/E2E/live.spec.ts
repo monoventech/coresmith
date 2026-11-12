@@ -30,7 +30,10 @@ test.describe('live pages', () => {
         await page.goto('/dashboard')
         await expect(card(page, name)).toBeVisible()
 
-        const elsewhere = await browser.newContext({ storageState: 'tests/E2E/.auth/user.json', baseURL: testInfo.project.use.baseURL })
+        const elsewhere = await browser.newContext({
+            storageState: 'tests/E2E/.auth/user.json',
+            baseURL: testInfo.project.use.baseURL
+        })
         const other = await elsewhere.newPage()
 
         await gotoServer(other, name)

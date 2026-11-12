@@ -61,7 +61,7 @@ final class DashboardController extends Controller
             'tiles' => [
                 [
                     'id' => 'applications',
-                    'label' => 'Applications',
+                    'label' => 'Apps',
                     'value' => (string) $applications,
                     'sub' => 'across ' . $servers->count() . ' ' . ($servers->count() === 1 ? 'server' : 'servers'),
                     'tone' => 'default',

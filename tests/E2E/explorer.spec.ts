@@ -123,6 +123,7 @@ test.describe('the explorer', () => {
 
         await expect(running).toBeVisible()
         await expect(running.getByTestId('phase-segments')).toBeVisible()
+        await expect(running).toContainText(/[a-z0-9-]+ to [a-z0-9-]+/)
         await expect(nav(page).getByTestId('deploys-live')).toBeVisible()
 
         await running.click()

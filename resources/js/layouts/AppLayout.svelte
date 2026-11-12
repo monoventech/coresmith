@@ -46,7 +46,7 @@
             return
         }
 
-        return untrack(() => follow({ only: ['explorer', 'panel'], async: true }))
+        return untrack(() => follow({ only: ['explorer', 'panel'], async: true, shell: true }))
     })
 
     onMount(() => {
@@ -144,7 +144,11 @@
 
     {#if explorer && !shell.wide}
         <Sheet.Root bind:open={shell.open}>
-            <Sheet.Content side="left" showCloseButton={false} class="w-72 max-w-72 gap-0 border-r-0 p-0 sm:max-w-72">
+            <Sheet.Content
+                side="left"
+                showCloseButton={false}
+                class="gap-0 p-0 data-[side=left]:w-72 data-[side=left]:border-r-0 data-[side=left]:sm:max-w-72"
+            >
                 <Sheet.Title class="sr-only">Explorer</Sheet.Title>
                 <Explorer {explorer} onSearch={() => (palette = true)} onAccount={() => (account = true)} />
             </Sheet.Content>
