@@ -17,6 +17,7 @@ use App\Services\Network\HostReach;
 use App\Services\Network\LocalAddresses;
 use App\Services\Network\ReachProbe;
 use App\Services\Network\StableAddresses;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\File;
 use Inertia\Testing\AssertableInertia;
 use Tests\Support\CloudBilling;
@@ -130,7 +131,7 @@ test('a domain the internet cannot reach is refused with what to fix, and nothin
 
     $this->actingAs(addressSettingsUser())
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
-        ->assertSessionHasErrors(['address' => 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it.']);
+        ->assertSessionHasErrors(['address' => 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.']);
 
     expect(AddressChange::current())->toBeNull()
         ->and(file_exists(AddressRequest::file()))->toBeFalse();
@@ -307,12 +308,70 @@ test('checking a domain keeps what the check found, one problem at a time, and s
     expect(AddressCheck::current())->toMatchArray([
         'host' => 'coresmith.example.com',
         'ok' => false,
-        'problems' => ['coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it.'],
+        'problems' => ['coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.'],
         'notes' => [],
+        'records' => [],
     ])
         ->and(AddressCheck::current()['checked_at'] ?? null)->not->toBeNull()
         ->and(AddressChange::current())->toBeNull()
         ->and(file_exists(AddressRequest::file()))->toBeFalse();
+});
+
+test('a check that asks for a DNS record keeps the record, for the dialog to show ready to copy', function () {
+    addressSettingsResolving([]);
+    addressSettingsReach(new DirectReach('151.226.169.196', true, true));
+
+    $this->actingAs(addressSettingsUser())->post(route('settings.address.check'), ['address' => 'coresmith.example.com']);
+
+    expect(AddressCheck::current())->toMatchArray([
+        'host' => 'coresmith.example.com',
+        'ok' => false,
+        'problems' => ["coresmith.example.com doesn't point anywhere yet. Add an A record for coresmith.example.com pointing at 151.226.169.196, then check again."],
+        'records' => [['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196']],
+    ]);
+});
+
+test('Coresmith reads its own address every morning, and the settings page carries what it found for that address', function () {
+    config(['app.url' => 'https://coresmith.example.com']);
+    addressSettingsResolving(['2001:db8::10']);
+    app()->instance(StableAddresses::class, new class implements StableAddresses
+    {
+        public function ipv6(): array
+        {
+            return ['2001:db8::10'];
+        }
+    });
+    app()->instance(ReachProbe::class, new class implements ReachProbe
+    {
+        public function direct(): ?DirectReach
+        {
+            return new DirectReach('151.226.169.196', false, false);
+        }
+
+        public function host(string $host, string $from): ?HostReach
+        {
+            return new HostReach($from, true, true, true);
+        }
+    });
+    $event = collect(app(Schedule::class)->events())->first(fn($event): bool => $event->description === 'coresmith:read-own-address');
+
+    expect($event)->not->toBeNull()
+        ->and($event->expression)->toBe('50 5 * * *');
+
+    $event->run(app());
+
+    $this->actingAs(addressSettingsUser())
+        ->get(route('settings.general'))
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('address.ipv6_only', true)
+            ->where('address.reach.notes', ["coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. Nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443, so if you can open or forward those ports, add an A record for coresmith.example.com pointing at 151.226.169.196. If your internet provider shares that address with other customers, put coresmith.example.com behind a proxy that answers on IPv4, such as Cloudflare's."])
+            ->where('address.reach.records', [['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196']]));
+
+    config(['app.url' => 'https://coresmith.example.org']);
+
+    $this->actingAs(addressSettingsUser())
+        ->get(route('settings.general'))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('address.reach', null));
 });
 
 test('a domain that passes the check is kept as ready, with its notes', function () {

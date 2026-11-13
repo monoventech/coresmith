@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
-const INSTALL_ADDRESS_REFUSAL = 'beelink.coresmith.io points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it.';
+const INSTALL_ADDRESS_REFUSAL = 'beelink.coresmith.io points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.';
 
 const INSTALL_ADDRESS_NOTE = "Inside your own network, your router may not loop back to 151.226.169.196. If beelink.coresmith.io doesn't load there, add 192.168.0.248 beelink.coresmith.io to your local DNS or /etc/hosts.";
 

@@ -13,10 +13,12 @@ final readonly class ReachReport
     /**
      * @param  list<string>  $problems
      * @param  list<string>  $notes
+     * @param  list<array{type: string, name: string, value: string}>  $records
      */
     public function __construct(
         public ?bool $ready,
         public array $problems = [],
         public array $notes = [],
+        public array $records = [],
     ) {}
 }

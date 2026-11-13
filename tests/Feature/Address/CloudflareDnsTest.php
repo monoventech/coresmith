@@ -99,6 +99,33 @@ test('a record that already says this server, written another way, is left alone
     Http::assertSentCount(1);
 });
 
+test("a record someone put behind Cloudflare's proxy keeps it while it already says this server", function () {
+    Http::fake([
+        CLOUDFLARE_DNS_API . '/zones/z1/dns_records?type=AAAA&name=beelink.coresmith.io' => Http::response(cloudflareDnsAnswer([
+            ['id' => 'r1', 'type' => 'AAAA', 'content' => '2a02:c7c:c0e:b500::248', 'proxied' => true],
+        ])),
+    ]);
+
+    app(CloudflareDns::class)->point('a-token', 'z1', 'beelink.coresmith.io', 'AAAA', '2a02:c7c:c0e:b500::248');
+
+    Http::assertSentCount(1);
+});
+
+test("a proxied record that points elsewhere moves to this server and stays behind Cloudflare's proxy", function () {
+    Http::fake([
+        CLOUDFLARE_DNS_API . '/zones/z1/dns_records?type=AAAA&name=beelink.coresmith.io' => Http::response(cloudflareDnsAnswer([
+            ['id' => 'r1', 'type' => 'AAAA', 'content' => '2a02:c7c:c0e:b500::99', 'proxied' => true],
+        ])),
+        CLOUDFLARE_DNS_API . '/zones/z1/dns_records/*' => Http::response(cloudflareDnsAnswer(['id' => 'r1'])),
+    ]);
+
+    app(CloudflareDns::class)->point('a-token', 'z1', 'beelink.coresmith.io', 'AAAA', '2a02:c7c:c0e:b500::248');
+
+    Http::assertSent(fn(Request $request): bool => $request->method() === 'PATCH'
+        && $request->data()['content'] === '2a02:c7c:c0e:b500::248'
+        && $request->data()['proxied'] === true);
+});
+
 test("Cloudflare's refusal reaches whoever asked, in its own words", function () {
     Http::fake([
         CLOUDFLARE_DNS_API . '/zones/z1/dns_records?type=A&name=beelink.coresmith.io' => Http::response(cloudflareDnsAnswer([])),

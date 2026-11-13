@@ -13,6 +13,7 @@ use App\Models\GitHubApp;
 use App\Models\TeamSsoConnection;
 use App\Services\Address\AddressChange;
 use App\Services\Address\AddressCheck;
+use App\Services\Address\AddressReading;
 use App\Services\Address\CertificateSource;
 use App\Services\Address\CloudflareConnection;
 use App\Services\Address\InstallationAddress;
@@ -31,7 +32,7 @@ final class AddressPresenter
     ) {}
 
     /**
-     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, follow: ?array{github: ?string, sso: ?string}}|null
+     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, follow: ?array{github: ?string, sso: ?string}}|null
      */
     public function present(): ?array
     {
@@ -51,6 +52,7 @@ final class AddressPresenter
             'ipv6_only' => $this->ipv6Only($host),
             'change' => $change,
             'check' => AddressCheck::current(),
+            'reach' => AddressReading::current($host),
             'cloudflare' => $this->cloudflare(),
             'follow' => ($change['state'] ?? null) !== 'done' ? null : [
                 'github' => GitHubApp::query()->exists() ? route('source-providers.index') : null,

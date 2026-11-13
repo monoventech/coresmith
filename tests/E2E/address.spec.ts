@@ -2,6 +2,8 @@ import type { Locator, Page } from '@playwright/test'
 import {
     asMember,
     blockingViolations,
+    captureClipboard,
+    clipboardText,
     dialog,
     expect,
     gotoSettings,
@@ -25,6 +27,35 @@ const FAILED = {
         to: 'coresmith.example.com',
         error: 'No certificate for coresmith.example.com after 3 minutes. Check that it points at this server and that ports 80 and 443 reach this server from the internet, then try again.'
     }
+}
+
+const IPV6_ONLY_NOTE =
+    "coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. Nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443, so if you can open or forward those ports, add an A record for coresmith.example.com pointing at 203.0.113.7. If your internet provider shares that address with other customers, put coresmith.example.com behind a proxy that answers on IPv4, such as Cloudflare's."
+
+const IPV6_ONLY = {
+    host: 'coresmith.example.com',
+    url: 'https://coresmith.example.com',
+    certificate: 'public',
+    ipv6_only: true,
+    reach: {
+        host: 'coresmith.example.com',
+        ready: true,
+        problems: [],
+        notes: [IPV6_ONLY_NOTE],
+        records: [{ type: 'A', name: 'coresmith.example.com', value: '203.0.113.7' }],
+        checked_at: '2026-11-13T05:50:00Z'
+    }
+}
+
+const CHECK_WITH_RECORD = {
+    host: 'shop.example.com',
+    ok: false,
+    problems: [
+        "shop.example.com doesn't point anywhere yet. Add an A record for shop.example.com pointing at 203.0.113.7, then check again."
+    ],
+    notes: [],
+    records: [{ type: 'A', name: 'shop.example.com', value: '203.0.113.7' }],
+    checked_at: '2026-11-13T05:50:00Z'
 }
 
 function card(page: Page): Locator {
@@ -59,8 +90,53 @@ test.describe("Coresmith's address", () => {
         })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people on networks without IPv6 can't open Coresmith. To reach them too, add an A record for this server's public IPv4 address, and forward TCP ports 80 and 443 to this server if it's behind a router."
+            "coresmith.example.com has only an IPv6 address, so people on networks without IPv6 can't open Coresmith. If the internet reaches this server's IPv4 address on ports 80 and 443, add an A record for it. If your internet provider shares that address with other customers, put coresmith.example.com behind a proxy that answers on IPv4, such as Cloudflare's."
         )
+        await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
+    })
+
+    test("the daily reading of an IPv6-only domain names this server's IPv4 address, ready to copy", async ({ page }) => {
+        await captureClipboard(page)
+        await settingsShowing(page, IPV6_ONLY)
+
+        await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(IPV6_ONLY_NOTE)
+
+        const records = card(page).getByTestId('address-ipv6-records')
+
+        await expect(records).toContainText('coresmith.example.com')
+        await records.getByRole('button', { name: 'Copy the A value 203.0.113.7' }).click()
+
+        await expect(records.getByRole('button', { name: 'Copied the A value 203.0.113.7' })).toBeVisible()
+        expect(await clipboardText(page)).toBe('203.0.113.7')
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the IPv6-only note and its record are accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await settingsShowing(page, IPV6_ONLY)
+            await expect(card(page).getByTestId('address-ipv6-records')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
+
+    test('a check that asks for a record shows it ready to copy', async ({ page }) => {
+        await captureClipboard(page)
+        await withProps(page, /\/settings\/address\/check$/, (props) => {
+            props.address = { ...(props.address as Record<string, unknown>), check: CHECK_WITH_RECORD }
+        })
+        await gotoSettings(page, 'General')
+        await card(page).getByRole('button', { name: 'Change' }).click()
+        await dialog(page).getByLabel('Domain').fill('beelink')
+        await dialog(page).getByRole('button', { name: 'Check', exact: true }).click()
+
+        const records = dialog(page).getByTestId('address-records')
+
+        await expect(page.getByTestId('address-check')).toContainText(CHECK_WITH_RECORD.problems[0])
+        await expect(records).toContainText('shop.example.com')
+        await records.getByRole('button', { name: 'Copy the A value 203.0.113.7' }).click()
+
+        expect(await clipboardText(page)).toBe('203.0.113.7')
     })
 
     test("a name that isn't a domain is checked, and the check says what's wrong without allowing a switch", async ({
