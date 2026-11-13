@@ -95,7 +95,7 @@ final class DatabaseController extends Controller
         CreateDatabase::dispatch($database);
 
         return to_route('servers.databases.index', $server)
-            ->with('success', 'Database queued for creation.');
+            ->with('success', 'Creating the database.');
     }
 
     public function show(Request $request, Server $server, ManagedDatabase $database, DatabaseBackups $backups, DatabaseUsage $usage, TeamAccess $access): Response

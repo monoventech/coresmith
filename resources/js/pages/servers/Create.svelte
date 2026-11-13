@@ -375,7 +375,9 @@
 
     <div class="rounded-xl border border-border bg-card p-6">
         <h3 class="type-h3 m-0 mb-1">What happens next</h3>
-        <p class="mb-4 text-[12.5px] text-muted-foreground">Eight phases, hardened by default, not opt-in.</p>
+        <p class="mb-4 text-[12.5px] text-muted-foreground">
+            Coresmith runs eight phases and hardens the server along the way.
+        </p>
         <ol class="m-0 flex list-none flex-col gap-0.5 p-0">
             {#each phases as phase, index (phase.name)}
                 <li class="flex items-baseline gap-3 py-1.75">

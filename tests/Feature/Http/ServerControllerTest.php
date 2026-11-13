@@ -611,7 +611,7 @@ test('a failed server can start over from phase 1', function () {
 
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->post(route('servers.provisioning.restart', $server))
-        ->assertSessionHas('success', 'Starting over from phase 1. Each phase is written to be safe to run again.');
+        ->assertSessionHas('success', 'Starting over from phase 1. Each phase is safe to repeat.');
 
     expect($server->fresh()->provisioning_log)->toBeNull()
         ->and($server->fresh()->provisioning_error)->toBeNull();

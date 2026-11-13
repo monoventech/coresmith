@@ -59,7 +59,7 @@ test.describe('inviting someone without an account', () => {
         await expect(guest.getByRole('heading', { level: 1 })).toHaveText('Join Monoven Ltd')
         await expect(guest.getByLabel('Email address')).toHaveValue(email)
         await expect(guest.getByTestId('trust-note')).toContainText(
-            'By joining this Coresmith instance, your connected Git provider tokens will be accessible to the instance administrator.'
+            'Whoever runs this Coresmith installation can read the Git provider tokens you connect to it.'
         )
 
         await guest.getByLabel('Name').fill(name)

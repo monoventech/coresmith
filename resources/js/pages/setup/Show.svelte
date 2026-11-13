@@ -66,7 +66,11 @@
             label: 'Provision through a provider',
             desc: 'Hetzner, DigitalOcean, Vultr or Linode, with an API token'
         },
-        { key: 'existing' as const, label: 'Use an existing VM', desc: 'Any Ubuntu 24.04 machine with SSH access' }
+        {
+            key: 'existing' as const,
+            label: 'Use an existing VM',
+            desc: 'Any Ubuntu 24.04 or Debian 12 machine with SSH access'
+        }
     ]
 
     const options = $derived([
@@ -146,7 +150,7 @@
 <h1 class="type-h1 m-0 mb-1.5">Set up <MarkerUnderline>Coresmith</MarkerUnderline></h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
     {complete
-        ? 'Every step is done. This page stays here for reference, the sidebar item is gone.'
+        ? 'Every step is done. The Setup link has gone, and this page stays here for reference.'
         : 'Four steps from a fresh install to your first deploy. You can leave and pick this up anytime.'}
 </p>
 
@@ -196,7 +200,7 @@
                 {#if github?.connected}<Badge variant="success">Connected</Badge>{/if}
             </div>
             <p class="type-body-sm mb-4 text-muted-foreground">
-                Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only,
+                Install the Coresmith GitHub App on your organization. It asks for the minimum: contents read-only,
                 commit statuses and webhooks, per repository, not your whole account.
             </p>
             <ul class="m-0 mb-5 flex list-none flex-col gap-2 p-0 text-[13.5px]">
@@ -414,7 +418,8 @@
                                 />
                                 <FieldError message={errors.ip_address} />
                                 <p class="mt-1.5 text-[12px] text-muted-foreground">
-                                    Needs root SSH access and Ubuntu 24.04. Coresmith hardens it during provisioning.
+                                    Needs root SSH access and Ubuntu 24.04 or Debian 12. Coresmith hardens it during
+                                    provisioning.
                                 </p>
                             </div>
                         </div>
@@ -480,8 +485,7 @@
                     {/if}
                 </div>
                 <p class="type-body-sm mb-4 text-muted-foreground">
-                    About six minutes. Hardening is part of provisioning, not an afterthought, you can watch every phase
-                    on the server page.
+                    About six minutes, hardening included. You can watch every phase on the server page.
                 </p>
                 <div class="mb-5 flex flex-col gap-0.5">
                     {#each provisioning.phases as phase (phase.name)}
@@ -544,7 +548,7 @@
                 <div class="flex gap-3">
                     <Button variant="outline" onclick={() => go(2)}>Back</Button>
                     {#if create_application_href}
-                        <Button href={create_application_href}>Create an application</Button>
+                        <Button href={create_application_href}>Add an app</Button>
                     {:else}
                         <p class="self-center text-[12.5px] text-muted-foreground">
                             Apps can be added once a server finishes provisioning.
