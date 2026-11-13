@@ -754,5 +754,145 @@
         "name": "vishuSkywalker/mern-estate",
         "cause": "app",
         "why": "It listens on port 3000 fixed in its code and ignores PORT, so the app answered 502."
+    },
+    {
+        "name": "aykhanalizada/Ecommerce",
+        "cause": "app",
+        "why": "Its settings point at MySQL, which the corpus deploys without, so migrations cannot connect."
+    },
+    {
+        "name": "NaviTal-406/navital",
+        "cause": "app",
+        "why": "Its settings point at MySQL, which the corpus deploys without, so migrations cannot connect."
+    },
+    {
+        "name": "BirgerMarius/innnsattno",
+        "cause": "app",
+        "why": "Its settings point at MySQL, which the corpus deploys without, so migrations cannot connect."
+    },
+    {
+        "name": "Yayisflorez/Restaurante-Prueba",
+        "cause": "app",
+        "why": "A service provider queries MySQL while Laravel discovers packages, and the corpus deploys without MySQL, so composer install stops."
+    },
+    {
+        "name": "maramadany/driver-onboarding",
+        "cause": "app",
+        "why": "package-lock.json is out of date with package.json, missing the platform packages of @tailwindcss/oxide and esbuild, so npm ci fails on any machine."
+    },
+    {
+        "name": "anuradha1122/sipthathu",
+        "cause": "app",
+        "why": "tailwind.config.js imports createRequire twice and declares require twice, a syntax error, so the CSS build fails."
+    },
+    {
+        "name": "Group-project-36/ProFormance",
+        "cause": "app",
+        "why": "vite.config.js names resources/js/utils/notification.js as an entry, but the repository has no resources/js/utils folder, so the build cannot resolve it."
+    },
+    {
+        "name": "alexis-haba/Internship-Manager",
+        "cause": "app",
+        "why": "src/From/CandidatureType.php does not declare App\\From\\CandidatureType, so Symfony's service loading fails in composer's cache:clear."
+    },
+    {
+        "name": "Im3vulx/veille-info",
+        "cause": "app",
+        "why": "src/Service/UpdateArticlesCommand.php does not declare App\\Service\\UpdateArticlesCommand, so Symfony's service loading fails in composer's cache:clear."
+    },
+    {
+        "name": "sorethea/evtrack",
+        "cause": "app",
+        "why": "One of its migrations runs SQL that SQLite rejects (near \"OR\": syntax error) on the SQLite database its settings default to."
+    },
+    {
+        "name": "SeakMengs/AutoCert-Web",
+        "cause": "app",
+        "why": "Its package.json asks for react ^19.0.0, but react-hook-form-antd 1.1.3 accepts react ^16.8.0 || ^17 || ^18 as a peer, so npm ci stops with ERESOLVE."
+    },
+    {
+        "name": "Antzelok/SunSolutions",
+        "cause": "app",
+        "why": "Prerendering its home page throws \"Failed to load products\", so next build stops."
+    },
+    {
+        "name": "atomtables/Pindle",
+        "cause": "app",
+        "why": "It imports PUBLIC_DAILY_URL from $env/static/public, which must be set when it builds, and the corpus sets no variables."
+    },
+    {
+        "name": "akling4378/social-code-seminar",
+        "cause": "app",
+        "why": "TypeScript reports a type error in its own code, so next build stops."
+    },
+    {
+        "name": "artur-laptev/spot-prices",
+        "commit": "7c1e0ee",
+        "cause": "stack",
+        "why": "The repository has no database folder, so no SQLite file existed at Laravel's default path and migrate failed. Fixed by 7c1e0ee, which links the shared database into every Laravel release."
+    },
+    {
+        "name": "GHmolliss/slim-app",
+        "commit": "d32c508",
+        "cause": "stack",
+        "why": "public/index.php calls Dotenv's load(), which throws without a .env file, so the app answered 500. Fixed by d32c508, which gives plain PHP apps an empty .env before composer runs, as Symfony apps get."
+    },
+    {
+        "name": "faizalhavid/moorfa-notes",
+        "cause": "app",
+        "why": "src/pages/about.astro imports ../assets/blog-placeholder-about.jpg, which the build cannot resolve, so astro build stops."
+    },
+    {
+        "name": "hoangdinh2411/theory-test-app-api",
+        "cause": "app",
+        "why": "It refuses to start without JWT_SECRET in its environment, and the corpus sets no variables."
+    },
+    {
+        "name": "CircularIA/backendTS",
+        "cause": "app",
+        "why": "It needs a MongoDB connection string in its environment, and the corpus sets no variables."
+    },
+    {
+        "name": "DanielHC16/medic",
+        "cause": "app",
+        "why": "next build needs NEON_AUTH_BASE_URL in its environment, and the corpus sets no variables."
+    },
+    {
+        "name": "fairking1/SyriaShof",
+        "cause": "app",
+        "why": "package-lock.json is out of date with package.json, so npm ci fails on any machine."
+    },
+    {
+        "name": "TracksApp/tracks",
+        "cause": "app",
+        "why": "It loads config/site.yml when it starts, which the repository does not commit, so the web process exits."
+    },
+    {
+        "name": "railslink/railslink",
+        "cause": "app",
+        "why": "Its settings point at PostgreSQL, which the corpus deploys without, so migrations cannot connect."
+    },
+    {
+        "name": "rootstrap/rails_api_base",
+        "cause": "app",
+        "why": "Its settings point at PostgreSQL, which the corpus deploys without, so migrations cannot connect."
+    },
+    {
+        "name": "e621ng/e621ng",
+        "commit": "805f496",
+        "cause": "stack",
+        "why": "rugged needs cmake and mrml, through rb_sys, needs libclang to compile, and neither was installed. Fixed by 805f496, which installs them when Gemfile.lock lists those gems."
+    },
+    {
+        "name": "rails/rails-contributors",
+        "commit": "805f496",
+        "cause": "stack",
+        "why": "rugged needs cmake to compile, and it was not installed. Fixed by 805f496, which installs it when Gemfile.lock lists rugged."
+    },
+    {
+        "name": "ibibhu/wedding",
+        "commit": "790775c",
+        "cause": "stack",
+        "why": "Detection called it ready, but its fibers dependency builds on no Node.js Coresmith installs. Fixed by 790775c, which refuses it with that reason."
     }
 ]
