@@ -128,6 +128,14 @@ test('rails before 7.1 with its Ruby version named is ready', function () {
     expect(stackDetectorRun(stackDetectorOldRails(['.ruby-version' => "3.3.6\n"]))->verdict())->toBe('ready');
 });
 
+test('a Nuxt 2 app that names no Node.js version is not sure, since webpack 4 fails on the Node.js Coresmith would pick', function () {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['scripts' => ['build' => 'nuxt build', 'start' => 'nuxt start'], 'dependencies' => ['nuxt' => '^2.14.0']])], ['yarn.lock'], complete: true);
+    $detected = stackDetectorRun($facts);
+
+    expect($detected->verdict())->toBe('unsure')
+        ->and($detected->unsettled['runtime_version'] ?? '')->toContain('Nuxt ^2.14.0 builds with webpack 4');
+});
+
 test('the server language wins over a frontend package.json', function () {
     expect(stackDetectorRun('laravel-13')->type)->toBe('php')
         ->and(stackDetectorRun('rails-jsbundling')->type)->toBe('ruby');
