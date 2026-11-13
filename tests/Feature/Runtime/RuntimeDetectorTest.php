@@ -142,13 +142,14 @@ test('a rails app that builds javascript gets node for its yarn lockfile', funct
     expect($detection->runtimes)->toBe(['ruby', 'nodejs'])->and($detection->tooling?->manager)->toBe('yarn');
 });
 
-test('a static site needs bun only when it has a build script', function (array $files, array $runtimes) {
+test('a static site needs a JavaScript runtime only when it has a build script, and its lockfile picks which', function (array $files, array $lockfiles, array $runtimes) {
     $application = detectorApp(['type' => ApplicationType::Static, 'framework' => '']);
 
-    expect(app(RuntimeDetector::class)->detect($application, detectorFacts($files))->runtimes)->toBe($runtimes);
+    expect(app(RuntimeDetector::class)->detect($application, detectorFacts($files, $lockfiles))->runtimes)->toBe($runtimes);
 })->with([
-    'plain html' => [[], []],
-    'an astro build' => [['package.json' => '{"scripts":{"build":"astro build"}}'], ['bun']],
+    'plain html' => [[], [], []],
+    'an astro build with no lockfile' => [['package.json' => '{"scripts":{"build":"astro build"}}'], [], ['nodejs']],
+    'an astro build with bun.lock' => [['package.json' => '{"scripts":{"build":"astro build"}}'], ['bun.lock'], ['bun']],
 ]);
 
 function detectorLockedNette(): string

@@ -148,3 +148,17 @@ test('a safe main in package.json is kept', function () {
 
     expect(JsTooling::for(new Application(['type' => ApplicationType::Js, 'js_runtime' => 'bun']), $facts)?->main)->toBe('src/index.mjs');
 });
+
+test('a package.json without a lockfile installs with npm for PHP and static apps, so composer scripts that call npm find it', function (ApplicationType $type) {
+    $tooling = JsTooling::for(new Application(['type' => $type]), new RepositoryFacts(['package.json' => '{"scripts":{"build":"vite build"}}']));
+
+    expect($tooling?->manager)->toBe('npm')
+        ->and($tooling?->runtime())->toBe('nodejs');
+})->with([ApplicationType::Php, ApplicationType::Static]);
+
+test('a JavaScript app without a lockfile installs with the runtime it was given', function () {
+    $tooling = fn(string $runtime): ?JsTooling => JsTooling::for(new Application(['type' => ApplicationType::Js, 'js_runtime' => $runtime]), new RepositoryFacts(['package.json' => '{"scripts":{"start":"node server.js"}}']));
+
+    expect($tooling('bun')?->manager)->toBe('bun')
+        ->and($tooling('node')?->manager)->toBe('npm');
+});

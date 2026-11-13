@@ -69,7 +69,7 @@ final readonly class JsTooling
             'package-lock.json' => 'npm',
             'pnpm-lock.yaml' => 'pnpm',
             'yarn.lock' => 'yarn',
-            default => $isJs && $application->js_runtime === 'node' ? 'npm' : 'bun',
+            default => $isJs && $application->js_runtime !== 'node' ? 'bun' : 'npm',
         };
 
         $declared = (string) ($facts->json('package.json')['packageManager'] ?? '');
