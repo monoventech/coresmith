@@ -124,6 +124,30 @@ final class CaddyApiClient
         });
     }
 
+    public function putAddress(SSHConnection $connection, Application $application, string $kind, string $listen): void
+    {
+        $server = $this->builder->addressServer($application, $listen, $kind);
+
+        $this->changing($connection, function () use ($connection, $application, $kind, $server): void {
+            $this->request($connection, 'POST', self::addressPath($application, $kind), $server);
+            $this->persistConfig($connection);
+        });
+    }
+
+    public function removeAddress(SSHConnection $connection, Application $application, string $kind): void
+    {
+        $this->changing($connection, function () use ($connection, $application, $kind): void {
+            if ($this->delete($connection, self::addressPath($application, $kind))) {
+                $this->persistConfig($connection);
+            }
+        });
+    }
+
+    public static function addressPath(Application $application, string $kind): string
+    {
+        return '/config/apps/http/servers/' . CaddyRouteBuilder::addressServerId($application, $kind);
+    }
+
     public static function policyId(Application $application): string
     {
         return CaddyRouteBuilder::routeId($application) . '-tls';

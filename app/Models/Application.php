@@ -19,6 +19,7 @@ use App\Services\Deployment\CrontabBuilder;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\Repository;
 use App\Services\SafeName;
+use App\Services\Server\PortAllocator;
 use Database\Factories\ApplicationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -31,6 +32,8 @@ class Application extends Model
 {
     /** @use HasFactory<ApplicationFactory> */
     use HasFactory, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes;
+
+    public const ADDRESS_PORTS = 20000;
 
     protected $guarded = ['id'];
 
@@ -145,6 +148,11 @@ class Application extends Model
         $provider = $this->sourceProvider;
 
         return $provider?->type === SourceProviderType::GitHubApp ? $provider : null;
+    }
+
+    public function addressPort(): int
+    {
+        return self::ADDRESS_PORTS + intdiv((int) $this->base_port - PortAllocator::RANGE_START, PortAllocator::BLOCK_SIZE);
     }
 
     public function needsRepositoryCheck(): bool

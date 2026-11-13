@@ -17,6 +17,11 @@ final class UfwFirewallManager implements FirewallManager
         return 'ufw allow ' . FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
     }
 
+    public function remove(int $port, string $protocol = 'tcp'): string
+    {
+        return 'ufw delete allow ' . FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
+    }
+
     public function deny(int $port, string $protocol = 'tcp'): string
     {
         return 'ufw deny ' . FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
