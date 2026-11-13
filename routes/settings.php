@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\AccountGitController;
 use App\Http\Controllers\Settings\AddressController;
 use App\Http\Controllers\Settings\ApiTokenController;
 use App\Http\Controllers\Settings\AuditLogController;
@@ -132,6 +133,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::get('settings/security', [SecurityController::class, 'edit'])->name('security.edit');
+    Route::get('settings/account/git', [AccountGitController::class, 'show'])->name('account.git');
+    Route::delete('settings/account/git', [AccountGitController::class, 'destroy'])->name('account.git.destroy');
 
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1,password-update')
