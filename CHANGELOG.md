@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.7 (2026-11-13)
+
+### Added
+- feat: the DNS records a domain needs are ready to copy where it's added and checked, an IPv6-only domain says who can't reach it, and Cloudflare's proxy is recognised (#73)
+- feat: an app's domains are checked from outside, and the advice for home servers only appears when the test shows IPv4 can't get through (#72)
+- feat: Developers create servers on the team's cloud accounts and projects of their own, with full control of what they create and nothing else unless it's shared (#71)
+
 ## v0.8.6 (2026-11-13)
 
 ### Added
