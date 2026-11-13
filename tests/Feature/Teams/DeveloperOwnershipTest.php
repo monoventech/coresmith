@@ -118,34 +118,34 @@ test("a developer's token puts into maintenance only the apps it added", functio
     $this->withHeaders($headers)->putJson("/api/v1/applications/{$mine->id}/maintenance", ['enabled' => true])->assertOk();
 });
 
-test('a developer cannot create a server on a cloud account the team pays for, where an admin can try', function () {
+test("a developer may create servers on the team's cloud accounts, as an admin may", function () {
     ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
     $admin = User::factory()->create();
     $team->members()->attach($admin, ['role' => TeamRole::Admin->value, 'sees_everything' => true]);
 
-    $this->actingAs($developer)->post(route('servers.cloud.store'), [])->assertForbidden();
-    $this->actingAs($admin)->post(route('servers.cloud.store'), [])->assertSessionHasErrors();
+    $this->actingAs($developer)->post(route('servers.cloud.store'), [])->assertSessionHasErrors('cloud_provider_id');
+    $this->actingAs($admin)->post(route('servers.cloud.store'), [])->assertSessionHasErrors('cloud_provider_id');
 });
 
-test('a developer cannot create a project, where an admin can', function () {
+test('a developer creates a project, as an admin can', function () {
     ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
     $admin = User::factory()->create();
     $team->members()->attach($admin, ['role' => TeamRole::Admin->value, 'sees_everything' => true]);
 
-    $this->actingAs($developer)->post(route('projects.store'), ['name' => 'Side project'])->assertForbidden();
-    $this->actingAs($admin)->post(route('projects.store'), ['name' => 'Side project'])->assertSessionHasNoErrors();
+    $this->actingAs($developer)->post(route('projects.store'), ['name' => 'Side project'])->assertSessionHasNoErrors();
+    $this->actingAs($admin)->post(route('projects.store'), ['name' => 'Launch'])->assertSessionHasNoErrors();
 });
 
-test('a developer adding a server is offered only a server of its own over SSH, never the cloud accounts', function () {
+test("a developer adding a server is offered the team's cloud accounts, but cannot connect new ones", function () {
     ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
-    CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud']);
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud']);
 
     $this->actingAs($developer)->get(route('servers.create'))
         ->assertOk()
         ->assertInertia(fn(AssertableInertia $page) => $page
-            ->where('cloud.accounts', [])
+            ->where('cloud.accounts', fn($accounts): bool => collect($accounts)->pluck('name')->all() === ['Hetzner Cloud'])
             ->where('cloud.types', [])
-            ->where('cloud.selected', 'manual')
+            ->where('cloud.selected', 'account:' . $account->id)
             ->where('cloud.can_connect', false));
 });
 

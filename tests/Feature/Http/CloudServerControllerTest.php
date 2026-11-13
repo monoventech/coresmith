@@ -122,6 +122,20 @@ test("provisioning from setup returns to the setup's provisioning step", functio
         ->assertRedirect(route('setup.show', ['step' => 2]));
 });
 
+test("a developer provisions a server through the team's account, and the server is theirs to change or destroy", function () {
+    [, $user, $account] = cloudServerAdmin(TeamRole::Developer);
+    cloudServerFake();
+
+    $this->actingAs($user)->post(route('servers.cloud.store'), cloudServerPayload($account))->assertSessionHasNoErrors();
+
+    $server = Server::query()->sole();
+
+    expect($server->created_by)->toBe($user->id)
+        ->and($user->can('update', $server))->toBeTrue()
+        ->and($user->can('delete', $server))->toBeTrue()
+        ->and($user->can('update', $account))->toBeFalse();
+});
+
 test('a deployer cannot provision', function () {
     [, $user, $account] = cloudServerAdmin(TeamRole::Member);
     $fake = cloudServerFake();

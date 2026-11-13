@@ -211,7 +211,9 @@ final class TeamAccess
             return false;
         }
 
-        return $this->seesEverything($user, $team) || in_array($project->getKey(), $this->granted($user, $team)['projects'], true);
+        return $this->seesEverything($user, $team)
+            || in_array($project->getKey(), $this->granted($user, $team)['projects'], true)
+            || in_array($project->getKey(), $this->ownProjectIds($user, $team), true);
     }
 
     public function canSeeEnvironment(User $user, Environment $environment): bool
@@ -371,7 +373,7 @@ final class TeamAccess
 
         return $this->environments[$key] ??= array_values(array_unique([
             ...$granted['environments'],
-            ...Environment::query()->whereIn('project_id', $granted['projects'])->pluck('id')->all(),
+            ...Environment::query()->whereIn('project_id', [...$granted['projects'], ...$this->ownProjectIds($user, $team)])->pluck('id')->all(),
         ]));
     }
 
@@ -385,8 +387,21 @@ final class TeamAccess
 
         return $this->reached[$key] ??= array_values(array_unique([
             ...$granted['projects'],
+            ...$this->ownProjectIds($user, $team),
             ...Environment::query()->whereIn('id', $granted['environments'])->pluck('project_id')->all(),
         ]));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function ownProjectIds(User $user, Team $team): array
+    {
+        if (!$this->membership($user, $team)['developer']) {
+            return [];
+        }
+
+        return array_values(Project::query()->where('team_id', $team->getKey())->where('created_by', $user->getKey())->pluck('id')->all());
     }
 
     private function forget(User $user, Team $team): void

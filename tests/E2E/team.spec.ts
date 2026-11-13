@@ -32,6 +32,9 @@ test.describe('the team', () => {
         await expect(member(page, 'owner@coresmith.test')).toContainText('Owner')
         await expect(member(page, 'jonas@coresmith.test')).toContainText('2FA')
         await expect(member(page, 'member@coresmith.test')).toContainText('No 2FA')
+        await expect(card).toContainText(
+            'Developers create their own servers, projects and apps, including servers on your cloud accounts, and see only those and what you share with them.'
+        )
         await expect(card).toContainText('Deployers can deploy and roll back.')
     })
 
