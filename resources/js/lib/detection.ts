@@ -4,6 +4,18 @@
 
 export type DetectionBlocker = { field: string; reason: string; fix: string }
 
+export type RepositoryCheck = {
+    access: 'github' | 'key' | 'https'
+    result: {
+        state: 'passed' | 'proposal' | 'blocked' | 'failed'
+        blockers?: DetectionBlocker[]
+        proposal?: { label: string } | null
+        failure?: string
+    } | null
+    check_href: string
+    apply_href: string
+}
+
 export type DetectionFields = {
     type: string | null
     framework: string | null

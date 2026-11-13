@@ -207,6 +207,7 @@ final class E2ESeeder extends Seeder
         }
 
         $this->githubFixtures($tenant->applications['atlas']);
+        $this->repositoryChecks();
         $this->cronFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
@@ -448,6 +449,40 @@ final class E2ESeeder extends Seeder
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $failed($this->server("stalled-{$code}", '203.0.113.' . (90 + $index), ServerStatus::Pending));
+        }
+    }
+
+    private function repositoryChecks(): void
+    {
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->application("unchecked-{$code}", 9700 + $index * 10, [
+                'repository_url' => "git@gitlab.com:acme/unchecked-{$code}.git",
+                'status' => ApplicationStatus::Pending,
+                'current_release' => null,
+                'repository_check_pending' => true,
+            ]);
+            $this->application("proposal-{$code}", 9800 + $index * 10, [
+                'web_directory' => '/',
+                'status' => ApplicationStatus::Pending,
+                'current_release' => null,
+                'repository_check_pending' => true,
+                'repository_check' => [
+                    'state' => 'proposal',
+                    'commit' => '9f3c2e1a4b5c6d7e8f9012345678901234567890',
+                    'blockers' => [
+                        ['field' => 'framework', 'reason' => "There is no artisan file at the repository's root, so this isn't a Laravel app.", 'fix' => 'Pick Plain PHP, or Symfony if it uses Symfony.'],
+                        ['field' => 'web_directory', 'reason' => 'There is no index.php, so the web root / would serve nothing.', 'fix' => 'Set the web root to /public, where index.php is.'],
+                    ],
+                    'proposal' => [
+                        'verdict' => 'ready',
+                        'fields' => ['type' => 'php', 'framework' => '', 'js_runtime' => null, 'web_directory' => '/public', 'version' => '8.5.10'],
+                        'sources' => [],
+                        'unsettled' => [],
+                        'blockers' => [],
+                        'label' => 'Plain PHP, PHP 8.5.10',
+                    ],
+                ],
+            ]);
         }
     }
 

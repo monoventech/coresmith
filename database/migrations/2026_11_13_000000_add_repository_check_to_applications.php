@@ -17,13 +17,14 @@ return new class extends Migration
         Schema::table('applications', function (Blueprint $table): void {
             $table->timestamp('repository_checked_at')->nullable();
             $table->boolean('repository_check_pending')->default(false);
+            $table->json('repository_check')->nullable();
         });
     }
 
     public function down(): void
     {
         Schema::table('applications', function (Blueprint $table): void {
-            $table->dropColumn(['repository_checked_at', 'repository_check_pending']);
+            $table->dropColumn(['repository_checked_at', 'repository_check_pending', 'repository_check']);
         });
     }
 };

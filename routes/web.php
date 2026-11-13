@@ -24,6 +24,7 @@ use App\Http\Controllers\NoTeamController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectEnvironmentController;
 use App\Http\Controllers\ReleasesController;
+use App\Http\Controllers\RepositoryCheckController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
@@ -153,6 +154,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.maintenance');
     Route::put('servers/{server}/applications/{application}/runtime', [ApplicationRuntimeController::class, 'update'])
         ->name('servers.applications.runtime');
+    Route::post('servers/{server}/applications/{application}/repository-check', [RepositoryCheckController::class, 'store'])
+        ->middleware('throttle:10,1,repository-check')
+        ->name('servers.applications.repository-check');
+    Route::put('servers/{server}/applications/{application}/repository-check', [RepositoryCheckController::class, 'apply'])
+        ->name('servers.applications.repository-check.apply');
     Route::post('servers/{server}/applications/{application}/deploy', [DeploymentController::class, 'deploy'])
         ->name('servers.applications.deploy');
     Route::post('servers/{server}/applications/{application}/rollback', [DeploymentController::class, 'rollback'])

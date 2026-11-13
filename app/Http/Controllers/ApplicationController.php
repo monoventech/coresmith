@@ -28,6 +28,7 @@ use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\StackDefaults;
+use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
@@ -208,6 +209,16 @@ final class ApplicationController extends Controller
                 'running_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $application, $running, 'from' => 'app']),
                 'releases_href' => route('servers.applications.releases.index', [$server, $application]),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
+                'repository_check' => $application->needsRepositoryCheck() ? [
+                    'access' => match (true) {
+                        RepositoryAccess::forApplication($application)->github !== null => 'github',
+                        $keys->usesDeployKey($application) => 'key',
+                        default => 'https',
+                    },
+                    'result' => $application->repository_check,
+                    'check_href' => route('servers.applications.repository-check', [$server, $application]),
+                    'apply_href' => route('servers.applications.repository-check.apply', [$server, $application]),
+                ] : null,
                 'logs_href' => route('servers.applications.logs', [$server, $application]),
                 'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
                 'last_failed_live' => $failedLive,

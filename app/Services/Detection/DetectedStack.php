@@ -8,10 +8,17 @@ declare(strict_types=1);
 
 namespace App\Services\Detection;
 
+use App\Services\Runtime\Catalog;
 use App\Services\Runtime\Stack;
 
 final readonly class DetectedStack
 {
+    private const FRAMEWORKS = [
+        'php' => ['laravel' => 'Laravel', 'symfony' => 'Symfony', '' => 'Plain PHP'],
+        'js' => ['sveltekit' => 'SvelteKit', 'nextjs' => 'Next.js', 'nuxt' => 'Nuxt', 'astro' => 'Astro', '' => 'API or other'],
+        'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra'],
+    ];
+
     /**
      * @param  array<string, string>  $sources
      * @param  array<string, string>  $unsettled
@@ -41,6 +48,19 @@ final readonly class DetectedStack
     public function version(): ?string
     {
         return $this->runtime === null ? null : ($this->stack?->runtimes[$this->runtime]->version ?? null);
+    }
+
+    public function label(Catalog $catalog): string
+    {
+        $version = $this->version();
+        $runtime = $this->runtime === null || $version === null ? null : $catalog->label($this->runtime) . ' ' . $version;
+        $framework = self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
+
+        return match ($this->type) {
+            'static' => 'Static site, web root ' . ($this->webDirectory ?? '/'),
+            'js' => $runtime === null ? $framework : "{$framework} on {$runtime}",
+            default => $runtime === null ? $framework : "{$framework}, {$runtime}",
+        };
     }
 
     /**

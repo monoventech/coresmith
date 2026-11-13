@@ -3,11 +3,13 @@
 </script>
 
 <script lang="ts">
+    import type { RepositoryCheck } from '@/lib/detection'
     import { Form, Link, page, router } from '@inertiajs/svelte'
     import { CircleArrowUp, OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
+    import RepositoryCheckBanner from '@/components/applications/RepositoryCheckBanner.svelte'
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
@@ -105,6 +107,7 @@
             running_href: string | null
             releases_href: string
             deploy_href: string
+            repository_check: RepositoryCheck | null
             logs_href: string
             last_failed: boolean
             last_failed_live: boolean
@@ -401,9 +404,18 @@
     {#if application.running_href}
         <Button href={application.running_href} class="max-sm:w-full">Watch deploy</Button>
     {:else if can.deploy}
-        <Button disabled={working} onclick={deploy} class="max-sm:w-full">Deploy</Button>
+        <Button
+            disabled={working || application.repository_check !== null}
+            aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
+            onclick={deploy}
+            class="max-sm:w-full">Deploy</Button
+        >
     {/if}
 </div>
+
+{#if application.repository_check}
+    <RepositoryCheckBanner check={application.repository_check} canDeploy={can.deploy} />
+{/if}
 
 {#if application.stopped || application.maintenance}
     <div
