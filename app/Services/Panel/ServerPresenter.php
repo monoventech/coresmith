@@ -27,12 +27,12 @@ final class ServerPresenter
     public const PROVISIONING_PHASES = [
         ['name' => 'Operating system', 'desc' => 'detected and checked'],
         ['name' => 'Base system', 'desc' => 'packages and build tools'],
-        ['name' => 'Runtimes', 'desc' => 'asdf, shared across apps'],
-        ['name' => 'Directories', 'desc' => 'apps, releases and logs, root-owned'],
-        ['name' => 'Caddy', 'desc' => 'HTTP routing, automatic HTTPS'],
-        ['name' => 'Firewall', 'desc' => 'default-deny, SSH and web ports open'],
-        ['name' => 'Hardening', 'desc' => 'SSH key-only, fail2ban, sysctls, auto-patching'],
-        ['name' => 'Verification', 'desc' => 'admin API reachable from localhost only'],
+        ['name' => 'Runtimes', 'desc' => 'the languages your apps run on'],
+        ['name' => 'Directories', 'desc' => 'folders for apps, releases and logs'],
+        ['name' => 'Web server', 'desc' => 'routing and automatic HTTPS'],
+        ['name' => 'Firewall', 'desc' => 'closed by default, SSH and web ports open'],
+        ['name' => 'Hardening', 'desc' => 'key-only SSH, sign-in blocking, security updates'],
+        ['name' => 'Verification', 'desc' => 'only Coresmith can change routing'],
     ];
 
     public function __construct(private readonly CloudPresenter $cloud, private readonly TeamAccess $access) {}

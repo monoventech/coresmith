@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\TeamRole;
-use App\Http\Controllers\ServerTabsController;
 use App\Jobs\ManageFirewallRule;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
@@ -220,7 +219,7 @@ test('the hardening tab lists only the firewall changes coresmith applied to tha
             ->where('firewall.changes.0.port', 8080));
 });
 
-test('the hardening tab claims key-only SSH only once sshd has reported it, and says what sshd reported otherwise', function (array $attributes, bool $listed, array $ssh) {
+test('the hardening tab claims key-only SSH only once sshd has reported it, and says what sshd reported otherwise', function (array $attributes, string $state, string $detail, array $ssh) {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create($attributes);
 
@@ -228,14 +227,14 @@ test('the hardening tab claims key-only SSH only once sshd has reported it, and 
         ->get(route('servers.hardening', $server))
         ->assertOk()
         ->assertInertia(fn($page) => $page
-            ->where('hardening', fn($items): bool => collect($items)->contains(ServerTabsController::SSH_KEY_ONLY) === $listed
-                && collect($items)->contains(ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS))
+            ->where('protections.rows.0.state', $state)
+            ->where('protections.rows.0.detail', $detail)
             ->where('ssh', $ssh));
 })->with([
-    'verified' => [['meta' => ['ssh_hardening' => 'verified']], true, ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
-    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => 'sshd reports passwordauthentication yes', 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
-    'not checked yet' => [['meta' => []], false, ['verified' => false, 'owner' => false, 'passwords_off' => false, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
-    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], false, ['verified' => false, 'owner' => true, 'passwords_off' => true, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'verified' => [['meta' => ['ssh_hardening' => 'verified']], 'on', 'Password sign-in is off.', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], 'off', "Coresmith couldn't turn off password sign-in yet: sshd reports passwordauthentication yes", ['verified' => false, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'not checked yet' => [['meta' => []], 'pending', 'Coresmith turns off password sign-in within the hour.', ['verified' => false, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], 'yours', "Password sign-in is off in this machine's own SSH settings.", ['verified' => false, 'owner' => true, 'passwords_off' => true, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
 ]);
 
 test('an admin can queue a firewall change', function () {
@@ -339,16 +338,19 @@ test('the activity log is the only firewall source, so nothing is invented', fun
         ->assertInertia(fn($page) => $page->has('firewall.changes', 0));
 });
 
-test('the hardening tab says Caddy closes the connection for unknown hostnames once it does, and only then', function (array $attributes, string $line, string $not) {
+test('the hardening tab says unknown addresses are closed once they are, and only then', function (array $attributes, string $state, string $detail) {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create($attributes);
 
     $this->actingAs(tabUser($team, TeamRole::Member))
         ->get(route('servers.hardening', $server))
         ->assertOk()
-        ->assertInertia(fn($page) => $page->where('hardening', fn($items): bool => collect($items)->contains($line) && !collect($items)->contains($not)));
+        ->assertInertia(fn($page) => $page
+            ->where('protections.rows.5.key', 'unknown_hosts')
+            ->where('protections.rows.5.state', $state)
+            ->where('protections.rows.5.detail', $detail));
 })->with([
-    'closed' => [['meta' => ['caddy_unknown_hosts' => 'closed']], ServerTabsController::UNKNOWN_HOSTS_CLOSED, ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS],
-    'not yet' => [['meta' => []], ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS, ServerTabsController::UNKNOWN_HOSTS_CLOSED],
-    "Coresmith's own machine, whose own catch-all serves no site" => [['runs_coresmith' => true, 'meta' => ['caddy_unknown_hosts' => 'closed']], ServerTabsController::NO_SITE_FOR_UNKNOWN_HOSTS, ServerTabsController::UNKNOWN_HOSTS_CLOSED],
+    'closed' => [['meta' => ['caddy_unknown_hosts' => 'closed']], 'on', "Requests for addresses you didn't add are closed without an answer."],
+    'not yet' => [['meta' => []], 'pending', "Coresmith closes requests for addresses you didn't add within the hour."],
+    "Coresmith's own machine, whose own catch-all serves no app" => [['runs_coresmith' => true, 'meta' => ['caddy_unknown_hosts' => 'closed']], 'on', "Requests for addresses you didn't add never reach your apps."],
 ]);

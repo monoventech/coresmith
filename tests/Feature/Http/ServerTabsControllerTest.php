@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
-use App\Http\Controllers\ServerTabsController;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Panel\ProtectionRows;
 use Illuminate\Support\Collection;
 
 function serverTabMember(Team $team, TeamRole $role = TeamRole::Member): User
@@ -32,7 +32,7 @@ function serverTabServer(Team $team, array $attributes = []): Server
     ], $attributes));
 }
 
-test('the hardening tab lists the isolation layers, hardening, firewall and access details', function () {
+test('the hardening tab shows each protection with its real state, the firewall and access details', function () {
     $team = Team::factory()->create();
     $server = serverTabServer($team, ['meta' => ['ssh_hardening' => 'verified']]);
 
@@ -44,10 +44,12 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
             ->where('server.id', $server->id)
             ->where('server.tabs.hardening', route('servers.hardening', $server))
             ->where('server.can.update', false)
-            ->where('isolation', ServerTabsController::ISOLATION_LAYERS)
-            ->where('hardening', ServerTabsController::HARDENING)
-            ->where('admin_move_error', null)
-            ->where('ssh', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null])
+            ->where('protections', app(ProtectionRows::class)->for($server))
+            ->where('protections.rows.0', ['key' => 'ssh', 'label' => 'Sign-in with SSH keys only', 'state' => 'on', 'detail' => 'Password sign-in is off.', 'fix' => null])
+            ->missing('isolation')
+            ->missing('hardening')
+            ->missing('admin_move_error')
+            ->where('ssh', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null])
             ->where('firewall.open', [2222, 80, 443])
             ->where('firewall.ssh_port', 2222)
             ->where('firewall.changes', [])
@@ -57,41 +59,6 @@ test('the hardening tab lists the isolation layers, hardening, firewall and acce
                 'public_key' => $server->ssh_public_key,
                 'audit_logging' => true,
             ]));
-});
-
-test('a server whose admin api moved to the socket says so among its hardening', function () {
-    $team = Team::factory()->create();
-    $server = serverTabServer($team, ['meta' => ['caddy_admin' => 'socket', 'caddy_admin_error' => 'an old failure']]);
-
-    $this->actingAs(serverTabMember($team))
-        ->get(route('servers.hardening', $server))
-        ->assertInertia(fn($page) => $page
-            ->where('hardening', fn($items): bool => in_array('Admin API on a socket only Caddy and root can open', $items->all(), true)
-                && !in_array(ServerTabsController::ADMIN_API_ON_LOCALHOST, $items->all(), true))
-            ->where('admin_move_error', null));
-});
-
-test('a server whose admin api could not move yet says why', function () {
-    $team = Team::factory()->create();
-    $server = serverTabServer($team, ['meta' => ['caddy_admin_error' => 'curl: (7) Failed to connect to localhost port 2019', 'ssh_hardening' => 'verified']]);
-
-    $this->actingAs(serverTabMember($team))
-        ->get(route('servers.hardening', $server))
-        ->assertInertia(fn($page) => $page
-            ->where('hardening', ServerTabsController::HARDENING)
-            ->where('admin_move_error', 'curl: (7) Failed to connect to localhost port 2019'));
-});
-
-test('a server still running the shared Redis says its databases are dedicated except for it', function () {
-    $team = Team::factory()->create();
-    $server = serverTabServer($team, ['meta' => ['installed_databases' => ['redis']]]);
-
-    $this->actingAs(serverTabMember($team))
-        ->get(route('servers.hardening', $server))
-        ->assertInertia(fn($page) => $page
-            ->where('isolation', fn($layers): bool => in_array('Dedicated database credentials, except the shared Redis on port 6379', $layers->all(), true)
-                && !in_array('Dedicated database credentials', $layers->all(), true)
-                && $layers->count() === 9));
 });
 
 test("on Coresmith's own machine whose firewall was already on, only the web ports are listed as opened", function () {
@@ -110,8 +77,8 @@ test("on Coresmith's own machine the hardening tab says SSH is left as its owner
     $this->actingAs(serverTabMember($team))
         ->get(route('servers.hardening', $server))
         ->assertInertia(fn($page) => $page
-            ->where('ssh', ['verified' => false, 'owner' => true, 'passwords_off' => $off, 'error' => null, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null])
-            ->where('hardening', fn($items) => collect($items)->contains(ServerTabsController::SSH_LEFT_TO_OWNER) && !collect($items)->contains(ServerTabsController::SSH_KEY_ONLY)));
+            ->where('ssh', ['verified' => false, 'owner' => true, 'passwords_off' => $off, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null])
+            ->where('protections.rows.0.state', 'yours'));
 })->with([
     'passwords off' => [['ssh_hardening' => 'owner', 'ssh_passwords' => 'off'], true],
     'passwords on' => [['ssh_hardening' => 'owner'], false],
@@ -198,7 +165,7 @@ test('another team cannot open a servers tabs', function (string $route) {
     $this->actingAs(serverTabMember(Team::factory()->create(), TeamRole::Owner))
         ->get(route($route, $server))
         ->assertForbidden();
-})->with(['servers.hardening', 'servers.activity']);
+})->with(['servers.hardening', 'servers.activity', 'servers.under-the-hood']);
 
 test('the server tabs require authentication', function (string $route) {
     $server = serverTabServer(Team::factory()->create());

@@ -9,10 +9,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Server;
-use App\Services\Database\SharedRedis;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\Formats;
+use App\Services\Panel\ProtectionRows;
 use App\Services\Panel\ServerPresenter;
+use App\Services\Panel\UnderTheHood;
 use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\PasswordLogins;
 use Carbon\CarbonImmutable;
@@ -24,45 +25,7 @@ use Spatie\Activitylog\Models\Activity;
 
 final class ServerTabsController extends Controller
 {
-    public const ISOLATION_LAYERS = [
-        'Linux user separation',
-        'systemd sandboxing (NoNewPrivileges, ProtectSystem, PrivateTmp)',
-        'File permission enforcement',
-        'Root-owned env, injected via systemd',
-        self::DEDICATED_CREDENTIALS,
-        'Memory limits per app (MemoryMax)',
-        'Non-overlapping port blocks',
-        'Per-app Caddy routing',
-        'Separate log files',
-    ];
-
-    public const DEDICATED_CREDENTIALS = 'Dedicated database credentials';
-
-    public const DEDICATED_CREDENTIALS_EXCEPT_SHARED_REDIS = 'Dedicated database credentials, except the shared Redis on port 6379';
-
-    public const ADMIN_API_ON_LOCALHOST = 'Admin API bound to localhost, verified unreachable';
-
-    public const ADMIN_API_ON_SOCKET = 'Admin API on a socket only Caddy and root can open';
-
-    public const SSH_KEY_ONLY = 'SSH key-only, modern ciphers (curve25519, ed25519)';
-
-    public const SSH_LEFT_TO_OWNER = "SSH as you set it up, and Coresmith's key only works from this machine";
-
-    public const NO_SITE_FOR_UNKNOWN_HOSTS = 'Caddy serves no site for unknown hostnames';
-
-    public const UNKNOWN_HOSTS_CLOSED = 'Caddy closes the connection for unknown hostnames';
-
-    public const HARDENING = [
-        self::SSH_KEY_ONLY,
-        'fail2ban active, SSH jail after 5 failures',
-        'Kernel hardening sysctls applied',
-        'AppArmor checked for profiles in complain mode',
-        self::NO_SITE_FOR_UNKNOWN_HOSTS,
-        self::ADMIN_API_ON_LOCALHOST,
-        'Automatic OS security patches',
-    ];
-
-    public function hardening(Request $request, Server $server, ServerPresenter $presenter, SharedRedis $sharedRedis): Response|RedirectResponse
+    public function hardening(Request $request, Server $server, ServerPresenter $presenter, ProtectionRows $protections): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -72,24 +35,11 @@ final class ServerTabsController extends Controller
 
         return Inertia::render('servers/Hardening', [
             'server' => $presenter->header($server, $request->user()),
-            'isolation' => $sharedRedis->state($server) === null
-                ? self::ISOLATION_LAYERS
-                : array_map(fn(string $layer): string => $layer === self::DEDICATED_CREDENTIALS ? self::DEDICATED_CREDENTIALS_EXCEPT_SHARED_REDIS : $layer, self::ISOLATION_LAYERS),
-            'hardening' => array_values(array_filter(
-                array_map(fn(string $item): string => match (true) {
-                    $item === self::ADMIN_API_ON_LOCALHOST && $server->caddyAdminOnSocket() => self::ADMIN_API_ON_SOCKET,
-                    $item === self::NO_SITE_FOR_UNKNOWN_HOSTS && $server->unknownHostsClosed() => self::UNKNOWN_HOSTS_CLOSED,
-                    $item === self::SSH_KEY_ONLY && $server->sshLeftToOwner() => self::SSH_LEFT_TO_OWNER,
-                    default => $item,
-                }, self::HARDENING),
-                fn(string $item): bool => $item !== self::SSH_KEY_ONLY || $server->sshHardened(),
-            )),
-            'admin_move_error' => $server->caddyAdminOnSocket() ? null : (((array) $server->meta)['caddy_admin_error'] ?? null),
+            'protections' => $protections->for($server),
             'ssh' => [
                 'verified' => $server->sshHardened(),
                 'owner' => $server->sshLeftToOwner(),
                 'passwords_off' => $server->sshLeftToOwner() && $server->sshPasswordsOff(),
-                'error' => $server->sshHardened() || $server->sshLeftToOwner() ? null : (((array) $server->meta)['ssh_hardening_error'] ?? null),
                 ...$this->passwordLogins($server),
             ],
             'firewall' => [
@@ -117,6 +67,20 @@ final class ServerTabsController extends Controller
                 'public_key' => $server->ssh_public_key,
                 'audit_logging' => (bool) $server->audit_logging_enabled,
             ],
+        ]);
+    }
+
+    public function underTheHood(Request $request, Server $server, UnderTheHood $machinery): Response|RedirectResponse
+    {
+        if ($server->trashed()) {
+            return $this->destroyedServer($server);
+        }
+
+        $this->authorize('view', $server);
+
+        return Inertia::render('servers/UnderTheHood', [
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            ...$machinery->for($server, $request->user()),
         ]);
     }
 

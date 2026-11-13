@@ -63,7 +63,7 @@ final class ApplicationPresenter
         return match ($application->type) {
             ApplicationType::Php => trim('PHP ' . self::minor($application->php_version)),
             ApplicationType::Ruby => trim('Ruby ' . self::minor($application->ruby_version)),
-            ApplicationType::Static => 'Caddy',
+            ApplicationType::Static => 'Static files',
             default => match ($application->js_runtime) {
                 'deno' => trim('Deno ' . self::minor($application->deno_version)),
                 'node' => trim('Node ' . self::major($application->node_version)),

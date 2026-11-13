@@ -21,8 +21,8 @@
         name: string
         kind: string
         runtime: string
-        user: string
-        ports: string
+        domain: string | null
+        deployed: string | null
         state: EntityState
         href: string
     }
@@ -62,8 +62,8 @@
         <div class={cn(columns, 'border-b border-border px-5.5 py-3')}>
             <span class="type-caption text-muted-foreground">Application</span>
             <span class="type-caption text-muted-foreground max-sm:hidden">Runtime</span>
-            <span class="type-caption text-muted-foreground max-sm:hidden">Linux user</span>
-            <span class="type-caption text-muted-foreground max-sm:hidden">Port block</span>
+            <span class="type-caption text-muted-foreground max-sm:hidden">Domain</span>
+            <span class="type-caption text-muted-foreground max-sm:hidden">Last deploy</span>
             <span class="type-caption text-muted-foreground">Status</span>
         </div>
         {#each applications as application (application.id)}
@@ -81,9 +81,11 @@
                 >
                 <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{application.runtime}</span>
                 <span class="truncate font-mono text-[12.5px] text-muted-foreground max-sm:hidden"
-                    >{application.user}</span
+                    >{application.domain ?? 'No domain'}</span
                 >
-                <span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden">{application.ports}</span>
+                <span class="text-[12.5px] text-muted-foreground max-sm:hidden"
+                    >{application.deployed ?? 'Not yet'}</span
+                >
                 <span
                     class={cn(
                         'inline-flex items-center gap-1.5 text-[12.5px] font-medium',
@@ -98,6 +100,10 @@
             <p class="m-0 text-[12.5px] text-muted-foreground">
                 Each app runs walled off from the others, with its own environment and database credentials: {stackText},
                 one server.
+                <Link
+                    href={route('servers.under-the-hood', server.id)}
+                    class="text-foreground underline underline-offset-2">What Coresmith runs here</Link
+                >
             </p>
             {#if server.can.createApplication}
                 <Button size="sm" variant="outline" href={route('servers.applications.create', server.id)}

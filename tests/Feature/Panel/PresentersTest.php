@@ -36,7 +36,7 @@ test('the runtime names the language and its minor version', function (array $at
     'php without a version' => [['type' => ApplicationType::Php, 'php_version' => null], 'PHP'],
     'php with an unusual version' => [['type' => ApplicationType::Php, 'php_version' => 'nightly'], 'PHP nightly'],
     'ruby' => [['type' => ApplicationType::Ruby, 'ruby_version' => '3.4.1'], 'Ruby 3.4'],
-    'static' => [['type' => ApplicationType::Static], 'Caddy'],
+    'static' => [['type' => ApplicationType::Static], 'Static files'],
     'node' => [['type' => ApplicationType::Js, 'js_runtime' => 'node', 'node_version' => '24.15.0'], 'Node 24'],
     'deno' => [['type' => ApplicationType::Js, 'js_runtime' => 'deno'], 'Deno'],
     'bun' => [['type' => ApplicationType::Js, 'js_runtime' => 'bun'], 'Bun'],

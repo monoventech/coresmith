@@ -84,7 +84,9 @@ test.describe('a server', () => {
         await tabComesIntoViewAsStripNarrows(page, page.url(), 'Server sections', 'Activity')
     })
 
-    test('the apps tab lists each app with how it runs', async ({ page }, testInfo) => {
+    test('the apps tab lists each app with its domain and last deploy, and leaves the machinery to its own page', async ({
+        page
+    }, testInfo) => {
         await gotoServer(page, 'forge-01')
 
         for (const name of ['atlas', 'ledger', 'relay', 'storefront']) {
@@ -92,9 +94,12 @@ test.describe('a server', () => {
         }
 
         if (!isMobile(testInfo)) {
-            await expect(applicationRow(page, 'atlas')).toContainText('coresmith-app-atlas')
-            await expect(applicationRow(page, 'atlas')).toContainText('8000–8009')
+            await expect(applicationRow(page, 'atlas')).toContainText('atlas.monoven.io')
+            await expect(applicationRow(page, 'atlas')).not.toContainText('coresmith-app-atlas')
+            await expect(page.getByTestId('applications-table')).toContainText('Last deploy')
         }
+
+        await expect(page.getByRole('link', { name: 'What Coresmith runs here' })).toBeVisible()
 
         await applicationRow(page, 'ledger').click()
         await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
@@ -223,116 +228,140 @@ test.describe('a server', () => {
     })
 })
 
+type Protection = { key: string; label: string; state: string; detail: string; fix: string | null }
+
+function protectionRow(props: Record<string, unknown>, key: string, change: Partial<Protection>) {
+    const protections = props.protections as { checked: string | null; rows: Protection[] }
+
+    protections.rows = protections.rows.map((row) => (row.key === key ? { ...row, ...change } : row))
+}
+
 test.describe('hardening', () => {
-    test('the isolation layers and the server hardening are listed', async ({ page }) => {
+    test('each protection shows its real state on the server and when Coresmith last checked', async ({ page }) => {
         await gotoServerTab(page, 'forge-01', 'Hardening')
 
-        const isolation = page.getByRole('heading', { name: 'Nine-layer app isolation' }).locator('..')
+        const card = page.getByTestId('protections')
 
-        await expect(isolation.getByRole('listitem')).toHaveCount(9)
-        await expect(page.getByRole('heading', { name: 'Server hardening' })).toBeVisible()
+        await expect(card.getByRole('heading', { name: 'Server hardening' })).toBeVisible()
+        await expect(page.getByTestId('protections-checked')).toHaveText(
+            /^Checked (today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
+        )
+
+        for (const key of ['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts']) {
+            await expect(page.getByTestId(`protection-${key}`)).toHaveAttribute('data-state', 'on')
+        }
+
+        await expect(page.getByTestId('protection-fail2ban')).toContainText(
+            'An address that fails to sign in 5 times in 10 minutes is blocked for an hour.'
+        )
+        await expect(card.getByRole('button')).toHaveCount(0)
+        await expect(card).not.toContainText(/Caddy|systemd|fail2ban|sysctl|admin API/)
         await expect(page.getByRole('switch', { name: 'Audit logging' })).toBeVisible()
     })
 
-    test("a server's admin API on its private socket is listed among its hardening", async ({ page }) => {
+    test('a server Coresmith has not checked yet says when it will', async ({ page }) => {
+        await gotoServerTab(page, 'bench-01', 'Hardening')
+
+        await expect(page.getByTestId('protections-checked')).toHaveText('Not checked yet')
+        await expect(page.getByTestId('protection-fail2ban')).toHaveAttribute('data-state', 'pending')
+        await expect(page.getByTestId('protection-fail2ban')).toContainText('Coresmith checks this within the hour.')
+        await expect(page.getByTestId('protection-ssh')).toContainText(
+            'Coresmith turns off password sign-in within the hour.'
+        )
+    })
+
+    test('a protection that is off says so and asks Coresmith to turn it back on', async ({ page }) => {
+        await withProps(page, /\/hardening$/, (props) => {
+            protectionRow(props, 'fail2ban', {
+                state: 'off',
+                detail: "It isn't running on this server.",
+                fix: 'Turn it back on'
+            })
+        })
+        await page.route('**/protections/fail2ban', (route) =>
+            route.fulfill({ status: 409, headers: { 'x-inertia-location': page.url() } })
+        )
         await gotoServerTab(page, 'forge-01', 'Hardening')
 
-        const hardening = page.getByRole('heading', { name: 'Server hardening' }).locator('..')
+        const row = page.getByTestId('protection-fail2ban')
 
-        await expect(hardening).toContainText('Admin API on a socket only Caddy and root can open')
-        await expect(hardening).not.toContainText('Admin API bound to localhost')
-        await expect(page.getByTestId('admin-move-error')).toHaveCount(0)
-    })
+        await expect(row).toHaveAttribute('data-state', 'off')
+        await expect(row).toContainText("It isn't running on this server.")
 
-    test('a server whose admin API could not move yet says that apps can still reach it, and why', async ({ page }) => {
-        await withProps(page, /\/hardening$/, (props) => {
-            props.admin_move_error =
-                "curl: (7) Failed to connect to localhost port 2019 after 0 ms: Couldn't connect to server"
-        })
-        await gotoServerTab(page, 'bench-01', 'Hardening')
-
-        await expect(page.getByTestId('admin-move-error')).toHaveText(
-            "Apps on this server can still reach Caddy's admin API. Coresmith tries to move it to a private socket every hour, and the last try failed: curl: (7) Failed to connect to localhost port 2019 after 0 ms: Couldn't connect to server"
+        const request = page.waitForRequest(
+            (sent) => sent.url().endsWith('/protections/fail2ban') && sent.method() === 'POST'
         )
+        await row.getByRole('button', { name: 'Turn it back on' }).click()
+        await request
     })
 
-    test("a server whose sshd reported key-only SSH lists it, and Caddy's real answer to unknown hostnames", async ({
-        page
-    }) => {
+    test('a fix that is running says so, with nothing to press', async ({ page }) => {
+        await withProps(page, /\/hardening$/, (props) => {
+            protectionRow(props, 'patches', { state: 'busy', detail: 'Turning them back on…', fix: null })
+        })
         await gotoServerTab(page, 'forge-01', 'Hardening')
 
-        const hardening = page.getByRole('heading', { name: 'Server hardening' }).locator('..')
+        const row = page.getByTestId('protection-patches')
 
-        await expect(hardening).toContainText('SSH key-only, modern ciphers (curve25519, ed25519)')
-        await expect(hardening).toContainText('Caddy closes the connection for unknown hostnames')
-        await expect(hardening).not.toContainText('444')
-        await expect(page.getByTestId('ssh-hardening-error')).toHaveCount(0)
-        await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveCount(0)
+        await expect(row).toHaveAttribute('data-state', 'busy')
+        await expect(row).toContainText('Turning them back on…')
+        await expect(row).toContainText('Working')
+        await expect(row.getByRole('button')).toHaveCount(0)
     })
 
-    test('a server whose sshd still accepts passwords says what sshd reported, and claims neither key-only SSH nor password login off', async ({
-        page
-    }) => {
+    test('someone who cannot change the server sees the state but no fix', async ({ page }) => {
         await withProps(page, /\/hardening$/, (props) => {
-            props.ssh = { verified: false, error: 'sshd reports passwordauthentication yes' }
-            props.hardening = (props.hardening as string[]).filter((item) => !item.startsWith('SSH key-only'))
+            ;(props.server as { can: { update: boolean } }).can.update = false
+            protectionRow(props, 'kernel', {
+                state: 'off',
+                detail: '1 of 15 settings changed since Coresmith set them.',
+                fix: 'Set them again'
+            })
         })
-        await gotoServerTab(page, 'bench-01', 'Hardening')
+        await gotoServerTab(page, 'forge-01', 'Hardening')
 
-        await expect(page.getByTestId('ssh-hardening-error')).toHaveText(
-            'SSH may still accept passwords on this server. Coresmith tries to turn them off every hour, and the last try found: sshd reports passwordauthentication yes'
-        )
-        await expect(page.getByRole('heading', { name: 'Server hardening' }).locator('..')).not.toContainText(
-            'SSH key-only'
-        )
-        await expect(page.getByRole('heading', { name: 'SSH access' }).locator('..')).not.toContainText(
-            'Password login is off.'
-        )
+        await expect(page.getByTestId('protection-kernel')).toContainText('Off')
+        await expect(page.getByTestId('protection-kernel').getByRole('button')).toHaveCount(0)
     })
 
-    test('a server Coresmith has not checked yet says it will check its SSH settings within the hour', async ({
-        page
-    }) => {
-        await withProps(page, /\/hardening$/, (props) => {
-            props.ssh = { verified: false, error: null }
-            props.hardening = (props.hardening as string[]).filter((item) => !item.startsWith('SSH key-only'))
-        })
-        await gotoServerTab(page, 'bench-01', 'Hardening')
+    test('the tab leads to what Coresmith runs on the server, for whoever signs in over SSH', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Hardening')
+        await page.getByTestId('under-the-hood-link').click()
 
-        await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveText(
-            "Coresmith hasn't checked this server's SSH settings yet. It checks them within the hour."
-        )
-        await expect(page.getByRole('heading', { name: 'SSH access' }).locator('..')).not.toContainText(
-            'Password login is off.'
-        )
+        await expect(page.getByRole('heading', { level: 1, name: 'What Coresmith runs here' })).toBeVisible()
+        await expect(page.getByTestId('machinery-apps')).toContainText('coresmith-app-atlas')
+        await expect(page.getByTestId('machinery-apps')).toContainText('8000–8009')
+        await expect(page.getByTestId('machinery-isolation').getByRole('listitem')).toHaveCount(9)
+        await expect(page.getByTestId('machinery-files')).toContainText('/etc/fail2ban/jail.d/coresmith-ssh.conf')
     })
 
     test.describe('accessibility', () => {
         test.use({ reducedMotion: 'reduce' })
 
         for (const theme of ['light', 'dark'] as const) {
-            test(`sshd still accepting passwords has no serious or critical violations in ${theme}`, async ({
-                page
-            }) => {
+            test(`a protection that is off has no serious or critical violations in ${theme}`, async ({ page }) => {
                 await useTheme(page, theme)
                 await withProps(page, /\/hardening$/, (props) => {
-                    props.ssh = { verified: false, error: 'sshd reports passwordauthentication yes' }
+                    protectionRow(props, 'controls', {
+                        state: 'off',
+                        detail: "Apps on this server can still reach the controls that route traffic. Coresmith's last try to close them failed: curl: (7) Failed to connect to localhost port 2019",
+                        fix: 'Try again now'
+                    })
+                    protectionRow(props, 'patches', { state: 'busy', detail: 'Turning them back on…', fix: null })
                 })
-                await gotoServerTab(page, 'bench-01', 'Hardening')
-                await expect(page.getByTestId('ssh-hardening-error')).toBeVisible()
+                await gotoServerTab(page, 'forge-01', 'Hardening')
+                await expect(page.getByTestId('protection-controls')).toHaveAttribute('data-state', 'off')
 
-                expect(await blockingViolations(page), `ssh warning in ${theme}`).toEqual([])
+                expect(await blockingViolations(page), `protections in ${theme}`).toEqual([])
             })
 
-            test(`a failed admin API move has no serious or critical violations in ${theme}`, async ({ page }) => {
+            test(`what Coresmith runs here has no serious or critical violations in ${theme}`, async ({ page }) => {
                 await useTheme(page, theme)
-                await withProps(page, /\/hardening$/, (props) => {
-                    props.admin_move_error = 'curl: (7) Failed to connect to localhost port 2019'
-                })
-                await gotoServerTab(page, 'bench-01', 'Hardening')
-                await expect(page.getByTestId('admin-move-error')).toBeVisible()
+                await gotoServerTab(page, 'forge-01', 'Hardening')
+                await page.getByTestId('under-the-hood-link').click()
+                await expect(page.getByTestId('machinery-files')).toBeVisible()
 
-                expect(await blockingViolations(page), `failed move in ${theme}`).toEqual([])
+                expect(await blockingViolations(page), `what Coresmith runs in ${theme}`).toEqual([])
             })
         }
     })
@@ -352,7 +381,7 @@ test.describe('hardening', () => {
 
         const firewall = page.getByTestId('firewall')
 
-        await expect(firewall).toContainText('Default-deny.')
+        await expect(firewall).toContainText('Closed by default.')
         await expect(firewall).toContainText('allow 9090 from 203.0.113.50')
     })
 
