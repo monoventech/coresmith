@@ -24,6 +24,10 @@ export const asNarrowed = suite.extend({
     storageState: 'tests/E2E/.auth/narrowed.json'
 })
 
+export const asDeveloper = suite.extend({
+    storageState: 'tests/E2E/.auth/developer.json'
+})
+
 export const asEnvironmentOnly = suite.extend({
     storageState: 'tests/E2E/.auth/environment.json'
 })

@@ -41,7 +41,11 @@ class SourceProvider extends Model
 
     public function usableBy(User $user, Team $team): bool
     {
-        return $this->team_id === $team->getKey() && app(TeamAccess::class)->seesEverything($user, $team);
+        if ($this->team_id !== $team->getKey()) {
+            return false;
+        }
+
+        return $this->user_id !== null ? $this->user_id === $user->getKey() : app(TeamAccess::class)->seesEverything($user, $team);
     }
 
     public function connected(): bool

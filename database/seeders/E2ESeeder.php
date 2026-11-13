@@ -77,6 +77,8 @@ final class E2ESeeder extends Seeder
 
     public const ENVIRONMENT_EMAIL = 'environment@coresmith.test';
 
+    public const DEVELOPER_EMAIL = 'developer@coresmith.test';
+
     public const ACME_OWNER_EMAIL = 'elin@coresmith.test';
 
     public const ACME_MEMBER_EMAIL = 'tomas@coresmith.test';
@@ -125,6 +127,11 @@ final class E2ESeeder extends Seeder
         $environmentOnly = User::factory()->create(['name' => 'Ines Duarte', 'email' => self::ENVIRONMENT_EMAIL, 'password' => $password]);
         $this->team->members()->attach($environmentOnly, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
         app(TeamAccess::class)->grant($this->team, $environmentOnly, $this->team->projects()->where('name', 'Storefront')->sole()->environments()->where('name', 'Staging')->sole());
+
+        $developer = User::factory()->create(['name' => 'Lena Brandt', 'email' => self::DEVELOPER_EMAIL, 'password' => $password]);
+        $this->team->members()->attach($developer, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
+        app(TeamAccess::class)->grant($this->team, $developer, $tenant->servers['forge-02']);
+        $this->application('side-notes', 9620, ['created_by' => $developer->id, 'domain' => 'side-notes.lena.dev'], $tenant->servers['forge-02']);
 
         $this->movers();
 
