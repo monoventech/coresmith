@@ -183,7 +183,7 @@ final class StoreApplicationRequest extends FormRequest
         return $this->checked;
     }
 
-    public function names(): bool
+    public function hasRepository(): bool
     {
         return $this->repositoryKey() !== null;
     }

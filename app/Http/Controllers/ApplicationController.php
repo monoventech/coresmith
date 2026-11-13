@@ -124,7 +124,7 @@ final class ApplicationController extends Controller
             'runtime_pins' => $line === null ? null : [$runtime => $line],
             'env_variables' => $initial === [] ? null : app(EnvironmentFile::class)->render($initial),
             'repository_checked_at' => $checked === null ? null : now(),
-            'repository_check_pending' => $request->names() && $checked === null,
+            'repository_check_pending' => $request->hasRepository() && $checked === null,
             'server_id' => $server->id,
             'team_id' => $server->team_id,
             'slug' => $slug,
