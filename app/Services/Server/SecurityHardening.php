@@ -302,7 +302,7 @@ final class SecurityHardening
     {
         $settings = [];
 
-        foreach (preg_split('/\R/', $connection->execute('sshd -T', sudo: true)->throw()->output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $connection->execute('sshd -T', sudo: true)->throw()->output) ?: [] as $line) {
             $parts = preg_split('/\s+/', trim($line), 2) ?: [];
 
             if (count($parts) === 2) {

@@ -34,7 +34,7 @@ final class OomKillReader
     {
         $kills = [];
 
-        foreach (preg_split('/\R/', trim($output)) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', trim($output)) ?: [] as $line) {
             $entry = json_decode($line, true);
 
             if (!is_array($entry) || !is_string($entry['MESSAGE'] ?? null)) {

@@ -175,7 +175,7 @@ final class AsdfManager
         $result = $connection->execute("ls -1 {$path} 2>/dev/null || true");
 
         $versions = array_values(array_filter(
-            array_map(trim(...), preg_split('/\R/', $result->output) ?: []),
+            array_map(trim(...), preg_split('/\r\n|\n|\r/', $result->output) ?: []),
             fn(string $version): bool => preg_match('/^\d[0-9A-Za-z.+-]*$/D', $version) === 1 && self::isValid($runtime, $version),
         ));
 

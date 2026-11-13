@@ -17,7 +17,7 @@ final class DatabaseUsage
     {
         $name = (string) $database->name;
 
-        foreach (preg_split('/\R/', (string) $application->env_variables) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', (string) $application->env_variables) ?: [] as $line) {
             if (preg_match('/^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.*)$/', $line, $match) !== 1) {
                 continue;
             }

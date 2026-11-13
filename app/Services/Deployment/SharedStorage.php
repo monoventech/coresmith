@@ -60,7 +60,7 @@ final class SharedStorage
 
     public function seeded(string $output): bool
     {
-        return in_array(self::SEEDED, array_map(trim(...), preg_split('/\R/', $output) ?: []), true);
+        return in_array(self::SEEDED, array_map(trim(...), preg_split('/\r\n|\n|\r/', $output) ?: []), true);
     }
 
     public function discard(SSHConnection $connection, Deployment $deployment): void

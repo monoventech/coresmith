@@ -830,7 +830,7 @@ final class DeployApplication implements ShouldQueue
     private function recordCommit(SSHConnection $connection, string $repo, string $branch): void
     {
         $result = $connection->execute("git --git-dir={$repo} log -1 --format='%H%n%an%n%s' {$branch} 2>/dev/null || true", sudo: true);
-        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\R/', $result->output) ?: []), static fn(string $line): bool => $line !== ''));
+        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\r\n|\n|\r/', $result->output) ?: []), static fn(string $line): bool => $line !== ''));
 
         if (count($lines) < 2 || preg_match(AutoDeploy::COMMIT, $lines[0]) !== 1) {
             return;
@@ -1221,7 +1221,7 @@ final class DeployApplication implements ShouldQueue
 
     private function appendUnloggedOutput(string $output): void
     {
-        $tail = trim(implode("\n", array_slice(preg_split('/\R/', trim($output)) ?: [], -30)));
+        $tail = trim(implode("\n", array_slice(preg_split('/\r\n|\n|\r/', trim($output)) ?: [], -30)));
 
         if ($tail === '' || str_ends_with(trim((string) $this->deployment->log), app(LogSanitizer::class)->sanitize($tail, $this->deployment->application))) {
             return;

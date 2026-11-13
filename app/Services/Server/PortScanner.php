@@ -29,7 +29,7 @@ final class PortScanner
     {
         $listeners = [];
 
-        foreach (preg_split('/\R/', trim($output)) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', trim($output)) ?: [] as $line) {
             $fields = preg_split('/\s+/', trim($line)) ?: [];
 
             if (count($fields) < 4 || preg_match('/:(\d{1,5})$/', $fields[3], $port) !== 1) {

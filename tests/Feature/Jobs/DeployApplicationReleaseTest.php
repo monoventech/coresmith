@@ -195,6 +195,16 @@ test('a private repository announces that it fetches with the deploy key', funct
     expect((string) $deployment->fresh()->log)->toContain('[14:05:09] clone: fetching via deploy key (ed25519, read-only)');
 });
 
+test('a commit subject in Japanese is kept whole, so the deploy page can still render it', function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create(['commit_hash' => null, 'commit_message' => null]);
+    $transport = releaseTransport()->respondTo('log -1 --format', "0abac93f8986f4589809715b4d80675da0ce02fa\n小林 耕治\nダークモード実装\n");
+
+    releaseRun($deployment, $transport);
+
+    expect($deployment->fresh()->commit_message)->toBe('ダークモード実装')
+        ->and($deployment->fresh()->commit_author)->toBe('小林 耕治');
+});
+
 test('the commit hash, author and subject are resolved from git when the push did not carry them', function () {
     $deployment = Deployment::factory()->for(releaseApp())->create(['commit_hash' => null, 'commit_message' => null]);
     $transport = releaseTransport()->respondTo('log -1 --format', "4f3c2b1a0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b\nAda Lovelace\nShip the release screen\n");

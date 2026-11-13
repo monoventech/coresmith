@@ -105,7 +105,7 @@ final class RuntimeBinaries
         }
 
         $modules = $connection->execute(escapeshellarg($root . '/bin/php') . ' -m 2>/dev/null')->output;
-        $extensions = array_filter(array_map(trim(...), preg_split('/\R/', $modules) ?: []), fn(string $module): bool => $module !== '' && !str_starts_with($module, '['));
+        $extensions = array_filter(array_map(trim(...), preg_split('/\r\n|\n|\r/', $modules) ?: []), fn(string $module): bool => $module !== '' && !str_starts_with($module, '['));
 
         $notes[] = 'php extensions: ' . implode(' ', $extensions);
 

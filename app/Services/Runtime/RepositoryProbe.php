@@ -99,7 +99,7 @@ final class RepositoryProbe
         $envKeys = [];
         $complete = false;
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && in_array($matches[1], [...self::FILES, self::COMPOSER_LOCK], true)) {
                 $content = base64_decode($matches[2], true);
 

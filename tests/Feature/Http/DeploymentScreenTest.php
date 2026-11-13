@@ -168,6 +168,22 @@ test('the deploy screen carries the phases, the failure and the release details'
             ->where('can.deploy', true));
 });
 
+test('a commit subject saved cut through a character still renders, with the broken bytes replaced', function () {
+    $team = Team::factory()->create();
+    $deployment = Deployment::factory()->for(screenApp($team))->create([
+        'commit_hash' => '0abac93f8986f4589809715b4d80675da0ce02fa',
+        'commit_message' => "ダークモード実\xe8\xa3",
+        'commit_author' => "小林\xe8",
+    ]);
+
+    $this->actingAs(screenMember($team))
+        ->get(screenUrl($deployment))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('deployments/Show')
+            ->where('deployment.commit_message', fn(string $message): bool => mb_check_encoding($message, 'UTF-8') && str_starts_with($message, 'ダークモード実')));
+});
+
 test('a deploy whose storage copy failed names that step, while the rail shows the clone phase failed', function () {
     $team = Team::factory()->create();
     $deployment = Deployment::factory()->for(screenApp($team, ['current_release' => '20260912090000']))->create([
