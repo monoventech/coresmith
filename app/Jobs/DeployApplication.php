@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
@@ -882,7 +883,7 @@ final class DeployApplication implements ShouldQueue
     {
         $node = $stack->versions()['nodejs'] ?? null;
 
-        if ($node === null || !in_array($stack->tooling?->manager, ['yarn', 'pnpm'], true)) {
+        if ($node === null || (!in_array($stack->tooling?->manager, ['yarn', 'pnpm'], true) && $this->deployment->application->type !== ApplicationType::Ruby)) {
             return;
         }
 

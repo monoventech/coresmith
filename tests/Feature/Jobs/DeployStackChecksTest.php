@@ -208,3 +208,13 @@ test('a deploy whose packages come through yarn or pnpm puts their commands on P
     expect($commands)->toContain("'/opt/asdf-data/installs/nodejs/24.21.0/bin/corepack' enable --install-directory '/opt/asdf-data/installs/nodejs/24.21.0/bin'")
         ->and(strpos($commands, 'corepack\' enable'))->toBeLessThan(strpos($commands, 'corepack yarn install'));
 });
+
+test('a deploy with Node puts yarn and pnpm on PATH even when npm installs, since a Rails bundling gem picks its tool from the lockfiles', function () {
+    $probe = '@@file Gemfile ' . base64_encode("source 'https://rubygems.org'\ngem 'rails'\ngem 'puma'\ngem 'jsbundling-rails'\n") . "\n@@file Gemfile.lock " . base64_encode("GEM\n  specs:\n    jsbundling-rails (1.3.1)\n    puma (6.6.0)\n    railties (8.0.3)\n\nPLATFORMS\n  ruby\n\nBUNDLED WITH\n   2.6.9\n") . "\n@@file .ruby-version " . base64_encode("3.4.10\n") . "\n@@file package.json " . base64_encode('{"scripts":{"build":"esbuild app/javascript/*.* --bundle"}}') . "\n@@lock package-lock.json\n@@lock yarn.lock\n@@has bin/rails\n@@has config.ru\n@@done\n";
+    $deployment = Deployment::factory()->for(stackDeployApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.4.10', 'node_version' => '24.21.0']))->create();
+    $transport = stackDeployTransport($probe);
+
+    stackDeployRun($deployment, $transport);
+
+    expect(implode("\n", $transport->commands()))->toContain("'/opt/asdf-data/installs/nodejs/24.21.0/bin/corepack' enable --install-directory '/opt/asdf-data/installs/nodejs/24.21.0/bin'");
+});
