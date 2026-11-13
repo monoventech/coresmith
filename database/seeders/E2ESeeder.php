@@ -472,7 +472,7 @@ final class E2ESeeder extends Seeder
     private function answered500(): void
     {
         $application = $this->application('answered-500', 9900);
-        $this->succeeded($application, 1, 'v2.0.0');
+        $this->succeeded($application, 2 * 60, 'v2.0.0');
         $application->deployments()->latest('id')->firstOrFail()->forceFill(['live_status' => 500, 'live_detail' => 'No application encryption key has been specified.'])->save();
     }
 
