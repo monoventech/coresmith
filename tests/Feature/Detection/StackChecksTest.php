@@ -142,6 +142,36 @@ test('a start script that reads PORT is fine', function (string $start) {
     'a variable that only ends in PORT' => ['APP_PORT=3000 node server.js'],
 ]);
 
+function stackChecksNuxt(string $config, string $build = 'nuxt build', array $dependencies = []): RepositoryFacts
+{
+    return new RepositoryFacts([
+        'package.json' => (string) json_encode(['scripts' => ['build' => $build], 'dependencies' => ['nuxt' => '^3.16.0', ...$dependencies]]),
+        'nuxt.config.ts' => $config,
+    ], ['package-lock.json'], complete: true);
+}
+
+test('a Nuxt app built for another host is refused, since Coresmith runs a Node server', function (string $config, string $build, string $preset) {
+    $blockers = stackChecksFor(stackChecksNuxt($config, $build), ['type' => ApplicationType::Js, 'framework' => 'nuxt', 'js_runtime' => 'node']);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('framework')
+        ->and($blockers[0]->reason)->toContain("Nitro's preset is {$preset}")
+        ->and($blockers[0]->fix)->toContain('node-server');
+})->with([
+    'cloudflare pages in nuxt.config' => ["export default defineNuxtConfig({\n  nitro: {\n    preset: 'cloudflare-pages',\n  },\n})\n", 'nuxt build', 'cloudflare-pages'],
+    'vercel in the build script' => ["export default defineNuxtConfig({})\n", 'NITRO_PRESET=vercel nuxt build', 'vercel'],
+    'github pages through --preset' => ["export default defineNuxtConfig({})\n", 'nuxt build --preset github_pages', 'github_pages'],
+]);
+
+test('a Nuxt app built as a Node server is fine, whatever else says preset', function (string $config) {
+    expect(stackChecksFor(stackChecksNuxt($config), ['type' => ApplicationType::Js, 'framework' => 'nuxt', 'js_runtime' => 'node']))->toBe([]);
+})->with([
+    'no preset' => ["export default defineNuxtConfig({ devtools: { enabled: true } })\n"],
+    'node-server' => ["export default defineNuxtConfig({ nitro: { preset: 'node-server' } })\n"],
+    'a host preset that runs on Node' => ["export default defineNuxtConfig({ nitro: { preset: 'heroku' } })\n"],
+    'a preset key outside nitro' => ["export default defineNuxtConfig({\n  pwa: { pwaAssets: { preset: 'minimal-2023' } },\n  nitro: { compressPublicAssets: true },\n})\n"],
+]);
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 

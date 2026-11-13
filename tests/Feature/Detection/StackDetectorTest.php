@@ -90,6 +90,20 @@ test('a PHP app whose composer.json names a PHP version is ready without compose
     expect(stackDetectorRun($facts)->verdict())->toBe('ready');
 });
 
+test('a Nuxt app that may build for another host is not sure', function (string $config, array $dependencies, string $reason) {
+    $facts = new RepositoryFacts([
+        'package.json' => (string) json_encode(['scripts' => ['build' => 'nuxt build'], 'dependencies' => ['nuxt' => '^3.16.0', ...$dependencies]]),
+        'nuxt.config.ts' => $config,
+    ], ['package-lock.json'], complete: true);
+    $detected = stackDetectorRun($facts);
+
+    expect($detected->verdict())->toBe('unsure')
+        ->and($detected->unsettled['framework'] ?? '')->toContain($reason);
+})->with([
+    'a preset chosen by an expression, vishnujayadevan.com' => ["export default defineNuxtConfig({\n  nitro: {\n    preset: process.env.NODE_ENV === \"production\" ? \"github\" : undefined,\n  },\n})\n", [], 'github'],
+    'NuxtHub, BilleterieJO' => ["export default defineNuxtConfig({ modules: ['@nuxthub/core'] })\n", ['@nuxthub/core' => '^0.8.0'], '@nuxthub/core'],
+]);
+
 test('the server language wins over a frontend package.json', function () {
     expect(stackDetectorRun('laravel-13')->type)->toBe('php')
         ->and(stackDetectorRun('rails-jsbundling')->type)->toBe('ruby');

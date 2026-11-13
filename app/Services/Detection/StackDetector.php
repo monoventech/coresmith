@@ -263,9 +263,15 @@ final class StackDetector
         }
 
         if ($facts->dependency('nuxt') !== null) {
+            $preset = $this->checks->nitroPreset($facts);
+
             return $this->checks->nuxtGenerate($facts)
                 ? $this->staticBuild($output, ['type' => 'From the nuxt generate build script'], '')
-                : $this->proposal('js', 'nuxt', $runtime, null, [...$sources, 'framework' => 'nuxt in package.json']);
+                : $this->proposal('js', 'nuxt', $runtime, null, [...$sources, 'framework' => 'nuxt in package.json'], match (true) {
+                    $preset !== null && !$preset[1] => ['framework' => "nuxt.config can set Nitro's preset to {$preset[0]}, which makes the app for that host, not the Node server Coresmith runs. Set the preset to node-server."],
+                    $facts->dependency('@nuxthub/core') !== null => ['framework' => '@nuxthub/core builds the app for Cloudflare, not the Node server Coresmith runs.'],
+                    default => [],
+                });
         }
 
         if ($facts->dependency('astro') !== null) {

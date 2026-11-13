@@ -22,6 +22,13 @@ final class StackChecks
 {
     public const SERVER_ADAPTERS = ['@sveltejs/adapter-node', 'svelte-adapter-bun'];
 
+    public const OTHER_HOST_PRESETS = [
+        'aws-amplify', 'aws-lambda', 'aws_lambda', 'azure', 'azure-functions', 'azure-swa', 'cloudflare', 'cloudflare-durable', 'cloudflare-module', 'cloudflare-pages',
+        'cloudflare-pages-static', 'cloudflare_module', 'cloudflare_pages', 'deno', 'deno-deploy', 'deno-server', 'deno_deploy', 'firebase', 'github', 'github-pages',
+        'github_pages', 'gitlab-pages', 'iis', 'iis-node', 'netlify', 'netlify-builder', 'netlify-edge', 'netlify-static', 'netlify_edge', 'service-worker', 'static',
+        'vercel', 'vercel-edge', 'vercel-static', 'vercel_edge', 'winterjs',
+    ];
+
     private const PHP_INDEXES = ['public' => 'public/index.php', 'web' => 'web/index.php', '' => 'index.php'];
 
     private const STATIC_INDEXES = ['' => 'index.html', 'public' => 'public/index.html'];
@@ -71,6 +78,44 @@ final class StackChecks
     public function nuxtGenerate(RepositoryFacts $facts): bool
     {
         return str_contains((string) ($facts->json('package.json')['scripts']['build'] ?? ''), 'nuxt generate');
+    }
+
+    /**
+     * @return array{string, bool}|null
+     */
+    public function nitroPreset(RepositoryFacts $facts): ?array
+    {
+        $build = (string) ($facts->json('package.json')['scripts']['build'] ?? '');
+
+        if (preg_match('/(?:NITRO_PRESET|SERVER_PRESET)=([\w-]+)|--preset[ =]([\w-]+)/', $build, $matches) === 1) {
+            $preset = strtolower($matches[1] !== '' ? $matches[1] : $matches[2]);
+
+            return in_array($preset, self::OTHER_HOST_PRESETS, true) ? [$preset, true] : null;
+        }
+
+        foreach (['nuxt.config.ts', 'nuxt.config.js'] as $file) {
+            $block = $this->nitroBlock((string) $facts->file($file));
+
+            if ($block === null || preg_match('/\bpreset\s*:\s*([^,\n}]+)/', $block, $matches) !== 1) {
+                continue;
+            }
+
+            $expression = trim($matches[1]);
+
+            if (preg_match('/^([\'"`])([\w-]+)\1$/', $expression, $literal) === 1) {
+                return in_array(strtolower($literal[2]), self::OTHER_HOST_PRESETS, true) ? [strtolower($literal[2]), true] : null;
+            }
+
+            preg_match_all('/[\'"`]([\w-]+)[\'"`]/', $expression, $literals);
+
+            foreach ($literals[1] as $value) {
+                if (in_array(strtolower($value), self::OTHER_HOST_PRESETS, true)) {
+                    return [strtolower($value), false];
+                }
+            }
+        }
+
+        return null;
     }
 
     public function astroServer(RepositoryFacts $facts): bool
@@ -279,12 +324,39 @@ final class StackChecks
      */
     private function nuxt(RepositoryFacts $facts): array
     {
+        $preset = $this->nitroPreset($facts);
+
         return match (true) {
             $facts->dependency('nuxt') === null => [new Blocker('framework', "nuxt isn't in package.json, so this isn't a Nuxt app.", 'Pick the framework the app uses, or API or other.')],
             $this->nuxtGenerate($facts) => [new Blocker('type', 'The build script runs nuxt generate, so the build is static files, not a server.', 'Pick Static site with the web root /.output/public.')],
             !$facts->script('build') => [new Blocker('repository', 'There is no build script in package.json, so the Nuxt server is never built.', 'Add "build": "nuxt build" to the scripts in package.json.')],
+            $preset !== null && $preset[1] => [new Blocker('framework', "Nitro's preset is {$preset[0]}, so nuxt build makes the app for that host, not the Node server Coresmith runs.", 'Remove the preset or set it to node-server. If the app is static, pick Static site with the web root /.output/public.')],
             default => [],
         };
+    }
+
+    private function nitroBlock(string $config): ?string
+    {
+        if (preg_match('/\bnitro\s*:\s*\{/', $config, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+            return null;
+        }
+
+        $start = $matches[0][1] + strlen($matches[0][0]);
+        $depth = 1;
+
+        for ($at = $start, $length = strlen($config); $at < $length; $at++) {
+            $depth += match ($config[$at]) {
+                '{' => 1,
+                '}' => -1,
+                default => 0,
+            };
+
+            if ($depth === 0) {
+                return substr($config, $start, $at - $start);
+            }
+        }
+
+        return substr($config, $start);
     }
 
     /**
