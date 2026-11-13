@@ -827,15 +827,13 @@
     },
     {
         "name": "artur-laptev/spot-prices",
-        "commit": "7c1e0ee",
-        "cause": "stack",
-        "why": "The repository has no database folder, so no SQLite file existed at Laravel's default path and migrate failed. Fixed by 7c1e0ee, which links the shared database into every Laravel release."
+        "cause": "app",
+        "why": "Laravel's database sessions need a sessions table, and the repository has no migration for one, so the app answers 500. Its first failure was Coresmith's: with no database folder, migrate found no SQLite file, fixed by 7c1e0ee."
     },
     {
         "name": "GHmolliss/slim-app",
-        "commit": "d32c508",
-        "cause": "stack",
-        "why": "public/index.php calls Dotenv's load(), which throws without a .env file, so the app answered 500. Fixed by d32c508, which gives plain PHP apps an empty .env before composer runs, as Symfony apps get."
+        "cause": "app",
+        "why": "It needs APP_ENV in its environment, and the corpus sets no variables, so its own EnvHelper throws and the app answers 500. Its first failure was Coresmith's: Dotenv's load() threw without a .env file, fixed by d32c508."
     },
     {
         "name": "faizalhavid/moorfa-notes",
@@ -879,15 +877,13 @@
     },
     {
         "name": "e621ng/e621ng",
-        "commit": "805f496",
-        "cause": "stack",
-        "why": "rugged needs cmake and mrml, through rb_sys, needs libclang to compile, and neither was installed. Fixed by 805f496, which installs them when Gemfile.lock lists those gems."
+        "cause": "app",
+        "why": "It loads config/danbooru_local_config, which the repository does not commit, so migrations stop. Its first failure was Coresmith's: rugged and mrml could not compile without cmake and libclang, fixed by 805f496."
     },
     {
         "name": "rails/rails-contributors",
-        "commit": "805f496",
-        "cause": "stack",
-        "why": "rugged needs cmake to compile, and it was not installed. Fixed by 805f496, which installs it when Gemfile.lock lists rugged."
+        "cause": "app",
+        "why": "Its build needs a git mirror of the Rails repository on the server, which the corpus does not make. Its first failure was Coresmith's: rugged could not compile without cmake, fixed by 805f496."
     },
     {
         "name": "ibibhu/wedding",
