@@ -10,6 +10,7 @@ type Classified = { name: string; commit?: string; cause: 'stack' | 'app'; why: 
 
 const files = process.argv.slice(2).filter((argument) => !argument.startsWith('--'))
 const gate = process.argv.includes('--gate')
+const first = process.argv.includes('--first')
 
 if (files.length === 0) {
     console.error('Usage: bun tests/Corpus/report.ts results.jsonl [more.jsonl] [--gate]')
@@ -22,7 +23,10 @@ for (const file of files) {
     for (const line of readFileSync(file, 'utf8').split('\n')) {
         if (line.trim() !== '') {
             const result = JSON.parse(line) as Result
-            latest.set(result.name, result)
+
+            if (!first || !latest.has(result.name)) {
+                latest.set(result.name, result)
+            }
         }
     }
 }

@@ -267,12 +267,20 @@ for (const [index, entry] of entries.entries()) {
         await page.getByLabel('Repository', { exact: true }).fill(entry.url)
         await page.getByLabel('Branch', { exact: true }).fill(entry.branch)
 
-        const detail =
+        const read = async (): Promise<string> =>
             (await until(async () => {
                 const text = ((await page.getByTestId('stack-detection').innerText()) ?? '').trim()
 
                 return text === '' || text.includes('Reading the repository') ? null : text
             }, 240)) ?? 'Detection timed out'
+        let detail = await read()
+
+        for (let attempt = 0; attempt < 4 && detail.includes('in the last minute'); attempt++) {
+            await page.waitForTimeout(30_000)
+            await page.getByLabel('Branch', { exact: true }).fill('')
+            await page.getByLabel('Branch', { exact: true }).fill(entry.branch)
+            detail = await read()
+        }
 
         const notes = await page
             .locator('form .text-warning-strong')
