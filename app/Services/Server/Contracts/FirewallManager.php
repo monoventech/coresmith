@@ -14,6 +14,8 @@ interface FirewallManager
 
     public function deny(int $port, string $protocol = 'tcp'): string;
 
+    public function remove(int $port, string $protocol = 'tcp'): string;
+
     public function allowFrom(string $ip, int $port): string;
 
     public function denyIncomingByDefault(): string;

@@ -17,6 +17,7 @@ use App\Models\ServerMetric;
 use App\Models\User;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\SSH\AuthorizedKeyCommand;
+use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 
 final class ServerPresenter
@@ -34,7 +35,7 @@ final class ServerPresenter
         ['name' => 'Verification', 'desc' => 'admin API reachable from localhost only'],
     ];
 
-    public function __construct(private readonly CloudPresenter $cloud) {}
+    public function __construct(private readonly CloudPresenter $cloud, private readonly TeamAccess $access) {}
 
     /**
      * @return array<string, mixed>
@@ -65,7 +66,7 @@ final class ServerPresenter
                 'can_reboot' => RebootServer::viaProvider($server),
             ] : null,
             'disk_warning' => $metrics['disk']['now'] !== null && $metrics['disk']['now'] >= FleetSnapshot::DISK_WARNING
-                ? ['percent' => $metrics['disk']['now'], 'apps' => $server->applications->count()]
+                ? ['percent' => $metrics['disk']['now'], 'apps' => $this->access->applicationsOn($user, $server)->count()]
                 : null,
             'host_key' => $server->pending_host_key_fingerprint === null ? null : [
                 'expected' => $server->host_key_fingerprint,

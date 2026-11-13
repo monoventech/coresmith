@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\Ability;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Controller;
@@ -118,6 +119,19 @@ final class SourceProviderConnectController extends Controller
         $key = $request->query('app');
 
         abort_unless($key === null || is_string($key), 404);
+
+        $own = is_string($key) ? GitHubApp::query()->whereKey($key)->whereNotNull('user_id')->first() : null;
+
+        if ($own !== null) {
+            abort_unless($own->user_id === $request->user()->getKey(), 404);
+
+            $team = $this->teamOfApp($request, $context, (string) $key);
+
+            abort_if($team === null, 404);
+            abort_unless($request->user()->hasTeamAbility($team, Ability::CreateApplication), 403);
+
+            return redirect()->away($this->github->start($team, app(GitHubApps::class)->fromModel($own), $request->query('mode') === 'link'));
+        }
 
         $team = $key === null || $key === GitHubApps::ENV_KEY ? $this->currentTeam() : $this->teamOfApp($request, $context, $key);
 

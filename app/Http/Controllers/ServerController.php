@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\Ability;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Exceptions\ServerConnectionFailed;
@@ -74,7 +75,11 @@ final class ServerController extends Controller
                 'installer' => ThisMachine::INSTALLER,
             ] : null,
             'cloud' => fn(): array => $cloud->choices($team, $request->user(), $requested),
-            'catalog' => Inertia::defer(function () use ($cloud, $team, $requested): ?array {
+            'catalog' => Inertia::defer(function () use ($cloud, $team, $requested, $request): ?array {
+                if (!$request->user()->hasTeamAbility($team, Ability::CreateCloudServer)) {
+                    return null;
+                }
+
                 $account = $cloud->selectedAccount($team, $requested);
 
                 return $account === null ? null : $cloud->catalog($account);
@@ -111,7 +116,7 @@ final class ServerController extends Controller
         return to_route('servers.show', $server)->with($tone, $added);
     }
 
-    public function show(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
+    public function show(Request $request, Server $server, ServerPresenter $presenter, TeamAccess $access): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -127,7 +132,7 @@ final class ServerController extends Controller
 
         return Inertia::render('servers/Show', [
             'server' => $presenter->header($server, $request->user()),
-            'applications' => $server->applications()->orderBy('name')->get()->map(fn(Application $application): array => [
+            'applications' => $access->applicationsOn($request->user(), $server)->orderBy('name')->get()->map(fn(Application $application): array => [
                 'id' => $application->id,
                 'name' => $application->name,
                 'kind' => ApplicationPresenter::kind($application),

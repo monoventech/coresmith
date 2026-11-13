@@ -77,6 +77,7 @@ export type GitHubSettings = {
     connect: GitHubConnect | null
     choose: GitHubChoice | null
     webhook: GitHubWebhook[]
+    members: { id: string; account: string; member: string; remove_href: string }[]
     can: { manage: boolean }
 }
 

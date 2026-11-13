@@ -256,6 +256,14 @@ final class StoreApplicationRequest extends FormRequest
             return;
         }
 
+        $server = $this->route('server');
+
+        if (!$server instanceof Server || $server->team === null || !$connection->usableBy($this->user(), $server->team)) {
+            $validator->errors()->add('source_provider_id', self::CONNECTION_UNAVAILABLE);
+
+            return;
+        }
+
         if (!$connection->connected()) {
             $validator->errors()->add('source_provider_id', $connection->suspended_at === null ? self::CONNECTION_UNAVAILABLE : self::CONNECTION_SUSPENDED);
 

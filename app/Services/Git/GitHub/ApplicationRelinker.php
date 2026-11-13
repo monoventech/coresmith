@@ -148,7 +148,7 @@ final class ApplicationRelinker
             ->whereNotNull('repository_id')
             ->when($repositoryId !== null, fn(Builder $query): Builder => $query->where('repository_id', $repositoryId))
             ->where('source_provider_id', '!=', $connection->getKey())
-            ->whereHas('sourceProvider', fn(Builder $provider): Builder => $provider->where('type', SourceProviderType::GitHubApp->value))
+            ->whereHas('sourceProvider', fn(Builder $provider): Builder => $provider->withTrashed()->where('type', SourceProviderType::GitHubApp->value)->when($connection->user_id === null, fn(Builder $query): Builder => $query->whereNull('user_id'), fn(Builder $query): Builder => $query->where('user_id', $connection->user_id)))
             ->with('sourceProvider')
             ->orderBy('id')
             ->get()

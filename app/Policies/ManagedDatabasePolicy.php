@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Enums\Ability;
+use App\Enums\TeamRole;
 use App\Models\ManagedDatabase;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
@@ -38,7 +39,7 @@ final class ManagedDatabasePolicy
 
     public function delete(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $this->within($user, $managedDatabase, Ability::DeleteDatabase);
+        return $this->added($user, $managedDatabase, Ability::DeleteDatabase);
     }
 
     public function backup(User $user, ManagedDatabase $managedDatabase): Response|bool
@@ -48,12 +49,23 @@ final class ManagedDatabasePolicy
 
     public function restore(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
-        return $this->within($user, $managedDatabase, Ability::RestoreDatabase);
+        return $this->added($user, $managedDatabase, Ability::RestoreDatabase);
     }
 
     public function viewCredentials(User $user, ManagedDatabase $managedDatabase): Response|bool
     {
         return $this->within($user, $managedDatabase, Ability::ViewDatabaseCredentials);
+    }
+
+    private function added(User $user, ManagedDatabase $managedDatabase, Ability $ability): Response|bool
+    {
+        $allowed = $this->within($user, $managedDatabase, $ability);
+
+        if ($allowed !== true) {
+            return $allowed;
+        }
+
+        return $user->roleIn($managedDatabase->team) !== TeamRole::Developer || $managedDatabase->addedBy($user);
     }
 
     private function within(User $user, ManagedDatabase $managedDatabase, Ability $ability): Response|bool

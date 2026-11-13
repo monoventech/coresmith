@@ -12,6 +12,7 @@ enum TeamRole: string
 {
     case Owner = 'owner';
     case Admin = 'admin';
+    case Developer = 'developer';
     case Member = 'member';
 
     /**
@@ -29,6 +30,27 @@ enum TeamRole: string
                     Ability::ManageBilling,
                 ], true),
             )),
+            self::Developer => [
+                Ability::ViewTeam,
+                Ability::ViewServer,
+                Ability::CreateServer,
+                Ability::UpdateServer,
+                Ability::DeleteServer,
+                Ability::ManageFirewall,
+                Ability::ViewApplication,
+                Ability::CreateApplication,
+                Ability::UpdateApplication,
+                Ability::DeleteApplication,
+                Ability::DeployApplication,
+                Ability::ViewApplicationLogs,
+                Ability::ManageApplicationEnv,
+                Ability::ViewDatabase,
+                Ability::CreateDatabase,
+                Ability::DeleteDatabase,
+                Ability::BackupDatabase,
+                Ability::RestoreDatabase,
+                Ability::ViewDatabaseCredentials,
+            ],
             self::Member => [
                 Ability::ViewTeam,
                 Ability::ViewServer,
@@ -45,6 +67,7 @@ enum TeamRole: string
         return match ($this) {
             self::Owner => 'Owner',
             self::Admin => 'Admin',
+            self::Developer => 'Developer',
             self::Member => 'Deployer',
         };
     }

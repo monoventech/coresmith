@@ -112,6 +112,12 @@
         })
     }
 
+    let confirming = $state<string | null>(null)
+
+    function removeMember(href: string) {
+        router.delete(href, { preserveScroll: true, onFinish: () => (confirming = null) })
+    }
+
     function point(href: string) {
         pointing = href
         router.post(href, {}, { preserveScroll: true, onFinish: () => (pointing = null) })
@@ -171,6 +177,41 @@
                     <p class="m-0 text-[12.5px] text-muted-foreground">An owner or admin connects GitHub.</p>
                 </div>
             {/if}
+        {/if}
+
+        {#if github.members.length > 0}
+            <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="members-github">
+                <div class="mb-1 flex flex-wrap items-center gap-2.5">
+                    <GitBranch class="size-4.5 text-muted-foreground" />
+                    <h3 class="type-h3 m-0">Members' own GitHub</h3>
+                </div>
+                <p class="mb-3 text-[12.5px] text-muted-foreground">
+                    Each is usable only by its member. You can remove one, but not list or use its repositories.
+                </p>
+                <ul class="m-0 flex list-none flex-col p-0">
+                    {#each github.members as own (own.id)}
+                        <li class="flex flex-wrap items-center justify-between gap-3 border-t border-border py-2.5">
+                            <span class="text-[13.5px]"
+                                >{own.member}
+                                <span class="font-mono text-[12.5px] text-muted-foreground">{own.account}</span></span
+                            >
+                            {#if confirming === own.id}
+                                <span class="flex items-center gap-2 text-[12.5px]">
+                                    Their apps stop deploying from it.
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onclick={() => removeMember(own.remove_href)}>Remove</Button
+                                    >
+                                    <Button variant="ghost" size="sm" onclick={() => (confirming = null)}>Keep</Button>
+                                </span>
+                            {:else}
+                                <Button variant="ghost" size="sm" onclick={() => (confirming = own.id)}>Remove</Button>
+                            {/if}
+                        </li>
+                    {/each}
+                </ul>
+            </div>
         {/if}
 
         {#each others as provider (provider.id)}

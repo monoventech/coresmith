@@ -10,6 +10,7 @@ namespace App\Services\Git\GitHub;
 
 use App\Enums\SourceProviderType;
 use App\Models\Team;
+use App\Models\User;
 use App\Services\Teams\TeamUrls;
 use Illuminate\Support\Str;
 
@@ -67,6 +68,14 @@ final class ManifestBuilder
     public function organizationAction(string $state): string
     {
         return GitHubAppApi::WEB . '/organizations/{organization}/settings/apps/new?' . http_build_query(['state' => $state]);
+    }
+
+    public function personalName(User $user): string
+    {
+        $spaced = (string) preg_replace('/\s+/', ' ', Str::ascii((string) $user->name));
+        $words = trim((string) preg_replace('/ {2,}/', ' ', (string) preg_replace('/[^A-Za-z0-9 -]/', '', $spaced)));
+
+        return rtrim(substr(self::NAME_PREFIX . ' for ' . $words, 0, self::NAME_LIMIT), ' -');
     }
 
     public function defaultName(Team $team): string

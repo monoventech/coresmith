@@ -8,10 +8,12 @@ declare(strict_types=1);
 
 namespace App\Services\Git\GitHub;
 
+use App\Enums\Ability;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
 use App\Http\Controllers\Settings\SourceProviderConnectController;
 use App\Jobs\AdoptStrandedApplications;
+use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Services\Teams\TeamContext;
@@ -119,9 +121,7 @@ final class GitHubConnector
         $team = Team::query()->find($intent['team']);
 
         abort_if($team === null, 404);
-        Gate::forUser($request->user())->authorize('update', $team);
-
-        $app = $this->appFor($team, $intent['app']);
+        $app = $this->connectable($request, $team, $intent['app']);
 
         if ($app === null) {
             return $this->refuse($request, $team, SourceProviderConnectController::UNVERIFIED);
@@ -159,9 +159,7 @@ final class GitHubConnector
         $team = Team::query()->find($pending['team']);
 
         abort_if($team === null, 404);
-        Gate::forUser($request->user())->authorize('update', $team);
-
-        $app = $this->appFor($team, $pending['app']);
+        $app = $this->connectable($request, $team, $pending['app']);
 
         if ($app === null) {
             return $this->refuse($request, $team, SourceProviderConnectController::UNVERIFIED);
@@ -216,6 +214,21 @@ final class GitHubConnector
         return $provider;
     }
 
+    private function connectable(Request $request, Team $team, ?string $key): ?GitHubAppCredentials
+    {
+        $own = $key === null ? null : GitHubApp::query()->whereKey($key)->where('team_id', $team->getKey())->whereNotNull('user_id')->first();
+
+        if ($own !== null) {
+            abort_unless($own->user_id === $request->user()->getKey() && $request->user()->hasTeamAbility($team, Ability::CreateApplication), 403);
+
+            return $this->apps->fromModel($own);
+        }
+
+        Gate::forUser($request->user())->authorize('update', $team);
+
+        return $this->appFor($team, $key);
+    }
+
     /**
      * @param  array{id: string, account: string, account_type: string, repository_selection: string, suspended_at: ?string}  $installation
      * @param  array{id: string, login: string}|null  $person
@@ -225,6 +238,7 @@ final class GitHubConnector
         $provider = SourceProvider::withTrashed()->firstOrNew($this->keys($team, $app, $installation['id']));
 
         $provider->forceFill([
+            'user_id' => $app->isEnv() ? null : GitHubApp::query()->whereKey($app->key)->value('user_id'),
             'name' => $installation['account'],
             'account_type' => $installation['account_type'] === '' ? null : $installation['account_type'],
             'repository_selection' => $installation['repository_selection'] === '' ? null : $installation['repository_selection'],
