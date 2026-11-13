@@ -1160,7 +1160,7 @@ final class DeployApplication implements ShouldQueue
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
 
-                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), unit: $unit), sudo: true);
+                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), unit: $unit, environment: app(StackDefaults::class)->build($application)), sudo: true);
 
                 $this->appendLog($result->output);
 

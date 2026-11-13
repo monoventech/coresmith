@@ -68,6 +68,14 @@ final class StackDefaults
     /**
      * @return array<string, string>
      */
+    public function build(Application $application): array
+    {
+        return strtolower((string) $application->framework) === 'laravel' ? ['LARAVEL_INSTALLER_DEFER_HOOKS' => '1'] : [];
+    }
+
+    /**
+     * @return array<string, string>
+     */
     public function process(Application $application): array
     {
         $framework = strtolower((string) $application->framework);

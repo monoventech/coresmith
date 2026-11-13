@@ -49,10 +49,11 @@ final class AppShell
 
     /**
      * @param  array<string, string>  $versions
+     * @param  array<string, string>  $environment
      */
-    public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null): string
+    public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null, array $environment = []): string
     {
-        return $this->unit($application, $directory, $versions, $this->build($seconds), unit: $unit) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
+        return $this->unit($application, $directory, $versions, $this->build($seconds), $environment, $unit) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
     }
 
     /**

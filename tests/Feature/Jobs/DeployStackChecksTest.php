@@ -146,3 +146,16 @@ test('an app Coresmith could not ask records nothing, and the deploy still succe
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($deployment->fresh()->live_status)->toBeNull();
 });
+
+test('a Laravel app installs its dependencies with the starter kit setup deferred, and the log shows the plain command', function () {
+    $deployment = Deployment::factory()->for(stackDeployApp())->create();
+    $transport = stackDeployTransport(stackDeployProbe('laravel-13', "@@envkey APP_KEY\n"));
+
+    stackDeployRun($deployment, $transport);
+
+    $install = collect($transport->commands())->first(fn(string $command): bool => str_contains($command, 'composer install'));
+
+    expect($install)->toContain("-E 'LARAVEL_INSTALLER_DEFER_HOOKS=1'")
+        ->and($deployment->fresh()->log)->toContain('$ composer install --no-dev')
+        ->and($deployment->fresh()->log)->not->toContain('LARAVEL_INSTALLER_DEFER_HOOKS');
+});

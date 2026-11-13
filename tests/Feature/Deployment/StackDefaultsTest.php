@@ -60,3 +60,8 @@ test('a deploy fills only secrets, never APP_ENV', function () {
 test('a probe that did not finish fills nothing, because the committed .env could hold the key', function () {
     expect(app(StackDefaults::class)->missing(stackDefaultsApp('laravel'), new RepositoryFacts))->toBe([]);
 });
+
+test('a Laravel build defers a starter kit\'s one-time setup, which needs the dev tools a deploy leaves out', function () {
+    expect(app(StackDefaults::class)->build(stackDefaultsApp('laravel')))->toBe(['LARAVEL_INSTALLER_DEFER_HOOKS' => '1'])
+        ->and(app(StackDefaults::class)->build(stackDefaultsApp('symfony')))->toBe([]);
+});
