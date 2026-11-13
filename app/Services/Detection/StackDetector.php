@@ -57,6 +57,8 @@ final class StackDetector
         'ng serve', 'vue-cli-service serve', 'hexo server', 'next dev', 'nuxt dev', 'nuxi dev', 'astro dev', 'tsx watch', 'ts-node-dev', 'expo start', 'browser-sync', 'live-server',
     ];
 
+    private const COMPILES_AT_START = ['ts-node', 'nest start', 'babel-node'];
+
     private const SYMFONY_FAMILY = ['symfony/', 'oro/', 'sylius/', 'shopware/', 'pimcore/'];
 
     private const JS_LOCKFILES = ['bun.lock' => 'bun', 'bun.lockb' => 'bun', 'package-lock.json' => 'node', 'pnpm-lock.yaml' => 'node', 'yarn.lock' => 'node'];
@@ -307,6 +309,12 @@ final class StackDetector
         foreach (self::DEVELOPMENT_TOOLS as $tool) {
             if (preg_match('/(^|[\s;&|(])' . preg_quote($tool, '/') . '(\s|$)/', $start) === 1) {
                 return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$tool}, which isn't a production server. Add a start script that runs the app, for example \"start\": \"node server.js\"."]);
+            }
+        }
+
+        foreach (self::COMPILES_AT_START as $tool) {
+            if (preg_match('/(^|[\s;&|(])' . preg_quote($tool, '/') . '(\s|$)/', $start) === 1) {
+                return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$tool}, which compiles TypeScript every time the app starts and needs more memory than the Small size allows. Build to JavaScript and start that, for example \"start\": \"node dist/main.js\", or pick a bigger size."]);
             }
         }
 

@@ -83,3 +83,21 @@ test('the lockfile of the manager packageManager names is the one installed from
         ->and($tooling?->managerVersion)->toBe('1.22.22')
         ->and($tooling?->locked)->toBeTrue();
 });
+
+test('a start script that compiles TypeScript every time the app starts is not sure, since that needs more memory than Small', function (string $start, string $tool) {
+    $detected = app(StackDetector::class)->detect(startScriptFacts(['start' => $start]), fn(string $runtime): array => []);
+
+    expect($detected->verdict())->toBe('unsure')
+        ->and($detected->unsettled['framework'] ?? '')->toContain("runs {$tool}, which compiles TypeScript every time the app starts");
+})->with([
+    'ts-node, NotificationService' => ['ts-node src/server.ts', 'ts-node'],
+    'nest start' => ['nest start', 'nest start'],
+    'babel-node' => ['babel-node src/index.js', 'babel-node'],
+]);
+
+test('a start script that runs built JavaScript, or tsx, is ready', function (string $start) {
+    expect(app(StackDetector::class)->detect(startScriptFacts(['start' => $start]), fn(string $runtime): array => [])->verdict())->toBe('ready');
+})->with([
+    'node' => ['node dist/server.js'],
+    'tsx' => ['tsx src/server.ts'],
+]);
