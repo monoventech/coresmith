@@ -41,6 +41,7 @@ use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\CertificateCheck;
+use App\Services\Server\PortAllocator;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
@@ -218,6 +219,7 @@ final class E2ESeeder extends Seeder
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->connectFixtures();
         $this->databasePasswordFixtures();
+        $this->serverWithNoFreePorts();
         $this->auditFixtures();
         $this->invitations($tenant->owner);
 
@@ -391,6 +393,20 @@ final class E2ESeeder extends Seeder
 
         $unused = $this->server('vault-02', '127.0.0.1', ServerStatus::Active);
         $unused->forceFill(['ssh_port' => 1, 'meta' => [...(array) $unused->meta, 'installed_databases' => ['redis']]])->save();
+    }
+
+    private function serverWithNoFreePorts(): void
+    {
+        $full = $this->server('full-01', '127.0.0.1', ServerStatus::Active);
+        $full->forceFill(['ssh_port' => 1])->save();
+
+        $spent = $this->application('spent-0', PortAllocator::RANGE_START, ['deleted_at' => now()->subDay()], $full);
+
+        foreach (range(PortAllocator::RANGE_START + PortAllocator::BLOCK_SIZE, PortAllocator::RANGE_END, PortAllocator::BLOCK_SIZE) as $index => $port) {
+            $name = 'spent-' . ($index + 1);
+
+            $spent->replicate()->forceFill(['name' => $name, 'slug' => $name, 'system_user' => 'coresmith-app-' . $name, 'domain' => $name . '.bench.monoven.io', 'base_port' => $port])->saveQuietly();
+        }
     }
 
     private function connectFixtures(): void
