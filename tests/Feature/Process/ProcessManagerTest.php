@@ -401,3 +401,7 @@ test("on every other server an app's units stay exactly as they were", function 
     expect($unit)->toContain("ProtectControlGroups=true\n\n[Install]")
         ->and($fpm)->toContain("PrivateTmp=true\n\n[Install]");
 });
+
+test("the pool fills \$_ENV from the app's environment too, so apps that read it with phpdotenv get Coresmith's values", function () {
+    expect((new FpmPoolBuilder(new AsdfManager))->pool(managedApp()))->toContain('php_admin_value[variables_order] = EGPCS');
+});

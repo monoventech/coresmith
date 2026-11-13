@@ -31,6 +31,7 @@ use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\DatabaseFailure;
 use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\DeploymentLog;
@@ -1200,6 +1201,10 @@ final class DeployApplication implements ShouldQueue
                 }
 
                 if ($attempt > $retries || !$this->looksLikeNetwork($result->output) || DeploymentCancellation::requested($this->deployment)) {
+                    if ($phase === DeploymentPhases::MIGRATIONS) {
+                        $this->failureReason = DatabaseFailure::reason($result->output) ?? $this->failureReason;
+                    }
+
                     $result->throw();
                 }
 
