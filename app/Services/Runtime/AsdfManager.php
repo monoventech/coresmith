@@ -45,6 +45,9 @@ final class AsdfManager
             'PHP_BUILD_CONFIGURE_OPTS' => '--with-pgsql --with-pdo-pgsql',
             'PHP_BUILD_INSTALL_EXTENSION' => 'redis',
         ],
+        'ruby' => [
+            'RUBY_CONFIGURE_OPTS' => '--disable-install-doc',
+        ],
     ];
 
     private const DOWNLOAD_ERRORS = ['curl: (', 'Could not resolve host', 'Failed to download', 'Connection timed out', 'Connection reset', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'unable to download', 'SSL_ERROR_SYSCALL', 'Temporary failure resolving', 'Could not connect to', 'Unable to connect to'];
@@ -175,7 +178,7 @@ final class AsdfManager
         $result = $connection->execute("ls -1 {$path} 2>/dev/null || true");
 
         $versions = array_values(array_filter(
-            array_map(trim(...), preg_split('/\R/', $result->output) ?: []),
+            array_map(trim(...), preg_split('/\r\n|\n|\r/', $result->output) ?: []),
             fn(string $version): bool => preg_match('/^\d[0-9A-Za-z.+-]*$/D', $version) === 1 && self::isValid($runtime, $version),
         ));
 

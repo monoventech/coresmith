@@ -100,6 +100,7 @@ export default ts.config(
             'resources/js/components/ui/*',
             'resources/js/routes/**',
             'resources/js/wayfinder/**',
+            'tests/Fixtures/repositories/**',
         ],
     },
     prettier, // Turn off all rules that might conflict with Prettier

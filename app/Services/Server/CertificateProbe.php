@@ -41,7 +41,7 @@ final class CertificateProbe
     {
         $found = [];
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             if (preg_match('/^@@cert (\S+) (?:notAfter=(.+)|none)$/', trim($line), $matches) !== 1 || !in_array($matches[1], $domains, true)) {
                 continue;
             }

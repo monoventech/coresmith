@@ -16,6 +16,8 @@ use App\Services\Cloud\Tasks\CloudTask;
 
 final class DeployGuard
 {
+    public const UNCHECKED = "Check the repository on the app page first. Coresmith hasn't read it yet, so the first deploy waits for that check.";
+
     public function __construct(private readonly TeamBilling $billing) {}
 
     public function refusal(Application $application): ?string
@@ -35,7 +37,8 @@ final class DeployGuard
         }
 
         $server = $application->server;
+        $cloud = $server === null ? null : CloudTask::refusal($server, 'Deploy');
 
-        return $server === null ? null : CloudTask::refusal($server, 'Deploy');
+        return $cloud ?? ($application->needsRepositoryCheck() ? self::UNCHECKED : null);
     }
 }

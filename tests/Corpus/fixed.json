@@ -1,0 +1,449 @@
+[
+    {
+        "name": "laravel-13",
+        "url": "https://github.com/laravel/laravel.git",
+        "branch": "13.x",
+        "expect": {
+            "verdict": "ready",
+            "type": "php",
+            "framework": "laravel",
+            "web_directory": "/public"
+        },
+        "why": "The Laravel skeleton: no locks, SQLite, Vite."
+    },
+    {
+        "name": "laravel-vue-starter",
+        "url": "https://github.com/laravel/vue-starter-kit.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "php",
+            "framework": "laravel",
+            "web_directory": "/public"
+        },
+        "why": "Inertia and Vue with Wayfinder, which runs PHP inside the Vite build."
+    },
+    {
+        "name": "laravel-react-starter",
+        "url": "https://github.com/laravel/react-starter-kit.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "php",
+            "framework": "laravel",
+            "web_directory": "/public"
+        },
+        "why": "Inertia and React."
+    },
+    {
+        "name": "laravel-livewire-starter",
+        "url": "https://github.com/laravel/livewire-starter-kit.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "php",
+            "framework": "laravel",
+            "web_directory": "/public"
+        },
+        "why": "Livewire and Flux."
+    },
+    {
+        "name": "symfony-demo",
+        "url": "https://github.com/symfony/demo.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "php",
+            "framework": "symfony",
+            "web_directory": "/public"
+        },
+        "why": "Symfony with AssetMapper and a committed SQLite database."
+    },
+    {
+        "name": "slim-skeleton",
+        "url": "https://github.com/slimphp/Slim-Skeleton.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "php",
+            "framework": "",
+            "web_directory": "/public"
+        },
+        "why": "Plain PHP with public/index.php and no lock."
+    },
+    {
+        "name": "guzzle-library",
+        "url": "https://github.com/guzzle/guzzle.git",
+        "branch": "8.4",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "library"
+        },
+        "why": "A Composer library."
+    },
+    {
+        "name": "laravel-package",
+        "url": "https://github.com/aimeos/aimeos-laravel.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "library"
+        },
+        "why": "A Laravel package without artisan."
+    },
+    {
+        "name": "laravel-php71-lock",
+        "url": "https://github.com/gitscrum-core/laravel-gitscrum.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "composer.lock holds"
+        },
+        "why": "A lock no PHP Coresmith builds can install."
+    },
+    {
+        "name": "rails-devise-demo",
+        "url": "https://github.com/jameshibbard/authentication-with-devise-and-cancancan.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "ruby",
+            "framework": "rails"
+        },
+        "why": "Rails with Devise and CanCanCan."
+    },
+    {
+        "name": "sinatra-retro",
+        "url": "https://github.com/emad-elsaid/retro.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "Bundler 2.2.22"
+        },
+        "why": "A Gemfile.lock from Bundler 2.2, whose locked Bundler crashes on Ruby 3.4."
+    },
+    {
+        "name": "sinatra-echo-api",
+        "url": "https://github.com/3scale/echo-api.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "ruby",
+            "framework": "sinatra"
+        },
+        "why": "3scale's echo API, Sinatra on Puma."
+    },
+    {
+        "name": "sinatra-bootstrap",
+        "url": "https://github.com/bootstrap-ruby/sinatra-bootstrap.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "ruby",
+            "framework": "sinatra"
+        },
+        "why": "Sinatra with Bootstrap."
+    },
+    {
+        "name": "sinatra-on-thin",
+        "url": "https://github.com/chillu/github-dashing.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "Puma"
+        },
+        "why": "Sinatra without Puma in its lock."
+    },
+    {
+        "name": "ruby-gem",
+        "url": "https://github.com/sinatra/sinatra.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "Ruby gem"
+        },
+        "why": "A gem whose Gemfile loads its gemspec."
+    },
+    {
+        "name": "ruby-engine",
+        "url": "https://github.com/ddnexus/pagy.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "Ruby gem"
+        },
+        "why": "A gem that names rails."
+    },
+    {
+        "name": "next-tailwind",
+        "url": "https://github.com/theodorusclarence/ts-nextjs-tailwind-starter.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "nextjs",
+            "js_runtime": "node"
+        },
+        "why": "Next.js with npm."
+    },
+    {
+        "name": "next-tailadmin",
+        "url": "https://github.com/TailAdmin/free-nextjs-admin-dashboard.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "nextjs",
+            "js_runtime": "node"
+        },
+        "why": "Next.js admin template."
+    },
+    {
+        "name": "next-landing",
+        "url": "https://github.com/ixartz/Next-JS-Landing-Page-Starter-Template.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "nextjs",
+            "js_runtime": "node"
+        },
+        "why": "Next.js landing page."
+    },
+    {
+        "name": "next-export",
+        "url": "https://github.com/yasuhiro-yamamoto/nextjs-static-exports.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/out"
+        },
+        "why": "output: 'export' builds static files."
+    },
+    {
+        "name": "next-no-start",
+        "url": "https://github.com/reliverse/relivator.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "start script"
+        },
+        "why": "Next.js without a start script."
+    },
+    {
+        "name": "nuxt-ui-starter",
+        "url": "https://github.com/nuxt-ui-templates/starter.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "nuxt",
+            "js_runtime": "node"
+        },
+        "why": "The Nuxt UI starter."
+    },
+    {
+        "name": "nuxt-element",
+        "url": "https://github.com/element-plus/element-plus-nuxt-starter.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "nuxt",
+            "js_runtime": "node"
+        },
+        "why": "Nuxt with Element Plus."
+    },
+    {
+        "name": "sveltekit-node",
+        "url": "https://github.com/YakupEmreYerli/Convetta.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "sveltekit",
+            "js_runtime": "node"
+        },
+        "why": "SvelteKit on adapter-node."
+    },
+    {
+        "name": "sveltekit-static",
+        "url": "https://github.com/Zxce3/shadcn-sveltekit-landing-page.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/build"
+        },
+        "why": "SvelteKit on adapter-static, built with Bun."
+    },
+    {
+        "name": "sveltekit-auto",
+        "url": "https://github.com/nextauthjs/sveltekit-auth-example.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "@sveltejs/adapter-auto"
+        },
+        "why": "adapter-auto builds for a platform."
+    },
+    {
+        "name": "sveltekit-vercel",
+        "url": "https://github.com/sveltejs/realworld.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "@sveltejs/adapter-vercel"
+        },
+        "why": "adapter-vercel builds for Vercel."
+    },
+    {
+        "name": "astro-paper",
+        "url": "https://github.com/satnaing/astro-paper.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/dist"
+        },
+        "why": "Astro static with pnpm and an engines.node floor."
+    },
+    {
+        "name": "astrowind",
+        "url": "https://github.com/arthelokyo/astrowind.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/dist"
+        },
+        "why": "Astro static with npm."
+    },
+    {
+        "name": "vite-react",
+        "url": "https://github.com/dan5py/react-vite-shadcn-ui.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/dist"
+        },
+        "why": "A Vite React single-page app."
+    },
+    {
+        "name": "express-api",
+        "url": "https://github.com/hasanziakhan10/express-starter-api.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "",
+            "js_runtime": "node"
+        },
+        "why": "Express with a start script."
+    },
+    {
+        "name": "hono-bun",
+        "url": "https://github.com/maulanashalihin/dulak.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "",
+            "js_runtime": "bun"
+        },
+        "why": "Hono with Inertia React, served by Bun."
+    },
+    {
+        "name": "nest-api",
+        "url": "https://github.com/nestjs/typescript-starter.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "",
+            "js_runtime": "node"
+        },
+        "why": "NestJS's official starter, started with nest start."
+    },
+    {
+        "name": "js-library",
+        "url": "https://github.com/chimurai/http-proxy-middleware.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "library"
+        },
+        "why": "A library with a main file."
+    },
+    {
+        "name": "js-electron",
+        "url": "https://github.com/GetPublii/Publii.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "electron"
+        },
+        "why": "A desktop app."
+    },
+    {
+        "name": "js-workspace",
+        "url": "https://github.com/honojs/hono.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "workspace"
+        },
+        "why": "A workspace root."
+    },
+    {
+        "name": "js-old-node",
+        "url": "https://github.com/mucahitnezir/express-starter.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "engines.node"
+        },
+        "why": "engines.node asks for Node 16."
+    },
+    {
+        "name": "deno-app",
+        "url": "https://github.com/kinde-starter-kits/deno-starter-kit.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "",
+            "js_runtime": "deno"
+        },
+        "why": "A Deno app with a start task."
+    },
+    {
+        "name": "deno-library",
+        "url": "https://github.com/Octo8080X/fresh-session.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "library"
+        },
+        "why": "A JSR library."
+    },
+    {
+        "name": "static-html",
+        "url": "https://github.com/developermr/static-website-html-css-bootstrap.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/"
+        },
+        "why": "index.html at the root."
+    }
+]

@@ -53,7 +53,7 @@ final class OsDetector
     {
         $values = [];
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             if (!str_contains($line, '=')) {
                 continue;
             }

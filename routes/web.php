@@ -24,6 +24,7 @@ use App\Http\Controllers\NoTeamController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectEnvironmentController;
 use App\Http\Controllers\ReleasesController;
+use App\Http\Controllers\RepositoryCheckController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SharedRedisController;
 use App\Http\Controllers\SshKeyController;
+use App\Http\Controllers\StackDetectionController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberAccessController;
@@ -133,6 +135,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('servers/{server}/host-key/reject', [ServerHostKeyController::class, 'reject'])
         ->name('servers.host-key.reject');
 
+    Route::get('servers/{server}/repository-stack', [StackDetectionController::class, 'show'])
+        ->middleware('throttle:20,1,repository-stack')
+        ->name('servers.repository-stack');
     Route::resource('servers.applications', ApplicationController::class)->except(['index', 'edit']);
     Route::get('servers/{server}/applications/{application}/releases', [ReleasesController::class, 'index'])
         ->name('servers.applications.releases.index');
@@ -149,6 +154,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.maintenance');
     Route::put('servers/{server}/applications/{application}/runtime', [ApplicationRuntimeController::class, 'update'])
         ->name('servers.applications.runtime');
+    Route::post('servers/{server}/applications/{application}/repository-check', [RepositoryCheckController::class, 'store'])
+        ->middleware('throttle:10,1,repository-check')
+        ->name('servers.applications.repository-check');
+    Route::put('servers/{server}/applications/{application}/repository-check', [RepositoryCheckController::class, 'apply'])
+        ->name('servers.applications.repository-check.apply');
     Route::post('servers/{server}/applications/{application}/deploy', [DeploymentController::class, 'deploy'])
         ->name('servers.applications.deploy');
     Route::post('servers/{server}/applications/{application}/rollback', [DeploymentController::class, 'rollback'])

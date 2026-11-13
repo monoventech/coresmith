@@ -9,6 +9,8 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\ApplicationType;
+use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Events\DeploymentSucceeded;
@@ -35,10 +37,15 @@ use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\GitFailure;
+use App\Services\Deployment\LiveAnswer;
+use App\Services\Deployment\LiveCheck;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\RepositoryCache;
 use App\Services\Deployment\SharedStorage;
+use App\Services\Deployment\StackDefaults;
+use App\Services\Detection\Blocker;
+use App\Services\Detection\StackChecks;
 use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\ApplicationRelinker;
@@ -53,6 +60,7 @@ use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeBinaries;
@@ -442,6 +450,8 @@ final class DeployApplication implements ShouldQueue
         $asdf = app(AsdfManager::class);
         $binaries = app(RuntimeBinaries::class);
         $facts = $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(RepositoryProbe::class)->read($connection, $paths->appDirectory($release), $application));
+        $this->refuseUnrunnable($application, $facts);
+        $this->fillMissingSecrets($application, $facts);
         $stack = $this->reconnecting($connection, DeploymentPhases::CLONE, function () use ($connection, $application, $facts, $asdf, $binaries): Stack {
             $stack = app(StackResolver::class)->resolve($application, $facts, fn(string $runtime): array => $asdf->installedVersions($connection, $runtime));
 
@@ -465,6 +475,47 @@ final class DeployApplication implements ShouldQueue
         return $stack;
     }
 
+    private function refuseUnrunnable(Application $application, RepositoryFacts $facts): void
+    {
+        $blockers = app(StackChecks::class)->blockers($application, $facts, fn(): array => [], runtime: false);
+
+        if ($blockers === []) {
+            return;
+        }
+
+        $this->failureReason = implode(' ', array_map(fn(Blocker $blocker): string => trim($blocker->reason . ' ' . $blocker->fix), $blockers));
+
+        throw new DeploymentAborted($this->failureReason);
+    }
+
+    private function fillMissingSecrets(Application $application, RepositoryFacts $facts): void
+    {
+        $defaults = app(StackDefaults::class);
+        $missing = $defaults->missing($application, $facts);
+
+        if ($missing === []) {
+            return;
+        }
+
+        $application->forceFill(['env_variables' => $defaults->fill((string) $application->env_variables, $missing)])->save();
+
+        foreach (array_keys($missing) as $name) {
+            $this->appendLog("{$name} wasn't set, so Coresmith generated one and saved it in the app's environment.");
+        }
+    }
+
+    private function recordLiveAnswer(SSHConnection $connection, Application $application): void
+    {
+        $answer = rescue(fn(): ?LiveAnswer => app(LiveCheck::class)->ask($connection, $application), report: false);
+
+        if (!$answer instanceof LiveAnswer) {
+            return;
+        }
+
+        $this->deployment->forceFill(['live_status' => $answer->status, 'live_detail' => $answer->detail])->save();
+        $this->appendLog('check: ' . $answer->url . ' answered ' . $answer->status . ($answer->detail === null ? '' : '. The app logged: ' . $answer->detail));
+    }
+
     private function verifyInstalled(SSHConnection $connection, RuntimeBinaries $binaries, Stack $stack): Stack
     {
         $runtimes = [];
@@ -478,7 +529,7 @@ final class DeployApplication implements ShouldQueue
                 : new ResolvedRuntime($resolved->runtime, $resolved->version, $resolved->source, $resolved->detail, $installed, $resolved->note);
         }
 
-        return new Stack($runtimes, $stack->framework, $stack->tooling, $stack->notes, $stack->gems, $stack->packages);
+        return $stack->withRuntimes($runtimes);
     }
 
     private function describe(ResolvedRuntime $runtime): string
@@ -574,6 +625,7 @@ final class DeployApplication implements ShouldQueue
         app(CrontabBuilder::class)->write($connection, $application);
         $this->pruneOldReleases($connection, $application);
         $this->watchProcesses($connection, $processes, $application);
+        $this->recordLiveAnswer($connection, $application);
 
         if (DeploymentCancellation::requested($this->deployment)) {
             app(DeploymentCancellation::class)->note($this->deployment);
@@ -780,7 +832,7 @@ final class DeployApplication implements ShouldQueue
     private function recordCommit(SSHConnection $connection, string $repo, string $branch): void
     {
         $result = $connection->execute("git --git-dir={$repo} log -1 --format='%H%n%an%n%s' {$branch} 2>/dev/null || true", sudo: true);
-        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\R/', $result->output) ?: []), static fn(string $line): bool => $line !== ''));
+        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\r\n|\n|\r/', $result->output) ?: []), static fn(string $line): bool => $line !== ''));
 
         if (count($lines) < 2 || preg_match(AutoDeploy::COMMIT, $lines[0]) !== 1) {
             return;
@@ -823,7 +875,22 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::DEPENDENCIES, 'installing dependencies');
+        $this->enableCorepackCommands($connection, $stack);
         $this->runInRelease($connection, $release, $stack, $steps, DeploymentPhases::DEPENDENCIES, self::DEPENDENCY_RETRIES);
+    }
+
+    private function enableCorepackCommands(SSHConnection $connection, Stack $stack): void
+    {
+        $node = $stack->versions()['nodejs'] ?? null;
+
+        if ($node === null || (!in_array($stack->tooling?->manager, ['yarn', 'pnpm'], true) && $this->deployment->application->type !== ApplicationType::Ruby)) {
+            return;
+        }
+
+        $bin = escapeshellarg(app(AsdfManager::class)->versionPath('nodejs', $node) . '/bin');
+        $corepack = escapeshellarg(app(AsdfManager::class)->binaryPath('nodejs', $node, 'corepack'));
+
+        $connection->execute("test ! -x {$corepack} || PATH={$bin}:/usr/bin:/bin {$corepack} enable --install-directory {$bin}", sudo: true);
     }
 
     private function build(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void
@@ -845,7 +912,7 @@ final class DeployApplication implements ShouldQueue
 
     private function migrate(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void
     {
-        $steps = $commands->migrations($this->deployment->application);
+        $steps = $commands->migrations($this->deployment->application, $stack);
 
         if ($steps === []) {
             return;
@@ -958,7 +1025,10 @@ final class DeployApplication implements ShouldQueue
 
         $this->appendLog($loop->output);
         $this->keepFailed = true;
-        $this->failureReason = "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
+        $size = AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small;
+        $this->failureReason = $loop->outOfMemory
+            ? "Out of memory: {$loop->unit} went past the {$size->memoryMaxMb()} MB the " . ucfirst($size->value) . " size allows, so it kept being stopped. Pick a bigger size on the app page, then deploy again. releases/{$this->timestamp} is live but not serving, so roll back to the previous release meanwhile."
+            : "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
 
         throw new DeploymentAborted($this->failureReason);
     }
@@ -1110,11 +1180,17 @@ final class DeployApplication implements ShouldQueue
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
 
-                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), unit: $unit), sudo: true);
+                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), unit: $unit, environment: app(StackDefaults::class)->build($application)), sudo: true);
 
                 $this->appendLog($result->output);
 
                 if ($result->successful()) {
+                    break;
+                }
+
+                if (in_array($step, DeploymentCommands::LARAVEL_CACHES, true) && !DeploymentCancellation::requested($this->deployment)) {
+                    $this->appendLog("{$step} failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.");
+
                     break;
                 }
 
@@ -1165,7 +1241,7 @@ final class DeployApplication implements ShouldQueue
 
     private function appendUnloggedOutput(string $output): void
     {
-        $tail = trim(implode("\n", array_slice(preg_split('/\R/', trim($output)) ?: [], -30)));
+        $tail = trim(implode("\n", array_slice(preg_split('/\r\n|\n|\r/', trim($output)) ?: [], -30)));
 
         if ($tail === '' || str_ends_with(trim((string) $this->deployment->log), app(LogSanitizer::class)->sanitize($tail, $this->deployment->application))) {
             return;

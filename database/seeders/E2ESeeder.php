@@ -41,6 +41,7 @@ use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\JsTooling;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\CertificateCheck;
+use App\Services\Server\PortAllocator;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
@@ -207,6 +208,8 @@ final class E2ESeeder extends Seeder
         }
 
         $this->githubFixtures($tenant->applications['atlas']);
+        $this->repositoryChecks();
+        $this->answered500();
         $this->cronFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
@@ -216,6 +219,7 @@ final class E2ESeeder extends Seeder
         $this->server('empty-server', '203.0.113.11', ServerStatus::Pending);
         $this->connectFixtures();
         $this->databasePasswordFixtures();
+        $this->serverWithNoFreePorts();
         $this->auditFixtures();
         $this->invitations($tenant->owner);
 
@@ -391,6 +395,20 @@ final class E2ESeeder extends Seeder
         $unused->forceFill(['ssh_port' => 1, 'meta' => [...(array) $unused->meta, 'installed_databases' => ['redis']]])->save();
     }
 
+    private function serverWithNoFreePorts(): void
+    {
+        $full = $this->server('full-01', '127.0.0.1', ServerStatus::Active);
+        $full->forceFill(['ssh_port' => 1])->save();
+
+        $spent = $this->application('spent-0', PortAllocator::RANGE_START, ['deleted_at' => now()->subDay()], $full);
+
+        foreach (range(PortAllocator::RANGE_START + PortAllocator::BLOCK_SIZE, PortAllocator::RANGE_END, PortAllocator::BLOCK_SIZE) as $index => $port) {
+            $name = 'spent-' . ($index + 1);
+
+            $spent->replicate()->forceFill(['name' => $name, 'slug' => $name, 'system_user' => 'coresmith-app-' . $name, 'domain' => $name . '.bench.monoven.io', 'base_port' => $port])->saveQuietly();
+        }
+    }
+
     private function connectFixtures(): void
     {
         foreach (array_values(self::PROJECTS) as $code) {
@@ -448,6 +466,47 @@ final class E2ESeeder extends Seeder
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $failed($this->server("stalled-{$code}", '203.0.113.' . (90 + $index), ServerStatus::Pending));
+        }
+    }
+
+    private function answered500(): void
+    {
+        $application = $this->application('answered-500', 9900);
+        $this->succeeded($application, 2 * 60, 'v2.0.0');
+        $application->deployments()->latest('id')->firstOrFail()->forceFill(['live_status' => 500, 'live_detail' => 'No application encryption key has been specified.'])->save();
+    }
+
+    private function repositoryChecks(): void
+    {
+        foreach (array_values(self::PROJECTS) as $index => $code) {
+            $this->application("unchecked-{$code}", 9700 + $index * 10, [
+                'repository_url' => "git@gitlab.com:acme/unchecked-{$code}.git",
+                'status' => ApplicationStatus::Pending,
+                'current_release' => null,
+                'repository_check_pending' => true,
+            ]);
+            $this->application("proposal-{$code}", 9800 + $index * 10, [
+                'web_directory' => '/',
+                'status' => ApplicationStatus::Pending,
+                'current_release' => null,
+                'repository_check_pending' => true,
+                'repository_check' => [
+                    'state' => 'proposal',
+                    'commit' => '9f3c2e1a4b5c6d7e8f9012345678901234567890',
+                    'blockers' => [
+                        ['field' => 'framework', 'reason' => "There is no artisan file at the repository's root, so this isn't a Laravel app.", 'fix' => 'Pick Plain PHP, or Symfony if it uses Symfony.'],
+                        ['field' => 'web_directory', 'reason' => 'There is no index.php, so the web root / would serve nothing.', 'fix' => 'Set the web root to /public, where index.php is.'],
+                    ],
+                    'proposal' => [
+                        'verdict' => 'ready',
+                        'fields' => ['type' => 'php', 'framework' => '', 'js_runtime' => null, 'web_directory' => '/public', 'version' => '8.5.10'],
+                        'sources' => [],
+                        'unsettled' => [],
+                        'blockers' => [],
+                        'label' => 'Plain PHP, PHP 8.5.10',
+                    ],
+                ],
+            ]);
         }
     }
 

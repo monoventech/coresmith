@@ -40,6 +40,17 @@ test('a soft deleted application still holds its block', function () {
     expect((new PortAllocator)->allocate($server->fresh()))->toBe(8010);
 });
 
+test('a removed application frees its block and its ssr port once its 7 days to come back are over', function () {
+    $server = Server::factory()->create();
+    Application::factory()->for($server)->create(['base_port' => 8000, 'ssr_port' => 13714])->delete();
+    $gone = Application::factory()->for($server)->create(['base_port' => 8010, 'ssr_port' => 13700]);
+    $gone->delete();
+    $gone->forceFill(['deleted_at' => now()->subDays(7)->subMinute()])->saveQuietly();
+
+    expect((new PortAllocator)->allocate($server->fresh()))->toBe(8010)
+        ->and((new PortAllocator)->allocateSsrPort($server->fresh()))->toBe(13700);
+});
+
 test('applications on another server do not consume blocks', function () {
     $a = Server::factory()->create();
     $b = Server::factory()->create();

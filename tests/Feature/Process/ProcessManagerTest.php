@@ -81,6 +81,13 @@ test('the pool confines php to the app directory and disables process functions'
         ->and($pool)->toContain('disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv');
 });
 
+test('the pool sends the app\'s PHP errors to syslog under its own name', function () {
+    $pool = (new FpmPoolBuilder(new AsdfManager))->pool(managedApp());
+
+    expect($pool)->toContain('php_admin_value[error_log] = syslog')
+        ->and($pool)->toContain('php_admin_value[syslog.ident] = coresmith-app-my-app-php');
+});
+
 test('the pool runs as the app user, never root', function () {
     $pool = (new FpmPoolBuilder(new AsdfManager))->pool(managedApp());
 

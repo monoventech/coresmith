@@ -9,11 +9,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
+use App\Exceptions\PortExhaustedException;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\CheckCertificates;
@@ -26,6 +28,8 @@ use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Deployment\EnvironmentFile;
+use App\Services\Deployment\StackDefaults;
+use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
@@ -107,9 +111,17 @@ final class ApplicationController extends Controller
 
         $connection = $request->githubConnection();
         $repository = $request->githubRepository();
+        $checked = $request->checkedRead();
+        $initial = app(StackDefaults::class)->initial(ApplicationType::tryFrom($request->string('type')->value()), $request->input('framework'));
+
+        try {
+            $port = $ports->allocate($server);
+        } catch (PortExhaustedException $exhausted) {
+            return back()->withInput()->with('error', $exhausted->getMessage());
+        }
 
         $application = Application::create([
-            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id']),
+            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id', 'detection']),
             ...($connection === null || $repository === null ? [] : [
                 'repository_url' => 'https://github.com/' . $repository['full_name'] . '.git',
                 'repository_provider' => 'github',
@@ -117,11 +129,14 @@ final class ApplicationController extends Controller
                 'repository_id' => $repository['id'],
             ]),
             'runtime_pins' => $line === null ? null : [$runtime => $line],
+            'env_variables' => $initial === [] ? null : app(EnvironmentFile::class)->render($initial),
+            'repository_checked_at' => $checked === null ? null : now(),
+            'repository_check_pending' => $request->hasRepository() && $checked === null,
             'server_id' => $server->id,
             'team_id' => $server->team_id,
             'slug' => $slug,
             'system_user' => $slugs->systemUser($slug),
-            'base_port' => $ports->allocate($server),
+            'base_port' => $port,
             'status' => ApplicationStatus::Pending,
         ]);
 
@@ -201,6 +216,16 @@ final class ApplicationController extends Controller
                 'running_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $application, $running, 'from' => 'app']),
                 'releases_href' => route('servers.applications.releases.index', [$server, $application]),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
+                'repository_check' => $application->needsRepositoryCheck() ? [
+                    'access' => match (true) {
+                        RepositoryAccess::forApplication($application)->github !== null => 'github',
+                        $keys->usesDeployKey($application) => 'key',
+                        default => 'https',
+                    },
+                    'result' => $application->repository_check,
+                    'check_href' => route('servers.applications.repository-check', [$server, $application]),
+                    'apply_href' => route('servers.applications.repository-check.apply', [$server, $application]),
+                ] : null,
                 'logs_href' => route('servers.applications.logs', [$server, $application]),
                 'last_failed' => $latest !== null && $latest->status === DeploymentStatus::Failed,
                 'last_failed_live' => $failedLive,

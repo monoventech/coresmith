@@ -2,8 +2,13 @@ import AxeBuilder from '@axe-core/playwright'
 import type { Browser, Locator, Page, TestInfo } from '@playwright/test'
 import { test as base, expect } from '@playwright/test'
 
+export const REPOSITORY_READS = '**/repository-stack?**'
+
 const suite = base.extend({
     page: async ({ page }, use) => {
+        await page.route(REPOSITORY_READS, (route) =>
+            route.fulfill({ json: { state: 'server_not_ready', server: 'this server' } })
+        )
         await use(page)
         await page.unrouteAll({ behavior: 'ignoreErrors' })
     }

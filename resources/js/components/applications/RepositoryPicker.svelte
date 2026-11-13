@@ -131,6 +131,7 @@
         highlighted = filtered.findIndex((candidate) => candidate.id === repository.id)
         branchFailure = null
         onpick?.({
+            id: repository.id,
             full_name: repository.full_name,
             default_branch: repository.default_branch,
             branches: [repository.default_branch]
@@ -144,6 +145,7 @@
 
         branchFailure = result.failure
         onpick?.({
+            id: repository.id,
             full_name: repository.full_name,
             default_branch: repository.default_branch,
             branches: result.branches

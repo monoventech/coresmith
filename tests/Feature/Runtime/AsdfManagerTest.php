@@ -220,6 +220,17 @@ test('php is built with the postgresql drivers and phpredis, which php-build lea
         ->and($install)->toContain("PHP_BUILD_INSTALL_EXTENSION='redis'");
 });
 
+test('ruby is built without its documentation, which only slows the install', function () {
+    $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
+    $connection = asdfConnection($transport);
+
+    (new AsdfManager)->install($connection, $connection->server(), 'ruby', '3.4.10');
+
+    $commands = $transport->commands();
+
+    expect($commands[asdfStep($commands, 'asdf install "$CORESMITH_RUNTIME" "$CORESMITH_VERSION"')])->toContain("RUBY_CONFIGURE_OPTS='--disable-install-doc'");
+});
+
 test('other runtimes are built without the php build settings', function () {
     $transport = (new FakeSSHTransport)->queueResult("no\n", 0);
     $connection = asdfConnection($transport);

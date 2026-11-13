@@ -102,7 +102,7 @@ final class PreProvisioningAudit
         $sections = [];
         $current = null;
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             $line = trim($line);
 
             if (preg_match('/^== ([a-z]+)$/', $line, $matches) === 1) {

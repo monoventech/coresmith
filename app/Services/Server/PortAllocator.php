@@ -11,6 +11,9 @@ namespace App\Services\Server;
 use App\Exceptions\PortExhaustedException;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\Deployment\RemovedApplicationFolders;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class PortAllocator
 {
@@ -31,8 +34,7 @@ final class PortAllocator
      */
     public function allocate(Server $server, array $inUse = [], ?Application $except = null): int
     {
-        $used = $server->applications()
-            ->withTrashed()
+        $used = $this->holders($server)
             ->when($except !== null, fn($query) => $query->whereKeyNot($except->getKey()))
             ->pluck('base_port')
             ->map(fn(mixed $port): int => (int) $port)
@@ -63,7 +65,7 @@ final class PortAllocator
 
     public function allocateSsrPort(Server $server): int
     {
-        $used = $server->applications()->withTrashed()->pluck('ssr_port')->filter()->all();
+        $used = $this->holders($server)->pluck('ssr_port')->filter()->all();
 
         foreach ([self::SSR_DEFAULT_PORT, ...range(self::SSR_RANGE_START, self::SSR_RANGE_END)] as $port) {
             if (!in_array($port, $used, true)) {
@@ -72,6 +74,16 @@ final class PortAllocator
         }
 
         throw PortExhaustedException::ssrForServer($server->name);
+    }
+
+    /**
+     * @return HasMany<Application, Server>
+     */
+    private function holders(Server $server): HasMany
+    {
+        return $server->applications()
+            ->withTrashed()
+            ->where(fn(Builder $query) => $query->whereNull('deleted_at')->orWhere('deleted_at', '>=', now()->subDays(RemovedApplicationFolders::KEEP_DAYS)));
     }
 
     public static function isInAllocatableRange(int $port): bool

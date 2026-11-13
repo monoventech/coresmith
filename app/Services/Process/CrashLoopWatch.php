@@ -48,12 +48,17 @@ final class CrashLoopWatch
                 $down[$unit] = $active ? 0 : $down[$unit] + 1;
 
                 if ($down[$unit] >= self::FAILURES || $this->restarts($connection, $unit) - $baseline[$unit] >= self::FAILURES) {
-                    return new CrashLoop($unit, $this->output($connection, $application, $unit));
+                    return new CrashLoop($unit, $this->output($connection, $application, $unit), $this->outOfMemory($connection, $unit));
                 }
             }
         }
 
         return null;
+    }
+
+    private function outOfMemory(SSHConnection $connection, string $unit): bool
+    {
+        return trim($connection->execute('systemctl show -p Result --value ' . escapeshellarg($unit))->output) === 'oom-kill';
     }
 
     private function restarts(SSHConnection $connection, string $unit): int

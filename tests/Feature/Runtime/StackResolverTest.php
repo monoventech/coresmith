@@ -113,3 +113,22 @@ test('an application takes a stack as its live versions', function () {
         'stack' => $stack->toArray(),
     ]);
 });
+
+test('a finished probe records the files it found, and an unfinished one records nothing', function () {
+    $application = new Application(['type' => ApplicationType::Php, 'framework' => null]);
+    $resolve = fn(RepositoryFacts $facts): Stack => app(StackResolver::class)->resolve($application, $facts, fn(): array => ['8.4.20']);
+    $finished = $resolve(new RepositoryFacts(['composer.json' => '{}'], markers: ['index.php'], complete: true));
+
+    expect($finished->files)->toBe(['composer.json', 'index.php'])
+        ->and(Stack::fromArray($finished->toArray())->files)->toBe(['composer.json', 'index.php'])
+        ->and($resolve(new RepositoryFacts(['composer.json' => '{}'], markers: ['index.php']))->files)->toBeNull();
+});
+
+test('the asset and migration gems are recorded only when Gemfile.lock was read', function () {
+    $application = new Application(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
+    $resolve = fn(RepositoryFacts $facts): Stack => app(StackResolver::class)->resolve($application, $facts, fn(): array => ['3.4.10']);
+    $read = $resolve(new RepositoryFacts(['.ruby-version' => "3.4.10\n", 'Gemfile.lock' => "GEM\n  specs:\n    propshaft (1.1.0)\n    puma (6.6.0)\n"]));
+
+    expect($read->gems)->toBe(['sidekiq' => false, 'solid_queue' => false, 'sprockets-rails' => false, 'propshaft' => true, 'sinatra-activerecord' => false, 'puma' => true])
+        ->and($resolve(new RepositoryFacts(['.ruby-version' => "3.4.10\n"]))->locked('propshaft'))->toBeNull();
+});
