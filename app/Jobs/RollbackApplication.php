@@ -16,10 +16,12 @@ use App\Exceptions\NoPreviousReleaseException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
 use App\Services\AutoDeploy\AutoDeploy;
+use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Deployment\SharedStorage;
 use App\Services\Panel\Reverb;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
@@ -86,6 +88,12 @@ final class RollbackApplication implements ShouldQueue
             $target = $this->target($ordered, $paths);
             $current = $paths->current();
             $previous = $this->application->current_release;
+
+            $relink = app(SharedStorage::class)->relinkDatabase($this->application, $target);
+
+            if ($relink !== null) {
+                $connection->execute(app(AppShell::class)->run($this->application, $relink, $target), sudo: true)->throw();
+            }
 
             $connection->execute("ln -sfn {$target} {$current}.tmp", sudo: true)->throw();
             $connection->execute("mv -Tf {$current}.tmp {$current}", sudo: true)->throw();
