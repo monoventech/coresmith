@@ -610,7 +610,7 @@ final class DeployApplication implements ShouldQueue
         $phpChanged = $this->swapSymlink($connection, $paths, $release, $stack);
         $toggles = app(SmartToggles::class);
         $processes = app(ProcessManager::class);
-        $processes->removeUnits($connection, $application, $toggles->syncDeployTimeProcesses($application));
+        $dropped = $toggles->syncDeployTimeProcesses($application);
 
         foreach ($toggles->leftOutOfRelease($application) as $note) {
             $this->appendLog($note);
@@ -620,10 +620,13 @@ final class DeployApplication implements ShouldQueue
             $this->appendLog('reverb: routing wss://' . $application->domain . '/app to port ' . app(Reverb::class)->port($application));
         }
 
-        $processes->install($connection, $application);
-        $this->startProcesses($connection, $processes, $application, $phpChanged);
-        $this->routeTraffic($connection, $application);
-        app(CrontabBuilder::class)->write($connection, $application);
+        $this->reconnecting($connection, DeploymentPhases::WATCH, function () use ($connection, $processes, $application, $dropped, $phpChanged): void {
+            $processes->removeUnits($connection, $application, $dropped);
+            $processes->install($connection, $application);
+            $this->startProcesses($connection, $processes, $application, $phpChanged);
+            $this->routeTraffic($connection, $application);
+            app(CrontabBuilder::class)->write($connection, $application);
+        });
         $this->pruneOldReleases($connection, $application);
         $this->watchProcesses($connection, $processes, $application);
         $this->recordLiveAnswer($connection, $application);
