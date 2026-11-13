@@ -1,4 +1,5 @@
 <script lang="ts">
+    import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
@@ -129,14 +130,29 @@
     </div>
 
     {#if address.ipv6_only && !running}
-        <p
-            class="tint-warning mt-2 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-normal"
+        <div
+            class="tint-warning mt-2 flex flex-col gap-1.5 rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-normal"
             data-testid="address-ipv6-only"
         >
-            <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people on networks without
-            IPv6 can't open Coresmith. To reach them too, add an A record for this server's public IPv4 address, and forward
-            TCP ports 80 and 443 to this server if it's behind a router.
-        </p>
+            {#if address.reach && address.reach.notes.length > 0}
+                {#each address.reach.notes as note (note)}
+                    <p class="m-0 wrap-anywhere">{note}</p>
+                {/each}
+            {:else}
+                <p class="m-0">
+                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people on
+                    networks without IPv6 can't open Coresmith. If the internet reaches this server's IPv4 address on
+                    ports 80 and 443, add an A record for it. If your internet provider shares that address with other
+                    customers, put <span class="font-mono text-[12px]">{address.host}</span> behind a proxy that answers on
+                    IPv4, such as Cloudflare's.
+                </p>
+            {/if}
+        </div>
+        {#if address.reach && address.reach.records.length > 0}
+            <div class="mt-1">
+                <DnsRecords records={address.reach.records} testid="address-ipv6-records" />
+            </div>
+        {/if}
     {/if}
 
     {#if running && address.change}
@@ -308,6 +324,11 @@
                                 </p>
                             {/each}
                         </div>
+                        {#if result.records && result.records.length > 0}
+                            <div class="mt-2">
+                                <DnsRecords records={result.records} testid="address-records" />
+                            </div>
+                        {/if}
                     {/if}
                 </div>
                 <Dialog.Footer>

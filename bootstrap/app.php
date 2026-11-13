@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\PlanRefusal;
+use App\Http\Middleware\CloudflareVisitorAddress;
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnforcePlan;
 use App\Http\Middleware\EnforceTokenAbility;
@@ -32,6 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->preventRequestsDuringMaintenance(except: ['api/up/release']);
+
+        $middleware->prepend(CloudflareVisitorAddress::class);
 
         $middleware->append(ResolveTeamUrl::class);
 

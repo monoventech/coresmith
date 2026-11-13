@@ -13,11 +13,13 @@ final readonly class AddressVerdict
     /**
      * @param  list<string>  $notes
      * @param  list<string>  $problems
+     * @param  list<array{type: string, name: string, value: string}>  $records
      */
     public function __construct(
         public ?string $refusal,
         public array $notes = [],
         private array $problems = [],
+        public array $records = [],
     ) {}
 
     /**

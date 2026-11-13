@@ -52,6 +52,7 @@ final class CheckDomainReach implements ShouldBeUnique, ShouldQueue
                 'ready' => $report->ready,
                 'problems' => $report->problems,
                 'notes' => $report->notes,
+                'records' => $report->records,
                 'checked_at' => $checked,
             ], $reach->check($application));
         } catch (Throwable) {
@@ -63,6 +64,7 @@ final class CheckDomainReach implements ShouldBeUnique, ShouldQueue
                     'ready' => null,
                     'problems' => [],
                     'notes' => ["Coresmith couldn't reach {$server} to check {$domain}. It checks again after the next deploy, or when you press Check again."],
+                    'records' => [],
                     'checked_at' => $checked,
                 ];
             }

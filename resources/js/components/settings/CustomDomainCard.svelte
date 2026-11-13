@@ -1,4 +1,5 @@
 <script lang="ts">
+    import DnsRecords from '@/components/DnsRecords.svelte'
     import PlanNote from '@/components/settings/PlanNote.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -6,9 +7,8 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import type { DnsRecord } from '@/lib/dns'
     import { Form, router } from '@inertiajs/svelte'
-
-    type DnsRecord = { type: string; name: string; value: string }
 
     type Domain = {
         hostname: string
@@ -29,7 +29,6 @@
     let removing = $state(false)
     let checking = $state(false)
     let working = $state(false)
-    let copied = $state<string | null>(null)
 
     const failure = $derived(
         domain?.failure === 'wrong_value'
@@ -38,16 +37,6 @@
               ? 'The last check found no TXT record yet.'
               : null
     )
-
-    async function copy(value: string) {
-        try {
-            await navigator.clipboard.writeText(value)
-            copied = value
-            setTimeout(() => (copied = null), 2000)
-        } catch {
-            copied = null
-        }
-    }
 
     function check() {
         checking = true
@@ -116,27 +105,7 @@
             Add these records at your DNS provider for <span class="font-mono text-[12px]">{domain.hostname}</span>,
             then check them.
         </p>
-        <div class="flex flex-col" data-testid="dns-records">
-            {#each domain.records as record (record.type)}
-                <div class="grid grid-cols-[52px_1fr_auto] items-center gap-2.5 border-t border-border py-2">
-                    <span class="font-mono text-[11.5px] text-muted-foreground">{record.type}</span>
-                    <span class="min-w-0">
-                        <span class="block truncate font-mono text-[12px]" title={record.name}>{record.name}</span>
-                        <span class="block truncate font-mono text-[12px] text-muted-foreground" title={record.value}
-                            >{record.value}</span
-                        >
-                    </span>
-                    <button
-                        type="button"
-                        class="focus-ring quick-action h-8! px-3! text-[12.5px]!"
-                        aria-label="Copy the {record.type} value"
-                        onclick={() => copy(record.value)}
-                    >
-                        {copied === record.value ? 'Copied' : 'Copy'}
-                    </button>
-                </div>
-            {/each}
-        </div>
+        <DnsRecords records={domain.records} />
         {#if failure}
             <p class="mt-2 text-[12px] text-muted-foreground" data-testid="dns-failure">{failure}</p>
         {/if}
