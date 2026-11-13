@@ -133,3 +133,16 @@ test('a developer cannot create a project, where an admin can', function () {
     $this->actingAs($developer)->post(route('projects.store'), ['name' => 'Side project'])->assertForbidden();
     $this->actingAs($admin)->post(route('projects.store'), ['name' => 'Side project'])->assertSessionHasNoErrors();
 });
+
+test('a developer adding a server is offered only a server of its own over SSH, never the cloud accounts', function () {
+    ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
+    App\Models\CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud']);
+
+    $this->actingAs($developer)->get(route('servers.create'))
+        ->assertOk()
+        ->assertInertia(fn(Inertia\Testing\AssertableInertia $page) => $page
+            ->where('cloud.accounts', [])
+            ->where('cloud.types', [])
+            ->where('cloud.selected', 'manual')
+            ->where('cloud.can_connect', false));
+});

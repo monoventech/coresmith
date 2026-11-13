@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\Ability;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Exceptions\ServerConnectionFailed;
@@ -74,7 +75,11 @@ final class ServerController extends Controller
                 'installer' => ThisMachine::INSTALLER,
             ] : null,
             'cloud' => fn(): array => $cloud->choices($team, $request->user(), $requested),
-            'catalog' => Inertia::defer(function () use ($cloud, $team, $requested): ?array {
+            'catalog' => Inertia::defer(function () use ($cloud, $team, $requested, $request): ?array {
+                if (!$request->user()->hasTeamAbility($team, Ability::ManageProviders)) {
+                    return null;
+                }
+
                 $account = $cloud->selectedAccount($team, $requested);
 
                 return $account === null ? null : $cloud->catalog($account);

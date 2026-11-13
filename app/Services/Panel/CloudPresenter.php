@@ -94,6 +94,10 @@ final class CloudPresenter
      */
     public function choices(Team $team, User $user, ?string $requested): array
     {
+        if (!$user->hasTeamAbility($team, Ability::ManageProviders)) {
+            return ['accounts' => [], 'types' => [], 'selected' => 'manual', 'can_connect' => false];
+        }
+
         $accounts = $this->accounts($team, $user);
         $connected = array_column($accounts['accounts'], 'type');
         $selected = $this->selectedAccount($team, $requested);

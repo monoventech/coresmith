@@ -212,7 +212,8 @@
         {/each}
     </ul>
     <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">
-        Admins can provision and delete servers. Deployers can deploy and roll back.
+        Admins can provision and delete servers. Developers add servers and apps of their own, and see only those and
+        what you share with them. Deployers can deploy and roll back.
     </p>
 </div>
 
