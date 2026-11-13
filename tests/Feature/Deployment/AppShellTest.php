@@ -68,7 +68,7 @@ test('the app account owns only its releases and shared folder, and root keeps t
 
     expect($command)->toStartWith('{ id -u coresmith-app-shop >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/coresmith-app-shop --shell /usr/sbin/nologin ')
         ->and($command)->toContain('chmod 751 /var/coresmith/apps')
-        ->and($command)->toContain('chown root:coresmith-app-shop /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
+        ->and($command)->toContain('chown root:$(id -gn coresmith-app-shop) /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
         ->and($command)->toContain('chmod 751 /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
         ->and($command)->toContain('chown -h coresmith-app-shop:caddy /var/coresmith/apps/shop/shared')
         ->and($command)->toContain('chmod 2750 /var/coresmith/apps/shop/shared');

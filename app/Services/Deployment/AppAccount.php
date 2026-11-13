@@ -38,7 +38,7 @@ final class AppAccount
             'mkdir -p ' . ReleasePaths::ROOT,
             'chmod 751 ' . ReleasePaths::ROOT,
             "mkdir -p {$releases} {$shared}",
-            "chown root:{$user} {$base} {$releases}",
+            "chown root:$(id -gn {$user}) {$base} {$releases}",
             "chmod 751 {$base} {$releases}",
             "chown -h {$user}:{$group} {$shared}",
             "chmod 2750 {$shared}",
