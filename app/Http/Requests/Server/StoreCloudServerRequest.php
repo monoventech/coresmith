@@ -41,7 +41,7 @@ final class StoreCloudServerRequest extends FormRequest
     {
         $team = app(TeamContext::class)->team();
 
-        return $team !== null && $this->user()->hasTeamAbility($team, Ability::CreateServer);
+        return $team !== null && $this->user()->hasTeamAbility($team, Ability::CreateServer) && $this->user()->hasTeamAbility($team, Ability::ManageProviders);
     }
 
     /**

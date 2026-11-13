@@ -115,3 +115,21 @@ test("a developer's token puts into maintenance only the apps it added", functio
     $this->withHeaders($headers)->putJson("/api/v1/applications/{$theirs->id}/maintenance", ['enabled' => true])->assertForbidden();
     $this->withHeaders($headers)->putJson("/api/v1/applications/{$mine->id}/maintenance", ['enabled' => true])->assertOk();
 });
+
+test('a developer cannot create a server on a cloud account the team pays for, where an admin can try', function () {
+    ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
+    $admin = User::factory()->create();
+    $team->members()->attach($admin, ['role' => TeamRole::Admin->value, 'sees_everything' => true]);
+
+    $this->actingAs($developer)->post(route('servers.cloud.store'), [])->assertForbidden();
+    $this->actingAs($admin)->post(route('servers.cloud.store'), [])->assertSessionHasErrors();
+});
+
+test('a developer cannot create a project, where an admin can', function () {
+    ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
+    $admin = User::factory()->create();
+    $team->members()->attach($admin, ['role' => TeamRole::Admin->value, 'sees_everything' => true]);
+
+    $this->actingAs($developer)->post(route('projects.store'), ['name' => 'Side project'])->assertForbidden();
+    $this->actingAs($admin)->post(route('projects.store'), ['name' => 'Side project'])->assertSessionHasNoErrors();
+});
