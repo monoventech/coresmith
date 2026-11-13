@@ -73,6 +73,23 @@ test('each repository gets the stack its files settle', function (string $fixtur
     'nothing Coresmith can run' => ['empty-repository', 'unsure', null, null, null, null],
 ]);
 
+test('a PHP app with no composer.lock and no PHP version leaves the version not sure', function (array $files, string $verdict) {
+    $facts = new RepositoryFacts(['composer.json' => (string) json_encode(['require' => ['slim/slim' => '^4.12', 'phpoffice/phpspreadsheet' => '^1.29']]), ...$files], markers: ['public/index.php'], complete: true);
+    $detected = stackDetectorRun($facts);
+
+    expect($detected->verdict())->toBe($verdict)
+        ->and($detected->unsettled['runtime_version'] ?? null)->toBe($verdict === 'unsure' ? 'composer.json names no PHP version and there is no composer.lock, so Coresmith can\'t tell which PHP your packages allow. Add one to require in composer.json, for example "php": "^8.3", or commit composer.lock.' : null);
+})->with([
+    'nothing names it, frank270/nPhpSlim4Skeleton' => [[], 'unsure'],
+    '.tool-versions names it' => [['.tool-versions' => "php 8.4.25\n"], 'ready'],
+]);
+
+test('a PHP app whose composer.json names a PHP version is ready without composer.lock', function () {
+    $facts = new RepositoryFacts(['composer.json' => (string) json_encode(['require' => ['php' => '^8.2', 'slim/slim' => '^4.12']])], markers: ['public/index.php'], complete: true);
+
+    expect(stackDetectorRun($facts)->verdict())->toBe('ready');
+});
+
 test('the server language wins over a frontend package.json', function () {
     expect(stackDetectorRun('laravel-13')->type)->toBe('php')
         ->and(stackDetectorRun('rails-jsbundling')->type)->toBe('ruby');

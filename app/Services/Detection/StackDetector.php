@@ -15,6 +15,7 @@ use App\Services\Runtime\Catalog;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
+use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
 use App\Services\Runtime\StackResolver;
 use Closure;
@@ -30,6 +31,8 @@ final class StackDetector
     public const LIBRARY = 'composer.json names no framework and there is no index.php at /, /public or /web, so this looks like a library, not an app.';
 
     public const LOCK_UNREADABLE = "composer.lock couldn't be read whole, so Coresmith can't tell which PHP versions its packages allow. Pick the PHP version yourself.";
+
+    public const PHP_UNNAMED = 'composer.json names no PHP version and there is no composer.lock, so Coresmith can\'t tell which PHP your packages allow. Add one to require in composer.json, for example "php": "^8.3", or commit composer.lock.';
 
     public const GEM = 'Gemfile loads a gemspec, so this looks like a Ruby gem, not an app.';
 
@@ -100,6 +103,10 @@ final class StackDetector
 
         if ($type === ApplicationType::Php && $facts->has(RepositoryProbe::COMPOSER_LOCK) && !is_array($facts->json(RepositoryProbe::COMPOSER_LOCK)['packages'] ?? null)) {
             $unsettled['runtime_version'] = self::LOCK_UNREADABLE;
+        }
+
+        if ($type === ApplicationType::Php && $facts->has('composer.json') && !$facts->has(RepositoryProbe::COMPOSER_LOCK) && $runtime !== null && ($stack?->runtimes[$runtime]->source ?? null) === ResolvedRuntime::FROM_DEFAULT) {
+            $unsettled['runtime_version'] = self::PHP_UNNAMED;
         }
 
         return new DetectedStack(
