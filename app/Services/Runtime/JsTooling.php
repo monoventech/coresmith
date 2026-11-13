@@ -95,7 +95,7 @@ final readonly class JsTooling
 
         $build = $facts->script('build');
 
-        if (!$isJs && !$build) {
+        if (!$isJs && !$build && !($application->type === ApplicationType::Ruby && $facts->script('build:css'))) {
             return null;
         }
 

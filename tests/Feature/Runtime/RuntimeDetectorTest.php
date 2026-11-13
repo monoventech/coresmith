@@ -18,6 +18,16 @@ function detectorFacts(array $files = [], array $lockfiles = []): RepositoryFact
     return new RepositoryFacts($files, $lockfiles);
 }
 
+test('a rails app whose css builds through cssbundling gets node and its package manager', function () {
+    $detection = app(RuntimeDetector::class)->detect(detectorApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']), detectorFacts([
+        'package.json' => '{"scripts":{"build:css":"sass ./app/assets/stylesheets/application.sass.scss:./app/assets/builds/application.css"}}',
+    ], ['package-lock.json']));
+
+    expect($detection->runtimes)->toBe(['ruby', 'nodejs'])
+        ->and($detection->tooling?->manager)->toBe('npm')
+        ->and($detection->tooling?->build)->toBeFalse();
+});
+
 test('a laravel app that builds with bun needs php and bun', function () {
     $detection = app(RuntimeDetector::class)->detect(detectorApp(), detectorFacts([
         'composer.json' => '{"require":{"php":"^8.4"}}',
