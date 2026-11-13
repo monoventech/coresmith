@@ -278,7 +278,7 @@ final class TeamAccess
 
             $this->memberships[$key] = [
                 'member' => $row !== null,
-                'everything' => $row !== null && ($row->role === TeamRole::Owner->value || (bool) $row->sees_everything),
+                'everything' => $row !== null && ($row->role === TeamRole::Owner->value || ($row->role !== TeamRole::Developer->value && (bool) $row->sees_everything)),
             ];
         }
 

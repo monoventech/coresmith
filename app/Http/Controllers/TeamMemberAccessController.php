@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 final class TeamMemberAccessController extends Controller
 {
@@ -40,6 +41,10 @@ final class TeamMemberAccessController extends Controller
         ]);
 
         $everything = (bool) $validated['everything'];
+
+        if ($role === TeamRole::Developer && $everything) {
+            throw ValidationException::withMessages(['everything' => 'A developer sees what they add and what you share with them, never everything.']);
+        }
         $servers = array_values(array_unique($validated['servers'] ?? []));
         $applications = array_values(array_unique($validated['applications'] ?? []));
         $projects = array_values(array_unique($validated['projects'] ?? []));

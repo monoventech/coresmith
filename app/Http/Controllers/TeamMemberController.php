@@ -58,9 +58,9 @@ final class TeamMemberController extends Controller
             throw ValidationException::withMessages($errors);
         }
 
-        $everything = $request->user()->roleIn($team) === TeamRole::Owner
+        $everything = $role !== TeamRole::Developer && ($request->user()->roleIn($team) === TeamRole::Owner
             ? ($validated['access'] ?? 'everything') === 'everything'
-            : $access->seesEverything($request->user(), $team);
+            : $access->seesEverything($request->user(), $team));
 
         if (!$user instanceof User || !$this->joinsAtOnce($user)) {
             return $this->invite($request, $team, $email, $role, $everything, $invitations);
@@ -98,7 +98,7 @@ final class TeamMemberController extends Controller
 
         $from = $user->roleIn($team);
 
-        $team->members()->updateExistingPivot($user->getKey(), ['role' => $role->value]);
+        $team->members()->updateExistingPivot($user->getKey(), ['role' => $role->value, ...($role === TeamRole::Developer ? ['sees_everything' => false] : [])]);
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email, 'from' => $from?->value, 'to' => $role->value])->log('member_role_changed');
 
