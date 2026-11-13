@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Enums\Ability;
+use App\Enums\TeamRole;
 use App\Models\Project;
 use App\Models\Team;
 use App\Models\User;
@@ -37,7 +38,9 @@ final class ProjectPolicy
             return Response::denyAsNotFound();
         }
 
-        return $user->hasTeamAbility($project->team, Ability::ManageProjects) && $access->seesWholeProject($user, $project)
+        $owns = $user->roleIn($project->team) !== TeamRole::Developer || $project->addedBy($user);
+
+        return $user->hasTeamAbility($project->team, Ability::ManageProjects) && $access->seesWholeProject($user, $project) && $owns
             ? Response::allow()
             : Response::denyWithStatus(403);
     }

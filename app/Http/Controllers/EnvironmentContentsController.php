@@ -8,10 +8,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\Projects\Projects;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Collection;
@@ -33,8 +35,14 @@ final class EnvironmentContentsController extends Controller
         ]);
 
         $user = $request->user();
+        $developer = $user->roleIn($project->team) === TeamRole::Developer;
         $applications = $this->seen(Application::query()->whereIn('id', $validated['applications'] ?? [])->get(), $validated['applications'] ?? [], $project, fn(Application $each): bool => $access->canSeeApplication($user, $each), 'applications', 'apps');
         $databases = $this->seen(ManagedDatabase::query()->whereIn('id', $validated['databases'] ?? [])->get(), $validated['databases'] ?? [], $project, fn(ManagedDatabase $each): bool => $access->canSeeDatabase($user, $each), 'databases', 'databases');
+
+        if ($developer) {
+            $this->added($applications, $user, 'applications', 'apps');
+            $this->added($databases, $user, 'databases', 'databases');
+        }
 
         $projects->file($environment, $applications, $databases, $user);
 
@@ -45,6 +53,7 @@ final class EnvironmentContentsController extends Controller
     {
         $this->authorize('fill', $environment);
         abort_unless($access->canSeeApplication($request->user(), $application), 404);
+        abort_if($request->user()->roleIn($project->team) === TeamRole::Developer && !$application->addedBy($request->user()), 403);
 
         $projects->unfile($application, $request->user());
 
@@ -55,6 +64,7 @@ final class EnvironmentContentsController extends Controller
     {
         $this->authorize('fill', $environment);
         abort_unless($access->canSeeDatabase($request->user(), $database), 404);
+        abort_if($request->user()->roleIn($project->team) === TeamRole::Developer && !$database->addedBy($request->user()), 403);
 
         $projects->unfile($database, $request->user());
 
@@ -78,5 +88,15 @@ final class EnvironmentContentsController extends Controller
         }
 
         return $usable;
+    }
+
+    /**
+     * @param  Collection<int, Application>|Collection<int, ManagedDatabase>  $items
+     */
+    private function added(Collection $items, User $user, string $field, string $noun): void
+    {
+        if ($items->contains(fn(Application|ManagedDatabase $each): bool => !$each->addedBy($user))) {
+            throw ValidationException::withMessages([$field => "You can only move {$noun} you added. Reload the page and choose again."]);
+        }
     }
 }

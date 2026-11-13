@@ -1,4 +1,14 @@
-import { blockingViolations, expect, gotoServer, gotoSettings, asDeveloper as test, useTheme } from './support/fixtures'
+import {
+    blockingViolations,
+    dialog,
+    expect,
+    gotoServer,
+    gotoSettings,
+    own,
+    asDeveloper as test,
+    toast,
+    useTheme
+} from './support/fixtures'
 
 test.describe('a developer', () => {
     test('sees the server shared with it and the app it added there, and none of the apps others run on it', async ({
@@ -21,12 +31,42 @@ test.describe('a developer', () => {
         await expect(apps.getByRole('link', { name: /^storefront-staging / })).toHaveCount(0)
     })
 
-    test('adding a server is offered only as a server of its own over SSH', async ({ page }) => {
+    test("adding a server offers the team's cloud accounts and its own VM, but no provider to connect", async ({
+        page
+    }) => {
         await page.goto('/servers/create')
 
         await expect(page.getByRole('heading', { level: 1, name: 'Provision a server' })).toBeVisible()
-        await expect(page.getByText('Hetzner Cloud', { exact: false })).toHaveCount(0)
-        await expect(page.getByLabel('IP address', { exact: true })).toBeVisible()
+        await expect(page.getByLabel('Provider').locator('option')).toContainText([
+            'DigitalOcean',
+            'Hetzner Cloud',
+            'Linode, token refused',
+            'Bring your own VM'
+        ])
+        await expect(page.getByLabel('Provider').locator('option', { hasText: 'not connected yet' })).toHaveCount(0)
+    })
+
+    test('creates a project of its own, renames it and deletes it', async ({ page }, testInfo) => {
+        const name = own(testInfo, 'Side', ' ')
+
+        await page.goto('/projects')
+        await page.getByRole('button', { name: 'Create a project' }).first().click()
+        await dialog(page).getByLabel('Project name').fill(name)
+        await dialog(page).getByRole('button', { name: 'Create project' }).click()
+        await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+        await expect(toast(page)).toContainText(`Created ${name}.`)
+
+        await page.getByRole('button', { name: 'Rename', exact: true }).click()
+        await dialog(page).getByLabel('Project name').fill(`${name} notes`)
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+        await expect(page.getByRole('heading', { level: 1, name: `${name} notes` })).toBeVisible()
+
+        await page.getByRole('button', { name: 'Delete', exact: true }).click()
+        await dialog(page)
+            .getByRole('button', { name: `Delete ${name} notes` })
+            .click()
+        await page.waitForURL(/\/projects$/)
+        await expect(toast(page)).toContainText(`Deleted ${name} notes.`)
     })
 
     test('sees the team settings but cannot change them', async ({ page }) => {
