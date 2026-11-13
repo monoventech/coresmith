@@ -44,16 +44,14 @@ final class SyncApplicationAddresses implements ShouldQueue
             $caddy->removeAddress($connection, $application, 'tailnet');
         }
 
-        $firewall = $server->runs_coresmith ? null : FirewallManagerFactory::for($server);
-
         if ($application->preview) {
             $caddy->putAddress($connection, $application, 'preview', ":{$port}");
 
-            if ($firewall !== null) {
-                $connection->execute($firewall->allow($port), sudo: true)->throw();
+            if (!$server->runs_coresmith) {
+                $connection->execute(FirewallManagerFactory::for($server)->allow($port), sudo: true)->throw();
             }
-        } elseif ($caddy->removeAddress($connection, $application, 'preview') && $firewall !== null) {
-            $connection->execute($firewall->remove($port), sudo: true);
+        } elseif ($caddy->removeAddress($connection, $application, 'preview') && !$server->runs_coresmith) {
+            $connection->execute(FirewallManagerFactory::for($server)->remove($port), sudo: true);
         }
 
         $application->forceFill(['tailnet_ip' => $ip, 'address_problem' => $problem])->save();

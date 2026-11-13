@@ -45,9 +45,11 @@ final class DetachApplication implements ShouldQueue
                 $caddy->persistConfig($connection);
             }
 
-            $caddy->removeAddress($connection, $this->application, 'tailnet');
+            if ($this->application->tailnet) {
+                $caddy->removeAddress($connection, $this->application, 'tailnet');
+            }
 
-            if ($caddy->removeAddress($connection, $this->application, 'preview') && !$this->application->server->runs_coresmith) {
+            if ($this->application->preview && $caddy->removeAddress($connection, $this->application, 'preview') && !$this->application->server->runs_coresmith) {
                 $connection->execute(FirewallManagerFactory::for($this->application->server)->remove($this->application->addressPort()), sudo: true);
             }
         } finally {
