@@ -583,6 +583,18 @@ test('an ssh connection that drops before the swap is reopened and the phase run
         ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during build, reconnecting');
 });
 
+test('a release the memory limit keeps killing says it ran out of memory and to pick a bigger size', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000', 'app_size' => 'small']))->create();
+    $transport = healthyDeployTransport()
+        ->respondToSequence("systemctl is-active 'coresmith-app-my-app-fpm'", [["active\n", 0], ["failed\n", 3]])
+        ->respondTo("show -p Result --value 'coresmith-app-my-app-fpm'", "oom-kill\n");
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(DeploymentAborted::class);
+
+    expect($deployment->fresh()->failure_reason)->toBe('Out of memory: coresmith-app-my-app-fpm went past the 256 MB the Small size allows, so it kept being stopped. Pick a bigger size on the app page, then deploy again. releases/' . TIMESTAMP . ' is live but not serving, so roll back to the previous release meanwhile.');
+});
+
 test('a release that crash loops after the swap fails the deploy and says to roll back', function () {
     Event::fake([DeploymentFailed::class]);
     $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000']))->create();

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Events\DeploymentSucceeded;
@@ -1008,7 +1009,10 @@ final class DeployApplication implements ShouldQueue
 
         $this->appendLog($loop->output);
         $this->keepFailed = true;
-        $this->failureReason = "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
+        $size = AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small;
+        $this->failureReason = $loop->outOfMemory
+            ? "Out of memory: {$loop->unit} went past the {$size->memoryMaxMb()} MB the " . ucfirst($size->value) . " size allows, so it kept being stopped. Pick a bigger size on the app page, then deploy again. releases/{$this->timestamp} is live but not serving, so roll back to the previous release meanwhile."
+            : "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
 
         throw new DeploymentAborted($this->failureReason);
     }
