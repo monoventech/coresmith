@@ -12,6 +12,7 @@ use App\Models\Application;
 use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Process\ProcessManager;
+use App\Services\Server\FirewallManagerFactory;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -42,6 +43,12 @@ final class DetachApplication implements ShouldQueue
             if ($this->application->allDomains() !== []) {
                 $caddy->removeSite($connection, $this->application);
                 $caddy->persistConfig($connection);
+            }
+
+            $caddy->removeAddress($connection, $this->application, 'tailnet');
+
+            if ($caddy->removeAddress($connection, $this->application, 'preview') && !$this->application->server->runs_coresmith) {
+                $connection->execute(FirewallManagerFactory::for($this->application->server)->remove($this->application->addressPort()), sudo: true);
             }
         } finally {
             $connections->disconnect($this->application->server);

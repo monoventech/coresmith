@@ -192,6 +192,8 @@ class Application extends Model
     protected function casts(): array
     {
         return [
+            'tailnet' => 'boolean',
+            'preview' => 'boolean',
             'env_variables' => Vaulted::class,
             'deploy_key_private' => Vaulted::class,
             'type' => ApplicationType::class,

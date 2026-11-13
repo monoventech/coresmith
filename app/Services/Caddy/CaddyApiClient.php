@@ -134,13 +134,19 @@ final class CaddyApiClient
         });
     }
 
-    public function removeAddress(SSHConnection $connection, Application $application, string $kind): void
+    public function removeAddress(SSHConnection $connection, Application $application, string $kind): bool
     {
-        $this->changing($connection, function () use ($connection, $application, $kind): void {
-            if ($this->delete($connection, self::addressPath($application, $kind))) {
+        $removed = false;
+
+        $this->changing($connection, function () use ($connection, $application, $kind, &$removed): void {
+            $removed = $this->exists($connection, self::addressPath($application, $kind)) && $this->delete($connection, self::addressPath($application, $kind));
+
+            if ($removed) {
                 $this->persistConfig($connection);
             }
         });
+
+        return $removed;
     }
 
     public static function addressPath(Application $application, string $kind): string
