@@ -30,6 +30,19 @@ const UNSURE = {
     blockers: []
 }
 
+const UNREAD = {
+    id: 't6wq8mz9xw4hpbn6tq8rjf3ylc5ds0ge',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'unsure',
+    fields: { type: null, framework: null, js_runtime: null, web_directory: null, version: null },
+    sources: {},
+    unsettled: {
+        type: "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on."
+    },
+    blockers: []
+}
+
 const BLOCKED = {
     id: 'b4wq8mz9xw4hpbn6tq8rjf3ylc5ds0gc',
     state: 'read',
@@ -108,6 +121,52 @@ test.describe('Stack detection on Add an app', () => {
         await expect(page.getByRole('button', { name: 'Add the app' })).toBeEnabled()
     })
 
+    test('a framework the files leave open must be picked before the app can be added', async ({ page }) => {
+        await answer(page, [UNSURE])
+
+        await openAddApp(page)
+        await page.getByLabel('Name', { exact: true }).fill('worker')
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/worker.git')
+        await expect(detection(page)).toContainText('Filled in what the repository settles.')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(framework).toHaveValue('unset')
+        await expect(framework.locator('option:checked')).toHaveText('Pick one')
+
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+        expect(await framework.evaluate((select: HTMLSelectElement) => select.validationMessage)).toBe(
+            'Pick a framework.'
+        )
+
+        await framework.selectOption('sinatra')
+
+        expect(await framework.evaluate((select: HTMLSelectElement) => select.validity.valid)).toBe(true)
+    })
+
+    test('a language the files leave open must be picked before the app can be added', async ({ page }) => {
+        await answer(page, [UNREAD])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/notes.git')
+        await expect(detection(page)).toContainText('Filled in what the repository settles.')
+
+        const language = page.getByLabel('Language')
+
+        await expect(language).toHaveValue('unset')
+        await expect(language.locator('option:checked')).toHaveText('Pick one')
+        expect(await language.evaluate((select: HTMLSelectElement) => select.validationMessage)).toBe(
+            'Pick a language.'
+        )
+
+        await language.selectOption('ruby')
+
+        expect(await language.evaluate((select: HTMLSelectElement) => select.validity.valid)).toBe(true)
+        await expect(page.getByLabel('Framework')).toHaveValue('rails')
+    })
+
     test('a repository that cannot deploy as is says why and how, and cannot be added until it changes', async ({
         page
     }) => {
@@ -164,15 +223,15 @@ test.describe('Stack detection on Add an app', () => {
         await expect(page.getByLabel('Framework')).toHaveValue('laravel')
     })
 
-    test('the form passes axe while it fills in and while it refuses', async ({ page }) => {
-        for (const state of [READY, BLOCKED]) {
+    test('the form passes axe while it fills in, leaves a field open and refuses', async ({ page }) => {
+        for (const state of [READY, UNSURE, BLOCKED]) {
             for (const theme of ['light', 'dark'] as const) {
                 await page.unrouteAll({ behavior: 'ignoreErrors' })
                 await answer(page, [state])
                 await useTheme(page, theme)
                 await openAddApp(page)
                 await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
-                await expect(detection(page)).toContainText(state === READY ? 'Filled in' : "can't deploy as is")
+                await expect(detection(page)).toContainText(state === BLOCKED ? "can't deploy as is" : 'Filled in')
 
                 expect(await blockingViolations(page)).toEqual([])
             }

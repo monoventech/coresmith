@@ -43,6 +43,8 @@
 
     const STACK_FIELDS = ['type', 'framework', 'js_runtime', 'web_directory']
 
+    const UNSET = 'unset'
+
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = {
         php: [
             { value: 'laravel', label: 'Laravel' },
@@ -74,6 +76,8 @@
 
     let type = $state('php')
     let framework = $derived(FRAMEWORKS[type]?.[0]?.value ?? '')
+    let typeSelect = $state<HTMLSelectElement | null>(null)
+    let frameworkSelect = $state<HTMLSelectElement | null>(null)
     let jsRuntime = $state('bun')
     let webDirectory = $state('/public')
     const picker = $derived(pickerRuntime(type, jsRuntime))
@@ -107,6 +111,14 @@
     onDestroy(() => {
         clearTimeout(timer)
         controller?.abort()
+    })
+
+    $effect(() => {
+        typeSelect?.setCustomValidity(type === UNSET ? 'Pick a language.' : '')
+    })
+
+    $effect(() => {
+        frameworkSelect?.setCustomValidity(framework === UNSET ? 'Pick a framework.' : '')
     })
 
     function chooseSource(value: string) {
@@ -194,22 +206,25 @@
         detection = answer
 
         if (answer.state === 'read') {
-            fill(answer.fields)
+            fill(answer.fields, answer.unsettled)
         }
     }
 
-    function fill(fields: {
-        type: string | null
-        framework: string | null
-        js_runtime: string | null
-        web_directory: string | null
-    }) {
-        if (fields.type !== null && !touched.type) {
-            type = fields.type
+    function fill(
+        fields: {
+            type: string | null
+            framework: string | null
+            js_runtime: string | null
+            web_directory: string | null
+        },
+        unsettled: Record<string, string>
+    ) {
+        if (!touched.type && (fields.type !== null || unsettled.type)) {
+            type = fields.type ?? UNSET
         }
 
-        if (fields.framework !== null && !touched.framework && !touched.type) {
-            framework = fields.framework
+        if (!touched.framework && !touched.type && (fields.framework !== null || unsettled.framework)) {
+            framework = fields.framework ?? UNSET
         }
 
         if (fields.js_runtime !== null && !touched.js_runtime) {
@@ -344,9 +359,11 @@
                             <NativeSelect
                                 id="type"
                                 name="type"
+                                bind:ref={typeSelect}
                                 bind:value={type}
                                 onchange={() => touch('type')}
                                 options={[
+                                    ...(type === UNSET ? [{ value: UNSET, label: 'Pick one', disabled: true }] : []),
                                     { value: 'php', label: 'PHP' },
                                     { value: 'js', label: 'JavaScript' },
                                     { value: 'ruby', label: 'Ruby' },
@@ -362,9 +379,15 @@
                             <NativeSelect
                                 id="framework"
                                 name="framework"
+                                bind:ref={frameworkSelect}
                                 bind:value={framework}
                                 onchange={() => touch('framework')}
-                                options={FRAMEWORKS[type] ?? []}
+                                options={[
+                                    ...(framework === UNSET || type === UNSET
+                                        ? [{ value: UNSET, label: 'Pick one', disabled: true }]
+                                        : []),
+                                    ...(FRAMEWORKS[type] ?? [])
+                                ]}
                                 aria-invalid={errors.framework ? true : undefined}
                             />
                             {@render note('framework')}
