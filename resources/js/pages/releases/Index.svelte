@@ -101,7 +101,8 @@
                 >{/if}
         </h1>
         <p class="type-body-sm mt-1.5 text-muted-foreground">
-            Every deploy is a timestamped directory. Rollback re-points the symlink, instant, no rebuild.
+            Every deploy is a timestamped directory. Rolling back points the symlink at an older one, so nothing is
+            rebuilt.
         </p>
     </div>
     {#if application && can.deploy}
@@ -221,8 +222,8 @@
         <Dialog.Header>
             <Dialog.Title>Roll back to {target?.tag ?? target?.directory}?</Dialog.Title>
             <Dialog.Description>
-                The symlink re-points to {target?.directory}. It takes about a second, no rebuild, no downtime.
-                Migrations already applied are not reversed.
+                The symlink points to {target?.directory} again. It takes about a second, and nothing is rebuilt. Migrations
+                already applied are not reversed.
             </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>

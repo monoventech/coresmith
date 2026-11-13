@@ -63,7 +63,7 @@
         {#if step === 'what'}
             <Dialog.Header>
                 <Dialog.Title>Remove Coresmith?</Dialog.Title>
-                <Dialog.Description>This is permanent and can't be undone.</Dialog.Description>
+                <Dialog.Description>This can't be undone.</Dialog.Description>
             </Dialog.Header>
             <ul
                 class="mt-4 mb-0 flex list-disc flex-col gap-2 pl-4.5 text-[13px] leading-normal"

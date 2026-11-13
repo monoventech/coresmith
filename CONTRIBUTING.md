@@ -19,7 +19,7 @@ For PHP files, prefer line comments after the opening `<?php` tag, then `declare
 
 For Svelte/JS/TS files, use `//` line comments at the very top.
 
-Existing starter files do NOT need to be retroactively rewritten; apply headers only to new files going forward.
+Existing starter files don't need the header added; it goes on new files only.
 
 ## Dev quickstart
 
@@ -72,7 +72,7 @@ CI runs the same list. `bun run ci` runs it all on your machine: every check abo
 - `DesignSystemParityTest` fails if the app's tokens, type scale, radius family or display face drift from the Monoven design system.
 - Use the shadcn primitives in `resources/js/components/ui/` rather than raw form controls; a native checkbox gets the browser's focus outline, not the Monoven focus ring. Keep to one accent, and give every full-bleed view one hand tell and the Monoven footer mark.
 - Screen layouts follow Coresmith's design handoff, so propose a change to a screen's structure in an issue before building it.
-- The information architecture is settled. The sidebar has Fleet, Deployments, Releases and Settings, plus "Finish setup" until setup is done. A server has Apps, Databases, Hardening and Activity tabs. An app is one page with no tabs. Settings has General, Team, Git, Notifications and API tokens tabs, and Billing on Coresmith Cloud. Profile and security live under "Your account", reached from the account dialog. Below 640px the sidebar becomes bottom tabs, and below 900px it collapses to a rail.
+- The information architecture is settled. A rail carries Fleet, Deploys, Releases and Settings, plus Setup until setup is done, and an explorer beside it lists projects, apps, databases and servers with their live state. A server has Apps, Databases, Hardening and Activity tabs. An app is one page with no tabs. Settings has General, Team, Git, Notifications and API tokens tabs, and Billing on Coresmith Cloud. Profile and security live under "Your account", reached from the account dialog. From 1280px the explorer sits beside the page and can be hidden, from 640px it opens over the page, and below 640px bottom tabs take over.
 - Show real state. A feature that can't work yet says so and names what blocks it.
 
 ### Copy
@@ -88,7 +88,7 @@ CI runs the same list. `bun run ci` runs it all on your machine: every check abo
 
 - Controllers take the team from `TeamContext` (`$this->currentTeam()` in a controller), never `$user->teams()->first()`. A team named by the address (a `/{slug}` prefix, a team subdomain or a verified custom domain) wins over the user's last team, and a resource from another team is a 404 there.
 - Build every link with `route()` or `url()`, in PHP and in Svelte. They carry the `/{slug}` prefix; a hardcoded path silently drops it.
-- Git provider OAuth callbacks and webhooks use `TeamUrls::canonical()`, so providers only ever see the panel's own address. Single sign-on is the exception: sessions belong to a host, so its callback returns to the host that started it and each host is listed as a redirect URI.
+- Git provider OAuth callbacks and webhooks use `TeamUrls::canonical()`, so providers only ever see Coresmith's own address. Single sign-on is the exception: sessions belong to a host, so its callback returns to the host that started it and each host is listed as a redirect URI.
 - Single sign-on never attaches to an existing account on an email match alone. The account's owner signs in with their password, and two-factor if enabled, once to connect it.
 - Top-level route segments are reserved from team addresses automatically. Words that are not routes go in `TeamSlug::RESERVED`.
 

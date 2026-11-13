@@ -98,8 +98,8 @@
         {/each}
         <div class="flex flex-wrap items-center justify-between gap-3 px-5.5 py-3">
             <p class="m-0 text-[12.5px] text-muted-foreground">
-                Each app runs walled off from the others, with its own environment and database credentials: {stackText},
-                one server.
+                This server runs {stackText}, each app walled off from the others with its own environment and database
+                credentials.
                 <Link
                     href={route('servers.under-the-hood', server.id)}
                     class="whitespace-nowrap text-foreground underline underline-offset-2"

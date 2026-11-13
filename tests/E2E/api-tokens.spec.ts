@@ -12,7 +12,9 @@ test.describe('api tokens', () => {
     test('with no tokens the page explains what they are for', async ({ page }) => {
         await gotoSettings(page, 'API tokens')
 
-        await expect(page.getByRole('main')).toContainText(/No API tokens yet\.|Shown once at creation, hashed after\./)
+        await expect(page.getByRole('main')).toContainText(
+            /No API tokens yet\.|Each token is shown once, when it's created/
+        )
     })
 
     test('an owner is offered every ability the role grants', async ({ page }) => {

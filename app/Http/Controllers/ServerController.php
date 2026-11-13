@@ -343,7 +343,7 @@ final class ServerController extends Controller
 
         activity()->performedOn($server)->log('provisioning_restarted');
 
-        return back()->with('success', 'Starting over from phase 1. Each phase is written to be safe to run again.');
+        return back()->with('success', 'Starting over from phase 1. Each phase is safe to repeat.');
     }
 
     public function reboot(Server $server): RedirectResponse

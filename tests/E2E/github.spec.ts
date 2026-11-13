@@ -314,7 +314,7 @@ test.describe('with the environment GitHub App', () => {
         })
 
         await expect(card).toContainText(
-            'Install the Coresmith GitHub App on your organisation. It asks for the minimum: contents read-only, commit statuses and webhooks, per repository, not your whole account.'
+            'Install the Coresmith GitHub App on your organization. It asks for the minimum: contents read-only, commit statuses and webhooks, per repository, not your whole account.'
         )
         await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('href', connect)
         await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('target', '_self')

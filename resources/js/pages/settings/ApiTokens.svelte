@@ -99,7 +99,7 @@
     <div class="max-w-165">
         <EmptyState
             title="No API tokens yet."
-            description="Tokens let the CLI and your CI deploy on your behalf. They're scoped, revocable, and hashed at rest, you see the value exactly once."
+            description="Tokens let the CLI and your CI deploy for you, with only the abilities you give them. You see each token once, Coresmith stores it hashed, and you can revoke it at any time."
         />
         <div class="mt-4"><Button onclick={() => (creating = true)}>Create a token</Button></div>
     </div>
@@ -109,7 +109,7 @@
             <div>
                 <h3 class="type-h3 m-0">API tokens</h3>
                 <p class="mt-0.5 text-[12.5px] text-muted-foreground">
-                    Shown once at creation, hashed after. They act for {team.name} only.
+                    Each token is shown once, when it's created, and acts for {team.name} only.
                 </p>
             </div>
             <span class="ml-auto"><Button size="sm" onclick={() => (creating = true)}>Create a token</Button></span>

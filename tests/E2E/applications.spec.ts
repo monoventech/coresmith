@@ -535,7 +535,7 @@ test.describe('adding an application', () => {
         await page.getByRole('button', { name: 'Add the app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
-        await expect(toast(page)).toContainText('Application created.')
+        await expect(toast(page)).toContainText('App added.')
         await expect(page.getByTestId('app-project')).toContainText('Storefront › Staging')
     })
 
@@ -614,7 +614,7 @@ test.describe('adding an application', () => {
         await page.getByRole('button', { name: 'Add the app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
-        await expect(toast(page)).toContainText('Application created.')
+        await expect(toast(page)).toContainText('App added.')
     })
 
     test('a ruby app starts at medium, and a size picked by hand is kept', async ({ page }) => {
@@ -744,7 +744,7 @@ test.describe('adding an application from GitHub', () => {
         expect(sent.source_provider_id).toMatch(/^[0-9a-z]{26}$/i)
         expect(sent).not.toHaveProperty('repository_url')
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
-        await expect(toast(page)).toContainText('Application created.')
+        await expect(toast(page)).toContainText('App added.')
     })
 
     test('a Git URL still works without picking', async ({ page }, testInfo) => {
@@ -773,7 +773,7 @@ test.describe('adding an application from GitHub', () => {
         expect(sent).not.toHaveProperty('source_provider_id')
         expect(sent).not.toHaveProperty('repository_id')
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
-        await expect(toast(page)).toContainText('Application created.')
+        await expect(toast(page)).toContainText('App added.')
     })
 
     test('adding an app from GitHub without picking a repository asks for one', async ({ page }) => {
