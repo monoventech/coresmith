@@ -11,15 +11,17 @@ The bar leaves out the apps' own failures.
 
 Stack causes were fixed with tests, and their repositories were deployed again on the final code. So the final numbers describe the fixed code on the same repositories it was tuned on. The first pass shows each repository's first result, before the fixes it led to. A fresh sample on the final code would measure the bar without that bias.
 
-The sample ran on 36b76e5, ae6142c and c4b5023, with reruns on d1f8f67 and 5155b3d.
+The sample ran on 36b76e5, ae6142c and c4b5023, with reruns on d1f8f67 and 5155b3d, and fox-one/cowallet read again on 51086df.
+
+About 170 deploys sit under the final bar, too few to show 99% with confidence. The node is arm64. There Coresmith refuses a Gemfile.lock that only lists x86_64-linux, and puppeteer's Chrome download and Bun 1.3.8 fail; on an x86 server those repositories may deploy.
 
 ## Final, each repository's latest result
 
 - Repositories: 378
-- Verdicts: ready 283, unsure 45, blocked 50, unreadable 0, harness 0
-- Coverage, filled in completely: 283 (74.9%)
-- Strict, deployed and answering: 167 of 283 (59.0%)
-- The bar, passes / (passes + stack failures): 167 of 169 (98.8%)
+- Verdicts: ready 282, unsure 46, blocked 50, unreadable 0, harness 0
+- Coverage, filled in completely: 282 (74.6%)
+- Strict, deployed and answering: 167 of 282 (59.2%)
+- The bar, passes / (passes + stack failures): 167 of 168 (99.4%)
 - Failures that were the apps' own: 114
 
 ## First pass, each repository's first result
@@ -50,7 +52,7 @@ The sample ran on 36b76e5, ae6142c and c4b5023, with reruns on d1f8f67 and 5155b
 - `devosamagasser/glasses-shop`: routes/api.php declares a function, so config:cache, which loads routes twice, hit a fatal redeclare. Skipped with the reason since ce9f027. (ce9f027)
 - `devreyz/supply`: Past the skipped view:cache (ce9f027), it connects to MySQL and the corpus deploys without a database, so migrations cannot connect. (ce9f027)
 - `finadio/SetaraLoka`: The repository leaves out storage/framework/views, so package discovery failed with 'Please provide a valid cache path'. Created on every release since f9807ff. (f9807ff)
-- `fox-one/cowallet`: Nothing names a Node.js version, so Coresmith picked Node 24, where yarn 1 first refused a dependency's engines (fixed by 5155b3d) and then node-sass, which doesn't build on current Node.js, failed. Not fixed yet: a node-sass rule is the next task. (not fixed)
+- `fox-one/cowallet`: Nothing names a Node.js version, so Coresmith picked Node 24, where yarn 1 first refused a dependency's engines (fixed by 5155b3d) and then node-sass, which no release builds on Node.js 21 or newer, failed. Reads not sure since 5a18896. (5a18896)
 - `frank270/nPhpSlim4Skeleton`: No composer.lock and no PHP constraint, so Coresmith picked PHP 8.5, which its phpspreadsheet ^1.29 stops short of. The version reads not sure since 0ab1062. (0ab1062)
 - `ichierevans/futsaldev`: Past the skipped route:cache (ce9f027), it connects to MySQL and the corpus deploys without a database, so migrations cannot connect. (ce9f027)
 - `jashanpreetsinghdod/NotificationService`: Its start script runs ts-node, which compiles TypeScript at start and went past Small's 256 MB. Reads not sure since 46ee0f1. (46ee0f1)
@@ -187,4 +189,3 @@ The sample ran on 36b76e5, ae6142c and c4b5023, with reruns on d1f8f67 and 5155b
 - `yasminelkhawa-prog/ATS-pfe` (app): It imports ../Employment-Types, which isn't in the repository under that name.
 - `zidvsd/waddlr` (app): Better Auth refuses to build without BETTER_AUTH_SECRET, which the corpus does not set.
 - `PreciousNwogu/Dabs_Beauty_Touch` (stack): public/index.php calls putenv(), which Coresmith turns off for PHP web requests (with exec, proc_open and the rest), so every request is a fatal error before Laravel boots. Not fixed: the restriction is deliberate hardening.
-- `fox-one/cowallet` (stack): Nothing names a Node.js version, so Coresmith picked Node 24, where yarn 1 first refused a dependency's engines (fixed by 5155b3d) and then node-sass, which doesn't build on current Node.js, failed. Not fixed yet: a node-sass rule is the next task.

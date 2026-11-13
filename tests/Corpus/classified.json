@@ -670,8 +670,9 @@
     },
     {
         "name": "fox-one/cowallet",
+        "commit": "5a18896",
         "cause": "stack",
-        "why": "Nothing names a Node.js version, so Coresmith picked Node 24, where yarn 1 first refused a dependency's engines (fixed by 5155b3d) and then node-sass, which doesn't build on current Node.js, failed. Not fixed yet: a node-sass rule is the next task."
+        "why": "Nothing names a Node.js version, so Coresmith picked Node 24, where yarn 1 first refused a dependency's engines (fixed by 5155b3d) and then node-sass, which no release builds on Node.js 21 or newer, failed. Reads not sure since 5a18896."
     },
     {
         "name": "iampratyushk/Ai-interview-backend",
