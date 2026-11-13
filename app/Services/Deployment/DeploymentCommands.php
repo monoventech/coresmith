@@ -105,7 +105,7 @@ final class DeploymentCommands
         return match ($application->type) {
             ApplicationType::Php => $application->framework === 'laravel' ? ['php artisan migrate --force'] : [],
             ApplicationType::Ruby => $application->framework !== 'sinatra'
-                ? ['RAILS_ENV=production bundle exec rails db:migrate']
+                ? ($stack->present('config/database.yml') === false ? [] : ['RAILS_ENV=production bundle exec rails db:migrate'])
                 : ($stack->locked('sinatra-activerecord') === true && $stack->present('Rakefile') === true ? ['RACK_ENV=production bundle exec rake db:migrate'] : []),
             default => [],
         };

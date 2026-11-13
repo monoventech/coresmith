@@ -43,6 +43,13 @@ test('a Rails app precompiles assets only when it has an asset pipeline', functi
     'a stack saved before Coresmith tracked the asset gems' => [['sidekiq' => false], null, ['RAILS_ENV=production bundle exec rails assets:precompile']],
 ]);
 
-test('a Rails app still migrates with rails', function () {
-    expect(app(DeploymentCommands::class)->migrations(rubyPipelineApp('rails'), rubyPipelineStack(['propshaft' => true])))->toBe(['RAILS_ENV=production bundle exec rails db:migrate']);
+test('a Rails app migrates with rails when it has a database configuration, or Coresmith did not see its files', function (?array $files) {
+    expect(app(DeploymentCommands::class)->migrations(rubyPipelineApp('rails'), rubyPipelineStack(['propshaft' => true], $files)))->toBe(['RAILS_ENV=production bundle exec rails db:migrate']);
+})->with([
+    'config/database.yml' => [['Gemfile', 'Gemfile.lock', 'config.ru', 'config/database.yml']],
+    'files not read' => [null],
+]);
+
+test('a Rails app without config/database.yml has no Active Record to migrate, so it skips migrations', function () {
+    expect(app(DeploymentCommands::class)->migrations(rubyPipelineApp('rails'), rubyPipelineStack(['propshaft' => true])))->toBe([]);
 });
