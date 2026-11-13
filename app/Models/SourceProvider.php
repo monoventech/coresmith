@@ -14,6 +14,7 @@ use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Services\Git\ProviderHost;
+use App\Services\Teams\TeamAccess;
 use Carbon\CarbonInterface;
 use Database\Factories\SourceProviderFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -36,6 +37,11 @@ class SourceProvider extends Model
         static::saving(function (self $provider): void {
             $provider->custom_host = ProviderHost::normalise($provider->custom_host);
         });
+    }
+
+    public function usableBy(User $user, Team $team): bool
+    {
+        return $this->team_id === $team->getKey() && app(TeamAccess::class)->seesEverything($user, $team);
     }
 
     public function connected(): bool

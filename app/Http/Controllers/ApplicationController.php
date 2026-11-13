@@ -80,7 +80,7 @@ final class ApplicationController extends Controller
                     ->orderBy('name')
                     ->orderBy('id')
                     ->get()
-                    ->filter(fn(SourceProvider $provider): bool => $provider->connected())
+                    ->filter(fn(SourceProvider $provider): bool => $provider->connected() && $provider->usableBy($request->user(), $server->team))
                     ->map(fn(SourceProvider $provider): array => [
                         'id' => $provider->id,
                         'account' => $provider->name,
