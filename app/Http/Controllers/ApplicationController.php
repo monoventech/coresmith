@@ -33,6 +33,7 @@ use App\Services\Deployment\StackDefaults;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
+use App\Services\Network\ServerAddresses;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\DeploymentPresenter;
@@ -68,7 +69,7 @@ final class ApplicationController extends Controller
         $this->authorize('create', Application::class);
 
         return Inertia::render('applications/Create', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targets($server->public_addresses)],
             'projects' => $projects->choices($request->user(), $server->team),
             'runtimes' => collect(['php', 'ruby', 'bun', 'nodejs', 'deno'])->mapWithKeys(fn(string $runtime): array => [$runtime => [
                 'label' => $catalog->label($runtime),
@@ -195,6 +196,7 @@ final class ApplicationController extends Controller
                 'certificates' => $certificates->forApplication($application),
                 'domain_reach' => $this->domainReach($application),
                 'domain_check_href' => route('servers.applications.domains.check', [$server, $application]),
+                'dns_targets' => ServerAddresses::targets($server->public_addresses),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),
@@ -377,6 +379,7 @@ final class ApplicationController extends Controller
                 'ready' => is_bool($reading['ready'] ?? null) ? $reading['ready'] : null,
                 'problems' => array_values(array_map('strval', (array) ($reading['problems'] ?? []))),
                 'notes' => array_values(array_map('strval', (array) ($reading['notes'] ?? []))),
+                'records' => array_values(array_filter((array) ($reading['records'] ?? []), fn(mixed $record): bool => is_array($record) && is_string($record['type'] ?? null) && is_string($record['name'] ?? null) && is_string($record['value'] ?? null))),
                 'checked' => is_string($reading['checked_at'] ?? null) ? Formats::when(Carbon::parse($reading['checked_at'])) : null,
             ];
         }, $application->allDomains());

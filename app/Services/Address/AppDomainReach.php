@@ -11,7 +11,7 @@ namespace App\Services\Address;
 use App\Models\Application;
 use App\Services\Network\AddressResolver;
 use App\Services\Network\RemoteReachProbe;
-use App\Services\Network\ServerNetworkReading;
+use App\Services\Network\ServerAddresses;
 use App\Services\SSH\SSHConnectionManager;
 
 final class AppDomainReach
@@ -19,6 +19,7 @@ final class AppDomainReach
     public function __construct(
         private readonly SSHConnectionManager $connections,
         private readonly AddressResolver $resolver,
+        private readonly ServerAddresses $addresses,
     ) {}
 
     /**
@@ -34,7 +35,8 @@ final class AppDomainReach
         }
 
         $connection = $this->connections->for($server);
-        $reading = ServerNetworkReading::parse($connection->execute(RemoteReachProbe::script(), timeout: RemoteReachProbe::SECONDS + 10)->output);
+        $reading = $this->addresses->read($connection);
+        $this->addresses->keep($server, $reading);
         $reachability = new Reachability($this->resolver, $reading, $reading, new RemoteReachProbe($connection, $reading->direct));
 
         $reports = [];

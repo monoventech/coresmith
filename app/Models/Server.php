@@ -151,6 +151,7 @@ class Server extends Model
             'booted_at' => 'datetime',
             'provider_task' => 'array',
             'provider_monthly_cost' => 'decimal:2',
+            'public_addresses' => 'array',
         ];
     }
 }

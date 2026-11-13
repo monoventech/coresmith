@@ -8,6 +8,7 @@
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import StackDetection from '@/components/applications/StackDetection.svelte'
     import BackLink from '@/components/BackLink.svelte'
+    import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import EnvironmentSelect from '@/components/projects/EnvironmentSelect.svelte'
     import TextLink from '@/components/TextLink.svelte'
@@ -29,7 +30,12 @@
         github,
         projects = []
     }: {
-        server: { id: string; name: string; href: string }
+        server: {
+            id: string
+            name: string
+            href: string
+            dns_targets: { type: string; value: string; closed: boolean }[]
+        }
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
         projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
@@ -82,6 +88,7 @@
     let webDirectory = $state('/public')
     const picker = $derived(pickerRuntime(type, jsRuntime))
     let pickedSize = $state<string | null>(null)
+    let domainName = $state('')
     const size = $derived(pickedSize ?? (type === 'ruby' ? 'medium' : 'small'))
     let chosenSource = $state<string | null>(null)
     const source = $derived(
@@ -444,13 +451,14 @@
                             <Input
                                 id="domain"
                                 name="domain"
+                                bind:value={domainName}
                                 placeholder="app.example.com"
                                 autocomplete="off"
                                 aria-invalid={errors.domain ? true : undefined}
                             />
                             <FieldError message={errors.domain} />
                         </div>
-                        <div>
+                        <div class="max-sm:order-2">
                             <Label for="app_size" class="mb-1.5">Size</Label>
                             <NativeSelect
                                 id="app_size"
@@ -463,11 +471,29 @@
                                 ]}
                             />
                         </div>
+                        <div class="col-span-full max-sm:order-1">
+                            {#if server.dns_targets.length > 0}
+                                <p class="m-0 mb-1 text-[12px] text-muted-foreground">
+                                    Point the domain at this server with {server.dns_targets.length === 1
+                                        ? 'this record'
+                                        : 'these records'}. The certificate is issued on the first visit.
+                                </p>
+                                <DnsRecords
+                                    records={server.dns_targets.map((target) => ({
+                                        ...target,
+                                        name: domainName.trim().toLowerCase() || null
+                                    }))}
+                                    testid="domain-targets"
+                                />
+                            {:else}
+                                <p class="m-0 text-[12px] text-muted-foreground">
+                                    Point the domain at the server first: an A record for its IPv4 address, or an AAAA
+                                    record for IPv6. Once the app is live, Coresmith checks the domain from outside and
+                                    shows the record it needs. The certificate is issued on the first visit.
+                                </p>
+                            {/if}
+                        </div>
                     </div>
-                    <p class="-mt-1 text-[12px] text-muted-foreground">
-                        Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for
-                        IPv6. The certificate is issued on the first visit.
-                    </p>
                     <EnvironmentSelect {projects} error={errors.environment_id} />
                     <Button type="submit" class="w-full" disabled={processing || refused}>Add the app</Button>
                 </div>

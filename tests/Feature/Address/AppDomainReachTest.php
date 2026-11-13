@@ -102,7 +102,11 @@ test('a domain on a home server nobody reaches over IPv4 is told why, with both 
 
     $report = app(AppDomainReach::class)->check($application)['notes.example.net'];
 
-    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers, as many home connections do. If you can forward them, add an A record for notes.example.net pointing at 203.0.113.7. If you can't, use IPv6: add an AAAA record for notes.example.net pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8. Then check again."]);
+    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers, as many home connections do. If you can forward them, add an A record for notes.example.net pointing at 203.0.113.7. If you can't, add an AAAA record for notes.example.net pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8. That reaches visitors with IPv6; to reach everyone else as well, put notes.example.net behind a proxy that answers on IPv4, such as Cloudflare's. Then check again."])
+        ->and($report->records)->toBe([
+            ['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7'],
+            ['type' => 'AAAA', 'name' => 'notes.example.net', 'value' => appReachIpv6()],
+        ]);
 });
 
 test('an AAAA record the internet reaches reads as reachable, asked from the server over IPv6', function () {
@@ -154,7 +158,24 @@ test("the check stores each domain's reading on the app", function () {
     expect(array_keys($reach))->toBe(['notes.example.net', 'www.notes.example.net'])
         ->and($reach['notes.example.net']['ready'])->toBeFalse()
         ->and($reach['notes.example.net']['problems'][0])->toStartWith("notes.example.net doesn't point anywhere yet.")
+        ->and($reach['notes.example.net']['records'])->toBe([['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7']])
         ->and($reach['notes.example.net']['checked_at'])->toBe(now()->toIso8601String());
+});
+
+test("the check keeps what it learned about the server's addresses, for the next domain added there", function () {
+    $this->travelTo(now()->startOfMinute());
+    $application = appReachApp();
+    appReachDns([]);
+    appReachSsh(appReachServerOutput(ipv4Open: false));
+
+    app()->call([new CheckDomainReach($application), 'handle']);
+
+    expect($application->server->fresh()->public_addresses)->toBe([
+        'ipv4' => '203.0.113.7',
+        'ipv4_open' => false,
+        'ipv6' => [appReachIpv6()],
+        'checked_at' => now()->toIso8601String(),
+    ]);
 });
 
 test('a check that cannot reach the server says so for each domain', function () {
@@ -227,12 +248,14 @@ test('anyone who can change an app can check its domains again, and nobody else 
     Bus::assertDispatchedTimes(CheckDomainReach::class, 1);
 });
 
-test("the app page shows each domain's last reading, and where to check again", function () {
+test("the app page shows each domain's last reading, the records it asks for, and where to check again", function () {
     $this->travelTo(now()->setTime(12, 0));
+    $record = ['type' => 'AAAA', 'name' => 'notes.example.net', 'value' => appReachIpv6()];
     $application = appReachApp([
         'additional_domains' => ['www.notes.example.net'],
         'domain_reach' => [
-            'notes.example.net' => ['ready' => false, 'problems' => ['notes.example.net needs an AAAA record.'], 'notes' => [], 'checked_at' => now()->subMinutes(5)->toIso8601String()],
+            'notes.example.net' => ['ready' => false, 'problems' => ['notes.example.net needs an AAAA record.'], 'notes' => [], 'records' => [$record], 'checked_at' => now()->subMinutes(5)->toIso8601String()],
+            'www.notes.example.net' => ['ready' => true, 'problems' => [], 'notes' => [], 'checked_at' => now()->subHour()->toIso8601String()],
             'old.example.net' => ['ready' => true, 'problems' => [], 'notes' => [], 'checked_at' => now()->subDay()->toIso8601String()],
         ],
     ]);
@@ -242,8 +265,32 @@ test("the app page shows each domain's last reading, and where to check again", 
         ->assertOk()
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('application.domain_reach', [
-                ['domain' => 'notes.example.net', 'ready' => false, 'problems' => ['notes.example.net needs an AAAA record.'], 'notes' => [], 'checked' => 'today 11:55'],
-                ['domain' => 'www.notes.example.net', 'ready' => null, 'problems' => [], 'notes' => [], 'checked' => null],
+                ['domain' => 'notes.example.net', 'ready' => false, 'problems' => ['notes.example.net needs an AAAA record.'], 'notes' => [], 'records' => [$record], 'checked' => 'today 11:55'],
+                ['domain' => 'www.notes.example.net', 'ready' => true, 'problems' => [], 'notes' => [], 'records' => [], 'checked' => 'today 11:00'],
             ])
             ->where('application.domain_check_href', route('servers.applications.domains.check', [$application->server, $application])));
 });
+
+test("Add an app shows the server's addresses to point a domain at, from its last reading", function () {
+    $application = appReachApp();
+    $application->server->forceFill(['public_addresses' => ['ipv4' => '203.0.113.7', 'ipv4_open' => true, 'ipv6' => [], 'checked_at' => '2026-11-13T12:00:00+00:00']])->save();
+    $owner = appReachMember($application, TeamRole::Owner);
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $application->server))
+        ->assertOk()
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('server.dns_targets', [['type' => 'A', 'value' => '203.0.113.7', 'closed' => false]]));
+});
+
+test("the Add a domain dialog shows the server's addresses from its last reading, and nothing before one", function (?array $addresses, array $targets) {
+    $application = appReachApp();
+    $application->server->forceFill(['public_addresses' => $addresses])->save();
+    $owner = appReachMember($application, TeamRole::Owner);
+
+    $this->actingAs($owner)->get(route('servers.applications.show', [$application->server, $application]))
+        ->assertOk()
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('application.dns_targets', $targets));
+})->with([
+    'IPv4 open, with IPv6' => [['ipv4' => '203.0.113.7', 'ipv4_open' => true, 'ipv6' => [appReachIpv6()], 'checked_at' => '2026-11-13T12:00:00+00:00'], [['type' => 'A', 'value' => '203.0.113.7', 'closed' => false], ['type' => 'AAAA', 'value' => appReachIpv6(), 'closed' => false]]],
+    'IPv4 closed, with IPv6' => [['ipv4' => '203.0.113.7', 'ipv4_open' => false, 'ipv6' => [appReachIpv6()], 'checked_at' => '2026-11-13T12:00:00+00:00'], [['type' => 'AAAA', 'value' => appReachIpv6(), 'closed' => false], ['type' => 'A', 'value' => '203.0.113.7', 'closed' => true]]],
+    'no reading yet' => [null, []],
+]);

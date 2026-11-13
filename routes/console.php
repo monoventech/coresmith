@@ -14,15 +14,19 @@ use App\Jobs\IdleAppSleeper;
 use App\Jobs\MoveCaddyAdminToSocket;
 use App\Jobs\PollRepositories;
 use App\Jobs\PruneRemovedApplications;
+use App\Jobs\ReadServerAddresses;
 use App\Jobs\ResumeCloudTasks;
 use App\Models\InstanceSetting;
 use App\Models\MoveCode;
 use App\Models\Server;
 use App\Models\StripeEvent;
+use App\Services\Address\AddressChange;
+use App\Services\Address\AddressReading;
 use App\Services\Address\CertificateSource;
 use App\Services\Address\CloudflareConnection;
 use App\Services\Address\InstallationAddress;
 use App\Services\Address\PointAddress;
+use App\Services\Address\Reachability;
 use App\Services\Deployment\RemovedApplicationFolders;
 use App\Services\Updates\UpdateChecker;
 use App\Services\Updates\UpdateState;
@@ -102,6 +106,20 @@ Schedule::call(function (): void {
 })->hourlyAt(30)->name('coresmith:check-protections')->withoutOverlapping();
 
 Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->whereNull('unreachable_since')
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(function (Server $server): void {
+            $checked = $server->public_addresses['checked_at'] ?? null;
+
+            if (!is_string($checked) || now()->subWeek()->gt($checked)) {
+                ReadServerAddresses::dispatch($server);
+            }
+        });
+})->hourlyAt(40)->name('coresmith:read-server-addresses')->withoutOverlapping();
+
+Schedule::call(function (): void {
     $host = app(InstallationAddress::class)->host();
 
     if (Edition::current()->isCloud() || CloudflareConnection::token() === null || InstallationAddress::certificate($host) !== CertificateSource::Public) {
@@ -110,6 +128,16 @@ Schedule::call(function (): void {
 
     app(PointAddress::class)->point($host);
 })->everyTenMinutes()->name('coresmith:point-address')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    $host = app(InstallationAddress::class)->host();
+
+    if (Edition::current()->isCloud() || AddressChange::running() || InstallationAddress::certificate($host) !== CertificateSource::Public) {
+        return;
+    }
+
+    AddressReading::record($host, app(Reachability::class)->check($host));
+})->dailyAt('05:50')->name('coresmith:read-own-address')->withoutOverlapping();
 
 Schedule::job(new IdleAppSleeper)->everyFiveMinutes()->name('coresmith:sleep-idle-apps');
 
