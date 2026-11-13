@@ -128,6 +128,28 @@ test('rails before 7.1 with its Ruby version named is ready', function () {
     expect(stackDetectorRun(stackDetectorOldRails(['.ruby-version' => "3.3.6\n"]))->verdict())->toBe('ready');
 });
 
+function stackDetectorNodeSass(string $fixture, array $extra = []): RepositoryFacts
+{
+    $facts = RepositoryFixture::facts($fixture);
+    $manifest = $facts->json('package.json');
+    $manifest['devDependencies'] = [...(array) ($manifest['devDependencies'] ?? []), 'node-sass' => '^7.0.0'];
+    $files = [...$facts->files, 'package.json' => (string) json_encode($manifest), ...$extra];
+
+    return new RepositoryFacts($files, $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+}
+
+test('an app on node-sass is not sure when Coresmith would use a Node.js node-sass does not build on', function (string $fixture, array $extra, ?string $version) {
+    $detected = stackDetectorRun(stackDetectorNodeSass($fixture, $extra));
+
+    expect($detected->verdict())->toBe($version === null ? 'ready' : 'unsure')
+        ->and($detected->unsettled['runtime_version'] ?? null)->toBe($version === null ? null : "node-sass builds on Node.js 20 at most, and Coresmith would use Node.js {$version}. Replace node-sass with sass, or name a Node.js version your node-sass supports in .nvmrc.");
+})->with([
+    'nothing names a Node.js version, fox-one/cowallet' => ['nuxt-app', [], '24.21.0'],
+    '.nvmrc names Node.js 22' => ['nuxt-app', ['.nvmrc' => "22\n"], '22.23.2'],
+    'a Laravel app that builds its assets with it' => ['laravel-13', [], '24.21.0'],
+    '.nvmrc names Node.js 20' => ['nuxt-app', ['.nvmrc' => "20\n"], null],
+]);
+
 test('the server language wins over a frontend package.json', function () {
     expect(stackDetectorRun('laravel-13')->type)->toBe('php')
         ->and(stackDetectorRun('rails-jsbundling')->type)->toBe('ruby');

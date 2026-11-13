@@ -118,6 +118,12 @@ final class StackDetector
             $unsettled['runtime_version'] = "Nothing names a Ruby version, so Coresmith would pick the newest, Ruby {$ruby->version}, which gems locked with Rails {$rails} may not install or load on. Add a .ruby-version with the Ruby the app runs on, for example 3.3.6.";
         }
 
+        $node = $stack?->runtimes['nodejs'] ?? null;
+
+        if ($node !== null && $facts->dependency('node-sass') !== null && version_compare($node->version, '21', '>=')) {
+            $unsettled['runtime_version'] ??= "node-sass builds on Node.js 20 at most, and Coresmith would use Node.js {$node->version}. Replace node-sass with sass, or name a Node.js version your node-sass supports in .nvmrc.";
+        }
+
         return new DetectedStack(
             $proposal['type'],
             $proposal['framework'],
