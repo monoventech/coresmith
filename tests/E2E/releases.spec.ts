@@ -66,6 +66,7 @@ test.describe('releases', () => {
 
         await expect(dialog(page)).toContainText('Roll back to v2.13.2?')
         await expect(dialog(page)).toContainText('It takes about a second, and nothing is rebuilt.')
+        await expect(dialog(page).getByText(/^releases\/\d{8}-\d{6}$/)).toHaveCSS('white-space', 'nowrap')
         await expect(dialog(page)).toContainText('Migrations already applied are not reversed.')
 
         await dialog(page).getByRole('button', { name: 'Cancel' }).click()

@@ -104,7 +104,7 @@ final class CloudPresenter
 
         return [
             'accounts' => $accounts['accounts'],
-            'types' => array_values(array_filter(self::types(), fn(array $type): bool => !in_array($type['value'], $connected, true))),
+            'types' => $accounts['can_manage'] ? array_values(array_filter(self::types(), fn(array $type): bool => !in_array($type['value'], $connected, true))) : [],
             'selected' => $selected === null ? 'manual' : 'account:' . $selected->getKey(),
             'can_connect' => $accounts['can_manage'],
         ];

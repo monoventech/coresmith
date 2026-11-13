@@ -25,8 +25,8 @@ final class Projects
 
     public function create(Team $team, string $name, User $by): Project
     {
-        $project = DB::transaction(function () use ($team, $name): Project {
-            $project = $team->projects()->create(['name' => $name]);
+        $project = DB::transaction(function () use ($team, $name, $by): Project {
+            $project = $team->projects()->create(['name' => $name, 'created_by' => $by->getKey()]);
             $project->environments()->create(['name' => self::FIRST_ENVIRONMENT, 'position' => 0]);
 
             return $project;

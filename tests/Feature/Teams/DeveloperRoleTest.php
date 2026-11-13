@@ -22,7 +22,7 @@ function developerRoleTable(): array
         'manage members' => [Ability::ManageMembers, false],
         'view a server' => [Ability::ViewServer, true],
         'add a server' => [Ability::CreateServer, true],
-        'add a server on a cloud account' => [Ability::CreateCloudServer, false],
+        'add a server on a cloud account' => [Ability::CreateCloudServer, true],
         'update a server' => [Ability::UpdateServer, true],
         'delete a server' => [Ability::DeleteServer, true],
         'read server credentials' => [Ability::ViewServerCredentials, false],
@@ -41,7 +41,7 @@ function developerRoleTable(): array
         'read database credentials' => [Ability::ViewDatabaseCredentials, true],
         'manage cloud accounts' => [Ability::ManageProviders, false],
         'manage a firewall' => [Ability::ManageFirewall, true],
-        'manage projects' => [Ability::ManageProjects, false],
+        'manage projects' => [Ability::ManageProjects, true],
     ];
 }
 
