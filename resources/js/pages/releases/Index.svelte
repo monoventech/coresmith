@@ -222,8 +222,8 @@
         <Dialog.Header>
             <Dialog.Title>Roll back to {target?.tag ?? target?.directory}?</Dialog.Title>
             <Dialog.Description>
-                The symlink points to {target?.directory} again. It takes about a second, and nothing is rebuilt. Migrations
-                already applied are not reversed.
+                The symlink points to <span class="whitespace-nowrap">{target?.directory}</span> again. It takes about a second,
+                and nothing is rebuilt. Migrations already applied are not reversed.
             </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>

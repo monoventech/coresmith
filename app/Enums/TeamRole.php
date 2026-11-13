@@ -34,6 +34,7 @@ enum TeamRole: string
                 Ability::ViewTeam,
                 Ability::ViewServer,
                 Ability::CreateServer,
+                Ability::CreateCloudServer,
                 Ability::UpdateServer,
                 Ability::DeleteServer,
                 Ability::ManageFirewall,
@@ -50,6 +51,7 @@ enum TeamRole: string
                 Ability::BackupDatabase,
                 Ability::RestoreDatabase,
                 Ability::ViewDatabaseCredentials,
+                Ability::ManageProjects,
             ],
             self::Member => [
                 Ability::ViewTeam,

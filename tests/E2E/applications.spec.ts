@@ -2,6 +2,8 @@ import type { Page } from '@playwright/test'
 import {
     applicationRow,
     blockingViolations,
+    captureClipboard,
+    clipboardText,
     dialog,
     expect,
     expectWayBack,
@@ -364,6 +366,73 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(domains).toContainText('Certificates renew themselves.')
     })
 
+    test("a domain visitors can't reach says why and what to do", async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const reach = page.getByTestId('domain-reach')
+
+        await expect(reach).toContainText(
+            'atlas.monoven.io points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet.'
+        )
+        await expect(reach).toContainText('use IPv6: add an AAAA record for atlas.monoven.io pointing at 2001:db8::7')
+        await expect(reach).toContainText('Checked')
+    })
+
+    test('the record a reading asks for is ready to copy', async ({ page }) => {
+        await captureClipboard(page)
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const records = page.getByTestId('domain-reach').getByTestId('domain-records')
+
+        await expect(records).toContainText('AAAA')
+        await expect(records).toContainText('atlas.monoven.io')
+        await records.getByRole('button', { name: 'Copy the AAAA value 2001:db8::7' }).click()
+
+        await expect(records.getByRole('button', { name: 'Copied the AAAA value 2001:db8::7' })).toBeVisible()
+        expect(await clipboardText(page)).toBe('2001:db8::7')
+    })
+
+    test("Add a domain shows this server's addresses ready to copy, named as the domain is typed", async ({ page }) => {
+        await captureClipboard(page)
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        await page.getByRole('button', { name: 'Add domain' }).click()
+
+        const targets = dialog(page).getByTestId('domain-targets')
+
+        await expect(dialog(page)).toContainText(
+            'Point the domain at this server with these records, then add it here. The certificate is handled for you.'
+        )
+        await expect(targets).toContainText('2001:db8::7')
+        await expect(targets).toContainText('203.0.113.7')
+        await expect(targets).toContainText("The internet can't reach this address on ports 80 and 443 yet.")
+
+        await dialog(page).getByRole('textbox', { name: 'Domain' }).fill('Shop.Example.com')
+        await expect(targets).toContainText('shop.example.com')
+        await targets.getByRole('button', { name: 'Copy the AAAA value 2001:db8::7' }).click()
+
+        expect(await clipboardText(page)).toBe('2001:db8::7')
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the server's addresses in Add a domain are accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await gotoApplication(page, 'forge-01', 'atlas')
+            await page.getByRole('button', { name: 'Add domain' }).click()
+            await expect(dialog(page).getByTestId('domain-targets')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
+
+    test('the domains are checked again from outside on request', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        await page.getByTestId('domain-reach').getByRole('button', { name: 'Check again' }).click()
+
+        await expect(toast(page)).toContainText('Checking from outside. The results show here in a few seconds.')
+    })
+
     test('the releases link opens this app’s releases', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
@@ -469,8 +538,9 @@ test.describe('what the full app page adds on a wider screen', () => {
 
         await page.getByRole('button', { name: 'Add domain' }).click()
         await expect(dialog(page)).toContainText(
-            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. The certificate is handled for you.'
+            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. Once the app is live, Coresmith checks the domain from outside and shows the record it needs. The certificate is handled for you.'
         )
+        await expect(dialog(page).getByTestId('domain-targets')).toHaveCount(0)
         await dialog(page).getByRole('textbox', { name: 'Domain' }).fill('not a domain')
         await dialog(page).getByRole('button', { name: 'Add domain' }).click()
 
@@ -508,6 +578,32 @@ test.describe('what the full app page adds on a wider screen', () => {
 })
 
 test.describe('adding an application', () => {
+    test("the domain help shows this server's addresses ready to copy, named as the domain is typed", async ({ page }) => {
+        await captureClipboard(page)
+        await gotoServer(page, 'forge-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+
+        const targets = page.getByTestId('domain-targets')
+
+        await expect(page.getByRole('main')).toContainText(
+            'Point the domain at this server with these records. The certificate is issued on the first visit.'
+        )
+        await page.getByLabel('Domain').fill('shop.example.com')
+        await expect(targets).toContainText('shop.example.com')
+        await targets.getByRole('button', { name: 'Copy the AAAA value 2001:db8::7' }).click()
+
+        expect(await clipboardText(page)).toBe('2001:db8::7')
+    })
+
+    test("a server Coresmith hasn't read yet keeps the general domain advice", async ({ page }) => {
+        await openAddApp(page)
+
+        await expect(page.getByRole('main')).toContainText(
+            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. Once the app is live, Coresmith checks the domain from outside and shows the record it needs.'
+        )
+        await expect(page.getByTestId('domain-targets')).toHaveCount(0)
+    })
+
     test('the server offers to add an app', async ({ page }) => {
         await gotoServer(page, 'bench-01')
 

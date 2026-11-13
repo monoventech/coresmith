@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
+use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Environment;
@@ -192,9 +193,11 @@ final class ProjectPresenter
             'where' => $each->environment === null ? 'No project' : $each->environment->project->name . ' › ' . $each->environment->name,
         ];
 
+        $own = $viewer->roleIn($project->team) === TeamRole::Developer ? $viewer->getKey() : null;
+
         return [
-            'applications' => $this->access->applications($viewer, $project->team)->with('environment.project')->orderBy('name')->get()->map($place)->values()->all(),
-            'databases' => $this->access->databases($viewer, $project->team)->with('environment.project')->orderBy('name')->get()->map($place)->values()->all(),
+            'applications' => $this->access->applications($viewer, $project->team)->when($own !== null, fn($query) => $query->where('created_by', $own))->with('environment.project')->orderBy('name')->get()->map($place)->values()->all(),
+            'databases' => $this->access->databases($viewer, $project->team)->when($own !== null, fn($query) => $query->where('created_by', $own))->with('environment.project')->orderBy('name')->get()->map($place)->values()->all(),
         ];
     }
 }

@@ -19,6 +19,7 @@ use App\Exceptions\PortExhaustedException;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\CheckCertificates;
+use App\Jobs\CheckDomainReach;
 use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
 use App\Jobs\SyncApplicationRoute;
@@ -32,6 +33,7 @@ use App\Services\Deployment\StackDefaults;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
+use App\Services\Network\ServerAddresses;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\DeploymentPresenter;
@@ -51,6 +53,8 @@ use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Bus;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Activitylog\Models\Activity;
@@ -65,7 +69,7 @@ final class ApplicationController extends Controller
         $this->authorize('create', Application::class);
 
         return Inertia::render('applications/Create', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targets($server->public_addresses)],
             'projects' => $projects->choices($request->user(), $server->team),
             'runtimes' => collect(['php', 'ruby', 'bun', 'nodejs', 'deno'])->mapWithKeys(fn(string $runtime): array => [$runtime => [
                 'label' => $catalog->label($runtime),
@@ -190,6 +194,9 @@ final class ApplicationController extends Controller
                 'domain' => $application->domain,
                 'additional_domains' => array_values((array) $application->additional_domains),
                 'certificates' => $certificates->forApplication($application),
+                'domain_reach' => $this->domainReach($application),
+                'domain_check_href' => route('servers.applications.domains.check', [$server, $application]),
+                'dns_targets' => ServerAddresses::targets($server->public_addresses),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),
@@ -349,10 +356,33 @@ final class ApplicationController extends Controller
         }
 
         if ($domains !== $before && $application->current_release !== null) {
-            SyncApplicationRoute::dispatch($application, unroute: $domains === []);
+            $route = new SyncApplicationRoute($application, unroute: $domains === []);
+
+            array_diff($domains, $before) === [] ? dispatch($route) : Bus::chain([$route, new CheckDomainReach($application)])->dispatch();
         }
 
         return back()->with('success', 'Saved.');
+    }
+
+    /**
+     * @return list<array{domain: string, ready: bool|null, problems: list<string>, notes: list<string>, checked: string|null}>
+     */
+    private function domainReach(Application $application): array
+    {
+        $stored = (array) $application->domain_reach;
+
+        return array_map(function (string $domain) use ($stored): array {
+            $reading = is_array($stored[$domain] ?? null) ? $stored[$domain] : [];
+
+            return [
+                'domain' => $domain,
+                'ready' => is_bool($reading['ready'] ?? null) ? $reading['ready'] : null,
+                'problems' => array_values(array_map('strval', (array) ($reading['problems'] ?? []))),
+                'notes' => array_values(array_map('strval', (array) ($reading['notes'] ?? []))),
+                'records' => array_values(array_filter((array) ($reading['records'] ?? []), fn(mixed $record): bool => is_array($record) && is_string($record['type'] ?? null) && is_string($record['name'] ?? null) && is_string($record['value'] ?? null))),
+                'checked' => is_string($reading['checked_at'] ?? null) ? Formats::when(Carbon::parse($reading['checked_at'])) : null,
+            ];
+        }, $application->allDomains());
     }
 
     public function destroy(Server $server, Application $application): RedirectResponse

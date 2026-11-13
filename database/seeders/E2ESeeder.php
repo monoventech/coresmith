@@ -217,6 +217,7 @@ final class E2ESeeder extends Seeder
         }
 
         $this->githubFixtures($tenant->applications['atlas']);
+        $this->domainReach($tenant->applications['atlas']);
         $this->repositoryChecks();
         $this->answered500();
         $this->cronFixtures();
@@ -926,6 +927,28 @@ final class E2ESeeder extends Seeder
     /**
      * @param  array<string, mixed>  $attributes
      */
+    private function domainReach(Application $atlas): void
+    {
+        $domain = (string) $atlas->domain;
+
+        $atlas->forceFill(['domain_reach' => [
+            $domain => [
+                'ready' => false,
+                'problems' => ["{$domain} points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If you can't, or your internet provider shares that address with other customers, use IPv6: add an AAAA record for {$domain} pointing at 2001:db8::7, remove the A record, and allow ports 80 and 443 to it in your router's IPv6 firewall. To reach visitors without IPv6 too, put {$domain} behind a proxy that answers on IPv4, such as Cloudflare's."],
+                'notes' => [],
+                'records' => [['type' => 'AAAA', 'name' => $domain, 'value' => '2001:db8::7']],
+                'checked_at' => now()->subMinutes(20)->toIso8601String(),
+            ],
+        ]])->save();
+
+        $atlas->server->forceFill(['public_addresses' => [
+            'ipv4' => '203.0.113.7',
+            'ipv4_open' => false,
+            'ipv6' => ['2001:db8::7'],
+            'checked_at' => now()->subMinutes(20)->toIso8601String(),
+        ]])->save();
+    }
+
     private function application(string $name, int $port, array $attributes = [], ?Server $server = null): Application
     {
         return Application::factory()->for($this->team)->for($server ?? $this->bench)->create([

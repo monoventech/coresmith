@@ -21,12 +21,13 @@ final class AddressCheck
             'ok' => $verdict->refusal === null,
             'problems' => $verdict->problems(),
             'notes' => $verdict->notes,
+            'records' => $verdict->records,
             'checked_at' => now()->toIso8601String(),
         ]));
     }
 
     /**
-     * @return array{host: string, ok: bool, problems: list<string>, notes: list<string>, checked_at: string}|null
+     * @return array{host: string, ok: bool, problems: list<string>, notes: list<string>, records?: list<array{type: string, name: string, value: string}>, checked_at: string}|null
      */
     public static function current(): ?array
     {

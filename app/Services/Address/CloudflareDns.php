@@ -66,8 +66,8 @@ final class CloudflareDns
 
         if ($first === null) {
             $this->send($token, 'post', "/zones/{$zone}/dns_records", $record);
-        } elseif (@inet_pton((string) ($first['content'] ?? '')) !== @inet_pton($content) || ($first['proxied'] ?? false) === true) {
-            $this->send($token, 'patch', "/zones/{$zone}/dns_records/{$first['id']}", $record);
+        } elseif (@inet_pton((string) ($first['content'] ?? '')) !== @inet_pton($content)) {
+            $this->send($token, 'patch', "/zones/{$zone}/dns_records/{$first['id']}", [...$record, 'proxied' => ($first['proxied'] ?? false) === true]);
         }
 
         foreach ($records as $extra) {
