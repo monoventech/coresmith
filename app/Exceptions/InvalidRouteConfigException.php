@@ -14,26 +14,26 @@ final class InvalidRouteConfigException extends RuntimeException
 {
     public static function upstream(string $dial): self
     {
-        return new self("Refusing to push a Caddy route with upstream [{$dial}]. Upstreams must be loopback on a port allocated to this application.");
+        return new self("Coresmith refused to send the app's traffic to [{$dial}], which isn't one of the app's own ports on this server.");
     }
 
     public static function socket(string $socket): self
     {
-        return new self("Refusing to push a Caddy route with FPM socket [{$socket}]. The socket must belong to this application.");
+        return new self("Coresmith refused to send the app's traffic to the PHP socket [{$socket}], which isn't the app's own.");
     }
 
     public static function domain(string $domain): self
     {
-        return new self("Refusing to push a Caddy route for domain [{$domain}]. The domain is not assigned to this application.");
+        return new self("Coresmith refused to route [{$domain}], which isn't one of the app's domains.");
     }
 
     public static function missingDomain(): self
     {
-        return new self('Refusing to push a Caddy route for an application with no domain.');
+        return new self('Coresmith refused to route an app that has no domain.');
     }
 
     public static function root(string $root): self
     {
-        return new self("Refusing to push a Caddy route serving [{$root}]. The document root must live inside this application's directory.");
+        return new self("Coresmith refused to serve [{$root}], which isn't inside the app's folder.");
     }
 }

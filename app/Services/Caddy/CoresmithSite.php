@@ -30,7 +30,7 @@ final class CoresmithSite
 
     public const INTERNAL_LISTEN = '127.0.0.1:8484';
 
-    public const UNREADABLE = "Caddy couldn't read Coresmith's site. Run caddy adapt --config /etc/caddy/Caddyfile on this machine to see why.";
+    public const UNREADABLE = "The web server couldn't read Coresmith's settings. Run caddy adapt --config /etc/caddy/Caddyfile on this machine to see why.";
 
     /**
      * @param  list<stdClass>  $hostRoutes
@@ -234,6 +234,6 @@ final class CoresmithSite
 
     private static function missing(string $what): RuntimeException
     {
-        return new RuntimeException("Caddy's reading of Coresmith's site has no {$what}. Run the installer again to put Coresmith's Caddy site back.");
+        return new RuntimeException("The web server's settings for Coresmith have no {$what}. Run the installer again to put them back.");
     }
 }

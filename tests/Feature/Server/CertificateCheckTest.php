@@ -449,7 +449,7 @@ test('the mail names the domain and what to check', function (int $days, string 
 
     expect($mail->subject)->toBe($subject)
         ->and($mail->introLines)->toBe([
-            'Caddy on web-1 renews certificates well before they expire, so this one could not be renewed.',
+            'Coresmith renews certificates on web-1 well before they expire, so this one could not be renewed.',
             'Check that a.example.com still points at 203.0.113.9 and that ports 80 and 443 are open.',
         ])
         ->and($mail->actionText)->toBe('Open Shop')

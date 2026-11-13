@@ -97,7 +97,7 @@ test("a reading that doesn't look like Coresmith's site is refused rather than h
     $adapted = coresmithSiteObjects('internal');
     $break($adapted);
 
-    expect(fn() => CoresmithSite::fromAdapted(coresmithSiteEncode($adapted)))->toThrow(RuntimeException::class, "Caddy's reading of Coresmith's site has no {$missing}. Run the installer again to put Coresmith's Caddy site back.");
+    expect(fn() => CoresmithSite::fromAdapted(coresmithSiteEncode($adapted)))->toThrow(RuntimeException::class, "The web server's settings for Coresmith have no {$missing}. Run the installer again to put them back.");
 })->with([
     'no https listener' => [function (stdClass $adapted) {
         foreach ((array) $adapted->apps->http->servers as $name => $server) {

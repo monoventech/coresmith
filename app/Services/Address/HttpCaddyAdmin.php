@@ -60,13 +60,13 @@ final class HttpCaddyAdmin implements CaddyAdmin
         $current = $this->request()->timeout(30)->get($this->url('/config/'));
 
         if ($current->failed()) {
-            throw new RuntimeException("Caddy didn't give Coresmith its running config: " . $this->reason($current));
+            throw new RuntimeException("The web server didn't give Coresmith its running settings: " . $this->reason($current));
         }
 
         $adapted = $this->request()->withBody($caddyfile, 'text/caddyfile')->timeout(30)->post($this->url('/adapt'));
 
         if ($adapted->failed()) {
-            throw new RuntimeException('Caddy refused the new site: ' . $this->reason($adapted));
+            throw new RuntimeException('The web server refused the new address: ' . $this->reason($adapted));
         }
 
         $reading = json_decode($adapted->body(), false);
@@ -80,7 +80,7 @@ final class HttpCaddyAdmin implements CaddyAdmin
         $response = $this->request()->withBody($body, $type)->timeout(30)->post($this->url('/load'));
 
         if ($response->failed()) {
-            throw new RuntimeException('Caddy refused the new site: ' . $this->reason($response));
+            throw new RuntimeException('The web server refused the new address: ' . $this->reason($response));
         }
     }
 
