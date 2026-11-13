@@ -695,7 +695,7 @@ test('the app gets its own linux account and a root controlled folder before any
     expect($account)->not->toBeFalse()
         ->and($account)->toBeLessThan($clone)
         ->and($commands[$account])->toContain('--shell /usr/sbin/nologin')
-        ->and($commands[$account])->toContain('chown root:root /var/coresmith/apps/my-app /var/coresmith/apps/my-app/releases')
+        ->and($commands[$account])->toContain('chown root:coresmith-app-my-app /var/coresmith/apps/my-app /var/coresmith/apps/my-app/releases')
         ->and($commands[$account])->toContain('chown -h coresmith-app-my-app:caddy /var/coresmith/apps/my-app/shared');
 });
 

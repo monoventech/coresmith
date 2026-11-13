@@ -63,13 +63,13 @@ test('a step that times out is named by what the app ran, not by its wrapper', f
         ->and(SSHCommandTimedOut::display('sudo bash -c ' . escapeshellarg($command)))->toBe('composer install --no-dev');
 });
 
-test('the app account owns only its releases and shared folder, and root keeps the folders around them', function () {
+test('the app account owns only its releases and shared folder, and root keeps the folders around them, which the app can list but not change', function () {
     $command = (new AppAccount)->command(shellApp());
 
     expect($command)->toStartWith('{ id -u coresmith-app-shop >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/coresmith-app-shop --shell /usr/sbin/nologin ')
         ->and($command)->toContain('chmod 751 /var/coresmith/apps')
-        ->and($command)->toContain('chown root:root /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
-        ->and($command)->toContain('chmod 711 /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
+        ->and($command)->toContain('chown root:coresmith-app-shop /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
+        ->and($command)->toContain('chmod 751 /var/coresmith/apps/shop /var/coresmith/apps/shop/releases')
         ->and($command)->toContain('chown -h coresmith-app-shop:caddy /var/coresmith/apps/shop/shared')
         ->and($command)->toContain('chmod 2750 /var/coresmith/apps/shop/shared');
 });
