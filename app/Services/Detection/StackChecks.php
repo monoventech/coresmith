@@ -56,6 +56,9 @@ final class StackChecks
             default => [],
         };
 
+        $mismatch = $this->managerMismatch($facts);
+        $blockers = $mismatch === null ? $blockers : [...$blockers, $mismatch];
+
         return $runtime ? [...$blockers, ...$this->runtime($choice, $facts, $installed, $extensions)] : $blockers;
     }
 
@@ -333,6 +336,27 @@ final class StackChecks
             $preset !== null && $preset[1] => [new Blocker('framework', "Nitro's preset is {$preset[0]}, so nuxt build makes the app for that host, not the Node server Coresmith runs.", 'Remove the preset or set it to node-server. If the app is static, pick Static site with the web root /.output/public.')],
             default => [],
         };
+    }
+
+    private function managerMismatch(RepositoryFacts $facts): ?Blocker
+    {
+        $declared = JsTooling::declaredManager($facts);
+        $lockfile = JsTooling::lockfileFor($facts);
+        $locked = match ($lockfile) {
+            'pnpm-lock.yaml' => 'pnpm',
+            'yarn.lock' => 'yarn',
+            default => null,
+        };
+
+        if ($declared === null || $locked === null || $declared === $locked) {
+            return null;
+        }
+
+        return new Blocker(
+            'repository',
+            "package.json names {$declared} in packageManager, but the lockfile is {$lockfile}, and corepack refuses to install with a different package manager.",
+            'Commit a ' . JsTooling::LOCKFILES[$declared][0] . " made with {$declared}, or change packageManager to {$locked}.",
+        );
     }
 
     private function nitroBlock(string $config): ?string

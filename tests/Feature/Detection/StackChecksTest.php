@@ -172,6 +172,29 @@ test('a Nuxt app built as a Node server is fine, whatever else says preset', fun
     'a preset key outside nitro' => ["export default defineNuxtConfig({\n  pwa: { pwaAssets: { preset: 'minimal-2023' } },\n  nitro: { compressPublicAssets: true },\n})\n"],
 ]);
 
+function stackChecksManager(string $packageManager, array $lockfiles): RepositoryFacts
+{
+    return new RepositoryFacts(['package.json' => (string) json_encode(['packageManager' => $packageManager, 'scripts' => ['build' => 'astro build'], 'dependencies' => ['astro' => '^5.16.0']])], $lockfiles, complete: true);
+}
+
+test('a packageManager that names another manager than the lockfile is refused, since corepack will not mix them', function () {
+    $blockers = stackChecksFor(stackChecksManager('yarn@1.22.22', ['pnpm-lock.yaml']), ['type' => ApplicationType::Static, 'framework' => '', 'web_directory' => '/dist']);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('repository')
+        ->and($blockers[0]->reason)->toBe('package.json names yarn in packageManager, but the lockfile is pnpm-lock.yaml, and corepack refuses to install with a different package manager.')
+        ->and($blockers[0]->fix)->toBe('Commit a yarn.lock made with yarn, or change packageManager to pnpm.');
+});
+
+test('a packageManager that matches a committed lockfile, or a lockfile npm or Bun installs, is fine', function (string $packageManager, array $lockfiles) {
+    expect(stackChecksFor(stackChecksManager($packageManager, $lockfiles), ['type' => ApplicationType::Static, 'framework' => '', 'web_directory' => '/dist']))->toBe([]);
+})->with([
+    'the same manager' => ['pnpm@9.15.0', ['pnpm-lock.yaml']],
+    'its own lockfile among others' => ['yarn@1.22.22', ['pnpm-lock.yaml', 'yarn.lock']],
+    'npm ignores packageManager' => ['yarn@1.22.22', ['package-lock.json']],
+    'bun ignores packageManager' => ['pnpm@9.15.0', ['bun.lock']],
+]);
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 

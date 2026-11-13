@@ -17,6 +17,8 @@ final readonly class JsTooling
 
     public const START_SCRIPTS = ['start:prod', 'start'];
 
+    public const LOCKFILES = ['npm' => ['package-lock.json'], 'pnpm' => ['pnpm-lock.yaml'], 'yarn' => ['yarn.lock'], 'bun' => ['bun.lock', 'bun.lockb']];
+
     private const BACKGROUND = '/(?:^|[\s;&|(])((?:pm2|forever)\s+start)(?:\s|$)/';
 
     private const COREPACK = 'COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack ';
@@ -32,6 +34,19 @@ final readonly class JsTooling
         public ?string $main = null,
         public string $startScript = 'start',
     ) {}
+
+    public static function declaredManager(RepositoryFacts $facts): ?string
+    {
+        return preg_match('/^(npm|pnpm|yarn|bun)@/', (string) ($facts->json('package.json')['packageManager'] ?? ''), $matches) === 1 ? $matches[1] : null;
+    }
+
+    public static function lockfileFor(RepositoryFacts $facts): ?string
+    {
+        $declared = self::declaredManager($facts);
+        $own = $declared === null ? [] : array_values(array_intersect(self::LOCKFILES[$declared], $facts->lockfiles));
+
+        return $own[0] ?? $facts->lockfile();
+    }
 
     public static function startScriptFor(RepositoryFacts $facts): ?string
     {
@@ -84,7 +99,8 @@ final readonly class JsTooling
             return null;
         }
 
-        $manager = match ($facts->lockfile()) {
+        $lockfile = self::lockfileFor($facts);
+        $manager = match ($lockfile) {
             'bun.lock', 'bun.lockb' => 'bun',
             'package-lock.json' => 'npm',
             'pnpm-lock.yaml' => 'pnpm',
@@ -97,7 +113,7 @@ final readonly class JsTooling
 
         $start = self::startScriptFor($facts);
 
-        return new self($manager, $facts->lockfile() !== null, $build, $start !== null, $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null), startScript: $start ?? 'start');
+        return new self($manager, $lockfile !== null, $build, $start !== null, $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null), startScript: $start ?? 'start');
     }
 
     public function runtime(): string

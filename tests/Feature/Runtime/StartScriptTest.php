@@ -74,3 +74,12 @@ test('a start:prod script on its own is something to start', function () {
 
     expect($blockers)->toBe([]);
 });
+
+test('the lockfile of the manager packageManager names is the one installed from, when it is committed', function () {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['packageManager' => 'yarn@1.22.22', 'scripts' => ['build' => 'astro build']])], ['pnpm-lock.yaml', 'yarn.lock'], complete: true);
+    $tooling = JsTooling::for(new Application(['type' => ApplicationType::Static]), $facts);
+
+    expect($tooling?->manager)->toBe('yarn')
+        ->and($tooling?->managerVersion)->toBe('1.22.22')
+        ->and($tooling?->locked)->toBeTrue();
+});
