@@ -95,7 +95,7 @@ final class UrlGuard
         $port = (int) ($parts['port'] ?? 443);
 
         if (in_array($host, self::BLOCKED_HOSTS, true) || str_ends_with($host, '.localhost')) {
-            throw new SsoException("Coresmith will not connect to {$host}. Use your identity provider's public address.", 'url.blocked');
+            throw new SsoException("Coresmith won't connect to {$host}. Use your identity provider's public address.", 'url.blocked');
         }
 
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
