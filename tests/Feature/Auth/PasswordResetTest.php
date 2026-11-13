@@ -100,6 +100,19 @@ class PasswordResetTest extends TestCase
         });
     }
 
+    public function test_the_reset_email_speaks_like_coresmith_and_links_to_the_reset_page(): void
+    {
+        $user = User::factory()->create(['email' => 'lena@example.com']);
+
+        $mail = (new ResetPassword('reset-token'))->toMail($user);
+
+        $this->assertSame('Reset your Coresmith password', $mail->subject);
+        $this->assertSame('Choose a new password', $mail->actionText);
+        $this->assertSame(url(route('password.reset', ['token' => 'reset-token', 'email' => 'lena@example.com'], false)), $mail->actionUrl);
+        $this->assertSame(['Someone asked to reset the password for your Coresmith account. The link works for 60 minutes.'], $mail->introLines);
+        $this->assertSame(["If it wasn't you, you can ignore this email. Your password stays the same."], $mail->outroLines);
+    }
+
     public function test_password_cannot_be_reset_with_invalid_token(): void
     {
         $user = User::factory()->create();
