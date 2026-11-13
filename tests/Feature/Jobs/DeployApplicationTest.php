@@ -865,3 +865,24 @@ test('a sudo user deploys with every step run as root and uploads staged first',
     expect($unprivileged->values()->all())->toBe([])
         ->and(array_keys($transport->uploads()))->toBe([FakeSSHTransport::STAGED_UPLOAD]);
 });
+
+test('migrations that cannot reach the database the app points at say which one and what to do', function (string $output, string $engine) {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('php artisan migrate', $output, 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->failure_reason)->toBe("Migrations couldn't connect to {$engine} where the app's settings point, so nothing was changed. Add a {$engine} database for the app on its server, or check its DB_ settings. To use SQLite instead, set DB_CONNECTION=sqlite.");
+})->with([
+    'mysql' => ["   Illuminate\\Database\\QueryException\n\n  SQLSTATE[HY000] [2002] Connection refused (Connection: mysql, SQL: select exists (select 1 from information_schema.tables))\n", 'MySQL'],
+    'postgres' => ["  SQLSTATE[08006] [7] connection to server at \"127.0.0.1\", port 5432 failed: Connection refused\n", 'PostgreSQL'],
+]);
+
+test('a migration that fails for another reason keeps the plain step failure', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('php artisan migrate', "SQLSTATE[42S01]: Base table or view already exists: 1050 Table 'users' already exists\n", 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect((string) $deployment->fresh()->failure_reason)->not->toContain("couldn't connect");
+});
