@@ -149,6 +149,22 @@ test('the app\'s answer once live is recorded and logged, with the newest error 
         ->and($deployment->fresh()->log)->toContain('check: https://app.example.com/ answered 500');
 });
 
+test('a 500 that never reached the app\'s own log is explained by the newest PHP fatal error it logged', function (array $attributes, string $probe) {
+    $deployment = Deployment::factory()->for(stackDeployApp($attributes))->create();
+    $transport = stackDeployTransport($probe)
+        ->respondTo('curl -sk', '500')
+        ->respondTo('storage/logs', '')
+        ->respondTo("journalctl -t 'coresmith-app-my-app-php'", "PHP Fatal error:  Uncaught Error: Call to undefined function putenv() in /var/coresmith/apps/my-app/releases/20261113120000/public/index.php:12\n");
+
+    stackDeployRun($deployment, $transport);
+
+    expect($deployment->fresh()->live_status)->toBe(500)
+        ->and($deployment->fresh()->live_detail)->toBe('Uncaught Error: Call to undefined function putenv() in /var/coresmith/apps/my-app/releases/20261113120000/public/index.php:12');
+})->with([
+    'laravel, before it boots' => [[], '@@file composer.json ' . base64_encode('{"require":{"laravel/framework":"^12.0"}}') . "\n@@has artisan\n@@has public/index.php\n@@envkey APP_KEY\n@@done\n"],
+    'plain PHP' => [['framework' => null], '@@file composer.json ' . base64_encode('{"require":{"slim/slim":"^4.12","php":"^8.2"}}') . "\n@@has public/index.php\n@@done\n"],
+]);
+
 test('an app Coresmith could not ask records nothing, and the deploy still succeeds', function () {
     $deployment = Deployment::factory()->for(stackDeployApp())->create();
 

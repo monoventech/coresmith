@@ -10,6 +10,7 @@ namespace App\Services\Deployment;
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
@@ -52,10 +53,24 @@ final class LiveCheck
 
     private function newestError(SSHConnection $connection, Application $application): ?string
     {
-        if (strtolower((string) $application->framework) !== 'laravel') {
+        if ($application->type !== ApplicationType::Php) {
             return null;
         }
 
+        return (strtolower((string) $application->framework) === 'laravel' ? $this->laravelError($connection, $application) : null)
+            ?? $this->phpError($connection, $application);
+    }
+
+    private function phpError(SSHConnection $connection, Application $application): ?string
+    {
+        $ident = 'coresmith-app-' . SafeName::assertSlug($application->slug) . '-php';
+        $line = trim($connection->execute('journalctl -t ' . escapeshellarg($ident) . " --since '-2 min' -o cat --no-pager 2>/dev/null | grep -E 'PHP (Fatal|Parse) error' | tail -n 1", sudo: true)->output);
+
+        return preg_match('/PHP (?:Fatal|Parse) error:\s+(.+)$/', $line, $matches) === 1 ? Str::limit(trim($matches[1]), 300) : null;
+    }
+
+    private function laravelError(SSHConnection $connection, Application $application): ?string
+    {
         $paths = new ReleasePaths($application);
         $logs = escapeshellarg($paths->appDirectory($paths->current()) . '/storage/logs');
         $line = trim($connection->execute("f=\$(ls -t {$logs}/*.log 2>/dev/null | head -n 1); [ -n \"\$f\" ] && tail -n 400 \"\$f\" | grep -E '\\.(ERROR|CRITICAL|ALERT|EMERGENCY): ' | tail -n 1", sudo: true)->output);
