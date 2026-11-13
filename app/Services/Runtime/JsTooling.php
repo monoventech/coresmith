@@ -17,6 +17,8 @@ final readonly class JsTooling
 
     public const START_SCRIPTS = ['start:prod', 'start'];
 
+    private const BACKGROUND = '/(?:^|[\s;&|(])((?:pm2|forever)\s+start)(?:\s|$)/';
+
     private const COREPACK = 'COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack ';
 
     public function __construct(
@@ -33,7 +35,17 @@ final readonly class JsTooling
 
     public static function startScriptFor(RepositoryFacts $facts): ?string
     {
-        return array_values(array_filter(self::START_SCRIPTS, fn(string $name): bool => $facts->script($name)))[0] ?? null;
+        $scripts = array_values(array_filter(self::START_SCRIPTS, fn(string $name): bool => $facts->script($name)));
+        $foreground = array_values(array_filter($scripts, fn(string $name): bool => self::backgroundCommand($facts, $name) === null));
+
+        return $foreground[0] ?? $scripts[0] ?? null;
+    }
+
+    public static function backgroundCommand(RepositoryFacts $facts, string $script): ?string
+    {
+        $command = $facts->json('package.json')['scripts'][$script] ?? null;
+
+        return is_string($command) && preg_match(self::BACKGROUND, $command, $matches) === 1 ? (string) preg_replace('/\s+/', ' ', $matches[1]) : null;
     }
 
     public static function safeMain(mixed $main): ?string

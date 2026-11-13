@@ -297,6 +297,12 @@ final class StackDetector
             }
         }
 
+        $background = JsTooling::backgroundCommand($facts, (string) $name);
+
+        if ($background !== null) {
+            return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$background}, which puts the app in the background, where Coresmith can't keep it running. Start it in the foreground instead, for example \"start\": \"node server.js\" or \"pm2-runtime server.js\"."]);
+        }
+
         $server = array_values(array_filter(self::SERVER_PACKAGES, fn(string $package): bool => $facts->dependency($package) !== null))[0] ?? null;
 
         return $server === null

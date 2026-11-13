@@ -23,6 +23,20 @@ test('a start:prod script is what a JavaScript app runs, ahead of start', functi
         ->and(JsTooling::for($application, RepositoryFixture::facts('express-api'))?->startScript)->toBe('start');
 });
 
+test('a start:prod script that puts the app in the background is passed over for start', function (string $daemon) {
+    expect(JsTooling::startScriptFor(startScriptFacts(['start' => 'node server.js', 'start:prod' => $daemon])))->toBe('start');
+})->with([
+    'pm2' => ['pm2 start server.js --name api'],
+    'forever' => ['NODE_ENV=production forever start server.js'],
+]);
+
+test('a start script that puts the app in the background is not sure, since systemd would restart it in a loop', function () {
+    $detected = app(StackDetector::class)->detect(startScriptFacts(['start' => 'pm2 start server.js']), fn(string $runtime): array => []);
+
+    expect($detected->verdict())->toBe('unsure')
+        ->and($detected->unsettled['framework'] ?? '')->toContain('pm2 start');
+});
+
 test('the web process runs the start:prod script', function (string $runtime, string $command) {
     $application = Application::factory()->create([
         'slug' => 'api',
