@@ -490,6 +490,18 @@ gates() {
     success "Every gate passed"
 }
 
+corpus_gate() {
+    local hash
+
+    hash="$(bun tests/Corpus/codeHash.ts)"
+
+    if [ ! -f "storage/corpus/fixed-pass-${hash}.json" ]; then
+        fail "The fixed set of real repositories hasn't passed on this detection and deploy code (${hash}). Run bun tests/Corpus/run.ts against the Lima servers, then bun tests/Corpus/report.ts <results> --gate."
+    fi
+
+    success "The fixed set of real repositories passed on this code (${hash})"
+}
+
 build() {
     local changed
 
@@ -635,6 +647,7 @@ prepare() {
         gates
     fi
 
+    corpus_gate
     push_ref "$RELEASE_BRANCH" "refs/heads/${RELEASE_BRANCH}"
     git checkout --quiet "$START_BRANCH"
     SWITCHED=false
