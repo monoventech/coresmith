@@ -38,6 +38,7 @@ final class Breadcrumbs
         'servers.activity' => 'Activity',
         'servers.databases.index' => 'Databases',
         'servers.applications.create' => 'Add an app',
+        'servers.under-the-hood' => 'What Coresmith runs here',
     ];
 
     private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases'];

@@ -30,7 +30,7 @@
 
     const description = $derived.by(() => {
         if (path.startsWith('/settings/git')) {
-            return 'GitHub App with fine-grained, per-repository permissions, not OAuth.'
+            return 'A GitHub App, installed only on the repositories you choose.'
         }
 
         if (path.startsWith('/settings/billing')) {

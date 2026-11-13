@@ -48,7 +48,15 @@ final class TeamAccess
             return $servers;
         }
 
-        $servers->whereIn('id', $this->granted($user, $team)['servers']);
+        $granted = $this->granted($user, $team)['servers'];
+
+        if ($this->membership($user, $team)['developer']) {
+            $servers->where(fn($query) => $query->whereIn('id', $granted)->orWhere('created_by', $user->getKey()));
+
+            return $servers;
+        }
+
+        $servers->whereIn('id', $granted);
 
         return $servers;
     }
@@ -63,6 +71,13 @@ final class TeamAccess
 
         $granted = $this->granted($user, $team);
         $environments = $this->environmentIds($user, $team);
+
+        if ($this->membership($user, $team)['developer']) {
+            $applications->where(fn($query) => $query->whereIn('id', $granted['applications'])->orWhereIn('environment_id', $environments)->orWhere('created_by', $user->getKey()));
+
+            return $applications;
+        }
+
         $applications->where(fn($query) => $query->whereIn('server_id', $granted['servers'])->orWhereIn('id', $granted['applications'])->orWhereIn('environment_id', $environments));
 
         return $applications;
@@ -78,6 +93,13 @@ final class TeamAccess
 
         $servers = $this->granted($user, $team)['servers'];
         $environments = $this->environmentIds($user, $team);
+
+        if ($this->membership($user, $team)['developer']) {
+            $databases->where(fn($query) => $query->whereIn('environment_id', $environments)->orWhere('created_by', $user->getKey()));
+
+            return $databases;
+        }
+
         $databases->where(fn($query) => $query->whereIn('server_id', $servers)->orWhereIn('environment_id', $environments));
 
         return $databases;
@@ -96,6 +118,30 @@ final class TeamAccess
         return $projects;
     }
 
+    public function applicationsOn(User $user, Server $server): HasMany
+    {
+        $applications = $server->applications();
+        $team = $server->team;
+
+        if ($team === null || $this->seesEverything($user, $team)) {
+            return $applications;
+        }
+
+        return $applications->whereIn('id', $this->applications($user, $team)->select('id'));
+    }
+
+    public function databasesOn(User $user, Server $server): HasMany
+    {
+        $databases = $server->databases();
+        $team = $server->team;
+
+        if ($team === null || $this->seesEverything($user, $team)) {
+            return $databases;
+        }
+
+        return $databases->whereIn('id', $this->databases($user, $team)->select('id'));
+    }
+
     public function canSeeServer(User $user, Server $server): bool
     {
         $team = $server->team;
@@ -104,7 +150,9 @@ final class TeamAccess
             return false;
         }
 
-        return $this->seesEverything($user, $team) || in_array($server->getKey(), $this->granted($user, $team)['servers'], true);
+        return $this->seesEverything($user, $team)
+            || in_array($server->getKey(), $this->granted($user, $team)['servers'], true)
+            || ($this->membership($user, $team)['developer'] && $server->addedBy($user));
     }
 
     public function canSeeApplication(User $user, Application $application): bool
@@ -120,10 +168,12 @@ final class TeamAccess
         }
 
         $granted = $this->granted($user, $team);
+        $developer = $this->membership($user, $team)['developer'];
 
         return in_array($application->getKey(), $granted['applications'], true)
-            || in_array($application->server_id, $granted['servers'], true)
-            || in_array($application->environment_id, $this->environmentIds($user, $team), true);
+            || (!$developer && in_array($application->server_id, $granted['servers'], true))
+            || in_array($application->environment_id, $this->environmentIds($user, $team), true)
+            || ($developer && $application->addedBy($user));
     }
 
     public function canSeeDatabase(User $user, ManagedDatabase $database): bool
@@ -134,9 +184,12 @@ final class TeamAccess
             return false;
         }
 
+        $developer = $this->membership($user, $team)['developer'];
+
         return $this->seesEverything($user, $team)
-            || in_array($database->server_id, $this->granted($user, $team)['servers'], true)
-            || in_array($database->environment_id, $this->environmentIds($user, $team), true);
+            || (!$developer && in_array($database->server_id, $this->granted($user, $team)['servers'], true))
+            || in_array($database->environment_id, $this->environmentIds($user, $team), true)
+            || ($developer && $database->addedBy($user));
     }
 
     public function canSeeProject(User $user, Project $project): bool
@@ -267,7 +320,7 @@ final class TeamAccess
     }
 
     /**
-     * @return array{member: bool, everything: bool}
+     * @return array{member: bool, everything: bool, developer: bool}
      */
     private function membership(User $user, Team $team): array
     {
@@ -278,7 +331,8 @@ final class TeamAccess
 
             $this->memberships[$key] = [
                 'member' => $row !== null,
-                'everything' => $row !== null && ($row->role === TeamRole::Owner->value || (bool) $row->sees_everything),
+                'everything' => $row !== null && ($row->role === TeamRole::Owner->value || ($row->role !== TeamRole::Developer->value && (bool) $row->sees_everything)),
+                'developer' => $row !== null && $row->role === TeamRole::Developer->value,
             ];
         }
 

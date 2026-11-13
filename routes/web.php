@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApplicationAddressController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
 use App\Http\Controllers\ApplicationLogController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\RepositoryCheckController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
+use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerTabsController;
 use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\SetupController;
@@ -40,6 +42,7 @@ use App\Http\Controllers\TeamMemberAccessController;
 use App\Http\Controllers\TeamMemberController;
 use App\Http\Controllers\ThisMachineController;
 use App\Http\Controllers\ThisMachineSshController;
+use App\Jobs\RestoreProtection;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
@@ -124,11 +127,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('servers/{server}/activity', [ServerTabsController::class, 'activity'])
         ->withTrashed()
         ->name('servers.activity');
+    Route::get('servers/{server}/under-the-hood', [ServerTabsController::class, 'underTheHood'])
+        ->withTrashed()
+        ->name('servers.under-the-hood');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
     Route::post('servers/{server}/ssh-check', [ThisMachineSshController::class, 'store'])
         ->middleware('throttle:6,1,ssh-check')
         ->name('servers.ssh-check');
+    Route::post('servers/{server}/protections/{protection}', [ServerProtectionController::class, 'store'])
+        ->whereIn('protection', RestoreProtection::PROTECTIONS)
+        ->middleware('throttle:6,1,protections')
+        ->name('servers.protections.restore');
 
     Route::post('servers/{server}/host-key/accept', [ServerHostKeyController::class, 'accept'])
         ->name('servers.host-key.accept');
@@ -165,6 +175,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.rollback');
     Route::put('servers/{server}/applications/{application}/env', [EnvController::class, 'update'])
         ->name('servers.applications.env.update');
+    Route::put('servers/{server}/applications/{application}/addresses', [ApplicationAddressController::class, 'update'])
+        ->name('servers.applications.addresses.update');
     Route::put('servers/{server}/applications/{application}/toggles/{toggle}', [ApplicationToggleController::class, 'update'])
         ->where('toggle', '[a-z_]+')
         ->name('servers.applications.toggles.update');

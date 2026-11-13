@@ -6,6 +6,7 @@ use App\Enums\ApplicationType;
 use App\Models\Application;
 use App\Services\Detection\Blocker;
 use App\Services\Detection\StackChecks;
+use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RepositoryFacts;
 use Tests\Support\RepositoryFixture;
 
@@ -113,6 +114,17 @@ test('PHP extensions the chosen PHP has, a polyfill provides, or nobody can be s
     'a polyfill provides it' => [['ext-intl' => '*'], [['name' => 'symfony/polyfill-intl-icu', 'version' => 'v1.31.0', 'provide' => ['ext-intl' => '*']]], true],
     'only require-dev needs it' => [[], [], true],
     'no extension list for that PHP' => [['ext-amqp' => '*'], [], false],
+]);
+
+test('fibers in package.json is refused, since it builds on no Node.js Coresmith installs', function (string $section, string $runtime) {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['scripts' => ['build' => 'nuxt build', 'start' => 'nuxt start'], 'dependencies' => ['nuxt' => '^2.14.6'], $section => ['fibers' => '^5.0.0']])], ['package-lock.json'], complete: true);
+    $blockers = stackChecksFor($facts, ['type' => ApplicationType::Js, 'framework' => 'nuxt', 'js_runtime' => $runtime]);
+
+    expect(collect($blockers)->pluck('reason')->all())->toContain('package.json depends on fibers, which does not build on Node.js 16 or later, and Coresmith installs Node.js ' . app(Catalog::class)->range('nodejs') . '.')
+        ->and(collect($blockers)->firstWhere('field', 'repository')?->fix)->toBe('Remove fibers from package.json. Its author retired it when Node.js 16 came out.');
+})->with([
+    'a dependency on node' => ['dependencies', 'node'],
+    'a dev dependency on bun' => ['devDependencies', 'bun'],
 ]);
 
 test('a start script that fixes its own port is refused, since visitors would get a 502', function (string $framework, string $start, string $port) {

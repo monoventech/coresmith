@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Casts\Vaulted;
 use App\Enums\DatabaseType;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
+use App\Models\Concerns\RecordsWhoAdded;
 use Database\Factories\ManagedDatabaseFactory;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Cache;
 class ManagedDatabase extends Model
 {
     /** @use HasFactory<ManagedDatabaseFactory> */
-    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes;
 
     public const CREDENTIALS_LOCK_SECONDS = 1320;
 

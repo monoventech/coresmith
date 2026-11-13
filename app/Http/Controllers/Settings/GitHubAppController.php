@@ -51,11 +51,12 @@ final class GitHubAppController extends Controller
 
         $state = (string) $query->validated()['state'];
         $team = $this->registrar->teamFor($state, $user) ?? $current;
+        $personal = $this->registrar->personal($state, $user);
 
         try {
             $app = $this->registrar->complete($state, (string) $query->validated()['code'], $user);
         } catch (GitProviderException $e) {
-            return $this->refused($team, $request, $e->getMessage());
+            return $personal ? redirect()->route('account.git')->with('error', $e->getMessage()) : $this->refused($team, $request, $e->getMessage());
         }
 
         return redirect()->route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->getKey()]);

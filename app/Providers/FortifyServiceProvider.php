@@ -7,6 +7,7 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Enums\Edition;
 use App\Http\Responses\TeamHomeResponse;
 use App\Services\Sso\SsoConnections;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -45,6 +46,12 @@ class FortifyServiceProvider extends ServiceProvider
             ->line('Confirm this address to finish setting up your Coresmith account.')
             ->action('Confirm your email', $url)
             ->line('If you did not create an account, you can ignore this email.'));
+
+        ResetPassword::toMailUsing(fn(object $notifiable, string $token): MailMessage => (new MailMessage)
+            ->subject('Reset your Coresmith password')
+            ->line('Someone asked to reset the password for your Coresmith account. The link works for ' . config('auth.passwords.' . config('auth.defaults.passwords') . '.expire') . ' minutes.')
+            ->action('Choose a new password', url(route('password.reset', ['token' => $token, 'email' => $notifiable->getEmailForPasswordReset()], false)))
+            ->line("If it wasn't you, you can ignore this email. Your password stays the same."));
     }
 
     /**

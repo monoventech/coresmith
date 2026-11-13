@@ -323,6 +323,21 @@ test('a dropped connection reconnects and re-authenticates on the next command',
     expect($transport->connected())->toBeTrue();
 });
 
+test('a packet that fails its integrity check counts as a dropped connection, and the next command connects again', function (string $kind) {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'ssh_user' => 'root']);
+    $transport = (new FakeSSHTransport)->corruptPacketOn($kind === 'command' ? 'git fetch' : '/etc/coresmith/unit');
+    $connection = connectTo($server, $transport);
+
+    expect(fn() => $kind === 'command' ? $connection->execute('git fetch') : $connection->uploadContent('x', '/etc/coresmith/unit'))
+        ->toThrow(ConnectionClosedException::class, "The SSH connection to {$server->name} broke: a packet from the server failed its integrity check.");
+    expect($transport->connected())->toBeFalse();
+
+    $connection->execute('git fetch');
+
+    expect($transport->connected())->toBeTrue()
+        ->and(array_count_values($transport->calls())['connect'] ?? 0)->toBe(2);
+})->with(['command', 'upload']);
+
 test('disconnecting closes the transport', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $transport = new FakeSSHTransport;

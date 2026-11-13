@@ -38,7 +38,7 @@ final class TeamInvitations
             ['team_id' => $team->getKey(), 'email' => Str::lower(trim($email))],
             [
                 'role' => $role,
-                'sees_everything' => $seesEverything,
+                'sees_everything' => $role !== TeamRole::Developer && $seesEverything,
                 'token_hash' => TeamInvitation::hash($token),
                 'link_offered' => $this->offersLinks(),
                 'invited_by' => $inviter->getKey(),
@@ -98,7 +98,7 @@ final class TeamInvitations
             if (!$user->belongsToTeam($team)) {
                 $this->plans->ensureCanAddMember($team, $user);
 
-                $team->members()->attach($user, ['role' => $pending->role->value, 'sees_everything' => $pending->sees_everything]);
+                $team->members()->attach($user, ['role' => $pending->role->value, 'sees_everything' => $pending->role !== TeamRole::Developer && $pending->sees_everything]);
                 $user->unsetRelation('teams');
 
                 activity()->performedOn($team)->causedBy($user)->withProperties(['email' => $user->email, 'role' => $pending->role->value])->log('member_added');

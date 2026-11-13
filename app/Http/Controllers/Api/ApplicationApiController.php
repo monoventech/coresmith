@@ -74,6 +74,8 @@ final class ApplicationApiController extends ApiController
     {
         $this->seenApplication($request, $application);
 
+        abort_unless($request->user()->can('update', $application), 403);
+
         $validated = $request->validate(['enabled' => ['required', 'boolean']]);
 
         $toggles = (array) $application->toggles;

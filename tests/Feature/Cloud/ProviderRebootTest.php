@@ -147,7 +147,7 @@ test('a provider server that is not answering is still rebooted through its prov
 
     $this->actingAs($user->fresh())
         ->post(route('servers.reboot', $server))
-        ->assertSessionHas('success', 'Reboot scheduled. outpost-02 restarts in a few seconds, apps come back via systemd.');
+        ->assertSessionHas('success', 'Reboot scheduled. outpost-02 restarts in a few seconds, and its apps start again on their own.');
 
     Queue::assertPushed(RebootServer::class, 1);
 

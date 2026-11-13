@@ -101,7 +101,7 @@ test.describe('provisioning that failed', () => {
         await gotoServer(page, 'halfway-server')
 
         await page.getByRole('button', { name: 'Start over' }).click()
-        await expect(dialog(page)).toContainText('safe to run again')
+        await expect(dialog(page)).toContainText('Every phase runs again from the start. Each one is safe to repeat.')
         await dialog(page).getByRole('button', { name: 'Cancel' }).click()
 
         await expect(dialog(page)).toHaveCount(0)

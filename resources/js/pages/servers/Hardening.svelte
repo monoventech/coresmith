@@ -3,29 +3,49 @@
 </script>
 
 <script lang="ts">
-    import { Form, router } from '@inertiajs/svelte'
-    import { Check, ShieldCheck } from '@lucide/svelte'
+    import { Form, Link, router } from '@inertiajs/svelte'
+    import { onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
+    import StateDot from '@/components/StateDot.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { NativeSelect } from '@/components/ui/native-select'
+    import type { StateTone } from '@/lib/fleet'
+    import { toneText } from '@/lib/fleet'
+    import { follow } from '@/lib/live.svelte'
     import type { ServerHeader } from '@/lib/servers'
+    import { cn } from '@/lib/utils'
 
     type Change = { id: number; action: string | null; port: number | null; from: string | null; at: string | null }
+    type ProtectionState = 'on' | 'off' | 'pending' | 'busy' | 'yours'
+    type Protection = { key: string; label: string; state: ProtectionState; detail: string; fix: string | null }
+
+    const TONES: Record<ProtectionState, StateTone> = {
+        on: 'success',
+        off: 'warning',
+        pending: 'outline',
+        busy: 'accent',
+        yours: 'outline'
+    }
+
+    const LABELS: Record<ProtectionState, string> = {
+        on: 'On',
+        off: 'Off',
+        pending: 'Pending',
+        busy: 'Working',
+        yours: 'Left to you'
+    }
 
     let {
         server,
-        isolation = [],
-        hardening = [],
-        admin_move_error = null,
+        protections = { checked: null, rows: [] },
         ssh = {
             verified: false,
             owner: false,
             passwords_off: false,
-            error: null,
             logins: null,
             source: null,
             lines: [],
@@ -36,14 +56,11 @@
         access
     }: {
         server: ServerHeader
-        isolation: string[]
-        hardening: string[]
-        admin_move_error?: string | null
+        protections?: { checked: string | null; rows: Protection[] }
         ssh?: {
             verified: boolean
             owner: boolean
             passwords_off: boolean
-            error: string | null
             logins: { password: boolean; keyboard: boolean; root: boolean } | null
             source: string | null
             lines: string[]
@@ -56,6 +73,18 @@
 
     let auditBusy = $state(false)
     let checking = $state(false)
+    let restoring = $state<string | null>(null)
+
+    onMount(() => follow({ only: ['protections', 'ssh', 'firewall'], paused: () => restoring !== null }))
+
+    function restore(key: string) {
+        restoring = key
+        router.post(
+            route('servers.protections.restore', [server.id, key]),
+            {},
+            { preserveScroll: true, onFinish: () => (restoring = null) }
+        )
+    }
 
     const quoted = (line: string) => `'${line}'`
     const commands = $derived(
@@ -98,63 +127,56 @@
 
 <ServerHeaderView {server} />
 
-<div class="grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
-    <div class="rounded-xl border border-border bg-card px-5.5 py-5">
-        <h3 class="type-h3 m-0 mb-1">Nine-layer app isolation</h3>
-        <p class="mb-3.5 text-[12.5px] text-muted-foreground">
-            A compromise in one app must defeat all nine to reach another.
-        </p>
-        <ul class="m-0 flex list-none flex-col gap-2.25 p-0">
-            {#each isolation as layer (layer)}
-                <li class="flex items-center gap-2.5 text-[13.5px]">
-                    <Check class="size-4 shrink-0 text-success" />{layer}
-                </li>
-            {/each}
-        </ul>
+<div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="protections">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 class="type-h3 m-0">Server hardening</h3>
+        <span class="text-[12px] text-muted-foreground" data-testid="protections-checked"
+            >{protections.checked ? `Checked ${protections.checked}` : 'Not checked yet'}</span
+        >
     </div>
-
-    <div class="flex flex-col rounded-xl border border-border bg-card px-5.5 py-5">
-        <h3 class="type-h3 m-0 mb-1">Server hardening</h3>
-        <p class="mb-3.5 text-[12.5px] text-muted-foreground">
-            Applied during provisioning and verified before the server goes live.
-        </p>
-        <ul class="m-0 flex list-none flex-col gap-2.25 p-0">
-            {#each hardening as item (item)}
-                <li class="flex items-center gap-2.5 text-[13.5px]">
-                    <ShieldCheck class="size-4 shrink-0 text-success" />{item}
-                </li>
-            {/each}
-        </ul>
-        {#if admin_move_error}
-            <p class="tint-warning mt-3.5 rounded-lg border px-3.5 py-2.5 text-[12.5px]" data-testid="admin-move-error">
-                Apps on this server can still reach Caddy's admin API. Coresmith tries to move it to a private socket
-                every hour, and the last try failed: <span class="font-mono wrap-anywhere">{admin_move_error}</span>
-            </p>
-        {/if}
-        {#if ssh.error}
-            <p
-                class="tint-warning mt-3.5 rounded-lg border px-3.5 py-2.5 text-[12.5px]"
-                data-testid="ssh-hardening-error"
+    <p class="mt-1 mb-2 text-[12.5px] text-muted-foreground">
+        Coresmith sets these up when it provisions the server, and checks them every hour.
+    </p>
+    <ul class="m-0 flex list-none flex-col p-0">
+        {#each protections.rows as row (row.key)}
+            <li
+                class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-border py-3"
+                data-testid="protection-{row.key}"
+                data-state={row.state}
             >
-                SSH may still accept passwords on this server. Coresmith tries to turn them off every hour, and the last
-                try found: <span class="font-mono wrap-anywhere">{ssh.error}</span>
-            </p>
-        {:else if !ssh.verified && !ssh.owner}
-            <p class="mt-3.5 text-[12.5px] text-muted-foreground" data-testid="ssh-hardening-unchecked">
-                Coresmith hasn't checked this server's SSH settings yet. It checks them within the hour.
-            </p>
-        {/if}
-        <div class="mt-auto pt-3">
-            <ToggleRow
-                label="Audit logging"
-                description="auditd watches sudoers, SSH config, users and crontabs. Takes effect at the next provision."
-                checked={access.audit_logging}
-                busy={auditBusy}
-                disabled={!server.can.update}
-                onchange={setAudit}
-                bordered="top"
-            />
-        </div>
+                <StateDot tone={TONES[row.state]} state={row.state === 'busy' ? 'running' : ''} />
+                <div class="min-w-0 flex-1 basis-60">
+                    <p class="m-0 text-[13.5px] font-medium">{row.label}</p>
+                    <p class="m-0 text-[12.5px] wrap-anywhere text-muted-foreground">{row.detail}</p>
+                </div>
+                {#if row.fix && server.can.update}
+                    <Button variant="outline" size="sm" disabled={restoring !== null} onclick={() => restore(row.key)}
+                        >{row.fix}</Button
+                    >
+                {:else}
+                    <span class={cn('text-[12.5px] font-medium', toneText(TONES[row.state]))}>{LABELS[row.state]}</span>
+                {/if}
+            </li>
+        {/each}
+    </ul>
+    <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+        Each app runs walled off from the others.
+        <Link
+            href={route('servers.under-the-hood', server.id)}
+            class="whitespace-nowrap text-foreground underline underline-offset-2"
+            data-testid="under-the-hood-link">What Coresmith runs here</Link
+        >
+    </p>
+    <div class="pt-3">
+        <ToggleRow
+            label="Audit logging"
+            description="Records changes to sudo rules, SSH settings, users and cron jobs. Takes effect at the next provision."
+            checked={access.audit_logging}
+            busy={auditBusy}
+            disabled={!server.can.update}
+            onchange={setAudit}
+            bordered="top"
+        />
     </div>
 </div>
 
@@ -167,8 +189,9 @@
                 <span class="font-mono text-[12px]">{firewall.open.join(', ')}</span> and kept its SSH rules. Changes Coresmith
                 applied are listed here.
             {:else}
-                Default-deny. Provisioning opened <span class="font-mono text-[12px]">{firewall.open.join(', ')}</span>.
-                Changes Coresmith applied are listed here.
+                Closed by default. Provisioning opened <span class="font-mono text-[12px]"
+                    >{firewall.open.join(', ')}</span
+                >. Changes Coresmith applied are listed here.
             {/if}
         </p>
         <div class="flex flex-col">

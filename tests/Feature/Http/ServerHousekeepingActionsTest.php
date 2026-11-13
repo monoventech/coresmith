@@ -30,7 +30,7 @@ test('an admin can reboot a server that is not deploying', function () {
         ->from(route('servers.show', $server))
         ->post(route('servers.reboot', $server))
         ->assertRedirect(route('servers.show', $server))
-        ->assertSessionHas('success', 'Reboot scheduled. web-1 restarts in a few seconds, apps come back via systemd.');
+        ->assertSessionHas('success', 'Reboot scheduled. web-1 restarts in a few seconds, and its apps start again on their own.');
 
     Queue::assertPushed(RebootServer::class, 1);
 });

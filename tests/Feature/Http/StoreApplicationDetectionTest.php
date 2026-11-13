@@ -71,7 +71,7 @@ test('a server with no free port block says so on the form instead of failing', 
 
     storeDetectionPost($owner, $server, [])
         ->assertRedirect()
-        ->assertSessionHas('error', "No port block is free on web-01. Its apps, apps removed in the last 7 days or other processes hold all 200 blocks in 8000–9999. Remove apps you no longer need or stop processes using ports in that range. A removed app's block frees up after 7 days.");
+        ->assertSessionHas('error', "There's no room for another app on web-01. Its apps, apps removed in the last 7 days or other processes hold every port Coresmith gives apps, 8000–9999. Remove apps you no longer need or stop processes using ports in that range. A removed app's ports free up after 7 days.");
 
     expect(storeDetectionApp())->toBeNull();
 });

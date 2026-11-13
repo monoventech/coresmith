@@ -65,7 +65,7 @@ final class CaddyAdminSocket
         if (!$this->answers($connection, self::ATTEMPTS)) {
             $connection->execute('systemctl restart caddy', sudo: true);
 
-            throw new RuntimeException('Caddy took the new settings but never answered on its socket, so Coresmith restarted it on its saved ones.');
+            throw new RuntimeException('The web server took the new settings but stopped answering, so Coresmith restarted it on its saved ones.');
         }
     }
 

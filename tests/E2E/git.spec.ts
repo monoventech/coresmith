@@ -15,7 +15,7 @@ test.describe('git settings', () => {
             /Installation token expires in \d+ (minutes|hours), rotated automatically\./
         )
         await expect(page.getByRole('main')).toContainText(
-            'GitHub App with fine-grained, per-repository permissions, not OAuth.'
+            'A GitHub App, installed only on the repositories you choose.'
         )
     })
 

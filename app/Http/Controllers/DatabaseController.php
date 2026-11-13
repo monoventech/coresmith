@@ -41,7 +41,7 @@ use RuntimeException;
 
 final class DatabaseController extends Controller
 {
-    public function index(Request $request, Server $server, ServerPresenter $presenter, SharedRedis $sharedRedis): Response|RedirectResponse
+    public function index(Request $request, Server $server, ServerPresenter $presenter, SharedRedis $sharedRedis, TeamAccess $access): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -51,7 +51,7 @@ final class DatabaseController extends Controller
 
         return Inertia::render('servers/Databases', [
             'server' => $presenter->header($server, $request->user()),
-            'databases' => $server->databases()->orderBy('name')->get()->map(
+            'databases' => $access->databasesOn($request->user(), $server)->orderBy('name')->get()->map(
                 fn(ManagedDatabase $database): array => [
                     ...$this->summarise($database),
                     'href' => route('servers.databases.show', [$server, $database]),
@@ -95,7 +95,7 @@ final class DatabaseController extends Controller
         CreateDatabase::dispatch($database);
 
         return to_route('servers.databases.index', $server)
-            ->with('success', 'Database queued for creation.');
+            ->with('success', 'Creating the database.');
     }
 
     public function show(Request $request, Server $server, ManagedDatabase $database, DatabaseBackups $backups, DatabaseUsage $usage, TeamAccess $access): Response

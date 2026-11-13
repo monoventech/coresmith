@@ -31,6 +31,7 @@ use App\Services\Caddy\CaddyApiClient;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\DatabaseFailure;
 use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\DeploymentLog;
@@ -60,6 +61,7 @@ use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\NativeGemTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\ResolvedRuntime;
@@ -609,7 +611,7 @@ final class DeployApplication implements ShouldQueue
         $phpChanged = $this->swapSymlink($connection, $paths, $release, $stack);
         $toggles = app(SmartToggles::class);
         $processes = app(ProcessManager::class);
-        $processes->removeUnits($connection, $application, $toggles->syncDeployTimeProcesses($application));
+        $dropped = $toggles->syncDeployTimeProcesses($application);
 
         foreach ($toggles->leftOutOfRelease($application) as $note) {
             $this->appendLog($note);
@@ -619,10 +621,13 @@ final class DeployApplication implements ShouldQueue
             $this->appendLog('reverb: routing wss://' . $application->domain . '/app to port ' . app(Reverb::class)->port($application));
         }
 
-        $processes->install($connection, $application);
-        $this->startProcesses($connection, $processes, $application, $phpChanged);
-        $this->routeTraffic($connection, $application);
-        app(CrontabBuilder::class)->write($connection, $application);
+        $this->reconnecting($connection, DeploymentPhases::WATCH, function () use ($connection, $processes, $application, $dropped, $phpChanged): void {
+            $processes->removeUnits($connection, $application, $dropped);
+            $processes->install($connection, $application);
+            $this->startProcesses($connection, $processes, $application, $phpChanged);
+            $this->routeTraffic($connection, $application);
+            app(CrontabBuilder::class)->write($connection, $application);
+        });
         $this->pruneOldReleases($connection, $application);
         $this->watchProcesses($connection, $processes, $application);
         $this->recordLiveAnswer($connection, $application);
@@ -822,6 +827,11 @@ final class DeployApplication implements ShouldQueue
             $this->appendLog("storage: copied the live release's data into shared/storage. Changes made while this deploy runs stay in the previous release.");
         }
 
+        if ($storage->seededDatabase($result->output)) {
+            $this->deployment->forceFill(['seeded_shared_database' => true])->save();
+            $this->appendLog("storage: copied the live release's SQLite database into shared/database. Changes made while this deploy runs stay in the previous release.");
+        }
+
         if (!$result->successful()) {
             $this->deployment->forceFill(['failed_step' => DeploymentPhases::STORAGE])->save();
         }
@@ -875,8 +885,29 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::DEPENDENCIES, 'installing dependencies');
+
+        if ($this->deployment->application->type === ApplicationType::Ruby) {
+            $this->installGemTools($connection, $release);
+        }
+
         $this->enableCorepackCommands($connection, $stack);
         $this->runInRelease($connection, $release, $stack, $steps, DeploymentPhases::DEPENDENCIES, self::DEPENDENCY_RETRIES);
+    }
+
+    private function installGemTools(SSHConnection $connection, string $release): void
+    {
+        $tools = app(NativeGemTools::class);
+        $lockfile = (new ReleasePaths($this->deployment->application))->appDirectory($release) . '/Gemfile.lock';
+        $needed = $tools->needed($connection->server(), $connection->execute($tools->find($lockfile), sudo: true)->output);
+        $missing = $tools->missing($connection, array_values(array_unique(array_merge(...array_values($needed)))));
+
+        if ($missing === []) {
+            return;
+        }
+
+        $gems = array_keys(array_filter($needed, fn(array $packages): bool => array_intersect($packages, $missing) !== []));
+        $this->appendLog($this->stamp() . ' deps: installing ' . implode(', ', $missing) . ', which ' . implode(' and ', $gems) . (count($gems) === 1 ? ' needs' : ' need') . ' to build');
+        $tools->install($connection, $missing);
     }
 
     private function enableCorepackCommands(SSHConnection $connection, Stack $stack): void
@@ -1195,6 +1226,10 @@ final class DeployApplication implements ShouldQueue
                 }
 
                 if ($attempt > $retries || !$this->looksLikeNetwork($result->output) || DeploymentCancellation::requested($this->deployment)) {
+                    if ($phase === DeploymentPhases::MIGRATIONS) {
+                        $this->failureReason = DatabaseFailure::reason($result->output, $this->deployment->application->type) ?? $this->failureReason;
+                    }
+
                     $result->throw();
                 }
 

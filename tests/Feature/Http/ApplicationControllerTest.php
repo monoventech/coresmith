@@ -190,7 +190,7 @@ test('the app page knows when the last failed deploy had already gone live', fun
 test('the app page gives the reason a release that went live is not serving, while that release is still live', function () {
     $team = Team::factory()->create();
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260914-140211']);
-    $reason = 'coresmith-app-shop-web did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.';
+    $reason = 'The web process didn\'t start (activating). The process log says why. Fix it and deploy again, or roll back to the previous release.';
     Deployment::factory()->for($application)->create([
         'status' => DeploymentStatus::Failed,
         'release' => '20260914-140211',
@@ -212,7 +212,7 @@ test('the app page gives the reason a release that went live is not serving, whi
 test('a worker that did not start after going live leaves the app live, with the worker named and why', function () {
     $team = Team::factory()->create();
     $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['current_release' => '20260914-140211', 'status' => ApplicationStatus::Active]);
-    $reason = 'coresmith-app-shop-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.';
+    $reason = 'The queue process didn\'t start (activating). The entry point was not found. Check the build produced the file the process starts, then deploy again.';
     Deployment::factory()->for($application)->create([
         'status' => DeploymentStatus::Failed,
         'release' => '20260914-140211',
@@ -256,7 +256,7 @@ function appWithFailedRollback(Team $team): Application
     appRollback($application, 'rollback_processes_failed', 30, [
         'from' => '20260913-120000',
         'to' => '20260912-090000',
-        'error' => 'coresmith-app-shop-web did not start, systemd reports it as activating. Port 8000 is already taken by another process. Find it with ss -tlnp | grep 8000, stop it, then deploy again.',
+        'error' => 'The web process didn\'t start (activating). Port 8000 is already taken by another process. Find it with ss -tlnp | grep 8000, stop it, then deploy again.',
     ]);
 
     return $application;
@@ -272,7 +272,7 @@ test('the app page says a rollback did not start the app, with the reason it sto
             ->where('application.state.label', 'Failed')
             ->where('application.rollback_failed', [
                 'release' => '20260912-090000',
-                'error' => 'coresmith-app-shop-web did not start, systemd reports it as activating. Port 8000 is already taken by another process. Find it with ss -tlnp | grep 8000, stop it, then deploy again.',
+                'error' => 'The web process didn\'t start (activating). Port 8000 is already taken by another process. Find it with ss -tlnp | grep 8000, stop it, then deploy again.',
                 'worker' => null,
             ]));
 });
@@ -285,7 +285,7 @@ test('the app page names the worker that did not start after a rollback, and the
         'from' => '20260913-120000',
         'to' => '20260912-090000',
         'worker' => 'Sidekiq',
-        'error' => 'coresmith-app-shop-sidekiq did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.',
+        'error' => 'The sidekiq process didn\'t start (activating). The process log says why. Fix it and deploy again, or roll back to the previous release.',
     ]);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
@@ -294,7 +294,7 @@ test('the app page names the worker that did not start after a rollback, and the
             ->where('application.state.label', 'Live')
             ->where('application.rollback_failed', [
                 'release' => '20260912-090000',
-                'error' => 'coresmith-app-shop-sidekiq did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.',
+                'error' => 'The sidekiq process didn\'t start (activating). The process log says why. Fix it and deploy again, or roll back to the previous release.',
                 'worker' => 'Sidekiq',
             ]));
 });

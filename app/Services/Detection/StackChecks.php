@@ -11,6 +11,7 @@ namespace App\Services\Detection;
 use App\Enums\ApplicationType;
 use App\Exceptions\RuntimeUnavailable;
 use App\Models\Application;
+use App\Services\Runtime\Catalog;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
@@ -34,7 +35,7 @@ final class StackChecks
 
     private const STATIC_INDEXES = ['' => 'index.html', 'public' => 'public/index.html'];
 
-    public function __construct(private readonly StackResolver $resolver) {}
+    public function __construct(private readonly StackResolver $resolver, private readonly Catalog $catalog) {}
 
     /**
      * @param  Closure(string): list<string>  $installed
@@ -305,8 +306,11 @@ final class StackChecks
             default => $this->started($facts),
         };
         $port = $this->fixedPort($facts);
+        $blockers = $port === null ? $blockers : [...$blockers, $port];
 
-        return $port === null ? $blockers : [...$blockers, $port];
+        return $facts->dependency('fibers') === null
+            ? $blockers
+            : [...$blockers, new Blocker('repository', 'package.json depends on fibers, which does not build on Node.js 16 or later, and Coresmith installs Node.js ' . $this->catalog->range('nodejs') . '.', 'Remove fibers from package.json. Its author retired it when Node.js 16 came out.')];
     }
 
     private function fixedPort(RepositoryFacts $facts): ?Blocker

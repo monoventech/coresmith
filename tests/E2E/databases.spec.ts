@@ -74,7 +74,7 @@ test.describe('databases', () => {
         await page.getByLabel('User', { exact: true }).fill(`${name}_app`)
         await page.getByRole('button', { name: 'Create the database' }).click()
 
-        await expect(toast(page)).toContainText('Database queued for creation.')
+        await expect(toast(page)).toContainText('Creating the database.')
         await expect(databaseRow(page, name)).toBeVisible()
     })
 
@@ -97,7 +97,7 @@ test.describe('databases', () => {
         await page.getByLabel('Database name').fill(name)
         await page.getByRole('button', { name: 'Create the database' }).click()
 
-        await expect(toast(page)).toContainText('Database queued for creation.')
+        await expect(toast(page)).toContainText('Creating the database.')
         await expect(databaseRow(page, name)).toContainText('password')
         await expect(databaseRow(page, name)).toContainText(/63[89]\d|64[0-7]\d/)
     })
@@ -544,11 +544,14 @@ test.describe('the shared Redis', () => {
         await expect(page.getByRole('button', { name: 'Turn off the shared Redis' })).toBeVisible()
     })
 
-    test('the hardening tab names the shared Redis as the exception to dedicated credentials', async ({ page }) => {
+    test('what Coresmith runs here names the shared Redis as the exception to credentials per app', async ({
+        page
+    }) => {
         await gotoServerTab(page, 'vault-02', 'Hardening')
+        await page.getByTestId('under-the-hood-link').click()
 
-        await expect(page.getByRole('heading', { name: 'Nine-layer app isolation' }).locator('..')).toContainText(
-            'Dedicated database credentials, except the shared Redis on port 6379'
+        await expect(page.getByTestId('machinery-isolation')).toContainText(
+            'Database credentials per app, except the shared Redis on port 6379'
         )
     })
 

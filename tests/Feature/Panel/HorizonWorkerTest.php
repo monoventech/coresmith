@@ -73,8 +73,8 @@ test('turning the worker on runs horizon when the repository requires it', funct
         ->and($row['description'])->toBe($description)
         ->and($row['busy_on'])->toBe($busy);
 })->with([
-    'horizon' => [true, 'php artisan horizon', 'Detected: laravel/horizon · systemd unit coresmith-app-shop-queue', 'Creating the systemd unit and starting Horizon…'],
-    'plain queue' => [false, 'php artisan queue:work --sleep=3 --tries=3 --max-time=3600', 'php artisan queue:work · systemd unit coresmith-app-shop-queue', 'Creating the systemd unit and starting the worker…'],
+    'horizon' => [true, 'php artisan horizon', 'Detected: laravel/horizon', 'Starting Horizon…'],
+    'plain queue' => [false, 'php artisan queue:work --sleep=3 --tries=3 --max-time=3600', 'php artisan queue:work', 'Starting the worker…'],
 ]);
 
 test('the worker command follows what the repository installs', function () {

@@ -38,6 +38,6 @@ final class SiteFile
     {
         $path = (string) config('coresmith.address.site');
 
-        AtomicFile::write($path, $this->render($addresses, $redirects), 0640, "Coresmith couldn't write its Caddy site at {$path}");
+        AtomicFile::write($path, $this->render($addresses, $redirects), 0640, "Coresmith couldn't write its web server settings at {$path}");
     }
 }

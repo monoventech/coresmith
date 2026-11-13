@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Git\GitHub;
 
+use App\Enums\Ability;
 use App\Exceptions\GitProviderException;
 use App\Models\GitHubApp;
 use App\Models\Team;
@@ -35,7 +36,7 @@ final class GitHubAppRegistrar
     /**
      * @return array{state: string, key: string}
      */
-    public function intent(Team $team, User $user): array
+    public function intent(Team $team, User $user, bool $personal = false): array
     {
         $state = Str::random(40);
         $key = strtolower((string) Str::ulid());
@@ -45,12 +46,21 @@ final class GitHubAppRegistrar
             'team' => (string) $team->getKey(),
             'user' => (string) $user->getKey(),
             'key' => $key,
+            'personal' => $personal,
             'at' => now()->getTimestamp(),
         ];
 
         session()->put(self::SESSION_KEY, array_slice($waiting, -self::KEEP, null, true));
 
         return ['state' => $state, 'key' => $key];
+    }
+
+    public function personal(#[\SensitiveParameter] string $state, User $user): bool
+    {
+        $waiting = $this->waiting();
+        $stored = $this->find($waiting, $state, $user);
+
+        return $stored !== null && (bool) ($waiting[$stored]['personal'] ?? false);
     }
 
     public function teamFor(#[\SensitiveParameter] string $state, User $user): ?Team
@@ -81,7 +91,17 @@ final class GitHubAppRegistrar
             throw new GitProviderException(self::UNVERIFIED);
         }
 
-        Gate::forUser($user)->authorize('update', $team);
+        $personal = (bool) ($intent['personal'] ?? false);
+
+        if ($personal) {
+            abort_unless($user->hasTeamAbility($team, Ability::CreateApplication), 403);
+
+            if (GitHubApp::query()->where('team_id', $team->getKey())->where('user_id', $user->getKey())->exists()) {
+                throw new GitProviderException("Your own GitHub is already connected to {$team->name}. Remove it in Your account, Git, to connect another.");
+            }
+        } else {
+            Gate::forUser($user)->authorize('update', $team);
+        }
 
         try {
             $converted = $this->api->convertManifest($code);
@@ -89,7 +109,7 @@ final class GitHubAppRegistrar
             throw new GitProviderException(self::NOT_CREATED, previous: $e);
         }
 
-        $app = $this->store($intent['key'], $team, $user, $converted);
+        $app = $this->store($intent['key'], $team, $user, $converted, $personal);
 
         try {
             $hookUrl = $this->api->hookUrl($this->apps->fromModel($app));
@@ -113,7 +133,7 @@ final class GitHubAppRegistrar
     /**
      * @param  array<string, mixed>  $converted
      */
-    private function store(string $key, Team $team, User $user, #[\SensitiveParameter] array $converted): GitHubApp
+    private function store(string $key, Team $team, User $user, #[\SensitiveParameter] array $converted, bool $personal): GitHubApp
     {
         $app = new GitHubApp;
 
@@ -134,13 +154,14 @@ final class GitHubAppRegistrar
             'events' => $converted['events'],
             'hook_url' => null,
             'created_by' => $user->getKey(),
+            'user_id' => $personal ? $user->getKey() : null,
         ])->save();
 
         return $app;
     }
 
     /**
-     * @return array<string, array{team: string, user: string, key: string, at: int}>
+     * @return array<string, array{team: string, user: string, key: string, personal: bool, at: int}>
      */
     private function waiting(): array
     {
@@ -162,6 +183,7 @@ final class GitHubAppRegistrar
                 'team' => $entry['team'],
                 'user' => $entry['user'],
                 'key' => $entry['key'],
+                'personal' => ($entry['personal'] ?? false) === true,
                 'at' => (int) $entry['at'],
             ];
         }

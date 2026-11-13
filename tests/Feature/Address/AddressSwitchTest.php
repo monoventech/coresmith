@@ -39,7 +39,7 @@ final class ChangeAddressCaddy implements CaddyAdmin
         if ($this->refusals > 0) {
             $this->refusals--;
 
-            throw new RuntimeException('Caddy refused the new site: ambiguous site definition: coresmith.example.com');
+            throw new RuntimeException('The web server refused the new address: ambiguous site definition: coresmith.example.com');
         }
 
         $this->loaded[] = (string) file_get_contents($this->site);
@@ -189,7 +189,7 @@ test('caddy refusing the new site leaves the old one in place', function () {
 
     expect($caddy->loaded)->toHaveCount(1)
         ->and(file_get_contents("{$directory}/panel.caddy"))->toBe(app(SiteFile::class)->render(['192.168.0.248']))
-        ->and(AddressChange::current())->toMatchArray(['state' => 'failed', 'error' => 'Caddy refused the new site: ambiguous site definition: coresmith.example.com']);
+        ->and(AddressChange::current())->toMatchArray(['state' => 'failed', 'error' => 'The web server refused the new address: ambiguous site definition: coresmith.example.com']);
 });
 
 test('a server that also serves apps through caddy is left alone', function () {
@@ -202,7 +202,7 @@ test('a server that also serves apps through caddy is left alone', function () {
         ->and(file_get_contents("{$directory}/panel.caddy"))->toBe("192.168.0.248 {\n}\n")
         ->and(AddressChange::current())->toMatchArray([
             'state' => 'failed',
-            'error' => 'This server also serves apps through Caddy, so Coresmith leaves its Caddy setup alone. Run the installer again with --domain instead.',
+            'error' => 'This machine also serves apps, so Coresmith leaves its web server setup alone. Run the installer again with --domain instead.',
         ]);
 });
 

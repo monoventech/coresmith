@@ -19,6 +19,13 @@ final class FirewalldFirewallManager implements FirewallManager
         return "firewall-cmd --permanent --add-port={$rule} && firewall-cmd --reload";
     }
 
+    public function remove(int $port, string $protocol = 'tcp'): string
+    {
+        $rule = FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);
+
+        return "firewall-cmd --permanent --remove-port={$rule} && firewall-cmd --reload";
+    }
+
     public function deny(int $port, string $protocol = 'tcp'): string
     {
         $rule = FirewallRule::port($port) . '/' . FirewallRule::protocol($protocol);

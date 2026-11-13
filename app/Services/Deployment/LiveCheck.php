@@ -10,6 +10,7 @@ namespace App\Services\Deployment;
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\Process\SystemdUnitBuilder;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
@@ -43,7 +44,7 @@ final class LiveCheck
             return null;
         }
 
-        return new LiveAnswer($url, $status, $status >= 500 ? $this->newestError($connection, $application) : null);
+        return new LiveAnswer($url, $status, $status >= 500 ? $this->newestError($connection, $application, $status) : null);
     }
 
     private function status(SSHConnection $connection, string $command): int
@@ -51,14 +52,34 @@ final class LiveCheck
         return (int) trim($connection->execute($command, timeout: self::SECONDS + 5)->output);
     }
 
-    private function newestError(SSHConnection $connection, Application $application): ?string
+    private function newestError(SSHConnection $connection, Application $application, int $status): ?string
     {
         if ($application->type !== ApplicationType::Php) {
-            return null;
+            return $status === 502 ? $this->wrongPort($connection, $application) : null;
         }
 
         return (strtolower((string) $application->framework) === 'laravel' ? $this->laravelError($connection, $application) : null)
             ?? $this->phpError($connection, $application);
+    }
+
+    private function wrongPort(SSHConnection $connection, Application $application): ?string
+    {
+        $unit = escapeshellarg(app(SystemdUnitBuilder::class)->unitName($application, 'web'));
+        $script = 'cg=$(systemctl show -p ControlGroup --value ' . $unit . ' 2>/dev/null); [ -n "$cg" ] || exit 0; '
+            . 'pids=$(tr "\\n" "|" < "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); [ -n "$pids" ] || exit 0; '
+            . 'ss -ltnpH 2>/dev/null | grep -E "pid=(${pids%|})," | awk \'{print $4}\'';
+        $ports = collect(preg_split('/\s+/', trim($connection->execute($script, sudo: true)->output)) ?: [])
+            ->map(fn(string $address): ?int => preg_match('/:(\d+)$/', $address, $matches) === 1 ? (int) $matches[1] : null)
+            ->filter()
+            ->unique()
+            ->values();
+        $expected = (int) $application->base_port;
+
+        if ($ports->isEmpty() || $ports->contains($expected)) {
+            return null;
+        }
+
+        return 'The app listens on port ' . $ports->implode(', ') . ", not the port Coresmith gives it, {$expected}. Have it listen on the PORT environment variable.";
     }
 
     private function phpError(SSHConnection $connection, Application $application): ?string

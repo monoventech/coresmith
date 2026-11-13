@@ -17,8 +17,15 @@
         registration,
         compact = false,
         submitLabel = 'Create on GitHub',
+        personalOnly = false,
         actions
-    }: { registration: GitHubRegistration; compact?: boolean; submitLabel?: string; actions?: Snippet } = $props()
+    }: {
+        registration: GitHubRegistration
+        compact?: boolean
+        submitLabel?: string
+        personalOnly?: boolean
+        actions?: Snippet
+    } = $props()
 
     let owner = $state('personal')
     let organization = $state('')
@@ -70,25 +77,27 @@
     <form method="post" {action} class="flex flex-col gap-4">
         <input type="hidden" name="manifest" value={manifest} />
 
-        <div>
-            <Label id="github-owner-label" class="mb-1.5">Owner</Label>
-            <RadioGroup.Root
-                bind:value={owner}
-                aria-labelledby="github-owner-label"
-                class="gap-0 overflow-hidden rounded-lg border border-border"
-            >
-                <label
-                    class="flex cursor-pointer items-center gap-3 border-b border-border px-3.5 py-2.5 hover:bg-muted max-sm:min-h-11"
+        {#if !personalOnly}
+            <div>
+                <Label id="github-owner-label" class="mb-1.5">Owner</Label>
+                <RadioGroup.Root
+                    bind:value={owner}
+                    aria-labelledby="github-owner-label"
+                    class="gap-0 overflow-hidden rounded-lg border border-border"
                 >
-                    <RadioGroup.Item value="personal" aria-labelledby="github-owner-personal" />
-                    <span id="github-owner-personal" class="text-[13.5px]">Your personal account</span>
-                </label>
-                <label class="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-muted max-sm:min-h-11">
-                    <RadioGroup.Item value="organization" aria-labelledby="github-owner-organization" />
-                    <span id="github-owner-organization" class="text-[13.5px]">An organization</span>
-                </label>
-            </RadioGroup.Root>
-        </div>
+                    <label
+                        class="flex cursor-pointer items-center gap-3 border-b border-border px-3.5 py-2.5 hover:bg-muted max-sm:min-h-11"
+                    >
+                        <RadioGroup.Item value="personal" aria-labelledby="github-owner-personal" />
+                        <span id="github-owner-personal" class="text-[13.5px]">Your personal account</span>
+                    </label>
+                    <label class="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-muted max-sm:min-h-11">
+                        <RadioGroup.Item value="organization" aria-labelledby="github-owner-organization" />
+                        <span id="github-owner-organization" class="text-[13.5px]">An organization</span>
+                    </label>
+                </RadioGroup.Root>
+            </div>
+        {/if}
 
         {#if owner === 'organization'}
             <div>

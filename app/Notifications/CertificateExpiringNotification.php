@@ -41,7 +41,7 @@ final class CertificateExpiringNotification extends Notification implements Shou
 
         return (new MailMessage)
             ->subject("The certificate for {$this->domain} " . CertificateCheck::expiry($this->days))
-            ->line('Caddy on ' . $server?->name . ' renews certificates well before they expire, so this one could not be renewed.')
+            ->line('Coresmith renews certificates on ' . $server?->name . ' well before they expire, so this one could not be renewed.')
             ->line("Check that {$this->domain} still points at {$server?->ip_address} and that ports 80 and 443 are open.")
             ->action('Open ' . $this->application->name, route('servers.applications.show', [$this->application->server_id, $this->application]));
     }

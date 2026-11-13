@@ -33,6 +33,15 @@ setup('authenticate as an admin who sees only one environment', async ({ browser
     await context.close()
 })
 
+setup('authenticate as a developer', async ({ browser }) => {
+    const context = await browser.newContext()
+    const page = await context.newPage()
+
+    await signIn(page, 'developer@coresmith.test', 'tests/E2E/.auth/developer.json')
+
+    await context.close()
+})
+
 for (const code of ['chr', 'ffx', 'wbk', 'mch', 'msf']) {
     setup(`authenticate as the owner who moves a team in on ${code}`, async ({ browser }) => {
         const context = await browser.newContext()

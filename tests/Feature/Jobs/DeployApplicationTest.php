@@ -250,7 +250,7 @@ test('a process that does not start fails the deploy with the reason and its jou
     $fresh = $deployment->fresh();
 
     expect($fresh->status)->toBe(DeploymentStatus::Failed)
-        ->and($fresh->failure_reason)->toContain('coresmith-app-my-app-fpm did not start')
+        ->and($fresh->failure_reason)->toContain('The PHP process didn\'t start')
         ->and($fresh->failure_reason)->toContain('Port 8000 is already taken')
         ->and($fresh->log)->toContain('unable to bind listening socket');
 });
@@ -268,7 +268,7 @@ test('a release whose web process does not start leaves the app failed, as a cra
 
     expect($application->status)->toBe(ApplicationStatus::Failed)
         ->and($application->current_release)->toBe(TIMESTAMP)
-        ->and($deployment->fresh()->failure_reason)->toStartWith("{$unit} did not start")
+        ->and($deployment->fresh()->failure_reason)->toStartWith('The ' . (str_ends_with($unit, '-fpm') ? 'PHP' : 'web') . " process didn't start")
         ->and($deployment->fresh()->start_failed)->toBeTrue()
         ->and($deployment->fresh()->failed_worker)->toBeNull()
         ->and($deployment->fresh()->log)->toContain('deploy failed after the symlink swap');
@@ -294,7 +294,7 @@ test('a worker that does not start fails the deploy with its own reason, but the
     $application = $deployment->application->fresh();
 
     expect($fresh->status)->toBe(DeploymentStatus::Failed)
-        ->and($fresh->failure_reason)->toBe('coresmith-app-my-app-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.')
+        ->and($fresh->failure_reason)->toBe('The queue process didn\'t start (activating). The entry point was not found. Check the build produced the file the process starts, then deploy again.')
         ->and($fresh->log)->toContain('Could not open input file: artisan')
         ->and($fresh->start_failed)->toBeTrue()
         ->and($fresh->failed_worker)->toBe('Queue worker')
@@ -583,6 +583,17 @@ test('an ssh connection that drops before the swap is reopened and the phase run
         ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during build, reconnecting');
 });
 
+test('an ssh connection that drops after the swap is reopened and the new release is started once more', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->corruptPacketOn("systemctl enable 'coresmith-app-my-app-fpm'");
+
+    deploy($deployment, $transport);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during watch, reconnecting')
+        ->and(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, "systemctl enable 'coresmith-app-my-app-fpm'"))))->toBe(2);
+});
+
 test('a release the memory limit keeps killing says it ran out of memory and to pick a bigger size', function () {
     Event::fake([DeploymentFailed::class]);
     $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000', 'app_size' => 'small']))->create();
@@ -864,4 +875,25 @@ test('a sudo user deploys with every step run as root and uploads staged first',
 
     expect($unprivileged->values()->all())->toBe([])
         ->and(array_keys($transport->uploads()))->toBe([FakeSSHTransport::STAGED_UPLOAD]);
+});
+
+test('migrations that cannot reach the database the app points at say which one and what to do', function (string $output, string $engine) {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('php artisan migrate', $output, 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->failure_reason)->toBe("Migrations couldn't connect to {$engine} where the app's settings point, so nothing was changed. Add a {$engine} database for the app on its server, or check its DB_ settings. To use SQLite instead, set DB_CONNECTION=sqlite.");
+})->with([
+    'mysql' => ["   Illuminate\\Database\\QueryException\n\n  SQLSTATE[HY000] [2002] Connection refused (Connection: mysql, SQL: select exists (select 1 from information_schema.tables))\n", 'MySQL'],
+    'postgres' => ["  SQLSTATE[08006] [7] connection to server at \"127.0.0.1\", port 5432 failed: Connection refused\n", 'PostgreSQL'],
+]);
+
+test('a migration that fails for another reason keeps the plain step failure', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->respondTo('php artisan migrate', "SQLSTATE[42S01]: Base table or view already exists: 1050 Table 'users' already exists\n", 1);
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect((string) $deployment->fresh()->failure_reason)->not->toContain("couldn't connect");
 });

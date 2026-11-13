@@ -16,8 +16,10 @@ use App\Exceptions\SSHPasswordRefused;
 use App\Models\Server;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\Contracts\SSHTransport;
+use Closure;
 use phpseclib3\Crypt\Common\PrivateKey;
 use phpseclib3\Crypt\PublicKeyLoader;
+use phpseclib3\Exception\BadDecryptionException;
 use phpseclib3\Exception\ConnectionClosedException;
 use RuntimeException;
 
@@ -102,7 +104,7 @@ final class SSHConnection
     public function uploadContent(#[\SensitiveParameter] string $content, string $remotePath, int $timeout = SSHTransport::COMMAND_SECONDS): void
     {
         if ($this->server->ssh_user === 'root') {
-            $this->connect()->transport->uploadContent($content, $remotePath);
+            $this->guarded(fn() => $this->connect()->transport->uploadContent($content, $remotePath));
 
             return;
         }
@@ -114,7 +116,7 @@ final class SSHConnection
         }
 
         try {
-            $this->connect()->transport->uploadContent($content, $staged);
+            $this->guarded(fn() => $this->connect()->transport->uploadContent($content, $staged));
 
             $source = escapeshellarg($staged);
             $target = escapeshellarg($remotePath);
@@ -155,18 +157,31 @@ final class SSHConnection
 
     private function run(string $command, int $timeout, ?callable $onOutput = null, #[\SensitiveParameter] ?string $input = null): SSHResult
     {
-        try {
+        $output = $this->guarded(function () use ($command, $timeout, $onOutput, $input): string {
             $transport = $this->connect()->transport;
-            $output = $input === null
+
+            return $input === null
                 ? $transport->exec($command, $onOutput, $timeout)
                 : $transport->execWithInput($command, $input, $timeout);
+        });
+
+        return $this->conclude($command, $output, $timeout);
+    }
+
+    private function guarded(Closure $work): mixed
+    {
+        try {
+            return $work();
         } catch (ConnectionClosedException $e) {
             $this->authenticated = false;
 
             throw $e;
-        }
+        } catch (BadDecryptionException $e) {
+            $this->authenticated = false;
+            $this->transport->disconnect();
 
-        return $this->conclude($command, $output, $timeout);
+            throw new ConnectionClosedException("The SSH connection to {$this->server->name} broke: a packet from the server failed its integrity check.", 0, $e);
+        }
     }
 
     private function verifyHostKey(): void

@@ -49,7 +49,7 @@ test("where Caddy serves Coresmith from its own Caddyfile, there's nothing to br
 });
 
 test("a sync Caddy refuses fails the installer's step with Caddy's reason", function () {
-    caddySyncAdmin(true, new RuntimeException('Caddy refused the new site: unrecognized directive: foo'));
+    caddySyncAdmin(true, new RuntimeException('The web server refused the new address: unrecognized directive: foo'));
 
-    $this->artisan('coresmith:caddy-sync')->expectsOutput('Caddy refused the new site: unrecognized directive: foo')->assertFailed();
+    $this->artisan('coresmith:caddy-sync')->expectsOutput('The web server refused the new address: unrecognized directive: foo')->assertFailed();
 });
