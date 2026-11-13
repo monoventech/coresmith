@@ -219,13 +219,28 @@ final class StackChecks
             )];
         }
 
-        return match ($framework) {
+        $blockers = match ($framework) {
             'sveltekit' => $this->svelteKit($facts),
             'nextjs', 'next' => $this->next($facts),
             'nuxt' => $this->nuxt($facts),
             'astro' => $this->astro($facts),
             default => $this->started($facts),
         };
+        $port = $this->fixedPort($facts);
+
+        return $port === null ? $blockers : [...$blockers, $port];
+    }
+
+    private function fixedPort(RepositoryFacts $facts): ?Blocker
+    {
+        $script = JsTooling::startScriptFor($facts);
+        $command = $script === null ? null : ($facts->json('package.json')['scripts'][$script] ?? null);
+
+        if (!is_string($command) || preg_match('/(?:^|[\s;&|(])(?:(?:-p|--port)(?:\s+|=)|PORT=)(\d{2,5})(?=$|[\s;&|)])/', $command, $matches) !== 1) {
+            return null;
+        }
+
+        return new Blocker('repository', "The {$script} script sets port {$matches[1]}, but Coresmith gives each app its own port in PORT, so visitors would get a 502.", "Take the port out of the {$script} script so the app listens on PORT, which Coresmith sets.");
     }
 
     /**

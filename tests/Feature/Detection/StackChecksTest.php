@@ -115,6 +115,33 @@ test('PHP extensions the chosen PHP has, a polyfill provides, or nobody can be s
     'no extension list for that PHP' => [['ext-amqp' => '*'], [], false],
 ]);
 
+test('a start script that fixes its own port is refused, since visitors would get a 502', function (string $framework, string $start, string $port) {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['scripts' => ['build' => 'next build', 'start' => $start], 'dependencies' => ['next' => '^16.1.6', 'express' => '^5.1.0']])], ['package-lock.json'], complete: true);
+    $blockers = stackChecksFor($facts, ['type' => ApplicationType::Js, 'framework' => $framework, 'js_runtime' => 'node']);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('repository')
+        ->and($blockers[0]->reason)->toBe("The start script sets port {$port}, but Coresmith gives each app its own port in PORT, so visitors would get a 502.")
+        ->and($blockers[0]->fix)->toContain('PORT');
+})->with([
+    'next start -p, uyoopack-tutorial' => ['nextjs', 'next start -p 3100', '3100'],
+    '--port=' => ['', 'node server.js --port=4000', '4000'],
+    'a PORT= prefix' => ['', 'PORT=5000 node server.js', '5000'],
+    'cross-env' => ['', 'cross-env NODE_ENV=production PORT=8080 node dist/main.js', '8080'],
+]);
+
+test('a start script that reads PORT is fine', function (string $start) {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['scripts' => ['start' => $start], 'dependencies' => ['express' => '^5.1.0']])], ['package-lock.json'], complete: true);
+
+    expect(stackChecksFor($facts, ['type' => ApplicationType::Js, 'framework' => '', 'js_runtime' => 'node']))->toBe([]);
+})->with([
+    'no port' => ['node server.js'],
+    'the PORT variable' => ['next start -p $PORT'],
+    'a fallback' => ['node server.js --port=${PORT:-3000}'],
+    'a project flag that is not a port' => ['tsc -p tsconfig.json && node dist/index.js'],
+    'a variable that only ends in PORT' => ['APP_PORT=3000 node server.js'],
+]);
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 
