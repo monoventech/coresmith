@@ -70,7 +70,10 @@ final class StackDefaults
      */
     public function build(Application $application): array
     {
-        return strtolower((string) $application->framework) === 'laravel' ? ['LARAVEL_INSTALLER_DEFER_HOOKS' => '1'] : [];
+        return [
+            'COREPACK_ENABLE_DOWNLOAD_PROMPT' => '0',
+            ...(strtolower((string) $application->framework) === 'laravel' ? ['LARAVEL_INSTALLER_DEFER_HOOKS' => '1'] : []),
+        ];
     }
 
     /**

@@ -145,6 +145,13 @@ test('ruby versions are read from .ruby-version, then the Gemfile', function (ar
     'the gemfile' => [['Gemfile' => "source \"https://rubygems.org\"\nruby \"~> 3.4\"\n"], '~> 3.4'],
 ]);
 
+test('a rails app with a package.json gets node and its package manager, whatever its scripts', function () {
+    $detection = app(RuntimeDetector::class)->detect(detectorApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']), detectorFacts(['package.json' => '{"devDependencies":{"vite":"^6.0.0","vite-plugin-ruby":"^5.1.0"}}'], ['package-lock.json']));
+
+    expect($detection->runtimes)->toBe(['ruby', 'nodejs'])
+        ->and($detection->tooling?->manager)->toBe('npm');
+});
+
 test('a rails app that builds javascript gets node for its yarn lockfile', function () {
     $application = detectorApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
     $detection = app(RuntimeDetector::class)->detect($application, detectorFacts(['package.json' => '{"scripts":{"build":"esbuild app/javascript/*.*"}}'], ['yarn.lock']));

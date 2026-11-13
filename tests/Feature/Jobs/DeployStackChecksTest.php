@@ -196,3 +196,15 @@ test('a 500 that only the first request after starting gets is a cold start, so 
     expect($deployment->fresh()->live_status)->toBe(200)
         ->and($deployment->fresh()->log)->toContain('check: https://app.example.com/ answered 200');
 });
+
+test('a deploy whose packages come through yarn or pnpm puts their commands on PATH, since build tools call them by name', function () {
+    $deployment = Deployment::factory()->for(stackDeployApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.4.10', 'node_version' => '24.21.0']))->create();
+    $transport = stackDeployTransport(stackDeployProbe('rails-jsbundling'));
+
+    stackDeployRun($deployment, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain("'/opt/asdf-data/installs/nodejs/24.21.0/bin/corepack' enable --install-directory '/opt/asdf-data/installs/nodejs/24.21.0/bin'")
+        ->and(strpos($commands, 'corepack\' enable'))->toBeLessThan(strpos($commands, 'corepack yarn install'));
+});

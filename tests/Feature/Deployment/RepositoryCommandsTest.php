@@ -47,11 +47,11 @@ test('a php app with nothing to build runs no javascript', function () {
     expect(app(DeploymentCommands::class)->dependencies($application, repositoryStack(null)))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
 });
 
-test('a rails app leaves its javascript to assets:precompile and configures bundler the current way', function () {
+test('a rails app installs its javascript packages after its gems, so vite_rails finds them, and configures bundler the current way', function () {
     $application = new Application(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
     $stack = repositoryStack(new JsTooling('yarn', true, true, false));
 
-    expect(app(DeploymentCommands::class)->dependencies($application, $stack))->toBe(['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install'])
+    expect(app(DeploymentCommands::class)->dependencies($application, $stack))->toBe(['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install', 'COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --frozen-lockfile'])
         ->and(app(DeploymentCommands::class)->build($application, $stack))->toBe(['RAILS_ENV=production bundle exec rails assets:precompile']);
 });
 

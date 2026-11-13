@@ -874,7 +874,22 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::DEPENDENCIES, 'installing dependencies');
+        $this->enableCorepackCommands($connection, $stack);
         $this->runInRelease($connection, $release, $stack, $steps, DeploymentPhases::DEPENDENCIES, self::DEPENDENCY_RETRIES);
+    }
+
+    private function enableCorepackCommands(SSHConnection $connection, Stack $stack): void
+    {
+        $node = $stack->versions()['nodejs'] ?? null;
+
+        if ($node === null || !in_array($stack->tooling?->manager, ['yarn', 'pnpm'], true)) {
+            return;
+        }
+
+        $bin = escapeshellarg(app(AsdfManager::class)->versionPath('nodejs', $node) . '/bin');
+        $corepack = escapeshellarg(app(AsdfManager::class)->binaryPath('nodejs', $node, 'corepack'));
+
+        $connection->execute("test ! -x {$corepack} || PATH={$bin}:/usr/bin:/bin {$corepack} enable --install-directory {$bin}", sudo: true);
     }
 
     private function build(SSHConnection $connection, DeploymentCommands $commands, string $release, Stack $stack): void

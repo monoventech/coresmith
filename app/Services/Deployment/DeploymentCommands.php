@@ -44,7 +44,7 @@ final class DeploymentCommands
 
         return match ($application->type) {
             ApplicationType::Php => [...($application->framework === 'symfony' ? ['[ -e .env ] || touch .env'] : []), ...$this->composer($stack), ...$javascript],
-            ApplicationType::Ruby => ['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install'],
+            ApplicationType::Ruby => ['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install', ...$javascript],
             default => $javascript,
         };
     }
