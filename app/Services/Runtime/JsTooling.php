@@ -15,6 +15,8 @@ final readonly class JsTooling
 {
     public const MANAGERS = ['bun' => 'bun', 'npm' => 'nodejs', 'pnpm' => 'nodejs', 'yarn' => 'nodejs', 'deno' => 'deno'];
 
+    public const START_SCRIPTS = ['start:prod', 'start'];
+
     private const COREPACK = 'COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack ';
 
     public function __construct(
@@ -26,7 +28,13 @@ final readonly class JsTooling
         public bool $manifest = true,
         public bool $ssr = false,
         public ?string $main = null,
+        public string $startScript = 'start',
     ) {}
+
+    public static function startScriptFor(RepositoryFacts $facts): ?string
+    {
+        return array_values(array_filter(self::START_SCRIPTS, fn(string $name): bool => $facts->script($name)))[0] ?? null;
+    }
 
     public static function safeMain(mixed $main): ?string
     {
@@ -75,7 +83,9 @@ final readonly class JsTooling
         $declared = (string) ($facts->json('package.json')['packageManager'] ?? '');
         $version = preg_match('/^' . $manager . '@(\d[\w.+-]*)/', $declared, $matches) === 1 ? $matches[1] : null;
 
-        return new self($manager, $facts->lockfile() !== null, $build, $facts->script('start'), $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null));
+        $start = self::startScriptFor($facts);
+
+        return new self($manager, $facts->lockfile() !== null, $build, $start !== null, $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null), startScript: $start ?? 'start');
     }
 
     public function runtime(): string
@@ -122,7 +132,7 @@ final readonly class JsTooling
     }
 
     /**
-     * @return array{manager: string, locked: bool, build: bool, start: bool, manager_version: ?string, manifest: bool, ssr: bool, main: ?string}
+     * @return array{manager: string, locked: bool, build: bool, start: bool, manager_version: ?string, manifest: bool, ssr: bool, main: ?string, start_script: string}
      */
     public function toArray(): array
     {
@@ -135,6 +145,7 @@ final readonly class JsTooling
             'manifest' => $this->manifest,
             'ssr' => $this->ssr,
             'main' => $this->main,
+            'start_script' => $this->startScript,
         ];
     }
 
@@ -158,6 +169,7 @@ final readonly class JsTooling
             (bool) ($data['manifest'] ?? true),
             (bool) ($data['ssr'] ?? false),
             self::safeMain($data['main'] ?? null),
+            in_array($data['start_script'] ?? null, self::START_SCRIPTS, true) ? (string) $data['start_script'] : 'start',
         );
     }
 

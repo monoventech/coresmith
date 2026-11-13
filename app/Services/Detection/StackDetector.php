@@ -12,6 +12,7 @@ use App\Enums\ApplicationType;
 use App\Exceptions\RuntimeUnavailable;
 use App\Models\Application;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\Stack;
@@ -283,7 +284,8 @@ final class StackDetector
      */
     private function started(RepositoryFacts $facts, string $runtime, array $sources): array
     {
-        $start = trim((string) ($facts->json('package.json')['scripts']['start'] ?? ''));
+        $name = JsTooling::startScriptFor($facts);
+        $start = $name === null ? '' : trim((string) ($facts->json('package.json')['scripts'][$name] ?? ''));
 
         if ($start === '') {
             return $this->proposal('js', null, $runtime, null, $sources, ['framework' => isset($facts->json('package.json')['main']) ? self::MAIN_ONLY : self::NO_START]);
@@ -291,7 +293,7 @@ final class StackDetector
 
         foreach (self::DEVELOPMENT_TOOLS as $tool) {
             if (preg_match('/(^|[\s;&|(])' . preg_quote($tool, '/') . '(\s|$)/', $start) === 1) {
-                return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "The start script runs {$tool}, which isn't a production server. Add a start script that runs the app, for example \"start\": \"node server.js\"."]);
+                return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$tool}, which isn't a production server. Add a start script that runs the app, for example \"start\": \"node server.js\"."]);
             }
         }
 
@@ -299,7 +301,7 @@ final class StackDetector
 
         return $server === null
             ? $this->proposal('js', null, $runtime, null, $sources, ['framework' => self::NO_SERVER])
-            : $this->proposal('js', '', $runtime, null, [...$sources, 'framework' => "The start script in package.json, with {$server}"]);
+            : $this->proposal('js', '', $runtime, null, [...$sources, 'framework' => "The {$name} script in package.json, with {$server}"]);
     }
 
     /**

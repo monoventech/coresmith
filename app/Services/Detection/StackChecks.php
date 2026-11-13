@@ -253,7 +253,7 @@ final class StackChecks
      */
     private function started(RepositoryFacts $facts): array
     {
-        return $facts->script('start') || JsTooling::safeMain($facts->json('package.json')['main'] ?? null) !== null || $facts->exists('server.js')
+        return JsTooling::startScriptFor($facts) !== null || JsTooling::safeMain($facts->json('package.json')['main'] ?? null) !== null || $facts->exists('server.js')
             ? []
             : [new Blocker('repository', 'There is no start script and no main file in package.json, so Coresmith has nothing to start.', 'Add a start script to package.json, for example "start": "node server.js".')];
     }

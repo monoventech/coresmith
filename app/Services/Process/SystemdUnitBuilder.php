@@ -114,13 +114,14 @@ final class SystemdUnitBuilder
         $data = ((array) $application->stack)['tooling'] ?? null;
         $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
         $start = $tooling?->start ?? false;
+        $script = $tooling?->startScript ?? 'start';
 
         return match ($application->js_runtime) {
             'node' => $start
-                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run start'
+                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run ' . $script
                 : $this->asdf->binaryPath('nodejs', (string) $application->node_version) . ' ' . $this->entry($application, $tooling),
             'deno' => $this->asdf->binaryPath('deno', (string) $application->deno_version) . ($start ? ' task start' : ' run --allow-net --allow-read --allow-env main.ts'),
-            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun start' : ' ' . $this->entry($application, $tooling)),
+            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun ' . $script : ' ' . $this->entry($application, $tooling)),
         };
     }
 
