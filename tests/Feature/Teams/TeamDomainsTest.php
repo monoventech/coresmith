@@ -116,7 +116,7 @@ test('checking dns says what is wrong when the record is missing or different', 
         ->and($domain->fresh()->failure)->toBe($failure)
         ->and($domain->fresh()->checked_at)->not->toBeNull();
 })->with([
-    'missing' => [[], 'no_record', 'The TXT record is not visible yet. DNS can take a few minutes, check again shortly.'],
+    'missing' => [[], 'no_record', 'The TXT record is not visible yet. DNS can take a few minutes, so check again shortly.'],
     'different' => [['coresmith-verification=other'], 'wrong_value', 'The TXT record is there but its value does not match. Copy it again from this page.'],
 ]);
 

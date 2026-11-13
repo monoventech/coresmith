@@ -190,7 +190,7 @@ test('a token with no team is refused rather than defaulting to one', function (
     $this->withHeaders(asToken($plain))
         ->getJson('/api/v1/servers')
         ->assertForbidden()
-        ->assertJsonPath('message', 'This token is not bound to a team. Issue a new one.');
+        ->assertJsonPath('message', 'This token isn\'t tied to a team. Create a new one.');
 });
 
 test('a token whose user was removed from the team stops working', function () {

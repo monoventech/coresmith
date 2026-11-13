@@ -264,7 +264,7 @@ test('a read-only team can still leave, secure itself, shrink and pay', function
     'dismiss a changed host key' => [function ($test, Team $team, User $owner) {
         $server = Server::factory()->for($team)->create(['host_key_fingerprint' => 'SHA256:old', 'pending_host_key_fingerprint' => 'SHA256:new', 'host_key_changed_at' => now()]);
 
-        $test->post(route('servers.host-key.reject', $server))->assertRedirect()->assertSessionHas('success', 'Dismissed. The original key is still the only one trusted, so operations stay blocked until the server presents it again.');
+        $test->post(route('servers.host-key.reject', $server))->assertRedirect()->assertSessionHas('success', 'Dismissed. Coresmith still trusts only the original key, so it won\'t connect until the server presents it again.');
 
         $server->refresh();
 

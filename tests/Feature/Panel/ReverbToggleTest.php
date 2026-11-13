@@ -105,14 +105,14 @@ test('it explains what is missing before it can turn on', function (array $attri
     'no settings' => [[], "APP_ENV=production\n", 'Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on'],
     'no secret' => [[], "REVERB_APP_ID=chat-app\nREVERB_APP_KEY=chat-key\n", 'Set REVERB_APP_ID, REVERB_APP_KEY and REVERB_APP_SECRET in the environment to turn it on'],
     'a key with a slash' => [[], "REVERB_APP_ID=chat-app\nREVERB_APP_KEY=chat/key\nREVERB_APP_SECRET=s3cret\n", 'REVERB_APP_ID and REVERB_APP_KEY can only use letters, numbers, dots, dashes and underscores'],
-    'no domain' => [['domain' => null], null, 'Add a domain first, browsers reach Reverb through it'],
+    'no domain' => [['domain' => null], null, 'Add a domain first. Browsers reach Reverb through it'],
 ]);
 
 test('ready and off, it says what turning it on does', function () {
     $row = reverbRow(reverbApp());
 
     expect($row['label'])->toBe('Reverb websockets')
-        ->and($row['description'])->toBe('Available, turning it on gives it port 8202 from the next deploy')
+        ->and($row['description'])->toBe('Available. Turning it on gives it port 8202 from the next deploy')
         ->and($row['disabled'])->toBeFalse()
         ->and($row['busy_on'])->toBe('Saving, it starts with the next deploy…')
         ->and($row['busy_off'])->toBe('Stopping the unit and removing the route…');

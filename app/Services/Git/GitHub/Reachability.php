@@ -59,11 +59,11 @@ final readonly class Reachability
         $host = $this->host === '' ? 'Coresmith' : $this->host;
 
         return match ($this->reason) {
-            self::LOOPBACK => "GitHub cannot reach {$host}, it only answers on this machine.",
+            self::LOOPBACK => "GitHub can't reach {$host}, because it only answers on this machine.",
             self::PRIVATE => $this->address === null || $this->address === $this->host
-                ? "GitHub cannot reach {$host}, it is not a public address."
-                : "GitHub cannot reach {$host}, {$this->address} is not a public address.",
-            self::LOCAL => "GitHub cannot reach {$host}, it only resolves on your own network.",
+                ? "GitHub can't reach {$host}, because it isn't a public address."
+                : "GitHub can't reach {$host}, because {$this->address} isn't a public address.",
+            self::LOCAL => "GitHub can't reach {$host}, because it only resolves on your own network.",
             self::IP => "GitHub cannot check a certificate for {$host}. Give Coresmith a domain name to get pushes as they happen.",
             self::HTTP => 'Coresmith is served over http, and GitHub only delivers to https.',
             default => null,

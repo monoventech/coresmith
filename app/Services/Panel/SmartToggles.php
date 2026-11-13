@@ -200,7 +200,7 @@ final class SmartToggles
             default => [
                 'key' => $key,
                 'label' => 'Maintenance page',
-                'description' => $stopped ? 'The application is stopped, so visitors already see one.' : 'Visitors see a holding page, and the app keeps running',
+                'description' => $stopped ? 'The app is stopped, so visitors already see one.' : 'Visitors see a holding page, and the app keeps running',
                 'busy_on' => 'Putting up the maintenance page…',
                 'busy_off' => 'Routing traffic back to the app…',
                 'on' => $this->isOn($application, $key),
@@ -478,7 +478,7 @@ final class SmartToggles
             $problem !== null => $problem,
             $reverb->live($application) => "php artisan reverb:start · port {$port} · {$socket}",
             $reverb->on($application) => "Starts with the next deploy, on port {$port} behind {$socket}",
-            default => "Available, turning it on gives it port {$port} from the next deploy",
+            default => "Available. Turning it on gives it port {$port} from the next deploy",
         };
     }
 

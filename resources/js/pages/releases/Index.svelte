@@ -101,8 +101,7 @@
                 >{/if}
         </h1>
         <p class="type-body-sm mt-1.5 text-muted-foreground">
-            Every deploy is a timestamped directory. Rolling back points the symlink at an older one, so nothing is
-            rebuilt.
+            Every deploy gets its own timestamped folder. Rolling back switches to an older one, so nothing is rebuilt.
         </p>
     </div>
     {#if application && can.deploy}
@@ -137,7 +136,7 @@
         data-testid="rolled-back"
     >
         <Undo2 class="size-4 shrink-0 text-success" />
-        Rolled back. <span class="font-mono text-[12.5px]">releases/{application.rolled_back}</span> is live, the newer release
+        Rolled back. <span class="font-mono text-[12.5px]">releases/{application.rolled_back}</span> is live. The newer release
         stays on disk.
     </div>
 {/if}

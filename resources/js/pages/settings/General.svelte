@@ -170,7 +170,7 @@
                 ? cloud
                     ? 'Installed on every server you manage. Password login stays off.'
                     : 'Installed on every server you manage, except the machine Coresmith runs on. Password login stays off.'
-                : "Deployers don't get shell access, so these aren't installed on any server."}
+                : "Coresmith installs only owners' and admins' keys on servers, so these aren't on any of them."}
         </p>
         <div class="flex max-h-72 flex-col overflow-y-auto">
             {#each keys as key (key.id)}

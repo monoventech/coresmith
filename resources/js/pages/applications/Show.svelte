@@ -184,7 +184,7 @@
     const failedDeploy = $derived(
         application.last_failed_live
             ? (application.last_failed_reason ??
-                  `releases/${application.current_release} is serving, read the log before pushing again.`)
+                  `releases/${application.current_release} is serving. Read the log before pushing again.`)
             : application.current_release
               ? `releases/${application.current_release} is still live.`
               : 'Nothing was live yet.'
@@ -625,7 +625,7 @@
                 through GitHub, and that connection
                 {application.github.problem === 'suspended' ? 'is suspended' : 'was removed'}.</span
             >
-            Public repositories still deploy, private ones need GitHub connected again.
+            Public repositories still deploy. Private ones need GitHub connected again.
         </span>
         <Link
             href={application.github.settings_href}
@@ -900,7 +900,7 @@
                 <h3 class="type-h3 m-0 mb-1">Danger zone</h3>
                 <p class="m-0 text-[12.5px] text-muted-foreground">
                     Stopping puts up the maintenance page and pauses cron jobs until you start it again. Removing stops
-                    the app and detaches it from this server, its releases stay on disk for 7 days.
+                    the app and detaches it from this server. Its releases stay on disk for 7 days.
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">

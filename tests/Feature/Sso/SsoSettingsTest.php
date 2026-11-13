@@ -144,16 +144,16 @@ test('an issuer that is not https or reaches a private address is refused withou
 })->with([
     'plain http' => ['http://idp.example.test', 'Use an https:// address, like https://login.example.com.'],
     'not a url' => ['idp.example.test', 'Use an https:// address, like https://login.example.com.'],
-    'loopback' => ['https://127.0.0.1', 'Coresmith will not connect to 127.0.0.1, it points at a private address.'],
-    'loopback with a path' => ['https://127.0.0.1:8443/realms/acme', 'Coresmith will not connect to 127.0.0.1, it points at a private address.'],
-    'ipv6 loopback' => ['https://[::1]', 'Coresmith will not connect to ::1, it points at a private address.'],
-    'ipv4 mapped loopback' => ['https://[::ffff:127.0.0.1]', 'Coresmith will not connect to ::ffff:127.0.0.1, it points at a private address.'],
-    'cloud metadata' => ['https://169.254.169.254/latest', 'Coresmith will not connect to 169.254.169.254, it points at a private address.'],
-    'unique local ipv6' => ['https://[fd00:ec2::254]', 'Coresmith will not connect to fd00:ec2::254, it points at a private address.'],
-    'unspecified address' => ['https://0.0.0.0', 'Coresmith will not connect to 0.0.0.0, it points at a private address.'],
+    'loopback' => ['https://127.0.0.1', 'Coresmith won\'t connect to 127.0.0.1, because it points at a private address.'],
+    'loopback with a path' => ['https://127.0.0.1:8443/realms/acme', 'Coresmith won\'t connect to 127.0.0.1, because it points at a private address.'],
+    'ipv6 loopback' => ['https://[::1]', 'Coresmith won\'t connect to ::1, because it points at a private address.'],
+    'ipv4 mapped loopback' => ['https://[::ffff:127.0.0.1]', 'Coresmith won\'t connect to ::ffff:127.0.0.1, because it points at a private address.'],
+    'cloud metadata' => ['https://169.254.169.254/latest', 'Coresmith won\'t connect to 169.254.169.254, because it points at a private address.'],
+    'unique local ipv6' => ['https://[fd00:ec2::254]', 'Coresmith won\'t connect to fd00:ec2::254, because it points at a private address.'],
+    'unspecified address' => ['https://0.0.0.0', 'Coresmith won\'t connect to 0.0.0.0, because it points at a private address.'],
     'localhost' => ['https://localhost', "Coresmith will not connect to localhost. Use your identity provider's public address."],
     'metadata name' => ['https://metadata.google.internal', "Coresmith will not connect to metadata.google.internal. Use your identity provider's public address."],
-    'resolves to metadata' => ['https://inside.example.test', 'Coresmith will not connect to inside.example.test, it points at a private address.'],
+    'resolves to metadata' => ['https://inside.example.test', 'Coresmith won\'t connect to inside.example.test, because it points at a private address.'],
     'numeric host' => ['https://2130706433', '"2130706433" is not a valid host name.'],
     'credentials' => ['https://user:pass@idp.example.test', 'Remove the username and password from the address.'],
     'query string' => ['https://idp.example.test/?tenant=acme', 'Remove the ? query or # fragment from the issuer URL.'],
@@ -248,7 +248,7 @@ test('checking DNS verifies the email domain once the TXT record matches', funct
 
     $this->actingAs($owner)
         ->post('/acme/settings/team/sso/verify')
-        ->assertSessionHas('error', 'The TXT record is not visible yet. DNS can take a few minutes, check again shortly.');
+        ->assertSessionHas('error', 'The TXT record is not visible yet. DNS can take a few minutes, so check again shortly.');
 
     expect($connection->fresh()->domain_verified_at)->toBeNull();
 
@@ -355,7 +355,7 @@ test('turning on is refused when the provider configuration does not check out',
     ],
     'keys on a private address' => [
         fn() => ssoFakeProvider(['jwks_uri' => 'https://169.254.169.254/keys']),
-        'The OpenID configuration lists a jwks_uri Coresmith will not use. Coresmith will not connect to 169.254.169.254, it points at a private address.',
+        'The OpenID configuration lists a jwks_uri Coresmith will not use. Coresmith won\'t connect to 169.254.169.254, because it points at a private address.',
     ],
     'no authorization endpoint' => [
         fn() => ssoFakeProvider(['authorization_endpoint' => null]),

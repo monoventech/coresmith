@@ -93,7 +93,7 @@ test('turning auto deploy on and off saves it and clears the last check', functi
 
     $this->actingAs($admin)
         ->put(autoDeployToggleUrl($application), ['on' => false])
-        ->assertSessionHas('success', 'Saved. Auto deploy is off, deploy from this page when you are ready.');
+        ->assertSessionHas('success', 'Saved. Auto deploy is off. Deploy from this page when you\'re ready.');
 
     expect($application->fresh()->only(['quick_deploy', 'polled_at', 'poll_error']))->toBe(['quick_deploy' => false, 'polled_at' => null, 'poll_error' => null]);
 });

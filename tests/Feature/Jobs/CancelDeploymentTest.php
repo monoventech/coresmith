@@ -870,7 +870,7 @@ test('a cancelled deploy posts an error commit status', function (?string $live,
         ->and($posts[1]['description'])->toBe($description)
         ->and($posts[1]['context'])->toBe('coresmith/cancel-me');
 })->with([
-    'an app with a live release' => [CANCEL_LIVE, 'Deploy cancelled, the previous release is still live'],
+    'an app with a live release' => [CANCEL_LIVE, 'Deploy cancelled. The previous release is still live'],
     'a first deploy' => [null, 'Deploy cancelled, the app has no live release yet'],
 ]);
 

@@ -83,7 +83,7 @@ test('a linked app on a panel github cannot reach checks every minute and says w
     $application = statusLinkedApp();
     GitHubApp::query()->update(['hook_url' => null, 'webhook_secret' => null]);
 
-    expect(statusOf($application))->toBe(['Checks main for new commits every minute. GitHub cannot reach 192.168.0.248, it is not a public address.', 1, 'github']);
+    expect(statusOf($application))->toBe(['Checks main for new commits every minute. GitHub can\'t reach 192.168.0.248, because it isn\'t a public address.', 1, 'github']);
 });
 
 test('a linked app with no evidence yet checks through github and says so', function () {

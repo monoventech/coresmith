@@ -47,33 +47,33 @@ test('the panel address is judged by what github could do with it', function (st
         ->and($verdict->sentence())->toBe($sentence);
 })->with([
     'a public name' => ['https://panel.example.com', ['panel.example.com' => ['140.82.112.3']], true, null, null],
-    'a public name behind a private address' => ['https://panel.example.com', ['panel.example.com' => ['192.168.0.10']], false, 'private', 'GitHub cannot reach panel.example.com, 192.168.0.10 is not a public address.'],
-    'a private address' => ['https://192.168.0.248', [], false, 'private', 'GitHub cannot reach 192.168.0.248, it is not a public address.'],
-    'a shared address space address' => ['https://100.64.1.9', [], false, 'private', 'GitHub cannot reach 100.64.1.9, it is not a public address.'],
-    'a unique local ipv6 address' => ['https://[fd00::1]', [], false, 'private', 'GitHub cannot reach fd00::1, it is not a public address.'],
-    'a loopback address with a port' => ['https://127.0.0.1:8123', [], false, 'loopback', 'GitHub cannot reach 127.0.0.1, it only answers on this machine.'],
-    'a loopback address anywhere in 127.0.0.0/8' => ['https://127.4.5.6', [], false, 'loopback', 'GitHub cannot reach 127.4.5.6, it only answers on this machine.'],
-    'the ipv6 loopback address' => ['https://[::1]', [], false, 'loopback', 'GitHub cannot reach ::1, it only answers on this machine.'],
-    'localhost over http' => ['http://localhost', [], false, 'loopback', 'GitHub cannot reach localhost, it only answers on this machine.'],
-    'a localhost subdomain' => ['https://panel.localhost', [], false, 'loopback', 'GitHub cannot reach panel.localhost, it only answers on this machine.'],
-    'a name that resolves to loopback' => ['https://panel.example.com', ['panel.example.com' => ['127.0.0.1']], false, 'loopback', 'GitHub cannot reach panel.example.com, it only answers on this machine.'],
-    'a mdns name' => ['https://beelink.local', [], false, 'local', 'GitHub cannot reach beelink.local, it only resolves on your own network.'],
-    'a lan name' => ['https://box.lan', [], false, 'local', 'GitHub cannot reach box.lan, it only resolves on your own network.'],
-    'a home.arpa name' => ['https://nas.home.arpa', [], false, 'local', 'GitHub cannot reach nas.home.arpa, it only resolves on your own network.'],
-    'a single label' => ['https://beelink', [], false, 'local', 'GitHub cannot reach beelink, it only resolves on your own network.'],
+    'a public name behind a private address' => ['https://panel.example.com', ['panel.example.com' => ['192.168.0.10']], false, 'private', 'GitHub can\'t reach panel.example.com, because 192.168.0.10 isn\'t a public address.'],
+    'a private address' => ['https://192.168.0.248', [], false, 'private', 'GitHub can\'t reach 192.168.0.248, because it isn\'t a public address.'],
+    'a shared address space address' => ['https://100.64.1.9', [], false, 'private', 'GitHub can\'t reach 100.64.1.9, because it isn\'t a public address.'],
+    'a unique local ipv6 address' => ['https://[fd00::1]', [], false, 'private', 'GitHub can\'t reach fd00::1, because it isn\'t a public address.'],
+    'a loopback address with a port' => ['https://127.0.0.1:8123', [], false, 'loopback', 'GitHub can\'t reach 127.0.0.1, because it only answers on this machine.'],
+    'a loopback address anywhere in 127.0.0.0/8' => ['https://127.4.5.6', [], false, 'loopback', 'GitHub can\'t reach 127.4.5.6, because it only answers on this machine.'],
+    'the ipv6 loopback address' => ['https://[::1]', [], false, 'loopback', 'GitHub can\'t reach ::1, because it only answers on this machine.'],
+    'localhost over http' => ['http://localhost', [], false, 'loopback', 'GitHub can\'t reach localhost, because it only answers on this machine.'],
+    'a localhost subdomain' => ['https://panel.localhost', [], false, 'loopback', 'GitHub can\'t reach panel.localhost, because it only answers on this machine.'],
+    'a name that resolves to loopback' => ['https://panel.example.com', ['panel.example.com' => ['127.0.0.1']], false, 'loopback', 'GitHub can\'t reach panel.example.com, because it only answers on this machine.'],
+    'a mdns name' => ['https://beelink.local', [], false, 'local', 'GitHub can\'t reach beelink.local, because it only resolves on your own network.'],
+    'a lan name' => ['https://box.lan', [], false, 'local', 'GitHub can\'t reach box.lan, because it only resolves on your own network.'],
+    'a home.arpa name' => ['https://nas.home.arpa', [], false, 'local', 'GitHub can\'t reach nas.home.arpa, because it only resolves on your own network.'],
+    'a single label' => ['https://beelink', [], false, 'local', 'GitHub can\'t reach beelink, because it only resolves on your own network.'],
     'a public ip' => ['https://140.82.112.3', [], false, 'ip', 'GitHub cannot check a certificate for 140.82.112.3. Give Coresmith a domain name to get pushes as they happen.'],
     'a public ipv6 address' => ['https://[2606:4700::1111]', [], false, 'ip', 'GitHub cannot check a certificate for 2606:4700::1111. Give Coresmith a domain name to get pushes as they happen.'],
     'plain http' => ['http://panel.example.com', ['panel.example.com' => ['140.82.112.3']], false, 'http', 'Coresmith is served over http, and GitHub only delivers to https.'],
     'a name that does not resolve' => ['https://unresolvable.example.com', [], true, null, null],
     'a name that resolves to a mix' => ['https://panel.example.com', ['panel.example.com' => ['192.168.0.10', '140.82.112.3']], true, null, null],
     'upper case and a trailing dot' => ['https://Panel.Example.COM.', ['panel.example.com' => ['140.82.112.3']], true, null, null],
-    'a private literal beats plain http' => ['http://192.168.0.5', [], false, 'private', 'GitHub cannot reach 192.168.0.5, it is not a public address.'],
+    'a private literal beats plain http' => ['http://192.168.0.5', [], false, 'private', 'GitHub can\'t reach 192.168.0.5, because it isn\'t a public address.'],
     'a public literal beats plain http' => ['http://140.82.112.3', [], false, 'ip', 'GitHub cannot check a certificate for 140.82.112.3. Give Coresmith a domain name to get pushes as they happen.'],
-    'a private resolution beats plain http' => ['http://panel.example.com', ['panel.example.com' => ['10.0.0.7']], false, 'private', 'GitHub cannot reach panel.example.com, 10.0.0.7 is not a public address.'],
-    'loopback beats plain http' => ['http://127.0.0.1', [], false, 'loopback', 'GitHub cannot reach 127.0.0.1, it only answers on this machine.'],
-    'a trailing newline on a loopback address' => ["https://127.0.0.1\n", [], false, 'loopback', 'GitHub cannot reach 127.0.0.1, it only answers on this machine.'],
-    'a trailing newline on a private address' => ["https://192.168.0.248\n", [], false, 'private', 'GitHub cannot reach 192.168.0.248, it is not a public address.'],
-    'a trailing newline on a local name' => ["https://beelink.local\n", [], false, 'local', 'GitHub cannot reach beelink.local, it only resolves on your own network.'],
+    'a private resolution beats plain http' => ['http://panel.example.com', ['panel.example.com' => ['10.0.0.7']], false, 'private', 'GitHub can\'t reach panel.example.com, because 10.0.0.7 isn\'t a public address.'],
+    'loopback beats plain http' => ['http://127.0.0.1', [], false, 'loopback', 'GitHub can\'t reach 127.0.0.1, because it only answers on this machine.'],
+    'a trailing newline on a loopback address' => ["https://127.0.0.1\n", [], false, 'loopback', 'GitHub can\'t reach 127.0.0.1, because it only answers on this machine.'],
+    'a trailing newline on a private address' => ["https://192.168.0.248\n", [], false, 'private', 'GitHub can\'t reach 192.168.0.248, because it isn\'t a public address.'],
+    'a trailing newline on a local name' => ["https://beelink.local\n", [], false, 'local', 'GitHub can\'t reach beelink.local, because it only resolves on your own network.'],
     'a trailing newline on a public name' => ["https://panel.example.com\n", ['panel.example.com' => ['140.82.112.3']], true, null, null],
 ]);
 
@@ -98,7 +98,7 @@ test('an address that cannot be read as a host counts as this machine and is nev
     expect($verdict->reachable)->toBeFalse()
         ->and($verdict->reason)->toBe('loopback')
         ->and($verdict->host)->toBe('')
-        ->and($verdict->sentence())->toBe('GitHub cannot reach Coresmith, it only answers on this machine.')
+        ->and($verdict->sentence())->toBe('GitHub can\'t reach Coresmith, because it only answers on this machine.')
         ->and(reachabilityAsked())->toBe([]);
 })->with([
     'an empty address' => [''],
@@ -131,7 +131,7 @@ test('a private verdict remembers the first address it found', function () {
 
     expect($verdict->reason)->toBe('private')
         ->and($verdict->address)->toBe('192.168.0.10')
-        ->and($verdict->sentence())->toBe('GitHub cannot reach panel.example.com, 192.168.0.10 is not a public address.');
+        ->and($verdict->sentence())->toBe('GitHub can\'t reach panel.example.com, because 192.168.0.10 isn\'t a public address.');
 });
 
 test('an explicit address is judged instead of the configured one', function () {
@@ -189,7 +189,7 @@ test('a remembered verdict survives a cache that serialises its values', functio
 
     expect($second)->toBeInstanceOf(Reachability::class)
         ->and($second)->toEqual($first)
-        ->and($second->sentence())->toBe('GitHub cannot reach panel.example.com, 192.168.0.10 is not a public address.')
+        ->and($second->sentence())->toBe('GitHub can\'t reach panel.example.com, because 192.168.0.10 isn\'t a public address.')
         ->and(reachabilityAsked())->toBe(['panel.example.com']);
 });
 
@@ -216,6 +216,6 @@ test('a verdict says nothing about itself when github can reach the panel', func
 });
 
 test('a private address that is the host itself reads as the short sentence', function () {
-    expect((new Reachability(false, '10.0.0.1', 'private', '10.0.0.1'))->sentence())->toBe('GitHub cannot reach 10.0.0.1, it is not a public address.')
-        ->and((new Reachability(false, '10.0.0.1', 'private', null))->sentence())->toBe('GitHub cannot reach 10.0.0.1, it is not a public address.');
+    expect((new Reachability(false, '10.0.0.1', 'private', '10.0.0.1'))->sentence())->toBe('GitHub can\'t reach 10.0.0.1, because it isn\'t a public address.')
+        ->and((new Reachability(false, '10.0.0.1', 'private', null))->sentence())->toBe('GitHub can\'t reach 10.0.0.1, because it isn\'t a public address.');
 });

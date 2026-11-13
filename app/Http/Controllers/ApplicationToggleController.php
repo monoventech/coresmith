@@ -30,7 +30,7 @@ final class ApplicationToggleController extends Controller
         $label = $toggles->label($toggle);
 
         if ($toggle === SmartToggles::MAINTENANCE && $application->power_state === PowerState::Stopped) {
-            return back()->with('error', 'The application is stopped, so visitors already see the maintenance page. Start it first.');
+            return back()->with('error', 'The app is stopped, so visitors already see the maintenance page. Start it first.');
         }
 
         if ($toggles->isOn($application, $toggle) === $on) {
@@ -57,7 +57,7 @@ final class ApplicationToggleController extends Controller
             $toggle === SmartToggles::MAINTENANCE && $on => 'Maintenance page is on. Visitors see it now, your processes keep running.',
             $toggle === SmartToggles::MAINTENANCE => 'Maintenance page is off. Traffic reaches the app again.',
             $toggle === SmartToggles::AUTO_DEPLOY && $on => "Auto deploy is on, {$application->repository_branch} deploys whenever it changes.",
-            $toggle === SmartToggles::AUTO_DEPLOY => 'Auto deploy is off, deploy from this page when you are ready.',
+            $toggle === SmartToggles::AUTO_DEPLOY => 'Auto deploy is off. Deploy from this page when you\'re ready.',
             in_array($toggle, [SmartToggles::REVERB, SmartToggles::INERTIA_SSR], true) && $on => "{$label} starts with the next deploy.",
             $toggle === SmartToggles::SCHEDULER && $on && $application->current_release === null => 'It runs after the first deploy.',
             $toggle === SmartToggles::SCHEDULER && $on && $application->power_state === PowerState::Stopped => 'It runs once you start the app.',

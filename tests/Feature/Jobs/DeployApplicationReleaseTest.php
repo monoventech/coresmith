@@ -346,7 +346,7 @@ test('a missing health check target aborts before the swap and removes the half 
         ->and($commands)->not->toContain('current.tmp')
         ->and($commands)->toContain('rm -rf /var/coresmith/apps/my-app/releases/20260913-140509')
         ->and($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
-        ->and((string) $deployment->fresh()->log)->toContain('Health check failed: public/index.php is missing, so the release was not put live.');
+        ->and((string) $deployment->fresh()->log)->toContain('Health check failed: public/index.php is missing, so the release didn\'t go live.');
 
     Event::assertDispatched(DeploymentFailed::class);
 });

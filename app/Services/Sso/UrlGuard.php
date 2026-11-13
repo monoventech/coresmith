@@ -125,7 +125,7 @@ final class UrlGuard
     {
         foreach (self::BLOCKED_RANGES as $range) {
             if (self::inRange($address, $range) || self::inRange((string) self::embeddedIpv4($address), $range)) {
-                throw new SsoException("Coresmith will not connect to {$host}, it points at a private address.", 'url.blocked');
+                throw new SsoException("Coresmith won't connect to {$host}, because it points at a private address.", 'url.blocked');
             }
         }
     }

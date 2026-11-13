@@ -59,7 +59,7 @@ const BLOCKED = {
     blockers: [
         {
             field: 'framework',
-            reason: 'svelte.config.js uses @sveltejs/adapter-vercel, which builds for a hosting platform, not for a server Coresmith runs.',
+            reason: "svelte.config.js uses @sveltejs/adapter-vercel, which builds the app for that hosting platform's own servers.",
             fix: 'Install @sveltejs/adapter-node, use it in svelte.config.js, then commit both.'
         }
     ]

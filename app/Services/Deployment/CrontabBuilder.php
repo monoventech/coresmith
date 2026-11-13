@@ -58,7 +58,7 @@ final class CrontabBuilder
         $current = $paths->appDirectory($paths->current());
         $scripts = $this->scriptDirectory($application);
 
-        $lines = ["# Coresmith managed crons for {$slug} - do not edit manually"];
+        $lines = ["# Managed by Coresmith for {$slug}. Change these jobs on the app page."];
 
         foreach ($this->entries($application) as $index => $entry) {
             $lines[] = $entry['schedule'] . ' root ' . $this->shell->scheduled($application, $scripts . '/' . $index . '.sh', $current, $application->runtimeVersions(), app(StackDefaults::class)->process($application));

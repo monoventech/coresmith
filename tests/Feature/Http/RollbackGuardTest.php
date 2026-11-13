@@ -106,7 +106,7 @@ test('a rollback is queued once every deploy of the app has finished, whatever a
 
     $this->actingAs(guardMember($application))
         ->post(route('servers.applications.rollback', [$application->server_id, $application]))
-        ->assertSessionHas('success', 'Rolling back. The symlink re-points to the previous release, nothing is rebuilt.');
+        ->assertSessionHas('success', 'Rolling back to the previous release. Nothing is rebuilt.');
 
     Queue::assertPushed(RollbackApplication::class, 1);
 })->with([
@@ -131,7 +131,7 @@ test("a rollback that meets a deploy's lock does nothing and says so", function 
         ->and(Activity::query()->where('description', 'rollback_blocked')->count())->toBe(1)
         ->and($row['parts'])->toBe([
             ['text' => 'Shop', 'mono' => true],
-            ['text' => ' was not rolled back, a deploy was running. Roll back again once it finishes.', 'mono' => false],
+            ['text' => ' wasn\'t rolled back, because a deploy was running. Roll back again once it finishes.', 'mono' => false],
         ])
         ->and($row['href'])->toBe(route('servers.applications.show', [$application->server_id, $application]))
         ->and(guardLockFree($application))->toBeFalse()

@@ -77,7 +77,7 @@
 {#if deployments.length === 0}
     <EmptyState
         title={filter === 'all' ? 'Nothing has been deployed yet.' : `No ${filter} deploys.`}
-        description="Each deploy builds a new release while the current one keeps serving, then swaps the symlink when every phase passes."
+        description="Each deploy builds a new release while the current one keeps serving, then switches over when every phase passes."
     />
 {:else}
     <div class="overflow-hidden rounded-xl border border-border bg-card" data-testid="deployments-table">
@@ -128,7 +128,7 @@
             </Link>
         {/each}
         <p class="m-0 px-5.5 py-3 text-[12.5px] text-muted-foreground">
-            A failed deploy never reaches users, the old release keeps serving until every phase passes.
+            A failed deploy never reaches visitors. The old release keeps serving until every phase passes.
         </p>
     </div>
 {/if}

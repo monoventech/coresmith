@@ -114,7 +114,7 @@
                 }}
             >
                 <Dialog.Header>
-                    <Dialog.Title>Are you sure?</Dialog.Title>
+                    <Dialog.Title>Remove Coresmith for good?</Dialog.Title>
                     <Dialog.Description
                         >{removal.two_factor
                             ? `There's no undo. Type ${removal.address}, your password and a code from your authenticator app to remove Coresmith.`
