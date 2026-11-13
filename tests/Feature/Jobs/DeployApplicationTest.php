@@ -563,12 +563,14 @@ test('dependencies that hit a registry timeout are installed once more', functio
 });
 
 test('a build error is not retried', function () {
-    $deployment = Deployment::factory()->for(deployableApp())->create();
-    $transport = healthyDeployTransport()->respondTo('artisan config:cache', 'In Repository.php line 12: syntax error', 1);
+    $deployment = Deployment::factory()->for(deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'node_version' => '24.15.0']))->create();
+    $transport = healthyDeployTransport()
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['package.json' => '{"scripts":{"build":"vite build"}}'], ['bun.lock']))
+        ->respondTo('bun run build', 'error during build: Rollup failed to resolve import "lodash/each"', 1);
 
     expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
-    expect(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, 'artisan config:cache'))))->toBe(1);
+    expect(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, 'bun run build'))))->toBe(1);
 });
 
 test('an ssh connection that drops before the swap is reopened and the phase runs once more', function () {

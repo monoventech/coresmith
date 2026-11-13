@@ -1168,6 +1168,12 @@ final class DeployApplication implements ShouldQueue
                     break;
                 }
 
+                if (in_array($step, DeploymentCommands::LARAVEL_CACHES, true) && !DeploymentCancellation::requested($this->deployment)) {
+                    $this->appendLog("{$step} failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.");
+
+                    break;
+                }
+
                 if ($attempt > $retries || !$this->looksLikeNetwork($result->output) || DeploymentCancellation::requested($this->deployment)) {
                     $result->throw();
                 }

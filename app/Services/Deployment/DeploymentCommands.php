@@ -16,6 +16,8 @@ use App\Services\Runtime\Stack;
 
 final class DeploymentCommands
 {
+    public const LARAVEL_CACHES = ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'];
+
     public function __construct(private readonly AsdfManager $asdf) {}
 
     /**
@@ -55,7 +57,7 @@ final class DeploymentCommands
         $javascript = $stack->tooling?->buildCommands(app(SmartToggles::class)->ssrBuilds($application, $stack)) ?? [];
 
         return match ($application->type) {
-            ApplicationType::Php => [...$javascript, ...($application->framework === 'laravel' ? ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'] : [])],
+            ApplicationType::Php => [...$javascript, ...($application->framework === 'laravel' ? self::LARAVEL_CACHES : [])],
             ApplicationType::Ruby => $this->rubyBuild($application, $stack),
             default => $javascript,
         };
