@@ -69,6 +69,7 @@ class Deployment extends Model
             'tag_signed' => 'boolean',
             'stack' => 'array',
             'seeded_shared_storage' => 'boolean',
+            'seeded_shared_database' => 'boolean',
             'start_failed' => 'boolean',
             'stale_after' => 'datetime',
         ];

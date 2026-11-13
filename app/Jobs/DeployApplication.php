@@ -822,6 +822,11 @@ final class DeployApplication implements ShouldQueue
             $this->appendLog("storage: copied the live release's data into shared/storage. Changes made while this deploy runs stay in the previous release.");
         }
 
+        if ($storage->seededDatabase($result->output)) {
+            $this->deployment->forceFill(['seeded_shared_database' => true])->save();
+            $this->appendLog("storage: copied the live release's SQLite database into shared/database. Changes made while this deploy runs stay in the previous release.");
+        }
+
         if (!$result->successful()) {
             $this->deployment->forceFill(['failed_step' => DeploymentPhases::STORAGE])->save();
         }
