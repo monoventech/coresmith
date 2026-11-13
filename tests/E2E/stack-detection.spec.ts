@@ -177,7 +177,7 @@ test.describe('Stack detection on Add an app', () => {
 
         await expect(detection(page)).toContainText("This repository can't deploy as is")
         await expect(detection(page)).toContainText(
-            'not for a server Coresmith runs. Install @sveltejs/adapter-node, use it in svelte.config.js, then commit both.'
+            'own servers. Install @sveltejs/adapter-node, use it in svelte.config.js, then commit both.'
         )
         await expect(page.getByRole('button', { name: 'Add the app' })).toBeDisabled()
     })
