@@ -272,7 +272,6 @@ final class CronJobs
                 default => null,
             },
             'error' => $application->cron_error,
-            'user' => (string) $application->system_user,
             'live' => $live,
         ];
     }

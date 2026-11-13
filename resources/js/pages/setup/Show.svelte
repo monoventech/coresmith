@@ -520,7 +520,7 @@
         <div class="rounded-xl border border-border bg-card p-6" data-testid="setup-step">
             <h3 class="type-h3 m-0 mb-1.5">Deploy your first app</h3>
             <p class="type-body-sm mb-4 text-muted-foreground">
-                Pick a repository. Coresmith builds it into a release and serves it through Caddy.
+                Pick a repository. Coresmith builds it into a release and serves it.
             </p>
             {#if application}
                 <div class="mb-4 rounded-md border border-border p-4">
@@ -532,8 +532,8 @@
                         <Badge variant="accent">{application.kind}</Badge>
                     </div>
                     <div class="text-[12.5px] leading-[1.7] text-muted-foreground">
-                        {application.runtime} · deploys to {application.server}<br />Process supervised by systemd ·
-                        routed by Caddy · a new release per deploy
+                        {application.runtime} · deploys to {application.server}<br />Restarted if it stops · served on
+                        its domain · a new release per deploy
                     </div>
                 </div>
                 <div class="flex gap-3">

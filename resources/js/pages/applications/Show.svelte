@@ -540,7 +540,7 @@
             <span class="font-semibold"
                 >{`The ${application.oom.process} process was killed ${application.oom.when} for going over its ${application.oom.limit_mb} MB memory limit.`}</span
             >
-            {` systemd started it again. If it keeps happening, the app needs more memory than the ${application.oom.size} size gives it.`}
+            {` it was started again. If it keeps happening, the app needs more memory than the ${application.oom.size} size gives it.`}
         </span>
     </div>
 {/if}
@@ -663,13 +663,11 @@
                     </div>
                 {:else}
                     <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
-                        No domain yet. Add one and Caddy requests the certificate.
+                        No domain yet. Add one and its certificate is requested for you.
                     </p>
                 {/each}
                 {#if domains.length > 0}
-                    <p class="m-0 mt-2 text-[12px] text-muted-foreground">
-                        Routed by Caddy. Certificates renew themselves.
-                    </p>
+                    <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
                 {/if}
                 {#if can.update}
                     <div class="mt-auto pt-3">
@@ -805,7 +803,7 @@
             >
                 <h3 class="type-h3 m-0 mb-1">Environment</h3>
                 <p class="mb-3 text-[12.5px] text-muted-foreground">
-                    Root-owned, injected via systemd at start. The app cannot read its own env file.
+                    Kept out of the app's reach and handed to it at start. The app can't read its own env file.
                 </p>
                 {#if application.environment.length > 0}
                     <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
@@ -871,7 +869,7 @@
             <Dialog.Header>
                 <Dialog.Title>Edit environment</Dialog.Title>
                 <Dialog.Description
-                    >Values are root-owned and injected via systemd, the app never reads the file itself. They apply at
+                    >Values are handed to the app when it starts, and the app never reads the file itself. They apply at
                     the next deploy.</Dialog.Description
                 >
             </Dialog.Header>
@@ -902,7 +900,7 @@
                 <Dialog.Title>Add a domain</Dialog.Title>
                 <Dialog.Description
                     >Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6.
-                    Caddy handles the certificate.</Dialog.Description
+                    The certificate is handled for you.</Dialog.Description
                 >
             </Dialog.Header>
             <div class="mt-4">

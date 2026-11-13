@@ -33,7 +33,7 @@ final class AddressSwitch
         $from = $this->address->host();
         $source = InstallationAddress::certificate($host);
         $refusal = $this->servesApps() && !$this->caddy->managed()
-            ? 'This server also serves apps through Caddy, so Coresmith leaves its Caddy setup alone. Run the installer again with --domain instead.'
+            ? 'This machine also serves apps, so Coresmith leaves its web server setup alone. Run the installer again with --domain instead.'
             : ($source === CertificateSource::Tailscale ? $this->tailscale->refusal($host) : null);
 
         if ($refusal !== null) {

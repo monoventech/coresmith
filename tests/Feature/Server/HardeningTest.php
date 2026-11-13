@@ -116,6 +116,44 @@ test('the fail2ban jail bans after five attempts on the real ssh port', function
         ->and($jail)->toContain('findtime = 600');
 });
 
+test('the fail2ban jail reads SSH sign-ins from the journal, so it starts on systems with no auth log', function () {
+    $jail = (new SecurityHardening)->fail2banJail(22);
+
+    expect($jail)->toContain('backend = systemd')
+        ->and($jail)->not->toContain('logpath');
+});
+
+test('Debian and Ubuntu get the journal reader the jail needs, the Red Hat family already has it', function (string $os, bool $reader) {
+    $command = (new SecurityHardening)->fail2banInstallCommand(Server::factory()->make(['os_name' => $os]));
+
+    expect($command)->toContain('fail2ban')
+        ->and(str_contains($command, 'python3-systemd'))->toBe($reader);
+})->with([
+    ['ubuntu', true],
+    ['debian', true],
+    ['rocky', false],
+    ['fedora', false],
+]);
+
+test('Debian and Ubuntu turn on the daily security update run in apt itself', function (string $os) {
+    $command = (new SecurityHardening)->automaticUpdatesCommand(Server::factory()->make(['os_name' => $os]));
+
+    expect($command)->toContain('unattended-upgrades')
+        ->and($command)->toContain('APT::Periodic::Unattended-Upgrade "1";')
+        ->and($command)->toContain('/etc/apt/apt.conf.d/20auto-upgrades')
+        ->and($command)->toContain('apt-daily-upgrade.timer');
+})->with(['ubuntu', 'debian']);
+
+test('the Red Hat family installs security updates, not only downloads them', function (string $os) {
+    $command = (new SecurityHardening)->automaticUpdatesCommand(Server::factory()->make(['os_name' => $os]));
+
+    expect($command)->toContain('dnf-automatic')
+        ->and($command)->toContain('/etc/dnf/automatic.conf')
+        ->and($command)->toContain('apply_updates = yes')
+        ->and($command)->toContain('upgrade_type = security')
+        ->and($command)->toContain('systemctl enable --now dnf-automatic.timer');
+})->with(['rocky', 'almalinux', 'fedora', 'amzn']);
+
 test('every hardening sysctl from the spec is present', function (string $sysctl) {
     expect((new SecurityHardening)->sysctlConfig())->toContain($sysctl);
 })->with([

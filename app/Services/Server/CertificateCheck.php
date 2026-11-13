@@ -202,10 +202,10 @@ final class CertificateCheck
     private function describe(string $domain, array $entry, string $ip): array
     {
         $days = $this->days($entry['expires_at']);
-        $renew = "Caddy should have renewed this by now. Check {$domain} still points at {$ip}.";
+        $renew = "This should have renewed by now. Check {$domain} still points at {$ip}.";
 
         [$state, $label, $title] = match (true) {
-            $days === null => ['none', 'No certificate', "Caddy has no certificate for this name yet. Point its DNS at {$ip} and Caddy requests one."],
+            $days === null => ['none', 'No certificate', "There's no certificate for this name yet. Point its DNS at {$ip} and one is requested."],
             $days < 0 => ['expired', 'Expired', $renew],
             $days <= self::WARN_DAYS => ['expiring', ucfirst(self::expiry($days)), $renew],
             default => ['valid', 'TLS', 'Valid until ' . Formats::absolute($this->moment((string) $entry['expires_at'])) . ', checked ' . Formats::when($this->moment($entry['checked_at']))],

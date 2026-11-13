@@ -2,13 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Http\Controllers\ServerController;
 use App\Jobs\AuditServer;
 use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
+use App\Models\Application;
 use App\Models\CloudProvider;
+use App\Models\Deployment;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
@@ -78,6 +81,28 @@ test('a member of the owning team can view the server', function () {
         ->get(route('servers.show', $server))
         ->assertOk()
         ->assertInertia(fn($page) => $page->component('servers/Show')->where('server.id', $server->id));
+});
+
+test('the apps tab gives each app its domain and when it last deployed, not its Linux user or ports', function () {
+    $this->travelTo(now()->setTime(15, 0));
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $shop = Application::factory()->for($team)->for($server)->create(['name' => 'shop', 'domain' => 'shop.example.com']);
+    Application::factory()->for($team)->for($server)->create(['name' => 'tools', 'domain' => null]);
+    Deployment::factory()->for($shop)->create(['status' => DeploymentStatus::Succeeded, 'finished_at' => now()->setTime(9, 30)]);
+    Deployment::factory()->for($shop)->create(['status' => DeploymentStatus::Succeeded, 'finished_at' => now()->setTime(14, 5)]);
+    Deployment::factory()->for($shop)->create(['status' => DeploymentStatus::Failed, 'finished_at' => now()->setTime(14, 45)]);
+
+    $this->actingAs(teamMember($team, TeamRole::Member))
+        ->get(route('servers.show', $server))
+        ->assertInertia(fn($page) => $page
+            ->where('applications.0.name', 'shop')
+            ->where('applications.0.domain', 'shop.example.com')
+            ->where('applications.0.deployed', 'today 14:05')
+            ->where('applications.1.domain', null)
+            ->where('applications.1.deployed', null)
+            ->missing('applications.0.user')
+            ->missing('applications.0.ports'));
 });
 
 test('the private key is never sent to the browser', function (string $route) {
@@ -378,7 +403,7 @@ test('provisioning another teams server is refused and queues nothing', function
 test('an admin can provision a server whose recent check found nothing blocking', function () {
     Queue::fake();
     $team = Team::factory()->create();
-    $server = checkedServer($team, [['key' => 'app_users', 'severity' => 'warning', 'title' => '1 Coresmith app user exists', 'detail' => '', 'fix' => null]]);
+    $server = checkedServer($team, [['key' => 'app_users', 'severity' => 'warning', 'title' => '1 app account from an earlier Coresmith setup', 'detail' => '', 'fix' => null]]);
 
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->post(route('servers.provision', $server))

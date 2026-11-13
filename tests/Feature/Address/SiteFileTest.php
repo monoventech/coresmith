@@ -95,7 +95,7 @@ test('a site file that cannot be written says where and why', function () {
 
     try {
         expect(fn() => app(SiteFile::class)->write(['coresmith.example.com']))
-            ->toThrow(RuntimeException::class, "Coresmith couldn't write its Caddy site at {$directory}/panel.caddy: ");
+            ->toThrow(RuntimeException::class, "Coresmith couldn't write its web server settings at {$directory}/panel.caddy: ");
     } finally {
         chmod($directory, 0755);
         File::deleteDirectory($directory);

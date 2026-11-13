@@ -148,17 +148,17 @@ final class PreProvisioningAudit
                 "port_{$port}",
                 AuditSeverity::Blocker,
                 "Port {$port} is in use by {$process}",
-                "Caddy needs port {$port} to serve your apps over HTTPS. " . ($fix === null ? "Stop {$process} and free the port, then check again." : "Stop and disable {$process}, or let Coresmith do it."),
+                "Coresmith needs port {$port} to serve your apps over HTTPS. " . ($fix === null ? "Stop {$process} and free the port, then check again." : "Stop and disable {$process}, or let Coresmith do it."),
                 $fix,
             );
         }
 
         if ($coresmiths !== []) {
-            $findings[] = new AuditFinding('ports_coresmith', AuditSeverity::Info, "Coresmith's Caddy holds " . (count($coresmiths) === 2 ? 'ports 80 and 443' : "port {$coresmiths[0]}"), 'Provisioning gives it the config every server uses, so it serves your apps beside Coresmith.');
+            $findings[] = new AuditFinding('ports_coresmith', AuditSeverity::Info, 'Coresmith holds ' . (count($coresmiths) === 2 ? 'ports 80 and 443' : "port {$coresmiths[0]}"), 'Provisioning gives it the config every server uses, so it serves your apps beside Coresmith.');
         }
 
         if (!isset($listeners[80]) && !isset($listeners[443])) {
-            $findings[] = new AuditFinding('ports_free', AuditSeverity::Info, 'Ports 80 and 443 are free', 'Caddy takes them when provisioning runs.');
+            $findings[] = new AuditFinding('ports_free', AuditSeverity::Info, 'Ports 80 and 443 are free', 'Coresmith takes them when provisioning runs.');
         }
 
         foreach ($listeners as $port => $process) {
@@ -167,8 +167,8 @@ final class PreProvisioningAudit
             }
 
             $findings[] = $ownMachine && $port === self::CORESMITH_INTERNAL_PORT && $process === 'caddy'
-                ? new AuditFinding("app_port_{$port}", AuditSeverity::Info, "Port {$port} is Coresmith's", "Caddy asks Coresmith there before it issues a certificate for a team's domain. Apps skip that port block.")
-                : new AuditFinding("app_port_{$port}", AuditSeverity::Warning, "Port {$port} is in use by {$process}", 'It is inside the range Coresmith gives apps (8000–9999). Apps skip that port block, or stop the process to free it.');
+                ? new AuditFinding("app_port_{$port}", AuditSeverity::Info, "Port {$port} is Coresmith's", 'Coresmith approves certificates for your domains there. Apps skip that port.')
+                : new AuditFinding("app_port_{$port}", AuditSeverity::Warning, "Port {$port} is in use by {$process}", 'It is inside the range Coresmith gives apps (8000–9999). Apps get other ports, or stop the process to free it.');
         }
 
         return $findings;
@@ -195,7 +195,7 @@ final class PreProvisioningAudit
 
         foreach (self::FIXES as $fix => $service) {
             if (in_array($service, $services, true) && !in_array($fix, $covered, true)) {
-                $findings[] = new AuditFinding("service_{$service}", AuditSeverity::Blocker, "{$service} is running", "Coresmith serves apps through Caddy, so {$service} has to stop. Stop and disable it, or let Coresmith do it.", $fix);
+                $findings[] = new AuditFinding("service_{$service}", AuditSeverity::Blocker, "{$service} is running", "Coresmith serves apps on ports 80 and 443, so {$service} has to stop. Stop and disable it, or let Coresmith do it.", $fix);
             }
         }
 
@@ -246,7 +246,7 @@ final class PreProvisioningAudit
         $apps = count(array_filter($users, fn(string $user): bool => str_starts_with($user, 'coresmith-app-')));
 
         if ($apps > 0) {
-            $findings[] = new AuditFinding('app_users', AuditSeverity::Warning, $apps . ' Coresmith app ' . ($apps === 1 ? 'user exists' : 'users exist'), 'Coresmith may have provisioned this server before. Provisioning reuses those users.');
+            $findings[] = new AuditFinding('app_users', AuditSeverity::Warning, $apps . ' app ' . ($apps === 1 ? 'account' : 'accounts') . ' from an earlier Coresmith setup', 'Coresmith may have set this server up before. Provisioning reuses ' . ($apps === 1 ? 'it.' : 'them.'));
         }
 
         return $findings;
@@ -284,7 +284,7 @@ final class PreProvisioningAudit
         $findings = [];
 
         if (strcasecmp($selinux, 'Enforcing') === 0) {
-            $findings[] = new AuditFinding('selinux', AuditSeverity::Warning, 'SELinux is enforcing', 'Coresmith has no SELinux policies yet, so Caddy or app processes may be blocked. Set it to permissive before provisioning, or be ready to allow them yourself.');
+            $findings[] = new AuditFinding('selinux', AuditSeverity::Warning, 'SELinux is enforcing', 'Coresmith has no SELinux policies yet, so Coresmith or your apps may be blocked. Set it to permissive before provisioning, or be ready to allow them yourself.');
         }
 
         if (in_array(strtoupper($apparmor), ['Y', 'YES'], true)) {
@@ -312,7 +312,7 @@ final class PreProvisioningAudit
 
             $version = preg_match('/\d+\.\d+(?:\.\d+)?/', Str::after($line, ' '), $matches) === 1 ? ' ' . $matches[0] : '';
 
-            $findings[] = new AuditFinding("runtime_{$bin}", AuditSeverity::Info, self::RUNTIMES[$bin] . $version . ' is installed from system packages', 'Coresmith installs its own runtimes with asdf. This one stays, apps just do not use it.');
+            $findings[] = new AuditFinding("runtime_{$bin}", AuditSeverity::Info, self::RUNTIMES[$bin] . $version . ' is installed from system packages', 'Coresmith installs its own runtimes. This one stays, and apps just don\'t use it.');
         }
 
         foreach ($managers as $path) {
@@ -322,7 +322,7 @@ final class PreProvisioningAudit
                 continue;
             }
 
-            $findings["manager_{$tool}"] ??= new AuditFinding("manager_{$tool}", AuditSeverity::Info, "{$tool} is installed in " . dirname($path), 'No conflict with asdf, but consider removing version managers nothing uses.');
+            $findings["manager_{$tool}"] ??= new AuditFinding("manager_{$tool}", AuditSeverity::Info, "{$tool} is installed in " . dirname($path), 'No conflict with Coresmith\'s runtimes, but consider removing version managers nothing uses.');
         }
 
         return array_values($findings);

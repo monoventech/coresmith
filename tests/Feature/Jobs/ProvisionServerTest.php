@@ -9,6 +9,7 @@ use App\Events\ServerProvisioningFailed;
 use App\Exceptions\ProvisioningVerificationException;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\UnsupportedOperatingSystemException;
+use App\Jobs\CheckProtections;
 use App\Jobs\ProvisionServer;
 use App\Models\Server;
 use App\Models\User;
@@ -356,8 +357,18 @@ test('a fully provisioned server becomes active and announces itself', function 
     Event::assertDispatched(ServerProvisioned::class);
 });
 
+test('a server that finishes provisioning has its protections read half a minute later, so the hardening tab starts from real state', function () {
+    Queue::fake([CheckProtections::class]);
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+
+    provision($server, provisioningTransport());
+
+    Queue::assertPushed(CheckProtections::class, fn(CheckProtections $job): bool => $job->server->is($server) && $job->delay !== null);
+});
+
 test('a mail that cannot be queued does not undo a finished provision', function () {
     Exceptions::fake();
+    Queue::fake([CheckProtections::class]);
     $server = Server::factory()->create(['host_key_fingerprint' => null]);
     $server->team->members()->attach(User::factory()->create(), ['role' => TeamRole::Member->value]);
     Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));

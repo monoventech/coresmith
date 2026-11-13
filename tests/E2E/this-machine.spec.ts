@@ -35,7 +35,6 @@ async function passwordsOn(page: Page, ssh: Record<string, unknown> = {}) {
             verified: false,
             owner: true,
             passwords_off: false,
-            error: null,
             logins: { password: true, keyboard: false, root: true },
             source: '/etc/ssh/sshd_config.d/50-cloud-init.conf',
             lines: ['PasswordAuthentication no', 'PermitRootLogin prohibit-password'],
@@ -213,14 +212,25 @@ test.describe('this machine', () => {
     }) => {
         await rewriteInertia(page, '/servers/*/hardening', (props) => {
             props.server.this_machine = true
-            props.ssh = { verified: false, owner: true, passwords_off: true, error: null }
+            props.ssh = { verified: false, owner: true, passwords_off: true }
+            props.protections.rows = props.protections.rows.map((row: { key: string }) =>
+                row.key === 'ssh'
+                    ? {
+                          ...row,
+                          state: 'yours',
+                          detail: "Password login is off in this machine's own SSH settings.",
+                          fix: null
+                      }
+                    : row
+            )
         })
         await gotoServerTab(page, 'outpost-01', 'Hardening')
 
         await expect(page.getByTestId('ssh-access-summary')).toHaveText(
             "Coresmith signs in as root with a key that only works from this machine itself. Password login is off in this machine's own SSH settings, which Coresmith leaves to you."
         )
-        await expect(page.getByTestId('ssh-hardening-unchecked')).toHaveCount(0)
+        await expect(page.getByTestId('protection-ssh')).toContainText('Left to you')
+        await expect(page.getByTestId('protection-ssh').getByRole('button')).toHaveCount(0)
     })
 
     test('when password login is on, this machine shows the exact steps to turn it off', async ({ page }) => {
@@ -288,7 +298,6 @@ test.describe('this machine', () => {
                 verified: false,
                 owner: true,
                 passwords_off: true,
-                error: null,
                 logins: null,
                 source: null,
                 lines: []

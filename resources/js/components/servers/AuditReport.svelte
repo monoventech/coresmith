@@ -130,8 +130,8 @@
         <Dialog.Header>
             <Dialog.Title>{`Stop ${service(fixing?.fix ?? null)} on ${server.name}?`}</Dialog.Title>
             <Dialog.Description>
-                Coresmith stops and disables it. Any site it serves on this server goes offline, and Caddy takes over
-                ports 80 and 443 when provisioning runs.
+                Coresmith stops and disables it. Any site it serves on this server goes offline, and Coresmith takes
+                over ports 80 and 443 when provisioning runs.
             </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>

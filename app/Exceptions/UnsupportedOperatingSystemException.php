@@ -21,6 +21,6 @@ final class UnsupportedOperatingSystemException extends RuntimeException
 
     public static function missingSystemd(): self
     {
-        return new self('Coresmith requires systemd, which was not found on this server.');
+        return new self("This server doesn't run systemd, which Coresmith needs to run apps. Use Ubuntu, Debian, Rocky Linux, AlmaLinux, Fedora or Amazon Linux.");
     }
 }
