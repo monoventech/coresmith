@@ -67,6 +67,13 @@ test('a platform PHP in composer.json that composer.lock accepts is fine', funct
     'something composer would not parse' => ['latest'],
 ]);
 
+test('an app with a custom blueprint gets no blockers, since the blueprint does the build', function () {
+    $facts = new RepositoryFacts(['README.md' => 'hugo'], complete: true);
+
+    expect(stackChecksFor($facts, ['type' => ApplicationType::Static, 'framework' => '', 'web_directory' => '/public']))->not->toBe([])
+        ->and(stackChecksFor($facts, ['type' => ApplicationType::Static, 'framework' => '', 'web_directory' => '/public', 'custom_blueprint' => "hugo -d public\n"]))->toBe([]);
+});
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 

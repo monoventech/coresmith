@@ -34,7 +34,7 @@ final class StackChecks
      */
     public function blockers(Application $choice, RepositoryFacts $facts, Closure $installed, bool $runtime = true): array
     {
-        if (!$facts->complete) {
+        if (!$facts->complete || trim((string) $choice->custom_blueprint) !== '') {
             return [];
         }
 

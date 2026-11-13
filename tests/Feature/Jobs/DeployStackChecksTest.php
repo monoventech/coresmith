@@ -68,6 +68,17 @@ test('a deploy stops in seconds when the stack cannot run the repository, before
         ->and(implode("\n", $transport->commands()))->not->toContain('npm ci');
 });
 
+test('an app with a custom blueprint is not refused by the stack checks, since the blueprint does the build', function () {
+    $probe = "@@file README.md aHVnbw==\n@@done\n";
+    $deployment = Deployment::factory()->for(stackDeployApp(['type' => ApplicationType::Static, 'framework' => null, 'php_version' => null, 'web_directory' => '/public', 'custom_blueprint' => "hugo --minify -d public\n"]))->create();
+    $transport = stackDeployTransport($probe);
+
+    stackDeployRun($deployment, $transport);
+
+    expect((string) $deployment->fresh()->failure_reason)->not->toContain('public/index.html')
+        ->and(implode("\n", $transport->commands()))->toContain('blueprint');
+});
+
 test('an app whose probe did not finish deploys exactly as before', function () {
     $deployment = Deployment::factory()->for(stackDeployApp())->create();
     $transport = (new FakeSSHTransport)->respondTo('df /', "40\n");
