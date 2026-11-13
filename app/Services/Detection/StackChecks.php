@@ -17,6 +17,7 @@ use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\StackResolver;
 use App\Services\Runtime\VersionConstraint;
 use Closure;
+use Illuminate\Support\Arr;
 
 final class StackChecks
 {
@@ -40,7 +41,7 @@ final class StackChecks
      * @param  (Closure(string): ?list<string>)|null  $extensions
      * @return list<Blocker>
      */
-    public function blockers(Application $choice, RepositoryFacts $facts, Closure $installed, bool $runtime = true, ?Closure $extensions = null): array
+    public function blockers(Application $choice, RepositoryFacts $facts, Closure $installed, bool $runtime = true, ?Closure $extensions = null, ?string $arch = null): array
     {
         if (!$facts->complete || trim((string) $choice->custom_blueprint) !== '') {
             return [];
@@ -50,7 +51,7 @@ final class StackChecks
 
         $blockers = match ($choice->type) {
             ApplicationType::Php => $this->php($choice, $framework, $facts),
-            ApplicationType::Ruby => $this->ruby($framework, $facts),
+            ApplicationType::Ruby => $this->ruby($framework, $facts, $arch),
             ApplicationType::Js => $this->javascript($choice, $framework, $facts),
             ApplicationType::Static => $this->static($choice, $facts),
             default => [],
@@ -217,7 +218,7 @@ final class StackChecks
     /**
      * @return list<Blocker>
      */
-    private function ruby(string $framework, RepositoryFacts $facts): array
+    private function ruby(string $framework, RepositoryFacts $facts, ?string $arch): array
     {
         if (!$facts->has('Gemfile')) {
             return [new Blocker('type', "There is no Gemfile at the repository's root, so this isn't a Ruby app.", 'Pick the language the repository uses.')];
@@ -239,7 +240,36 @@ final class StackChecks
             $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app at the repository's root.", 'Pick Sinatra if it uses Sinatra.');
         }
 
-        return $blockers;
+        $platform = $arch === null ? null : $this->platformMissing($facts, $arch);
+
+        return $platform === null ? $blockers : [...$blockers, $platform];
+    }
+
+    private function platformMissing(RepositoryFacts $facts, string $arch): ?Blocker
+    {
+        $local = match ($arch) {
+            'x86_64', 'amd64' => 'x86_64-linux',
+            'aarch64', 'arm64' => 'aarch64-linux',
+            default => null,
+        };
+
+        if ($local === null || preg_match('/^PLATFORMS\r?\n((?:  \S[^\r\n]*\r?\n?)+)/m', (string) $facts->file('Gemfile.lock'), $matches) !== 1) {
+            return null;
+        }
+
+        $platforms = array_values(array_filter(array_map(trim(...), preg_split('/\r\n|\n|\r/', $matches[1]) ?: []), fn(string $platform): bool => $platform !== ''));
+
+        foreach ($platforms as $platform) {
+            if ($platform === 'ruby' || $platform === $local || str_starts_with($platform, $local . '-')) {
+                return null;
+            }
+        }
+
+        return new Blocker(
+            'repository',
+            'Gemfile.lock lists only the ' . Arr::join($platforms, ', ', ' and ') . ' platform' . (count($platforms) === 1 ? '' : 's') . ", and this server is {$local}, so bundle install refuses it.",
+            "Run bundle lock --add-platform {$local}, then commit Gemfile.lock.",
+        );
     }
 
     /**

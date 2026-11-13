@@ -72,7 +72,7 @@ final class StackDetector
     /**
      * @param  Closure(string): list<string>  $installed
      */
-    public function detect(RepositoryFacts $facts, Closure $installed, ?Closure $extensions = null): DetectedStack
+    public function detect(RepositoryFacts $facts, Closure $installed, ?Closure $extensions = null, ?string $arch = null): DetectedStack
     {
         if (!$facts->complete) {
             return new DetectedStack(null, null, null, null, unsettled: ['type' => self::UNFINISHED]);
@@ -118,7 +118,7 @@ final class StackDetector
             $proposal['web'],
             $sources,
             $unsettled,
-            isset($unsettled['framework']) ? [] : $this->checks->blockers($application, $facts, $installed, extensions: $extensions),
+            isset($unsettled['framework']) ? [] : $this->checks->blockers($application, $facts, $installed, extensions: $extensions, arch: $arch),
             $stack,
             $runtime,
         );

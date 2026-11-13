@@ -37,7 +37,7 @@ final class RepositoryCheckController extends Controller
 
         $installed = fn(string $runtime): array => $read->installed($runtime);
         $extensions = fn(string $version): ?array => $read->extensions($version);
-        $blockers = $checks->blockers($application, $read->facts, $installed, extensions: $extensions);
+        $blockers = $checks->blockers($application, $read->facts, $installed, extensions: $extensions, arch: $read->arch);
 
         if ($blockers === []) {
             $application->forceFill([
@@ -49,7 +49,7 @@ final class RepositoryCheckController extends Controller
             return back()->with('success', 'Checked. Ready to deploy.');
         }
 
-        $detected = $detector->detect($read->facts, $installed, $extensions);
+        $detected = $detector->detect($read->facts, $installed, $extensions, $read->arch);
         $proposal = $detected->verdict() === 'ready' ? [...$detected->toArray(), 'label' => $detected->label($catalog)] : null;
 
         $application->forceFill(['repository_check' => [

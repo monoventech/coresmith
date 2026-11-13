@@ -222,7 +222,7 @@ final class StoreApplicationRequest extends FormRequest
             'runtime_pins' => $line === null ? null : [$this->runtime() => $line],
         ]);
 
-        $blockers = app(StackChecks::class)->blockers($choice, $read->facts, fn(string $runtime): array => $read->installed($runtime), extensions: fn(string $version): ?array => $read->extensions($version));
+        $blockers = app(StackChecks::class)->blockers($choice, $read->facts, fn(string $runtime): array => $read->installed($runtime), extensions: fn(string $version): ?array => $read->extensions($version), arch: $read->arch);
 
         foreach ($blockers as $blocker) {
             $validator->errors()->add($blocker->field === 'repository' ? $field : $blocker->field, trim($blocker->reason . ' ' . $blocker->fix));

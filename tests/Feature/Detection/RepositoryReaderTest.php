@@ -82,6 +82,15 @@ test('the read lists the PHP extensions of each PHP on the server', function () 
         ->and(readerScript($transport))->toContain('/bin/php -m');
 });
 
+test('the read says what kind of machine the server is', function () {
+    $transport = readerAnswer("@@arch aarch64\n@@done\n");
+
+    $read = readerRun($transport, RepositoryAccess::public('https://github.com/laravel/laravel.git'));
+
+    expect($read->arch)->toBe('aarch64')
+        ->and(readerScript($transport))->toContain('uname -m');
+});
+
 test('an app in a subfolder is read from that folder', function () {
     $transport = readerAnswer("@@done\n");
 

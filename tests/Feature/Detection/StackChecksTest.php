@@ -195,6 +195,40 @@ test('a packageManager that matches a committed lockfile, or a lockfile npm or B
     'bun ignores packageManager' => ['pnpm@9.15.0', ['bun.lock']],
 ]);
 
+function stackChecksPlatforms(string $platforms): RepositoryFacts
+{
+    $facts = RepositoryFixture::facts('sinatra-puma');
+    $lock = (string) preg_replace('/^PLATFORMS\n(?:  [^\n]*\n)+/m', "PLATFORMS\n{$platforms}\n", (string) $facts->file('Gemfile.lock'));
+
+    return new RepositoryFacts(['Gemfile.lock' => $lock, ...array_diff_key($facts->files, ['Gemfile.lock' => true])], $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+}
+
+/**
+ * @return list<Blocker>
+ */
+function stackChecksOnServer(RepositoryFacts $facts, ?string $arch): array
+{
+    return app(StackChecks::class)->blockers(new Application(['directory' => '/', 'type' => ApplicationType::Ruby, 'framework' => 'sinatra']), $facts, fn(string $runtime): array => [], arch: $arch);
+}
+
+test('a Gemfile.lock that leaves out the server\'s platform is refused, since bundle install refuses it', function () {
+    $blockers = stackChecksOnServer(stackChecksPlatforms("  x86_64-linux\n  arm64-darwin-23"), 'aarch64');
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('repository')
+        ->and($blockers[0]->reason)->toBe('Gemfile.lock lists only the x86_64-linux and arm64-darwin-23 platforms, and this server is aarch64-linux, so bundle install refuses it.')
+        ->and($blockers[0]->fix)->toBe('Run bundle lock --add-platform aarch64-linux, then commit Gemfile.lock.');
+});
+
+test('a Gemfile.lock with the server\'s platform, the ruby platform, or a server of unknown kind is fine', function (string $platforms, ?string $arch) {
+    expect(stackChecksOnServer(stackChecksPlatforms($platforms), $arch))->toBe([]);
+})->with([
+    'the server platform' => ['  x86_64-linux', 'x86_64'],
+    'a gnu variant' => ['  aarch64-linux-gnu', 'aarch64'],
+    'the ruby platform' => ["  arm64-darwin-23\n  ruby", 'x86_64'],
+    'a server of unknown kind' => ['  arm64-darwin-23', null],
+]);
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 

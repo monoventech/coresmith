@@ -47,6 +47,7 @@ final class RepositoryReader
     git sparse-checkout set --no-cone {patterns} 2>&1 || exit 72
     $limit git -c core.symlinks=false checkout --quiet 2>&1 || exit 73
     printf '@@commit %s\n' "$(git rev-parse HEAD)"
+    printf '@@arch %s\n' "$(uname -m)"
     {folder}
     names=$(git ls-tree --name-only HEAD {tree})
     for f in {lockfiles}; do
@@ -168,7 +169,9 @@ final class RepositoryReader
 
             $commit = preg_match('/^@@commit ([0-9a-f]{40})$/m', $output, $matches) === 1 ? $matches[1] : null;
 
-            return new RepositoryRead($this->probe->parse($output), $commit, installed: $this->installed($output), extensions: $this->extensions($output));
+            $arch = preg_match('/^@@arch ([a-z0-9_]+)$/m', $output, $machine) === 1 ? $machine[1] : null;
+
+            return new RepositoryRead($this->probe->parse($output), $commit, installed: $this->installed($output), extensions: $this->extensions($output), arch: $arch);
         }
 
         if ($exitCode === self::SETUP_FAILED) {

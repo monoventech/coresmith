@@ -76,6 +76,17 @@ test('a server with no free port block says so on the form instead of failing', 
     expect(storeDetectionApp())->toBeNull();
 });
 
+test('the store refuses a Gemfile.lock that leaves out the server\'s platform', function () {
+    [$owner, $server] = storeDetectionServer();
+    $facts = RepositoryFixture::facts('sinatra-puma');
+    $lock = (string) preg_replace('/^PLATFORMS\n(?:  [^\n]*\n)+/m', "PLATFORMS\n  arm64-darwin-23\n", (string) $facts->file('Gemfile.lock'));
+    $mac = new RepositoryFacts(['Gemfile.lock' => $lock, ...array_diff_key($facts->files, ['Gemfile.lock' => true])], $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+    $id = storeDetectionRead($owner, $server, new RepositoryRead($mac, arch: 'x86_64'));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, 'type' => ApplicationType::Ruby->value, 'framework' => 'sinatra', 'web_directory' => '/'])
+        ->assertSessionHasErrors(['repository_url' => 'Gemfile.lock lists only the arm64-darwin-23 platform, and this server is x86_64-linux, so bundle install refuses it. Run bundle lock --add-platform x86_64-linux, then commit Gemfile.lock.']);
+});
+
 test('the store refuses a choice the checks know will fail and names the fix', function () {
     [$owner, $server] = storeDetectionServer();
     $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts('slim-skeleton')));

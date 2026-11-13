@@ -23,6 +23,7 @@ final readonly class RepositoryRead
         public bool $definitive = false,
         public array $installed = [],
         public array $extensions = [],
+        public ?string $arch = null,
     ) {}
 
     /**
