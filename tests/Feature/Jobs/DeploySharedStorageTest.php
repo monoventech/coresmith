@@ -787,6 +787,37 @@ test('a first laravel deploy keeps its SQLite database in shared/database, priva
     }
 });
 
+test('a laravel repository without a database folder still gets one linked to the shared SQLite database, so migrate finds Laravel\'s default file', function () {
+    $script = sharedStorageScript(sharedStorageCommandFor(sharedStorageLaravelApp()));
+    $root = sharedStorageRoot();
+
+    try {
+        $run = sharedStorageRun($script, $root);
+
+        expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
+            ->and(sharedStorageModes($root . '/shop/shared/database'))->toBe(['' => '700', 'database.sqlite' => '600'])
+            ->and(sharedStorageLink($root . '/shop/releases/20261019-120000/database/database.sqlite'))->toBe($root . '/shop/shared/database/database.sqlite');
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
+test('a rollback to a laravel release without a database folder gives it one linked to the shared SQLite database', function () {
+    $command = (string) app(SharedStorage::class)->relinkDatabase(sharedStorageLaravelApp(), ReleasePaths::ROOT . '/shop/releases/20261019-120000');
+    $root = sharedStorageRoot();
+    File::ensureDirectoryExists($root . '/shop/shared/database');
+    touch($root . '/shop/shared/database/database.sqlite');
+
+    try {
+        $run = sharedStorageRun($command, $root);
+
+        expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
+            ->and(sharedStorageLink($root . '/shop/releases/20261019-120000/database/database.sqlite'))->toBe($root . '/shop/shared/database/database.sqlite');
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
 test('a laravel app whose live release holds its SQLite database copies it into shared, writes still in the WAL included', function () {
     if ((new ExecutableFinder)->find('sqlite3') === null) {
         $this->markTestSkipped('sqlite3 is not installed on this machine, so the copy cannot run for real.');
@@ -850,20 +881,6 @@ test('a SQLite database the repository commits seeds shared once when nothing is
             ->and($run->getOutput())->toBe('')
             ->and(sharedStorageRows($root . '/shop/shared/database/database.sqlite'))->toBe(['seeded'])
             ->and(sharedStorageLink($root . '/shop/releases/20261019-120000/database/database.sqlite'))->toBe($root . '/shop/shared/database/database.sqlite');
-    } finally {
-        File::deleteDirectory($root);
-    }
-});
-
-test('a laravel release without a database folder gets no shared database', function () {
-    $script = sharedStorageScript(sharedStorageCommandFor(sharedStorageLaravelApp()));
-    $root = sharedStorageRoot();
-
-    try {
-        $run = sharedStorageRun($script, $root);
-
-        expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
-            ->and(sharedStorageEntries($root . '/shop/shared'))->toBe(['logs', 'storage']);
     } finally {
         File::deleteDirectory($root);
     }

@@ -46,23 +46,21 @@ final class SharedStorage
     private const LINK = 'if [ -d {shared} ]; then rm -rf {local} && ln -sfn {shared} {local}; fi';
 
     private const DATABASE = <<<'BASH'
-    if [ -d {folder} ]; then
-      mkdir -p {shared} && chmod 700 {shared} || exit 1
-      if [ ! -e {database} ]; then
-        if [ -f {live} ] && [ ! -L {live} ]; then
-          {
-            rm -f {seed} && statement={backup} &&
-            { if version=$(sqlite3 -version 2>/dev/null) && printf '%s\n' 3.27.0 "${version%% *}" | sort -C -V; then statement={vacuum}; fi; } &&
-            sqlite3 {live} "$statement" && chmod 600 {seed} && mv -f {seed} {database} && echo {seeded}
-          } || { rm -f {seed}; echo "Could not copy the live release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again." >&2; exit 1; }
-        elif [ -f {local} ] && [ ! -L {local} ]; then
-          { cp {local} {seed} && chmod 600 {seed} && mv -f {seed} {database}; } || { rm -f {seed}; echo "Could not copy the release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again." >&2; exit 1; }
-        else
-          ( umask 077 && : > {database} ) || exit 1
-        fi
+    mkdir -p {folder} {shared} && chmod 700 {shared} || exit 1
+    if [ ! -e {database} ]; then
+      if [ -f {live} ] && [ ! -L {live} ]; then
+        {
+          rm -f {seed} && statement={backup} &&
+          { if version=$(sqlite3 -version 2>/dev/null) && printf '%s\n' 3.27.0 "${version%% *}" | sort -C -V; then statement={vacuum}; fi; } &&
+          sqlite3 {live} "$statement" && chmod 600 {seed} && mv -f {seed} {database} && echo {seeded}
+        } || { rm -f {seed}; echo "Could not copy the live release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again." >&2; exit 1; }
+      elif [ -f {local} ] && [ ! -L {local} ]; then
+        { cp {local} {seed} && chmod 600 {seed} && mv -f {seed} {database}; } || { rm -f {seed}; echo "Could not copy the release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again." >&2; exit 1; }
+      else
+        ( umask 077 && : > {database} ) || exit 1
       fi
-      ln -sfn {database} {local}
     fi
+    ln -sfn {database} {local}
     BASH;
 
     public function script(Application $application, string $release): string
@@ -96,7 +94,7 @@ final class SharedStorage
         $folder = $paths->appDirectory($release) . '/database';
         $local = escapeshellarg($folder . '/database.sqlite');
 
-        return "if [ -e {$database} ] && [ -d " . escapeshellarg($folder) . " ] && [ ! -L {$local} ]; then ln -sfn {$database} {$local}; fi";
+        return "if [ -e {$database} ] && [ ! -L {$local} ]; then mkdir -p " . escapeshellarg($folder) . " && ln -sfn {$database} {$local}; fi";
     }
 
     public function seededDatabase(string $output): bool
