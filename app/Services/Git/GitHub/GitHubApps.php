@@ -11,6 +11,7 @@ namespace App\Services\Git\GitHub;
 use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
+use App\Models\User;
 
 final class GitHubApps
 {
@@ -92,9 +93,16 @@ final class GitHubApps
             return [$env];
         }
 
-        return $team->githubApps()->latest()->latest('id')->get()
+        return $team->githubApps()->whereNull('user_id')->latest()->latest('id')->get()
             ->map(fn(GitHubApp $app): GitHubAppCredentials => $this->fromModel($app))
             ->all();
+    }
+
+    public function own(Team $team, User $user): ?GitHubAppCredentials
+    {
+        $app = $team->githubApps()->where('user_id', $user->getKey())->first();
+
+        return $app === null ? null : $this->fromModel($app);
     }
 
     public function canRegister(): bool

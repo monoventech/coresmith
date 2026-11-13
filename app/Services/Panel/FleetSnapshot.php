@@ -74,7 +74,7 @@ final class FleetSnapshot
     public function servers(): Collection
     {
         return $this->servers ??= $this->serversQuery()
-            ->with(['applications' => fn($query) => $query->orderBy('name'), 'cloudProvider'])
+            ->with(['applications' => fn($query) => $query->whereIn('id', $this->applicationsQuery()->select('id'))->orderBy('name'), 'cloudProvider'])
             ->oldest()
             ->orderBy('name')
             ->get();

@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Enums\Ability;
+use App\Enums\TeamRole;
 use App\Models\Server;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
@@ -33,12 +34,12 @@ final class ServerPolicy
 
     public function update(User $user, Server $server): Response|bool
     {
-        return $this->within($user, $server, Ability::UpdateServer);
+        return $this->added($user, $server, Ability::UpdateServer);
     }
 
     public function delete(User $user, Server $server): Response|bool
     {
-        return $this->within($user, $server, Ability::DeleteServer);
+        return $this->added($user, $server, Ability::DeleteServer);
     }
 
     public function viewCredentials(User $user, Server $server): Response|bool
@@ -48,7 +49,18 @@ final class ServerPolicy
 
     public function manageFirewall(User $user, Server $server): Response|bool
     {
-        return $this->within($user, $server, Ability::ManageFirewall);
+        return $this->added($user, $server, Ability::ManageFirewall);
+    }
+
+    private function added(User $user, Server $server, Ability $ability): Response|bool
+    {
+        $allowed = $this->within($user, $server, $ability);
+
+        if ($allowed !== true) {
+            return $allowed;
+        }
+
+        return $user->roleIn($server->team) !== TeamRole::Developer || $server->addedBy($user);
     }
 
     private function within(User $user, Server $server, Ability $ability): Response|bool

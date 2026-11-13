@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Casts\Vaulted;
 use App\Enums\ServerStatus;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
+use App\Models\Concerns\RecordsWhoAdded;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Server\SecurityHardening;
 use Database\Factories\ServerFactory;
@@ -25,7 +26,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Server extends Model
 {
     /** @use HasFactory<ServerFactory> */
-    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes;
 
     protected $guarded = ['id'];
 

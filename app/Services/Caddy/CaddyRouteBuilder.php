@@ -59,6 +59,24 @@ final class CaddyRouteBuilder
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function addressServer(Application $application, string $listen, string $kind): array
+    {
+        return [
+            '@id' => self::addressServerId($application, $kind),
+            'listen' => [$listen],
+            'automatic_https' => ['disable' => true],
+            'routes' => [['handle' => $this->build($application)['handle'], 'terminal' => true]],
+        ];
+    }
+
+    public static function addressServerId(Application $application, string $kind): string
+    {
+        return 'coresmith-app-' . $application->slug . '-' . $kind;
+    }
+
+    /**
      * @return list<string>
      */
     public function domains(Application $application): array

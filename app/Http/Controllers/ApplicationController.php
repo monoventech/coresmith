@@ -80,7 +80,7 @@ final class ApplicationController extends Controller
                     ->orderBy('name')
                     ->orderBy('id')
                     ->get()
-                    ->filter(fn(SourceProvider $provider): bool => $provider->connected())
+                    ->filter(fn(SourceProvider $provider): bool => $provider->connected() && $provider->usableBy($request->user(), $server->team))
                     ->map(fn(SourceProvider $provider): array => [
                         'id' => $provider->id,
                         'account' => $provider->name,
@@ -242,6 +242,14 @@ final class ApplicationController extends Controller
                 ...$toggle,
                 'href' => route('servers.applications.toggles.update', [$server, $application, $toggle['key']]),
             ], $toggles->describe($application)),
+            'addresses' => [
+                'tailnet' => (bool) $application->tailnet,
+                'preview' => (bool) $application->preview,
+                'tailnet_url' => $application->tailnet && $application->tailnet_ip !== null ? "http://{$application->tailnet_ip}:{$application->addressPort()}" : null,
+                'preview_url' => $application->preview ? 'http://' . (string) $server->ip_address . ':' . $application->addressPort() : null,
+                'problem' => $application->address_problem,
+                'href' => route('servers.applications.addresses.update', [$server, $application]),
+            ],
             'cron' => $this->cron($server, $application, $cron),
             'can' => [
                 'update' => $user->can('update', $application),

@@ -54,6 +54,7 @@
         place = null,
         application,
         toggles = [],
+        addresses,
         cron,
         can,
         runtime_choice = null,
@@ -117,6 +118,14 @@
             runtime_eol: { runtime: string; ended: string; fix: string } | null
         }
         toggles: Toggle[]
+        addresses: {
+            tailnet: boolean
+            preview: boolean
+            tailnet_url: string | null
+            preview_url: string | null
+            problem: string | null
+            href: string
+        }
         cron: CronCard
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
@@ -211,6 +220,20 @@
 
     function retryCron() {
         sendCron((finish) => router.post(cron.sync_href, {}, { preserveScroll: true, onFinish: finish }))
+    }
+
+    let addressBusy = $state<'tailnet' | 'preview' | null>(null)
+
+    function setAddress(kind: 'tailnet' | 'preview', on: boolean) {
+        addressBusy = kind
+        router.put(
+            addresses.href,
+            {
+                tailnet: kind === 'tailnet' ? on : addresses.tailnet,
+                preview: kind === 'preview' ? on : addresses.preview
+            },
+            { preserveScroll: true, onFinish: () => (addressBusy = null) }
+        )
     }
 
     function flip(toggle: Toggle, on: boolean) {
@@ -750,6 +773,29 @@
                             testid="toggle-{toggle.key}"
                         />
                     {/each}
+                    <ToggleRow
+                        label="Reachable on your tailnet"
+                        description={addresses.problem ??
+                            (addresses.tailnet_url
+                                ? `At ${addresses.tailnet_url}, once ${server.name}'s firewall lets your tailnet in.`
+                                : `Serves the app at ${server.name}'s Tailscale address, without a domain.`)}
+                        checked={addresses.tailnet}
+                        busy={addressBusy === 'tailnet'}
+                        disabled={!can.update}
+                        onchange={(on) => setAddress('tailnet', on)}
+                        testid="toggle-tailnet"
+                    />
+                    <ToggleRow
+                        label="Preview without a domain"
+                        description={addresses.preview_url
+                            ? `Plain HTTP at ${addresses.preview_url}. Anyone who has the address can open it. Add a domain for HTTPS.`
+                            : "Plain HTTP on the server's own address. Anyone who has the address can open it. Add a domain for HTTPS."}
+                        checked={addresses.preview}
+                        busy={addressBusy === 'preview'}
+                        disabled={!can.update}
+                        onchange={(on) => setAddress('preview', on)}
+                        testid="toggle-preview"
+                    />
                 </div>
             </div>
 

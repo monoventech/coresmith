@@ -88,6 +88,7 @@ final class SourceRepositoryController extends Controller
         abort_unless($team !== null && $sourceProvider->team_id === $team->getKey(), 404);
         abort_unless($request->user()->hasTeamAbility($team, Ability::CreateApplication), 403);
         abort_unless($sourceProvider->type === SourceProviderType::GitHubApp && $sourceProvider->connected(), 404);
+        abort_unless($sourceProvider->usableBy($request->user(), $team), 404);
     }
 
     private function unavailable(string $sentence, GitProviderException $exception): JsonResponse

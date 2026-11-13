@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Enums\Ability;
+use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
@@ -33,12 +34,12 @@ final class ApplicationPolicy
 
     public function update(User $user, Application $application): Response|bool
     {
-        return $this->within($user, $application, Ability::UpdateApplication);
+        return $this->added($user, $application, Ability::UpdateApplication);
     }
 
     public function delete(User $user, Application $application): Response|bool
     {
-        return $this->within($user, $application, Ability::DeleteApplication);
+        return $this->added($user, $application, Ability::DeleteApplication);
     }
 
     public function deploy(User $user, Application $application): Response|bool
@@ -54,6 +55,17 @@ final class ApplicationPolicy
     public function manageEnvironment(User $user, Application $application): Response|bool
     {
         return $this->within($user, $application, Ability::ManageApplicationEnv);
+    }
+
+    private function added(User $user, Application $application, Ability $ability): Response|bool
+    {
+        $allowed = $this->within($user, $application, $ability);
+
+        if ($allowed !== true) {
+            return $allowed;
+        }
+
+        return $user->roleIn($application->team) !== TeamRole::Developer || $application->addedBy($user);
     }
 
     private function within(User $user, Application $application, Ability $ability): Response|bool

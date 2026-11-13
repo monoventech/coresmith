@@ -14,10 +14,12 @@ use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Enums\SourceProviderType;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
+use App\Models\Concerns\RecordsWhoAdded;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\Repository;
 use App\Services\SafeName;
+use App\Services\Server\PortAllocator;
 use Database\Factories\ApplicationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -29,7 +31,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Application extends Model
 {
     /** @use HasFactory<ApplicationFactory> */
-    use HasFactory, HasUlids, IgnoresJsonKeyOrder, SoftDeletes;
+    use HasFactory, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes;
+
+    public const ADDRESS_PORTS = 20000;
 
     protected $guarded = ['id'];
 
@@ -146,6 +150,11 @@ class Application extends Model
         return $provider?->type === SourceProviderType::GitHubApp ? $provider : null;
     }
 
+    public function addressPort(): int
+    {
+        return self::ADDRESS_PORTS + intdiv((int) $this->base_port - PortAllocator::RANGE_START, PortAllocator::BLOCK_SIZE);
+    }
+
     public function needsRepositoryCheck(): bool
     {
         return $this->repository_check_pending === true;
@@ -183,6 +192,8 @@ class Application extends Model
     protected function casts(): array
     {
         return [
+            'tailnet' => 'boolean',
+            'preview' => 'boolean',
             'env_variables' => Vaulted::class,
             'deploy_key_private' => Vaulted::class,
             'type' => ApplicationType::class,

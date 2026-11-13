@@ -14,6 +14,7 @@ use App\Exceptions\GitProviderException;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
+use App\Models\User;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryReader;
@@ -38,7 +39,7 @@ final class StackDetectionController extends Controller
             'directory' => ['nullable', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
         ]);
 
-        $access = $this->access($server, $validated);
+        $access = $this->access($request->user(), $server, $validated);
 
         if (is_string($access)) {
             return response()->json(['state' => 'failed', 'failure' => $access, 'definitive' => true]);
@@ -72,7 +73,7 @@ final class StackDetectionController extends Controller
     /**
      * @param  array<string, mixed>  $validated
      */
-    private function access(Server $server, array $validated): RepositoryAccess|string|null
+    private function access(User $user, Server $server, array $validated): RepositoryAccess|string|null
     {
         $repositoryId = $validated['repository_id'] ?? null;
 
@@ -82,7 +83,7 @@ final class StackDetectionController extends Controller
                 ->where('type', SourceProviderType::GitHubApp->value)
                 ->find($validated['source_provider_id'] ?? null);
 
-            if (!$connection instanceof SourceProvider || !$connection->connected()) {
+            if (!$connection instanceof SourceProvider || !$connection->connected() || $server->team === null || !$connection->usableBy($user, $server->team)) {
                 return "That GitHub connection isn't available. Pick another one, or connect GitHub again in Git settings.";
             }
 

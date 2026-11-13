@@ -19,6 +19,7 @@ enum Ability: string
 
     case ViewServer = 'server.view';
     case CreateServer = 'server.create';
+    case CreateCloudServer = 'server.create-cloud';
     case UpdateServer = 'server.update';
     case DeleteServer = 'server.delete';
     case ViewServerCredentials = 'server.credentials';
