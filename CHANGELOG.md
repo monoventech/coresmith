@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.6 (2026-11-13)
+
+### Added
+- feat: the Hardening tab shows each protection's real state and can turn it back on, and everyday messages stop naming Caddy, systemd and Linux users (#67)
+- feat: a Developer role, GitHub connections that belong to one member, and app addresses without a domain (#65)
+
+### Fixed
+- fix: copy says plainly what happens, without fragment rows or claims the code can't keep, and the password reset email speaks like Coresmith (#69)
+- fix: deploys reconnect after a corrupt SSH packet, Laravel and plain PHP apps get the database folder or .env they lack, Ruby gems get their build tools, and fibers is refused (#68)
+- fix: PHP apps see Coresmith's environment in $_ENV, and deploys name the missing database or the fixed port an app listens on (#66)
+- fix: a Laravel app's SQLite database lives in shared/database and survives deploys, copied once from the live release, and a rollback points an older release at it (#64)
+
 ## v0.8.5 (2026-11-13)
 
 ### Added
