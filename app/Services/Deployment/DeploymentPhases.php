@@ -115,7 +115,7 @@ final class DeploymentPhases
     {
         $last = null;
 
-        foreach (preg_split('/\R/', $log) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $log) ?: [] as $line) {
             if (preg_match(self::MARKER, $line, $matches) === 1) {
                 $last = $matches[4];
             }
@@ -199,7 +199,7 @@ final class DeploymentPhases
     {
         $starts = [];
 
-        foreach (preg_split('/\R/', $log) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $log) ?: [] as $line) {
             if (preg_match(self::MARKER, $line, $matches) === 1 && in_array($matches[4], self::ORDER, true) && !isset($starts[$matches[4]])) {
                 $starts[$matches[4]] = (int) $matches[1] * 3600 + (int) $matches[2] * 60 + (int) $matches[3];
             }
@@ -210,7 +210,7 @@ final class DeploymentPhases
 
     private function end(string $log): ?int
     {
-        foreach (preg_split('/\R/', $log) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $log) ?: [] as $line) {
             if (preg_match(self::END, $line, $matches) === 1) {
                 return (int) $matches[1] * 3600 + (int) $matches[2] * 60 + (int) $matches[3];
             }

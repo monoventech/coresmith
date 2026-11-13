@@ -16,16 +16,74 @@ final readonly class RepositoryFacts
      * @param  array<string, string>  $files
      * @param  list<string>  $lockfiles
      * @param  array<string, string>  $locked
+     * @param  list<string>  $markers
+     * @param  list<string>  $envKeys
      */
     public function __construct(
         public array $files = [],
         public array $lockfiles = [],
         public array $locked = [],
+        public array $markers = [],
+        public array $envKeys = [],
+        public bool $complete = false,
     ) {}
 
     public function has(string $file): bool
     {
         return array_key_exists($file, $this->files);
+    }
+
+    public function exists(string $path): bool
+    {
+        return in_array($path, $this->markers, true);
+    }
+
+    public function gem(string $name): ?string
+    {
+        return preg_match('/^    ' . preg_quote($name, '/') . ' \(([^)]+)\)\r?$/m', (string) $this->file('Gemfile.lock'), $matches) === 1 ? $matches[1] : null;
+    }
+
+    public function dependency(string $package): ?string
+    {
+        $manifest = $this->json('package.json');
+
+        foreach (['dependencies', 'devDependencies'] as $section) {
+            $version = is_array($manifest[$section] ?? null) ? ($manifest[$section][$package] ?? null) : null;
+
+            if (is_string($version)) {
+                return $version;
+            }
+        }
+
+        return null;
+    }
+
+    public function workspace(): bool
+    {
+        $workspaces = $this->json('package.json')['workspaces'] ?? null;
+        $packages = is_array($workspaces) ? (array_is_list($workspaces) ? $workspaces : (array) ($workspaces['packages'] ?? [])) : [];
+
+        return array_diff(array_map(fn(mixed $entry): string => is_string($entry) ? trim($entry) : '', [...$packages, ...$this->pnpmPackages()]), ['', '.', './']) !== [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function pnpmPackages(): array
+    {
+        $yaml = (string) $this->file('pnpm-workspace.yaml');
+
+        if (preg_match('/^packages:[ \t]*\[([^\]]*)\]/m', $yaml, $inline) === 1) {
+            return array_map(fn(string $entry): string => trim($entry, " \t'\""), explode(',', $inline[1]));
+        }
+
+        if (preg_match('/^packages:[ \t]*\R((?:[ \t]+-[^\r\n]*\R?)+)/m', $yaml, $block) !== 1) {
+            return [];
+        }
+
+        preg_match_all('/^[ \t]+-[ \t]*([^#\r\n]*)/m', $block[1], $entries);
+
+        return array_map(fn(string $entry): string => trim($entry, " \t'\""), $entries[1]);
     }
 
     public function file(string $file): ?string

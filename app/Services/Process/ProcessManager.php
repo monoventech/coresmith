@@ -238,7 +238,7 @@ final class ProcessManager
 
     private function excerpt(string $log): string
     {
-        $lines = preg_split('/\R/', rtrim($log, "\r\n")) ?: [];
+        $lines = preg_split('/\r\n|\n|\r/', rtrim($log, "\r\n")) ?: [];
         $candidates = preg_grep(self::REQUEST_LINE, $lines, PREG_GREP_INVERT) ?: [];
         $candidates = preg_grep(self::FRAME_LINE, $candidates, PREG_GREP_INVERT) ?: [];
         $error = array_key_last(preg_grep(self::NAMED_ERROR, $candidates) ?: []) ?? array_key_last(preg_grep(self::ERROR_WORD, $candidates) ?: []);

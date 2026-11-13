@@ -19,6 +19,9 @@ exit 0
 SH;
 
 const RELEASE_BUN_BUILD = <<<'SH'
+if [ "$1" = "tests/Corpus/codeHash.ts" ]; then
+    printf 'stubbedhash\n'
+fi
 if [ "$*" = "run build" ]; then
     for file in ${STUB_BUILD_EDITS:-}; do
         printf 'edited\n' >> "$file"
@@ -164,7 +167,7 @@ function releaseScriptSandbox(): array
         'VERSION' => "0.1.0\n",
         'scripts/install.sh' => (string) file_get_contents(base_path('scripts/install.sh')),
         'scripts/release.sh' => releaseScriptBody(),
-        '.gitignore' => "vendor/\n",
+        '.gitignore' => "vendor/\nstorage/\n",
     ];
 
     foreach ($files as $path => $contents) {
@@ -172,6 +175,8 @@ function releaseScriptSandbox(): array
         file_put_contents("{$sandbox['clone']}/{$path}", $contents);
     }
 
+    File::ensureDirectoryExists("{$sandbox['clone']}/storage/corpus");
+    file_put_contents("{$sandbox['clone']}/storage/corpus/fixed-pass-stubbedhash.json", "{}\n");
     chmod("{$sandbox['clone']}/scripts/install.sh", 0755);
     chmod("{$sandbox['clone']}/scripts/release.sh", 0755);
     File::ensureDirectoryExists("{$sandbox['clone']}/vendor/bin");

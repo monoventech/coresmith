@@ -18,6 +18,16 @@ function detectorFacts(array $files = [], array $lockfiles = []): RepositoryFact
     return new RepositoryFacts($files, $lockfiles);
 }
 
+test('a rails app whose css builds through cssbundling gets node and its package manager', function () {
+    $detection = app(RuntimeDetector::class)->detect(detectorApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']), detectorFacts([
+        'package.json' => '{"scripts":{"build:css":"sass ./app/assets/stylesheets/application.sass.scss:./app/assets/builds/application.css"}}',
+    ], ['package-lock.json']));
+
+    expect($detection->runtimes)->toBe(['ruby', 'nodejs'])
+        ->and($detection->tooling?->manager)->toBe('npm')
+        ->and($detection->tooling?->build)->toBeFalse();
+});
+
 test('a laravel app that builds with bun needs php and bun', function () {
     $detection = app(RuntimeDetector::class)->detect(detectorApp(), detectorFacts([
         'composer.json' => '{"require":{"php":"^8.4"}}',
@@ -135,6 +145,13 @@ test('ruby versions are read from .ruby-version, then the Gemfile', function (ar
     'the gemfile' => [['Gemfile' => "source \"https://rubygems.org\"\nruby \"~> 3.4\"\n"], '~> 3.4'],
 ]);
 
+test('a rails app with a package.json gets node and its package manager, whatever its scripts', function () {
+    $detection = app(RuntimeDetector::class)->detect(detectorApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']), detectorFacts(['package.json' => '{"devDependencies":{"vite":"^6.0.0","vite-plugin-ruby":"^5.1.0"}}'], ['package-lock.json']));
+
+    expect($detection->runtimes)->toBe(['ruby', 'nodejs'])
+        ->and($detection->tooling?->manager)->toBe('npm');
+});
+
 test('a rails app that builds javascript gets node for its yarn lockfile', function () {
     $application = detectorApp(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
     $detection = app(RuntimeDetector::class)->detect($application, detectorFacts(['package.json' => '{"scripts":{"build":"esbuild app/javascript/*.*"}}'], ['yarn.lock']));
@@ -142,13 +159,14 @@ test('a rails app that builds javascript gets node for its yarn lockfile', funct
     expect($detection->runtimes)->toBe(['ruby', 'nodejs'])->and($detection->tooling?->manager)->toBe('yarn');
 });
 
-test('a static site needs bun only when it has a build script', function (array $files, array $runtimes) {
+test('a static site needs a JavaScript runtime only when it has a build script, and its lockfile picks which', function (array $files, array $lockfiles, array $runtimes) {
     $application = detectorApp(['type' => ApplicationType::Static, 'framework' => '']);
 
-    expect(app(RuntimeDetector::class)->detect($application, detectorFacts($files))->runtimes)->toBe($runtimes);
+    expect(app(RuntimeDetector::class)->detect($application, detectorFacts($files, $lockfiles))->runtimes)->toBe($runtimes);
 })->with([
-    'plain html' => [[], []],
-    'an astro build' => [['package.json' => '{"scripts":{"build":"astro build"}}'], ['bun']],
+    'plain html' => [[], [], []],
+    'an astro build with no lockfile' => [['package.json' => '{"scripts":{"build":"astro build"}}'], [], ['nodejs']],
+    'an astro build with bun.lock' => [['package.json' => '{"scripts":{"build":"astro build"}}'], ['bun.lock'], ['bun']],
 ]);
 
 function detectorLockedNette(): string

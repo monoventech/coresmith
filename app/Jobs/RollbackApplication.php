@@ -80,7 +80,7 @@ final class RollbackApplication implements ShouldQueue
             $releases = $connection->execute('ls -1dt ' . $paths->releases() . '/*/ 2>/dev/null || true', sudo: true)->output;
             $ordered = array_values(array_filter(array_map(
                 static fn(string $line): string => rtrim(trim($line), '/'),
-                preg_split('/\R/', $releases) ?: [],
+                preg_split('/\r\n|\n|\r/', $releases) ?: [],
             )));
 
             $target = $this->target($ordered, $paths);

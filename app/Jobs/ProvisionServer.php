@@ -235,7 +235,7 @@ final class ProvisionServer implements ShouldQueue
 
     private function tail(string $output): string
     {
-        $lines = array_values(array_filter(array_map(rtrim(...), preg_split('/\R/', $output) ?: []), fn(string $line): bool => trim($line) !== ''));
+        $lines = array_values(array_filter(array_map(rtrim(...), preg_split('/\r\n|\n|\r/', $output) ?: []), fn(string $line): bool => trim($line) !== ''));
 
         return implode("\n", array_slice($lines, -12));
     }

@@ -34,6 +34,14 @@ test('plain, quoted and exported lines all become variables', function () {
     ]);
 });
 
+test('a value in Japanese or Chinese survives parsing byte for byte', function () {
+    expect(environmentFile()->parse("APP_NAME=\"ダークモード実装\"\nGREETING=你好，装修\nAFTER=1"))->toBe([
+        'APP_NAME' => 'ダークモード実装',
+        'GREETING' => '你好，装修',
+        'AFTER' => '1',
+    ]);
+});
+
 test('a double quoted value can run over several lines and carry escapes', function () {
     $raw = "KEY=\"-----BEGIN KEY-----\nabc\n-----END KEY-----\"\nNEXT=\"tab\\there \\\"quoted\\\" \\\\ done\"\nAFTER=1";
 

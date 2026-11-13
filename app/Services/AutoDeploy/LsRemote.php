@@ -46,7 +46,7 @@ final class LsRemote
 
     public function parse(string $output, string $branch): ?string
     {
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             $sha = strstr($line, "\t", true);
 
             if ($sha !== false && $line === $sha . "\t" . self::HEADS . $branch && preg_match(AutoDeploy::COMMIT, $sha) === 1) {

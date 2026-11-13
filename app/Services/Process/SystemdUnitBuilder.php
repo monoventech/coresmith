@@ -14,6 +14,7 @@ use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Deployment\StackDefaults;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\JsTooling;
 use App\Services\SafeName;
@@ -51,7 +52,7 @@ final class SystemdUnitBuilder
         $listen = $process === 'web'
             ? "Environment=\"PORT={$application->base_port}\"\nEnvironment=\"HOST=127.0.0.1\"\n" . ($application->type === ApplicationType::Js ? "Environment=\"HOSTNAME=127.0.0.1\"\n" : '')
             : '';
-        $defaults = $application->type?->defaultEnvironment() ?? [];
+        $defaults = app(StackDefaults::class)->process($application);
         $production = implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($defaults), $defaults));
         $command = $process === 'web' ? $command : $this->workerCommand($command);
         $umask = AppAccount::UMASK;
@@ -110,15 +111,17 @@ final class SystemdUnitBuilder
 
     private function jsCommand(Application $application): string
     {
-        $tooling = ((array) $application->stack)['tooling'] ?? null;
-        $start = JsTooling::fromArray(is_array($tooling) ? $tooling : null)?->start ?? false;
+        $data = ((array) $application->stack)['tooling'] ?? null;
+        $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
+        $start = $tooling?->start ?? false;
+        $script = $tooling?->startScript ?? 'start';
 
         return match ($application->js_runtime) {
             'node' => $start
-                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run start'
-                : $this->asdf->binaryPath('nodejs', (string) $application->node_version) . ' ' . $this->entry($application),
+                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run ' . $script
+                : $this->asdf->binaryPath('nodejs', (string) $application->node_version) . ' ' . $this->entry($application, $tooling),
             'deno' => $this->asdf->binaryPath('deno', (string) $application->deno_version) . ($start ? ' task start' : ' run --allow-net --allow-read --allow-env main.ts'),
-            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun start' : ' ' . $this->entry($application)),
+            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun ' . $script : ' ' . $this->entry($application, $tooling)),
         };
     }
 
@@ -134,13 +137,13 @@ final class SystemdUnitBuilder
         return str_starts_with($command, '/') ? $command : '/usr/bin/env ' . $command;
     }
 
-    private function entry(Application $application): string
+    private function entry(Application $application, ?JsTooling $tooling): string
     {
         return match (strtolower((string) $application->framework)) {
             'sveltekit' => 'build/index.js',
             'nuxt' => '.output/server/index.mjs',
             'astro' => 'dist/server/entry.mjs',
-            default => 'server.js',
+            default => $tooling?->main ?? 'server.js',
         };
     }
 

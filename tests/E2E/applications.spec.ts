@@ -541,6 +541,22 @@ test.describe('adding an application', () => {
         await expect(page.getByTestId('app-project')).toContainText('Storefront › Staging')
     })
 
+    test('a server with no free port block says so and keeps the form as it was', async ({ page }) => {
+        await gotoServer(page, 'full-01')
+        await page.getByRole('link', { name: 'Add an app' }).click()
+
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
+        await page.getByLabel('Name', { exact: true }).fill('one-too-many')
+        await page.getByLabel('Language').selectOption('js')
+        await page.getByLabel('Domain').fill('one-too-many.bench.monoven.io')
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        await expect(toast(page)).toContainText('No port block is free on full-01.')
+        await expect(toast(page)).toContainText("A removed app's block frees up after 7 days.")
+        await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
+        await expect(page.getByLabel('Name', { exact: true })).toHaveValue('one-too-many')
+    })
+
     test('a malformed domain is refused next to the field', async ({ page }) => {
         await gotoServer(page, 'bench-01')
         await page.getByRole('link', { name: 'Add an app' }).click()

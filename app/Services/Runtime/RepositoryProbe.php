@@ -16,9 +16,20 @@ final class RepositoryProbe
 {
     public const DIRECTORY_VARIABLE = 'CORESMITH_PROBE_DIR';
 
-    public const FILES = ['.tool-versions', 'composer.json', 'package.json', '.nvmrc', '.node-version', '.ruby-version', 'Gemfile', '.dvmrc', 'deno.json', 'deno.jsonc'];
+    public const FILES = [
+        '.tool-versions', 'composer.json', 'package.json', '.nvmrc', '.node-version', '.ruby-version', 'Gemfile', 'Gemfile.lock', '.dvmrc', 'deno.json', 'deno.jsonc',
+        'svelte.config.js', 'svelte.config.ts', 'next.config.js', 'next.config.mjs', 'next.config.ts', 'nuxt.config.ts', 'nuxt.config.js',
+        'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml',
+    ];
 
     public const LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'deno.lock'];
+
+    public const MARKERS = [
+        'artisan', 'bin/rails', 'bin/console', 'config.ru', 'Rakefile', 'index.php', 'public/index.php', 'web/index.php',
+        'index.html', 'public/index.html', 'main.ts', 'config/master.key', 'config/database.yml', 'symfony.lock', 'config/bundles.php', 'server.js',
+    ];
+
+    public const ENV_SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'RAILS_MASTER_KEY'];
 
     public const MAX_BYTES = 262144;
 
@@ -29,20 +40,29 @@ final class RepositoryProbe
     private const SCRIPT = <<<'BASH'
     cd "$CORESMITH_PROBE_DIR" 2>/dev/null || exit 0
     for f in {files}; do
-      if [ -f "$f" ]; then printf '@@file %s ' "$f"; head -c {bytes} "$f" | base64 | tr -d '\n'; printf '\n'; fi
+      if [ -f "$f" ] && [ ! -L "$f" ]; then printf '@@file %s ' "$f"; head -c {bytes} "$f" | base64 | tr -d '\n'; printf '\n'; fi
     done
     for f in {lockfiles}; do
       if [ -f "$f" ]; then printf '@@lock %s\n' "$f"; fi
     done
-    if [ -f composer.lock ]; then
+    for f in {markers}; do
+      if [ -f "$f" ] && [ ! -L "$f" ]; then printf '@@has %s\n' "$f"; fi
+    done
+    if [ -f .env ] && [ ! -L .env ]; then
+      for k in {secrets}; do
+        if grep -Eq "^[[:space:]]*(export[[:space:]]+)?${k}=[\"']?[^\"'[:space:]#]" .env; then printf '@@envkey %s\n' "$k"; fi
+      done
+    fi
+    if [ -f composer.lock ] && [ ! -L composer.lock ]; then
       printf '@@file composer.lock '; head -c {lockbytes} composer.lock | base64 | tr -d '\n'; printf '\n'
       grep -A1 -E '"name": "(laravel/framework|symfony/framework-bundle)",' composer.lock | awk -F'"' '/"name"/ {n=$4} /"version"/ {print "@@locked " n " " $4}'
     fi
-    if [ -f Gemfile.lock ]; then
+    if [ -f Gemfile.lock ] && [ ! -L Gemfile.lock ]; then
       sed -n 's/^    rails (\([^)]*\))$/@@locked rails \1/p' Gemfile.lock | head -n 1
       sed -n 's/^    sidekiq (\([^)]*\))$/@@locked sidekiq \1/p' Gemfile.lock | head -n 1
       sed -n 's/^    solid_queue (\([^)]*\))$/@@locked solid_queue \1/p' Gemfile.lock | head -n 1
     fi
+    printf '@@done\n'
     exit 0
     BASH;
 
@@ -63,6 +83,8 @@ final class RepositoryProbe
         return strtr(self::SCRIPT, [
             '{files}' => implode(' ', self::FILES),
             '{lockfiles}' => implode(' ', self::LOCKFILES),
+            '{markers}' => implode(' ', self::MARKERS),
+            '{secrets}' => implode(' ', self::ENV_SECRETS),
             '{bytes}' => (string) self::MAX_BYTES,
             '{lockbytes}' => (string) self::COMPOSER_LOCK_MAX_BYTES,
         ]) . "\n";
@@ -73,8 +95,11 @@ final class RepositoryProbe
         $files = [];
         $lockfiles = [];
         $locked = [];
+        $markers = [];
+        $envKeys = [];
+        $complete = false;
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && in_array($matches[1], [...self::FILES, self::COMPOSER_LOCK], true)) {
                 $content = base64_decode($matches[2], true);
 
@@ -85,9 +110,15 @@ final class RepositoryProbe
                 $lockfiles[] = $matches[1];
             } elseif (preg_match('/^@@locked (\S+) v?(\d[\w.+-]*)$/', $line, $matches) === 1) {
                 $locked[$matches[1]] = $matches[2];
+            } elseif ($line === '@@done') {
+                $complete = true;
+            } elseif (preg_match('/^@@has (\S+)$/', $line, $matches) === 1 && in_array($matches[1], self::MARKERS, true)) {
+                $markers[] = $matches[1];
+            } elseif (preg_match('/^@@envkey (\S+)$/', $line, $matches) === 1 && in_array($matches[1], self::ENV_SECRETS, true)) {
+                $envKeys[] = $matches[1];
             }
         }
 
-        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked);
+        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete);
     }
 }

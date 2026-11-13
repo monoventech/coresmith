@@ -1,0 +1,758 @@
+[
+    {
+        "name": "msnetworks/doc2info",
+        "cause": "app",
+        "why": "Past the skipped route:cache (ce9f027), Laravel 8 connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect.",
+        "commit": "ce9f027"
+    },
+    {
+        "name": "mattrias/directionMap",
+        "cause": "app",
+        "why": "Its view asks Vite for resources/js/Pages/*.jsx, but the folder is resources/js/pages, which only works on a case-insensitive disk."
+    },
+    {
+        "name": "sulaeman-kos/s_kos",
+        "cause": "app",
+        "why": "Its layout reads the signed-in user's name when nobody is signed in, so / answers 500."
+    },
+    {
+        "name": "Fennlye/insurance",
+        "cause": "app",
+        "why": "routes/api.php holds a merge conflict marker, so PHP cannot parse it."
+    },
+    {
+        "name": "Anen135/shortener",
+        "cause": "app",
+        "why": "package-lock.json is missing packages package.json needs, so npm ci fails on any machine, this Mac included."
+    },
+    {
+        "name": "angelsandev/tienda-laravel",
+        "cause": "app",
+        "why": "It registers Telescope, a dev dependency, unconditionally, so any install without dev packages fails."
+    },
+    {
+        "name": "lasirene-61sgn/vinyl-laravel",
+        "cause": "app",
+        "why": "Laravel 10 connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "225123/Web-Sidang-KP",
+        "commit": "ae6142c",
+        "cause": "app",
+        "why": "config.platform.php 8.2.0 is older than its locked packages need, so composer install fails on any server. Refused before the deploy since ae6142c."
+    },
+    {
+        "name": "akunesiateam/akunchatnew",
+        "cause": "app",
+        "why": "Past the ide-helper fix in 1f337ad, its Vue code imports lodash, which package.json doesn't declare and no lockfile pins, so the build can't resolve it.",
+        "commit": "1f337ad"
+    },
+    {
+        "name": "nest-api",
+        "commit": "f6abd63",
+        "cause": "stack",
+        "why": "npm start ran nest start, which compiles TypeScript inside the 256 MB limit. Fixed by f6abd63, which runs start:prod."
+    },
+    {
+        "name": "Anjali12234/crs",
+        "commit": "ce9f027",
+        "cause": "app",
+        "why": "Past the skipped route:cache (ce9f027), its layout uses Illuminate\\support\\Facades\\Cache with a lowercase support, which only loads on a case-insensitive disk, so / answers 500."
+    },
+    {
+        "name": "devosamagasser/glasses-shop",
+        "cause": "stack",
+        "why": "routes/api.php declares a function, so config:cache, which loads routes twice, hit a fatal redeclare. Skipped with the reason since ce9f027.",
+        "commit": "ce9f027"
+    },
+    {
+        "name": "InZaynGT/SheinApp",
+        "cause": "app",
+        "why": "Laravel 8 connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "maton369/HackFlow",
+        "cause": "app",
+        "why": "Laravel 10 connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "nev3rfind/bringlu-marketing-app",
+        "cause": "app",
+        "why": "Laravel 9 connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "JerryMont/Botica-AMY",
+        "cause": "app",
+        "why": "It commits part of vendor/, so composer finds nothing to install and then cannot find nette/schema's src folder."
+    },
+    {
+        "name": "AwaisDotGeek/_Boardify_",
+        "cause": "app",
+        "why": "Laravel 10 connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "hymns/hostiqo",
+        "cause": "app",
+        "why": "Its migrations use MySQL-only SQL (ALTER TABLE ... MODIFY), and without a database Laravel 12 uses SQLite, which rejects it. It needs MySQL."
+    },
+    {
+        "name": "mustafamsm/mini-shop",
+        "cause": "app",
+        "why": "It asks Vite for resources/js/pages/Shop/index.vue, but the file is Index.vue, which only works on a case-insensitive disk."
+    },
+    {
+        "name": "Djole003/djordjekitic",
+        "cause": "app",
+        "why": "resources/js/app.js imports bootstrap, which package.json doesn't declare, so the build can't resolve it."
+    },
+    {
+        "name": "SyldevK/TIE",
+        "cause": "app",
+        "why": "A class under src/ doesn't match its namespace, so Symfony's container can't load it and cache:clear fails."
+    },
+    {
+        "name": "rami-aouinti/bro-world-backend-setting",
+        "cause": "stack",
+        "why": "It needs ext-amqp, which Coresmith builds PHP without, so composer install fails. Refused when the stack is read since 8d792f9.",
+        "commit": "8d792f9"
+    },
+    {
+        "name": "devguy4u/paybis-crypto-api",
+        "commit": "f840f1e",
+        "cause": "app",
+        "why": "Past the missing .env (f840f1e), config/bundles.php registers TwigBundle, which composer.json doesn't require, so cache:clear fails."
+    },
+    {
+        "name": "Buzzi3/api-tarefas",
+        "cause": "app",
+        "why": "src/Tarefa.php requires Conexao.php, which the repository doesn't include."
+    },
+    {
+        "name": "karen-rm/kioskoNet",
+        "cause": "app",
+        "why": "Its routes sit under a base path hard-coded from the author's machine, so / is not found, and with no error middleware that answers 500."
+    },
+    {
+        "name": "quentin-reymond/MusicAPIv2",
+        "cause": "app",
+        "why": "app/settings.php reads DB_* settings and the app needs a MySQL database, neither of which the corpus provides."
+    },
+    {
+        "name": "bbxmbb/my-slim",
+        "cause": "app",
+        "why": "It calls phpdotenv's load(), which needs a .env the repository doesn't commit, and then needs the database settings .env.example lists."
+    },
+    {
+        "name": "frank270/nPhpSlim4Skeleton",
+        "cause": "stack",
+        "commit": "0ab1062",
+        "why": "No composer.lock and no PHP constraint, so Coresmith picked PHP 8.5, which its phpspreadsheet ^1.29 stops short of. The version reads not sure since 0ab1062."
+    },
+    {
+        "name": "Emanuel-Cacuci/symfony_cour",
+        "cause": "app",
+        "why": "Its .env points Doctrine at MySQL on 127.0.0.1, and the corpus deploys without a database."
+    },
+    {
+        "name": "lelinguine/supervision-project",
+        "cause": "app",
+        "why": "It calls phpdotenv's load(), which needs a .env the repository doesn't commit (it ships .env-example)."
+    },
+    {
+        "name": "Mysterken/osudroid-hub",
+        "cause": "app",
+        "why": "yarn.lock is out of date with package.json, so yarn install --frozen-lockfile fails on any machine."
+    },
+    {
+        "name": "STOCD/VGER",
+        "cause": "app",
+        "why": "An endpoint calls mkdirSync on an environment variable the app expects at build time and the corpus does not set."
+    },
+    {
+        "name": "Souvik-1705/Hire-Hub",
+        "cause": "app",
+        "why": "next build prerenders pages that need a Firebase API key the corpus does not set."
+    },
+    {
+        "name": "md-saim850/StudioSpace-client",
+        "cause": "app",
+        "why": "src/lib/auth.ts reads an environment variable at build time that the corpus does not set."
+    },
+    {
+        "name": "collective/pyf-gui",
+        "cause": "app",
+        "why": "Its dependencies' peer requirements conflict and it commits no lockfile, so npm install fails with ERESOLVE on any machine."
+    },
+    {
+        "name": "FarhadNuri/DriveFleet-Car-Rental-Client",
+        "cause": "app",
+        "why": "Its auth route reads an environment variable at build time that the corpus does not set."
+    },
+    {
+        "name": "erictreacy/FinanceFlow",
+        "cause": "app",
+        "why": "next build prerenders pages that need NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, which the corpus does not set."
+    },
+    {
+        "name": "deeesh/IT-Salary-Calculator-AIR",
+        "cause": "app",
+        "why": "next build runs ESLint, which fails on errors in its own code."
+    },
+    {
+        "name": "poliberry/moddr_web",
+        "cause": "app",
+        "why": "It imports socket from a page module that doesn't export it, so next build fails."
+    },
+    {
+        "name": "dishudhalwal12/localjob",
+        "cause": "app",
+        "why": "next build runs ESLint, which fails on errors in its own code."
+    },
+    {
+        "name": "eduardogazolla/portfolio",
+        "cause": "app",
+        "why": "next build needs HYGRAPH_URL and HYGRAPH_TOKEN, which the corpus does not set."
+    },
+    {
+        "name": "uyoolabs/uyoopack-tutorial",
+        "cause": "stack",
+        "commit": "e9bac9c",
+        "why": "Its start script is next start -p 3100, so the app ignored PORT and answered 502. Refused when the stack is read since e9bac9c."
+    },
+    {
+        "name": "otatechie/guacpanel-tailwind",
+        "cause": "app",
+        "why": "A composer script connects to MySQL, and the corpus deploys without a database."
+    },
+    {
+        "name": "akshara-devs/sistem-antrian",
+        "cause": "app",
+        "why": "It connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "avishka-hashara/factory-outlet-pos",
+        "cause": "app",
+        "why": "It connects to MySQL by default and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "MaryEddythe/hr-system",
+        "cause": "app",
+        "why": "Its migrations use MySQL-only SQL (MODIFY), which SQLite rejects. It needs MySQL."
+    },
+    {
+        "name": "fauzan05/z-health-queue-app",
+        "cause": "app",
+        "why": "Its dependencies' peer requirements conflict and no lockfile settles them, so npm install fails with ERESOLVE on any machine."
+    },
+    {
+        "name": "Selomegech/ai-social-tool",
+        "cause": "app",
+        "why": "package.json names a dependency npm cannot fetch (404), so npm ci fails on any machine."
+    },
+    {
+        "name": "neozhu/lingualens",
+        "cause": "app",
+        "why": "npm ci refuses its package-lock.json, which is out of step with package.json, on any machine."
+    },
+    {
+        "name": "Shubham-355/gren",
+        "cause": "app",
+        "why": "It pins bun@1.3.8 in packageManager, and Bun 1.3.8 crashes running its next build (reproduced outside Coresmith on this arm64 node). Bun 1.4.2 builds it."
+    },
+    {
+        "name": "devreyz/supply",
+        "commit": "ce9f027",
+        "cause": "app",
+        "why": "Past the skipped view:cache (ce9f027), it connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "ichierevans/futsaldev",
+        "commit": "ce9f027",
+        "cause": "app",
+        "why": "Past the skipped route:cache (ce9f027), it connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "devops-thiago/6038_Desenvolvimento_Backend_com_IA_Essencial_PHP",
+        "cause": "stack",
+        "why": "An API-only app with no resources/views, so view:cache failed, and a failed cache failed the deploy. Skipped with the reason since ce9f027.",
+        "commit": "ce9f027"
+    },
+    {
+        "name": "AlukweJonesTerah/ProposalMonitor",
+        "cause": "stack",
+        "why": "Its start script is next start -p 3000, so the app ignored PORT and answered 502. Refused when the stack is read since e9bac9c.",
+        "commit": "e9bac9c"
+    },
+    {
+        "name": "Gabrielingnau/Finance.ai",
+        "cause": "app",
+        "why": "Its middleware needs Clerk keys and Prisma needs DATABASE_URL, which the corpus does not set, so / answers 500."
+    },
+    {
+        "name": "chatbotkit/template-nextjs-slack-agent-platform-js",
+        "cause": "app",
+        "why": "next build type-checks a dependency (react-markdown) whose types don't match its React, so the build fails on any machine."
+    },
+    {
+        "name": "indigibilliharshit/Habit-Tracker-App",
+        "cause": "app",
+        "why": "next build cannot find a module the code imports."
+    },
+    {
+        "name": "oncorphinchus/fentanylfloyd",
+        "cause": "app",
+        "why": "An API route throws at build time without BUCKET_NAME, which the corpus does not set."
+    },
+    {
+        "name": "fpgarciamtnz/CVKiko",
+        "cause": "app",
+        "why": "package-lock.json makes @cloudflare/workerd-windows-64 a required dependency, so npm ci refuses it on Linux."
+    },
+    {
+        "name": "zidvsd/waddlr",
+        "cause": "app",
+        "why": "Better Auth refuses to build without BETTER_AUTH_SECRET, which the corpus does not set."
+    },
+    {
+        "name": "PreciousNwogu/Dabs_Beauty_Touch",
+        "cause": "stack",
+        "why": "public/index.php calls putenv(), which Coresmith turns off for PHP web requests (with exec, proc_open and the rest), so every request is a fatal error before Laravel boots. Not fixed: the restriction is deliberate hardening."
+    },
+    {
+        "name": "AlexandrePereon/ify",
+        "cause": "app",
+        "why": "nuxt-auth refuses to start in production without AUTH_ORIGIN, which the corpus does not set."
+    },
+    {
+        "name": "Ripwords/ai-trip",
+        "cause": "app",
+        "why": "Its Nuxt build on Bun needs over 4.6 GB, past the 6 GiB corpus node's memory with other builds running. A server size limit, not a stack choice."
+    },
+    {
+        "name": "zinken7/gowhere-wa",
+        "cause": "app",
+        "why": "Its Nuxt build needs about 2.1 GB and was killed by the node-wide OOM killer while two other builds ran on the 6 GiB corpus node. A server size limit, not a stack choice."
+    },
+    {
+        "name": "yasminelkhawa-prog/ATS-pfe",
+        "cause": "app",
+        "why": "It imports ../Employment-Types, which isn't in the repository under that name."
+    },
+    {
+        "name": "Fanreza/Nestora",
+        "cause": "app",
+        "why": "npm ci refuses its package-lock.json, which is out of step with package.json, on any machine."
+    },
+    {
+        "name": "Laznology/nuxt-fullstack-blueprint",
+        "cause": "app",
+        "why": "Better Auth refuses to start without BETTER_AUTH_SECRET, which the corpus does not set."
+    },
+    {
+        "name": "R0mm1/mediatheque-front-nuxt",
+        "cause": "app",
+        "why": "yarn.lock is out of date with package.json, so yarn install --frozen-lockfile fails on any machine."
+    },
+    {
+        "name": "thebluefowl/vishnujayadevan.com",
+        "cause": "stack",
+        "commit": "7e0ead1",
+        "why": "nuxt.config sets Nitro's preset to github in production builds, so it built for GitHub Pages, not a Node server. Reads not sure since 7e0ead1."
+    },
+    {
+        "name": "AllisonDaney/BilleterieJO",
+        "cause": "stack",
+        "commit": "7e0ead1",
+        "why": "@nuxthub/core builds it for Cloudflare Pages, so there was no Node server and the app answered 502. Reads not sure since 7e0ead1."
+    },
+    {
+        "name": "umesh-verma/nessam-tea",
+        "cause": "stack",
+        "why": "It pins Bun 1.3.4, whose bun run can't list the root-owned 711 folders above the release, so the build failed reading its current directory. Builds since be17e43.",
+        "commit": "be17e43"
+    },
+    {
+        "name": "rafael-arantes/portifolio",
+        "cause": "stack",
+        "commit": "ee5e0a3",
+        "why": "package.json declares yarn@1.22.22 but the only lockfile is pnpm-lock.yaml, so corepack refused the pnpm install Coresmith chose. Refused with the fix since ee5e0a3."
+    },
+    {
+        "name": "jtkunley/jameskunley",
+        "cause": "app",
+        "why": "Its build launches Puppeteer's Chrome, which needs system libraries the server doesn't have."
+    },
+    {
+        "name": "ngeorgeault/ngeorgeault.github.io",
+        "cause": "app",
+        "why": "Its build fails inside @tailwindcss/vite with the Vite and Rolldown versions it resolves."
+    },
+    {
+        "name": "erlin-martinez-ds/lenguas-vivas-backend",
+        "cause": "app",
+        "why": "It refuses to start without JWT_SECRET, which the corpus does not set."
+    },
+    {
+        "name": "kevinnail/fs-react-exp-gallery-backend",
+        "cause": "app",
+        "why": "It needs a PostgreSQL database on 127.0.0.1:5432, which the corpus does not attach."
+    },
+    {
+        "name": "JeremieN6/stellara",
+        "cause": "app",
+        "why": "Doctrine needs DATABASE_URL, which neither the repository nor the corpus sets, so cache:clear fails."
+    },
+    {
+        "name": "giabaod1nh-spec/TokenRing_DistributedSystem",
+        "cause": "app",
+        "why": "Its code holds merge conflict markers, so Node cannot parse it."
+    },
+    {
+        "name": "ThilinaTLM/JyskUC-MockAPI",
+        "cause": "app",
+        "why": "bun.lock is out of date with package.json, so bun install --frozen-lockfile fails on any machine."
+    },
+    {
+        "name": "jashanpreetsinghdod/NotificationService",
+        "cause": "stack",
+        "why": "Its start script runs ts-node, which compiles TypeScript at start and went past Small's 256 MB. Reads not sure since 46ee0f1.",
+        "commit": "46ee0f1"
+    },
+    {
+        "name": "Semai-Mohamed/WorkSphere-Backend",
+        "cause": "app",
+        "why": "puppeteer's install downloads a Chrome that has no Linux arm64 build; the corpus node is arm64."
+    },
+    {
+        "name": "sagi0312/serenity-core",
+        "cause": "app",
+        "why": "Its dependencies' peer requirements conflict and no lockfile settles them, so npm install fails with ERESOLVE on any machine."
+    },
+    {
+        "name": "Ashirvad95/backend_byte",
+        "cause": "app",
+        "why": "It refuses to start without JWT_SECRET, which the corpus does not set."
+    },
+    {
+        "name": "Thagya/Expense-Tracker-",
+        "cause": "app",
+        "why": "package-lock.json is missing the platform packages npm ci needs, so it fails on any machine."
+    },
+    {
+        "name": "Maharsh-Nayak/CSI-Quizz",
+        "cause": "app",
+        "why": "firebase.js reads Firebase credentials from the environment, which the corpus does not set."
+    },
+    {
+        "name": "codepharm99/markdown-create",
+        "cause": "app",
+        "why": "It needs OPENAI_API_KEY, which the corpus does not set."
+    },
+    {
+        "name": "cfg7am/opendic-server",
+        "cause": "app",
+        "why": "It needs a MongoDB URI, which the corpus does not set."
+    },
+    {
+        "name": "ElInsano69/PROYECTOEXPOKINAL",
+        "cause": "app",
+        "why": "npm ci refuses its package-lock.json, which is out of step with package.json, on any machine."
+    },
+    {
+        "name": "Animesh0706/Ai-Resume-Analyzer",
+        "cause": "app",
+        "why": "It needs a MongoDB URI, which the corpus does not set."
+    },
+    {
+        "name": "abdulahad123524/flocci-backend",
+        "cause": "app",
+        "why": "It refuses to start without MONGODB_URI, which the corpus does not set."
+    },
+    {
+        "name": "viv2005ek/BiteSpeed",
+        "cause": "app",
+        "why": "Prisma needs DATABASE_URL, which the corpus does not set."
+    },
+    {
+        "name": "manchagd/grouping_nodes_api",
+        "cause": "app",
+        "why": "Its production database is PostgreSQL, which the corpus does not attach, so migrations cannot connect."
+    },
+    {
+        "name": "PharaohKJ/lightning-talks-manager",
+        "cause": "stack",
+        "commit": "9d7e1b7",
+        "why": "cssbundling-rails runs npm during assets:precompile, but Coresmith only gave Rails apps Node for a build script. Node, npm and the packages are there since 9d7e1b7."
+    },
+    {
+        "name": "NishimuraS133/original",
+        "cause": "stack",
+        "commit": "56ab872",
+        "why": "Gemfile.lock lists x86_64-linux but not the arm64 corpus node's aarch64-linux, so bundle install refused it in deployment mode. Refused with the bundle lock fix since 56ab872."
+    },
+    {
+        "name": "KaemonIsland/mana-flooded",
+        "cause": "stack",
+        "commit": "56ab872",
+        "why": "Gemfile.lock lists x86_64-linux but not the arm64 corpus node's aarch64-linux, so bundle install refused it in deployment mode. Refused with the bundle lock fix since 56ab872."
+    },
+    {
+        "name": "marciotoshio/bingo",
+        "cause": "stack",
+        "commit": "56ab872",
+        "why": "Gemfile.lock lists x86_64-linux but not the arm64 corpus node's aarch64-linux, so bundle install refused it in deployment mode. Refused with the bundle lock fix since 56ab872."
+    },
+    {
+        "name": "christopherdent/VolunteerManager",
+        "cause": "app",
+        "why": "Its production database is PostgreSQL, which the corpus does not attach, so migrations cannot connect."
+    },
+    {
+        "name": "klaustopher/turbostream-react-demo",
+        "cause": "stack",
+        "commit": "9d7e1b7",
+        "why": "vite_rails needs the npm packages installed, and Coresmith left a Rails app's JavaScript to assets:precompile, so the vite binary was missing. Installed after the gems since 9d7e1b7."
+    },
+    {
+        "name": "sethhorsley/react-rails-starter-kit",
+        "cause": "stack",
+        "commit": "9d7e1b7",
+        "why": "vite_rails needs the npm packages installed, and Coresmith left a Rails app's JavaScript to assets:precompile, so the vite binary was missing. Installed after the gems since 9d7e1b7."
+    },
+    {
+        "name": "sethhorsley/inertia-rails-shadcn-starter",
+        "cause": "stack",
+        "commit": "9d7e1b7",
+        "why": "vite_rails needs the npm packages installed, and Coresmith left a Rails app's JavaScript to assets:precompile, so the vite binary was missing. Installed after the gems since 9d7e1b7."
+    },
+    {
+        "name": "ChanMor/chatgenie",
+        "commit": "194ce39",
+        "cause": "app",
+        "why": "Past the missing yarn (9d7e1b7, 194ce39), its production database is PostgreSQL, which the corpus does not attach, so migrations cannot connect."
+    },
+    {
+        "name": "ub-digit/bestall",
+        "cause": "app",
+        "why": "Its production database is PostgreSQL, which the corpus does not attach, so migrations cannot connect."
+    },
+    {
+        "name": "EKL-NCI/AlbumTrackerCA",
+        "cause": "app",
+        "why": "Its production database is PostgreSQL, which the corpus does not attach, so migrations cannot connect."
+    },
+    {
+        "name": "simonesilvetti/simonesilvetti.github.io",
+        "cause": "stack",
+        "why": "A Rails app without Active Record, so rails db:migrate is not a command it has. Migrations are skipped without config/database.yml since 55d0135.",
+        "commit": "55d0135"
+    },
+    {
+        "name": "jusondac/railsapptemplate",
+        "cause": "stack",
+        "why": "Gemfile.lock lists x86_64-linux but not the arm64 corpus node's aarch64-linux, so bundle install refused it. Refused with the bundle lock fix since 56ab872.",
+        "commit": "56ab872"
+    },
+    {
+        "name": "MILOSNIKOLA/MilosNikola1.github.io",
+        "cause": "app",
+        "why": "Its Vite config minifies with terser, which package.json doesn't install."
+    },
+    {
+        "name": "Nandoabcd22/futzoneReal",
+        "cause": "app",
+        "why": "It connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "karma253/Hot_stone_bath_booking_system",
+        "cause": "app",
+        "why": "It connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "AbdullahAlbkour/Camp_management",
+        "cause": "app",
+        "why": "It connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "IAmShafqatAli/boostrap5-inertia-ssr",
+        "cause": "app",
+        "why": "It connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "YolandaMbande/easybooking",
+        "cause": "app",
+        "why": "It connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "NicholasLoren/jpriceless",
+        "cause": "app",
+        "why": "Its dependencies' peer requirements conflict and no lockfile settles them, so npm install fails with ERESOLVE on any machine."
+    },
+    {
+        "name": "SLAVACOM/web-sys-lab-5",
+        "cause": "app",
+        "why": "Its production database config names no SQLite file, so migrations fail with 'No database file specified'."
+    },
+    {
+        "name": "VictoriousWealth/audit-management-system-demo",
+        "cause": "stack",
+        "commit": "c8119e3",
+        "why": "Nothing names a Ruby version, so Coresmith picked 3.4.10, which stopped shipping bigdecimal that Rails 7.0.8.7 loads. The version reads not sure since 58b3371."
+    },
+    {
+        "name": "jedaeroweb/homepage",
+        "cause": "stack",
+        "commit": "c8119e3",
+        "why": "Nothing names a Ruby version, so Coresmith picked 3.4.11, and its locked sqlite3 1.7.3 build stops before Ruby 3.4. The version reads not sure since c8119e3."
+    },
+    {
+        "name": "mhero/freight-challenge",
+        "cause": "app",
+        "why": "Its production database is PostgreSQL, which the corpus does not attach, so migrations cannot connect."
+    },
+    {
+        "name": "gma/nestacms.com",
+        "cause": "app",
+        "why": "haml-contrib registers Tilt::MarukuTemplate, which the Tilt it locks no longer has, so the app cannot boot."
+    },
+    {
+        "name": "finadio/SetaraLoka",
+        "cause": "stack",
+        "why": "The repository leaves out storage/framework/views, so package discovery failed with 'Please provide a valid cache path'. Created on every release since f9807ff.",
+        "commit": "f9807ff"
+    },
+    {
+        "name": "Fuzail21/POS",
+        "commit": "f9807ff",
+        "cause": "app",
+        "why": "Past the missing SQLite file (f9807ff), its migrations use MySQL-only SQL (MODIFY), which SQLite rejects. It needs MySQL."
+    },
+    {
+        "name": "palladium-tms/palladium-api",
+        "cause": "stack",
+        "why": "Gemfile.lock lists x86_64-linux but not the arm64 corpus node's aarch64-linux. Refused with the bundle lock fix since 56ab872.",
+        "commit": "56ab872"
+    },
+    {
+        "name": "ctyamashita/text-to-speech-google-api",
+        "cause": "app",
+        "why": "Its Gemfile resolves azure_tts to a version whose ruby_speech dependency Bundler can't satisfy, so bundle install fails on any machine."
+    },
+    {
+        "name": "gracesitumorang17/ulosta",
+        "cause": "app",
+        "why": "A migration alters the orders table before any migration creates it."
+    },
+    {
+        "name": "aniway89/Aetheris",
+        "cause": "app",
+        "why": "It imports a module by a path that doesn't exist with that letter case."
+    },
+    {
+        "name": "lUCIFER94008/Bismi",
+        "cause": "app",
+        "why": "Its auth API route reads environment values at build time that the corpus does not set."
+    },
+    {
+        "name": "anothor/genui",
+        "cause": "app",
+        "why": "Its CSS fails to parse in the Nuxt build."
+    },
+    {
+        "name": "efrizalnf/laravel-notes-app",
+        "cause": "app",
+        "why": "Its dependencies' peer requirements conflict and no lockfile settles them, so npm install fails with ERESOLVE on any machine."
+    },
+    {
+        "name": "Peureki/peuresearchcenterv2",
+        "cause": "app",
+        "why": "It connects to MySQL and the corpus deploys without a database, so migrations cannot connect."
+    },
+    {
+        "name": "fox-one/cowallet",
+        "commit": "5a18896",
+        "cause": "stack",
+        "why": "Nothing names a Node.js version, so Coresmith picked Node 24, where yarn 1 first refused a dependency's engines (fixed by 5155b3d) and then node-sass, which no release builds on Node.js 21 or newer, failed. Reads not sure since 5a18896."
+    },
+    {
+        "name": "iampratyushk/Ai-interview-backend",
+        "cause": "app",
+        "why": "It needs OPENAI_API_KEY, which the corpus does not set."
+    },
+    {
+        "name": "rromenskyi/platform-dash",
+        "cause": "app",
+        "why": "It needs OIDC settings and AUTH_SECRET, which the corpus does not set, so / answers 500."
+    },
+    {
+        "name": "symful/template-portfolio",
+        "cause": "stack",
+        "why": "nuxt.config sets Nitro's preset to cloudflare-pages, so the build made no Node server. Refused since 7e0ead1.",
+        "commit": "7e0ead1"
+    },
+    {
+        "name": "nivedit1998/dinodia-platform",
+        "cause": "app",
+        "why": "Its Prisma config needs DATABASE_URL during install, which the corpus does not set."
+    },
+    {
+        "name": "1446652577/agent-",
+        "cause": "app",
+        "why": "Its build cannot find modules it imports."
+    },
+    {
+        "name": "MidhunPM6/WorkBridge_Job_Portal-back-end",
+        "cause": "app",
+        "why": "It refuses to start without JWT_SECRET_KEY, which the corpus does not set."
+    },
+    {
+        "name": "VovaRotterdam/Store_Sofa_Project",
+        "cause": "app",
+        "why": "next build collects page data that needs environment values the corpus does not set."
+    },
+    {
+        "name": "mikilezen/arc-agent-starter",
+        "cause": "app",
+        "why": "next build cannot find modules its components import."
+    },
+    {
+        "name": "svnmin/onlineStoreProject",
+        "cause": "app",
+        "why": "next build runs ESLint, which fails on errors in its own code."
+    },
+    {
+        "name": "brendanfurtado/CaseMap",
+        "cause": "app",
+        "why": "next build needs an API token from the environment, which the corpus does not set."
+    },
+    {
+        "name": "evanpurkhiser/resume",
+        "cause": "app",
+        "why": "Its Astro build generates a PDF with a headless Chrome that needs system libraries the server doesn't have."
+    },
+    {
+        "name": "BhuvanXcode/Temple",
+        "cause": "app",
+        "why": "It imports ../../package.json, which is outside the app, so it cannot start."
+    },
+    {
+        "name": "coumbassasanden-group/CS-TECH-WEB-APP",
+        "cause": "app",
+        "why": "npm ci refuses its package-lock.json, which is out of step with package.json, on any machine."
+    },
+    {
+        "name": "yakkoworks/StarMap",
+        "cause": "app",
+        "why": "npm ci refuses its package-lock.json, which is out of step with package.json, on any machine."
+    },
+    {
+        "name": "niranjanb27/saicare-backend",
+        "cause": "app",
+        "why": "Its MongoDB Atlas cluster no longer resolves, so it cannot start."
+    },
+    {
+        "name": "vishuSkywalker/mern-estate",
+        "cause": "app",
+        "why": "It listens on port 3000 fixed in its code and ignores PORT, so the app answered 502."
+    }
+]

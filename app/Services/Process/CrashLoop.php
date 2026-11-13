@@ -13,5 +13,6 @@ final readonly class CrashLoop
     public function __construct(
         public string $unit,
         public string $output,
+        public bool $outOfMemory = false,
     ) {}
 }

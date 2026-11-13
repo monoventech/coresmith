@@ -4,7 +4,7 @@
 
 <script lang="ts">
     import { router } from '@inertiajs/svelte'
-    import { CircleSlash, OctagonAlert } from '@lucide/svelte'
+    import { CircleSlash, OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount, tick } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
@@ -26,6 +26,7 @@
         phases: Phase[]
         failed_phase: string | null
         failure_reason: string | null
+        live_answer: { status: number; detail: string | null } | null
         start_failed: boolean
         failed_worker: string | null
         failed_step: string | null
@@ -286,6 +287,30 @@
         </div>
     {/if}
 </div>
+
+{#if live.status === 'succeeded' && live.live_answer}
+    {#if live.live_answer.status >= 500}
+        <div
+            class="tint-warning mb-5 flex items-start gap-3 rounded-xl border px-4.5 py-3.5 max-sm:mb-3.5 max-sm:gap-2.5 max-sm:px-3.5 max-sm:py-3"
+            data-testid="deploy-live-answer"
+        >
+            <TriangleAlert class="mt-0.5 size-4.5 shrink-0 text-warning max-sm:size-4" />
+            <div class="min-w-0 text-[13.5px] leading-[1.55] max-sm:text-[12.5px] max-sm:leading-normal">
+                <span class="font-semibold">{`Live, but the app answered ${live.live_answer.status}.`}</span>
+                {#if live.live_answer.detail}
+                    The app logged:
+                    <span class="font-mono text-[12.5px] wrap-anywhere max-sm:text-[12px]"
+                        >{live.live_answer.detail}</span
+                    >
+                {/if}
+            </div>
+        </div>
+    {:else}
+        <p class="mb-5 text-[12.5px] text-muted-foreground max-sm:mb-3.5" data-testid="deploy-live-answer">
+            {`The app answered ${live.live_answer.status} once live.`}
+        </p>
+    {/if}
+{/if}
 
 {#if live.status === 'failed'}
     <div
