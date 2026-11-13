@@ -15,6 +15,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
+use App\Exceptions\PortExhaustedException;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\CheckCertificates;
@@ -113,6 +114,12 @@ final class ApplicationController extends Controller
         $checked = $request->checkedRead();
         $initial = app(StackDefaults::class)->initial(ApplicationType::tryFrom($request->string('type')->value()), $request->input('framework'));
 
+        try {
+            $port = $ports->allocate($server);
+        } catch (PortExhaustedException $exhausted) {
+            return back()->withInput()->with('error', $exhausted->getMessage());
+        }
+
         $application = Application::create([
             ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id', 'detection']),
             ...($connection === null || $repository === null ? [] : [
@@ -129,7 +136,7 @@ final class ApplicationController extends Controller
             'team_id' => $server->team_id,
             'slug' => $slug,
             'system_user' => $slugs->systemUser($slug),
-            'base_port' => $ports->allocate($server),
+            'base_port' => $port,
             'status' => ApplicationStatus::Pending,
         ]);
 

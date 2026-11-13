@@ -65,6 +65,17 @@ test('the store refuses a PHP extension the server\'s PHP lacks', function () {
         ->assertSessionHasErrors(['repository_url' => "composer.json needs the amqp PHP extension, which PHP 8.5.10 on this server doesn't have, so composer install fails. Remove ext-amqp from composer.json if the app runs without it."]);
 });
 
+test('a server with no free port block says so on the form instead of failing', function () {
+    [$owner, $server] = storeDetectionServer();
+    Application::factory()->count(200)->sequence(fn($sequence): array => ['base_port' => 8000 + $sequence->index * 10, 'slug' => 'taken-' . $sequence->index])->create(['server_id' => $server->id]);
+
+    storeDetectionPost($owner, $server, [])
+        ->assertRedirect()
+        ->assertSessionHas('error', 'No port block is free on web-01. All 200 blocks in 8000–9999 are taken by apps or by other processes. Remove apps you no longer need, or stop processes using ports in that range.');
+
+    expect(storeDetectionApp())->toBeNull();
+});
+
 test('the store refuses a choice the checks know will fail and names the fix', function () {
     [$owner, $server] = storeDetectionServer();
     $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts('slim-skeleton')));
