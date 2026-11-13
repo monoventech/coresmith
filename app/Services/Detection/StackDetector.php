@@ -111,6 +111,13 @@ final class StackDetector
             $unsettled['runtime_version'] = self::PHP_UNNAMED;
         }
 
+        $ruby = $type === ApplicationType::Ruby && $runtime !== null ? ($stack?->runtimes[$runtime] ?? null) : null;
+        $rails = $facts->gem('railties');
+
+        if ($ruby !== null && $ruby->source === ResolvedRuntime::FROM_DEFAULT && version_compare($ruby->version, '3.4', '>=') && $rails !== null && version_compare($rails, '7.1', '<') && ($facts->gem('bigdecimal') === null || $facts->gem('mutex_m') === null)) {
+            $unsettled['runtime_version'] = "Nothing names a Ruby version, and Rails {$rails} needs gems that Ruby 3.4 stopped shipping, such as bigdecimal, while Coresmith would pick Ruby {$ruby->version}. Add a .ruby-version, for example 3.3.6.";
+        }
+
         return new DetectedStack(
             $proposal['type'],
             $proposal['framework'],

@@ -104,6 +104,27 @@ test('a Nuxt app that may build for another host is not sure', function (string 
     'NuxtHub, BilleterieJO' => ["export default defineNuxtConfig({ modules: ['@nuxthub/core'] })\n", ['@nuxthub/core' => '^0.8.0'], '@nuxthub/core'],
 ]);
 
+function stackDetectorOldRails(array $extra = []): RepositoryFacts
+{
+    $facts = RepositoryFixture::facts('rails-api');
+    $lock = (string) preg_replace(['/^    (rails|railties|activerecord|activesupport|actionpack) \([0-9.]+\)$/m', '/^    (bigdecimal|mutex_m) \([^)]*\)\n/m'], ['    $1 (7.0.8.7)', ''], (string) $facts->file('Gemfile.lock'));
+    $files = ['Gemfile.lock' => $lock, ...array_diff_key($facts->files, ['Gemfile.lock' => true, '.ruby-version' => true, '.tool-versions' => true]), ...$extra];
+
+    return new RepositoryFacts($files, $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+}
+
+test('rails before 7.1 with no Ruby version named is not sure, since the newest Ruby drops gems it loads', function () {
+    $detected = stackDetectorRun(stackDetectorOldRails());
+
+    expect($detected->verdict())->toBe('unsure')
+        ->and($detected->unsettled['runtime_version'] ?? '')->toContain('Rails 7.0.8.7')
+        ->and($detected->unsettled['runtime_version'] ?? '')->toContain('.ruby-version');
+});
+
+test('rails before 7.1 with its Ruby version named is ready', function () {
+    expect(stackDetectorRun(stackDetectorOldRails(['.ruby-version' => "3.3.6\n"]))->verdict())->toBe('ready');
+});
+
 test('the server language wins over a frontend package.json', function () {
     expect(stackDetectorRun('laravel-13')->type)->toBe('php')
         ->and(stackDetectorRun('rails-jsbundling')->type)->toBe('ruby');
