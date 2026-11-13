@@ -12,7 +12,7 @@
     - Each was picked in a seeded order with the same exclusions.
 - The merged set is `storage/corpus/held-3.json`.
 
-## First pass, before any fix (e7e8f69)
+## First pass, before any fix (code hash 898b7b60c7de1114)
 
 - Repositories: 77
 - Verdicts: ready 57, unsure 10, blocked 10
@@ -26,15 +26,15 @@
 
 ## Coresmith's failures, each fixed with tests
 
-- **artur-laptev/spot-prices:** a Laravel repository with no `database/` folder, so migrate found no SQLite file. Fixed by 7c1e0ee.
-- **GHmolliss/slim-app:** a plain PHP app whose `Dotenv::load()` needs a `.env`. Fixed by d32c508.
-- **e621ng/e621ng:** rugged needs cmake, and mrml, through rb_sys, needs libclang. Fixed by 805f496.
-- **rails/rails-contributors:** rugged needs cmake. Fixed by 805f496.
-- **ibibhu/wedding:** fibers builds on no Node.js Coresmith installs, but detection called it ready. Fixed by 790775c, which refuses it with that reason.
+- **artur-laptev/spot-prices:** a Laravel repository with no `database/` folder, so migrate found no SQLite file. Fixed in 0.8.6.
+- **GHmolliss/slim-app:** a plain PHP app whose `Dotenv::load()` needs a `.env`. Fixed in 0.8.6.
+- **e621ng/e621ng:** rugged needs cmake, and mrml, through rb_sys, needs libclang. Fixed in 0.8.6.
+- **rails/rails-contributors:** rugged needs cmake. Fixed in 0.8.6.
+- **ibibhu/wedding:** fibers builds on no Node.js Coresmith installs, but detection called it ready. Fixed in 0.8.6, which refuses it with that reason.
 
-The fixed set (`fixed.json`, 40 repositories) passed 40 of 40 on the fixed code (cd7394e, code hash 4c7ff5da5088ca79).
+The fixed set (`fixed.json`, 40 repositories) passed 40 of 40 on the fixed code (code hash 4c7ff5da5088ca79).
 
-## The five, deployed again on the fixed code (cd7394e)
+## The five, deployed again on the fixed code (code hash 4c7ff5da5088ca79)
 
 - **ibibhu/wedding** is now refused, with the fibers reason.
 - **artur-laptev/spot-prices** now migrates, then answers 500. Laravel's database sessions need a sessions table, and the repository has no migration for one.

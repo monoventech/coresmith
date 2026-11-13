@@ -828,12 +828,12 @@
     {
         "name": "artur-laptev/spot-prices",
         "cause": "app",
-        "why": "Laravel's database sessions need a sessions table, and the repository has no migration for one, so the app answers 500. Its first failure was Coresmith's: with no database folder, migrate found no SQLite file, fixed by 7c1e0ee."
+        "why": "Laravel's database sessions need a sessions table, and the repository has no migration for one, so the app answers 500. Its first failure was Coresmith's: with no database folder, migrate found no SQLite file, fixed in 0.8.6."
     },
     {
         "name": "GHmolliss/slim-app",
         "cause": "app",
-        "why": "It needs APP_ENV in its environment, and the corpus sets no variables, so its own EnvHelper throws and the app answers 500. Its first failure was Coresmith's: Dotenv's load() threw without a .env file, fixed by d32c508."
+        "why": "It needs APP_ENV in its environment, and the corpus sets no variables, so its own EnvHelper throws and the app answers 500. Its first failure was Coresmith's: Dotenv's load() threw without a .env file, fixed in 0.8.6."
     },
     {
         "name": "faizalhavid/moorfa-notes",
@@ -878,17 +878,16 @@
     {
         "name": "e621ng/e621ng",
         "cause": "app",
-        "why": "It loads config/danbooru_local_config, which the repository does not commit, so migrations stop. Its first failure was Coresmith's: rugged and mrml could not compile without cmake and libclang, fixed by 805f496."
+        "why": "It loads config/danbooru_local_config, which the repository does not commit, so migrations stop. Its first failure was Coresmith's: rugged and mrml could not compile without cmake and libclang, fixed in 0.8.6."
     },
     {
         "name": "rails/rails-contributors",
         "cause": "app",
-        "why": "Its build needs a git mirror of the Rails repository on the server, which the corpus does not make. Its first failure was Coresmith's: rugged could not compile without cmake, fixed by 805f496."
+        "why": "Its build needs a git mirror of the Rails repository on the server, which the corpus does not make. Its first failure was Coresmith's: rugged could not compile without cmake, fixed in 0.8.6."
     },
     {
         "name": "ibibhu/wedding",
-        "commit": "790775c",
         "cause": "stack",
-        "why": "Detection called it ready, but its fibers dependency builds on no Node.js Coresmith installs. Fixed by 790775c, which refuses it with that reason."
+        "why": "Detection called it ready, but its fibers dependency builds on no Node.js Coresmith installs. Fixed in 0.8.6, which refuses it with that reason."
     }
 ]
