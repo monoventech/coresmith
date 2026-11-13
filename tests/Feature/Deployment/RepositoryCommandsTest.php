@@ -26,7 +26,7 @@ test('the lockfile chooses the package manager and its commands', function (JsTo
     'bun, no lockfile' => [new JsTooling('bun', false, true, false), ['bun install'], ['bun run build']],
     'npm' => [new JsTooling('npm', true, true, false), ['npm ci'], ['npm run build']],
     'npm, no lockfile and nothing to build' => [new JsTooling('npm', false, false, false), ['npm install'], []],
-    'pnpm' => [new JsTooling('pnpm', true, true, false, '9.12.0'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile'], ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm run build']],
+    'pnpm, without failing on dependency build scripts it was not told to run' => [new JsTooling('pnpm', true, true, false, '9.12.0'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --config.strict-dep-builds=false'], ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm run build']],
     'yarn classic' => [new JsTooling('yarn', true, true, false, '1.22.22'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --frozen-lockfile'], ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn run build']],
     'yarn berry' => [new JsTooling('yarn', true, false, false, '4.5.0'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --immutable'], []],
     'deno with a manifest' => [new JsTooling('deno', false, true, true), ['deno install'], ['deno task build']],

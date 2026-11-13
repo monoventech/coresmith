@@ -94,7 +94,7 @@ final readonly class JsTooling
 
         return [match ($this->manager) {
             'npm' => $this->locked ? 'npm ci' : 'npm install',
-            'pnpm' => self::COREPACK . 'pnpm install --frozen-lockfile',
+            'pnpm' => self::COREPACK . 'pnpm install --frozen-lockfile --config.strict-dep-builds=false',
             'yarn' => self::COREPACK . ($this->berry() ? 'yarn install --immutable' : 'yarn install --frozen-lockfile'),
             'deno' => 'deno install',
             default => $this->locked ? 'bun install --frozen-lockfile' : 'bun install',
