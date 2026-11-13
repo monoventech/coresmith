@@ -37,7 +37,8 @@ test('reading a server keeps its public IPv4 address, whether visitors reach it,
 
     app()->call([new ReadServerAddresses($server), 'handle']);
 
-    expect($server->fresh()->public_addresses)->toBe(serverAddressesReading(now()->toIso8601String(), open: false));
+    expect($server->fresh()->public_addresses)->toEqual(serverAddressesReading(now()->toIso8601String(), open: false))
+        ->and($server->fresh()->public_addresses['ipv4_open'])->toBeFalse();
 });
 
 test("a reading that couldn't ask get.coresmith.io keeps the IPv4 address it had", function () {
@@ -47,7 +48,8 @@ test("a reading that couldn't ask get.coresmith.io keeps the IPv4 address it had
 
     app()->call([new ReadServerAddresses($server), 'handle']);
 
-    expect($server->fresh()->public_addresses)->toBe(serverAddressesReading(now()->toIso8601String()));
+    expect($server->fresh()->public_addresses)->toEqual(serverAddressesReading(now()->toIso8601String()))
+        ->and($server->fresh()->public_addresses['ipv4_open'])->toBeTrue();
 });
 
 test('a server Coresmith cannot reach keeps its last reading', function () {
@@ -56,7 +58,7 @@ test('a server Coresmith cannot reach keeps its last reading', function () {
 
     app()->call([new ReadServerAddresses($server), 'handle']);
 
-    expect($server->fresh()->public_addresses)->toBe(serverAddressesReading('2026-11-01T00:00:00+00:00'));
+    expect($server->fresh()->public_addresses)->toEqual(serverAddressesReading('2026-11-01T00:00:00+00:00'));
 });
 
 test('the hourly pass reads active servers with no reading, or one older than a week', function () {

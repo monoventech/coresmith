@@ -158,7 +158,7 @@ test("the check stores each domain's reading on the app", function () {
     expect(array_keys($reach))->toBe(['notes.example.net', 'www.notes.example.net'])
         ->and($reach['notes.example.net']['ready'])->toBeFalse()
         ->and($reach['notes.example.net']['problems'][0])->toStartWith("notes.example.net doesn't point anywhere yet.")
-        ->and($reach['notes.example.net']['records'])->toBe([['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7']])
+        ->and($reach['notes.example.net']['records'])->toEqual([['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7']])
         ->and($reach['notes.example.net']['checked_at'])->toBe(now()->toIso8601String());
 });
 
@@ -170,12 +170,12 @@ test("the check keeps what it learned about the server's addresses, for the next
 
     app()->call([new CheckDomainReach($application), 'handle']);
 
-    expect($application->server->fresh()->public_addresses)->toBe([
+    expect($application->server->fresh()->public_addresses)->toEqual([
         'ipv4' => '203.0.113.7',
         'ipv4_open' => false,
         'ipv6' => [appReachIpv6()],
         'checked_at' => now()->toIso8601String(),
-    ]);
+    ])->and($application->server->fresh()->public_addresses['ipv4_open'])->toBeFalse();
 });
 
 test('a check that cannot reach the server says so for each domain', function () {
