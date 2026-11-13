@@ -113,13 +113,16 @@ function stackDetectorOldRails(array $extra = []): RepositoryFacts
     return new RepositoryFacts($files, $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
 }
 
-test('rails before 7.1 with no Ruby version named is not sure, since the newest Ruby drops gems it loads', function () {
-    $detected = stackDetectorRun(stackDetectorOldRails());
+test('rails with no Ruby version named is not sure, since gems locked for an older Ruby may not install on the newest', function (array $extra, string $rails) {
+    $detected = stackDetectorRun(stackDetectorOldRails($extra));
 
     expect($detected->verdict())->toBe('unsure')
-        ->and($detected->unsettled['runtime_version'] ?? '')->toContain('Rails 7.0.8.7')
+        ->and($detected->unsettled['runtime_version'] ?? '')->toContain("Rails {$rails}")
         ->and($detected->unsettled['runtime_version'] ?? '')->toContain('.ruby-version');
-});
+})->with([
+    'rails 7.0, which loads gems Ruby 3.4 dropped' => [[], '7.0.8.7'],
+    'rails 7.1 with a native gem built for older Rubies, jedaeroweb/homepage' => [['Gemfile.lock' => "GEM\n  remote: https://rubygems.org/\n  specs:\n    bigdecimal (4.0.1)\n    mutex_m (0.3.0)\n    puma (6.6.0)\n    railties (7.1.6)\n    sqlite3 (1.7.3-aarch64-linux)\n\nPLATFORMS\n  aarch64-linux\n\nDEPENDENCIES\n  puma\n  rails\n\nBUNDLED WITH\n   2.7.0\n"], '7.1.6'],
+]);
 
 test('rails before 7.1 with its Ruby version named is ready', function () {
     expect(stackDetectorRun(stackDetectorOldRails(['.ruby-version' => "3.3.6\n"]))->verdict())->toBe('ready');
