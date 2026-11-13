@@ -1202,7 +1202,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(header(page, 'dev-mode')).toContainText('Failed')
         await expect(header(page, 'dev-mode')).not.toContainText('Live')
         await expect(banner).toContainText('The last deploy went live but did not finish.')
-        await expect(banner).toContainText("The web process didn't start (activating).'t start (activating).")
+        await expect(banner).toContainText("The web process didn't start (activating).")
         await expect(banner).toContainText('Set RAILS_ENV=production in its environment variables, then deploy again.')
         await expect(banner).not.toContainText('is serving')
 
@@ -1223,7 +1223,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(header(page, 'no-sidekiq')).toContainText('Live')
         await expect(header(page, 'no-sidekiq')).not.toContainText('Failed')
         await expect(banner).toContainText('The last deploy went live but did not finish.')
-        await expect(banner).toContainText("The sidekiq process didn't start (activating).'t start (activating).")
+        await expect(banner).toContainText("The sidekiq process didn't start (activating).")
         await expect(toggle(page, 'Sidekiq')).toBeChecked()
         await expect(toggle(page, 'Sidekiq')).toBeEnabled()
     })
@@ -1237,7 +1237,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(banner).toContainText('The rollback did not start the app.')
         await expect(banner).toContainText(/releases\/\d{8}-\d{6} is live again, but its processes did not start\./)
         await expect(banner).toContainText(
-            "The web process didn't start (activating). Port 8310 is already taken by another process.'t start (activating). Port 8310 is already taken by another process."
+            "The web process didn't start (activating). Port 8310 is already taken by another process."
         )
         await expect(page.getByTestId('failed-banner')).toHaveCount(0)
     })
@@ -1251,7 +1251,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(header(page, 'rollback-sidekiq')).not.toContainText('Failed')
         await expect(banner).toContainText('Sidekiq did not start after the rollback.')
         await expect(banner).toContainText(/releases\/\d{8}-\d{6} is live again, but Sidekiq did not start\./)
-        await expect(banner).toContainText("The sidekiq process didn't start (activating).'t start (activating).")
+        await expect(banner).toContainText("The sidekiq process didn't start (activating).")
         await expect(banner).not.toContainText('The rollback did not start the app.')
     })
 

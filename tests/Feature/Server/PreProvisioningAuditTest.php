@@ -117,7 +117,7 @@ test('a coresmith user blocks a fresh server but not one Coresmith already start
 
     expect(auditFinding(auditFindings($probe), 'user_coresmith')['severity'])->toBe('blocker')
         ->and(auditFinding(auditFindings($probe, ['provisioning_phase' => 3]), 'user_coresmith')['severity'])->toBe('info')
-        ->and(auditFinding(auditFindings($probe), 'app_users')['title'])->toBe('1 Coresmith app user exists');
+        ->and(auditFinding(auditFindings($probe), 'app_users')['title'])->toBe('1 app account from an earlier Coresmith setup');
 });
 
 test("the panel's own host is refused with one blocker and none of the advice that would break the panel", function (array $panel, array $server) {

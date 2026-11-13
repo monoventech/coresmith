@@ -378,7 +378,7 @@ test('provisioning another teams server is refused and queues nothing', function
 test('an admin can provision a server whose recent check found nothing blocking', function () {
     Queue::fake();
     $team = Team::factory()->create();
-    $server = checkedServer($team, [['key' => 'app_users', 'severity' => 'warning', 'title' => '1 Coresmith app user exists', 'detail' => '', 'fix' => null]]);
+    $server = checkedServer($team, [['key' => 'app_users', 'severity' => 'warning', 'title' => '1 app account from an earlier Coresmith setup', 'detail' => '', 'fix' => null]]);
 
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->post(route('servers.provision', $server))

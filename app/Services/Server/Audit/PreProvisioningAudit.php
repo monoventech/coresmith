@@ -168,7 +168,7 @@ final class PreProvisioningAudit
 
             $findings[] = $ownMachine && $port === self::CORESMITH_INTERNAL_PORT && $process === 'caddy'
                 ? new AuditFinding("app_port_{$port}", AuditSeverity::Info, "Port {$port} is Coresmith's", 'Coresmith approves certificates for your domains there. Apps skip that port.')
-                : new AuditFinding("app_port_{$port}", AuditSeverity::Warning, "Port {$port} is in use by {$process}", 'It is inside the range Coresmith gives apps (8000–9999). Apps skip that port block, or stop the process to free it.');
+                : new AuditFinding("app_port_{$port}", AuditSeverity::Warning, "Port {$port} is in use by {$process}", 'It is inside the range Coresmith gives apps (8000–9999). Apps get other ports, or stop the process to free it.');
         }
 
         return $findings;
@@ -246,7 +246,7 @@ final class PreProvisioningAudit
         $apps = count(array_filter($users, fn(string $user): bool => str_starts_with($user, 'coresmith-app-')));
 
         if ($apps > 0) {
-            $findings[] = new AuditFinding('app_users', AuditSeverity::Warning, $apps . ' Coresmith app ' . ($apps === 1 ? 'user exists' : 'users exist'), 'Coresmith may have provisioned this server before. Provisioning reuses those users.');
+            $findings[] = new AuditFinding('app_users', AuditSeverity::Warning, $apps . ' app ' . ($apps === 1 ? 'account' : 'accounts') . ' from an earlier Coresmith setup', 'Coresmith may have set this server up before. Provisioning reuses ' . ($apps === 1 ? 'it.' : 'them.'));
         }
 
         return $findings;
