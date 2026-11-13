@@ -195,11 +195,7 @@ final class StackDetector
                 return $this->proposal('ruby', null, null, null, $sources, ['framework' => 'Gemfile names rails, but there is no bin/rails, so this looks like a Rails engine or gem, not an app.']);
             }
 
-            $bundler = preg_match('/^BUNDLED WITH\R\s+(\d+\.\d+[\w.]*)/m', (string) $facts->file('Gemfile.lock'), $matches) === 1 ? $matches[1] : null;
-
-            return $this->proposal('ruby', $gem, null, null, [...$sources, 'framework' => $version === null ? "{$gem} in Gemfile" : "{$gem} {$version} in Gemfile.lock"], $bundler !== null && version_compare($bundler, '2.4', '<')
-                ? ['runtime_version' => "Gemfile.lock was written by Bundler {$bundler}. Coresmith builds Ruby 3.2 and newer, where locks that old often fail to install. Run bundle update --bundler, then commit Gemfile.lock."]
-                : []);
+            return $this->proposal('ruby', $gem, null, null, [...$sources, 'framework' => $version === null ? "{$gem} in Gemfile" : "{$gem} {$version} in Gemfile.lock"], $this->oldBundler($facts));
         }
 
         return $this->proposal('ruby', null, null, null, $sources, ['framework' => 'Gemfile names neither rails nor sinatra. Coresmith runs Rails and Sinatra apps.']);
@@ -404,6 +400,26 @@ final class StackDetector
         }
 
         return ['node', 'No lockfile, so Node, which every npm package supports'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function oldBundler(RepositoryFacts $facts): array
+    {
+        $lock = $facts->file('Gemfile.lock');
+
+        if ($lock === null) {
+            return [];
+        }
+
+        $bundler = preg_match('/^BUNDLED WITH\R\s+(\d+\.\d+[\w.]*)/m', $lock, $matches) === 1 ? $matches[1] : null;
+
+        return match (true) {
+            $bundler === null => ['runtime_version' => "Gemfile.lock doesn't say which Bundler wrote it, so it predates Bundler 1.10. Coresmith builds Ruby 3.2 and newer, where locks that old often fail to install. Run bundle update --bundler, then commit Gemfile.lock."],
+            version_compare($bundler, '2.4', '<') => ['runtime_version' => "Gemfile.lock was written by Bundler {$bundler}. Coresmith builds Ruby 3.2 and newer, where locks that old often fail to install. Run bundle update --bundler, then commit Gemfile.lock."],
+            default => [],
+        };
     }
 
     private function viteOnly(RepositoryFacts $facts): bool
