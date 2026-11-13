@@ -34,6 +34,10 @@ final class StackDefaults
      */
     public function missing(Application $application, RepositoryFacts $facts): array
     {
+        if (!$facts->complete) {
+            return [];
+        }
+
         $set = array_filter(app(EnvironmentFile::class)->parse((string) $application->env_variables), fn(string $value): bool => trim($value) !== '');
         $secrets = array_intersect_key($this->initial($application->type, $application->framework === null ? null : strtolower($application->framework)), array_flip(self::SECRETS));
 
@@ -42,6 +46,23 @@ final class StackDefaults
         }
 
         return array_filter($secrets, fn(string $value, string $name): bool => !isset($set[$name]) && !in_array($name, $facts->envKeys, true), ARRAY_FILTER_USE_BOTH);
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    public function fill(string $environment, array $values): string
+    {
+        foreach ($values as $name => $value) {
+            $line = $name . '="' . addcslashes($value, '\\"$`') . '"';
+            $pattern = '/^[ \t]*(?:export[ \t]+)?' . preg_quote($name, '/') . '[ \t]*=.*$/m';
+
+            $environment = preg_match($pattern, $environment) === 1
+                ? (string) preg_replace_callback($pattern, fn(): string => $line, $environment, 1)
+                : ($environment === '' || str_ends_with($environment, "\n") ? $environment : $environment . "\n") . $line . "\n";
+        }
+
+        return $environment;
     }
 
     /**

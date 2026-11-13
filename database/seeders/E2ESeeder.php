@@ -208,6 +208,7 @@ final class E2ESeeder extends Seeder
 
         $this->githubFixtures($tenant->applications['atlas']);
         $this->repositoryChecks();
+        $this->answered500();
         $this->cronFixtures();
 
         $this->rekeyed('rekeyed-server', '203.0.113.30');
@@ -450,6 +451,13 @@ final class E2ESeeder extends Seeder
         foreach (array_values(self::PROJECTS) as $index => $code) {
             $failed($this->server("stalled-{$code}", '203.0.113.' . (90 + $index), ServerStatus::Pending));
         }
+    }
+
+    private function answered500(): void
+    {
+        $application = $this->application('answered-500', 9900);
+        $this->succeeded($application, 1, 'v2.0.0');
+        $application->deployments()->latest('id')->firstOrFail()->forceFill(['live_status' => 500, 'live_detail' => 'No application encryption key has been specified.'])->save();
     }
 
     private function repositoryChecks(): void

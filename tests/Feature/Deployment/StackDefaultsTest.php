@@ -37,7 +37,7 @@ test('each app gets its own secrets', function () {
 });
 
 test('a missing secret is one set neither in the environment nor in the committed .env', function (string $env, array $envKeys, array $missing) {
-    expect(array_keys(app(StackDefaults::class)->missing(stackDefaultsApp('laravel', $env), new RepositoryFacts(envKeys: $envKeys))))->toBe($missing);
+    expect(array_keys(app(StackDefaults::class)->missing(stackDefaultsApp('laravel', $env), new RepositoryFacts(envKeys: $envKeys, complete: true))))->toBe($missing);
 })->with([
     'nowhere' => ['', [], ['APP_KEY']],
     'empty in the environment' => ["APP_KEY=\n", [], ['APP_KEY']],
@@ -48,11 +48,15 @@ test('a missing secret is one set neither in the environment nor in the committe
 test('Rails with a master key gets no SECRET_KEY_BASE', function (string $env, RepositoryFacts $facts) {
     expect(app(StackDefaults::class)->missing(stackDefaultsApp('rails', $env, ApplicationType::Ruby), $facts))->toBe([]);
 })->with([
-    'in the environment' => ["RAILS_MASTER_KEY=0123456789abcdef0123456789abcdef\n", new RepositoryFacts],
-    'in the committed .env' => ['', new RepositoryFacts(envKeys: ['RAILS_MASTER_KEY'])],
-    'committed as config/master.key' => ['', new RepositoryFacts(markers: ['config/master.key'])],
+    'in the environment' => ["RAILS_MASTER_KEY=0123456789abcdef0123456789abcdef\n", new RepositoryFacts(complete: true)],
+    'in the committed .env' => ['', new RepositoryFacts(envKeys: ['RAILS_MASTER_KEY'], complete: true)],
+    'committed as config/master.key' => ['', new RepositoryFacts(markers: ['config/master.key'], complete: true)],
 ]);
 
 test('a deploy fills only secrets, never APP_ENV', function () {
-    expect(array_keys(app(StackDefaults::class)->missing(stackDefaultsApp('symfony'), new RepositoryFacts)))->toBe(['APP_SECRET']);
+    expect(array_keys(app(StackDefaults::class)->missing(stackDefaultsApp('symfony'), new RepositoryFacts(complete: true))))->toBe(['APP_SECRET']);
+});
+
+test('a probe that did not finish fills nothing, because the committed .env could hold the key', function () {
+    expect(app(StackDefaults::class)->missing(stackDefaultsApp('laravel'), new RepositoryFacts))->toBe([]);
 });

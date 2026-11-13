@@ -44,6 +44,7 @@ class Deployment extends Model
     protected function casts(): array
     {
         return [
+            'live_status' => 'integer',
             'status' => DeploymentStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',

@@ -35,10 +35,15 @@ use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\GitFailure;
+use App\Services\Deployment\LiveAnswer;
+use App\Services\Deployment\LiveCheck;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\RepositoryCache;
 use App\Services\Deployment\SharedStorage;
+use App\Services\Deployment\StackDefaults;
+use App\Services\Detection\Blocker;
+use App\Services\Detection\StackChecks;
 use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\ApplicationRelinker;
@@ -53,6 +58,7 @@ use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeBinaries;
@@ -442,6 +448,8 @@ final class DeployApplication implements ShouldQueue
         $asdf = app(AsdfManager::class);
         $binaries = app(RuntimeBinaries::class);
         $facts = $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(RepositoryProbe::class)->read($connection, $paths->appDirectory($release), $application));
+        $this->refuseUnrunnable($application, $facts);
+        $this->fillMissingSecrets($application, $facts);
         $stack = $this->reconnecting($connection, DeploymentPhases::CLONE, function () use ($connection, $application, $facts, $asdf, $binaries): Stack {
             $stack = app(StackResolver::class)->resolve($application, $facts, fn(string $runtime): array => $asdf->installedVersions($connection, $runtime));
 
@@ -463,6 +471,47 @@ final class DeployApplication implements ShouldQueue
         }
 
         return $stack;
+    }
+
+    private function refuseUnrunnable(Application $application, RepositoryFacts $facts): void
+    {
+        $blockers = app(StackChecks::class)->blockers($application, $facts, fn(): array => [], runtime: false);
+
+        if ($blockers === []) {
+            return;
+        }
+
+        $this->failureReason = implode(' ', array_map(fn(Blocker $blocker): string => trim($blocker->reason . ' ' . $blocker->fix), $blockers));
+
+        throw new DeploymentAborted($this->failureReason);
+    }
+
+    private function fillMissingSecrets(Application $application, RepositoryFacts $facts): void
+    {
+        $defaults = app(StackDefaults::class);
+        $missing = $defaults->missing($application, $facts);
+
+        if ($missing === []) {
+            return;
+        }
+
+        $application->forceFill(['env_variables' => $defaults->fill((string) $application->env_variables, $missing)])->save();
+
+        foreach (array_keys($missing) as $name) {
+            $this->appendLog("{$name} wasn't set, so Coresmith generated one and saved it in the app's environment.");
+        }
+    }
+
+    private function recordLiveAnswer(SSHConnection $connection, Application $application): void
+    {
+        $answer = rescue(fn(): ?LiveAnswer => app(LiveCheck::class)->ask($connection, $application), report: false);
+
+        if (!$answer instanceof LiveAnswer) {
+            return;
+        }
+
+        $this->deployment->forceFill(['live_status' => $answer->status, 'live_detail' => $answer->detail])->save();
+        $this->appendLog('check: ' . $answer->url . ' answered ' . $answer->status . ($answer->detail === null ? '' : '. The app logged: ' . $answer->detail));
     }
 
     private function verifyInstalled(SSHConnection $connection, RuntimeBinaries $binaries, Stack $stack): Stack
@@ -574,6 +623,7 @@ final class DeployApplication implements ShouldQueue
         app(CrontabBuilder::class)->write($connection, $application);
         $this->pruneOldReleases($connection, $application);
         $this->watchProcesses($connection, $processes, $application);
+        $this->recordLiveAnswer($connection, $application);
 
         if (DeploymentCancellation::requested($this->deployment)) {
             app(DeploymentCancellation::class)->note($this->deployment);
