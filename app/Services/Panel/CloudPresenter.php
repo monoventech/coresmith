@@ -94,7 +94,7 @@ final class CloudPresenter
      */
     public function choices(Team $team, User $user, ?string $requested): array
     {
-        if (!$user->hasTeamAbility($team, Ability::ManageProviders)) {
+        if (!$user->hasTeamAbility($team, Ability::CreateCloudServer)) {
             return ['accounts' => [], 'types' => [], 'selected' => 'manual', 'can_connect' => false];
         }
 

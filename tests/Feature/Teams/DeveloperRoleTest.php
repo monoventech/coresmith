@@ -22,6 +22,7 @@ function developerRoleTable(): array
         'manage members' => [Ability::ManageMembers, false],
         'view a server' => [Ability::ViewServer, true],
         'add a server' => [Ability::CreateServer, true],
+        'add a server on a cloud account' => [Ability::CreateCloudServer, false],
         'update a server' => [Ability::UpdateServer, true],
         'delete a server' => [Ability::DeleteServer, true],
         'read server credentials' => [Ability::ViewServerCredentials, false],

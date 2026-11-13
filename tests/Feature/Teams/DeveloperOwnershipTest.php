@@ -6,12 +6,14 @@ use App\Enums\Ability;
 use App\Enums\TeamRole;
 use App\Models\ApiToken;
 use App\Models\Application;
+use App\Models\CloudProvider;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia;
 
 /**
  * @return array{team: Team, owner: User, developer: User, shared: Server, own: Server, theirs: Application, mine: Application, theirsDb: ManagedDatabase, mineDb: ManagedDatabase}
@@ -136,11 +138,11 @@ test('a developer cannot create a project, where an admin can', function () {
 
 test('a developer adding a server is offered only a server of its own over SSH, never the cloud accounts', function () {
     ['team' => $team, 'developer' => $developer] = developerOwnershipSetup();
-    App\Models\CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud']);
+    CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud']);
 
     $this->actingAs($developer)->get(route('servers.create'))
         ->assertOk()
-        ->assertInertia(fn(Inertia\Testing\AssertableInertia $page) => $page
+        ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('cloud.accounts', [])
             ->where('cloud.types', [])
             ->where('cloud.selected', 'manual')

@@ -10,6 +10,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Edition;
 use App\Enums\TeamRole;
+use App\Http\Controllers\Settings\AccountGitController;
 use App\Jobs\SyncAuthorizedKeys;
 use App\Models\Team;
 use App\Models\User;
@@ -121,6 +122,7 @@ final class TeamMemberController extends Controller
 
         $team->members()->detach($user->getKey());
         $access->remove($team, $user);
+        AccountGitController::removeOwn($team, (string) $user->getKey());
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties(['email' => $user->email])->log('member_removed');
 

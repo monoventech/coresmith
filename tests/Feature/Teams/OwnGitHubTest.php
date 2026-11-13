@@ -3,14 +3,17 @@
 declare(strict_types=1);
 
 use App\Enums\TeamRole;
+use App\Models\Application;
 use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Git\GitHub\ApplicationRelinker;
 use App\Services\Git\GitHub\GitHubAppRegistrar;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\GitHubConnector;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia;
 
 /**
  * @return array{team: Team, owner: User, developer: User, other: User, own: SourceProvider, team_connection: SourceProvider}
@@ -145,4 +148,49 @@ test('the installation of a GitHub App of its own becomes a connection that memb
 
     expect($connection->user_id)->toBe($developer->id)
         ->and($connection->usableBy($developer, $team))->toBeTrue();
+});
+
+test("the team Git page lists members' own GitHub apart from the team's, for those who manage the team", function () {
+    ['team' => $team, 'owner' => $owner, 'developer' => $developer, 'own' => $own] = ownGitHubSetup();
+
+    $this->actingAs($owner)->get(route('source-providers.index'))
+        ->assertOk()
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('github.connections', fn($connections): bool => collect($connections)->pluck('account')->all() === ['monoventech'])
+            ->where('github.members', [['id' => $own->id, 'account' => 'lena-b', 'member' => $developer->name, 'remove_href' => route('source-providers.members.destroy', $own)]]));
+});
+
+test("an owner removes a member's own GitHub, keys and all, where a developer cannot", function () {
+    ['owner' => $owner, 'developer' => $developer, 'other' => $other, 'own' => $own] = ownGitHubSetup();
+
+    $this->actingAs($other)->delete(route('source-providers.members.destroy', $own))->assertForbidden();
+    $this->actingAs($owner)->delete(route('source-providers.members.destroy', $own))->assertSessionHas('success');
+
+    expect($own->fresh()->trashed())->toBeTrue()
+        ->and(GitHubApp::query()->where('user_id', $developer->id)->exists())->toBeFalse();
+});
+
+test('a member who leaves the team takes its own GitHub with it, and its apps say the connection is gone', function () {
+    ['team' => $team, 'owner' => $owner, 'developer' => $developer, 'own' => $own] = ownGitHubSetup();
+    $application = Application::factory()->for($team)->create(['source_provider_id' => $own->id, 'repository_id' => '881', 'created_by' => $developer->id]);
+
+    $this->actingAs($owner)->delete(route('teams.members.destroy', [$team, $developer]))->assertSessionHas('success', 'Member removed.');
+
+    expect($own->fresh()->trashed())->toBeTrue()
+        ->and(GitHubApp::query()->where('user_id', $developer->id)->exists())->toBeFalse()
+        ->and($application->fresh()->githubProblem())->toBe('removed');
+});
+
+test("an app on a member's own GitHub is never moved onto the team's connection, and the reverse", function () {
+    ['team' => $team, 'own' => $own, 'team_connection' => $teamConnection] = ownGitHubSetup();
+    $mine = Application::factory()->for($team)->create(['source_provider_id' => $own->id, 'repository_id' => '881']);
+    $ours = Application::factory()->for($team)->create(['source_provider_id' => $teamConnection->id, 'repository_id' => '882']);
+    $own->delete();
+    $teamConnection->delete();
+    $newTeam = SourceProvider::factory()->githubApp(GitHubApp::factory()->create(['team_id' => $team->id]))->create(['team_id' => $team->id, 'name' => 'lena-b']);
+    $newOwn = SourceProvider::factory()->githubApp(GitHubApp::factory()->create(['team_id' => $team->id, 'user_id' => $own->user_id]))->create(['team_id' => $team->id, 'user_id' => $own->user_id, 'name' => 'monoventech']);
+    $relinker = app(ApplicationRelinker::class);
+
+    expect($relinker->stranded($newTeam)->pluck('id')->all())->not->toContain($mine->id)
+        ->and($relinker->stranded($newOwn)->pluck('id')->all())->not->toContain($ours->id);
 });

@@ -68,6 +68,27 @@ final class AccountGitController extends Controller
         return redirect()->route('account.git')->with('success', $app === null ? 'Removed.' : "Removed. Delete {$app->name} from your GitHub account too, at {$app->html_url}.");
     }
 
+    public function destroyMember(Request $request, SourceProvider $sourceProvider): RedirectResponse
+    {
+        $team = $this->currentTeam();
+
+        abort_unless($team !== null && $sourceProvider->team_id === $team->getKey() && $sourceProvider->user_id !== null, 404);
+        $this->authorize('update', $team);
+
+        $member = $sourceProvider->user;
+        self::removeOwn($team, (string) $sourceProvider->user_id);
+
+        activity()->performedOn($team)->causedBy($request->user())->withProperties(['member' => $member?->email, 'account' => $sourceProvider->name])->log('own_github_removed');
+
+        return back()->with('success', 'Removed.');
+    }
+
+    public static function removeOwn(Team $team, string $userId): void
+    {
+        SourceProvider::query()->where('team_id', $team->getKey())->where('user_id', $userId)->get()->each->delete();
+        GitHubApp::query()->where('team_id', $team->getKey())->where('user_id', $userId)->delete();
+    }
+
     private function ownApp(Team $team, User $user): ?GitHubApp
     {
         return GitHubApp::query()->where('team_id', $team->getKey())->where('user_id', $user->getKey())->first();

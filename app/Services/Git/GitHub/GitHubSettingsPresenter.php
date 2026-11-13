@@ -45,6 +45,7 @@ final class GitHubSettingsPresenter
         $viaHost = $this->context->viaHost();
         $connections = $team->sourceProviders()
             ->where('type', SourceProviderType::GitHubApp->value)
+            ->whereNull('user_id')
             ->orderBy('name')
             ->orderBy('id')
             ->get();
@@ -59,8 +60,31 @@ final class GitHubSettingsPresenter
             'connect' => $canManage && $available !== [] ? $this->connectLinks($available[0]->key) : null,
             'choose' => $canManage ? $this->choice($team, $user, $available) : null,
             'webhook' => $this->webhooks($available, $connected, $canManage),
+            'members' => $canManage ? $this->members($team) : [],
             'can' => ['manage' => $canManage],
         ];
+    }
+
+    /**
+     * @return list<array{id: string, account: string, member: string, remove_href: string}>
+     */
+    private function members(Team $team): array
+    {
+        return $team->sourceProviders()
+            ->where('type', SourceProviderType::GitHubApp->value)
+            ->whereNotNull('user_id')
+            ->with('user')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get()
+            ->map(fn(SourceProvider $provider): array => [
+                'id' => $provider->id,
+                'account' => $provider->name,
+                'member' => (string) $provider->user?->name,
+                'remove_href' => route('source-providers.members.destroy', $provider),
+            ])
+            ->values()
+            ->all();
     }
 
     public function recheckSuspended(Team $team): void

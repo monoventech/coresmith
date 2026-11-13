@@ -39,6 +39,14 @@ class SourceProvider extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function usableBy(User $user, Team $team): bool
     {
         if ($this->team_id !== $team->getKey()) {

@@ -135,6 +135,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/security', [SecurityController::class, 'edit'])->name('security.edit');
     Route::get('settings/account/git', [AccountGitController::class, 'show'])->name('account.git');
     Route::delete('settings/account/git', [AccountGitController::class, 'destroy'])->name('account.git.destroy');
+    Route::delete('settings/git/members/{sourceProvider}', [AccountGitController::class, 'destroyMember'])
+        ->whereUlid('sourceProvider')
+        ->name('source-providers.members.destroy');
 
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1,password-update')

@@ -76,7 +76,7 @@ final class ServerController extends Controller
             ] : null,
             'cloud' => fn(): array => $cloud->choices($team, $request->user(), $requested),
             'catalog' => Inertia::defer(function () use ($cloud, $team, $requested, $request): ?array {
-                if (!$request->user()->hasTeamAbility($team, Ability::ManageProviders)) {
+                if (!$request->user()->hasTeamAbility($team, Ability::CreateCloudServer)) {
                     return null;
                 }
 
