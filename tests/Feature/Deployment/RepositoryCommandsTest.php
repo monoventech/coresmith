@@ -105,7 +105,7 @@ test('a PHP app without composer.json skips composer install', function () {
     $commands = app(DeploymentCommands::class);
 
     expect($commands->dependencies($application, new Stack(files: ['index.php'])))->toBe([])
-        ->and($commands->dependencies($application, new Stack(files: ['composer.json', 'index.php'])))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction'])
+        ->and($commands->dependencies($application, new Stack(files: ['composer.json', 'composer.lock', 'index.php'])))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction'])
         ->and($commands->dependencies($application, new Stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
 });
 
@@ -161,4 +161,16 @@ test('a JavaScript app without a lockfile installs with the runtime it was given
 
     expect($tooling('bun')?->manager)->toBe('bun')
         ->and($tooling('node')?->manager)->toBe('npm');
+});
+
+test('a PHP app without composer.lock installs the way a locked one does, so post-update-cmd scripts meant for development never run', function () {
+    $application = new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']);
+    $commands = app(DeploymentCommands::class);
+
+    expect($commands->dependencies($application, new Stack(files: ['composer.json', 'artisan'])))->toBe([
+        'composer install --no-dev --optimize-autoloader --no-interaction --no-scripts',
+        'composer dump-autoload --optimize --no-dev --no-interaction',
+        'if composer config scripts.post-install-cmd >/dev/null 2>&1; then composer run-script post-install-cmd --no-dev --no-interaction; fi',
+    ])->and($commands->dependencies($application, new Stack(files: ['composer.json', 'composer.lock'])))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction'])
+        ->and($commands->dependencies($application, new Stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
 });

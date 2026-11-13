@@ -41,7 +41,7 @@ final class DeploymentCommands
         $javascript = $stack->tooling?->install() ?? [];
 
         return match ($application->type) {
-            ApplicationType::Php => [...($stack->present('composer.json') === false ? [] : ['composer install --no-dev --optimize-autoloader --no-interaction']), ...$javascript],
+            ApplicationType::Php => [...$this->composer($stack), ...$javascript],
             ApplicationType::Ruby => ['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install'],
             default => $javascript,
         };
@@ -58,6 +58,24 @@ final class DeploymentCommands
             ApplicationType::Php => [...$javascript, ...($application->framework === 'laravel' ? ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'] : [])],
             ApplicationType::Ruby => $this->rubyBuild($application, $stack),
             default => $javascript,
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function composer(Stack $stack): array
+    {
+        $install = 'composer install --no-dev --optimize-autoloader --no-interaction';
+
+        return match (true) {
+            $stack->present('composer.json') === false => [],
+            $stack->present('composer.lock') === false => [
+                $install . ' --no-scripts',
+                'composer dump-autoload --optimize --no-dev --no-interaction',
+                'if composer config scripts.post-install-cmd >/dev/null 2>&1; then composer run-script post-install-cmd --no-dev --no-interaction; fi',
+            ],
+            default => [$install],
         };
     }
 
