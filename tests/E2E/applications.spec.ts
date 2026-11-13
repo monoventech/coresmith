@@ -364,6 +364,26 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(domains).toContainText('Certificates renew themselves.')
     })
 
+    test("a domain visitors can't reach says why and what to do", async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const reach = page.getByTestId('domain-reach')
+
+        await expect(reach).toContainText(
+            'atlas.monoven.io points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet.'
+        )
+        await expect(reach).toContainText('use IPv6: add an AAAA record for atlas.monoven.io pointing at 2001:db8::7')
+        await expect(reach).toContainText('Checked')
+    })
+
+    test('the domains are checked again from outside on request', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        await page.getByTestId('domain-reach').getByRole('button', { name: 'Check again' }).click()
+
+        await expect(toast(page)).toContainText('Checking from outside. The results show here in a few seconds.')
+    })
+
     test('the releases link opens this app’s releases', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 

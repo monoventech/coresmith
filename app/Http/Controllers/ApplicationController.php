@@ -19,6 +19,7 @@ use App\Exceptions\PortExhaustedException;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\CheckCertificates;
+use App\Jobs\CheckDomainReach;
 use App\Jobs\DetachApplication;
 use App\Jobs\ReservePortBlock;
 use App\Jobs\SyncApplicationRoute;
@@ -51,6 +52,8 @@ use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Bus;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Activitylog\Models\Activity;
@@ -190,6 +193,8 @@ final class ApplicationController extends Controller
                 'domain' => $application->domain,
                 'additional_domains' => array_values((array) $application->additional_domains),
                 'certificates' => $certificates->forApplication($application),
+                'domain_reach' => $this->domainReach($application),
+                'domain_check_href' => route('servers.applications.domains.check', [$server, $application]),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),
@@ -349,10 +354,32 @@ final class ApplicationController extends Controller
         }
 
         if ($domains !== $before && $application->current_release !== null) {
-            SyncApplicationRoute::dispatch($application, unroute: $domains === []);
+            $route = new SyncApplicationRoute($application, unroute: $domains === []);
+
+            array_diff($domains, $before) === [] ? dispatch($route) : Bus::chain([$route, new CheckDomainReach($application)])->dispatch();
         }
 
         return back()->with('success', 'Saved.');
+    }
+
+    /**
+     * @return list<array{domain: string, ready: bool|null, problems: list<string>, notes: list<string>, checked: string|null}>
+     */
+    private function domainReach(Application $application): array
+    {
+        $stored = (array) $application->domain_reach;
+
+        return array_map(function (string $domain) use ($stored): array {
+            $reading = is_array($stored[$domain] ?? null) ? $stored[$domain] : [];
+
+            return [
+                'domain' => $domain,
+                'ready' => is_bool($reading['ready'] ?? null) ? $reading['ready'] : null,
+                'problems' => array_values(array_map('strval', (array) ($reading['problems'] ?? []))),
+                'notes' => array_values(array_map('strval', (array) ($reading['notes'] ?? []))),
+                'checked' => is_string($reading['checked_at'] ?? null) ? Formats::when(Carbon::parse($reading['checked_at'])) : null,
+            ];
+        }, $application->allDomains());
     }
 
     public function destroy(Server $server, Application $application): RedirectResponse

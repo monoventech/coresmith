@@ -83,6 +83,14 @@
                     }
                 >
             } | null
+            domain_reach: {
+                domain: string
+                ready: boolean | null
+                problems: string[]
+                notes: string[]
+                checked: string | null
+            }[]
+            domain_check_href: string
             repository: string | null
             branch: string
             current_release: string | null
@@ -157,6 +165,17 @@
     let cronReload: { cancel: () => void } | null = null
 
     const domains = $derived([...(application.domain ? [application.domain] : []), ...application.additional_domains])
+    let checkingReach = $state(false)
+    const reachChecked = $derived(application.domain_reach.filter((reading) => reading.checked !== null))
+    const reachWhen = $derived(reachChecked[0]?.checked === 'now' ? 'just now' : (reachChecked[0]?.checked ?? ''))
+    const reachSummary = $derived(
+        reachChecked.length === 0
+            ? 'Not checked from outside yet.'
+            : reachChecked.length === application.domain_reach.length &&
+                application.domain_reach.every((reading) => reading.ready === true)
+              ? `Visitors reach every domain here from the internet. Checked ${reachWhen}.`
+              : `Checked ${reachWhen}.`
+    )
     const failedDeploy = $derived(
         application.last_failed_live
             ? (application.last_failed_reason ??
@@ -294,6 +313,18 @@
                 onSuccess: () => (dialog = null),
                 onError: (errors) => (envError = errors.env ?? Object.values(errors)[0] ?? null),
                 onFinish: () => (working = false)
+            }
+        )
+    }
+
+    function checkReach() {
+        router.post(
+            application.domain_check_href,
+            {},
+            {
+                preserveScroll: true,
+                onStart: () => (checkingReach = true),
+                onFinish: () => (checkingReach = false)
             }
         )
     }
@@ -668,6 +699,24 @@
                 {/each}
                 {#if domains.length > 0}
                     <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
+                    <div class="mt-3 flex flex-col gap-1.5 border-t border-border pt-3" data-testid="domain-reach">
+                        {#each application.domain_reach as reading (reading.domain)}
+                            {#each reading.problems as line (line)}
+                                <p class="m-0 text-[12.5px] text-warning-strong">{line}</p>
+                            {/each}
+                            {#each reading.notes as line (line)}
+                                <p class="m-0 text-[12.5px] text-muted-foreground">{line}</p>
+                            {/each}
+                        {/each}
+                        <p class="m-0 text-[12px] text-muted-foreground">{reachSummary}</p>
+                        {#if can.update}
+                            <div>
+                                <Button variant="link" class="min-h-6" disabled={checkingReach} onclick={checkReach}
+                                    >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
+                                >
+                            </div>
+                        {/if}
+                    </div>
                 {/if}
                 {#if can.update}
                     <div class="mt-auto pt-3">
