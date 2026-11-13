@@ -159,3 +159,13 @@ test('a Laravel app installs its dependencies with the starter kit setup deferre
         ->and($deployment->fresh()->log)->toContain('$ composer install --no-dev')
         ->and($deployment->fresh()->log)->not->toContain('LARAVEL_INSTALLER_DEFER_HOOKS');
 });
+
+test('a 500 that only the first request after starting gets is a cold start, so the second answer is the one recorded', function () {
+    $deployment = Deployment::factory()->for(stackDeployApp())->create();
+    $transport = stackDeployTransport(stackDeployProbe('laravel-13', "@@envkey APP_KEY\n"))->respondToSequence('curl -sk', [['500', 0], ['200', 0]]);
+
+    stackDeployRun($deployment, $transport);
+
+    expect($deployment->fresh()->live_status)->toBe(200)
+        ->and($deployment->fresh()->log)->toContain('check: https://app.example.com/ answered 200');
+});

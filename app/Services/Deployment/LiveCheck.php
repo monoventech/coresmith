@@ -11,6 +11,7 @@ namespace App\Services\Deployment;
 use App\Enums\ApplicationType;
 use App\Models\Application;
 use App\Services\SSH\SSHConnection;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 
 final class LiveCheck
@@ -30,13 +31,23 @@ final class LiveCheck
         $command = $domain === ''
             ? 'curl -s -o /dev/null --max-time ' . self::SECONDS . " -w '%{http_code}' " . escapeshellarg($url)
             : 'curl -sk -o /dev/null --max-time ' . self::SECONDS . " -w '%{http_code}' --resolve " . escapeshellarg($domain . ':443:127.0.0.1') . ' ' . escapeshellarg($url);
-        $status = (int) trim($connection->execute($command, timeout: self::SECONDS + 5)->output);
+        $status = $this->status($connection, $command);
+
+        if ($status >= 500) {
+            Sleep::for(2)->seconds();
+            $status = $this->status($connection, $command);
+        }
 
         if ($status < 100 || $status > 599) {
             return null;
         }
 
         return new LiveAnswer($url, $status, $status >= 500 ? $this->newestError($connection, $application) : null);
+    }
+
+    private function status(SSHConnection $connection, string $command): int
+    {
+        return (int) trim($connection->execute($command, timeout: self::SECONDS + 5)->output);
     }
 
     private function newestError(SSHConnection $connection, Application $application): ?string
