@@ -374,3 +374,28 @@ test('a stopped app still gets its units rewritten, so it starts on the right ve
     expect($transport->uploads()['/etc/systemd/system/coresmith-app-my-app-fpm.service'] ?? '')->toContain('/opt/asdf-data/installs/php/8.4.20/sbin/php-fpm')
         ->and(implode("\n", $transport->commands()))->not->toContain('systemctl restart');
 });
+
+test('a rollback to a laravel release first points that release at the shared SQLite database, so it never reads its own older copy', function () {
+    $application = rollbackApp(['framework' => 'laravel']);
+    $transport = rollbackTransport();
+
+    rollbackRun($application, $transport, '20260911-100000');
+
+    $commands = collect($transport->commands());
+    $relink = $commands->search(fn(string $command): bool => str_contains($command, 'ln -sfn') && str_contains($command, '/var/coresmith/apps/my-app/shared/database/database.sqlite') && str_contains($command, '/var/coresmith/apps/my-app/releases/20260911-100000/database/database.sqlite'));
+    $swap = $commands->search('ln -sfn /var/coresmith/apps/my-app/releases/20260911-100000 /var/coresmith/apps/my-app/current.tmp');
+
+    expect($relink)->toBeInt()
+        ->and($swap)->toBeInt()
+        ->and($relink)->toBeLessThan($swap)
+        ->and($commands[$relink])->toContain('--uid=coresmith-app-abcd');
+});
+
+test('a rollback of an app that is not laravel touches no shared database', function () {
+    $application = rollbackApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.4.10']);
+    $transport = rollbackTransport();
+
+    rollbackRun($application, $transport, '20260911-100000');
+
+    expect(implode("\n", $transport->commands()))->not->toContain('shared/database');
+});
