@@ -14,8 +14,10 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\SQLiteConnection;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 
 function screenMember(Team $team, TeamRole $role = TeamRole::Member): User
 {
@@ -169,6 +171,10 @@ test('the deploy screen carries the phases, the failure and the release details'
 });
 
 test('a commit subject saved cut through a character still renders, with the broken bytes replaced', function () {
+    if (!Schema::getConnection() instanceof SQLiteConnection) {
+        $this->markTestSkipped('PostgreSQL and MySQL refuse invalid UTF-8 on insert, so a commit subject cut through a character can only have been saved on SQLite.');
+    }
+
     $team = Team::factory()->create();
     $deployment = Deployment::factory()->for(screenApp($team))->create([
         'commit_hash' => '0abac93f8986f4589809715b4d80675da0ce02fa',
