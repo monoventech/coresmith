@@ -13,6 +13,7 @@ use App\Services\Detection\RepositoryReader;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
@@ -23,12 +24,12 @@ beforeEach(function () {
     Http::preventStrayRequests();
 });
 
-function readerRun(FakeSSHTransport $transport, RepositoryAccess $access, string $branch = 'main', string $directory = '/'): RepositoryRead
+function readerRun(FakeSSHTransport $transport, RepositoryAccess $access, string $branch = 'main', string $directory = '/', array $server = []): RepositoryRead
 {
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {
-        return app(RepositoryReader::class)->read(Server::factory()->create(['name' => 'web-01']), $access, $branch, $directory);
+        return app(RepositoryReader::class)->read(Server::factory()->create(['name' => 'web-01', ...$server]), $access, $branch, $directory);
     } finally {
         SSHConnectionManager::createTransportUsing(null);
     }
@@ -70,6 +71,32 @@ test('a public repository is read with a sparse checkout of just the probe\'s fi
         ->and($script)->toContain("trap 'rm -rf \"\$dir\"' EXIT")
         ->and($script)->not->toContain('credential.helper')
         ->and($script)->not->toContain('GIT_SSH_COMMAND');
+});
+
+test('a read the server turns away says why and what to do', function (Closure $transport, array $server, string $failure) {
+    $read = readerRun($transport(), RepositoryAccess::public('https://github.com/laravel/laravel.git'), server: $server);
+
+    expect($read->failure)->toBe($failure)
+        ->and($read->definitive)->toBeFalse();
+})->with([
+    'a changed host key' => [fn() => (new FakeSSHTransport)->setHostKey(FakeSSHTransport::keyNamed('impostor')), ['host_key_fingerprint' => FakeSSHTransport::fingerprintOf('original-key')], "web-01 presented a different host key, so Coresmith didn't read the repository. Review the key on the server page, then try again."],
+    'a refused sign-in' => [fn() => (new FakeSSHTransport)->failLogin(), [], "Coresmith couldn't sign in to web-01 over SSH, so it couldn't read the repository. Check the server's SSH key, then try again."],
+    'a read that took too long' => [fn() => (new FakeSSHTransport)->timeOutOn(RepositoryReader::MARKER), [], 'web-01 took too long to read the repository. Try again in a minute.'],
+    'a dropped connection' => [fn() => (new FakeSSHTransport)->dropConnectionOn(RepositoryReader::MARKER), [], 'Coresmith lost its connection to web-01 while reading the repository. Try again.'],
+]);
+
+test('a read that fails for a reason other than the connection is reported', function () {
+    Exceptions::fake();
+    SSHConnectionManager::createTransportUsing(fn() => throw new RuntimeException('The transport broke.'));
+
+    try {
+        $read = app(RepositoryReader::class)->read(Server::factory()->create(['name' => 'web-01']), RepositoryAccess::public('https://github.com/laravel/laravel.git'), 'main', '/');
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    expect($read->failure)->not->toBeNull();
+    Exceptions::assertReported(fn(RuntimeException $reported): bool => $reported->getMessage() === 'The transport broke.');
 });
 
 test('the read lists the PHP extensions of each PHP on the server', function () {

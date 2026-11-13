@@ -10,6 +10,9 @@ namespace App\Services\Detection;
 
 use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitProviderException;
+use App\Exceptions\HostKeyChangedException;
+use App\Exceptions\SSHAuthenticationException;
+use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\GitFailure;
@@ -20,6 +23,7 @@ use App\Services\Git\GitProviderFactory;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SafeName;
+use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Str;
@@ -80,8 +84,8 @@ final class RepositoryReader
 
         try {
             $connection = $this->connections->for($server);
-        } catch (Throwable) {
-            return RepositoryRead::failed("Coresmith couldn't reach {$server->name} over SSH, so it couldn't read the repository. Try again once the server is back.", false);
+        } catch (Throwable $failure) {
+            return RepositoryRead::failed($this->turnedAway($server, $failure, "Coresmith couldn't reach {$server->name} over SSH, so it couldn't read the repository. Try again once the server is back."), false);
         }
 
         $name = 'read-' . Str::lower(Str::random(20));
@@ -108,8 +112,8 @@ final class RepositoryReader
             return RepositoryRead::failed($this->gitHubRefusal($access, $refusal), $refusal->kind !== GitHubInstallationException::UNREACHABLE);
         } catch (GitProviderException $refusal) {
             return RepositoryRead::failed("GitHub wouldn't give Coresmith a token to read {$access->fullName}: {$refusal->getMessage()}", false);
-        } catch (Throwable) {
-            return RepositoryRead::failed("Coresmith lost its connection to {$server->name} while reading the repository. Try again.", false);
+        } catch (Throwable $failure) {
+            return RepositoryRead::failed($this->turnedAway($server, $failure, "Coresmith lost its connection to {$server->name} while reading the repository. Try again."), false);
         } finally {
             if ($secret !== null) {
                 rescue(fn() => $connection->execute('rm -f ' . escapeshellarg($secret), sudo: true), report: false);
@@ -230,6 +234,20 @@ final class RepositoryReader
             $access->github !== null => "GitHub didn't let Coresmith read {$access->fullName}. Check the repository is still selected for Coresmith's GitHub app, then try again.",
             $access->application !== null => "{$host} refused this app's deploy key. Add the key shown under Source to the repository's deploy keys, then check again.",
             default => "{$host} wouldn't let Coresmith read {$url} without credentials. If it's private, connect GitHub in Settings, Git, or use a git@ URL so Coresmith reads it with a deploy key.",
+        };
+    }
+
+    private function turnedAway(Server $server, Throwable $failure, string $otherwise): string
+    {
+        if (!$failure instanceof HostKeyChangedException && !ServerReachability::isConnectionFailure($failure)) {
+            report($failure);
+        }
+
+        return match (true) {
+            $failure instanceof HostKeyChangedException => "{$server->name} presented a different host key, so Coresmith didn't read the repository. Review the key on the server page, then try again.",
+            $failure instanceof SSHAuthenticationException => "Coresmith couldn't sign in to {$server->name} over SSH, so it couldn't read the repository. Check the server's SSH key, then try again.",
+            $failure instanceof SSHCommandTimedOut => "{$server->name} took too long to read the repository. Try again in a minute.",
+            default => $otherwise,
         };
     }
 
