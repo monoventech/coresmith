@@ -40,7 +40,7 @@ final class HttpCaddyAdmin implements CaddyAdmin
         try {
             Cache::lock(CaddyApiClient::THIS_MACHINE_LOCK, CaddyApiClient::LOCK_SECONDS)->block(CaddyApiClient::LOCK_WAIT_SECONDS, fn() => $this->swapCoresmithsRoutes($caddyfile));
         } catch (LockTimeoutException) {
-            throw new RuntimeException('Caddy was busy with another change on this machine. Try again in a minute.');
+            throw new RuntimeException('Coresmith was busy with another change on this machine. Try again in a minute.');
         }
     }
 

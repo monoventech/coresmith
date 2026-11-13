@@ -202,7 +202,7 @@ test('a server that also serves apps through caddy is left alone', function () {
         ->and(file_get_contents("{$directory}/panel.caddy"))->toBe("192.168.0.248 {\n}\n")
         ->and(AddressChange::current())->toMatchArray([
             'state' => 'failed',
-            'error' => 'This server also serves apps through Caddy, so Coresmith leaves its Caddy setup alone. Run the installer again with --domain instead.',
+            'error' => 'This machine also serves apps, so Coresmith leaves its web server setup alone. Run the installer again with --domain instead.',
         ]);
 });
 

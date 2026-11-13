@@ -223,8 +223,12 @@ test.describe('Stack detection on Add an app', () => {
         await expect(page.getByLabel('Framework')).toHaveValue('laravel')
     })
 
-    test('the form passes axe while it fills in, leaves a field open and refuses', async ({ page }) => {
-        for (const state of [READY, UNSURE, BLOCKED]) {
+    for (const [label, state] of [
+        ['fills in', READY],
+        ['leaves a field open', UNSURE],
+        ['refuses', BLOCKED]
+    ] as const) {
+        test(`the form passes axe in light and dark while it ${label}`, async ({ page }) => {
             for (const theme of ['light', 'dark'] as const) {
                 await page.unrouteAll({ behavior: 'ignoreErrors' })
                 await answer(page, [state])
@@ -235,6 +239,6 @@ test.describe('Stack detection on Add an app', () => {
 
                 expect(await blockingViolations(page)).toEqual([])
             }
-        }
-    })
+        })
+    }
 })

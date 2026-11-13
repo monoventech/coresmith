@@ -147,7 +147,7 @@
         <div class="mt-auto pt-3">
             <ToggleRow
                 label="Audit logging"
-                description="auditd watches sudoers, SSH config, users and crontabs. Takes effect at the next provision."
+                description="Records changes to sudo rules, SSH settings, users and cron jobs. Takes effect at the next provision."
                 checked={access.audit_logging}
                 busy={auditBusy}
                 disabled={!server.can.update}

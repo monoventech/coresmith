@@ -188,7 +188,7 @@ test('the activity tab shows the feed for this server and its applications only'
             ->has('activity', 2)
             ->where('activity', fn($rows) => collect($rows)->map(fn($row) => implode('', array_column($row['parts'], 'text')))->sort()->values()->all() === [
                 'shop started again',
-                'web-1 rebooted, apps came back via systemd',
+                'web-1 rebooted, and its apps started again',
             ]));
 });
 

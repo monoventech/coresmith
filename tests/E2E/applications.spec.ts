@@ -120,9 +120,7 @@ test.describe('an application', () => {
         await gotoApplication(page, 'bench-01', 'solid-jobs')
 
         await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
-        await expect(page.getByTestId('toggle-solid_queue')).toContainText(
-            'bin/jobs · systemd unit coresmith-app-solid-jobs-jobs'
-        )
+        await expect(page.getByTestId('toggle-solid_queue')).toContainText('bin/jobs')
         await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
 
@@ -276,7 +274,7 @@ test.describe('changing an application', () => {
 
         await gotoApplication(page, 'bench-01', name)
 
-        await expect(page.getByTestId('toggle-queue_worker')).toContainText(`systemd unit coresmith-app-${name}-queue`)
+        await expect(page.getByTestId('toggle-queue_worker')).toContainText('php artisan queue:work')
         await expect(toggle(page, 'Queue worker')).not.toBeChecked()
 
         await toggle(page, 'Queue worker').click()
@@ -363,7 +361,7 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(domains).toContainText('www.atlas.monoven.io')
         await expect(domains).toContainText('primary')
         await expect(domains).toContainText('alias')
-        await expect(domains).toContainText('Routed by Caddy. Certificates renew themselves.')
+        await expect(domains).toContainText('Certificates renew themselves.')
     })
 
     test('the releases link opens this app’s releases', async ({ page }) => {
@@ -471,7 +469,7 @@ test.describe('what the full app page adds on a wider screen', () => {
 
         await page.getByRole('button', { name: 'Add domain' }).click()
         await expect(dialog(page)).toContainText(
-            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. Caddy handles the certificate.'
+            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. The certificate is handled for you.'
         )
         await dialog(page).getByRole('textbox', { name: 'Domain' }).fill('not a domain')
         await dialog(page).getByRole('button', { name: 'Add domain' }).click()
@@ -541,7 +539,7 @@ test.describe('adding an application', () => {
         await expect(page.getByTestId('app-project')).toContainText('Storefront › Staging')
     })
 
-    test('a server with no free port block says so and keeps the form as it was', async ({ page }) => {
+    test('a server with no room for another app says so and keeps the form as it was', async ({ page }) => {
         await gotoServer(page, 'full-01')
         await page.getByRole('link', { name: 'Add an app' }).click()
 
@@ -551,8 +549,8 @@ test.describe('adding an application', () => {
         await page.getByLabel('Domain').fill('one-too-many.bench.monoven.io')
         await page.getByRole('button', { name: 'Add the app' }).click()
 
-        await expect(toast(page)).toContainText('No port block is free on full-01.')
-        await expect(toast(page)).toContainText("A removed app's block frees up after 7 days.")
+        await expect(toast(page)).toContainText("There's no room for another app on full-01.")
+        await expect(toast(page)).toContainText("A removed app's ports free up after 7 days.")
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
         await expect(page.getByLabel('Name', { exact: true })).toHaveValue('one-too-many')
     })
@@ -1204,9 +1202,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(header(page, 'dev-mode')).toContainText('Failed')
         await expect(header(page, 'dev-mode')).not.toContainText('Live')
         await expect(banner).toContainText('The last deploy went live but did not finish.')
-        await expect(banner).toContainText(
-            'coresmith-app-dev-mode-web did not start, systemd reports it as activating.'
-        )
+        await expect(banner).toContainText("The web process didn't start (activating).'t start (activating).")
         await expect(banner).toContainText('Set RAILS_ENV=production in its environment variables, then deploy again.')
         await expect(banner).not.toContainText('is serving')
 
@@ -1227,9 +1223,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(header(page, 'no-sidekiq')).toContainText('Live')
         await expect(header(page, 'no-sidekiq')).not.toContainText('Failed')
         await expect(banner).toContainText('The last deploy went live but did not finish.')
-        await expect(banner).toContainText(
-            'coresmith-app-no-sidekiq-sidekiq did not start, systemd reports it as activating.'
-        )
+        await expect(banner).toContainText("The sidekiq process didn't start (activating).'t start (activating).")
         await expect(toggle(page, 'Sidekiq')).toBeChecked()
         await expect(toggle(page, 'Sidekiq')).toBeEnabled()
     })
@@ -1243,7 +1237,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(banner).toContainText('The rollback did not start the app.')
         await expect(banner).toContainText(/releases\/\d{8}-\d{6} is live again, but its processes did not start\./)
         await expect(banner).toContainText(
-            'coresmith-app-failed-rollback-web did not start, systemd reports it as activating. Port 8310 is already taken by another process.'
+            "The web process didn't start (activating). Port 8310 is already taken by another process.'t start (activating). Port 8310 is already taken by another process."
         )
         await expect(page.getByTestId('failed-banner')).toHaveCount(0)
     })
@@ -1257,9 +1251,7 @@ test.describe('an app whose processes did not start', () => {
         await expect(header(page, 'rollback-sidekiq')).not.toContainText('Failed')
         await expect(banner).toContainText('Sidekiq did not start after the rollback.')
         await expect(banner).toContainText(/releases\/\d{8}-\d{6} is live again, but Sidekiq did not start\./)
-        await expect(banner).toContainText(
-            'coresmith-app-rollback-sidekiq-sidekiq did not start, systemd reports it as activating.'
-        )
+        await expect(banner).toContainText("The sidekiq process didn't start (activating).'t start (activating).")
         await expect(banner).not.toContainText('The rollback did not start the app.')
     })
 
@@ -1460,9 +1452,7 @@ test.describe('what the repository installs', () => {
 
         await gotoApplication(page, 'bench-01', name)
 
-        await expect(toggleRow(page, 'queue_worker')).toContainText(
-            `Detected: laravel/horizon · systemd unit coresmith-app-${name}-queue`
-        )
+        await expect(toggleRow(page, 'queue_worker')).toContainText('Detected: laravel/horizon')
         await expect(toggle(page, 'Queue worker')).toBeChecked()
     })
 

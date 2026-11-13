@@ -204,7 +204,7 @@ test('a worker that does not start is stopped, removed and its toggle turned bac
         ->and($activity->subject_id)->toBe($application->id)
         ->and($activity->properties['toggle'])->toBe('queue_worker')
         ->and($activity->properties['label'])->toBe('Queue worker')
-        ->and($activity->properties['error'])->toBe('coresmith-app-shop-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.')
+        ->and($activity->properties['error'])->toBe('The queue process didn\'t start (activating). The entry point was not found. Check the build produced the file the process starts, then deploy again.')
         ->and(Activity::query()->where('description', 'processes_sync_failed')->exists())->toBeFalse()
         ->and(Activity::query()->where('description', 'toggle_started')->exists())->toBeFalse()
         ->and($transport->connected())->toBeFalse();

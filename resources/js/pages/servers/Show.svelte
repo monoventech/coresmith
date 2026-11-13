@@ -49,7 +49,7 @@
 {:else if applications.length === 0}
     <EmptyState
         title="Nothing deployed here yet."
-        description="Point Coresmith at a repository and it builds, releases and serves it on this server, as its own Linux user."
+        description="Point Coresmith at a repository and it builds, releases and serves it on this server, walled off from the other apps."
     >
         {#snippet action()}
             {#if server.can.createApplication}
@@ -96,8 +96,8 @@
         {/each}
         <div class="flex flex-wrap items-center justify-between gap-3 px-5.5 py-3">
             <p class="m-0 text-[12.5px] text-muted-foreground">
-                Each app runs as its own Linux user with its own ports, env file and database credentials, {stackText},
-                one server, full isolation.
+                Each app runs walled off from the others, with its own environment and database credentials: {stackText},
+                one server.
             </p>
             {#if server.can.createApplication}
                 <Button size="sm" variant="outline" href={route('servers.applications.create', server.id)}

@@ -123,6 +123,6 @@ test("an address change waits for a deploy changing Caddy on Coresmith's machine
     Cache::lock(CaddyApiClient::THIS_MACHINE_LOCK, 600)->get();
     caddyAdminComposedFake();
 
-    expect(fn() => (new HttpCaddyAdmin)->reload())->toThrow(RuntimeException::class, 'Caddy was busy with another change on this machine. Try again in a minute.')
+    expect(fn() => (new HttpCaddyAdmin)->reload())->toThrow(RuntimeException::class, 'Coresmith was busy with another change on this machine. Try again in a minute.')
         ->and(caddyAdminLoaded())->toBeNull();
 });

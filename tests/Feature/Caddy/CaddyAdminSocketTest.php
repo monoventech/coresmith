@@ -72,7 +72,7 @@ test('a socket that never answers puts caddy back on its old settings, and the s
         ->respondTo("-X GET 'http://localhost:2019/config/'", adminSocketRunning());
 
     expect(fn() => adminSocketMove($server, $transport))
-        ->toThrow(RuntimeException::class, 'Caddy took the new settings but never answered on its socket, so Coresmith restarted it on its saved ones.');
+        ->toThrow(RuntimeException::class, 'The web server took the new settings but stopped answering, so Coresmith restarted it on its saved ones.');
 
     expect($transport->commands())->toContain('systemctl restart caddy')
         ->and(implode("\n", $transport->commands()))->not->toContain('mv -f /etc/caddy/caddy-config.staged.json')

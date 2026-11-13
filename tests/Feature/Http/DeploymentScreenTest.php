@@ -219,7 +219,7 @@ test('a deploy whose processes did not start is named a start failure, with ever
         'status' => DeploymentStatus::Failed,
         'release' => '20260913140000',
         'start_failed' => true,
-        'failure_reason' => 'coresmith-app-shop-web did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.',
+        'failure_reason' => 'The web process didn\'t start (activating). The process log says why. Fix it and deploy again, or roll back to the previous release.',
         'log' => implode("\n", [
             '[14:00:09] clone: fetching over https',
             '[14:00:12] deps: installing dependencies',

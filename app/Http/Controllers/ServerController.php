@@ -363,7 +363,7 @@ final class ServerController extends Controller
 
         RebootServer::dispatch($server, request()->user());
 
-        return back()->with('success', "Reboot scheduled. {$server->name} restarts in a few seconds, apps come back via systemd.");
+        return back()->with('success', "Reboot scheduled. {$server->name} restarts in a few seconds, and its apps start again on their own.");
     }
 
     public function prune(Server $server): RedirectResponse

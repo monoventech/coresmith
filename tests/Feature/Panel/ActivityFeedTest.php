@@ -54,7 +54,7 @@ test('server events are described in plain words', function (string $description
     'provisioned' => ['server_provisioned', ['duration_seconds' => 372], 'web-1 provisioned and hardened in 6m 12s'],
     'provisioned without a duration' => ['server_provisioned', [], 'web-1 provisioned and hardened'],
     'renamed' => ['server_renamed', [], 'Server renamed to web-1'],
-    'rebooted' => ['server_rebooted', [], 'web-1 rebooted, apps came back via systemd'],
+    'rebooted' => ['server_rebooted', [], 'web-1 rebooted, and its apps started again'],
     'pruned' => ['releases_pruned', ['removed' => 7, 'kept' => 5], 'Old releases pruned on web-1, 7 removed'],
     'disk pressure' => ['disk_pressure', ['percent' => 86], 'Disk warning, web-1 at 86%, consider pruning old releases'],
     'firewall' => ['firewall_rule_changed', ['action' => 'allow', 'port' => 6379], 'Firewall allow port 6379 on web-1'],
@@ -97,11 +97,11 @@ test('application events are described in plain words and link to the applicatio
     'process sync failed without detail' => ['processes_sync_failed', [], "Couldn't apply the process change on shop, the server did not respond"],
     'rollback processes failed' => ['rollback_processes_failed', ['from' => '20260913140000', 'to' => '20260912090000', 'error' => 'coresmith-app-shop-web did not start.'], 'shop rolled back to 20260912-090000, but its processes did not start. Open the app to see why, then deploy a release that starts.'],
     'rollback worker did not start' => ['rollback_worker_failed', ['from' => '20260913140000', 'to' => '20260912090000', 'worker' => 'Sidekiq', 'error' => 'coresmith-app-shop-sidekiq did not start.'], 'shop rolled back to 20260912-090000, but Sidekiq did not start. Open the app to see why.'],
-    'worker did not start' => ['toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => 'coresmith-app-shop-jobs did not start, systemd reports it as activating.'], 'Solid Queue did not start on shop, so its toggle is off again'],
+    'worker did not start' => ['toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => 'The jobs process didn\'t start (activating).'], 'Solid Queue did not start on shop, so its toggle is off again'],
     'ssr did not start' => ['toggle_start_failed', ['toggle' => 'inertia_ssr', 'label' => 'Inertia SSR', 'error' => 'The SSR server did not start on port 13714.'], 'Inertia SSR did not start on shop, pages render in the browser until the next deploy'],
     'domain added' => ['domain_added', ['domain' => 'www.shop.test'], 'www.shop.test added to shop'],
     'port block moved' => ['port_block_moved', ['from' => 8000, 'to' => 8010, 'port' => 8005, 'process' => 'java'], 'shop moved to ports 8010–8019, java already listens on 8005'],
-    'killed for memory' => ['app_oom_killed', ['process' => 'queue', 'at' => '2026-09-13T14:03:00+00:00', 'limit_mb' => 256], 'shop queue process killed for going over its 256 MB memory limit, systemd started it again'],
+    'killed for memory' => ['app_oom_killed', ['process' => 'queue', 'at' => '2026-09-13T14:03:00+00:00', 'limit_mb' => 256], 'shop queue process killed for going over its 256 MB memory limit and was started again'],
     'end of life chosen' => ['runtime_eol_chosen', ['runtime' => 'php', 'line' => '8.1'], 'shop was added on PHP 8.1, which no longer gets security fixes'],
     'cron sync failed' => ['cron_sync_failed', ['error' => "Couldn't reach web-1 over SSH. Check it's online, then try again."], "Couldn't write the cron jobs for shop. Couldn't reach web-1 over SSH. Check it's online, then try again."],
     'cron job added' => ['cron_job_added', ['schedule' => '0 3 * * *', 'description' => null, 'command' => 'php artisan backup:run'], 'Cron job added to shop, daily at 3:00 AM UTC'],
@@ -318,7 +318,7 @@ test('a server feed covers only that server, its applications and its databases'
     expect(array_map(feedSentence(...), (new ActivityFeed)->forServer($server)))->toBe([
         'Database shop_db created',
         'shop started again',
-        'web-1 rebooted, apps came back via systemd',
+        'web-1 rebooted, and its apps started again',
     ]);
 });
 

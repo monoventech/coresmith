@@ -137,8 +137,8 @@ final class SmartToggles
             self::QUEUE => [
                 'key' => $key,
                 'label' => 'Queue worker',
-                'description' => ($this->horizon($application) ? 'Detected: laravel/horizon' : 'php artisan queue:work') . ' · systemd unit coresmith-app-' . $slug . '-queue',
-                'busy_on' => $this->horizon($application) ? 'Creating the systemd unit and starting Horizon…' : 'Creating the systemd unit and starting the worker…',
+                'description' => ($this->horizon($application) ? 'Detected: laravel/horizon' : 'php artisan queue:work'),
+                'busy_on' => $this->horizon($application) ? 'Starting Horizon…' : 'Starting the worker…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
@@ -155,8 +155,8 @@ final class SmartToggles
             self::SIDEKIQ => [
                 'key' => $key,
                 'label' => 'Sidekiq',
-                'description' => 'bundle exec sidekiq · systemd unit coresmith-app-' . $slug . '-sidekiq',
-                'busy_on' => 'Creating the systemd unit and starting Sidekiq…',
+                'description' => 'bundle exec sidekiq',
+                'busy_on' => 'Starting Sidekiq…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
@@ -164,8 +164,8 @@ final class SmartToggles
             self::SOLID_QUEUE => [
                 'key' => $key,
                 'label' => 'Solid Queue',
-                'description' => 'bin/jobs · systemd unit coresmith-app-' . $slug . '-jobs',
-                'busy_on' => 'Creating the systemd unit and starting Solid Queue…',
+                'description' => 'bin/jobs',
+                'busy_on' => 'Starting Solid Queue…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
@@ -200,8 +200,8 @@ final class SmartToggles
             default => [
                 'key' => $key,
                 'label' => 'Maintenance page',
-                'description' => $stopped ? 'The application is stopped, so visitors already see one.' : 'Caddy serves a holding page, the processes keep running',
-                'busy_on' => 'Pointing Caddy at the maintenance page…',
+                'description' => $stopped ? 'The application is stopped, so visitors already see one.' : 'Visitors see a holding page, and the app keeps running',
+                'busy_on' => 'Putting up the maintenance page…',
                 'busy_off' => 'Routing traffic back to the app…',
                 'on' => $this->isOn($application, $key),
                 'disabled' => $stopped,

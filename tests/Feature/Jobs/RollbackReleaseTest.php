@@ -222,7 +222,7 @@ test('a rollback whose processes do not come back up is recorded, not silent', f
     expect($activity->subject_id)->toBe($application->id)
         ->and($activity->properties['from'])->toBe('20260913-120000')
         ->and($activity->properties['to'])->toBe('20260911-100000')
-        ->and($activity->properties['error'])->toContain('did not start')
+        ->and($activity->properties['error'])->toContain("didn't start")
         ->and(Activity::query()->where('description', 'application_rolled_back')->exists())->toBeFalse();
 });
 
@@ -254,7 +254,7 @@ test('a rollback where only a worker does not start keeps the app live and names
             'from' => '20260913-120000',
             'to' => '20260911-100000',
             'worker' => 'Queue worker',
-            'error' => 'coresmith-app-my-app-queue did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.',
+            'error' => 'The queue process didn\'t start (activating). The entry point was not found. Check the build produced the file the process starts, then deploy again.',
         ])
         ->and(Activity::query()->whereIn('description', ['rollback_processes_failed', 'application_rolled_back'])->exists())->toBeFalse();
 });
