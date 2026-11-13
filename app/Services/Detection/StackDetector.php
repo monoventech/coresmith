@@ -118,13 +118,6 @@ final class StackDetector
             $unsettled['runtime_version'] = "Nothing names a Ruby version, so Coresmith would pick the newest, Ruby {$ruby->version}, which gems locked with Rails {$rails} may not install or load on. Add a .ruby-version with the Ruby the app runs on, for example 3.3.6.";
         }
 
-        $node = $type === ApplicationType::Js && $runtime === 'nodejs' ? ($stack?->runtimes[$runtime] ?? null) : null;
-        $nuxt = $proposal['framework'] === 'nuxt' ? $facts->dependency('nuxt') : null;
-
-        if ($node !== null && $node->source === ResolvedRuntime::FROM_DEFAULT && $nuxt !== null && preg_match('/\d+/', $nuxt, $major) === 1 && (int) $major[0] < 3) {
-            $unsettled['runtime_version'] = "Nothing names a Node.js version, and Nuxt {$nuxt} builds with webpack 4, which fails on Node.js 17 and newer, while Coresmith would pick Node.js {$node->version}. Add an .nvmrc with the version the app builds on, for example 16.";
-        }
-
         return new DetectedStack(
             $proposal['type'],
             $proposal['framework'],

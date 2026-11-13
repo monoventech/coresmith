@@ -27,7 +27,7 @@ test('the lockfile chooses the package manager and its commands', function (JsTo
     'npm' => [new JsTooling('npm', true, true, false), ['npm ci'], ['npm run build']],
     'npm, no lockfile and nothing to build' => [new JsTooling('npm', false, false, false), ['npm install'], []],
     'pnpm, without failing on dependency build scripts it was not told to run' => [new JsTooling('pnpm', true, true, false, '9.12.0'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --config.strict-dep-builds=false'], ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm run build']],
-    'yarn classic' => [new JsTooling('yarn', true, true, false, '1.22.22'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --frozen-lockfile'], ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn run build']],
+    'yarn classic' => [new JsTooling('yarn', true, true, false, '1.22.22'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --frozen-lockfile --ignore-engines'], ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn run build']],
     'yarn berry' => [new JsTooling('yarn', true, false, false, '4.5.0'), ['COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --immutable'], []],
     'deno with a manifest' => [new JsTooling('deno', false, true, true), ['deno install'], ['deno task build']],
     'deno without one' => [new JsTooling('deno', false, false, true, null, false), [], []],
@@ -51,7 +51,7 @@ test('a rails app installs its javascript packages after its gems, so vite_rails
     $application = new Application(['type' => ApplicationType::Ruby, 'framework' => 'rails']);
     $stack = repositoryStack(new JsTooling('yarn', true, true, false));
 
-    expect(app(DeploymentCommands::class)->dependencies($application, $stack))->toBe(['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install', 'COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --frozen-lockfile'])
+    expect(app(DeploymentCommands::class)->dependencies($application, $stack))->toBe(['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install', 'COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --frozen-lockfile --ignore-engines'])
         ->and(app(DeploymentCommands::class)->build($application, $stack))->toBe(['RAILS_ENV=production bundle exec rails assets:precompile']);
 });
 
