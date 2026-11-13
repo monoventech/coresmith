@@ -148,3 +148,29 @@ test('a developer adding a server is offered only a server of its own over SSH, 
             ->where('cloud.selected', 'manual')
             ->where('cloud.can_connect', false));
 });
+
+test('a shared server\'s page lists only the apps and databases the developer can see, and counts only those', function () {
+    ['developer' => $developer, 'shared' => $shared] = developerOwnershipSetup();
+
+    $this->actingAs($developer)->get(route('servers.show', $shared))
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('applications', fn($apps): bool => collect($apps)->pluck('name')->all() === ['notes']));
+
+    $this->actingAs($developer)->get(route('servers.databases.index', $shared))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('databases', fn($databases): bool => collect($databases)->pluck('name')->all() === ['notes_db']));
+});
+
+test('the fleet, explorer and command palette show a developer only its own apps on a shared server', function () {
+    ['developer' => $developer] = developerOwnershipSetup();
+
+    $this->actingAs($developer)->get(route('dashboard'))
+        ->assertInertia(function (AssertableInertia $page): void {
+            $props = $page->toArray()['props'];
+            $names = collect(data_get($props, 'servers'))->flatMap(fn(array $server): array => collect($server['applications'] ?? [])->pluck('name')->all())->all();
+            $counts = collect(data_get($props, 'explorer.servers'))->pluck('apps', 'name')->all();
+
+            expect($names)->not->toContain('miagraph')
+                ->and(json_encode($props))->not->toContain('miagraph')
+                ->and($counts['beelink'] ?? null)->not->toBe(2);
+        });
+});

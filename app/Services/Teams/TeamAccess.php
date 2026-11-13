@@ -118,6 +118,30 @@ final class TeamAccess
         return $projects;
     }
 
+    public function applicationsOn(User $user, Server $server): HasMany
+    {
+        $applications = $server->applications();
+        $team = $server->team;
+
+        if ($team === null || $this->seesEverything($user, $team)) {
+            return $applications;
+        }
+
+        return $applications->whereIn('id', $this->applications($user, $team)->select('id'));
+    }
+
+    public function databasesOn(User $user, Server $server): HasMany
+    {
+        $databases = $server->databases();
+        $team = $server->team;
+
+        if ($team === null || $this->seesEverything($user, $team)) {
+            return $databases;
+        }
+
+        return $databases->whereIn('id', $this->databases($user, $team)->select('id'));
+    }
+
     public function canSeeServer(User $user, Server $server): bool
     {
         $team = $server->team;

@@ -20,6 +20,8 @@ final class SyncApplicationAddresses implements ShouldQueue
 {
     use Queueable;
 
+    public bool $deleteWhenMissingModels = true;
+
     public function __construct(public Application $application) {}
 
     public function handle(SSHConnectionManager $connections, CaddyApiClient $caddy): void

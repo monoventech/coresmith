@@ -116,7 +116,7 @@ final class ServerController extends Controller
         return to_route('servers.show', $server)->with($tone, $added);
     }
 
-    public function show(Request $request, Server $server, ServerPresenter $presenter): Response|RedirectResponse
+    public function show(Request $request, Server $server, ServerPresenter $presenter, TeamAccess $access): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -132,7 +132,7 @@ final class ServerController extends Controller
 
         return Inertia::render('servers/Show', [
             'server' => $presenter->header($server, $request->user()),
-            'applications' => $server->applications()->orderBy('name')->get()->map(fn(Application $application): array => [
+            'applications' => $access->applicationsOn($request->user(), $server)->orderBy('name')->get()->map(fn(Application $application): array => [
                 'id' => $application->id,
                 'name' => $application->name,
                 'kind' => ApplicationPresenter::kind($application),

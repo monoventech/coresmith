@@ -38,5 +38,5 @@ test('database type covers every spec value', function () {
 });
 
 test('team role covers every spec value', function () {
-    expect(array_column(TeamRole::cases(), 'value'))->toBe(['owner', 'admin', 'member']);
+    expect(array_column(TeamRole::cases(), 'value'))->toBe(['owner', 'admin', 'developer', 'member']);
 });

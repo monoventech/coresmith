@@ -16,9 +16,9 @@ test.describe('a developer', () => {
 
         const apps = page.getByTestId('applications-table')
 
-        await expect(apps.getByRole('link', { name: 'side-notes', exact: true })).toBeVisible()
-        await expect(apps.getByRole('link', { name: 'atlas-staging', exact: true })).toHaveCount(0)
-        await expect(apps.getByRole('link', { name: 'storefront-staging', exact: true })).toHaveCount(0)
+        await expect(apps.getByRole('link', { name: /^side-notes / })).toBeVisible()
+        await expect(apps.getByRole('link', { name: /^atlas-staging / })).toHaveCount(0)
+        await expect(apps.getByRole('link', { name: /^storefront-staging / })).toHaveCount(0)
     })
 
     test('adding a server is offered only as a server of its own over SSH', async ({ page }) => {
