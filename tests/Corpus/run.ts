@@ -252,7 +252,7 @@ for (const [index, entry] of entries.entries()) {
     let result: Result
 
     try {
-        const name = `c${String(index + 1).padStart(3, '0')}-${slug(entry.name)}`.slice(0, 48)
+        const name = `c${String(index + 1).padStart(3, '0')}-${slug(entry.name)}`.slice(0, 48).replace(/-+$/, '')
 
         console.log(`${index + 1}/${entries.length} ${entry.name}`)
 
