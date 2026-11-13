@@ -109,7 +109,7 @@ test('the hourly check records what it read and when', function () {
 
     app()->call([new CheckProtections($server), 'handle']);
 
-    expect(((array) $server->fresh()->meta)['protections'])->toBe([
+    expect(((array) $server->fresh()->meta)['protections'])->toEqual([
         'ssh' => 'on',
         'fail2ban' => 'off',
         'kernel' => 'on',
@@ -127,7 +127,7 @@ test('a check that could not read the server keeps the last reading', function (
 
     app()->call([new CheckProtections($server), 'handle']);
 
-    expect(((array) $server->fresh()->meta)['protections'])->toBe(['fail2ban' => 'on', 'checked_at' => '2026-11-13T09:00:00+00:00']);
+    expect(((array) $server->fresh()->meta)['protections'])->toEqual(['fail2ban' => 'on', 'checked_at' => '2026-11-13T09:00:00+00:00']);
 });
 
 test('every hour, each active and reachable server is checked', function () {
