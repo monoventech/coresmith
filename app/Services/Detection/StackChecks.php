@@ -30,7 +30,7 @@ final class StackChecks
      * @param  Closure(string): list<string>  $installed
      * @return list<Blocker>
      */
-    public function blockers(Application $choice, RepositoryFacts $facts, Closure $installed): array
+    public function blockers(Application $choice, RepositoryFacts $facts, Closure $installed, bool $runtime = true): array
     {
         if (!$facts->complete) {
             return [];
@@ -46,7 +46,7 @@ final class StackChecks
             default => [],
         };
 
-        return [...$blockers, ...$this->runtime($choice, $facts, $installed)];
+        return $runtime ? [...$blockers, ...$this->runtime($choice, $facts, $installed)] : $blockers;
     }
 
     public function svelteAdapter(RepositoryFacts $facts): ?string
@@ -151,7 +151,7 @@ final class StackChecks
 
         if ($framework === 'sinatra' && !$facts->exists('config.ru')) {
             $blockers[] = new Blocker('framework', 'There is no config.ru, so Puma has no app to start.', 'Add a config.ru that runs the app, for example: run Sinatra::Application.');
-        } elseif ($framework !== 'sinatra' && !$facts->exists('bin/rails')) {
+        } elseif ($framework === 'rails' && !$facts->exists('bin/rails')) {
             $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app at the repository's root.", 'Pick Sinatra if it uses Sinatra.');
         }
 
@@ -253,7 +253,7 @@ final class StackChecks
      */
     private function started(RepositoryFacts $facts): array
     {
-        return $facts->script('start') || JsTooling::safeMain($facts->json('package.json')['main'] ?? null) !== null
+        return $facts->script('start') || JsTooling::safeMain($facts->json('package.json')['main'] ?? null) !== null || $facts->exists('server.js')
             ? []
             : [new Blocker('repository', 'There is no start script and no main file in package.json, so Coresmith has nothing to start.', 'Add a start script to package.json, for example "start": "node server.js".')];
     }

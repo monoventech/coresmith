@@ -30,6 +30,31 @@ final class StackDetector
 
     public const LOCK_UNREADABLE = "composer.lock couldn't be read whole, so Coresmith can't tell which PHP versions its packages allow. Pick the PHP version yourself.";
 
+    public const GEM = 'Gemfile loads a gemspec, so this looks like a Ruby gem, not an app.';
+
+    public const MAIN_ONLY = 'package.json names a main file but no start script, so it looks like a library, not a server. Add a start script if it is an app.';
+
+    public const NO_START = "There is no start script in package.json, so Coresmith can't tell how the app starts. Add one, for example \"start\": \"node server.js\".";
+
+    public const NO_SERVER = "The start script doesn't use a server package Coresmith knows, such as Express, Fastify, Hono, Koa or NestJS, so it can't tell the app listens on a port. Pick API or other if it does.";
+
+    public const DENO_LIBRARY = 'deno.json publishes exports and has no start task, so it looks like a library, not an app.';
+
+    public const DENO_NO_START = "There is no start task in deno.json and no main.ts, so Coresmith can't tell how the app starts. Add a start task, for example \"start\": \"deno run --allow-net main.ts\".";
+
+    private const SERVER_PACKAGES = [
+        'express', 'fastify', 'hono', '@hono/node-server', 'koa', '@nestjs/core', '@hapi/hapi', 'restify', 'polka', '@adonisjs/core', 'h3', 'elysia',
+        'socket.io', 'ws', '@feathersjs/feathers', '@loopback/core', 'sails', '@remix-run/serve', '@react-router/serve', 'json-server', '@strapi/strapi',
+        '@keystone-6/core', 'payload', '@medusajs/medusa', 'micro', '@tinyhttp/app', 'hyper-express', 'srvx',
+    ];
+
+    private const DEVELOPMENT_TOOLS = [
+        'electron', 'react-scripts start', 'vite', 'vite dev', 'vite preview', 'webpack serve', 'webpack-dev-server', 'parcel', 'gatsby develop', 'nodemon',
+        'ng serve', 'vue-cli-service serve', 'hexo server', 'next dev', 'nuxt dev', 'nuxi dev', 'astro dev', 'tsx watch', 'ts-node-dev', 'expo start', 'browser-sync', 'live-server',
+    ];
+
+    private const SYMFONY_FAMILY = ['symfony/', 'oro/', 'sylius/', 'shopware/', 'pimcore/'];
+
     private const JS_LOCKFILES = ['bun.lock' => 'bun', 'bun.lockb' => 'bun', 'package-lock.json' => 'node', 'pnpm-lock.yaml' => 'node', 'yarn.lock' => 'node'];
 
     public function __construct(
@@ -83,7 +108,7 @@ final class StackDetector
             $proposal['web'],
             $sources,
             $unsettled,
-            $this->checks->blockers($application, $facts, $installed),
+            isset($unsettled['framework']) ? [] : $this->checks->blockers($application, $facts, $installed),
             $stack,
             $runtime,
         );
@@ -109,15 +134,28 @@ final class StackDetector
         }
 
         $require = (array) ($facts->json('composer.json')['require'] ?? []);
+        $laravel = array_key_exists('laravel/framework', $require) || $facts->locked('laravel/framework') !== null;
 
-        foreach (['laravel/framework' => ['laravel', 'Laravel'], 'symfony/framework-bundle' => ['symfony', 'Symfony']] as $package => [$framework, $label]) {
-            if (array_key_exists($package, $require)) {
-                return $this->proposal('php', $framework, null, '/public', [
-                    'type' => 'From composer.json',
-                    'framework' => $this->composerSource($facts, $package, $require[$package]),
-                    'web_directory' => "{$label} serves public/index.php",
-                ]);
-            }
+        if ($laravel && $facts->exists('artisan')) {
+            return $this->proposal('php', 'laravel', null, '/public', [
+                'type' => 'From composer.json',
+                'framework' => $this->composerSource($facts, 'laravel/framework', $require['laravel/framework'] ?? null),
+                'web_directory' => 'Laravel serves public/index.php',
+            ]);
+        }
+
+        if ($laravel && $index === null) {
+            return $this->unsure('type', self::LIBRARY);
+        }
+
+        $symfony = $this->symfony($facts, $require);
+
+        if ($symfony !== null) {
+            return $this->proposal('php', 'symfony', null, '/public', [
+                'type' => 'From composer.json',
+                'framework' => $symfony,
+                'web_directory' => 'Symfony serves public/index.php',
+            ]);
         }
 
         if ($index !== null) {
@@ -134,6 +172,10 @@ final class StackDetector
     {
         if (!$facts->has('Gemfile')) {
             return null;
+        }
+
+        if (preg_match('/^\s*gemspec\b/m', (string) $facts->file('Gemfile')) === 1) {
+            return $this->unsure('type', self::GEM);
         }
 
         $sources = ['type' => $facts->has('Gemfile.lock') ? 'From Gemfile and Gemfile.lock' : 'From Gemfile'];
@@ -163,7 +205,7 @@ final class StackDetector
         $deno = $facts->has('deno.json') || $facts->has('deno.jsonc');
 
         if (!$facts->has('package.json')) {
-            return $deno ? $this->proposal('js', '', 'deno', null, ['type' => 'From deno.json', 'js_runtime' => 'From deno.json']) : null;
+            return $deno ? $this->deno($facts) : null;
         }
 
         if ($facts->workspace()) {
@@ -173,6 +215,24 @@ final class StackDetector
         [$runtime, $runtimeSource] = $this->jsRuntime($facts);
         $sources = ['type' => 'From package.json', 'js_runtime' => $runtimeSource];
         $output = $this->checks->staticOutput($facts);
+
+        $build = (string) ($facts->json('package.json')['scripts']['build'] ?? '');
+
+        if ($facts->dependency('@sveltejs/kit') !== null && !str_contains($build, 'vite build')) {
+            return $this->unbuilt($runtime, $sources, '@sveltejs/kit', 'vite build', 'SvelteKit');
+        }
+
+        if ($facts->dependency('next') !== null && !str_contains($build, 'next build')) {
+            return $this->unbuilt($runtime, $sources, 'next', 'next build', 'Next.js');
+        }
+
+        if ($facts->dependency('nuxt') !== null && preg_match('/\bnux[ti] (build|generate)\b/', $build) !== 1) {
+            return $this->unbuilt($runtime, $sources, 'nuxt', 'nuxt build', 'Nuxt');
+        }
+
+        if ($facts->dependency('astro') !== null && !str_contains($build, 'astro build')) {
+            return $this->unbuilt($runtime, $sources, 'astro', 'astro build', 'Astro');
+        }
 
         if ($facts->dependency('@sveltejs/kit') !== null) {
             $adapter = $this->checks->svelteAdapter($facts);
@@ -202,11 +262,79 @@ final class StackDetector
                 : $this->staticBuild($output, ['type' => 'From astro in package.json, with no server adapter'], 'astro.config sets its own outDir, so Coresmith can\'t be sure where the build goes. Set the web root to that folder.');
         }
 
-        if ($facts->dependency('vite') !== null && str_contains((string) ($facts->json('package.json')['scripts']['build'] ?? ''), 'vite build') && $this->viteOnly($facts)) {
+        if ($facts->dependency('react-scripts') !== null && str_contains($build, 'react-scripts build')) {
+            return $this->staticBuild('/build', ['type' => 'From the react-scripts build script in package.json'], '');
+        }
+
+        if ($facts->dependency('vite') !== null && str_contains($build, 'vite build') && $this->viteOnly($facts)) {
             return $this->staticBuild($output, ['type' => 'From the vite build script in package.json'], 'vite.config sets its own outDir, so Coresmith can\'t be sure where the build goes. Set the web root to that folder.');
         }
 
-        return $this->proposal('js', '', $runtime, null, [...$sources, 'framework' => $facts->script('start') ? 'The start script in package.json' : 'The main file in package.json']);
+        return $this->started($facts, $runtime, $sources);
+    }
+
+    /**
+     * @param  array<string, string>  $sources
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     */
+    private function started(RepositoryFacts $facts, string $runtime, array $sources): array
+    {
+        $start = trim((string) ($facts->json('package.json')['scripts']['start'] ?? ''));
+
+        if ($start === '') {
+            return $this->proposal('js', null, $runtime, null, $sources, ['framework' => isset($facts->json('package.json')['main']) ? self::MAIN_ONLY : self::NO_START]);
+        }
+
+        foreach (self::DEVELOPMENT_TOOLS as $tool) {
+            if (preg_match('/(^|[\s;&|(])' . preg_quote($tool, '/') . '(\s|$)/', $start) === 1) {
+                return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "The start script runs {$tool}, which isn't a production server. Add a start script that runs the app, for example \"start\": \"node server.js\"."]);
+            }
+        }
+
+        $server = array_values(array_filter(self::SERVER_PACKAGES, fn(string $package): bool => $facts->dependency($package) !== null))[0] ?? null;
+
+        return $server === null
+            ? $this->proposal('js', null, $runtime, null, $sources, ['framework' => self::NO_SERVER])
+            : $this->proposal('js', '', $runtime, null, [...$sources, 'framework' => "The start script in package.json, with {$server}"]);
+    }
+
+    /**
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     */
+    private function deno(RepositoryFacts $facts): array
+    {
+        $sources = ['type' => 'From deno.json', 'js_runtime' => 'From deno.json'];
+
+        if ($facts->denoTask('start') || $facts->exists('main.ts')) {
+            return $this->proposal('js', '', 'deno', null, $sources);
+        }
+
+        $library = isset($facts->json('deno.json')['exports']) || isset($facts->json('deno.jsonc')['exports']);
+
+        return $this->proposal('js', null, 'deno', null, $sources, ['framework' => $library ? self::DENO_LIBRARY : self::DENO_NO_START]);
+    }
+
+    /**
+     * @param  array<string, string>  $sources
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     */
+    private function unbuilt(string $runtime, array $sources, string $package, string $command, string $label): array
+    {
+        return $this->proposal('js', null, $runtime, null, $sources, ['framework' => "{$package} is in package.json, but the build script doesn't run {$command}, so Coresmith can't tell this is a {$label} app."]);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $require
+     */
+    private function symfony(RepositoryFacts $facts, array $require): ?string
+    {
+        return match (true) {
+            array_key_exists('symfony/framework-bundle', $require) => $this->composerSource($facts, 'symfony/framework-bundle', $require['symfony/framework-bundle']),
+            $facts->locked('symfony/framework-bundle') !== null => 'symfony/framework-bundle ' . $facts->locked('symfony/framework-bundle') . ' in composer.lock',
+            $facts->exists('symfony.lock'), $facts->exists('config/bundles.php') => 'symfony.lock and config/bundles.php',
+            $facts->exists('bin/console') && array_filter(array_keys($require), fn(int|string $package): bool => array_filter(self::SYMFONY_FAMILY, fn(string $family): bool => str_starts_with((string) $package, $family)) !== []) !== [] => 'bin/console with Symfony packages in composer.json',
+            default => null,
+        };
     }
 
     /**

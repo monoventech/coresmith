@@ -26,7 +26,7 @@ final class RepositoryProbe
 
     public const MARKERS = [
         'artisan', 'bin/rails', 'bin/console', 'config.ru', 'Rakefile', 'index.php', 'public/index.php', 'web/index.php',
-        'index.html', 'public/index.html', 'main.ts', 'config/master.key',
+        'index.html', 'public/index.html', 'main.ts', 'config/master.key', 'symfony.lock', 'config/bundles.php', 'server.js',
     ];
 
     public const ENV_SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'RAILS_MASTER_KEY'];

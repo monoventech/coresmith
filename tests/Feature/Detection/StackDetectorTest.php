@@ -48,10 +48,21 @@ test('each repository gets the stack its files settle', function (string $fixtur
     'vite react' => ['vite-react', 'ready', 'static', '', null, '/dist'],
     'vite with its own outDir' => ['vite-outdir', 'unsure', 'static', '', null, null],
     'express with a start script' => ['express-api', 'ready', 'js', '', 'node', null],
-    'a main file and no start script' => ['js-main-only', 'ready', 'js', '', 'node', null],
-    'neither a start script nor a main file' => ['js-no-start', 'blocked', 'js', '', 'node', null],
+    'a main file and no start script' => ['js-main-only', 'unsure', 'js', null, 'node', null],
+    'neither a start script nor a main file' => ['js-no-start', 'unsure', 'js', null, 'node', null],
+    'a library with a main file, http-proxy-middleware' => ['js-library-main', 'unsure', 'js', null, 'node', null],
+    'a GitHub action, actions-gh-pages' => ['js-github-action', 'unsure', 'js', null, 'node', null],
+    'an electron app, Publii' => ['js-electron-start', 'unsure', 'js', null, 'node', null],
+    'nuxt only for the docs, bootstrap-vue' => ['js-nuxt-docs-library', 'unsure', 'js', null, 'node', null],
+    'nest start, MyAPI' => ['express-myapi', 'ready', 'js', '', 'node', null],
+    'a start script but no server package' => ['js-start-no-server', 'unsure', 'js', null, 'node', null],
+    'create react app' => ['react-scripts-app', 'ready', 'static', '', null, '/build'],
+    'a symfony app without the bundle in its own require, Sylius' => ['symfony-sylius', 'ready', 'php', 'symfony', null, '/public'],
+    'a laravel package, aimeos-laravel' => ['laravel-package', 'unsure', null, null, null, null],
+    'a ruby gem, sinatra itself' => ['ruby-gem-sinatra', 'unsure', null, null, null, null],
     'deno' => ['deno-app', 'ready', 'js', '', 'deno', null],
-    'deno with nothing to start' => ['deno-no-start', 'blocked', 'js', '', 'deno', null],
+    'deno with nothing to start' => ['deno-no-start', 'unsure', 'js', null, 'deno', null],
+    'a deno library, fresh-session' => ['deno-library', 'unsure', 'js', null, 'deno', null],
     'plain html' => ['static-html', 'ready', 'static', '', null, '/'],
     'a pnpm workspace root' => ['pnpm-workspace-root', 'unsure', null, null, null, null],
     'an npm workspace root' => ['npm-workspace-root', 'unsure', null, null, null, null],
@@ -92,8 +103,6 @@ test('a blocked stack says why and how to fix it', function (string $fixture, st
     'a platform adapter' => ['sveltekit-realworld', 'framework', '@sveltejs/adapter-vercel', '@sveltejs/adapter-node'],
     'adapter-auto' => ['sveltekit-auto', 'framework', '@sveltejs/adapter-auto', '@sveltejs/adapter-node'],
     'next.js without start' => ['next-no-start', 'repository', 'start script', '"start": "next start"'],
-    'nothing to start' => ['js-no-start', 'repository', 'start script', '"start":'],
-    'deno with nothing to start' => ['deno-no-start', 'repository', 'start task', 'deno.json'],
 ]);
 
 test('a field the files do not settle is left with the reason', function (string $fixture, string $field, string $reason) {
@@ -104,6 +113,14 @@ test('a field the files do not settle is left with the reason', function (string
     'an npm workspace' => ['npm-workspace-root', 'type', 'workspace'],
     'a custom outDir' => ['vite-outdir', 'web_directory', 'outDir'],
     'no stack at all' => ['empty-repository', 'type', 'composer.json'],
+    'no start script' => ['js-no-start', 'framework', 'no start script'],
+    'only a main file' => ['js-library-main', 'framework', 'looks like a library'],
+    'a desktop app' => ['js-electron-start', 'framework', 'electron'],
+    'a framework the build does not build' => ['js-nuxt-docs-library', 'framework', 'nuxt build'],
+    'a ruby gem' => ['ruby-gem-sinatra', 'type', 'Ruby gem'],
+    'a laravel package' => ['laravel-package', 'type', 'library'],
+    'deno with no start task' => ['deno-no-start', 'framework', 'no start task'],
+    'a deno library' => ['deno-library', 'framework', 'library'],
 ]);
 
 test('a composer.lock too big to read leaves the PHP version unsure', function () {
