@@ -193,6 +193,8 @@ class Application extends Model
             'last_request_at' => 'datetime',
             'repository_head_at' => 'datetime',
             'repository_pushed_at' => 'datetime',
+            'repository_checked_at' => 'datetime',
+            'repository_check_pending' => 'boolean',
             'polled_at' => 'datetime',
             'runtime_pins' => 'array',
             'stack' => 'array',

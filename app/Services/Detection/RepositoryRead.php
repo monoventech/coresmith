@@ -12,12 +12,24 @@ use App\Services\Runtime\RepositoryFacts;
 
 final readonly class RepositoryRead
 {
+    /**
+     * @param  array<string, list<string>>  $installed
+     */
     public function __construct(
         public ?RepositoryFacts $facts,
         public ?string $commit = null,
         public ?string $failure = null,
         public bool $definitive = false,
+        public array $installed = [],
     ) {}
+
+    /**
+     * @return list<string>
+     */
+    public function installed(string $runtime): array
+    {
+        return $this->installed[$runtime] ?? [];
+    }
 
     public static function failed(string $failure, bool $definitive): self
     {

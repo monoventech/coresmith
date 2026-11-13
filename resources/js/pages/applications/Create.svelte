@@ -6,6 +6,7 @@
     import AppHead from '@/components/AppHead.svelte'
     import RepositoryPicker from '@/components/applications/RepositoryPicker.svelte'
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
+    import StackDetection from '@/components/applications/StackDetection.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import EnvironmentSelect from '@/components/projects/EnvironmentSelect.svelte'
@@ -14,10 +15,13 @@
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
+    import type { Detection, DetectionRequest } from '@/lib/detection'
+    import { detectionId, detectStack } from '@/lib/detection'
     import type { GitHubPick, GitHubSource } from '@/lib/github'
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { pickerRuntime } from '@/lib/runtimes'
     import { Form } from '@inertiajs/svelte'
+    import { onDestroy } from 'svelte'
 
     let {
         server,
@@ -34,6 +38,10 @@
     const GIT_URL = 'url'
 
     const DEFAULT_BRANCH = 'main'
+
+    const WAIT_MS = 700
+
+    const STACK_FIELDS = ['type', 'framework', 'js_runtime', 'web_directory']
 
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = {
         php: [
@@ -67,6 +75,7 @@
     let type = $state('php')
     let framework = $derived(FRAMEWORKS[type]?.[0]?.value ?? '')
     let jsRuntime = $state('bun')
+    let webDirectory = $state('/public')
     const picker = $derived(pickerRuntime(type, jsRuntime))
     let pickedSize = $state<string | null>(null)
     const size = $derived(pickedSize ?? (type === 'ruby' ? 'medium' : 'small'))
@@ -81,24 +90,151 @@
     let branch = $state(DEFAULT_BRANCH)
     let branchEdited = $state(false)
     let branches = $state<string[]>([])
+    let repositoryUrl = $state('')
+    let pickedRepository = $state<GitHubPick | null>(null)
+    let detection = $state<Detection | null>(null)
+    let reading = $state(false)
+    let touched = $state<Record<string, boolean>>({})
+    let controller: AbortController | null = null
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const read = $derived(detection?.state === 'read' ? detection : null)
+    const changedStack = $derived(STACK_FIELDS.some((field) => touched[field]))
+    const refused = $derived(
+        (read?.verdict === 'blocked' && !changedStack) || (detection?.state === 'failed' && detection.definitive)
+    )
+
+    onDestroy(() => {
+        clearTimeout(timer)
+        controller?.abort()
+    })
 
     function chooseSource(value: string) {
         chosenSource = value
         branches = []
+        pickedRepository = null
 
         if (!branchEdited) {
             branch = DEFAULT_BRANCH
         }
+
+        forget()
     }
 
     function picked(pick: GitHubPick) {
+        const repositoryChanged = pickedRepository?.id !== pick.id
+
         if (!branchEdited) {
             branch = pick.default_branch
         }
 
         branches = pick.branches
+        pickedRepository = pick
+
+        if (repositoryChanged) {
+            detectSoon(0)
+        }
+    }
+
+    function forget() {
+        clearTimeout(timer)
+        controller?.abort()
+        reading = false
+        detection = null
+    }
+
+    function wanted(): DetectionRequest | null {
+        if (branch.trim() === '') {
+            return null
+        }
+
+        if (connection && pickedRepository) {
+            return { source_provider_id: connection.id, repository_id: pickedRepository.id, repository_branch: branch }
+        }
+
+        return !connection && repositoryUrl.trim() !== ''
+            ? { repository_url: repositoryUrl.trim(), repository_branch: branch }
+            : null
+    }
+
+    function detectSoon(wait = WAIT_MS) {
+        clearTimeout(timer)
+        timer = setTimeout(detect, wait)
+    }
+
+    async function detect() {
+        controller?.abort()
+
+        const request = wanted()
+
+        if (request === null) {
+            forget()
+
+            return
+        }
+
+        if (request.repository_url !== undefined && !request.repository_url.startsWith('https://')) {
+            reading = false
+            detection = request.repository_url.startsWith('git@') ? { state: 'needs_key' } : null
+
+            return
+        }
+
+        const current = new AbortController()
+        controller = current
+        reading = true
+
+        const answer = await detectStack(route('servers.repository-stack', server.id), request, current.signal)
+
+        if (current.signal.aborted) {
+            return
+        }
+
+        reading = false
+        detection = answer
+
+        if (answer.state === 'read') {
+            fill(answer.fields)
+        }
+    }
+
+    function fill(fields: {
+        type: string | null
+        framework: string | null
+        js_runtime: string | null
+        web_directory: string | null
+    }) {
+        if (fields.type !== null && !touched.type) {
+            type = fields.type
+        }
+
+        if (fields.framework !== null && !touched.framework && !touched.type) {
+            framework = fields.framework
+        }
+
+        if (fields.js_runtime !== null && !touched.js_runtime) {
+            jsRuntime = fields.js_runtime
+        }
+
+        if (fields.web_directory !== null && !touched.web_directory) {
+            webDirectory = fields.web_directory
+        }
+    }
+
+    function touch(field: string) {
+        touched = { ...touched, [field]: true }
     }
 </script>
+
+{#snippet note(field: string)}
+    {#if read && !touched[field]}
+        {#if read.unsettled[field]}
+            <p class="mt-1.5 mb-0 text-[12px] text-warning-strong">{read.unsettled[field]}</p>
+        {:else if read.sources[field]}
+            <p class="mt-1.5 mb-0 text-[12px] wrap-anywhere text-muted-foreground">{read.sources[field]}</p>
+        {/if}
+    {/if}
+{/snippet}
 
 <AppHead title="Add an app" />
 
@@ -115,6 +251,7 @@
         <Form method="post" action={route('servers.applications.store', server.id)}>
             {#snippet children({ errors, processing })}
                 <input type="hidden" name="directory" value="/" />
+                <input type="hidden" name="detection" value={detectionId(detection)} />
                 <div class="flex flex-col gap-4">
                     <div>
                         <Label for="name" class="mb-1.5">Name</Label>
@@ -128,51 +265,6 @@
                         />
                         <FieldError message={errors.name} />
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <Label for="type" class="mb-1.5">Language</Label>
-                            <NativeSelect
-                                id="type"
-                                name="type"
-                                bind:value={type}
-                                options={[
-                                    { value: 'php', label: 'PHP' },
-                                    { value: 'js', label: 'JavaScript' },
-                                    { value: 'ruby', label: 'Ruby' },
-                                    { value: 'static', label: 'Static site' }
-                                ]}
-                            />
-                        </div>
-                        <div>
-                            <Label for="framework" class="mb-1.5">Framework</Label>
-                            <NativeSelect
-                                id="framework"
-                                name="framework"
-                                bind:value={framework}
-                                options={FRAMEWORKS[type] ?? []}
-                            />
-                        </div>
-                    </div>
-                    {#if type === 'js'}
-                        <div>
-                            <Label for="js_runtime" class="mb-1.5">Runtime</Label>
-                            <NativeSelect
-                                id="js_runtime"
-                                name="js_runtime"
-                                bind:value={jsRuntime}
-                                options={[
-                                    { value: 'bun', label: 'Bun' },
-                                    { value: 'node', label: 'Node' },
-                                    { value: 'deno', label: 'Deno' }
-                                ]}
-                            />
-                        </div>
-                    {/if}
-                    {#if picker && runtimes[picker]}
-                        {#key picker}
-                            <RuntimeVersionPicker runtime={runtimes[picker]} error={errors.runtime_version} />
-                        {/key}
-                    {/if}
                     {#if github.connections.length > 0}
                         <div>
                             <Label for="source" class="mb-1.5">Source</Label>
@@ -201,6 +293,8 @@
                             <Input
                                 id="repository_url"
                                 name="repository_url"
+                                bind:value={repositoryUrl}
+                                oninput={() => detectSoon()}
                                 placeholder="git@github.com:you/atlas.git"
                                 autocomplete="off"
                                 class="font-mono text-[13px]"
@@ -218,43 +312,111 @@
                             {/if}
                         </div>
                     {/if}
+                    <div>
+                        <Label for="repository_branch" class="mb-1.5">Branch</Label>
+                        <Input
+                            id="repository_branch"
+                            name="repository_branch"
+                            bind:value={branch}
+                            oninput={() => {
+                                branchEdited = true
+                                detectSoon()
+                            }}
+                            list={branches.length > 0 ? 'repository-branches' : undefined}
+                            required
+                            autocomplete="off"
+                            class="font-mono text-[13px]"
+                            aria-invalid={errors.repository_branch ? true : undefined}
+                        />
+                        {#if branches.length > 0}
+                            <datalist id="repository-branches">
+                                {#each branches as name (name)}
+                                    <option value={name}></option>
+                                {/each}
+                            </datalist>
+                        {/if}
+                        <FieldError message={errors.repository_branch} />
+                    </div>
+                    <StackDetection {detection} {reading} server={server.name} />
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <Label for="repository_branch" class="mb-1.5">Branch</Label>
-                            <Input
-                                id="repository_branch"
-                                name="repository_branch"
-                                bind:value={branch}
-                                oninput={() => (branchEdited = true)}
-                                list={branches.length > 0 ? 'repository-branches' : undefined}
-                                required
-                                autocomplete="off"
-                                class="font-mono text-[13px]"
-                                aria-invalid={errors.repository_branch ? true : undefined}
+                            <Label for="type" class="mb-1.5">Language</Label>
+                            <NativeSelect
+                                id="type"
+                                name="type"
+                                bind:value={type}
+                                onchange={() => touch('type')}
+                                options={[
+                                    { value: 'php', label: 'PHP' },
+                                    { value: 'js', label: 'JavaScript' },
+                                    { value: 'ruby', label: 'Ruby' },
+                                    { value: 'static', label: 'Static site' }
+                                ]}
+                                aria-invalid={errors.type ? true : undefined}
                             />
-                            {#if branches.length > 0}
-                                <datalist id="repository-branches">
-                                    {#each branches as name (name)}
-                                        <option value={name}></option>
-                                    {/each}
-                                </datalist>
-                            {/if}
-                            <FieldError message={errors.repository_branch} />
+                            {@render note('type')}
+                            <FieldError message={errors.type} />
                         </div>
                         <div>
-                            <Label for="web_directory" class="mb-1.5">Web root</Label>
-                            <Input
-                                id="web_directory"
-                                name="web_directory"
-                                value="/public"
-                                required
-                                class="font-mono text-[13px]"
-                                aria-invalid={errors.web_directory ? true : undefined}
+                            <Label for="framework" class="mb-1.5">Framework</Label>
+                            <NativeSelect
+                                id="framework"
+                                name="framework"
+                                bind:value={framework}
+                                onchange={() => touch('framework')}
+                                options={FRAMEWORKS[type] ?? []}
+                                aria-invalid={errors.framework ? true : undefined}
                             />
-                            <FieldError message={errors.web_directory} />
+                            {@render note('framework')}
+                            <FieldError message={errors.framework} />
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
+                    {#if type === 'js'}
+                        <div>
+                            <Label for="js_runtime" class="mb-1.5">Runtime</Label>
+                            <NativeSelect
+                                id="js_runtime"
+                                name="js_runtime"
+                                bind:value={jsRuntime}
+                                onchange={() => touch('js_runtime')}
+                                options={[
+                                    { value: 'bun', label: 'Bun' },
+                                    { value: 'node', label: 'Node' },
+                                    { value: 'deno', label: 'Deno' }
+                                ]}
+                                aria-invalid={errors.js_runtime ? true : undefined}
+                            />
+                            {@render note('js_runtime')}
+                            <FieldError message={errors.js_runtime} />
+                        </div>
+                    {/if}
+                    {#if picker && runtimes[picker]}
+                        {#key picker}
+                            <RuntimeVersionPicker
+                                runtime={runtimes[picker]}
+                                error={errors.runtime_version}
+                                detected={read?.sources.runtime_version ?? null}
+                            />
+                        {/key}
+                        {#if read?.unsettled.runtime_version}
+                            <p class="-mt-2.5 mb-0 text-[12px] text-warning-strong">{read.unsettled.runtime_version}</p>
+                        {/if}
+                    {/if}
+                    <div>
+                        <Label for="web_directory" class="mb-1.5">Web root</Label>
+                        <Input
+                            id="web_directory"
+                            name="web_directory"
+                            bind:value={webDirectory}
+                            oninput={() => touch('web_directory')}
+                            required
+                            class="font-mono text-[13px]"
+                            aria-invalid={errors.web_directory ? true : undefined}
+                        />
+                        {@render note('web_directory')}
+                        <FieldError message={errors.web_directory} />
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                         <div>
                             <Label for="domain" class="mb-1.5">Domain</Label>
                             <Input
@@ -281,11 +443,11 @@
                         </div>
                     </div>
                     <p class="-mt-1 text-[12px] text-muted-foreground">
-                        Point the domain's A record at this server first. Caddy issues the certificate on the first
-                        request.
+                        Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for
+                        IPv6. Caddy issues the certificate on the first request.
                     </p>
                     <EnvironmentSelect {projects} error={errors.environment_id} />
-                    <Button type="submit" class="w-full" disabled={processing}>Add the app</Button>
+                    <Button type="submit" class="w-full" disabled={processing || refused}>Add the app</Button>
                 </div>
             {/snippet}
         </Form>

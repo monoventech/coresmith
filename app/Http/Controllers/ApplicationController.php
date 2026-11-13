@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
 use App\Enums\PowerState;
@@ -26,6 +27,7 @@ use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Deployment\EnvironmentFile;
+use App\Services\Deployment\StackDefaults;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
 use App\Services\Panel\ApplicationPresenter;
@@ -107,9 +109,11 @@ final class ApplicationController extends Controller
 
         $connection = $request->githubConnection();
         $repository = $request->githubRepository();
+        $checked = $request->checkedRead();
+        $initial = app(StackDefaults::class)->initial(ApplicationType::tryFrom($request->string('type')->value()), $request->input('framework'));
 
         $application = Application::create([
-            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id']),
+            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id', 'detection']),
             ...($connection === null || $repository === null ? [] : [
                 'repository_url' => 'https://github.com/' . $repository['full_name'] . '.git',
                 'repository_provider' => 'github',
@@ -117,6 +121,9 @@ final class ApplicationController extends Controller
                 'repository_id' => $repository['id'],
             ]),
             'runtime_pins' => $line === null ? null : [$runtime => $line],
+            'env_variables' => $initial === [] ? null : app(EnvironmentFile::class)->render($initial),
+            'repository_checked_at' => $checked === null ? null : now(),
+            'repository_check_pending' => $request->names() && $checked === null,
             'server_id' => $server->id,
             'team_id' => $server->team_id,
             'slug' => $slug,

@@ -17,6 +17,7 @@ use App\Services\Git\CloneToken;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitProviderFactory;
+use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
@@ -31,6 +32,8 @@ final class RepositoryReader
     private const SETUP_FAILED = 70;
 
     private const SECONDS = 300;
+
+    private const RUNTIMES = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
 
     private const SCRIPT = <<<'BASH'
     set -o pipefail
@@ -48,6 +51,9 @@ final class RepositoryReader
     names=$(git ls-tree --name-only HEAD {tree})
     for f in {lockfiles}; do
       if printf '%s\n' "$names" | grep -qxF -- {prefix}"$f"; then : > "$app/$f"; fi
+    done
+    for r in {runtimes}; do
+      for v in $(ls -1 {installs}/"$r" 2>/dev/null); do printf '@@installed %s %s\n' "$r" "$v"; done
     done
     echo {probe} | base64 -d | CORESMITH_PROBE_DIR="$app" bash -s
     BASH;
@@ -145,6 +151,8 @@ final class RepositoryReader
             '{prefix}' => escapeshellarg($prefix),
             '{lockfiles}' => implode(' ', RepositoryProbe::LOCKFILES),
             '{probe}' => escapeshellarg(base64_encode($this->probe->script())),
+            '{runtimes}' => implode(' ', self::RUNTIMES),
+            '{installs}' => escapeshellarg(AsdfManager::INSTALL_DIR),
         ]) . "\n";
     }
 
@@ -157,7 +165,7 @@ final class RepositoryReader
 
             $commit = preg_match('/^@@commit ([0-9a-f]{40})$/m', $output, $matches) === 1 ? $matches[1] : null;
 
-            return new RepositoryRead($this->probe->parse($output), $commit);
+            return new RepositoryRead($this->probe->parse($output), $commit, installed: $this->installed($output));
         }
 
         if ($exitCode === self::SETUP_FAILED) {
@@ -176,6 +184,22 @@ final class RepositoryReader
             GitFailure::NETWORK => RepositoryRead::failed("{$server->name} couldn't reach {$host}. Check its firewall allows outbound HTTPS and SSH, then try again.", false),
             default => RepositoryRead::failed("Git stopped on {$server->name} with an error Coresmith doesn't recognise: " . Str::limit(trim((string) Str::afterLast(trim($output), "\n")), 200) . ' Try again.', false),
         };
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function installed(string $output): array
+    {
+        $installed = [];
+
+        preg_match_all('/^@@installed (' . implode('|', self::RUNTIMES) . ') (\d[0-9A-Za-z.+-]*)$/m', $output, $matches, PREG_SET_ORDER);
+
+        foreach ($matches as [, $runtime, $version]) {
+            $installed[$runtime][] = $version;
+        }
+
+        return $installed;
     }
 
     private function unreadable(RepositoryAccess $access, string $url, string $host): string

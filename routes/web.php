@@ -32,6 +32,7 @@ use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SharedRedisController;
 use App\Http\Controllers\SshKeyController;
+use App\Http\Controllers\StackDetectionController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInvitationController;
 use App\Http\Controllers\TeamMemberAccessController;
@@ -133,6 +134,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('servers/{server}/host-key/reject', [ServerHostKeyController::class, 'reject'])
         ->name('servers.host-key.reject');
 
+    Route::get('servers/{server}/repository-stack', [StackDetectionController::class, 'show'])
+        ->middleware('throttle:20,1,repository-stack')
+        ->name('servers.repository-stack');
     Route::resource('servers.applications', ApplicationController::class)->except(['index', 'edit']);
     Route::get('servers/{server}/applications/{application}/releases', [ReleasesController::class, 'index'])
         ->name('servers.applications.releases.index');
