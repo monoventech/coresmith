@@ -74,7 +74,7 @@ test.describe('databases', () => {
         await page.getByLabel('User', { exact: true }).fill(`${name}_app`)
         await page.getByRole('button', { name: 'Create the database' }).click()
 
-        await expect(toast(page)).toContainText('Database queued for creation.')
+        await expect(toast(page)).toContainText('Creating the database.')
         await expect(databaseRow(page, name)).toBeVisible()
     })
 
@@ -97,7 +97,7 @@ test.describe('databases', () => {
         await page.getByLabel('Database name').fill(name)
         await page.getByRole('button', { name: 'Create the database' }).click()
 
-        await expect(toast(page)).toContainText('Database queued for creation.')
+        await expect(toast(page)).toContainText('Creating the database.')
         await expect(databaseRow(page, name)).toContainText('password')
         await expect(databaseRow(page, name)).toContainText(/63[89]\d|64[0-7]\d/)
     })

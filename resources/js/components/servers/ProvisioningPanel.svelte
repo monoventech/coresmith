@@ -66,7 +66,7 @@
         </div>
         <p class="mb-3 text-[12.5px] text-muted-foreground">
             {pending
-                ? 'Eight phases, hardened by default, not opt-in.'
+                ? 'Coresmith runs eight phases and hardens the server along the way.'
                 : 'Every phase is logged. Close this page, it keeps going.'}
         </p>
         <div class="flex flex-col gap-0.5">
@@ -110,9 +110,7 @@
     <Dialog.Content>
         <Dialog.Header>
             <Dialog.Title>Start over from phase 1?</Dialog.Title>
-            <Dialog.Description>
-                Every phase runs again. Each phase is written to be safe to run again.
-            </Dialog.Description>
+            <Dialog.Description>Every phase runs again from the start. Each one is safe to repeat.</Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>
             <Button variant="ghost" onclick={() => (restarting = false)}>Cancel</Button>

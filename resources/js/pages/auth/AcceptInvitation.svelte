@@ -60,8 +60,7 @@
 {#snippet trust()}
     {#if trustNote}
         <p class="m-0 text-[13px] text-muted-foreground" data-testid="trust-note">
-            By joining this Coresmith instance, your connected Git provider tokens will be accessible to the instance
-            administrator.
+            Whoever runs this Coresmith installation can read the Git provider tokens you connect to it.
         </p>
     {/if}
 {/snippet}

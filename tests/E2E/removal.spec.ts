@@ -71,7 +71,7 @@ test.describe('removing Coresmith', () => {
         await removalShowing(page)
         await openRemoval(page)
 
-        await expect(dialog(page)).toContainText("This is permanent and can't be undone.")
+        await expect(dialog(page)).toContainText("This can't be undone.")
         await expect(dialog(page).getByTestId('removal-what').getByRole('listitem')).toHaveText([
             'Your 3 servers, and everything on them, keep running. Deploys stop until you point another Coresmith at them.',
             'Coresmith takes its key off each server it can reach.',

@@ -152,7 +152,7 @@ final class ApplicationController extends Controller
         }
 
         return to_route('servers.applications.show', [$server, $application])
-            ->with('success', 'Application created. Deploy it when you are ready.');
+            ->with('success', "App added. Deploy it when you're ready.");
     }
 
     public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks, CertificateCheck $certificates, CronJobs $cron): Response

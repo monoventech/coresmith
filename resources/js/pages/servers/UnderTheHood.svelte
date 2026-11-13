@@ -39,8 +39,8 @@
 
 <h1 class="type-h1 m-0 mb-1.5">What Coresmith runs here</h1>
 <p class="type-body-sm mb-7 max-w-[68ch] text-muted-foreground">
-    For when you sign in to <span class="font-mono text-[13px]">{server.name}</span> over SSH. Coresmith manages all of
-    this, so change it through Coresmith rather than by hand. Its protections are on the
+    This is what you'll find when you sign in to <span class="font-mono text-[13px]">{server.name}</span> over SSH.
+    Coresmith manages all of this, so change it through Coresmith rather than by hand. Its protections are on the
     <Link href={server.hardening} class="text-foreground underline underline-offset-2">Hardening tab</Link>.
 </p>
 
@@ -90,9 +90,7 @@
 
     <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="machinery-isolation">
         <h3 class="type-h3 m-0 mb-1">How apps are kept apart</h3>
-        <p class="mb-3.5 text-[12.5px] text-muted-foreground">
-            A compromise in one app has to get past every one of these to reach another.
-        </p>
+        <p class="mb-3.5 text-[12.5px] text-muted-foreground">Every app on this server gets each of these.</p>
         <ul class="m-0 flex list-none flex-col gap-2.25 p-0">
             {#each isolation as layer (layer)}
                 <li class="flex items-start gap-2.5 text-[13.5px]">
