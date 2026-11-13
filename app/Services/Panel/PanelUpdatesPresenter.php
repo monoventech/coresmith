@@ -281,6 +281,6 @@ final class PanelUpdatesPresenter
             str_starts_with($line, '### ') => substr($line, 4),
             preg_match('/^- (?:[a-z]+(?:\([^)]*\))?!?: )?(.+)$/', $line, $matches) === 1 => '• ' . Str::ucfirst($matches[1]),
             default => $line,
-        }, preg_split('/\R/', trim($summary)) ?: []));
+        }, preg_split('/\r\n|\n|\r/', trim($summary)) ?: []));
     }
 }

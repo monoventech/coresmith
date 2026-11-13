@@ -1,0 +1,10 @@
+{
+  "name": "tool",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "hono": "^4.9.9"
+  }
+}

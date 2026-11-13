@@ -69,7 +69,7 @@ final class EnvironmentFile
             return ['variables' => $json, 'error' => null];
         }
 
-        $lines = preg_split('/\R/', $raw) ?: [];
+        $lines = preg_split('/\r\n|\n|\r/', $raw) ?: [];
         $variables = [];
         $error = null;
         $count = count($lines);

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.5 (2026-11-13)
+
+### Added
+- feat: Add an app reads the repository and fills in a stack it is sure will deploy, and says why when it can't (#62)
+
+### Changed
+- test: every spec drops its route handlers when its page is torn down, so a request still in a handler as the context closes no longer fails a run (#61)
+
 ## v0.8.4 (2026-11-12)
 
 ### Added

@@ -8,7 +8,12 @@
     import type { RuntimeChoices, RuntimeOption } from '@/lib/runtimes'
     import { untrack } from 'svelte'
 
-    let { runtime, error, value = null }: { runtime: RuntimeChoices; error?: string; value?: string | null } = $props()
+    let {
+        runtime,
+        error,
+        value = null,
+        detected = null
+    }: { runtime: RuntimeChoices; error?: string; value?: string | null; detected?: string | null } = $props()
 
     const REPOSITORY = 'repository'
 
@@ -62,7 +67,7 @@
             <RadioGroup.Item value={REPOSITORY} aria-labelledby="runtime-version-repository" />
             <span id="runtime-version-repository" class="flex min-w-0 flex-col">
                 <span class="text-[13.5px] font-medium">From the repository</span>
-                <span class="text-[12px] text-muted-foreground">{runtime.sources}</span>
+                <span class="text-[12px] text-muted-foreground">{detected ?? runtime.sources}</span>
             </span>
         </label>
         {#each runtime.options as option (option.line)}

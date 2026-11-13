@@ -121,7 +121,7 @@ final class DatabaseBackups
 
         $dumps = [];
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             if (preg_match('/^' . preg_quote($name, '/') . '-(\d{14})\.sql\.gz\t(\d+)$/', trim($line), $match) === 1) {
                 $dumps[] = ['stamp' => $match[1], 'path' => $folder . '/' . $name . '-' . $match[1] . '.sql.gz', 'size' => (int) $match[2]];
             }

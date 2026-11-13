@@ -106,7 +106,7 @@ final class RuntimeDetector
     {
         $found = [];
 
-        foreach (preg_split('/\R/', (string) $facts->file('.tool-versions')) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', (string) $facts->file('.tool-versions')) ?: [] as $line) {
             $parts = preg_split('/\s+/', trim((string) preg_replace('/#.*$/', '', $line))) ?: [];
             $runtime = self::TOOL_NAMES[$parts[0] ?? ''] ?? null;
             $value = $parts[1] ?? '';

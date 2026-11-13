@@ -563,12 +563,14 @@ test('dependencies that hit a registry timeout are installed once more', functio
 });
 
 test('a build error is not retried', function () {
-    $deployment = Deployment::factory()->for(deployableApp())->create();
-    $transport = healthyDeployTransport()->respondTo('artisan config:cache', 'In Repository.php line 12: syntax error', 1);
+    $deployment = Deployment::factory()->for(deployableApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'node_version' => '24.15.0']))->create();
+    $transport = healthyDeployTransport()
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['package.json' => '{"scripts":{"build":"vite build"}}'], ['bun.lock']))
+        ->respondTo('bun run build', 'error during build: Rollup failed to resolve import "lodash/each"', 1);
 
     expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
-    expect(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, 'artisan config:cache'))))->toBe(1);
+    expect(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, 'bun run build'))))->toBe(1);
 });
 
 test('an ssh connection that drops before the swap is reopened and the phase runs once more', function () {
@@ -579,6 +581,18 @@ test('an ssh connection that drops before the swap is reopened and the phase run
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during build, reconnecting');
+});
+
+test('a release the memory limit keeps killing says it ran out of memory and to pick a bigger size', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000', 'app_size' => 'small']))->create();
+    $transport = healthyDeployTransport()
+        ->respondToSequence("systemctl is-active 'coresmith-app-my-app-fpm'", [["active\n", 0], ["failed\n", 3]])
+        ->respondTo("show -p Result --value 'coresmith-app-my-app-fpm'", "oom-kill\n");
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(DeploymentAborted::class);
+
+    expect($deployment->fresh()->failure_reason)->toBe('Out of memory: coresmith-app-my-app-fpm went past the 256 MB the Small size allows, so it kept being stopped. Pick a bigger size on the app page, then deploy again. releases/' . TIMESTAMP . ' is live but not serving, so roll back to the previous release meanwhile.');
 });
 
 test('a release that crash loops after the swap fails the deploy and says to roll back', function () {
@@ -681,7 +695,7 @@ test('the app gets its own linux account and a root controlled folder before any
     expect($account)->not->toBeFalse()
         ->and($account)->toBeLessThan($clone)
         ->and($commands[$account])->toContain('--shell /usr/sbin/nologin')
-        ->and($commands[$account])->toContain('chown root:root /var/coresmith/apps/my-app /var/coresmith/apps/my-app/releases')
+        ->and($commands[$account])->toContain('chown root:$(id -gn coresmith-app-my-app) /var/coresmith/apps/my-app /var/coresmith/apps/my-app/releases')
         ->and($commands[$account])->toContain('chown -h coresmith-app-my-app:caddy /var/coresmith/apps/my-app/shared');
 });
 

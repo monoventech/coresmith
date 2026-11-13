@@ -61,7 +61,7 @@ final class CrontabBuilder
         $lines = ["# Coresmith managed crons for {$slug} - do not edit manually"];
 
         foreach ($this->entries($application) as $index => $entry) {
-            $lines[] = $entry['schedule'] . ' root ' . $this->shell->scheduled($application, $scripts . '/' . $index . '.sh', $current, $application->runtimeVersions(), $application->type?->defaultEnvironment() ?? []);
+            $lines[] = $entry['schedule'] . ' root ' . $this->shell->scheduled($application, $scripts . '/' . $index . '.sh', $current, $application->runtimeVersions(), app(StackDefaults::class)->process($application));
         }
 
         return implode("\n", $lines) . "\n";

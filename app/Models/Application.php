@@ -146,6 +146,11 @@ class Application extends Model
         return $provider?->type === SourceProviderType::GitHubApp ? $provider : null;
     }
 
+    public function needsRepositoryCheck(): bool
+    {
+        return $this->repository_check_pending === true;
+    }
+
     public function usesGitHubToken(): bool
     {
         $connection = $this->githubConnection();
@@ -193,6 +198,9 @@ class Application extends Model
             'last_request_at' => 'datetime',
             'repository_head_at' => 'datetime',
             'repository_pushed_at' => 'datetime',
+            'repository_checked_at' => 'datetime',
+            'repository_check_pending' => 'boolean',
+            'repository_check' => 'array',
             'polled_at' => 'datetime',
             'runtime_pins' => 'array',
             'stack' => 'array',

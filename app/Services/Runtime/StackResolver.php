@@ -42,7 +42,15 @@ final class StackResolver
             $runtimes[$runtime] = $resolved;
         }
 
-        return new Stack($runtimes, $this->frameworks->detect($application, $facts), $detection->tooling, $notes, $this->gems($application, $facts), $this->packages($application, $facts));
+        return new Stack(
+            $runtimes,
+            $this->frameworks->detect($application, $facts),
+            $detection->tooling,
+            $notes,
+            $this->gems($application, $facts),
+            $this->packages($application, $facts),
+            $facts->complete ? array_values(array_unique([...array_keys($facts->files), ...$facts->markers])) : null,
+        );
     }
 
     /**
@@ -77,7 +85,11 @@ final class StackResolver
         $gems = [];
 
         foreach (Stack::GEMS as $gem) {
-            $gems[$gem] = $facts->locked($gem) !== null;
+            $gems[$gem] = $facts->gem($gem) !== null || $facts->locked($gem) !== null;
+        }
+
+        foreach ($facts->has('Gemfile.lock') ? Stack::PIPELINE_GEMS : [] as $gem) {
+            $gems[$gem] = $facts->gem($gem) !== null;
         }
 
         return $gems;

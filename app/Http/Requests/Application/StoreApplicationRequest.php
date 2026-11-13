@@ -14,9 +14,13 @@ use App\Enums\SourceProviderType;
 use App\Exceptions\GitHubInstallationException;
 use App\Exceptions\GitHubLinkProofException;
 use App\Exceptions\GitProviderException;
+use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Rules\FillableEnvironment;
+use App\Services\Detection\DetectionStore;
+use App\Services\Detection\RepositoryRead;
+use App\Services\Detection\StackChecks;
 use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\RepositoryCatalog;
@@ -42,6 +46,8 @@ final class StoreApplicationRequest extends FormRequest
 
     /** @var array<string, mixed>|null */
     private ?array $repository = null;
+
+    private ?RepositoryRead $checked = null;
 
     public function authorize(): bool
     {
@@ -76,6 +82,7 @@ final class StoreApplicationRequest extends FormRequest
             'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['boolean'],
             'environment_id' => ['nullable', 'string', new FillableEnvironment($server?->team, $this->user())],
+            'detection' => ['nullable', 'string', 'max:64'],
         ];
     }
 
@@ -165,7 +172,76 @@ final class StoreApplicationRequest extends FormRequest
             function (Validator $validator): void {
                 $this->resolveRepository($validator);
             },
+            function (Validator $validator): void {
+                $this->checkStack($validator);
+            },
         ];
+    }
+
+    public function checkedRead(): ?RepositoryRead
+    {
+        return $this->checked;
+    }
+
+    public function hasRepository(): bool
+    {
+        return $this->repositoryKey() !== null;
+    }
+
+    private function checkStack(Validator $validator): void
+    {
+        $server = $this->route('server');
+        $repository = $this->repositoryKey();
+
+        if ($validator->errors()->isNotEmpty() || !$server instanceof Server || $repository === null) {
+            return;
+        }
+
+        $read = app(DetectionStore::class)->find($this->input('detection'), $this->user(), $server, $repository, (string) $this->input('repository_branch'), (string) $this->input('directory', '/'));
+        $field = $this->repository === null ? 'repository_url' : 'repository_id';
+
+        if ($read === null) {
+            return;
+        }
+
+        if ($read->facts === null) {
+            if ($read->definitive) {
+                $validator->errors()->add($field, (string) $read->failure);
+            }
+
+            return;
+        }
+
+        $line = $this->runtimeLine();
+        $choice = new Application([
+            'type' => $this->input('type'),
+            'framework' => $this->input('framework'),
+            'js_runtime' => $this->input('js_runtime'),
+            'directory' => $this->input('directory', '/'),
+            'web_directory' => $this->input('web_directory'),
+            'runtime_pins' => $line === null ? null : [$this->runtime() => $line],
+        ]);
+
+        $blockers = app(StackChecks::class)->blockers($choice, $read->facts, fn(string $runtime): array => $read->installed($runtime), extensions: fn(string $version): ?array => $read->extensions($version), arch: $read->arch);
+
+        foreach ($blockers as $blocker) {
+            $validator->errors()->add($blocker->field === 'repository' ? $field : $blocker->field, trim($blocker->reason . ' ' . $blocker->fix));
+        }
+
+        $this->checked = $blockers === [] ? $read : null;
+    }
+
+    private function repositoryKey(): ?string
+    {
+        $connection = $this->githubConnection();
+
+        if ($connection !== null && $this->repository !== null) {
+            return 'github:' . $connection->getKey() . ':' . $this->repository['id'];
+        }
+
+        $url = $this->input('repository_url');
+
+        return is_string($url) && $url !== '' ? $url : null;
     }
 
     private function resolveRepository(Validator $validator): void

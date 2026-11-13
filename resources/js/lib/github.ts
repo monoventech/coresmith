@@ -49,7 +49,7 @@ export type GitHubSource = { id: string; account: string; repositories_href: str
 
 export type GitHubRepository = { id: string; full_name: string; private: boolean; default_branch: string }
 
-export type GitHubPick = { full_name: string; default_branch: string; branches: string[] }
+export type GitHubPick = { id: string; full_name: string; default_branch: string; branches: string[] }
 
 export type GitHubInstallationChoice = {
     id: string

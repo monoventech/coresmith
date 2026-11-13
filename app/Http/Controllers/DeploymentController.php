@@ -146,6 +146,7 @@ final class DeploymentController extends Controller
             'phases' => $states,
             'failed_phase' => $failed['key'] ?? null,
             'failure_reason' => $deployment->failure_reason,
+            'live_answer' => $deployment->live_status === null ? null : ['status' => $deployment->live_status, 'detail' => $deployment->live_detail],
             'start_failed' => (bool) $deployment->start_failed,
             'failed_worker' => $deployment->failed_worker,
             'failed_step' => $deployment->failed_step,

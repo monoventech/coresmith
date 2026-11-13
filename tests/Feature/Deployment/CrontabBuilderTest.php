@@ -139,7 +139,7 @@ test('a rails cron run gets the production defaults the app units get, before th
         "# Coresmith managed crons for shop - do not edit manually\n"
         . '* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop'
         . " -p 'WorkingDirectory=/var/coresmith/apps/shop/current'"
-        . " -E 'RAILS_ENV=production' -E 'RACK_ENV=production'"
+        . " -E 'RAILS_ENV=production' -E 'RACK_ENV=production' -E 'RAILS_SERVE_STATIC_FILES=1' -E 'RAILS_LOG_TO_STDOUT=1'"
         . " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
         . ' -p KillMode=process -p UMask=0027 -p NoNewPrivileges=yes'
         . " -E 'PATH=/opt/asdf-data/installs/ruby/3.3.6/bin:/usr/local/bin:/usr/bin:/bin'"

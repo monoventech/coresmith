@@ -55,12 +55,25 @@ final class SharedStorage
             default => '',
         };
 
-        return $seed . strtr(self::LINK, ['{shared}' => escapeshellarg($shared), '{local}' => escapeshellarg($local)]);
+        $laravel = $application->type === ApplicationType::Php && strtolower((string) $application->framework) === 'laravel';
+        $link = strtr(self::LINK, ['{shared}' => escapeshellarg($shared), '{local}' => escapeshellarg($local)]);
+
+        return $laravel
+            ? '[ -e ' . escapeshellarg($local) . ' ] || mkdir -p ' . escapeshellarg($local) . '; ' . $seed . $link . $this->laravelFolders($paths->appDirectory($release))
+            : $seed . $link;
+    }
+
+    private function laravelFolders(string $app): string
+    {
+        $folders = implode(' ', array_map(fn(string $folder): string => escapeshellarg($app . '/' . $folder), ['storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/views', 'storage/logs', 'bootstrap/cache']));
+        $database = escapeshellarg($app . '/database/database.sqlite');
+
+        return "; mkdir -p {$folders} && { [ ! -d " . escapeshellarg($app . '/database') . " ] || [ -e {$database} ] || touch {$database}; }";
     }
 
     public function seeded(string $output): bool
     {
-        return in_array(self::SEEDED, array_map(trim(...), preg_split('/\R/', $output) ?: []), true);
+        return in_array(self::SEEDED, array_map(trim(...), preg_split('/\r\n|\n|\r/', $output) ?: []), true);
     }
 
     public function discard(SSHConnection $connection, Deployment $deployment): void

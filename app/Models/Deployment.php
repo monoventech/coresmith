@@ -11,6 +11,7 @@ namespace App\Models;
 use App\Enums\DeploymentStatus;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use Database\Factories\DeploymentFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -39,11 +40,28 @@ class Deployment extends Model
     }
 
     /**
+     * @return Attribute<?string, never>
+     */
+    protected function commitMessage(): Attribute
+    {
+        return Attribute::get(fn(?string $value): ?string => $value === null ? null : mb_scrub($value, 'UTF-8'));
+    }
+
+    /**
+     * @return Attribute<?string, never>
+     */
+    protected function commitAuthor(): Attribute
+    {
+        return Attribute::get(fn(?string $value): ?string => $value === null ? null : mb_scrub($value, 'UTF-8'));
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
+            'live_status' => 'integer',
             'status' => DeploymentStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',

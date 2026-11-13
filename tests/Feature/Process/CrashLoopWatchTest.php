@@ -49,6 +49,25 @@ test('a unit down on three checks in a row is a crash loop, with the end of its 
     Sleep::assertSleptTimes(3);
 });
 
+test('a unit the memory limit keeps killing is a crash loop that says it ran out of memory', function () {
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-queue'", "activating\n", 3)
+        ->respondTo("show -p Result --value 'coresmith-app-shop-queue'", "oom-kill\n");
+
+    $loop = watchRun($transport, watchApp());
+
+    expect($loop?->unit)->toBe('coresmith-app-shop-queue')
+        ->and($loop?->outOfMemory)->toBeTrue();
+});
+
+test('a unit that stops for any other reason is not called out of memory', function () {
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-queue'", "activating\n", 3)
+        ->respondTo("show -p Result --value 'coresmith-app-shop-queue'", "exit-code\n");
+
+    expect(watchRun($transport, watchApp())?->outOfMemory)->toBeFalse();
+});
+
 test('a unit systemd keeps restarting is a crash loop even when it looks active', function () {
     $transport = (new FakeSSHTransport)
         ->respondToSequence("NRestarts --value 'coresmith-app-shop-fpm'", [["0\n", 0], ["2\n", 0], ["5\n", 0]])

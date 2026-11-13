@@ -37,7 +37,7 @@ final class AccessLogReader
     {
         $lines = [];
 
-        foreach (preg_split('/\R/', $output) ?: [] as $raw) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $raw) {
             $entry = json_decode($raw, true);
 
             if (!is_array($entry) || !isset($entry['request']) || !is_array($entry['request'])) {

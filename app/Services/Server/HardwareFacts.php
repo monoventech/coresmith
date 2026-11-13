@@ -45,7 +45,7 @@ final class HardwareFacts
     {
         $values = [];
 
-        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
             if (preg_match('/^(cpu_model|cpu_cores|os|installed_mb)=(.*)$/', trim($line), $matches) === 1) {
                 $values[$matches[1]] ??= $matches[2];
             }

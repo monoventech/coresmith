@@ -146,6 +146,35 @@ test('each command run in the release is echoed before its output', function () 
         ->and($lines)->toContain('$ php artisan migrate --force');
 });
 
+test('a Laravel cache that fails is skipped with the reason, and the deploy goes on', function (string $cache, string $output) {
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $transport = releaseTransport()->respondTo("artisan {$cache}", $output, 255);
+
+    releaseRun($deployment, $transport);
+
+    $lines = releaseLogLines($deployment);
+    $skipped = array_search("php artisan {$cache} failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.", $lines, true);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($skipped)->not->toBeFalse()
+        ->and($lines[$skipped - 1])->toBe(trim($output))
+        ->and($lines)->toContain('$ php artisan view:cache')
+        ->and($lines)->toContain('$ php artisan migrate --force');
+})->with([
+    'a duplicate route name' => ['route:cache', "Unable to prepare route [login] for serialization. Another route has already been assigned name [login].\n"],
+    'a routes file that declares a function' => ['config:cache', "PHP Fatal error:  Cannot redeclare function myApiResource()\n"],
+]);
+
+test('a failing build step that is not a cache still fails the deploy', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $transport = releaseTransport()->respondTo('artisan migrate', "SQLSTATE[HY000] [2002] Connection refused\n", 1);
+
+    expect(fn() => releaseRun($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect(releaseLogLines($deployment))->not->toContain('php artisan migrate --force failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.');
+});
+
 test('a custom blueprint is logged as the build phase with no dependency install or migration marker', function () {
     $deployment = Deployment::factory()->for(releaseApp(['custom_blueprint' => "echo building\n"]))->create();
 
@@ -164,6 +193,16 @@ test('a private repository announces that it fetches with the deploy key', funct
     releaseRun($deployment, releaseTransport());
 
     expect((string) $deployment->fresh()->log)->toContain('[14:05:09] clone: fetching via deploy key (ed25519, read-only)');
+});
+
+test('a commit subject in Japanese is kept whole, so the deploy page can still render it', function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create(['commit_hash' => null, 'commit_message' => null]);
+    $transport = releaseTransport()->respondTo('log -1 --format', "0abac93f8986f4589809715b4d80675da0ce02fa\n小林 耕治\nダークモード実装\n");
+
+    releaseRun($deployment, $transport);
+
+    expect($deployment->fresh()->commit_message)->toBe('ダークモード実装')
+        ->and($deployment->fresh()->commit_author)->toBe('小林 耕治');
 });
 
 test('the commit hash, author and subject are resolved from git when the push did not carry them', function () {

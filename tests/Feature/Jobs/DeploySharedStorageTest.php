@@ -227,7 +227,7 @@ test('a node app only links shared storage, as it did', function () {
     ));
 });
 
-test('a laravel app copies its release storage into place only when the whole copy works', function () {
+test('a laravel app copies its release storage into place only when the whole copy works, and has the folders and SQLite file Laravel expects', function () {
     $application = sharedStorageApp(['type' => ApplicationType::Php, 'framework' => 'laravel', 'php_version' => '8.5.5', 'ruby_version' => null]);
     $release = '/var/coresmith/apps/shop/releases/20261019-120000';
     $shared = "'/var/coresmith/apps/shop/shared/storage'";
@@ -237,8 +237,10 @@ test('a laravel app copies its release storage into place only when the whole co
     expect(sharedStorageCommandFor($application))->toBe(app(AppShell::class)->run(
         $application,
         "mkdir -p '/var/coresmith/apps/shop/shared/logs'; "
+            . "[ -e {$local} ] || mkdir -p {$local}; "
             . "if [ -d {$local} ] && [ ! -L {$local} ] && [ ! -e {$shared} ]; then { rm -rf {$copy} && cp -a {$local} {$copy} && mv {$copy} {$shared}; } || { rm -rf {$copy}; echo \"Could not copy the release's storage into shared/storage, so nothing was changed. Fix the error above, then deploy again.\" >&2; exit 1; }; fi; "
-            . "if [ -d {$shared} ]; then rm -rf {$local} && ln -sfn {$shared} {$local}; fi",
+            . "if [ -d {$shared} ]; then rm -rf {$local} && ln -sfn {$shared} {$local}; fi; "
+            . "mkdir -p '{$release}/storage/framework/cache/data' '{$release}/storage/framework/sessions' '{$release}/storage/framework/views' '{$release}/storage/logs' '{$release}/bootstrap/cache' && { [ ! -d '{$release}/database' ] || [ -e '{$release}/database/database.sqlite' ] || touch '{$release}/database/database.sqlite'; }",
         $release,
     ));
 });

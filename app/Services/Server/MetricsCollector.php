@@ -204,7 +204,7 @@ final class MetricsCollector
             timeout: self::PROBE_SECONDS,
         );
 
-        return array_values(array_filter(array_map(trim(...), preg_split('/\R/', $result->output) ?: [])));
+        return array_values(array_filter(array_map(trim(...), preg_split('/\r\n|\n|\r/', $result->output) ?: [])));
     }
 
     /**

@@ -179,6 +179,7 @@ test('preparing a stable release picks dev onto main, bumps, runs the full ci on
     expect(array_slice($calls, 0, -1))->toBe([
         'bun run build',
         'bun run ci',
+        'bun tests/Corpus/codeHash.ts',
     ])->and(end($calls))->toMatch('#^gh pr create --repo monoven/coresmith --base main --head release/v1\.0\.0 --title Release v1\.0\.0 --body-file \S+$#')
         ->and((string) file_get_contents($sandbox['ci']))->toBe(releaseOrigin($sandbox, ['rev-parse', 'release/v1.0.0']) . " 1.0.0 0\n")
         ->and(releaseOrigin($sandbox, ['rev-parse', 'main']))->toBe($main)
@@ -393,6 +394,18 @@ test('a failing gate leaves nothing behind', function () {
         ->and(releaseGit($sandbox, ['rev-parse', '--abbrev-ref', 'HEAD']))->toBe('main')
         ->and(releaseGit($sandbox, ['status', '--porcelain']))->toBe('')
         ->and(releaseRefs($sandbox))->toBe($before);
+});
+
+test('a release stops until the fixed set of real repositories has passed on its code', function () {
+    $sandbox = releaseScriptSandbox();
+    releaseCommit($sandbox, 'dev', 'feat: deploy faster');
+    unlink("{$sandbox['clone']}/storage/corpus/fixed-pass-stubbedhash.json");
+
+    $process = releaseScriptRun($sandbox, ['1.0.0', '--yes', '--unsigned']);
+
+    expect($process->getExitCode())->toBe(1)
+        ->and(releaseOutput($process))->toContain("The fixed set of real repositories hasn't passed on this detection and deploy code (stubbedhash).")
+        ->and(array_filter(releaseCalls($sandbox), fn(string $line) => str_starts_with($line, 'gh pr create')))->toBe([]);
 });
 
 test('a rejected push leaves nothing behind', function () {
