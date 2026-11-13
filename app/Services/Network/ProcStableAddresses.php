@@ -20,10 +20,19 @@ final class ProcStableAddresses implements StableAddresses
 
     public function ipv6(): array
     {
-        $lines = @file($this->path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $contents = @file_get_contents($this->path);
+
+        return self::parse($contents === false ? '' : $contents);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function parse(string $contents): array
+    {
         $addresses = [];
 
-        foreach ($lines === false ? [] : $lines as $line) {
+        foreach (preg_split('/\r\n|\n|\r/', $contents) ?: [] as $line) {
             $fields = preg_split('/\s+/', trim($line)) ?: [];
 
             if (count($fields) < 6 || $fields[3] !== self::GLOBAL_SCOPE || (hexdec($fields[4]) & self::UNSTABLE) !== 0) {

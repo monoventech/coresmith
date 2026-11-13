@@ -100,8 +100,19 @@ test('a domain with no records yet says which record to add', function (?DirectR
         ->and($report->problems)->toBe([$problem]);
 })->with([
     'reachable over IPv4' => [new DirectReach('151.226.169.196', true, true), [], "coresmith.example.com doesn't point anywhere yet. Add an A record for coresmith.example.com pointing at 151.226.169.196, then check again."],
-    'only IPv6 can work' => [new DirectReach('151.226.169.196', false, false), ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com doesn't point anywhere yet, and nothing reaches this server's IPv4 address (151.226.169.196) on ports 80 and 443 from the internet. Add an AAAA record for coresmith.example.com pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8, then check again."],
+    'behind a router, with IPv6' => [new DirectReach('151.226.169.196', false, false), ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers, as many home connections do. If you can forward them, add an A record for coresmith.example.com pointing at 151.226.169.196. If you can't, use IPv6: add an AAAA record for coresmith.example.com pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8. Then check again."],
+    'behind a router, no IPv6' => [new DirectReach('151.226.169.196', false, false), [], "coresmith.example.com doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then add an A record for coresmith.example.com pointing at 151.226.169.196. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it."],
     'nothing known' => [null, [], "coresmith.example.com doesn't point anywhere yet. Add a DNS record that points it at this server, then check again."],
+]);
+
+test('a domain with no records on a server with a public address of its own says to open its firewall', function (array $stable, string $problem) {
+    reachabilityNetwork([], ['127.0.0.1', '151.226.169.196'], $stable);
+    reachabilityProbe(new DirectReach('151.226.169.196', false, false));
+
+    expect(app(Reachability::class)->check('coresmith.example.com')->problems)->toBe([$problem]);
+})->with([
+    'with IPv6' => [['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], "coresmith.example.com doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443. Open ports 80 and 443 in your provider's firewall and add an A record for coresmith.example.com pointing at 151.226.169.196, or add an AAAA record for coresmith.example.com pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8. Then check again."],
+    'no IPv6' => [[], "coresmith.example.com doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443. Open ports 80 and 443 in your provider's firewall, then add an A record for coresmith.example.com pointing at 151.226.169.196."],
 ]);
 
 test('a domain that points at another address says which one this server has', function () {
@@ -121,8 +132,8 @@ test('behind a router that forwards nothing, the problem names the ports, the ma
     expect($report->ready)->toBeFalse()
         ->and($report->problems)->toBe([$problem]);
 })->with([
-    'no IPv6' => [[], 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again.'],
-    'with IPv6' => [['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If you can\'t, or your provider shares that address with other customers, use IPv6: add an AAAA record for coresmith.example.com pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8, remove the A record, and allow ports 80 and 443 to it in your router\'s IPv6 firewall.'],
+    'no IPv6' => [[], 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it.'],
+    'with IPv6' => [['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], 'coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If you can\'t, or your internet provider shares that address with other customers, use IPv6: add an AAAA record for coresmith.example.com pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8, remove the A record, and allow ports 80 and 443 to it in your router\'s IPv6 firewall.'],
 ]);
 
 test('a server with its own public address that the internet cannot reach is told to open its provider firewall', function () {
@@ -151,7 +162,7 @@ test('an IPv6 record nothing reaches is told to open the router\'s IPv6 firewall
     reachabilityProbe(new DirectReach('151.226.169.196', false, false), new HostReach($v6, true, false, false));
 
     expect(app(Reachability::class)->check('beelink.coresmith.io')->problems)
-        ->toBe(["beelink.coresmith.io points at {$v6}, but nothing reaches it on ports 80 and 443 from the internet. Allow ports 80 and 443 to {$v6} in your router's IPv6 firewall, then check again."]);
+        ->toBe(["beelink.coresmith.io points at {$v6}, but nothing reaches it on ports 80 and 443 from the internet. Home routers often block incoming IPv6, so allow ports 80 and 443 to {$v6} in your router's IPv6 firewall, then check again."]);
 });
 
 test('an IPv6 record for another address says which one this server has', function () {

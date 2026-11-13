@@ -9,6 +9,7 @@ use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Exceptions\UnsafeNameException;
 use App\Jobs\CheckCertificates;
+use App\Jobs\CheckDomainReach;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -364,7 +365,7 @@ test('an app page with nothing checked yet carries no states', function () {
 });
 
 test('a deploy that routes traffic checks certificates ninety seconds later', function () {
-    Queue::fake([CheckCertificates::class]);
+    Queue::fake([CheckCertificates::class, CheckDomainReach::class]);
     $application = certificateApp(['type' => ApplicationType::Php, 'framework' => 'laravel', 'php_version' => '8.5.5', 'run_migrations' => false, 'base_port' => 8000]);
     $deployment = Deployment::factory()->for($application)->create();
     $transport = (new FakeSSHTransport)->respondTo('df /', "40\n");

@@ -12,6 +12,7 @@ use App\Exceptions\DeploymentAborted;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\SSHCommandTimedOut;
+use App\Jobs\CheckDomainReach;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -23,6 +24,7 @@ use App\Services\Process\CrashLoopWatch;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Sleep;
@@ -30,6 +32,8 @@ use Tests\Support\FakeSSHTransport;
 use Tests\Support\ProbeOutput;
 
 const TIMESTAMP = '20260730120000';
+
+beforeEach(fn() => Bus::fake([CheckDomainReach::class]));
 
 function deployableApp(array $attributes = []): Application
 {

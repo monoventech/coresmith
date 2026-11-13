@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
+use App\Jobs\CheckDomainReach;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\Deployment;
@@ -12,8 +13,11 @@ use App\Services\Deployment\EnvironmentFile;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Process;
 use Tests\Support\FakeSSHTransport;
+
+beforeEach(fn() => Bus::fake([CheckDomainReach::class]));
 
 function stackDeployApp(array $attributes = []): Application
 {
