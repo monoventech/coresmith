@@ -14,8 +14,7 @@ use App\Models\GitHubApp;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
-use App\Services\Git\GitHub\GitHubAppRegistrar;
-use App\Services\Git\GitHub\ManifestBuilder;
+use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -23,7 +22,7 @@ use Inertia\Response;
 
 final class AccountGitController extends Controller
 {
-    public function show(Request $request, GitHubAppRegistrar $registrar, ManifestBuilder $manifest): Response
+    public function show(Request $request, GitHubSettingsPresenter $settings): Response
     {
         $team = $this->currentTeam();
 
@@ -47,7 +46,7 @@ final class AccountGitController extends Controller
                 'url' => $app->html_url,
                 'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->getKey()]),
             ],
-            'registration' => $app !== null || !$canConnect ? null : $this->registration($team, $user, $registrar, $manifest),
+            'registration' => $app !== null || !$canConnect ? null : $settings->registration($team, $user, personal: true),
         ]);
     }
 
@@ -92,22 +91,5 @@ final class AccountGitController extends Controller
     private function ownApp(Team $team, User $user): ?GitHubApp
     {
         return GitHubApp::query()->where('team_id', $team->getKey())->where('user_id', $user->getKey())->first();
-    }
-
-    /**
-     * @return array{state: string, key: string, action: string, manifest: array<string, mixed>, webhook: array<string, mixed>, name: string}
-     */
-    private function registration(Team $team, User $user, GitHubAppRegistrar $registrar, ManifestBuilder $manifest): array
-    {
-        ['state' => $state, 'key' => $key] = $registrar->intent($team, $user, personal: true);
-
-        return [
-            'state' => $state,
-            'key' => $key,
-            'action' => $manifest->personalAction($state),
-            'manifest' => $manifest->base(),
-            'webhook' => $manifest->webhook($key),
-            'name' => $manifest->personalName($user),
-        ];
     }
 }

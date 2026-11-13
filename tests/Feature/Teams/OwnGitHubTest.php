@@ -194,3 +194,30 @@ test("an app on a member's own GitHub is never moved onto the team's connection,
     expect($relinker->stranded($newTeam)->pluck('id')->all())->not->toContain($mine->id)
         ->and($relinker->stranded($newOwn)->pluck('id')->all())->not->toContain($ours->id);
 });
+
+test('Your account, Git shows a member its own connection, or offers a registration of its own when it has none', function () {
+    ['team' => $team, 'developer' => $developer, 'other' => $other] = ownGitHubSetup();
+    $developer->forceFill(['name' => 'Lena Brandt'])->save();
+    $other->forceFill(['name' => 'Sam Ito'])->save();
+
+    $this->actingAs($developer)->get(route('account.git'))->assertOk()->assertInertia(fn(AssertableInertia $page) => $page
+        ->component('account/Git')
+        ->where('connection.account', 'lena-b')
+        ->where('registration', null));
+
+    $this->actingAs($other)->get(route('account.git'))->assertOk()->assertInertia(fn(AssertableInertia $page) => $page
+        ->where('connection', null)
+        ->where('app', null)
+        ->where('registration.name', 'Coresmith for Sam Ito')
+        ->where('can.connect', true));
+});
+
+test('a deployer, who adds no apps, is offered nothing to connect', function () {
+    ['team' => $team] = ownGitHubSetup();
+    $deployer = User::factory()->create();
+    $team->members()->attach($deployer, ['role' => TeamRole::Member->value]);
+
+    $this->actingAs($deployer)->get(route('account.git'))->assertOk()->assertInertia(fn(AssertableInertia $page) => $page
+        ->where('registration', null)
+        ->where('can.connect', false));
+});

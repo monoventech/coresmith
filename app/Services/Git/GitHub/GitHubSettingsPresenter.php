@@ -108,9 +108,9 @@ final class GitHubSettingsPresenter
     /**
      * @return array<string, mixed>
      */
-    private function registration(Team $team, User $user): array
+    public function registration(Team $team, User $user, bool $personal = false): array
     {
-        ['state' => $state, 'key' => $key] = $this->registrar->intent($team, $user);
+        ['state' => $state, 'key' => $key] = $this->registrar->intent($team, $user, $personal);
         $verdict = $this->reachability->verdict();
 
         return [
@@ -120,7 +120,7 @@ final class GitHubSettingsPresenter
             'organization_action' => $this->manifest->organizationAction($state),
             'manifest' => $this->manifest->base(),
             'webhook' => $this->manifest->webhook($key),
-            'name' => $this->manifest->defaultName($team),
+            'name' => $personal ? $this->manifest->personalName($user) : $this->manifest->defaultName($team),
             'reachability' => [
                 'reachable' => $verdict->reachable,
                 'host' => $verdict->host,
