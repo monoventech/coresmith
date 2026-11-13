@@ -55,10 +55,22 @@ final class Reachability
      */
     private function unpointed(string $host, ?DirectReach $direct, array $stable): string
     {
+        if ($direct === null) {
+            return "{$host} doesn't point anywhere yet. Add a DNS record that points it at this server, then check again.";
+        }
+
+        if ($direct->http) {
+            return "{$host} doesn't point anywhere yet. Add an A record for {$host} pointing at {$direct->address}, then check again.";
+        }
+
+        $lan = $this->lanAddress();
+        $closed = "{$host} doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, {$direct->address}, on ports 80 and 443.";
+
         return match (true) {
-            $direct !== null && $direct->http => "{$host} doesn't point anywhere yet. Add an A record for {$host} pointing at {$direct->address}, then check again.",
-            $direct !== null && $stable !== [] => "{$host} doesn't point anywhere yet, and nothing reaches this server's IPv4 address ({$direct->address}) on ports 80 and 443 from the internet. Add an AAAA record for {$host} pointing at {$stable[0]}, then check again.",
-            default => "{$host} doesn't point anywhere yet. Add a DNS record that points it at this server, then check again.",
+            $lan !== null && $stable !== [] => "{$closed} Either your router isn't forwarding those ports to {$lan}, or your internet provider shares that address with other customers, as many home connections do. If you can forward them, add an A record for {$host} pointing at {$direct->address}. If you can't, use IPv6: add an AAAA record for {$host} pointing at {$stable[0]}. Then check again.",
+            $lan !== null => "{$closed} Forward TCP ports 80 and 443 on your router to {$lan}, then add an A record for {$host} pointing at {$direct->address}. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it.",
+            $stable !== [] => "{$closed} Open ports 80 and 443 in your provider's firewall and add an A record for {$host} pointing at {$direct->address}, or add an AAAA record for {$host} pointing at {$stable[0]}. Then check again.",
+            default => "{$closed} Open ports 80 and 443 in your provider's firewall, then add an A record for {$host} pointing at {$direct->address}.",
         };
     }
 
@@ -91,7 +103,7 @@ final class Reachability
             return true;
         }
 
-        $problems[] = "{$host} points at {$named[0]}, but nothing reaches it on ports 80 and 443 from the internet. Allow ports 80 and 443 to {$named[0]} in your router's IPv6 firewall, then check again.";
+        $problems[] = "{$host} points at {$named[0]}, but nothing reaches it on ports 80 and 443 from the internet. Home routers often block incoming IPv6, so allow ports 80 and 443 to {$named[0]} in your router's IPv6 firewall, then check again.";
 
         return false;
     }
@@ -122,8 +134,8 @@ final class Reachability
 
         $problems[] = match (true) {
             $lan === null => "{$problem} Open ports 80 and 443 in your provider's firewall, then check again.",
-            $stable === [] => "{$problem} Forward TCP ports 80 and 443 on your router to {$lan}, then check again.",
-            default => "{$problem} Forward TCP ports 80 and 443 on your router to {$lan}, then check again. If you can't, or your provider shares that address with other customers, use IPv6: add an AAAA record for {$host} pointing at {$stable[0]}, remove the A record, and allow ports 80 and 443 to it in your router's IPv6 firewall.",
+            $stable === [] => "{$problem} Forward TCP ports 80 and 443 on your router to {$lan}, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before visitors can reach it.",
+            default => "{$problem} Forward TCP ports 80 and 443 on your router to {$lan}, then check again. If you can't, or your internet provider shares that address with other customers, use IPv6: add an AAAA record for {$host} pointing at {$stable[0]}, remove the A record, and allow ports 80 and 443 to it in your router's IPv6 firewall.",
         };
 
         return false;

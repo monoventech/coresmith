@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApplicationAddressController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
+use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationRuntimeController;
@@ -164,6 +165,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.maintenance');
     Route::put('servers/{server}/applications/{application}/runtime', [ApplicationRuntimeController::class, 'update'])
         ->name('servers.applications.runtime');
+    Route::post('servers/{server}/applications/{application}/domains/check', ApplicationDomainCheckController::class)
+        ->middleware('throttle:6,1,domain-check')
+        ->name('servers.applications.domains.check');
     Route::post('servers/{server}/applications/{application}/repository-check', [RepositoryCheckController::class, 'store'])
         ->middleware('throttle:10,1,repository-check')
         ->name('servers.applications.repository-check');

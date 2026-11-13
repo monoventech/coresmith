@@ -212,6 +212,7 @@ class Application extends Model
             'repository_checked_at' => 'datetime',
             'repository_check_pending' => 'boolean',
             'repository_check' => 'array',
+            'domain_reach' => 'array',
             'polled_at' => 'datetime',
             'runtime_pins' => 'array',
             'stack' => 'array',
