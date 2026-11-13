@@ -43,7 +43,7 @@ final class DeploymentCommands
         $javascript = $stack->tooling?->install() ?? [];
 
         return match ($application->type) {
-            ApplicationType::Php => [...$this->composer($stack), ...$javascript],
+            ApplicationType::Php => [...($application->framework === 'symfony' ? ['[ -e .env ] || touch .env'] : []), ...$this->composer($stack), ...$javascript],
             ApplicationType::Ruby => ['bundle config set --local deployment true', "bundle config set --local without 'development test'", 'bundle install'],
             default => $javascript,
         };

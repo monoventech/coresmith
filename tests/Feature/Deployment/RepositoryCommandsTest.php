@@ -109,6 +109,14 @@ test('a PHP app without composer.json skips composer install', function () {
         ->and($commands->dependencies($application, new Stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
 });
 
+test('a Symfony app without a committed .env gets an empty one before composer runs, since Symfony will not boot without the file', function () {
+    $commands = app(DeploymentCommands::class);
+    $stack = new Stack(files: ['composer.json', 'composer.lock', 'bin/console']);
+
+    expect($commands->dependencies(new Application(['type' => ApplicationType::Php, 'framework' => 'symfony']), $stack))->toBe(['[ -e .env ] || touch .env', 'composer install --no-dev --optimize-autoloader --no-interaction'])
+        ->and($commands->dependencies(new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']), $stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
+});
+
 test('a JavaScript app with no start script starts the main file in package.json', function (string $runtime, ?string $framework, ?string $main, string $command) {
     $application = Application::factory()->create([
         'slug' => 'api',
