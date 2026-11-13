@@ -25,9 +25,9 @@ function serverAddressesOutput(?bool $ipv4Open): string
     ]);
 }
 
-function serverAddressesReading(string $checked, ?string $ipv4 = '203.0.113.7', ?bool $open = true): array
+function serverAddressesReading(string $checked, bool $open = true): array
 {
-    return ['ipv4' => $ipv4, 'ipv4_open' => $open, 'ipv6' => ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], 'checked_at' => $checked];
+    return ['ipv4' => '203.0.113.7', 'ipv4_open' => $open, 'ipv6' => ['2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8'], 'checked_at' => $checked];
 }
 
 test('reading a server keeps its public IPv4 address, whether visitors reach it, and its stable IPv6 addresses', function () {

@@ -7,9 +7,8 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import type { DnsRecord } from '@/lib/dns'
     import { Form, router } from '@inertiajs/svelte'
-
-    type DnsRecord = { type: string; name: string; value: string }
 
     type Domain = {
         hostname: string

@@ -22,6 +22,8 @@
     import { Input } from '@/components/ui/input'
     import { Textarea } from '@/components/ui/textarea'
     import type { CronCard, CronSend } from '@/lib/cron'
+    import type { DnsRecord, DnsTarget } from '@/lib/dns'
+    import { namedTargets } from '@/lib/dns'
     import type { EntityState } from '@/lib/fleet'
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { follow } from '@/lib/live.svelte'
@@ -89,11 +91,11 @@
                 ready: boolean | null
                 problems: string[]
                 notes: string[]
-                records: { type: string; name: string; value: string }[]
+                records: DnsRecord[]
                 checked: string | null
             }[]
             domain_check_href: string
-            dns_targets: { type: string; value: string; closed: boolean }[]
+            dns_targets: DnsTarget[]
             repository: string | null
             branch: string
             current_release: string | null
@@ -978,13 +980,7 @@
             </div>
             {#if application.dns_targets.length > 0}
                 <div class="mt-3">
-                    <DnsRecords
-                        records={application.dns_targets.map((target) => ({
-                            ...target,
-                            name: domainInput.trim().toLowerCase() || null
-                        }))}
-                        testid="domain-targets"
-                    />
+                    <DnsRecords records={namedTargets(application.dns_targets, domainInput)} testid="domain-targets" />
                 </div>
             {/if}
             <Dialog.Footer>

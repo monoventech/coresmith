@@ -37,10 +37,6 @@ final class ReadServerAddresses implements ShouldBeUnique, ShouldQueue
 
     public function handle(SSHConnectionManager $connections, ServerAddresses $addresses): void
     {
-        $server = $this->server->fresh();
-
-        if ($server !== null) {
-            rescue(fn() => $addresses->keep($server, $addresses->read($connections->for($server))), report: false);
-        }
+        rescue(fn() => $addresses->keep($this->server, $addresses->read($connections->for($this->server))), report: false);
     }
 }

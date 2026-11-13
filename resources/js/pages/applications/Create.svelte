@@ -18,6 +18,8 @@
     import { NativeSelect } from '@/components/ui/native-select'
     import type { Detection, DetectionRequest } from '@/lib/detection'
     import { detectionId, detectStack } from '@/lib/detection'
+    import type { DnsTarget } from '@/lib/dns'
+    import { namedTargets } from '@/lib/dns'
     import type { GitHubPick, GitHubSource } from '@/lib/github'
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { pickerRuntime } from '@/lib/runtimes'
@@ -34,7 +36,7 @@
             id: string
             name: string
             href: string
-            dns_targets: { type: string; value: string; closed: boolean }[]
+            dns_targets: DnsTarget[]
         }
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
@@ -479,10 +481,7 @@
                                         : 'these records'}. The certificate is issued on the first visit.
                                 </p>
                                 <DnsRecords
-                                    records={server.dns_targets.map((target) => ({
-                                        ...target,
-                                        name: domainName.trim().toLowerCase() || null
-                                    }))}
+                                    records={namedTargets(server.dns_targets, domainName)}
                                     testid="domain-targets"
                                 />
                             {:else}

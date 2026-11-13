@@ -1,4 +1,4 @@
-export type DnsRecord = { type: string; name: string; value: string }
+import type { DnsRecord } from '@/lib/dns'
 
 export type Address = {
     host: string

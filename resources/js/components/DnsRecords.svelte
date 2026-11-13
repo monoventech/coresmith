@@ -1,7 +1,7 @@
 <script lang="ts">
-    type DnsRecord = { type: string; name?: string | null; value: string; closed?: boolean }
+    import type { DnsRow } from '@/lib/dns'
 
-    let { records, testid = 'dns-records' }: { records: DnsRecord[]; testid?: string } = $props()
+    let { records, testid = 'dns-records' }: { records: DnsRow[]; testid?: string } = $props()
 
     let copied = $state<string | null>(null)
 
