@@ -175,10 +175,10 @@ test('each domain gets a state the page can show', function (?int $days, string 
         ->and($domain['title'])->toBe($title);
 })->with([
     'valid' => [30, 'valid', 30, 'TLS', 'Valid until Nov 19, 2026 at 12:00 UTC, checked now'],
-    'five days' => [5, 'expiring', 5, 'Expires in 5 days', 'Caddy should have renewed this by now. Check a.example.com still points at 203.0.113.9.'],
-    'one day' => [1, 'expiring', 1, 'Expires tomorrow', 'Caddy should have renewed this by now. Check a.example.com still points at 203.0.113.9.'],
-    'expired' => [-1, 'expired', -1, 'Expired', 'Caddy should have renewed this by now. Check a.example.com still points at 203.0.113.9.'],
-    'none' => [null, 'none', null, 'No certificate', 'Caddy has no certificate for this name yet. Point its DNS at 203.0.113.9 and Caddy requests one.'],
+    'five days' => [5, 'expiring', 5, 'Expires in 5 days', 'This should have renewed by now. Check a.example.com still points at 203.0.113.9.'],
+    'one day' => [1, 'expiring', 1, 'Expires tomorrow', 'This should have renewed by now. Check a.example.com still points at 203.0.113.9.'],
+    'expired' => [-1, 'expired', -1, 'Expired', 'This should have renewed by now. Check a.example.com still points at 203.0.113.9.'],
+    'none' => [null, 'none', null, 'No certificate', 'There\'s no certificate for this name yet. Point its DNS at 203.0.113.9 and one is requested.'],
 ]);
 
 test('the title says when the certificate was checked, as of now', function () {
@@ -449,7 +449,7 @@ test('the mail names the domain and what to check', function (int $days, string 
 
     expect($mail->subject)->toBe($subject)
         ->and($mail->introLines)->toBe([
-            'Caddy on web-1 renews certificates well before they expire, so this one could not be renewed.',
+            'Coresmith renews certificates on web-1 well before they expire, so this one could not be renewed.',
             'Check that a.example.com still points at 203.0.113.9 and that ports 80 and 443 are open.',
         ])
         ->and($mail->actionText)->toBe('Open Shop')

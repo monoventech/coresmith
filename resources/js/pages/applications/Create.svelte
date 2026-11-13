@@ -257,8 +257,7 @@
 
 <h1 class="type-h1 m-0 mb-1.5">Add an app</h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
-    It runs on <span class="font-mono text-[13px]">{server.name}</span> as its own Linux user, with its own port block and
-    env file.
+    It runs on <span class="font-mono text-[13px]">{server.name}</span>, walled off from the other apps there.
 </p>
 
 <div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
@@ -467,7 +466,7 @@
                     </div>
                     <p class="-mt-1 text-[12px] text-muted-foreground">
                         Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for
-                        IPv6. Caddy issues the certificate on the first request.
+                        IPv6. The certificate is issued on the first visit.
                     </p>
                     <EnvironmentSelect {projects} error={errors.environment_id} />
                     <Button type="submit" class="w-full" disabled={processing || refused}>Add the app</Button>

@@ -26,7 +26,6 @@ export type CronCard = {
     state: 'applying' | 'waiting' | null
     note: 'paused' | 'undeployed' | null
     error: string | null
-    user: string
     live: boolean
     store_href: string
     sync_href: string

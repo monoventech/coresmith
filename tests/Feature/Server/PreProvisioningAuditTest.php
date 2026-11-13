@@ -117,7 +117,7 @@ test('a coresmith user blocks a fresh server but not one Coresmith already start
 
     expect(auditFinding(auditFindings($probe), 'user_coresmith')['severity'])->toBe('blocker')
         ->and(auditFinding(auditFindings($probe, ['provisioning_phase' => 3]), 'user_coresmith')['severity'])->toBe('info')
-        ->and(auditFinding(auditFindings($probe), 'app_users')['title'])->toBe('1 Coresmith app user exists');
+        ->and(auditFinding(auditFindings($probe), 'app_users')['title'])->toBe('1 app account from an earlier Coresmith setup');
 });
 
 test("the panel's own host is refused with one blocker and none of the advice that would break the panel", function (array $panel, array $server) {
@@ -218,7 +218,7 @@ test("on Coresmith's own machine its Caddy, PHP-FPM, Redis and coresmith user ar
 
     expect(collect($findings)->whereIn('severity', ['blocker', 'warning'])->values()->all())->toBe([])
         ->and(auditFinding($findings, 'panel_host'))->toBe(['key' => 'panel_host', 'severity' => 'info', 'title' => 'Coresmith runs on this machine', 'detail' => 'It keeps running beside your apps, which get users, folders and processes of their own.', 'fix' => null])
-        ->and(auditFinding($findings, 'ports_coresmith'))->toBe(['key' => 'ports_coresmith', 'severity' => 'info', 'title' => "Coresmith's Caddy holds ports 80 and 443", 'detail' => 'Provisioning gives it the config every server uses, so it serves your apps beside Coresmith.', 'fix' => null])
+        ->and(auditFinding($findings, 'ports_coresmith'))->toBe(['key' => 'ports_coresmith', 'severity' => 'info', 'title' => 'Coresmith holds ports 80 and 443', 'detail' => 'Provisioning gives it the config every server uses, so it serves your apps beside Coresmith.', 'fix' => null])
         ->and(auditFinding($findings, 'php_fpm'))->toBe(['key' => 'php_fpm', 'severity' => 'info', 'title' => 'PHP-FPM runs Coresmith here', 'detail' => 'Coresmith adds a separate pool per app beside its own.', 'fix' => null])
         ->and(auditFinding($findings, 'user_coresmith'))->toBe(['key' => 'user_coresmith', 'severity' => 'info', 'title' => "The coresmith user is Coresmith's own here", 'detail' => 'Apps get users of their own, and runtimes belong to coresmith-runtime.', 'fix' => null])
         ->and(auditFinding($findings, 'redis')['severity'] ?? null)->toBe('info')
@@ -234,7 +234,7 @@ test("on Coresmith's own machine anything but its Caddy on port 80 or 443 still 
 
     expect(auditFinding($findings, 'port_80'))->toMatchArray(['severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'fix' => 'stop-nginx'])
         ->and(auditFinding($findings, 'port_443'))->toBeNull()
-        ->and(auditFinding($findings, 'ports_coresmith'))->toMatchArray(['title' => "Coresmith's Caddy holds port 443"]);
+        ->and(auditFinding($findings, 'ports_coresmith'))->toMatchArray(['title' => 'Coresmith holds port 443']);
 });
 
 test('this very Coresmith, added the ordinary way, is pointed to This machine rather than told to go elsewhere', function () {

@@ -37,7 +37,7 @@ test('a server whose admin api still answers on its old port fails, since any lo
         ->respondTo('echo open || echo closed', "open\n");
 
     expect(fn() => provisioningVerifierRun($transport))
-        ->toThrow(ProvisioningVerificationException::class, 'Caddy still answers on 127.0.0.1:2019, where any program on the server can reach it. Provisioning has been halted.');
+        ->toThrow(ProvisioningVerificationException::class, "The web server's controls still answer on 127.0.0.1:2019, where any program on the server could change its routing, so provisioning stopped. Start provisioning again.");
 });
 
 test('a server not yet moved off tcp is only checked for being unreachable from outside', function () {

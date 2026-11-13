@@ -13,6 +13,7 @@ use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\User;
 use App\Services\SafeName;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Arr;
@@ -316,7 +317,7 @@ final class SecurityHardening
     /**
      * @param  array<string, string>  $settings
      */
-    private function passwordProblem(array $settings): ?string
+    public function passwordProblem(array $settings): ?string
     {
         if (!isset($settings['passwordauthentication'], $settings['permitrootlogin'])) {
             return "sshd didn't report its settings";
@@ -332,18 +333,36 @@ final class SecurityHardening
         return $open === [] ? null : 'sshd reports ' . implode(', ', array_map(fn(string $key): string => "{$key} {$settings[$key]}", $open));
     }
 
+    public function restore(SSHConnection $connection, string $protection): void
+    {
+        if ($protection !== 'kernel') {
+            $connection->execute(PackageManagerFactory::for($connection->server())->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+        }
+
+        match ($protection) {
+            'fail2ban' => $this->installFail2ban($connection),
+            'kernel' => $this->applySysctls($connection),
+            'patches' => $this->configureAutomaticUpdates($connection),
+        };
+    }
+
     private function installFail2ban(SSHConnection $connection): void
     {
-        $packages = PackageManagerFactory::for($connection->server());
+        $server = $connection->server();
 
-        $connection->execute(
-            'command -v fail2ban-server >/dev/null 2>&1 || { ' . $packages->install(['fail2ban']) . '; systemctl enable --now fail2ban; }',
-            sudo: true,
-        )->throw();
-
+        $connection->execute($this->fail2banInstallCommand($server), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
         $connection->execute('mkdir -p /etc/fail2ban/jail.d', sudo: true)->throw();
-        $connection->uploadContent($this->fail2banJail($connection->server()->ssh_port), self::FAIL2BAN_JAIL);
-        $connection->execute('systemctl restart fail2ban', sudo: true)->throw();
+        $connection->uploadContent($this->fail2banJail($server->ssh_port), self::FAIL2BAN_JAIL);
+        $connection->execute('systemctl enable fail2ban && systemctl restart fail2ban', sudo: true)->throw();
+    }
+
+    public function fail2banInstallCommand(Server $server): string
+    {
+        $packages = PackageManagerFactory::for($server);
+
+        return in_array($server->os_name, ProtectionCheck::APT_FAMILY, true)
+            ? $packages->install(['fail2ban', 'python3-systemd'])
+            : 'command -v fail2ban-server >/dev/null 2>&1 || ' . $packages->install(['fail2ban']);
     }
 
     private function applySysctls(SSHConnection $connection): void
@@ -354,15 +373,22 @@ final class SecurityHardening
 
     private function configureAutomaticUpdates(SSHConnection $connection): void
     {
-        $server = $connection->server();
+        $connection->execute($this->automaticUpdatesCommand($connection->server()), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
+    }
+
+    public function automaticUpdatesCommand(Server $server): string
+    {
         $packages = PackageManagerFactory::for($server);
 
-        $command = match ($server->os_name) {
-            'ubuntu', 'debian' => $packages->install(['unattended-upgrades']) . ' && systemctl enable --now unattended-upgrades',
-            default => $packages->install(['dnf-automatic']) . ' && systemctl enable --now dnf-automatic.timer',
-        };
+        if (in_array($server->os_name, ProtectionCheck::APT_FAMILY, true)) {
+            return $packages->install(['unattended-upgrades'])
+                . " && printf '%s\\n' 'APT::Periodic::Update-Package-Lists \"1\";' 'APT::Periodic::Unattended-Upgrade \"1\";' > /etc/apt/apt.conf.d/20auto-upgrades"
+                . ' && systemctl enable --now unattended-upgrades apt-daily.timer apt-daily-upgrade.timer';
+        }
 
-        $connection->execute($command, sudo: true)->throw();
+        return $packages->install(['dnf-automatic']) . ' && ' . <<<'BASH'
+        conf=/etc/dnf/automatic.conf && touch "$conf" && { grep -q '^\[commands\]' "$conf" || printf '[commands]\n' >> "$conf"; } && for setting in 'upgrade_type = security' 'apply_updates = yes'; do key=${setting%% *}; if grep -Eq "^[#[:space:]]*${key}[[:space:]]*=" "$conf"; then sed -i -E "s/^[#[:space:]]*${key}[[:space:]]*=.*/${setting}/" "$conf"; else sed -i "/^\[commands\]/a ${setting}" "$conf"; fi; done
+        BASH . ' && systemctl enable --now dnf-automatic.timer';
     }
 
     private function setTimezone(SSHConnection $connection): void
@@ -420,8 +446,7 @@ final class SecurityHardening
         enabled = true
         port = {$sshPort}
         filter = sshd
-        logpath = %(sshd_log)s
-        backend = %(sshd_backend)s
+        backend = systemd
         maxretry = 5
         bantime = 3600
         findtime = 600

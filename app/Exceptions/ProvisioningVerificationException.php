@@ -19,11 +19,11 @@ final class ProvisioningVerificationException extends RuntimeException
 
     public static function adminPortOpen(int $port): self
     {
-        return new self("Caddy still answers on 127.0.0.1:{$port}, where any program on the server can reach it. Provisioning has been halted.");
+        return new self("The web server's controls still answer on 127.0.0.1:{$port}, where any program on the server could change its routing, so provisioning stopped. Start provisioning again.");
     }
 
     public static function adminApiExposed(string $ipAddress, int $port): self
     {
-        return new self("The Caddy admin API is reachable from outside on {$ipAddress}:{$port}. Provisioning has been halted; the firewall is not restricting it as expected.");
+        return new self("The web server's controls answer from outside on {$ipAddress}:{$port}, so provisioning stopped. Check that the server's firewall blocks port {$port}, then start provisioning again.");
     }
 }

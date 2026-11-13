@@ -179,7 +179,7 @@ final class MonovenTenant
                 'status' => ServerStatus::Active,
                 'os_name' => 'ubuntu',
                 'os_version' => '24.04',
-                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'cpu_model' => 'AMD EPYC-Milan Processor', 'memory_mb' => $memory, 'disk_gb' => 160, 'os_pretty' => 'Ubuntu 24.04.3 LTS', 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified', 'caddy_unknown_hosts' => 'closed'],
+                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'cpu_model' => 'AMD EPYC-Milan Processor', 'memory_mb' => $memory, 'disk_gb' => 160, 'os_pretty' => 'Ubuntu 24.04.3 LTS', 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified', 'caddy_unknown_hosts' => 'closed', 'protections' => ['ssh' => 'on', 'fail2ban' => 'on', 'kernel' => 'on', 'kernel_off' => [], 'patches' => 'on', 'controls' => 'on', 'checked_at' => now()->subMinutes(20)->toIso8601String()]],
                 'provisioning_phase' => 8,
                 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $name, true)), 0, 43),
                 'last_connected_at' => now(),

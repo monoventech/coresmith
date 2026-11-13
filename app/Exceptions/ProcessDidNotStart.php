@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use Illuminate\Support\Str;
 use RuntimeException;
 
 final class ProcessDidNotStart extends RuntimeException
@@ -18,6 +19,8 @@ final class ProcessDidNotStart extends RuntimeException
         public readonly string $journal,
         public readonly string $advice,
     ) {
-        parent::__construct("{$unit} did not start, systemd reports it as {$state}. {$advice}");
+        $process = Str::afterLast($unit, '-');
+
+        parent::__construct('The ' . ($process === 'fpm' ? 'PHP' : $process) . " process didn't start ({$state}). {$advice}");
     }
 }

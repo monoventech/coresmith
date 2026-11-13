@@ -142,6 +142,7 @@ final class ProvisionServer implements ShouldQueue
             ->log('server_provisioned');
 
         ServerProvisioned::dispatch($this->server, $durationSeconds);
+        CheckProtections::dispatch($this->server)->delay(now()->addSeconds(30));
     }
 
     private function detectOperatingSystem(SSHConnection $connection, OsDetector $detector): void

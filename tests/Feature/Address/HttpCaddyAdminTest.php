@@ -50,7 +50,7 @@ test('a site Caddy refuses says what Caddy said', function () {
     config(['coresmith.address.caddy_admin_socket' => '/run/caddy-admin/admin.sock']);
 
     expect(fn() => (new HttpCaddyAdmin)->reload())
-        ->toThrow(RuntimeException::class, 'Caddy refused the new site: adapting config using caddyfile: unrecognized directive');
+        ->toThrow(RuntimeException::class, 'The web server refused the new address: adapting config using caddyfile: unrecognized directive');
 });
 
 function caddyAdminComposedCurrent(): string
@@ -114,7 +114,7 @@ test("a Caddy that isn't answering isn't taken for one holding Coresmith inside 
 test("a new site Caddy refuses on Coresmith's own machine leaves the running config alone and says why", function () {
     caddyAdminComposedFake(['localhost/adapt' => Http::response(['error' => 'adapting config using caddyfile: unrecognized directive: foo'], 400)]);
 
-    expect(fn() => (new HttpCaddyAdmin)->reload())->toThrow(RuntimeException::class, 'Caddy refused the new site: adapting config using caddyfile: unrecognized directive: foo')
+    expect(fn() => (new HttpCaddyAdmin)->reload())->toThrow(RuntimeException::class, 'The web server refused the new address: adapting config using caddyfile: unrecognized directive: foo')
         ->and(caddyAdminLoaded())->toBeNull();
 });
 
@@ -123,6 +123,6 @@ test("an address change waits for a deploy changing Caddy on Coresmith's machine
     Cache::lock(CaddyApiClient::THIS_MACHINE_LOCK, 600)->get();
     caddyAdminComposedFake();
 
-    expect(fn() => (new HttpCaddyAdmin)->reload())->toThrow(RuntimeException::class, 'Caddy was busy with another change on this machine. Try again in a minute.')
+    expect(fn() => (new HttpCaddyAdmin)->reload())->toThrow(RuntimeException::class, 'Coresmith was busy with another change on this machine. Try again in a minute.')
         ->and(caddyAdminLoaded())->toBeNull();
 });

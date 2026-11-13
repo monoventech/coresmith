@@ -20,10 +20,9 @@
         open = $bindable(false),
         job,
         storeHref,
-        user,
         busy,
         send
-    }: { open: boolean; job: CronJob | null; storeHref: string; user: string; busy: boolean; send: CronSend } = $props()
+    }: { open: boolean; job: CronJob | null; storeHref: string; busy: boolean; send: CronSend } = $props()
 
     let command = $state('')
     let kind = $state<CronPresetKind>('daily')
@@ -126,7 +125,8 @@
             <Dialog.Header>
                 <Dialog.Title>{job ? 'Edit cron job' : 'Add a cron job'}</Dialog.Title>
                 <Dialog.Description
-                    >{`It runs as ${user} in the current release, with the app's environment variables. Keep secrets in those, not in the command.`}</Dialog.Description
+                    >It runs in the current release with the app's permissions and environment variables. Keep secrets
+                    in those variables, not in the command.</Dialog.Description
                 >
             </Dialog.Header>
 

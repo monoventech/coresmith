@@ -104,19 +104,19 @@ test('a unit that is not running fails with its journal and advice for what the 
         expect($e->unit)->toBe('coresmith-app-shop-queue')
             ->and($e->state)->toBe('failed')
             ->and($e->journal)->toBe($journal)
-            ->and($e->getMessage())->toContain('coresmith-app-shop-queue did not start')
+            ->and($e->getMessage())->toContain('The queue process didn\'t start')
             ->and($e->getMessage())->toContain($advice);
     }
 })->with([
     'port taken' => ['Error: listen EADDRINUSE: address already in use :::8100', 'Port 8100 is already taken by another process.'],
-    'cannot bind' => ['Error: listen EACCES: permission denied 0.0.0.0:8100', 'The process was not allowed to bind its port.'],
+    'cannot bind' => ['Error: listen EACCES: permission denied 0.0.0.0:8100', 'The app wasn\'t allowed to listen on its port.'],
     'missing module' => ["Error: Cannot find module 'express'", 'A Node module is missing.'],
     'unreadable files' => ['PHP Warning: require(/var/coresmith/apps/shop/current/vendor/autoload.php): Failed to open stream: Permission denied', 'The process could not read its files.'],
     'missing entry point' => ['bun: No such file or directory: server.js', 'The entry point was not found.'],
     'syntax error' => ['PHP Parse error: syntax error, unexpected token "}"', 'The code has a syntax error.'],
     'missing environment file' => ['coresmith-app-shop-queue.service: Failed to load environment files: No such file or directory', "The app's environment file is missing from the server. Deploy again to write it."],
-    'missing linux user' => ['coresmith-app-shop-queue.service: Failed to determine user credentials: No such process', "The app's Linux user is missing from the server. Deploy again to create it."],
-    'sandbox not set up' => ['coresmith-app-shop-queue.service: Failed to set up mount namespacing: /home/coresmith-app-shop: No such file or directory', "systemd could not set up the app's sandbox."],
+    'missing linux user' => ['coresmith-app-shop-queue.service: Failed to determine user credentials: No such process', "The app's account on the server is missing. Deploy again to create it."],
+    'sandbox not set up' => ['coresmith-app-shop-queue.service: Failed to set up mount namespacing: /home/coresmith-app-shop: No such file or directory', "The server couldn't set up the app's sandbox."],
     'rails in development' => ["*  Environment: development\n! Unable to load application: LoadError: cannot load such file -- debug/prelude", 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.'],
     'a missing ruby file in production' => ["*  Environment: production\n! Unable to load application: LoadError: cannot load such file -- stripe", 'The process log says why.'],
     'anything else' => ['Killed', 'The process log says why.'],
@@ -387,7 +387,7 @@ test('a key the error block would cut in two is still removed whole', function (
 test('a rails app that sets its own RAILS_ENV and cannot load a gem is told its gems were installed for production only', function () {
     $e = startFailure(startRailsApp("RAILS_ENV=development\nSECRET_KEY_BASE=0f9c1e5a7b3d2c4e6f8a0b1c3d5e7f9a\n"), implode("\n", startPumaCrash()) . "\n");
 
-    expect($e->getMessage())->toBe('coresmith-app-shop-web did not start, systemd reports it as activating. This Rails app runs with RAILS_ENV=development, but its gems were installed for production only. Set RAILS_ENV=production in its environment variables, then deploy again.');
+    expect($e->getMessage())->toBe('The web process didn\'t start (activating). This Rails app runs with RAILS_ENV=development, but its gems were installed for production only. Set RAILS_ENV=production in its environment variables, then deploy again.');
 });
 
 test('the rails environment advice names the environment the app sets', function (string $value) {

@@ -394,9 +394,7 @@ test.describe('a deploy that failed with a known reason', () => {
         const rail = page.getByTestId('phase-rail')
 
         await expect(reason).toContainText('The processes did not start.')
-        await expect(reason).toContainText(
-            'coresmith-app-dev-mode-web did not start, systemd reports it as activating.'
-        )
+        await expect(reason).toContainText("The web process didn't start (activating).")
         await expect(reason).not.toContainText('The deploy failed after the swap.')
         await expect(rail.locator('[data-phase="swap"]')).toHaveAttribute('data-state', 'done')
         await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
@@ -412,9 +410,7 @@ test.describe('a deploy that failed with a known reason', () => {
         const rail = page.getByTestId('phase-rail')
 
         await expect(reason).toContainText('Sidekiq did not start.')
-        await expect(reason).toContainText(
-            'coresmith-app-no-sidekiq-sidekiq did not start, systemd reports it as activating.'
-        )
+        await expect(reason).toContainText("The sidekiq process didn't start (activating).")
         await expect(reason).not.toContainText('The processes did not start.')
         await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
         await expect(rail).toContainText('the swap went through')

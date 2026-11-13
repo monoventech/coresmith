@@ -15,6 +15,7 @@ use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
+use App\Exceptions\ProcessDidNotStart;
 use App\Jobs\InstallRuntimes;
 use App\Jobs\ReadSchedulerLog;
 use App\Models\Application;
@@ -437,14 +438,14 @@ final class E2ESeeder extends Seeder
     private function auditFixtures(): void
     {
         $blocked = [
-            ['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => 'Caddy needs port 80 to serve your apps over HTTPS. Stop and disable nginx, or let Coresmith do it.', 'fix' => 'stop-nginx'],
-            ['key' => 'app_port_8080', 'severity' => 'warning', 'title' => 'Port 8080 is in use by node', 'detail' => 'It is inside the range Coresmith gives apps (8000–9999). Apps skip that port block, or stop the process to free it.', 'fix' => null],
+            ['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => 'Coresmith needs port 80 to serve your apps over HTTPS. Stop and disable nginx, or let Coresmith do it.', 'fix' => 'stop-nginx'],
+            ['key' => 'app_port_8080', 'severity' => 'warning', 'title' => 'Port 8080 is in use by node', 'detail' => 'It is inside the range Coresmith gives apps (8000–9999). Apps get other ports, or stop the process to free it.', 'fix' => null],
             ['key' => 'mysql', 'severity' => 'info', 'title' => 'MySQL is already running', 'detail' => 'Coresmith creates app databases on it and never reconfigures, restarts or removes it.', 'fix' => null],
             ['key' => 'apparmor', 'severity' => 'info', 'title' => 'AppArmor is on', 'detail' => 'Coresmith works alongside it, nothing to change.', 'fix' => null],
         ];
         $ready = [
-            ['key' => 'app_users', 'severity' => 'warning', 'title' => '1 Coresmith app user exists', 'detail' => 'Coresmith may have provisioned this server before. Provisioning reuses those users.', 'fix' => null],
-            ['key' => 'ports_free', 'severity' => 'info', 'title' => 'Ports 80 and 443 are free', 'detail' => 'Caddy takes them when provisioning runs.', 'fix' => null],
+            ['key' => 'app_users', 'severity' => 'warning', 'title' => '1 app account from an earlier Coresmith setup', 'detail' => 'Coresmith may have set this server up before. Provisioning reuses it.', 'fix' => null],
+            ['key' => 'ports_free', 'severity' => 'info', 'title' => 'Ports 80 and 443 are free', 'detail' => 'Coresmith takes them when provisioning runs.', 'fix' => null],
         ];
         $done = fn(array $findings): array => ['state' => 'done', 'ran_at' => now()->addHours(5)->toIso8601String(), 'findings' => $findings];
 
@@ -1227,7 +1228,7 @@ final class E2ESeeder extends Seeder
         $this->logAt($application, 'rollback_processes_failed', [
             'from' => $broken,
             'to' => $healthy,
-            'error' => "coresmith-app-{$application->slug}-web did not start, systemd reports it as activating. {$advice}",
+            'error' => (new ProcessDidNotStart("coresmith-app-{$application->slug}-web", 'activating', '', $advice))->getMessage(),
         ], CarbonImmutable::now()->subHours(4));
 
         $application->forceFill(['current_release' => $healthy, 'status' => ApplicationStatus::Failed])->save();
@@ -1242,7 +1243,7 @@ final class E2ESeeder extends Seeder
             'from' => $newer,
             'to' => $older,
             'worker' => 'Sidekiq',
-            'error' => "coresmith-app-{$application->slug}-sidekiq did not start, systemd reports it as activating. The process log says why. Fix it and deploy again, or roll back to the previous release.",
+            'error' => (new ProcessDidNotStart("coresmith-app-{$application->slug}-sidekiq", 'activating', '', 'The process log says why. Fix it and deploy again, or roll back to the previous release.'))->getMessage(),
         ], CarbonImmutable::now()->subHours(3));
 
         $application->forceFill(['current_release' => $older])->save();
@@ -1269,7 +1270,7 @@ final class E2ESeeder extends Seeder
         $clock = fn(int $seconds): string => '[' . $started->addSeconds($seconds)->format('H:i:s') . ']';
         $unit = 'coresmith-app-' . $application->slug . '-' . $process;
         $units = ['coresmith-app-' . $application->slug . '-web', ...array_map(fn(array $worker): string => 'coresmith-app-' . $application->slug . '-' . $worker['name'], (array) $application->processes)];
-        $reason = "{$unit} did not start, systemd reports it as activating. {$advice}";
+        $reason = (new ProcessDidNotStart($unit, 'activating', '', $advice))->getMessage();
 
         Deployment::factory()->for($application)->create([
             'release' => $release,
@@ -1314,7 +1315,7 @@ final class E2ESeeder extends Seeder
     {
         $this->succeeded($application, 3 * 24 * 60, 'v0.4.0');
 
-        $error = "coresmith-app-{$application->slug}-jobs did not start, systemd reports it as activating. The entry point was not found. Check the build produced the file the process starts, then deploy again.";
+        $error = (new ProcessDidNotStart("coresmith-app-{$application->slug}-jobs", 'activating', '', 'The entry point was not found. Check the build produced the file the process starts, then deploy again.'))->getMessage();
 
         $this->logAt($application, 'toggle_changed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'on' => true], CarbonImmutable::now()->subMinutes(35));
         $this->logAt($application, 'toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => $error], CarbonImmutable::now()->subMinutes(34));

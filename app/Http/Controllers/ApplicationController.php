@@ -198,8 +198,6 @@ final class ApplicationController extends Controller
                 'power_state' => $application->power_state?->value,
                 'stopped' => $application->power_state === PowerState::Stopped,
                 'maintenance' => (bool) (((array) $application->toggles)['maintenance_mode'] ?? false),
-                'user' => $application->system_user,
-                'ports' => ApplicationPresenter::portBlock($application),
                 'processes' => array_values(array_filter((array) $application->processes, 'is_array')),
                 'deploy_key' => $publicKey === null ? null : [
                     'fingerprint' => HostKeyFingerprint::fromPublicKey($publicKey),

@@ -45,7 +45,7 @@ final class ApplicationOomKilledNotification extends Notification implements Sho
 
         return (new MailMessage)
             ->subject("{$application->name} was killed for memory")
-            ->line("The {$this->process} process on {$application->server?->name} went over its {$this->limitMb} MB memory limit at " . Formats::absolute($this->at) . ', and systemd started it again.')
+            ->line("The {$this->process} process on {$application->server?->name} went over its {$this->limitMb} MB memory limit at " . Formats::absolute($this->at) . ', and it was started again.')
             ->line("If it keeps happening, the app needs more memory than the {$size} size gives it.")
             ->action('Open ' . $application->name, route('servers.applications.show', [$application->server_id, $application]));
     }

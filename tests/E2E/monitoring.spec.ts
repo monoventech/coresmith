@@ -74,17 +74,17 @@ test.describe('monitoring', () => {
         await expect(badge('soon.monoven.io')).toHaveText('Expires in 3 days')
         await expect(badge('soon.monoven.io')).toHaveAttribute(
             'title',
-            'Caddy should have renewed this by now. Check soon.monoven.io still points at 198.51.100.40.'
+            'This should have renewed by now. Check soon.monoven.io still points at 198.51.100.40.'
         )
         await expect(badge('gone.monoven.io')).toHaveText('Expired')
         await expect(badge('gone.monoven.io')).toHaveAttribute(
             'title',
-            'Caddy should have renewed this by now. Check gone.monoven.io still points at 198.51.100.40.'
+            'This should have renewed by now. Check gone.monoven.io still points at 198.51.100.40.'
         )
         await expect(badge('dark.monoven.io')).toHaveText('No certificate')
         await expect(badge('dark.monoven.io')).toHaveAttribute(
             'title',
-            'Caddy has no certificate for this name yet. Point its DNS at 198.51.100.40 and Caddy requests one.'
+            "There's no certificate for this name yet. Point its DNS at 198.51.100.40 and one is requested."
         )
     })
 

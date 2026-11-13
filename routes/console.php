@@ -4,6 +4,7 @@ use App\Enums\Edition;
 use App\Enums\ServerStatus;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
+use App\Jobs\CheckProtections;
 use App\Jobs\CheckThisMachineSsh;
 use App\Jobs\CloseUnknownHosts;
 use App\Jobs\CollectServerMetrics;
@@ -91,6 +92,14 @@ Schedule::call(function (): void {
             }
         });
 })->hourly()->name('coresmith:harden-ssh')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->whereNull('unreachable_since')
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(fn(Server $server) => CheckProtections::dispatch($server));
+})->hourlyAt(30)->name('coresmith:check-protections')->withoutOverlapping();
 
 Schedule::call(function (): void {
     $host = app(InstallationAddress::class)->host();

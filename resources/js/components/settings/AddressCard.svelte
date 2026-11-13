@@ -33,7 +33,7 @@
             public: {
                 badge: 'Trusted certificate',
                 tone: 'success' as const,
-                note: 'Where people open Coresmith. Caddy keeps its certificate renewed.'
+                note: 'Where people open Coresmith. Its certificate renews itself.'
             },
             tailscale: {
                 badge: 'Tailscale certificate',
@@ -43,7 +43,7 @@
             internal: {
                 badge: 'Browsers warn',
                 tone: 'warning' as const,
-                note: 'Where people open Coresmith. Caddy signs this certificate itself, so browsers warn until Coresmith has a domain or a Tailscale name.'
+                note: 'Where people open Coresmith. Coresmith signs this certificate itself, so browsers warn until Coresmith has a domain or a Tailscale name.'
             }
         }[address.certificate]
     )
@@ -248,8 +248,8 @@
                     <Dialog.Title>Change Coresmith's address</Dialog.Title>
                     <Dialog.Description
                         >Check the domain first: Coresmith tests it from outside and says what to fix. Once it passes,
-                        Coresmith switches when Caddy has a certificate for it, and the current address then sends
-                        people there. You'll sign in again at the new address.</Dialog.Description
+                        Coresmith switches once there's a certificate for it, and the current address then sends people
+                        there. You'll sign in again at the new address.</Dialog.Description
                     >
                 </Dialog.Header>
                 <div class="mt-4">

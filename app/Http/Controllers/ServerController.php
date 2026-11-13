@@ -31,6 +31,7 @@ use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
+use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
@@ -41,6 +42,7 @@ use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
 use App\Services\Teams\TeamUrls;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -129,6 +131,12 @@ final class ServerController extends Controller
             ->where('status', DeploymentStatus::Running->value)
             ->get()
             ->keyBy('application_id');
+        $deployed = Deployment::query()
+            ->whereIn('application_id', $server->applications()->select('id'))
+            ->where('status', DeploymentStatus::Succeeded->value)
+            ->groupBy('application_id')
+            ->selectRaw('application_id, max(finished_at) as finished_at')
+            ->pluck('finished_at', 'application_id');
 
         return Inertia::render('servers/Show', [
             'server' => $presenter->header($server, $request->user()),
@@ -137,8 +145,8 @@ final class ServerController extends Controller
                 'name' => $application->name,
                 'kind' => ApplicationPresenter::kind($application),
                 'runtime' => ApplicationPresenter::runtime($application),
-                'user' => $application->system_user,
-                'ports' => ApplicationPresenter::portBlock($application),
+                'domain' => $application->domain,
+                'deployed' => $deployed->has($application->id) ? Formats::when(CarbonImmutable::parse($deployed->get($application->id))) : null,
                 'state' => $running->has($application->id)
                     ? ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent']
                     : ApplicationPresenter::state($application),
@@ -363,7 +371,7 @@ final class ServerController extends Controller
 
         RebootServer::dispatch($server, request()->user());
 
-        return back()->with('success', "Reboot scheduled. {$server->name} restarts in a few seconds, apps come back via systemd.");
+        return back()->with('success', "Reboot scheduled. {$server->name} restarts in a few seconds, and its apps start again on their own.");
     }
 
     public function prune(Server $server): RedirectResponse

@@ -110,12 +110,12 @@ test('a toggle reads as off when nothing matching is configured', function () {
         ->and(togglesService()->isOn($application, SmartToggles::SCHEDULER))->toBeFalse();
 });
 
-test('the description of each toggle names what it changes on the server', function () {
+test('the description of each toggle names what it runs, not how Coresmith runs it', function () {
     $described = collect(togglesService()->describe(togglesApp(['slug' => 'shop'])))->keyBy('key');
 
     expect($described->keys()->all())->toBe(['queue_worker', 'scheduler', 'maintenance_mode', 'auto_deploy'])
         ->and($described['queue_worker'])->toMatchArray(['label' => 'Queue worker', 'on' => false, 'disabled' => false])
-        ->and($described['queue_worker']['description'])->toContain('coresmith-app-shop-queue')
+        ->and($described['queue_worker']['description'])->toBe('php artisan queue:work')
         ->and($described['scheduler']['label'])->toBe('Scheduler')
         ->and($described['maintenance_mode'])->toMatchArray(['label' => 'Maintenance page', 'disabled' => false]);
 });
@@ -283,8 +283,8 @@ test('the solid queue toggle is described the way the other workers are', functi
 
     expect($described)->toMatchArray([
         'label' => 'Solid Queue',
-        'description' => 'bin/jobs · systemd unit coresmith-app-shop-jobs',
-        'busy_on' => 'Creating the systemd unit and starting Solid Queue…',
+        'description' => 'bin/jobs',
+        'busy_on' => 'Starting Solid Queue…',
         'busy_off' => 'Stopping the unit and removing it…',
         'on' => false,
         'disabled' => false,
@@ -364,7 +364,7 @@ test('a worker is not waited on once the sync could have finished, or while the 
 
 test('a worker that did not start is described with the reason until its toggle is changed again', function () {
     $application = togglesApp(['power_state' => PowerState::Active]);
-    $error = "coresmith-app-shop-queue did not start, systemd reports it as activating. The app's environment file is missing from the server. Deploy again to write it.";
+    $error = "The queue process didn't start (activating). The app's environment file is missing from the server. Deploy again to write it.";
 
     togglesActivity($application, 'toggle_changed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'on' => true], secondsAgo: 20);
     togglesActivity($application, 'toggle_start_failed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'error' => $error], secondsAgo: 10);
@@ -380,7 +380,7 @@ test('a worker that did not start is described with the reason until its toggle 
 test('a worker that did not start more than a day ago is no longer described as failing', function () {
     $application = togglesApp();
 
-    togglesActivity($application, 'toggle_start_failed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'error' => 'coresmith-app-shop-queue did not start.'], secondsAgo: 86400 + 60);
+    togglesActivity($application, 'toggle_start_failed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'error' => 'The queue process didn\'t start.'], secondsAgo: 86400 + 60);
 
     expect(togglesDescribed($application, SmartToggles::QUEUE)['failure'])->toBeNull();
 });

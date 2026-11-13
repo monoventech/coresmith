@@ -606,7 +606,7 @@ test('each alert says what happened and what to do', function (string $alert, st
     'killed for memory' => [
         'killed for memory',
         'Shop was killed for memory',
-        ['The web process on web-1 went over its 512 MB memory limit at Sep 14, 2026 at 09:59 UTC, and systemd started it again.', 'If it keeps happening, the app needs more memory than the Medium size gives it.'],
+        ['The web process on web-1 went over its 512 MB memory limit at Sep 14, 2026 at 09:59 UTC, and it was started again.', 'If it keeps happening, the app needs more memory than the Medium size gives it.'],
         'Open Shop',
     ],
     'memory' => [
