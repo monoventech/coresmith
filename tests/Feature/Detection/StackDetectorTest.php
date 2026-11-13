@@ -59,6 +59,7 @@ test('each repository gets the stack its files settle', function (string $fixtur
     'create react app' => ['react-scripts-app', 'ready', 'static', '', null, '/build'],
     'a symfony app without the bundle in its own require, Sylius' => ['symfony-sylius', 'ready', 'php', 'symfony', null, '/public'],
     'a laravel package, aimeos-laravel' => ['laravel-package', 'unsure', null, null, null, null],
+    'a symfony bundle, ContentfulBundle' => ['symfony-bundle', 'unsure', null, null, null, null],
     'a ruby gem, sinatra itself' => ['ruby-gem-sinatra', 'unsure', null, null, null, null],
     'deno' => ['deno-app', 'ready', 'js', '', 'deno', null],
     'deno with nothing to start' => ['deno-no-start', 'unsure', 'js', null, 'deno', null],
@@ -119,6 +120,7 @@ test('a field the files do not settle is left with the reason', function (string
     'a framework the build does not build' => ['js-nuxt-docs-library', 'framework', 'nuxt build'],
     'a ruby gem' => ['ruby-gem-sinatra', 'type', 'Ruby gem'],
     'a laravel package' => ['laravel-package', 'type', 'library'],
+    'a symfony bundle' => ['symfony-bundle', 'type', 'library'],
     'deno with no start task' => ['deno-no-start', 'framework', 'no start task'],
     'a deno library' => ['deno-library', 'framework', 'library'],
 ]);

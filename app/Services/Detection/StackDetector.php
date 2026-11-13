@@ -150,6 +150,10 @@ final class StackDetector
 
         $symfony = $this->symfony($facts, $require);
 
+        if ($symfony !== null && $index === null && !$facts->exists('bin/console')) {
+            return $this->unsure('type', self::LIBRARY);
+        }
+
         if ($symfony !== null) {
             return $this->proposal('php', 'symfony', null, '/public', [
                 'type' => 'From composer.json',
