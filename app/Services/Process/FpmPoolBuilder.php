@@ -69,6 +69,7 @@ final class FpmPoolBuilder
         php_admin_value[disable_functions] = {$disabled}
         php_admin_value[error_log] = syslog
         php_admin_value[syslog.ident] = coresmith-app-{$slug}-php
+        php_admin_value[variables_order] = EGPCS
 
         CONFIG;
     }
