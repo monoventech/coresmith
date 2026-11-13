@@ -13,7 +13,9 @@ use App\Exceptions\RuntimeUnavailable;
 use App\Models\Application;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
+use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\StackResolver;
+use App\Services\Runtime\VersionConstraint;
 use Closure;
 
 final class StackChecks
@@ -115,6 +117,12 @@ final class StackChecks
             $blockers[] = new Blocker('framework', "There is no artisan file at the repository's root, so this isn't a Laravel app.", 'Pick Plain PHP, or Symfony if it uses Symfony.');
         }
 
+        $platform = $this->platformBehindLock($facts);
+
+        if ($platform !== null) {
+            $blockers[] = $platform;
+        }
+
         $web = trim((string) $choice->web_directory, '/');
         $index = self::PHP_INDEXES[$web] ?? null;
 
@@ -128,6 +136,33 @@ final class StackChecks
         }
 
         return $blockers;
+    }
+
+    private function platformBehindLock(RepositoryFacts $facts): ?Blocker
+    {
+        $platform = $facts->json('composer.json')['config']['platform']['php'] ?? null;
+        $packages = $facts->json(RepositoryProbe::COMPOSER_LOCK)['packages'] ?? null;
+
+        if (!is_string($platform) || preg_match('/^\d+(?:\.\d+){0,2}$/', $platform) !== 1 || !is_array($packages)) {
+            return null;
+        }
+
+        foreach ($packages as $package) {
+            $needs = is_array($package) && is_array($package['require'] ?? null) ? ($package['require']['php'] ?? null) : null;
+            $constraint = is_string($needs) ? VersionConstraint::parse($needs, 'composer') : null;
+
+            if ($constraint !== null && !$constraint->satisfiedBy($platform)) {
+                $locked = trim((string) ($package['name'] ?? '') . ' ' . ltrim((string) ($package['version'] ?? ''), 'v'));
+
+                return new Blocker(
+                    'repository',
+                    "composer.json sets config.platform.php to {$platform}, but composer.lock holds {$locked}, which needs PHP {$needs}, so composer install fails on any server.",
+                    'Raise config.platform.php in composer.json to a PHP composer.lock allows, or remove it, then run composer update --lock and commit both files.',
+                );
+            }
+        }
+
+        return null;
     }
 
     /**

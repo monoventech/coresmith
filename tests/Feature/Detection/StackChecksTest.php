@@ -44,6 +44,29 @@ test('a PHP version composer.lock rules out is refused with the reason', functio
         ->and($blockers[0]->reason)->toContain('composer.lock holds');
 });
 
+test('a platform PHP in composer.json that composer.lock needs more than is refused', function () {
+    $blockers = stackChecksFor('laravel-platform-behind-lock', ['type' => ApplicationType::Php, 'framework' => 'laravel']);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('repository')
+        ->and($blockers[0]->reason)->toBe('composer.json sets config.platform.php to 8.2.0, but composer.lock holds spatie/laravel-activitylog 5.0.0, which needs PHP ^8.4, so composer install fails on any server.')
+        ->and($blockers[0]->fix)->toContain('config.platform.php');
+});
+
+test('a platform PHP in composer.json that composer.lock accepts is fine', function (mixed $platform) {
+    $facts = RepositoryFixture::facts('laravel-platform-behind-lock');
+    $manifest = $facts->json('composer.json');
+    $manifest['config']['platform']['php'] = $platform;
+    $accepted = new RepositoryFacts(['composer.json' => (string) json_encode($manifest), ...array_diff_key($facts->files, ['composer.json' => true])], $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+
+    expect(stackChecksFor($accepted, ['type' => ApplicationType::Php, 'framework' => 'laravel']))->toBe([]);
+})->with([
+    'a version the lock allows' => ['8.4.1'],
+    'a short version the lock allows' => ['8.5'],
+    'no override' => [false],
+    'something composer would not parse' => ['latest'],
+]);
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 

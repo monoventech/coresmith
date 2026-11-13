@@ -1,0 +1,32 @@
+{
+    "packages": [
+        {
+            "name": "laravel/framework",
+            "version": "v12.40.2",
+            "require": {
+                "php": "^8.2"
+            }
+        },
+        {
+            "name": "spatie/laravel-activitylog",
+            "version": "5.0.0",
+            "require": {
+                "php": "^8.4"
+            }
+        },
+        {
+            "name": "symfony/clock",
+            "version": "v8.1.0",
+            "require": {
+                "php": ">=8.4.1"
+            }
+        }
+    ],
+    "packages-dev": [],
+    "platform": {
+        "php": "^8.2"
+    },
+    "platform-overrides": {
+        "php": "8.2.0"
+    }
+}

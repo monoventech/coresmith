@@ -23,6 +23,7 @@ test('each repository gets the stack its files settle', function (string $fixtur
     'laravel 13' => ['laravel-13', 'ready', 'php', 'laravel', null, '/public'],
     'laravel vue starter kit' => ['laravel-vue-starter', 'ready', 'php', 'laravel', null, '/public'],
     'laravel held to php 8.4' => ['laravel-locked-84', 'ready', 'php', 'laravel', null, '/public'],
+    'laravel with a platform PHP its lock has outgrown' => ['laravel-platform-behind-lock', 'blocked', 'php', 'laravel', null, '/public'],
     'symfony demo' => ['symfony-demo', 'ready', 'php', 'symfony', null, '/public'],
     'slim skeleton' => ['slim-skeleton', 'ready', 'php', '', null, '/public'],
     'a composer library' => ['guzzle-library', 'unsure', null, null, null, null],
@@ -106,6 +107,7 @@ test('a blocked stack says why and how to fix it', function (string $fixture, st
     'a platform adapter' => ['sveltekit-realworld', 'framework', '@sveltejs/adapter-vercel', '@sveltejs/adapter-node'],
     'adapter-auto' => ['sveltekit-auto', 'framework', '@sveltejs/adapter-auto', '@sveltejs/adapter-node'],
     'next.js without start' => ['next-no-start', 'repository', 'start script', '"start": "next start"'],
+    'a platform PHP behind the lock' => ['laravel-platform-behind-lock', 'repository', 'config.platform.php', 'composer update --lock'],
 ]);
 
 test('a field the files do not settle is left with the reason', function (string $fixture, string $field, string $reason) {
