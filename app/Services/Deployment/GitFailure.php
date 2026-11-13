@@ -15,9 +15,22 @@ use App\Services\Git\RefusalReason;
 
 final readonly class GitFailure
 {
+    public const NOT_FOUND = 'not_found';
+
+    public const UNREADABLE = 'unreadable';
+
+    public const BRANCH = 'branch';
+
+    public const DNS = 'dns';
+
+    public const NETWORK = 'network';
+
+    public const UNKNOWN = 'unknown';
+
     private function __construct(
         public string $reason,
         public bool $retryable,
+        public string $kind = self::UNKNOWN,
     ) {}
 
     public static function from(string $output, Application $application, ?string $advice = null, ?string $unrecognised = null): self
@@ -27,11 +40,11 @@ final readonly class GitFailure
         $branch = (string) $application->repository_branch;
 
         return match (true) {
-            self::mentions($output, ['Repository not found', 'remote: Not Found', 'does not appear to be a git repository']) => new self("Repository not found at {$url}. Check the URL is right and the repository still exists, then deploy again.", false),
-            self::mentions($output, ['Permission denied (publickey)', 'Could not read from remote repository', 'Authentication failed', 'could not read Username', 'terminal prompts disabled']) => new self($advice ?? self::unreadable($application, $host), false),
-            self::mentions($output, ["Remote branch {$branch} not found", 'did not match any', 'not a valid object name', 'unknown revision', "couldn't find remote ref"]) => new self("Branch {$branch} is not in the repository. Check the branch name in the app's settings, then deploy again.", false),
-            self::mentions($output, ['Could not resolve host']) => new self("The server could not look up {$host}. Check its DNS settings, then deploy again.", true),
-            self::mentions($output, ['Connection timed out', 'Connection refused', 'Operation timed out', 'Failed to connect', 'early EOF', 'RPC failed', 'Connection reset', 'The remote end hung up unexpectedly']) => new self("The server could not reach {$host}. Check its firewall allows outbound HTTPS and SSH, then deploy again.", true),
+            self::mentions($output, ['Repository not found', 'remote: Not Found', 'does not appear to be a git repository']) => new self("Repository not found at {$url}. Check the URL is right and the repository still exists, then deploy again.", false, self::NOT_FOUND),
+            self::mentions($output, ['Permission denied (publickey)', 'Could not read from remote repository', 'Authentication failed', 'could not read Username', 'terminal prompts disabled']) => new self($advice ?? self::unreadable($application, $host), false, self::UNREADABLE),
+            self::mentions($output, ["Remote branch {$branch} not found", 'did not match any', 'not a valid object name', 'unknown revision', "couldn't find remote ref"]) => new self("Branch {$branch} is not in the repository. Check the branch name in the app's settings, then deploy again.", false, self::BRANCH),
+            self::mentions($output, ['Could not resolve host']) => new self("The server could not look up {$host}. Check its DNS settings, then deploy again.", true, self::DNS),
+            self::mentions($output, ['Connection timed out', 'Connection refused', 'Operation timed out', 'Failed to connect', 'early EOF', 'RPC failed', 'Connection reset', 'The remote end hung up unexpectedly']) => new self("The server could not reach {$host}. Check its firewall allows outbound HTTPS and SSH, then deploy again.", true, self::NETWORK),
             default => new self($unrecognised ?? 'Git failed with an error Coresmith does not recognise. Its full output is in the log.', false),
         };
     }
@@ -90,7 +103,7 @@ final readonly class GitFailure
         return false;
     }
 
-    private static function displayUrl(string $url): string
+    public static function displayUrl(string $url): string
     {
         if (preg_match('#^([a-z][a-z0-9+.-]*://)(?:[^@/]+@)?(.*)$#i', $url, $matches) === 1) {
             return $matches[1] . $matches[2];
@@ -99,7 +112,7 @@ final readonly class GitFailure
         return $url;
     }
 
-    private static function host(string $url): string
+    public static function host(string $url): string
     {
         if (preg_match('#^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?([^/:]+)#i', $url, $matches) === 1) {
             return $matches[1];

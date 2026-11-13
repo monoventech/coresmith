@@ -17,7 +17,17 @@ final class CloneToken
 
     public function path(Application $application): string
     {
-        return DeployKeyManager::KEY_DIR . '/' . SafeName::assertSlug($application->slug) . self::SUFFIX;
+        return $this->pathFor(SafeName::assertSlug($application->slug));
+    }
+
+    public function pathFor(string $name): string
+    {
+        return DeployKeyManager::KEY_DIR . '/' . SafeName::assertSlug($name) . self::SUFFIX;
+    }
+
+    public function helper(string $path): string
+    {
+        return '!f() { test "$1" = get && grep -qx host=github.com && cat ' . escapeshellarg($path) . '; }; f';
     }
 
     public function content(#[\SensitiveParameter] string $token): string
@@ -37,7 +47,7 @@ final class CloneToken
 
     public function wrap(Application $application, string $gitArguments): string
     {
-        $helper = 'credential.helper=!f() { test "$1" = get && grep -qx host=github.com && cat ' . escapeshellarg($this->path($application)) . '; }; f';
+        $helper = 'credential.helper=' . $this->helper($this->path($application));
 
         return 'GIT_TERMINAL_PROMPT=0 git -c credential.helper= -c ' . escapeshellarg($helper) . ' ' . $gitArguments;
     }
