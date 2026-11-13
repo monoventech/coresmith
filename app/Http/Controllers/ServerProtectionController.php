@@ -26,7 +26,7 @@ final class ServerProtectionController extends Controller
         return back()->with('success', match ($protection) {
             'kernel' => 'Setting them again.',
             'patches' => 'Turning them back on.',
-            'ssh' => 'Turning off password sign-in.',
+            'ssh' => 'Turning off password login.',
             'controls', 'unknown_hosts' => 'Closing them now.',
             default => 'Turning it back on.',
         });

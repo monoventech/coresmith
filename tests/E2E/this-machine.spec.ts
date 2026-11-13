@@ -218,7 +218,7 @@ test.describe('this machine', () => {
                     ? {
                           ...row,
                           state: 'yours',
-                          detail: "Password sign-in is off in this machine's own SSH settings.",
+                          detail: "Password login is off in this machine's own SSH settings.",
                           fix: null
                       }
                     : row

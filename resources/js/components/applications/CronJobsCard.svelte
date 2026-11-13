@@ -128,8 +128,7 @@
 >
     <h3 class="type-h3 m-0 mb-1">Cron jobs</h3>
     <p class="mb-3 text-[12.5px] text-muted-foreground">
-        Each job runs as <span class="font-mono text-[12px]">{cron.user}</span>
-        {`in the current release, with the app's environment. Saving changes what runs on ${server}, no deployment needed.`}
+        {`Each job runs in the current release with the app's permissions and environment. Saving changes what runs on ${server}, no deployment needed.`}
     </p>
 
     {#if cron.note}
@@ -251,7 +250,7 @@
 </div>
 
 {#if canUpdate}
-    <CronJobDialog bind:open={editor} job={editing} storeHref={cron.store_href} user={cron.user} {busy} {send} />
+    <CronJobDialog bind:open={editor} job={editing} storeHref={cron.store_href} {busy} {send} />
 
     <Dialog.Root open={removing !== null} onOpenChange={(next) => !next && (removing = null)}>
         <Dialog.Content>

@@ -27,13 +27,15 @@ function underTheHoodServer(array $attributes = []): array
 
 test('what Coresmith runs here lists each app with its user, ports, folder and processes', function () {
     [$team, $owner, $server] = underTheHoodServer(['meta' => ['caddy_admin' => 'socket']]);
-    Application::factory()->for($team)->for($server)->create(['name' => 'shop', 'slug' => 'shop', 'type' => ApplicationType::Php, 'framework' => 'laravel', 'base_port' => 8010, 'ssr_port' => 13714, 'system_user' => 'coresmith-app-shop']);
+    $shop = Application::factory()->for($team)->for($server)->create(['name' => 'shop', 'slug' => 'shop', 'type' => ApplicationType::Php, 'framework' => 'laravel', 'base_port' => 8010, 'ssr_port' => 13714, 'system_user' => 'coresmith-app-shop']);
 
     $this->actingAs($owner)->get(route('servers.under-the-hood', $server))
         ->assertOk()
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->component('servers/UnderTheHood')
             ->where('server.href', route('servers.show', $server))
+            ->where('server.hardening', route('servers.hardening', $server))
+            ->where('apps.0.href', route('servers.applications.show', [$server, $shop]))
             ->where('apps.0.name', 'shop')
             ->where('apps.0.user', 'coresmith-app-shop')
             ->where('apps.0.ports', '8010–8019, 13714')

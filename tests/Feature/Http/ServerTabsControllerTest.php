@@ -45,7 +45,7 @@ test('the hardening tab shows each protection with its real state, the firewall 
             ->where('server.tabs.hardening', route('servers.hardening', $server))
             ->where('server.can.update', false)
             ->where('protections', app(ProtectionRows::class)->for($server))
-            ->where('protections.rows.0', ['key' => 'ssh', 'label' => 'Sign-in with SSH keys only', 'state' => 'on', 'detail' => 'Password sign-in is off.', 'fix' => null])
+            ->where('protections.rows.0', ['key' => 'ssh', 'label' => 'Sign-in with SSH keys only', 'state' => 'on', 'detail' => 'Password login is off.', 'fix' => null])
             ->missing('isolation')
             ->missing('hardening')
             ->missing('admin_move_error')

@@ -79,7 +79,7 @@ final class ServerTabsController extends Controller
         $this->authorize('view', $server);
 
         return Inertia::render('servers/UnderTheHood', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'hardening' => route('servers.hardening', $server)],
             ...$machinery->for($server, $request->user()),
         ]);
     }

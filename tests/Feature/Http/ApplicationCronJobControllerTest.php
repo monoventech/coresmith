@@ -180,7 +180,7 @@ test('the app page carries its cron jobs and what a deployer may do with them', 
             ->where('cron.sync_href', route('servers.applications.cron-jobs.sync', [$server, $application]))
             ->where('cron.log_href', route('servers.applications.cron-jobs.log', [$server, $application]))
             ->where('cron.limit', 20)
-            ->where('cron.user', 'coresmith-app-shop')
+            ->missing('cron.user')
             ->where('cron.live', true)
             ->where('can.update', false)
             ->where('can.viewLogs', true)

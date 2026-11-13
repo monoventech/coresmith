@@ -1209,7 +1209,7 @@ test.describe('an app whose processes did not start', () => {
         await banner.getByRole('link', { name: 'Read the log' }).click()
 
         await expect(page.getByTestId('failure-reason')).toContainText('The processes did not start.')
-        await expect(page.getByTestId('failure-reason')).toContainText('coresmith-app-dev-mode-web did not start')
+        await expect(page.getByTestId('failure-reason')).toContainText("The web process didn't start (activating).")
         await expect(page.getByTestId('deployment-log')).toContainText('cannot load such file -- debug/prelude')
     })
 

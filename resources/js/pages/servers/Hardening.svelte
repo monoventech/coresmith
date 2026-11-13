@@ -163,7 +163,7 @@
         Each app runs walled off from the others.
         <Link
             href={route('servers.under-the-hood', server.id)}
-            class="text-foreground underline underline-offset-2"
+            class="whitespace-nowrap text-foreground underline underline-offset-2"
             data-testid="under-the-hood-link">What Coresmith runs here</Link
         >
     </p>

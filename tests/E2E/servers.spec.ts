@@ -266,7 +266,7 @@ test.describe('hardening', () => {
         await expect(page.getByTestId('protection-fail2ban')).toHaveAttribute('data-state', 'pending')
         await expect(page.getByTestId('protection-fail2ban')).toContainText('Coresmith checks this within the hour.')
         await expect(page.getByTestId('protection-ssh')).toContainText(
-            'Coresmith turns off password sign-in within the hour.'
+            'Coresmith turns off password login within the hour.'
         )
     })
 
@@ -435,7 +435,7 @@ test.describe('activity', () => {
 })
 
 test.describe('a server that is not connected yet', () => {
-    test('it offers a password sign-in, the command that adds its key, and the phases to come', async ({ page }) => {
+    test('it offers a password login, the command that adds its key, and the phases to come', async ({ page }) => {
         await gotoServer(page, 'empty-server')
 
         const card = page.getByTestId('server-connect')
@@ -463,7 +463,7 @@ test.describe('a server that is not connected yet', () => {
         )
     })
 
-    test('a password sign-in that cannot reach the server says why, and the password leaves the form', async ({
+    test('a password login that cannot reach the server says why, and the password leaves the form', async ({
         page
     }, testInfo) => {
         const name = own(testInfo, 'connect')

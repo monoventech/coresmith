@@ -102,7 +102,8 @@
                 one server.
                 <Link
                     href={route('servers.under-the-hood', server.id)}
-                    class="text-foreground underline underline-offset-2">What Coresmith runs here</Link
+                    class="whitespace-nowrap text-foreground underline underline-offset-2"
+                    >What Coresmith runs here</Link
                 >
             </p>
             {#if server.can.createApplication}

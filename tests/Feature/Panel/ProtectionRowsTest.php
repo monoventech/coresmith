@@ -73,16 +73,16 @@ test('a fix that failed says why, and offers to try again', function () {
     expect($rows['patches'])->toMatchArray(['state' => 'off', 'detail' => "Coresmith couldn't turn them back on: E: Unable to locate package unattended-upgrades", 'fix' => 'Try again']);
 });
 
-test('password sign-in that came back is off, with the fix', function () {
+test('password login that came back is off, with the fix', function () {
     $rows = protectionRows(protectionReadingMeta(['ssh' => 'off']));
 
-    expect($rows['ssh'])->toMatchArray(['state' => 'off', 'detail' => 'Password sign-in is on again.', 'fix' => 'Turn it off']);
+    expect($rows['ssh'])->toMatchArray(['state' => 'off', 'detail' => 'Password login is on again.', 'fix' => 'Turn it off']);
 });
 
 test('before the first check, SSH and the routing controls go by what Coresmith already did', function () {
     $rows = protectionRows(['ssh_hardening' => 'verified', 'caddy_admin' => 'socket']);
 
-    expect($rows['ssh'])->toMatchArray(['state' => 'on', 'detail' => 'Password sign-in is off.'])
+    expect($rows['ssh'])->toMatchArray(['state' => 'on', 'detail' => 'Password login is off.'])
         ->and($rows['controls'])->toMatchArray(['state' => 'on', 'detail' => "Apps on this server can't reach the controls that route traffic to them."]);
 });
 
@@ -99,7 +99,7 @@ test('routing controls Coresmith could not close yet say why and offer to try no
 test('SSH that Coresmith could not lock down yet says what it found', function () {
     $rows = protectionRows(['ssh_hardening_error' => 'sshd reports passwordauthentication yes']);
 
-    expect($rows['ssh'])->toMatchArray(['state' => 'off', 'detail' => "Coresmith couldn't turn off password sign-in yet: sshd reports passwordauthentication yes", 'fix' => 'Try again now']);
+    expect($rows['ssh'])->toMatchArray(['state' => 'off', 'detail' => "Coresmith couldn't turn off password login yet: sshd reports passwordauthentication yes", 'fix' => 'Try again now']);
 });
 
 test('on Coresmith\'s own machine SSH is left to its owner and unknown addresses are never answered, with nothing to fix', function (array $meta, string $detail) {
@@ -108,8 +108,8 @@ test('on Coresmith\'s own machine SSH is left to its owner and unknown addresses
     expect($rows['ssh'])->toMatchArray(['state' => 'yours', 'detail' => $detail, 'fix' => null])
         ->and($rows['unknown_hosts'])->toMatchArray(['state' => 'on', 'fix' => null]);
 })->with([
-    'passwords off' => [['ssh_passwords' => 'off'], "Password sign-in is off in this machine's own SSH settings."],
-    'passwords on' => [['ssh_passwords' => 'on'], "Password sign-in is on in this machine's own SSH settings. See SSH access below."],
+    'passwords off' => [['ssh_passwords' => 'off'], "Password login is off in this machine's own SSH settings."],
+    'passwords on' => [['ssh_passwords' => 'on'], "Password login is on in this machine's own SSH settings. See SSH access below."],
 ]);
 
 test('the card says when the protections were last read', function () {

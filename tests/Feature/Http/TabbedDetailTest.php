@@ -231,10 +231,10 @@ test('the hardening tab claims key-only SSH only once sshd has reported it, and 
             ->where('protections.rows.0.detail', $detail)
             ->where('ssh', $ssh));
 })->with([
-    'verified' => [['meta' => ['ssh_hardening' => 'verified']], 'on', 'Password sign-in is off.', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
-    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], 'off', "Coresmith couldn't turn off password sign-in yet: sshd reports passwordauthentication yes", ['verified' => false, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
-    'not checked yet' => [['meta' => []], 'pending', 'Coresmith turns off password sign-in within the hour.', ['verified' => false, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
-    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], 'yours', "Password sign-in is off in this machine's own SSH settings.", ['verified' => false, 'owner' => true, 'passwords_off' => true, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'verified' => [['meta' => ['ssh_hardening' => 'verified']], 'on', 'Password login is off.', ['verified' => true, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'still accepting passwords' => [['meta' => ['ssh_hardening_error' => 'sshd reports passwordauthentication yes']], 'off', "Coresmith couldn't turn off password login yet: sshd reports passwordauthentication yes", ['verified' => false, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    'not checked yet' => [['meta' => []], 'pending', 'Coresmith turns off password login within the hour.', ['verified' => false, 'owner' => false, 'passwords_off' => false, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
+    "left as its owner set it up on Coresmith's machine" => [['runs_coresmith' => true, 'meta' => ['ssh_hardening' => 'owner', 'ssh_passwords' => 'off']], 'yours', "Password login is off in this machine's own SSH settings.", ['verified' => false, 'owner' => true, 'passwords_off' => true, 'logins' => null, 'source' => null, 'lines' => [], 'reload' => 'ssh', 'checked' => null]],
 ]);
 
 test('an admin can queue a firewall change', function () {

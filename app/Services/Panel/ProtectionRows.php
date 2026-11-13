@@ -65,12 +65,12 @@ final class ProtectionRows
         $error = ((array) $server->meta)['ssh_hardening_error'] ?? null;
 
         return $row + match (true) {
-            (bool) $server->runs_coresmith => ['state' => 'yours', 'detail' => $server->sshPasswordsOff() ? "Password sign-in is off in this machine's own SSH settings." : "Password sign-in is on in this machine's own SSH settings. See SSH access below.", 'fix' => null],
-            ($reading['ssh'] ?? null) === 'on' => ['state' => 'on', 'detail' => 'Password sign-in is off.', 'fix' => null],
-            ($reading['ssh'] ?? null) === 'off' => ['state' => 'off', 'detail' => 'Password sign-in is on again.', 'fix' => 'Turn it off'],
-            $server->sshHardened() => ['state' => 'on', 'detail' => 'Password sign-in is off.', 'fix' => null],
-            is_string($error) => ['state' => 'off', 'detail' => "Coresmith couldn't turn off password sign-in yet: {$error}", 'fix' => 'Try again now'],
-            default => ['state' => 'pending', 'detail' => 'Coresmith turns off password sign-in within the hour.', 'fix' => null],
+            (bool) $server->runs_coresmith => ['state' => 'yours', 'detail' => $server->sshPasswordsOff() ? "Password login is off in this machine's own SSH settings." : "Password login is on in this machine's own SSH settings. See SSH access below.", 'fix' => null],
+            ($reading['ssh'] ?? null) === 'on' => ['state' => 'on', 'detail' => 'Password login is off.', 'fix' => null],
+            ($reading['ssh'] ?? null) === 'off' => ['state' => 'off', 'detail' => 'Password login is on again.', 'fix' => 'Turn it off'],
+            $server->sshHardened() => ['state' => 'on', 'detail' => 'Password login is off.', 'fix' => null],
+            is_string($error) => ['state' => 'off', 'detail' => "Coresmith couldn't turn off password login yet: {$error}", 'fix' => 'Try again now'],
+            default => ['state' => 'pending', 'detail' => 'Coresmith turns off password login within the hour.', 'fix' => null],
         };
     }
 
@@ -151,7 +151,7 @@ final class ProtectionRows
         return [...$row, 'state' => 'busy', 'detail' => match ($row['key']) {
             'kernel' => 'Setting them again…',
             'patches' => 'Turning them back on…',
-            'ssh' => 'Turning off password sign-in…',
+            'ssh' => 'Turning off password login…',
             'controls', 'unknown_hosts' => 'Closing them now…',
             default => 'Turning it back on…',
         }, 'fix' => null];

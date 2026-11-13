@@ -57,6 +57,7 @@ final class UnderTheHood
             'apps' => $this->access->applicationsOn($user, $server)->orderBy('name')->get()->map(fn(Application $application): array => [
                 'id' => $application->id,
                 'name' => $application->name,
+                'href' => route('servers.applications.show', [$server, $application]),
                 'user' => $application->system_user,
                 'ports' => ApplicationPresenter::portBlock($application) . ($application->ssr_port === null ? '' : ", {$application->ssr_port}"),
                 'folder' => ReleasePaths::ROOT . '/' . $application->slug,
