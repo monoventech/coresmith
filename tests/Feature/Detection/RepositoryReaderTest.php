@@ -72,6 +72,16 @@ test('a public repository is read with a sparse checkout of just the probe\'s fi
         ->and($script)->not->toContain('GIT_SSH_COMMAND');
 });
 
+test('the read lists the PHP extensions of each PHP on the server', function () {
+    $transport = readerAnswer("@@installed php 8.4.25\n@@phpext 8.4.25 bcmath ctype pdo_mysql zend-opcache\n@@done\n");
+
+    $read = readerRun($transport, RepositoryAccess::public('https://github.com/laravel/laravel.git'));
+
+    expect($read->extensions('8.4.25'))->toBe(['bcmath', 'ctype', 'pdo_mysql', 'zend-opcache'])
+        ->and($read->extensions('8.3.0'))->toBeNull()
+        ->and(readerScript($transport))->toContain('/bin/php -m');
+});
+
 test('an app in a subfolder is read from that folder', function () {
     $transport = readerAnswer("@@done\n");
 

@@ -42,6 +42,7 @@ final class DetectionStore
             'failure' => $read->failure,
             'definitive' => $read->definitive,
             'installed' => $read->installed,
+            'extensions' => $read->extensions,
         ], now()->addMinutes(self::MINUTES));
 
         return $id;
@@ -73,7 +74,7 @@ final class DetectionStore
             (bool) $stored['facts']['complete'],
         ) : null;
 
-        return new RepositoryRead($facts, $stored['commit'] ?? null, $stored['failure'] ?? null, (bool) ($stored['definitive'] ?? false), (array) ($stored['installed'] ?? []));
+        return new RepositoryRead($facts, $stored['commit'] ?? null, $stored['failure'] ?? null, (bool) ($stored['definitive'] ?? false), (array) ($stored['installed'] ?? []), (array) ($stored['extensions'] ?? []));
     }
 
     private function folder(string $directory): string

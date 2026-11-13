@@ -74,6 +74,47 @@ test('an app with a custom blueprint gets no blockers, since the blueprint does 
         ->and(stackChecksFor($facts, ['type' => ApplicationType::Static, 'framework' => '', 'web_directory' => '/public', 'custom_blueprint' => "hugo -d public\n"]))->toBe([]);
 });
 
+function stackChecksExtensions(array $require, array $packages = []): array
+{
+    $facts = RepositoryFixture::facts('slim-skeleton');
+    $manifest = $facts->json('composer.json');
+    $manifest['require'] = [...$manifest['require'], ...$require];
+    $lock = (string) json_encode(['packages' => $packages]);
+    $needs = new RepositoryFacts(['composer.json' => (string) json_encode($manifest), 'composer.lock' => $lock, ...array_diff_key($facts->files, ['composer.json' => true, 'composer.lock' => true])], $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+
+    return app(StackChecks::class)->blockers(
+        new Application(['directory' => '/', 'web_directory' => '/public', 'type' => ApplicationType::Php, 'framework' => '']),
+        $needs,
+        fn(string $runtime): array => $runtime === 'php' ? ['8.5.10'] : [],
+        extensions: fn(string $version): ?array => $version === '8.5.10' ? ['ctype', 'json', 'mbstring', 'pdo_mysql', 'zend-opcache'] : null,
+    );
+}
+
+test('a PHP extension composer needs that the chosen PHP lacks is refused', function () {
+    $blockers = stackChecksExtensions(['ext-amqp' => '*'], [['name' => 'symfony/amqp-messenger', 'version' => 'v7.2.3', 'require' => ['ext-amqp' => '*']]]);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('repository')
+        ->and($blockers[0]->reason)->toContain('amqp PHP extension, which PHP 8.5.10')
+        ->and($blockers[0]->fix)->toContain('ext-amqp');
+});
+
+test('a PHP extension in a locked package that the chosen PHP lacks is refused', function () {
+    $blockers = stackChecksExtensions([], [['name' => 'mongodb/mongodb', 'version' => '1.20.0', 'require' => ['ext-mongodb' => '^1.21']]]);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->reason)->toContain('mongodb/mongodb 1.20.0 in composer.lock needs the mongodb PHP extension');
+});
+
+test('PHP extensions the chosen PHP has, a polyfill provides, or nobody can be sure of are fine', function (array $require, array $packages, bool $known) {
+    expect($known ? stackChecksExtensions($require, $packages) : stackChecksFor(RepositoryFixture::facts('slim-skeleton'), ['type' => ApplicationType::Php, 'framework' => '']))->toBe([]);
+})->with([
+    'extensions it has, by any spelling' => [['ext-PDO_MySQL' => '*', 'ext-zend-opcache' => '*', 'ext-json' => '*'], [], true],
+    'a polyfill provides it' => [['ext-intl' => '*'], [['name' => 'symfony/polyfill-intl-icu', 'version' => 'v1.31.0', 'provide' => ['ext-intl' => '*']]], true],
+    'only require-dev needs it' => [[], [], true],
+    'no extension list for that PHP' => [['ext-amqp' => '*'], [], false],
+]);
+
 test('a web root without index.php is refused and points to the folder that has it', function () {
     $blockers = stackChecksFor('slim-skeleton', ['type' => ApplicationType::Php, 'framework' => '', 'web_directory' => '/']);
 

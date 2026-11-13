@@ -55,6 +55,9 @@ final class RepositoryReader
     for r in {runtimes}; do
       for v in $(ls -1 {installs}/"$r" 2>/dev/null); do printf '@@installed %s %s\n' "$r" "$v"; done
     done
+    for v in $(ls -1 {installs}/php 2>/dev/null); do
+      if [ -x {installs}/php/"$v"/bin/php ]; then printf '@@phpext %s %s\n' "$v" "$({installs}/php/"$v"/bin/php -m 2>/dev/null | grep -v '^\[' | tr 'A-Z ' 'a-z-' | tr '\n' ' ')"; fi
+    done
     echo {probe} | base64 -d | CORESMITH_PROBE_DIR="$app" bash -s
     BASH;
 
@@ -165,7 +168,7 @@ final class RepositoryReader
 
             $commit = preg_match('/^@@commit ([0-9a-f]{40})$/m', $output, $matches) === 1 ? $matches[1] : null;
 
-            return new RepositoryRead($this->probe->parse($output), $commit, installed: $this->installed($output));
+            return new RepositoryRead($this->probe->parse($output), $commit, installed: $this->installed($output), extensions: $this->extensions($output));
         }
 
         if ($exitCode === self::SETUP_FAILED) {
@@ -200,6 +203,22 @@ final class RepositoryReader
         }
 
         return $installed;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function extensions(string $output): array
+    {
+        $extensions = [];
+
+        preg_match_all('/^@@phpext (\d[0-9A-Za-z.+-]*) (.*)$/m', $output, $matches, PREG_SET_ORDER);
+
+        foreach ($matches as [, $version, $modules]) {
+            $extensions[$version] = array_values(array_filter(preg_split('/\s+/', trim($modules)) ?: [], fn(string $module): bool => preg_match('/^[a-z0-9_-]+$/', $module) === 1));
+        }
+
+        return $extensions;
     }
 
     private function unreadable(RepositoryAccess $access, string $url, string $host): string

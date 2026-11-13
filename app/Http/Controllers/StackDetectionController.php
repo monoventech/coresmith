@@ -65,7 +65,7 @@ final class StackDetectionController extends Controller
             'id' => $id,
             'state' => 'read',
             'commit' => $read->commit,
-            ...$detector->detect($read->facts, fn(string $runtime): array => $read->installed($runtime))->toArray(),
+            ...$detector->detect($read->facts, fn(string $runtime): array => $read->installed($runtime), fn(string $version): ?array => $read->extensions($version))->toArray(),
         ]);
     }
 

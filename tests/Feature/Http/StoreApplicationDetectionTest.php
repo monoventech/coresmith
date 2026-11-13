@@ -11,6 +11,7 @@ use App\Services\Deployment\EnvironmentFile;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
+use App\Services\Runtime\RepositoryFacts;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\RepositoryFixture;
 
@@ -51,6 +52,18 @@ function storeDetectionApp(): ?Application
 {
     return Application::query()->where('name', 'Shop')->first();
 }
+
+test('the store refuses a PHP extension the server\'s PHP lacks', function () {
+    [$owner, $server] = storeDetectionServer();
+    $facts = RepositoryFixture::facts('laravel-13');
+    $manifest = $facts->json('composer.json');
+    $manifest['require']['ext-amqp'] = '*';
+    $needs = new RepositoryFacts(['composer.json' => (string) json_encode($manifest), ...array_diff_key($facts->files, ['composer.json' => true])], $facts->lockfiles, $facts->locked, $facts->markers, $facts->envKeys, $facts->complete);
+    $id = storeDetectionRead($owner, $server, new RepositoryRead($needs, installed: ['php' => ['8.5.10']], extensions: ['8.5.10' => ['ctype', 'mbstring', 'pdo_sqlite']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id])
+        ->assertSessionHasErrors(['repository_url' => "composer.json needs the amqp PHP extension, which PHP 8.5.10 on this server doesn't have, so composer install fails. Remove ext-amqp from composer.json if the app runs without it."]);
+});
 
 test('the store refuses a choice the checks know will fail and names the fix', function () {
     [$owner, $server] = storeDetectionServer();

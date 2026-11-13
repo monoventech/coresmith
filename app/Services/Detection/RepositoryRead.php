@@ -14,6 +14,7 @@ final readonly class RepositoryRead
 {
     /**
      * @param  array<string, list<string>>  $installed
+     * @param  array<string, list<string>>  $extensions
      */
     public function __construct(
         public ?RepositoryFacts $facts,
@@ -21,7 +22,16 @@ final readonly class RepositoryRead
         public ?string $failure = null,
         public bool $definitive = false,
         public array $installed = [],
+        public array $extensions = [],
     ) {}
+
+    /**
+     * @return list<string>|null
+     */
+    public function extensions(string $version): ?array
+    {
+        return $this->extensions[$version] ?? null;
+    }
 
     /**
      * @return list<string>
