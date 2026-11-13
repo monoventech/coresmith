@@ -61,6 +61,7 @@ use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\NativeGemTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\ResolvedRuntime;
@@ -884,8 +885,29 @@ final class DeployApplication implements ShouldQueue
         }
 
         $this->mark(DeploymentPhases::DEPENDENCIES, 'installing dependencies');
+
+        if ($this->deployment->application->type === ApplicationType::Ruby) {
+            $this->installGemTools($connection, $release);
+        }
+
         $this->enableCorepackCommands($connection, $stack);
         $this->runInRelease($connection, $release, $stack, $steps, DeploymentPhases::DEPENDENCIES, self::DEPENDENCY_RETRIES);
+    }
+
+    private function installGemTools(SSHConnection $connection, string $release): void
+    {
+        $tools = app(NativeGemTools::class);
+        $lockfile = (new ReleasePaths($this->deployment->application))->appDirectory($release) . '/Gemfile.lock';
+        $needed = $tools->needed($connection->server(), $connection->execute($tools->find($lockfile), sudo: true)->output);
+        $missing = $tools->missing($connection, array_values(array_unique(array_merge(...array_values($needed)))));
+
+        if ($missing === []) {
+            return;
+        }
+
+        $gems = array_keys(array_filter($needed, fn(array $packages): bool => array_intersect($packages, $missing) !== []));
+        $this->appendLog($this->stamp() . ' deps: installing ' . implode(', ', $missing) . ', which ' . implode(' and ', $gems) . (count($gems) === 1 ? ' needs' : ' need') . ' to build');
+        $tools->install($connection, $missing);
     }
 
     private function enableCorepackCommands(SSHConnection $connection, Stack $stack): void
