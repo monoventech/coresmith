@@ -1205,7 +1205,7 @@ final class DeployApplication implements ShouldQueue
 
                 if ($attempt > $retries || !$this->looksLikeNetwork($result->output) || DeploymentCancellation::requested($this->deployment)) {
                     if ($phase === DeploymentPhases::MIGRATIONS) {
-                        $this->failureReason = DatabaseFailure::reason($result->output) ?? $this->failureReason;
+                        $this->failureReason = DatabaseFailure::reason($result->output, $this->deployment->application->type) ?? $this->failureReason;
                     }
 
                     $result->throw();
