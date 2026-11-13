@@ -222,7 +222,7 @@ async function remove(page: Page, name: string): Promise<void> {
         'sudo',
         'bash',
         '-c',
-        `rm -rf /var/coresmith/apps/${prefix}* /etc/coresmith/env/${prefix}* /home/coresmith-app-${prefix}*`
+        `for u in $(awk -F: '$1 ~ /^coresmith-app-${prefix}/ {print $1}' /etc/passwd); do userdel -r "$u" 2>/dev/null; done; rm -rf /var/coresmith/apps/${prefix}* /etc/coresmith/env/${prefix}* /home/coresmith-app-${prefix}*`
     ])
 }
 
