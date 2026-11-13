@@ -10,6 +10,7 @@ use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\SSHConnection;
 use Closure;
 use phpseclib3\Crypt\Common\PrivateKey;
+use phpseclib3\Exception\BadDecryptionException;
 use phpseclib3\Exception\ConnectionClosedException;
 use phpseclib3\Exception\UnableToConnectException;
 
@@ -50,6 +51,9 @@ final class FakeSSHTransport implements SSHTransport
 
     /** @var array<string, int> */
     private array $drops = [];
+
+    /** @var array<string, int> */
+    private array $corruptions = [];
 
     /** @var array<string, string> */
     private array $timeouts = [];
@@ -143,6 +147,13 @@ final class FakeSSHTransport implements SSHTransport
     public function dropConnectionOn(string $needle, int $times = 1): self
     {
         $this->drops[$needle] = $times;
+
+        return $this;
+    }
+
+    public function corruptPacketOn(string $needle, int $times = 1): self
+    {
+        $this->corruptions[$needle] = $times;
 
         return $this;
     }
@@ -331,6 +342,8 @@ final class FakeSSHTransport implements SSHTransport
             }
         }
 
+        $this->corrupt($command);
+
         foreach ($this->timeouts as $needle => $partialOutput) {
             if (str_contains($command, $needle)) {
                 $this->timedOut = true;
@@ -404,7 +417,19 @@ final class FakeSSHTransport implements SSHTransport
 
     public function uploadContent(string $content, string $remotePath): void
     {
+        $this->corrupt($remotePath);
         $this->uploads[$remotePath] = $content;
+    }
+
+    private function corrupt(string $subject): void
+    {
+        foreach ($this->corruptions as $needle => $remaining) {
+            if ($remaining > 0 && str_contains($subject, $needle)) {
+                $this->corruptions[$needle] = $remaining - 1;
+
+                throw new BadDecryptionException('Derived authentication tag and supplied authentication tag do not match');
+            }
+        }
     }
 
     public function disconnect(): void

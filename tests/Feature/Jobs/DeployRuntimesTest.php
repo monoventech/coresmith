@@ -13,7 +13,9 @@ use App\Jobs\DetectStaleDeployments;
 use App\Jobs\InstallRuntimes;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Server;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Runtime\NativeGemTools;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
@@ -122,6 +124,55 @@ test('a rails deploy records which worker gems its lockfile locks on the deploym
         ->and($deployment->fresh()->stack['gems'])->toBe(['sidekiq' => false, 'solid_queue' => true])
         ->and($application->fresh()->stack['gems'])->toBe(['sidekiq' => false, 'solid_queue' => true]);
 });
+
+function stackRailsWithGems(string $found, string $missing): array
+{
+    $application = stackApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'ruby_version' => null]);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['.ruby-version' => "3.4.10\n", 'Gemfile' => "source 'https://rubygems.org'\n"], [], ['rails' => '8.0.2']))
+        ->respondTo('grep -ohE', $found)
+        ->respondTo("|| echo 'cmake'", $missing);
+
+    stackDeploy($deployment, $transport);
+
+    return [$deployment->fresh(), collect($transport->commands())];
+}
+
+test('a rails app whose lockfile has gems that compile with cmake or libclang gets the missing ones installed before bundle install', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackRailsWithGems("rb_sys\nrugged\n", "cmake\n");
+    $install = $commands->search(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, "'cmake'"));
+    $bundle = $commands->search(fn(string $command): bool => str_contains($command, 'bundle install'));
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($install)->toBeInt()
+        ->and($install)->toBeLessThan($bundle)
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, 'libclang-dev')))->toBeFalse()
+        ->and($deployment->log)->toContain('deps: installing cmake, which rugged needs to build');
+});
+
+test('a rails app whose build tools are already there, or whose lockfile needs none, installs no packages for its gems', function (string $found, string $missing) {
+    Queue::fake();
+    [$deployment, $commands] = stackRailsWithGems($found, $missing);
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'apt-get install') && (str_contains($command, 'cmake') || str_contains($command, 'libclang-dev'))))->toBeFalse();
+})->with([
+    'already installed' => ["rugged\n", ''],
+    'no such gems' => ['', ''],
+]);
+
+test('the gems that need system packages to compile map to each family\'s package', function (string $os, array $packages) {
+    $tools = app(NativeGemTools::class);
+
+    expect($tools->needed(Server::factory()->make(['os_name' => $os]), "rb_sys\nrugged\n"))->toBe(['rb_sys' => [$packages[1]], 'rugged' => [$packages[0]]]);
+})->with([
+    ['ubuntu', ['cmake', 'libclang-dev']],
+    ['rocky', ['cmake', 'clang-devel']],
+]);
 
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();

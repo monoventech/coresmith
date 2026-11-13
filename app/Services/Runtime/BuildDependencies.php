@@ -92,6 +92,11 @@ final class BuildDependencies
         'amzn' => 'dnf',
     ];
 
+    public static function family(?string $osName): ?string
+    {
+        return self::FAMILIES[$osName] ?? null;
+    }
+
     /**
      * @return list<string>
      */

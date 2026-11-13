@@ -105,15 +105,16 @@ test('a PHP app without composer.json skips composer install', function () {
     $commands = app(DeploymentCommands::class);
 
     expect($commands->dependencies($application, new Stack(files: ['index.php'])))->toBe([])
-        ->and($commands->dependencies($application, new Stack(files: ['composer.json', 'composer.lock', 'index.php'])))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction'])
-        ->and($commands->dependencies($application, new Stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
+        ->and($commands->dependencies($application, new Stack(files: ['composer.json', 'composer.lock', 'index.php'])))->toBe(['[ -e .env ] || touch .env', 'composer install --no-dev --optimize-autoloader --no-interaction'])
+        ->and($commands->dependencies($application, new Stack))->toBe(['[ -e .env ] || touch .env', 'composer install --no-dev --optimize-autoloader --no-interaction']);
 });
 
-test('a Symfony app without a committed .env gets an empty one before composer runs, since Symfony will not boot without the file', function () {
+test('a Symfony or plain PHP app without a committed .env gets an empty one before composer runs, since Symfony and Dotenv\'s load() will not start without the file', function () {
     $commands = app(DeploymentCommands::class);
     $stack = new Stack(files: ['composer.json', 'composer.lock', 'bin/console']);
 
     expect($commands->dependencies(new Application(['type' => ApplicationType::Php, 'framework' => 'symfony']), $stack))->toBe(['[ -e .env ] || touch .env', 'composer install --no-dev --optimize-autoloader --no-interaction'])
+        ->and($commands->dependencies(new Application(['type' => ApplicationType::Php, 'framework' => null]), $stack))->toBe(['[ -e .env ] || touch .env', 'composer install --no-dev --optimize-autoloader --no-interaction'])
         ->and($commands->dependencies(new Application(['type' => ApplicationType::Php, 'framework' => 'laravel']), $stack))->toBe(['composer install --no-dev --optimize-autoloader --no-interaction']);
 });
 

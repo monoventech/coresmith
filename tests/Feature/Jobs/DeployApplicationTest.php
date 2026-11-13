@@ -583,6 +583,17 @@ test('an ssh connection that drops before the swap is reopened and the phase run
         ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during build, reconnecting');
 });
 
+test('an ssh connection that drops after the swap is reopened and the new release is started once more', function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport()->corruptPacketOn("systemctl enable 'coresmith-app-my-app-fpm'");
+
+    deploy($deployment, $transport);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($deployment->fresh()->log)->toContain('the SSH connection dropped during watch, reconnecting')
+        ->and(count(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, "systemctl enable 'coresmith-app-my-app-fpm'"))))->toBe(2);
+});
+
 test('a release the memory limit keeps killing says it ran out of memory and to pick a bigger size', function () {
     Event::fake([DeploymentFailed::class]);
     $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000', 'app_size' => 'small']))->create();
