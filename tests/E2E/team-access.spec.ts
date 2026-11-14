@@ -123,6 +123,24 @@ test.describe('what each member sees', () => {
         await expect(dialog(page).getByTestId('share-database')).toHaveCount(0)
     })
 
+    test('an app and a database with the same name on a shared server stay apart', async ({ page }) => {
+        await gotoSettings(page, 'Team')
+        await page.getByRole('button', { name: 'Access for Rowan Hale' }).click()
+        await dialog(page)
+            .getByRole('switch', { name: /^Everything in / })
+            .click()
+        await dialog(page).getByRole('checkbox', { name: 'anvil-01', exact: true }).click()
+        await dialog(page)
+            .getByRole('button', { name: / on anvil-01$/ })
+            .click()
+
+        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse', exact: true })).toHaveCount(1)
+        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse Database', exact: true })).toHaveCount(1)
+        await dialog(page).getByRole('checkbox', { name: 'warehouse Database', exact: true }).click()
+        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse', exact: true })).toBeChecked()
+        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse Database', exact: true })).not.toBeChecked()
+    })
+
     for (const theme of ['light', 'dark'] as const) {
         test(`the access dialog with a server's apps held back or locked is accessible in ${theme}`, async ({
             page

@@ -405,13 +405,16 @@
                                                         />
                                                         <Label
                                                             for="share-database-{database.id}"
-                                                            class="min-w-0 truncate font-mono text-[13px] font-normal"
-                                                            >{database.name}</Label
+                                                            class="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-normal"
                                                         >
-                                                        <span
-                                                            class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground"
-                                                            >Database</span
-                                                        >
+                                                            <span class="min-w-0 truncate font-mono"
+                                                                >{database.name}</span
+                                                            >
+                                                            <span
+                                                                class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground"
+                                                                >Database</span
+                                                            >
+                                                        </Label>
                                                     </div>
                                                 {/each}
                                             {/if}
