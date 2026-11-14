@@ -40,6 +40,7 @@ final readonly class PythonTooling
         public ?string $module,
         public bool $collectstatic = false,
         public ?string $migrate = null,
+        public ?string $celery = null,
     ) {}
 
     /**
@@ -60,11 +61,13 @@ final readonly class PythonTooling
             return null;
         }
 
-        return new self($manager, $server, $module, ($data['collectstatic'] ?? false) === true, in_array($migrate, self::MIGRATIONS, true) ? $migrate : null);
+        $celery = $data['celery'] ?? null;
+
+        return new self($manager, $server, $module, ($data['collectstatic'] ?? false) === true, in_array($migrate, self::MIGRATIONS, true) ? $migrate : null, is_string($celery) && preg_match(self::MODULE, $celery) === 1 ? $celery : null);
     }
 
     /**
-     * @return array{manager: string, server: string, module: ?string, collectstatic: bool, migrate: ?string}
+     * @return array{manager: string, server: string, module: ?string, collectstatic: bool, migrate: ?string, celery: ?string}
      */
     public function toArray(): array
     {
@@ -74,6 +77,7 @@ final readonly class PythonTooling
             'module' => $this->module,
             'collectstatic' => $this->collectstatic,
             'migrate' => $this->migrate,
+            'celery' => $this->celery,
         ];
     }
 }

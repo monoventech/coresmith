@@ -263,7 +263,7 @@ test('a Django app deploys into a virtualenv, collects its static files, migrate
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($application->fresh()->python_version)->toBe('3.13.18')
-        ->and($application->fresh()->stack['language_tooling'])->toBe(['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'collectstatic' => true, 'migrate' => 'django'])
+        ->and($application->fresh()->stack['language_tooling'])->toBe(['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'collectstatic' => true, 'migrate' => 'django', 'celery' => null])
         ->and(array_map($position, ['uv venv --clear', '-r requirements.txt', 'collectstatic --noinput', 'manage.py migrate --noinput']))->each->toBeInt()
         ->and($position('uv venv --clear'))->toBeLessThan($position('-r requirements.txt'))
         ->and($position('-r requirements.txt'))->toBeLessThan($position('collectstatic --noinput'))

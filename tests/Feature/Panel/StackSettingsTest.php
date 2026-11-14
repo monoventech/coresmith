@@ -32,6 +32,11 @@ test('each stack is offered only the smart toggles that apply to it', function (
     'a Node API' => [['type' => ApplicationType::Js, 'js_runtime' => 'node'], ['maintenance_mode', 'auto_deploy']],
     'a static site' => [['type' => ApplicationType::Static], ['maintenance_mode', 'auto_deploy']],
     'an app with no repository' => [['type' => ApplicationType::Php, 'repository_url' => null], ['maintenance_mode']],
+    'Django' => [['type' => ApplicationType::Python, 'framework' => 'django', 'stack' => ['language_tooling' => ['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application']]], ['maintenance_mode', 'auto_deploy']],
+    'Django with Celery' => [['type' => ApplicationType::Python, 'framework' => 'django', 'stack' => ['language_tooling' => ['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'celery' => 'shop']]], ['celery_worker', 'celery_beat', 'maintenance_mode', 'auto_deploy']],
+    'FastAPI with Celery' => [['type' => ApplicationType::Python, 'framework' => 'fastapi', 'stack' => ['language_tooling' => ['manager' => 'uv', 'server' => 'uvicorn', 'module' => 'app.main:app', 'celery' => 'worker:app']]], ['celery_worker', 'celery_beat', 'maintenance_mode', 'auto_deploy']],
+    'Python still running a Celery worker it no longer has' => [['type' => ApplicationType::Python, 'framework' => 'flask', 'processes' => [['name' => 'celery', 'command' => 'celery -A shop worker --loglevel=INFO --concurrency=2']], 'stack' => ['language_tooling' => ['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'app:app']]], ['celery_worker', 'maintenance_mode', 'auto_deploy']],
+    'Rails with a celery entry somehow' => [['type' => ApplicationType::Ruby, 'framework' => 'rails', 'stack' => ['language_tooling' => ['celery' => 'shop']]], ['maintenance_mode', 'auto_deploy']],
 ]);
 
 test('the cron dialog suggests a command in the app\'s own stack', function (array $attributes, string $example) {
@@ -47,4 +52,6 @@ test('the cron dialog suggests a command in the app\'s own stack', function (arr
     'Bun' => [['type' => ApplicationType::Js, 'js_runtime' => 'bun'], 'bun run cleanup'],
     'Deno' => [['type' => ApplicationType::Js, 'js_runtime' => 'deno'], 'deno task cleanup'],
     'a static site' => [['type' => ApplicationType::Static], 'sh scripts/nightly.sh'],
+    'Django' => [['type' => ApplicationType::Python, 'framework' => 'django'], 'python manage.py clearsessions'],
+    'Flask' => [['type' => ApplicationType::Python, 'framework' => 'flask'], 'python cron/cleanup.py'],
 ]);

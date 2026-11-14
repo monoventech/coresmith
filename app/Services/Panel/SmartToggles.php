@@ -21,6 +21,8 @@ use App\Services\AutoDeploy\AutoDeployStatus;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\Stack;
 use App\Services\Server\PortAllocator;
+use App\Stacks\Python;
+use App\Stacks\PythonTooling;
 use InvalidArgumentException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -35,6 +37,10 @@ final class SmartToggles
     public const SIDEKIQ = 'sidekiq';
 
     public const SOLID_QUEUE = 'solid_queue';
+
+    public const CELERY = 'celery_worker';
+
+    public const CELERY_BEAT = 'celery_beat';
 
     public const AUTO_DEPLOY = 'auto_deploy';
 
@@ -70,6 +76,8 @@ final class SmartToggles
         self::QUEUE => ['queue', self::QUEUE_COMMAND],
         self::SIDEKIQ => ['sidekiq', self::SIDEKIQ_COMMAND],
         self::SOLID_QUEUE => ['jobs', self::SOLID_QUEUE_COMMAND],
+        self::CELERY => ['celery', ''],
+        self::CELERY_BEAT => ['beat', ''],
     ];
 
     private const GEMS = [
@@ -92,6 +100,8 @@ final class SmartToggles
             $framework === 'laravel' && (($this->packages($application)['reverb'] ?? false) === true || (app(Reverb::class)->on($application) && !$this->dropped($application, 'reverb'))) ? self::REVERB : null,
             $rails && $this->offers($application, self::SIDEKIQ) ? self::SIDEKIQ : null,
             $rails && $this->offers($application, self::SOLID_QUEUE) ? self::SOLID_QUEUE : null,
+            $this->offersCelery($application, self::CELERY) ? self::CELERY : null,
+            $this->offersCelery($application, self::CELERY_BEAT) ? self::CELERY_BEAT : null,
             self::MAINTENANCE,
             filled($application->repository_url) ? self::AUTO_DEPLOY : null,
         ]));
@@ -170,6 +180,15 @@ final class SmartToggles
                 'on' => $this->isOn($application, $key),
                 'disabled' => false,
             ],
+            self::CELERY, self::CELERY_BEAT => [
+                'key' => $key,
+                'label' => $this->label($key),
+                'description' => 'celery -A ' . ($this->celeryApp($application) ?? '…') . ($key === self::CELERY ? ' worker' : ' beat'),
+                'busy_on' => $key === self::CELERY ? 'Starting the Celery worker…' : 'Starting Celery beat…',
+                'busy_off' => 'Stopping the unit and removing it…',
+                'on' => $this->isOn($application, $key),
+                'disabled' => !$this->isOn($application, $key) && $this->celeryApp($application) === null,
+            ],
             self::INERTIA_SSR => [
                 'key' => $key,
                 'label' => 'Inertia SSR',
@@ -213,7 +232,7 @@ final class SmartToggles
     {
         return match ($key) {
             self::MAINTENANCE => (bool) (((array) $application->toggles)[self::MAINTENANCE] ?? false),
-            self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->hasProcess($application, self::WORKERS[$key][0]),
+            self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE, self::CELERY, self::CELERY_BEAT => $this->hasProcess($application, self::WORKERS[$key][0]),
             self::SCHEDULER => app(CronJobs::class)->hasScheduler($application),
             self::AUTO_DEPLOY => (bool) $application->quick_deploy,
             self::REVERB => app(Reverb::class)->on($application),
@@ -229,6 +248,8 @@ final class SmartToggles
             self::SCHEDULER => 'Scheduler',
             self::SIDEKIQ => 'Sidekiq',
             self::SOLID_QUEUE => 'Solid Queue',
+            self::CELERY => 'Celery worker',
+            self::CELERY_BEAT => 'Celery beat',
             self::AUTO_DEPLOY => 'Auto deploy',
             self::REVERB => 'Reverb websockets',
             self::INERTIA_SSR => 'Inertia SSR',
@@ -268,6 +289,16 @@ final class SmartToggles
         if (($current['command'] ?? null) !== $wanted) {
             $this->replaceProcess($application, 'reverb', $wanted === null ? null : ['name' => 'reverb', 'command' => $wanted]);
             $dropped = $wanted === null ? [...$dropped, 'reverb'] : $dropped;
+        }
+
+        foreach ([self::CELERY, self::CELERY_BEAT] as $key) {
+            $name = self::WORKERS[$key][0];
+            $wanted = $this->celeryCommand($application, $key);
+            $running = collect((array) $application->processes)->first(fn(mixed $process): bool => is_array($process) && ($process['name'] ?? null) === $name);
+
+            if ($running !== null && $wanted !== null && ($running['command'] ?? null) !== $wanted) {
+                $this->replaceProcess($application, $name, ['name' => $name, 'command' => $wanted]);
+            }
         }
 
         $ssr = $this->ssrOn($application) && $application->ssr_port !== null && $this->ssrBuilt((array) $application->stack) ? $this->ssrCommand($application) : null;
@@ -334,7 +365,7 @@ final class SmartToggles
 
         match ($key) {
             self::MAINTENANCE => $this->maintenance($application, $on),
-            self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE => $this->worker($application, $key, $on),
+            self::QUEUE, self::SIDEKIQ, self::SOLID_QUEUE, self::CELERY, self::CELERY_BEAT => $this->worker($application, $key, $on),
             self::SCHEDULER => $this->scheduler($application, $on),
             self::AUTO_DEPLOY => $this->autoDeploy($application, $on),
             self::REVERB => $this->reverb($application, $on),
@@ -383,7 +414,12 @@ final class SmartToggles
     private function worker(Application $application, string $key, bool $on): void
     {
         [$name, $command] = self::WORKERS[$key];
-        $command = $key === self::QUEUE ? $this->queueCommand($application) : $command;
+        $command = match ($key) {
+            self::QUEUE => $this->queueCommand($application),
+            self::CELERY, self::CELERY_BEAT => $this->celeryCommand($application, $key),
+            default => $command,
+        };
+        $on = $on && $command !== null;
 
         $this->replaceProcess($application, $name, $on ? ['name' => $name, 'command' => $command] : null);
 
@@ -490,6 +526,35 @@ final class SmartToggles
     private function dropped(Application $application, string $package): bool
     {
         return ($this->packages($application)[$package] ?? null) === false;
+    }
+
+    public function celeryCommand(Application $application, string $key): ?string
+    {
+        $celery = $this->celeryApp($application);
+
+        if ($celery === null) {
+            return null;
+        }
+
+        return $key === self::CELERY
+            ? "celery -A {$celery} worker --loglevel=INFO --concurrency=" . Python::workers($application)
+            : "celery -A {$celery} beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule";
+    }
+
+    private function celeryApp(Application $application): ?string
+    {
+        if ($application->type !== ApplicationType::Python) {
+            return null;
+        }
+
+        $celery = ((array) (((array) $application->stack)['language_tooling'] ?? []))['celery'] ?? null;
+
+        return is_string($celery) && preg_match(PythonTooling::MODULE, $celery) === 1 ? $celery : null;
+    }
+
+    private function offersCelery(Application $application, string $key): bool
+    {
+        return $application->type === ApplicationType::Python && ($this->celeryApp($application) !== null || $this->isOn($application, $key));
     }
 
     private function offers(Application $application, string $key): bool

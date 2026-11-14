@@ -78,6 +78,29 @@ final readonly class PythonDetection
         return $preset === null ? $this->generic($facts) : $preset->app($facts, PythonDependencies::from($facts));
     }
 
+    public function celery(RepositoryFacts $facts): ?string
+    {
+        if (!PythonDependencies::from($facts)->has('celery')) {
+            return null;
+        }
+
+        foreach ($facts->matching('*/celery.py') as $path => $source) {
+            if (PythonSource::assigned($source, ['Celery']) !== null && PythonSource::module(dirname($path) . '.py') !== null) {
+                return dirname($path);
+            }
+        }
+
+        foreach (['celery_app.py', 'tasks.py', 'worker.py'] as $file) {
+            $variable = PythonSource::assigned((string) $facts->file($file), ['Celery']);
+
+            if ($variable !== null) {
+                return basename($file, '.py') . ':' . $variable;
+            }
+        }
+
+        return null;
+    }
+
     private function generic(RepositoryFacts $facts): PythonApp
     {
         $web = $this->procfileWeb($facts);

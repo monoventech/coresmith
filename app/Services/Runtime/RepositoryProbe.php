@@ -21,10 +21,10 @@ final class RepositoryProbe
         'svelte.config.js', 'svelte.config.ts', 'next.config.js', 'next.config.mjs', 'next.config.ts', 'nuxt.config.ts', 'nuxt.config.js',
         'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml', 'angular.json',
         '.python-version', 'runtime.txt', 'pyproject.toml', 'requirements.txt', 'Pipfile', 'Procfile', 'manage.py',
-        'app.py', 'main.py', 'wsgi.py', 'asgi.py', 'server.py', 'application.py', 'run.py', 'api.py',
+        'app.py', 'main.py', 'wsgi.py', 'asgi.py', 'server.py', 'application.py', 'run.py', 'api.py', 'tasks.py', 'worker.py', 'celery_app.py',
     ];
 
-    public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py'];
+    public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py'];
 
     public const LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'deno.lock'];
 

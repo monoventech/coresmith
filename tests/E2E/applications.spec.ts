@@ -126,6 +126,17 @@ test.describe('an application', () => {
         await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
 
+    test('a Django app with Celery is offered its worker and beat, and no Laravel or Rails toggles', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'celery-tasks')
+
+        await expect(page.getByRole('main')).toContainText('Django · Python 3.14')
+        await expect(toggle(page, 'Celery worker')).not.toBeChecked()
+        await expect(page.getByTestId('toggle-celery_worker')).toContainText('celery -A tasks worker')
+        await expect(toggle(page, 'Celery beat')).not.toBeChecked()
+        await expect(toggle(page, 'Queue worker')).toHaveCount(0)
+        await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
+    })
+
     test('the current release names its commit and who shipped it', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 

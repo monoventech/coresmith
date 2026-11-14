@@ -46,7 +46,7 @@ test('a Django project runs the WSGI application its settings name, and collects
     $facts = pyFacts(['requirements.txt' => "Django==5.1.4\npsycopg2==2.9.10\n", 'manage.py' => pyManage(), 'shop/settings.py' => pySettings(), 'shop/wsgi.py' => "application = get_wsgi_application()\n"]);
 
     expect(pyDetect($facts))->toBe(['type' => 'python', 'framework' => 'django', 'js_runtime' => null, 'web' => null, 'sources' => ['type' => 'From requirements.txt', 'framework' => 'django 5.1.4 in requirements.txt, with manage.py'], 'unsettled' => []])
-        ->and(pyTooling('django', $facts))->toBe(['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'collectstatic' => true, 'migrate' => 'django'])
+        ->and(pyTooling('django', $facts))->toBe(['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'collectstatic' => true, 'migrate' => 'django', 'celery' => null])
         ->and(pyBlockers('django', $facts))->toBe([]);
 });
 
@@ -60,13 +60,13 @@ test('settings split across files are all read, whichever one sets the applicati
     ], ['uv.lock']);
 
     expect(pyDetect($facts)['sources'])->toBe(['type' => 'From pyproject.toml and uv.lock', 'framework' => 'django in pyproject.toml, with manage.py'])
-        ->and(pyTooling('django', $facts))->toBe(['manager' => 'uv', 'server' => 'gunicorn', 'module' => 'config.wsgi:application', 'collectstatic' => true, 'migrate' => 'django']);
+        ->and(pyTooling('django', $facts))->toBe(['manager' => 'uv', 'server' => 'gunicorn', 'module' => 'config.wsgi:application', 'collectstatic' => true, 'migrate' => 'django', 'celery' => null]);
 });
 
 test('a Django project with an ASGI application, as Channels sets, runs it under uvicorn', function () {
     $facts = pyFacts(['requirements.txt' => "django\nchannels\n", 'manage.py' => pyManage(), 'shop/settings.py' => pySettings("WSGI_APPLICATION = 'shop.wsgi.application'\nASGI_APPLICATION = 'shop.asgi.application'\n")]);
 
-    expect(pyTooling('django', $facts))->toBe(['manager' => 'pip', 'server' => 'uvicorn', 'module' => 'shop.asgi:application', 'collectstatic' => false, 'migrate' => 'django']);
+    expect(pyTooling('django', $facts))->toBe(['manager' => 'pip', 'server' => 'uvicorn', 'module' => 'shop.asgi:application', 'collectstatic' => false, 'migrate' => 'django', 'celery' => null]);
 });
 
 test('without WSGI_APPLICATION in its settings, a Django project runs the wsgi.py beside them', function () {
@@ -111,7 +111,7 @@ test('a Flask app runs the app its module makes', function (array $files, array 
 
     expect(pyDetect($facts)['framework'])->toBe('flask')
         ->and(pyDetect($facts)['sources']['framework'])->toBe($source)
-        ->and(pyTooling('flask', $facts))->toBe(['manager' => $markers === [] ? 'pip' : 'poetry', 'server' => 'gunicorn', 'module' => $module, 'collectstatic' => false, 'migrate' => null]);
+        ->and(pyTooling('flask', $facts))->toBe(['manager' => $markers === [] ? 'pip' : 'poetry', 'server' => 'gunicorn', 'module' => $module, 'collectstatic' => false, 'migrate' => null, 'celery' => null]);
 })->with([
     'app.py' => [['requirements.txt' => "Flask==3.1.0\n", 'app.py' => "from flask import Flask\n\napp = Flask(__name__)\n"], [], 'app:app', 'flask 3.1.0 in requirements.txt'],
     'a factory in a package' => [['pyproject.toml' => "[tool.poetry.dependencies]\npython = \"^3.12\"\nflask = \"^3.1\"\n", 'shop/__init__.py' => "from flask import Flask\n\n\ndef create_app(config=None):\n    app = Flask(__name__)\n    return app\n"], ['poetry.lock'], 'shop:create_app()', 'flask in pyproject.toml'],
@@ -124,9 +124,9 @@ test('a FastAPI or Starlette app runs under uvicorn, and Alembic migrates when t
     expect(pyDetect($facts)['framework'])->toBe($framework)
         ->and(pyTooling($framework, $facts))->toBe($tooling);
 })->with([
-    'app/main.py with Alembic' => [['pyproject.toml' => "[project]\nname = \"shop\"\ndependencies = [\"fastapi[standard]>=0.115\", \"alembic\", \"sqlmodel\"]\n", 'app/main.py' => "from fastapi import FastAPI\n\napp: FastAPI = FastAPI(title=\"Shop\")\n"], ['alembic.ini'], 'fastapi', ['manager' => 'pyproject', 'server' => 'uvicorn', 'module' => 'app.main:app', 'collectstatic' => false, 'migrate' => 'alembic']],
-    'a factory in main.py' => [['requirements.txt' => "fastapi\n", 'main.py' => "from fastapi import FastAPI\n\n\ndef create_app() -> FastAPI:\n    return FastAPI()\n"], [], 'fastapi', ['manager' => 'pip', 'server' => 'uvicorn', 'module' => 'main:create_app()', 'collectstatic' => false, 'migrate' => null]],
-    'Starlette' => [['requirements.txt' => "starlette\n", 'main.py' => "from starlette.applications import Starlette\n\napp = Starlette(routes=[])\n"], [], 'starlette', ['manager' => 'pip', 'server' => 'uvicorn', 'module' => 'main:app', 'collectstatic' => false, 'migrate' => null]],
+    'app/main.py with Alembic' => [['pyproject.toml' => "[project]\nname = \"shop\"\ndependencies = [\"fastapi[standard]>=0.115\", \"alembic\", \"sqlmodel\"]\n", 'app/main.py' => "from fastapi import FastAPI\n\napp: FastAPI = FastAPI(title=\"Shop\")\n"], ['alembic.ini'], 'fastapi', ['manager' => 'pyproject', 'server' => 'uvicorn', 'module' => 'app.main:app', 'collectstatic' => false, 'migrate' => 'alembic', 'celery' => null]],
+    'a factory in main.py' => [['requirements.txt' => "fastapi\n", 'main.py' => "from fastapi import FastAPI\n\n\ndef create_app() -> FastAPI:\n    return FastAPI()\n"], [], 'fastapi', ['manager' => 'pip', 'server' => 'uvicorn', 'module' => 'main:create_app()', 'collectstatic' => false, 'migrate' => null, 'celery' => null]],
+    'Starlette' => [['requirements.txt' => "starlette\n", 'main.py' => "from starlette.applications import Starlette\n\napp = Starlette(routes=[])\n"], [], 'starlette', ['manager' => 'pip', 'server' => 'uvicorn', 'module' => 'main:app', 'collectstatic' => false, 'migrate' => null, 'celery' => null]],
 ]);
 
 test('a factory runs through uvicorn\'s --factory flag', function () {
@@ -139,7 +139,7 @@ test('an app on another framework runs what the Procfile\'s web line names', fun
     $facts = pyFacts(['requirements.txt' => "bottle\ngunicorn\nuvicorn\n", 'Procfile' => $procfile]);
 
     expect(pyDetect($facts))->toBe(['type' => 'python', 'framework' => '', 'js_runtime' => null, 'web' => null, 'sources' => ['type' => 'From requirements.txt', 'framework' => "web: {$program} in Procfile"], 'unsettled' => []])
-        ->and(pyTooling(null, $facts))->toBe(['manager' => 'pip', 'server' => $server, 'module' => $module, 'collectstatic' => false, 'migrate' => null]);
+        ->and(pyTooling(null, $facts))->toBe(['manager' => 'pip', 'server' => $server, 'module' => $module, 'collectstatic' => false, 'migrate' => null, 'celery' => null]);
 })->with([
     'gunicorn' => ["web: gunicorn hello:app --log-file -\nworker: python worker.py\n", 'gunicorn', 'gunicorn', 'hello:app'],
     'gunicorn with uvicorn workers' => ["web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app\n", 'gunicorn', 'uvicorn', 'main:app'],

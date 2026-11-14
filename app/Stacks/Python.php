@@ -123,9 +123,14 @@ final readonly class Python implements Language
 
     public function processEnvironment(Application $application): array
     {
+        return ['PYTHONUNBUFFERED' => '1', 'WEB_CONCURRENCY' => (string) self::workers($application)];
+    }
+
+    public static function workers(Application $application): int
+    {
         $size = AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small;
 
-        return ['PYTHONUNBUFFERED' => '1', 'WEB_CONCURRENCY' => (string) (self::WORKERS[$size->value] ?? self::WORKERS['small'])];
+        return self::WORKERS[$size->value] ?? self::WORKERS['small'];
     }
 
     public function listenEnvironment(Application $application): array
@@ -170,7 +175,7 @@ final readonly class Python implements Language
     {
         $app = $this->detection->app($application->framework, $facts);
 
-        return (new PythonTooling(PythonTooling::managerFor($facts), $app->server, $app->module, $app->collectstatic, $app->migrate))->toArray();
+        return (new PythonTooling(PythonTooling::managerFor($facts), $app->server, $app->module, $app->collectstatic, $app->migrate, $this->detection->celery($facts)))->toArray();
     }
 
     public function pathDirectories(string $appDirectory): array

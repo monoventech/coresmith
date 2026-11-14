@@ -118,7 +118,7 @@ test('a stack keeps the language\'s tooling through storage', function () {
     $tooling = new PythonTooling('poetry', 'uvicorn', 'app.main:app', collectstatic: false, migrate: 'alembic');
     $stored = pythonDeployStack($tooling)->toArray();
 
-    expect($stored['language_tooling'])->toBe(['manager' => 'poetry', 'server' => 'uvicorn', 'module' => 'app.main:app', 'collectstatic' => false, 'migrate' => 'alembic'])
+    expect($stored['language_tooling'])->toBe(['manager' => 'poetry', 'server' => 'uvicorn', 'module' => 'app.main:app', 'collectstatic' => false, 'migrate' => 'alembic', 'celery' => null])
         ->and(Stack::fromArray($stored)->languageTooling)->toBe($stored['language_tooling'])
         ->and(Stack::fromArray($stored)->withRuntimes([])->languageTooling)->toBe($stored['language_tooling'])
         ->and(PythonTooling::fromArray(['manager' => 'npm', 'server' => 'gunicorn']))->toBeNull()
