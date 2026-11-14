@@ -73,6 +73,7 @@ use App\Services\SafeName;
 use App\Services\Server\PortBlockGuard;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use App\Stacks\Php;
 use Closure;
 use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -451,7 +452,7 @@ final class DeployApplication implements ShouldQueue
     {
         $asdf = app(AsdfManager::class);
         $binaries = app(RuntimeBinaries::class);
-        $facts = $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(RepositoryProbe::class)->read($connection, $paths->appDirectory($release), $application));
+        $facts = $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(RepositoryProbe::class)->read($connection, $paths->appDirectory($release), $application, trim((string) $application->directory, '/')));
         $this->refuseUnrunnable($application, $facts);
         $this->fillMissingSecrets($application, $facts);
         $stack = $this->reconnecting($connection, DeploymentPhases::CLONE, function () use ($connection, $application, $facts, $asdf, $binaries): Stack {
@@ -1219,7 +1220,7 @@ final class DeployApplication implements ShouldQueue
                     break;
                 }
 
-                if (in_array($step, DeploymentCommands::LARAVEL_CACHES, true) && !DeploymentCancellation::requested($this->deployment)) {
+                if (in_array($step, Php::LARAVEL_CACHES, true) && !DeploymentCancellation::requested($this->deployment)) {
                     $this->appendLog("{$step} failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.");
 
                     break;

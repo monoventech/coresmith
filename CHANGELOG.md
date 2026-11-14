@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.9 (2026-11-14)
+
+### Added
+- feat: language providers, Rack apps, apps in a repository's folders, settings that follow the stack, and the installer's copy (#77)
+
 ## v0.8.8 (2026-11-14)
 
 ### Fixed

@@ -131,7 +131,7 @@ test('a domain that is not ready yet: the summary gives the working link, the re
     $output = installAddressFlat($process);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
-        ->and($output)->toContain('Coresmith installed successfully!')
+        ->and($output)->toContain('Coresmith is installed and answering')
         ->toContain('Address: https://192.168.0.248 ')
         ->toContain('https://192.168.0.248/install?token=abc')
         ->toContain('Your browser will warn about the certificate at https://192.168.0.248, because Caddy signs it itself. Continue past the warning to open Coresmith.')
@@ -146,7 +146,7 @@ test('a domain that works is the address the summary gives, with its notes and n
         BASH, ['PANEL_HOST' => 'beelink.coresmith.io', 'PANEL_URL' => 'https://beelink.coresmith.io', 'TARGET_DOMAIN' => 'beelink.coresmith.io', 'ADDRESS_LINES' => INSTALL_ADDRESS_NOTE]);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
-        ->and(installAddressFlat($process))->toContain('Coresmith installed successfully!')
+        ->and(installAddressFlat($process))->toContain('Coresmith is installed and answering')
         ->toContain('Address: https://beelink.coresmith.io ')
         ->toContain(INSTALL_ADDRESS_NOTE)
         ->not->toContain("isn't on")
@@ -178,14 +178,14 @@ test('the summary warns about the certificate wherever Caddy signs it itself, by
         ->and($warns)->toBe(InstallationAddress::certificate($host) === CertificateSource::Internal);
 })->with(['192.168.0.248', 'cs-r1.internal', 'panel.local', 'panel.home.arpa', 'panel.localhost', 'localhost', 'beelink.coresmith.io', 'panel.tailnet.ts.net', 'internal.example.com']);
 
-test('the summary only says installed successfully when the link it prints loads', function () {
+test('the summary only says Coresmith is answering when the link it prints loads', function () {
     $process = installAddressRun(<<<'BASH'
         link_loads() { return 1; }
         print_summary "https://192.168.0.248/install?token=abc" true false
         BASH, ['PANEL_HOST' => '192.168.0.248', 'PANEL_URL' => 'https://192.168.0.248']);
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
-        ->and(installAddressFlat($process))->not->toContain('successfully')
+        ->and(installAddressFlat($process))->not->toContain('installed and answering')
         ->toContain("Coresmith is installed, but isn't answering")
         ->toContain("https://192.168.0.248 didn't load from this server. Check Caddy's log with journalctl -u caddy -n 50.");
 });

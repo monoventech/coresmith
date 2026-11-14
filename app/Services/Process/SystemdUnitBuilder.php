@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Services\Process;
 
-use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
@@ -16,7 +15,6 @@ use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\StackDefaults;
 use App\Services\Runtime\AsdfManager;
-use App\Services\Runtime\JsTooling;
 use App\Services\SafeName;
 
 final class SystemdUnitBuilder
@@ -49,11 +47,8 @@ final class SystemdUnitBuilder
         $memoryMax = $size->memoryMaxMb();
         $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
-        $listen = $process === 'web'
-            ? "Environment=\"PORT={$application->base_port}\"\nEnvironment=\"HOST=127.0.0.1\"\n" . ($application->type === ApplicationType::Js ? "Environment=\"HOSTNAME=127.0.0.1\"\n" : '')
-            : '';
-        $defaults = app(StackDefaults::class)->process($application);
-        $production = implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($defaults), $defaults));
+        $listen = $process === 'web' ? $this->environment($application->type->language()->listenEnvironment($application)) : '';
+        $production = $this->environment(app(StackDefaults::class)->process($application));
         $command = $process === 'web' ? $command : $this->workerCommand($command);
         $umask = AppAccount::UMASK;
         $sandbox = implode('', array_map(fn(string $property): string => $property . "\n", AppSandbox::properties($application->server)));
@@ -101,28 +96,15 @@ final class SystemdUnitBuilder
 
     public function webCommand(Application $application): ?string
     {
-        return match ($application->type) {
-            ApplicationType::Js => $this->jsCommand($application),
-            ApplicationType::Ruby => $this->asdf->binaryPath('ruby', (string) $application->ruby_version, 'bundle')
-                . ' exec puma -b tcp://127.0.0.1:' . $application->base_port,
-            default => null,
-        };
+        return $application->type->language()->webCommand($application);
     }
 
-    private function jsCommand(Application $application): string
+    /**
+     * @param  array<string, string>  $variables
+     */
+    private function environment(array $variables): string
     {
-        $data = ((array) $application->stack)['tooling'] ?? null;
-        $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
-        $start = $tooling?->start ?? false;
-        $script = $tooling?->startScript ?? 'start';
-
-        return match ($application->js_runtime) {
-            'node' => $start
-                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run ' . $script
-                : $this->asdf->binaryPath('nodejs', (string) $application->node_version) . ' ' . $this->entry($application, $tooling),
-            'deno' => $this->asdf->binaryPath('deno', (string) $application->deno_version) . ($start ? ' task start' : ' run --allow-net --allow-read --allow-env main.ts'),
-            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun ' . $script : ' ' . $this->entry($application, $tooling)),
-        };
+        return implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($variables), $variables));
     }
 
     private function workerCommand(string $command): string
@@ -135,16 +117,6 @@ final class SystemdUnitBuilder
         }
 
         return str_starts_with($command, '/') ? $command : '/usr/bin/env ' . $command;
-    }
-
-    private function entry(Application $application, ?JsTooling $tooling): string
-    {
-        return match (strtolower((string) $application->framework)) {
-            'sveltekit' => 'build/index.js',
-            'nuxt' => '.output/server/index.mjs',
-            'astro' => 'dist/server/entry.mjs',
-            default => $tooling?->main ?? 'server.js',
-        };
     }
 
     private function pathFor(Application $application): string

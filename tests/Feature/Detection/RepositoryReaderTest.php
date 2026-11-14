@@ -7,6 +7,7 @@ use App\Models\GitHubApp;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
+use App\Services\Detection\AppFolders;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
 use App\Services\Detection\RepositoryReader;
@@ -238,4 +239,46 @@ test('the read script checks out only the probe\'s files from a real repository,
         ->and($web->script('start'))->toBeTrue()
         ->and($missing)->toContain('@@nodir')
         ->and($leftover())->toBe($before);
+});
+
+test('the read lists the folders that hold an app, three folders deep at most, leaving out dependencies, hidden folders and build output', function () {
+    $source = sys_get_temp_dir() . '/coresmith-folders-' . Str::random(8);
+
+    foreach ([
+        'composer.json' => '{}',
+        'apps/web/package.json' => '{}',
+        'apps/web/public/index.html' => '<html>',
+        'apps/web/dist/index.html' => '<html>',
+        'apps/api/Gemfile' => "gem 'rack'",
+        'services/edge/deno.json' => '{}',
+        'site/index.html' => '<html>',
+        'src/index.html' => '<html>',
+        'a/b/c/package.json' => '{}',
+        'a/b/c/d/package.json' => '{}',
+        'node_modules/left-pad/package.json' => '{}',
+        'vendor/acme/lib/composer.json' => '{}',
+        '.github/actions/check/package.json' => '{}',
+    ] as $path => $content) {
+        File::ensureDirectoryExists(dirname($source . '/' . $path));
+        File::put($source . '/' . $path, $content);
+    }
+
+    $git = fn(string $command) => Process::path($source)->env(['GIT_AUTHOR_NAME' => 'a', 'GIT_AUTHOR_EMAIL' => 'a@example.com', 'GIT_COMMITTER_NAME' => 'a', 'GIT_COMMITTER_EMAIL' => 'a@example.com'])->run($command)->throw();
+    $git('git init --quiet --initial-branch=main');
+    $git('git config uploadpack.allowFilter true');
+    $git('git config uploadpack.allowAnySHA1InWant true');
+    $git('git add -A');
+    $git('git commit --quiet -m start');
+
+    $output = Process::input(app(RepositoryReader::class)->script('file://' . $source, 'main', ''))->run('bash -s')->output();
+
+    File::deleteDirectory($source);
+
+    expect(AppFolders::in($output))->toBe(['a/b/c', 'apps/api', 'apps/web', 'services/edge', 'site']);
+});
+
+test('the folders a read finds come back with it', function () {
+    $read = readerRun(readerAnswer("@@manifest apps/web/package.json\n@@manifest apps/web/public/index.html\n@@manifest packages/ui/package.json\n@@manifest node_modules/x/package.json\n@@done\n"), RepositoryAccess::public('https://github.com/acme/mono.git'));
+
+    expect($read->folders)->toBe(['apps/web', 'packages/ui']);
 });

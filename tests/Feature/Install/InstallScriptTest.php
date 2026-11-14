@@ -66,14 +66,14 @@ test('it refuses a database driver it cannot configure', function () {
     $process = runInstaller(['--db', 'oracle']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getErrorOutput())->toContain('Invalid database driver');
+        ->and($process->getErrorOutput())->toContain("oracle isn't a database Coresmith runs on. Pass --db sqlite, pgsql or mysql.");
 });
 
 test('it refuses a domain that is not a domain', function (string $domain) {
     $process = runInstaller(['--domain', $domain, '--unattended']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getErrorOutput())->toContain('is not a valid domain name');
+        ->and($process->getErrorOutput())->toContain("isn't a domain name. Pass one like coresmith.example.com.");
 })->with([
     'not a domain',
     'panel.example.com/../etc',
@@ -96,7 +96,7 @@ test('it stops before doing anything when not run as root', function () {
     $process = runInstaller(['--unattended']);
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getErrorOutput())->toContain('must be run as root');
+        ->and($process->getErrorOutput())->toContain('Run the installer as root: sudo bash install.sh');
 });
 
 test('help is printed without touching the machine', function () {
@@ -127,8 +127,8 @@ test('the setup token lives where the sandboxed php-fpm can delete it once used'
 
 test('too little disk stops the install and a little is a warning', function () {
     expect(installScriptBody())
-        ->toContain('[ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb}GB of disk space is free. Coresmith needs at least 5GB, and 10GB or more is recommended."')
-        ->toContain('warn "Only ${disk_gb}GB of disk space is free. Coresmith recommends at least 10GB."')
+        ->toContain('[ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb} GB of disk is free, and Coresmith needs 5 GB. Free some space, then run the installer again."')
+        ->toContain('warn "Only ${disk_gb} GB of disk is free. Leave 10 GB or more for apps and their backups."')
         ->not->toContain('Coresmith needs at least 10GB');
 });
 
@@ -363,7 +363,7 @@ test('continuous integration runs the feature tests on every database the panel 
         ->and($definition)->not->toHaveKey('if')
         ->and(array_column($definition['services'] ?? [], 'image'))->toBe([$image])
         ->and($definition['env']['DB_CONNECTION'] ?? null)->toBe($driver)
-        ->and(array_map(trim(...), array_column($definition['steps'] ?? [], 'run')))->toContain('php artisan test');
+        ->and(array_map(trim(...), array_column($definition['steps'] ?? [], 'run')))->toContain('php artisan test --parallel');
 })->with([
     'PostgreSQL' => ['tests-pgsql', 'postgres:17', 'pgsql'],
     'MySQL' => ['tests-mysql', 'mysql:8.0', 'mysql'],
@@ -987,7 +987,7 @@ test('--version and --branch choose what is installed, and not both', function (
     expect($both->getExitCode())->toBe(1)
         ->and($both->getErrorOutput() . $both->getOutput())->toContain('Pass --version or --branch, not both.')
         ->and($junk->getExitCode())->toBe(1)
-        ->and($junk->getErrorOutput() . $junk->getOutput())->toContain('"latest" is not a version like 1.2.3.')
+        ->and($junk->getErrorOutput() . $junk->getOutput())->toContain('"latest" isn\'t a version like 1.2.3.')
         ->and($help->getOutput())->toContain('--version <x.y.z>')
         ->and($help->getOutput())->toContain('v' . trim((string) file_get_contents(base_path('VERSION'))))
         ->and($help->getOutput())->not->toContain('$CORESMITH_VERSION');

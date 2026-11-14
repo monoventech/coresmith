@@ -33,6 +33,7 @@ export type DetectionRead = {
     sources: Record<string, string>
     unsettled: Record<string, string>
     blockers: DetectionBlocker[]
+    folders: string[]
 }
 
 export type Detection =
@@ -46,6 +47,7 @@ export type DetectionRequest = {
     source_provider_id?: string
     repository_id?: string
     repository_branch: string
+    directory?: string
 }
 
 const HEADERS = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }

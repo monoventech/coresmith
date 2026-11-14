@@ -8,12 +8,12 @@ declare(strict_types=1);
 
 namespace App\Services\Caddy;
 
-use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
 use App\Services\Panel\Reverb;
 use App\Services\SafeName;
+use App\Stacks\Route;
 
 final class CaddyRouteBuilder
 {
@@ -175,18 +175,18 @@ final class CaddyRouteBuilder
      */
     private function serveApplication(Application $application): array
     {
-        $servesFiles = in_array($application->type, [ApplicationType::Php, ApplicationType::Static], true);
+        $route = $application->type->language()->route($application);
 
         return [
             [
                 'handle' => [
-                    ...($servesFiles ? [['handler' => 'vars', 'root' => $this->documentRoot($application)]] : []),
+                    ...($route->servesFiles() ? [['handler' => 'vars', 'root' => $this->documentRoot($application)]] : []),
                     ...$this->securityHeaders(),
                     ['handler' => 'encode', 'encodings' => ['gzip' => (object) [], 'zstd' => (object) []], 'prefer' => ['gzip', 'zstd']],
                 ],
             ],
             ...$this->reverbRoutes($application),
-            ...$this->applicationRoutes($application),
+            ...$this->applicationRoutes($application, $route),
         ];
     }
 
@@ -242,10 +242,10 @@ final class CaddyRouteBuilder
     /**
      * @return list<array<string, mixed>>
      */
-    private function applicationRoutes(Application $application): array
+    private function applicationRoutes(Application $application, Route $route): array
     {
-        return match ($application->type) {
-            ApplicationType::Php => [
+        return match ($route) {
+            Route::PhpFastcgi => [
                 [
                     'match' => [['file' => ['try_files' => ['{http.request.uri.path}/index.php']], 'not' => [['path' => ['*/']]]]],
                     'handle' => [[
@@ -272,10 +272,10 @@ final class CaddyRouteBuilder
                 ],
                 ['handle' => [['handler' => 'file_server']]],
             ],
-            ApplicationType::Static => [
+            Route::FileServer => [
                 ['handle' => [['handler' => 'file_server']]],
             ],
-            default => [
+            Route::ReverseProxy => [
                 ['handle' => [[
                     'handler' => 'reverse_proxy',
                     'upstreams' => [['dial' => '127.0.0.1:' . $application->base_port]],

@@ -196,7 +196,7 @@ release_servers() {
 
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        fatal "This uninstaller must be run as root. Use: sudo bash uninstall.sh"
+        fatal "Run the uninstaller as root: sudo bash uninstall.sh"
     fi
 }
 

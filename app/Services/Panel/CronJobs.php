@@ -256,7 +256,7 @@ final class CronJobs
     }
 
     /**
-     * @return array{jobs: list<array<string, mixed>>, limit: int, state: string|null, note: string|null, error: string|null, user: string, live: bool}
+     * @return array{jobs: list<array<string, mixed>>, limit: int, state: string|null, note: string|null, error: string|null, live: bool, example: string}
      */
     public function describe(Application $application): array
     {
@@ -273,6 +273,7 @@ final class CronJobs
             },
             'error' => $application->cron_error,
             'live' => $live,
+            'example' => $application->type->language()->cronExample($application),
         ];
     }
 

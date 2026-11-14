@@ -8,11 +8,11 @@ declare(strict_types=1);
 
 namespace App\Services\Deployment;
 
-use App\Enums\ApplicationType;
 use App\Models\Application;
 use App\Services\Process\SystemdUnitBuilder;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
+use App\Stacks\Route;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 
@@ -23,7 +23,7 @@ final class LiveCheck
     public function ask(SSHConnection $connection, Application $application): ?LiveAnswer
     {
         $domain = trim((string) $application->domain);
-        $served = in_array($application->type, [ApplicationType::Js, ApplicationType::Ruby], true) && $application->base_port !== null;
+        $served = $application->type->language()->route($application) === Route::ReverseProxy && $application->base_port !== null;
 
         if ($domain === '' && !$served) {
             return null;
@@ -54,7 +54,7 @@ final class LiveCheck
 
     private function newestError(SSHConnection $connection, Application $application, int $status): ?string
     {
-        if ($application->type !== ApplicationType::Php) {
+        if ($application->type->language()->route($application) !== Route::PhpFastcgi) {
             return $status === 502 ? $this->wrongPort($connection, $application) : null;
         }
 

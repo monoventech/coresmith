@@ -29,7 +29,7 @@ set -Eeuo pipefail
 
 LAST_STEP=""
 
-readonly CORESMITH_VERSION="0.8.8"
+readonly CORESMITH_VERSION="0.8.9"
 readonly CORESMITH_REPO="${CORESMITH_REPO:-https://github.com/monoventech/coresmith.git}"
 readonly CORESMITH_ROOT="/opt/coresmith"
 readonly RELEASES_DIR="$CORESMITH_ROOT/releases"
@@ -125,7 +125,7 @@ run() {
 on_failure() {
     local status=$? step="${LAST_STEP:-$BASH_COMMAND}"
     error "The installer stopped (exit ${status}) at: ${step}"
-    error "Details are in ${LOG_FILE}. Fix the cause, then run the installer again; it is safe to re-run."
+    error "Details are in ${LOG_FILE}. Fix the cause, then run the installer again. It's safe to run more than once."
 }
 
 usage() {
@@ -199,16 +199,16 @@ parse_args() {
     fi
 
     if [ -n "$INSTALL_VERSION" ] && ! [[ "$INSTALL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-        fatal "\"$INSTALL_VERSION\" is not a version like 1.2.3."
+        fatal "\"$INSTALL_VERSION\" isn't a version like 1.2.3. Pass --version with a release number in that form."
     fi
 
     case "$DB_DRIVER" in
     sqlite | pgsql | mysql) ;;
-    *) fatal "Invalid database driver: $DB_DRIVER. Must be sqlite, pgsql, or mysql." ;;
+    *) fatal "$DB_DRIVER isn't a database Coresmith runs on. Pass --db sqlite, pgsql or mysql." ;;
     esac
 
     if [ -n "$DOMAIN" ] && ! [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]; then
-        fatal "\"$DOMAIN\" is not a valid domain name."
+        fatal "\"$DOMAIN\" isn't a domain name. Pass one like coresmith.example.com."
     fi
 
     if [ -z "$DB_PORT" ]; then
@@ -224,10 +224,10 @@ parse_args() {
 preflight() {
     log "Running pre-flight checks..."
 
-    [ "$(id -u)" -eq 0 ] || fatal "This installer must be run as root. Use: sudo bash install.sh"
-    [ "$(uname)" = "Linux" ] || fatal "Coresmith only supports Linux. Detected: $(uname)"
-    command -v systemctl >/dev/null 2>&1 || fatal "systemd is required but was not found."
-    [ -f /etc/os-release ] || fatal "Cannot detect the operating system: /etc/os-release is missing."
+    [ "$(id -u)" -eq 0 ] || fatal "Run the installer as root: sudo bash install.sh"
+    [ "$(uname)" = "Linux" ] || fatal "Coresmith runs on Linux, and this machine runs $(uname)."
+    command -v systemctl >/dev/null 2>&1 || fatal "Coresmith needs systemd, and this machine doesn't have it."
+    [ -f /etc/os-release ] || fatal "/etc/os-release is missing, so the installer can't tell which Linux this is."
 
     # shellcheck disable=SC1091
     . /etc/os-release
@@ -237,29 +237,29 @@ preflight() {
 
     case "$OS_ID" in
     ubuntu)
-        [[ "$OS_VERSION" =~ ^(22\.04|24\.04)$ ]] || warn "Ubuntu $OS_VERSION is not one of the supported releases (22.04, 24.04). Continuing anyway."
+        [[ "$OS_VERSION" =~ ^(22\.04|24\.04)$ ]] || warn "Ubuntu $OS_VERSION isn't a release Coresmith supports (22.04 and 24.04). Installing anyway."
         PKG_MANAGER="apt"
         ;;
     debian)
-        [[ "$OS_VERSION" =~ ^(11|12)$ ]] || warn "Debian $OS_VERSION is not one of the supported releases (11, 12). Continuing anyway."
+        [[ "$OS_VERSION" =~ ^(11|12)$ ]] || warn "Debian $OS_VERSION isn't a release Coresmith supports (11 and 12). Installing anyway."
         PKG_MANAGER="apt"
         ;;
     rocky | almalinux)
-        [[ "$OS_VERSION" =~ ^(8|9) ]] || warn "$OS_NAME $OS_VERSION is not one of the supported releases (8.x, 9.x). Continuing anyway."
+        [[ "$OS_VERSION" =~ ^(8|9) ]] || warn "$OS_NAME $OS_VERSION isn't a release Coresmith supports (8.x and 9.x). Installing anyway."
         PKG_MANAGER="dnf"
         ;;
     fedora) PKG_MANAGER="dnf" ;;
     amzn)
         if [ "$OS_VERSION" = "2" ]; then PKG_MANAGER="yum"; else PKG_MANAGER="dnf"; fi
         ;;
-    *) fatal "Unsupported OS: $OS_ID. Supported: Ubuntu, Debian, Rocky, AlmaLinux, Fedora, Amazon Linux." ;;
+    *) fatal "Coresmith doesn't install on $OS_ID. It installs on Ubuntu, Debian, Rocky Linux, AlmaLinux, Fedora and Amazon Linux." ;;
     esac
 
     success "$OS_NAME $OS_VERSION (package manager: $PKG_MANAGER)"
 
     SERVER_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit } }')"
     [ -n "$SERVER_IP" ] || SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    [ -n "$SERVER_IP" ] || fatal "Could not determine this server's IP address."
+    [ -n "$SERVER_IP" ] || fatal "The installer couldn't find this server's IP address. Check it has a network connection, then run the installer again."
     success "Server IP: $SERVER_IP"
 
     PUBLIC_IP="$(curl -fsS -4 --max-time 5 https://ifconfig.me 2>/dev/null || curl -fsS -4 --max-time 5 https://api.ipify.org 2>/dev/null || true)"
@@ -283,16 +283,16 @@ preflight() {
     local ram_mb
     ram_mb="$(free -m | awk '/^Mem:/ {print $2}')"
     if [ "${ram_mb:-0}" -lt 900 ]; then
-        warn "Only ${ram_mb}MB of RAM. Coresmith will run, but slowly. 2GB or more is recommended."
+        warn "This server has ${ram_mb} MB of RAM. Coresmith runs on it, but slowly, and is quicker with 2 GB or more."
     else
         success "RAM: ${ram_mb}MB"
     fi
 
     local disk_gb
     disk_gb="$(df -P / | awk 'NR==2 {printf "%.0f", $4/1048576}')"
-    [ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb}GB of disk space is free. Coresmith needs at least 5GB, and 10GB or more is recommended."
+    [ "${disk_gb:-0}" -ge 5 ] || fatal "Only ${disk_gb} GB of disk is free, and Coresmith needs 5 GB. Free some space, then run the installer again."
     if [ "${disk_gb:-0}" -lt 10 ]; then
-        warn "Only ${disk_gb}GB of disk space is free. Coresmith recommends at least 10GB."
+        warn "Only ${disk_gb} GB of disk is free. Leave 10 GB or more for apps and their backups."
     else
         success "Disk: ${disk_gb}GB free"
     fi
@@ -337,7 +337,7 @@ interactive_prompts() {
         3) DB_DRIVER="mysql" ;;
         *)
             DB_DRIVER="sqlite"
-            warn "Unrecognised choice. Using SQLite."
+            warn "That isn't one of the choices, so Coresmith uses SQLite."
             ;;
         esac
         [ "$DB_DRIVER" = "pgsql" ] && DB_PORT="${DB_PORT:-5432}"
@@ -653,7 +653,7 @@ install_database_engine() {
         fi
         run systemctl enable --now postgresql
 
-        [ -n "$DB_PASSWORD" ] || fatal "PostgreSQL was selected but no password was supplied or generated."
+        [ -n "$DB_PASSWORD" ] || fatal "The installer has no password for PostgreSQL, so it stopped. Run it again, or pass one with --db-password."
         sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" | grep -q 1 ||
             sudo -u postgres psql -c "CREATE ROLE \"${DB_USER}\" WITH LOGIN PASSWORD '${DB_PASSWORD}';"
         sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1 ||
@@ -670,7 +670,7 @@ install_database_engine() {
         fi
         run systemctl enable --now mysqld || run systemctl enable --now mysql || true
 
-        [ -n "$DB_PASSWORD" ] || fatal "MySQL was selected but no password was supplied or generated."
+        [ -n "$DB_PASSWORD" ] || fatal "The installer has no password for MySQL, so it stopped. Run it again, or pass one with --db-password."
         mysql -u root -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
         mysql -u root -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
         mysql -u root -e "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, DROP, REFERENCES, TRIGGER, LOCK TABLES, EXECUTE, CREATE TEMPORARY TABLES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';"
@@ -716,7 +716,7 @@ install_caddy() {
         ;;
     esac
 
-    command -v caddy >/dev/null 2>&1 || fatal "Caddy did not install. Check $LOG_FILE."
+    command -v caddy >/dev/null 2>&1 || fatal "Caddy didn't install. The reason is in $LOG_FILE."
     caddy_new_enough || fatal "Caddy $(caddy version | head -1) is too old: Coresmith needs 2.8 or newer. Check $LOG_FILE for where apt found it."
     success "Caddy installed: $(caddy version | head -1)"
 }
@@ -1523,7 +1523,7 @@ install_uninstall_helper() {
 
 	require_root() {
 	    if [ "$(id -u)" -ne 0 ]; then
-	        fatal "This uninstaller must be run as root. Use: sudo bash uninstall.sh"
+	        fatal "Run the uninstaller as root: sudo bash uninstall.sh"
 	    fi
 	}
 
@@ -2269,7 +2269,7 @@ configure_firewall() {
 
 configure_fail2ban() {
     command -v fail2ban-client >/dev/null 2>&1 || {
-        warn "fail2ban is not installed; skipping brute-force protection."
+        warn "fail2ban isn't installed, so nothing slows down repeated sign-in attempts."
         return 0
     }
 
@@ -2431,7 +2431,7 @@ print_summary() {
     local colour="$YELLOW" title="   Coresmith is installed, but isn't answering    "
 
     if [ "$healthy" = "true" ] && link_loads "$PANEL_HOST"; then
-        loads=true colour="$GREEN" title="        Coresmith installed successfully!         "
+        loads=true colour="$GREEN" title="       Coresmith is installed and answering       "
     fi
 
     printf '\n%s%s╔══════════════════════════════════════════════════╗%s\n' "$BOLD" "$colour" "$NC"
@@ -2446,8 +2446,8 @@ print_summary() {
     if [ -n "$setup_link" ]; then
         printf '  %s%s⚠  Finish setup now:%s\n\n' "$BOLD" "$YELLOW" "$NC"
         printf '  %s%s%s\n\n' "$BOLD" "$setup_link" "$NC"
-        printf '  %sThis link works once. After the owner account exists it is%s\n' "$YELLOW" "$NC"
-        printf '  %scleared from the server and can never be used again.%s\n\n' "$YELLOW" "$NC"
+        printf '  %sThis link works once. Coresmith clears it from the server%s\n' "$YELLOW" "$NC"
+        printf '  %sas soon as the owner account exists.%s\n\n' "$YELLOW" "$NC"
     elif [ "$already_set_up" = "true" ]; then
         printf '  Coresmith is already set up. Sign in at %s%s%s\n\n' "$BOLD" "$PANEL_URL" "$NC"
     fi
@@ -2474,7 +2474,7 @@ print_summary() {
     printf '    Update:  cd %s && sudo -u coresmith php artisan coresmith:update\n\n' "$INSTALL_DIR"
 
     if [ "$healthy" != "true" ]; then
-        warn "Some services did not start. Coresmith may be unreachable until they do."
+        warn "Some services didn't start, so Coresmith may not answer until they do."
     elif ! $loads; then
         warn "${PANEL_URL} didn't load from this server. Check Caddy's log with journalctl -u caddy -n 50."
     fi

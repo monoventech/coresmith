@@ -52,6 +52,7 @@ final class RepositoryReader
     $limit git -c core.symlinks=false checkout --quiet 2>&1 || exit 73
     printf '@@commit %s\n' "$(git rev-parse HEAD)"
     printf '@@arch %s\n' "$(uname -m)"
+    {folders}
     {folder}
     names=$(git ls-tree --name-only HEAD {tree})
     for f in {lockfiles}; do
@@ -160,6 +161,7 @@ final class RepositoryReader
             '{lockfiles}' => implode(' ', RepositoryProbe::LOCKFILES),
             '{probe}' => escapeshellarg(base64_encode($this->probe->script())),
             '{runtimes}' => implode(' ', self::RUNTIMES),
+            '{folders}' => AppFolders::LISTING,
             '{installs}' => escapeshellarg(AsdfManager::INSTALL_DIR),
         ]) . "\n";
     }
@@ -175,7 +177,7 @@ final class RepositoryReader
 
             $arch = preg_match('/^@@arch ([a-z0-9_]+)$/m', $output, $machine) === 1 ? $machine[1] : null;
 
-            return new RepositoryRead($this->probe->parse($output), $commit, installed: $this->installed($output), extensions: $this->extensions($output), arch: $arch);
+            return new RepositoryRead($this->probe->parse($output, $subfolder), $commit, installed: $this->installed($output), extensions: $this->extensions($output), arch: $arch, folders: AppFolders::in($output));
         }
 
         if ($exitCode === self::SETUP_FAILED) {

@@ -81,6 +81,20 @@ test.describe('cron jobs on the app page', () => {
         await expect(cronCard(page)).toContainText("Times are UTC, the server's clock.")
     })
 
+    test("the command field suggests a command in the app's own stack", async ({ page }) => {
+        for (const [app, example] of [
+            ['hungry', 'php artisan backup:run'],
+            ['solid-jobs', 'bin/rails reports:send'],
+            ['legacy-api', 'npm run cleanup']
+        ] as const) {
+            await gotoApplication(page, 'bench-01', app)
+            await cronCard(page).getByRole('button', { name: 'Add cron job' }).click()
+            await expect(dialog(page).getByLabel('Command')).toHaveAttribute('placeholder', example)
+            await page.keyboard.press('Escape')
+            await expect(dialog(page)).toHaveCount(0)
+        }
+    })
+
     test('an app with no cron jobs says how to add one', async ({ page }) => {
         await gotoApplication(page, 'bench-01', 'hungry')
 
