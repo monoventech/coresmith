@@ -20,9 +20,17 @@
         open = $bindable(false),
         job,
         storeHref,
+        example,
         busy,
         send
-    }: { open: boolean; job: CronJob | null; storeHref: string; busy: boolean; send: CronSend } = $props()
+    }: {
+        open: boolean
+        job: CronJob | null
+        storeHref: string
+        example: string
+        busy: boolean
+        send: CronSend
+    } = $props()
 
     let command = $state('')
     let kind = $state<CronPresetKind>('daily')
@@ -139,7 +147,7 @@
                         oninput={() => clear('command')}
                         rows={3}
                         class="font-mono text-[12.5px] leading-[1.7]"
-                        placeholder="php artisan backup:run"
+                        placeholder={example}
                         aria-invalid={errors.command ? true : undefined}
                         spellcheck="false"
                     />

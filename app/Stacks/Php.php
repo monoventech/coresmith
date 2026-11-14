@@ -196,6 +196,15 @@ final readonly class Php implements Language
         };
     }
 
+    public function cronExample(Application $application): string
+    {
+        return match (strtolower((string) $application->framework)) {
+            'laravel' => 'php artisan backup:run',
+            'symfony' => 'php bin/console app:send-reports',
+            default => 'php cron/cleanup.php',
+        };
+    }
+
     /**
      * @return list<string>
      */

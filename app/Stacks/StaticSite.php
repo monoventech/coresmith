@@ -126,4 +126,9 @@ final readonly class StaticSite implements Language
     {
         return null;
     }
+
+    public function cronExample(Application $application): string
+    {
+        return 'sh scripts/nightly.sh';
+    }
 }

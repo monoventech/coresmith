@@ -70,6 +70,29 @@ test('an admin creating an app gets a slug, a system user and a port block', fun
         ->and($application->team_id)->toBe($team->id);
 });
 
+test('a JavaScript or Ruby app is added without a web root, which it never uses', function (string $type, ?string $framework) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), collect(payload(['type' => $type, 'framework' => $framework]))->except('web_directory')->all())
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect(Application::firstWhere('name', 'My Svelte App')->web_directory)->toBe('/public');
+})->with([['js', null], ['ruby', 'rack']]);
+
+test('a PHP app or a static site still needs a web root', function (string $type) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), collect(payload(['type' => $type]))->except('web_directory')->all())
+        ->assertSessionHasErrors('web_directory');
+
+    expect(Application::count())->toBe(0);
+})->with(['php', 'static']);
+
 test('a second app on the same server gets the next port block', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();

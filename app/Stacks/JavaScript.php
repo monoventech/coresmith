@@ -110,6 +110,15 @@ final readonly class JavaScript implements Language
         return null;
     }
 
+    public function cronExample(Application $application): string
+    {
+        return match ($application->js_runtime) {
+            'node' => 'npm run cleanup',
+            'deno' => 'deno task cleanup',
+            default => 'bun run cleanup',
+        };
+    }
+
     private function entry(Application $application, ?JsTooling $tooling): string
     {
         return match (strtolower((string) $application->framework)) {

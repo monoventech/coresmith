@@ -268,7 +268,7 @@ test('the card names each job and says when it runs', function () {
         ->and($jobs->pluck('scheduler')->all())->toBe([true, false, false, false])
         ->and($jobs->pluck('preset.kind')->all())->toBe(['minute', 'daily', 'custom', 'minute'])
         ->and($jobs->first()['command_summary'])->toBe('php artisan schedule:run')
-        ->and(collect($card)->except('jobs')->all())->toBe(['limit' => 20, 'state' => null, 'note' => null, 'error' => null, 'live' => true]);
+        ->and(collect($card)->except('jobs')->all())->toBe(['limit' => 20, 'state' => null, 'note' => null, 'error' => null, 'live' => true, 'example' => 'php artisan backup:run']);
 });
 
 test('the card says when jobs are paused or wait for the first deploy', function () {

@@ -169,6 +169,11 @@ final readonly class Ruby implements Language
             : null;
     }
 
+    public function cronExample(Application $application): string
+    {
+        return strtolower((string) $application->framework) === 'rails' ? 'bin/rails reports:send' : 'bundle exec rake reports:send';
+    }
+
     private function platformMissing(RepositoryFacts $facts, string $arch): ?Blocker
     {
         $local = match ($arch) {

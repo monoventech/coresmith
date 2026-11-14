@@ -715,6 +715,23 @@ test.describe('adding an application', () => {
         await expect(toast(page)).toContainText('App added.')
     })
 
+    test('the web root is asked only of PHP apps and static sites, which serve files from it', async ({ page }) => {
+        await openAddApp(page)
+
+        const language = page.getByLabel('Language')
+        const webRoot = page.getByLabel('Web root')
+
+        await expect(webRoot).toHaveValue('/public')
+
+        for (const proxied of ['js', 'ruby']) {
+            await language.selectOption(proxied)
+            await expect(webRoot).toHaveCount(0)
+        }
+
+        await language.selectOption('static')
+        await expect(webRoot).toBeVisible()
+    })
+
     test('a ruby app starts at medium, and a size picked by hand is kept', async ({ page }) => {
         await gotoServer(page, 'bench-01')
         await page.getByRole('link', { name: 'Add an app' }).click()
@@ -1591,17 +1608,16 @@ test.describe('what the repository installs', () => {
         await expect(toggle(page, 'Inertia SSR')).toBeChecked()
     })
 
-    test('a toggle that is on says why the release no longer runs it', async ({ page }) => {
+    test("a toggle that is on says why the release no longer runs it, and one whose package is gone isn't listed", async ({
+        page
+    }) => {
         await gotoApplication(page, 'bench-01', 'release-moved-on')
 
-        await expect(toggleRow(page, 'reverb')).toContainText(
-            'composer.json no longer requires laravel/reverb, so it does not start'
-        )
         await expect(toggleRow(page, 'inertia_ssr')).toContainText(
             'package.json no longer has a build:ssr script, so it does not start'
         )
-        await expect(toggle(page, 'Reverb websockets')).toBeChecked()
         await expect(toggle(page, 'Inertia SSR')).toBeChecked()
+        await expect(toggleRow(page, 'reverb')).toHaveCount(0)
     })
 
     test('an ssr server that did not start says so on the toggle and in the activity', async ({ page }) => {

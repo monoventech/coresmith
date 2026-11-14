@@ -71,4 +71,6 @@ interface Language
     public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array;
 
     public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string;
+
+    public function cronExample(Application $application): string;
 }

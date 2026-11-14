@@ -74,6 +74,8 @@
         static: [{ value: '', label: 'No framework' }]
     }
 
+    const SERVES_FILES = ['php', 'static']
+
     const STEPS = [
         { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
         { name: 'Install dependencies', desc: 'composer, bun or bundler' },
@@ -434,20 +436,22 @@
                             <p class="-mt-2.5 mb-0 text-[12px] text-warning-strong">{read.unsettled.runtime_version}</p>
                         {/if}
                     {/if}
-                    <div>
-                        <Label for="web_directory" class="mb-1.5">Web root</Label>
-                        <Input
-                            id="web_directory"
-                            name="web_directory"
-                            bind:value={webDirectory}
-                            oninput={() => touch('web_directory')}
-                            required
-                            class="font-mono text-[13px]"
-                            aria-invalid={errors.web_directory ? true : undefined}
-                        />
-                        {@render note('web_directory')}
-                        <FieldError message={errors.web_directory} />
-                    </div>
+                    {#if SERVES_FILES.includes(type)}
+                        <div>
+                            <Label for="web_directory" class="mb-1.5">Web root</Label>
+                            <Input
+                                id="web_directory"
+                                name="web_directory"
+                                bind:value={webDirectory}
+                                oninput={() => touch('web_directory')}
+                                required
+                                class="font-mono text-[13px]"
+                                aria-invalid={errors.web_directory ? true : undefined}
+                            />
+                            {@render note('web_directory')}
+                            <FieldError message={errors.web_directory} />
+                        </div>
+                    {/if}
                     <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                         <div>
                             <Label for="domain" class="mb-1.5">Domain</Label>
