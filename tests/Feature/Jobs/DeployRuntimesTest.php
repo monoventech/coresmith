@@ -893,3 +893,35 @@ test('a lock that rules out what composer.json asks for stops the deploy before 
     expect($deployment->fresh()->failure_reason)->toBe('require.php in composer.json asks for PHP ^8.5, but composer.lock holds nette/utils 4.0.5 (PHP 8.0 - 8.4). Run composer update nette/utils, commit composer.lock, then deploy.')
         ->and(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'composer install')))->toBeFalse();
 });
+
+test('a Go app downloads its modules, builds every package main and runs the server binary with the address variable it reads', function () {
+    Queue::fake();
+    $application = stackApp(['type' => ApplicationType::Go, 'framework' => 'chi', 'main_package' => 'cmd/api']);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $probe = ProbeOutput::for(['go.mod' => "module github.com/acme/shop\n\ngo 1.26\n\nrequire github.com/go-chi/chi/v5 v5.2.1\n"])
+        . ProbeOutput::go([
+            'cmd/api/main.go' => "package main\n\nfunc main() {\n\thttp.ListenAndServe(os.Getenv(\"LISTEN_ADDR\"), router())\n}\n",
+            'cmd/worker/main.go' => "package main\n\nfunc main() {\n\trun()\n}\n",
+        ]) . "@@done\n";
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, $probe)
+        ->respondTo("ls -1 '/opt/asdf-data/installs/go'", "1.27.4\n");
+
+    stackDeploy($deployment, $transport);
+
+    $commands = collect($transport->commands());
+    $position = fn(string $needle): int|false => $commands->search(fn(string $command): bool => str_contains($command, $needle));
+    $unit = $transport->uploads()['/etc/systemd/system/coresmith-app-shop-web.service'] ?? '';
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($application->fresh()->go_version)->toBe('1.27.4')
+        ->and($application->fresh()->stack['language_tooling'])->toMatchArray(['mains' => ['cmd/api' => 'api', 'cmd/worker' => 'worker'], 'web' => 'cmd/api', 'listen' => ['LISTEN_ADDR' => 'address']])
+        ->and(array_map($position, ['go mod download', '.coresmith/bin/api', '.coresmith/bin/worker']))->each->toBeInt()
+        ->and($position('go mod download'))->toBeLessThan($position('-o .coresmith/bin/api'))
+        ->and($commands->first(fn(string $command): bool => str_contains($command, '-o .coresmith/bin/api')))->toContain('GOTOOLCHAIN=local /opt/asdf-data/installs/go/1.27.4/bin/go build -trimpath')
+        ->and($unit)->toContain("\nExecStart=/var/coresmith/apps/shop/current/.coresmith/bin/api\n")
+        ->and($unit)->toContain('Environment="LISTEN_ADDR=127.0.0.1:8000"')
+        ->and($unit)->toContain('Environment="PATH=/var/coresmith/apps/shop/current/.coresmith/bin:/opt/asdf-data/installs/go/1.27.4/bin:/usr/local/bin:/usr/bin:/bin"');
+});

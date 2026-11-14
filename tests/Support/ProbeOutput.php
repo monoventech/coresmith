@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Services\Runtime\RepositoryProbe;
+
 final class ProbeOutput
 {
     /**
@@ -26,6 +28,26 @@ final class ProbeOutput
 
         foreach ($locked as $package => $version) {
             $lines[] = '@@locked ' . $package . ' ' . $version;
+        }
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    /**
+     * @param  array<string, string>  $sources
+     */
+    public static function go(array $sources): string
+    {
+        $lines = [];
+
+        foreach ($sources as $path => $content) {
+            $lines[] = '@@gofile ' . $path;
+
+            foreach (preg_split('/\r\n|\n|\r/', $content) ?: [] as $index => $line) {
+                if (preg_match('~' . RepositoryProbe::GO_PATTERN . '~', $line) === 1) {
+                    $lines[] = '@@goline ' . $path . ' ' . base64_encode(($index + 1) . ':' . $line);
+                }
+            }
         }
 
         return implode("\n", $lines) . "\n";
