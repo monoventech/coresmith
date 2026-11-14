@@ -16,6 +16,7 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Runtime\NativeGemTools;
+use App\Services\Runtime\NativePythonTools;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
@@ -173,6 +174,68 @@ test('the gems that need system packages to compile map to each family\'s packag
     ['ubuntu', ['cmake', 'libclang-dev']],
     ['rocky', ['cmake', 'clang-devel']],
 ]);
+
+function stackPythonWithPackages(string $found, string $missing): array
+{
+    $application = stackApp(['type' => ApplicationType::Python, 'framework' => 'django']);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['.python-version' => "3.14.10\n", 'requirements.txt' => "django\npsycopg2==2.9.10\n"], markers: ['manage.py']))
+        ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.14.10\n")
+        ->respondTo('grep -ohiE', $found)
+        ->respondTo("|| echo 'gcc'", $missing);
+
+    stackDeploy($deployment, $transport);
+
+    return [$deployment->fresh(), collect($transport->commands())];
+}
+
+test('a Python app whose dependencies build against libpq gets gcc and libpq-dev before they install', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackPythonWithPackages("psycopg2\n", "gcc\nlibpq-dev\n");
+    $install = $commands->search(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, "'libpq-dev'"));
+    $pip = $commands->search(fn(string $command): bool => str_contains($command, 'pip install --python .venv/bin/python -r requirements.txt'));
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($install)->toBeInt()
+        ->and($pip)->toBeInt()
+        ->and($install)->toBeLessThan($pip)
+        ->and($deployment->log)->toContain('deps: installing gcc, libpq-dev, which psycopg2 needs to build');
+});
+
+test('a Python app whose build tools are already there installs no packages for them', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackPythonWithPackages("psycopg2\n", '');
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, 'libpq-dev')))->toBeFalse();
+});
+
+test('the Python packages that build against system libraries map to each family\'s packages', function (string $os, array $packages) {
+    expect(app(NativePythonTools::class)->needed(Server::factory()->make(['os_name' => $os]), "mysqlclient\npsycopg2\n"))->toBe($packages);
+})->with([
+    'Debian family' => ['ubuntu', ['psycopg2' => ['gcc', 'libpq-dev'], 'mysqlclient' => ['gcc', 'pkg-config', 'default-libmysqlclient-dev']]],
+    'Red Hat family' => ['rocky', ['psycopg2' => ['gcc', 'libpq-devel'], 'mysqlclient' => ['gcc', 'pkgconf-pkg-config', 'mariadb-connector-c-devel']]],
+]);
+
+test('the server finds those packages in any lockfile or dependency list, and not their prebuilt twins', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-native-' . bin2hex(random_bytes(4));
+    mkdir($directory);
+    file_put_contents($directory . '/requirements.txt', "Django>=5.1\npsycopg2-binary==2.9.10\n# psycopg2 is not used\n");
+    file_put_contents($directory . '/uv.lock', "[[package]]\nname = \"mysqlclient\"\nversion = \"2.2.7\"\n");
+    file_put_contents($directory . '/pyproject.toml', "[project]\ndependencies = [\"PSYCOPG2>=2.9\", \"psycopg2-pool\"]\n");
+
+    try {
+        $output = (string) shell_exec(app(NativePythonTools::class)->find($directory));
+    } finally {
+        array_map(unlink(...), glob($directory . '/*') ?: []);
+        rmdir($directory);
+    }
+
+    expect(preg_split('/\s+/', trim($output)))->toBe(['mysqlclient', 'psycopg2']);
+});
 
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();

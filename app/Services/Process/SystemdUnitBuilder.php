@@ -43,7 +43,7 @@ final class SystemdUnitBuilder
         $workingDirectory = $paths->appDirectory($paths->current());
         $envFile = '/etc/coresmith/env/' . $slug . '.env';
         $logFile = $paths->processLog($process);
-        $path = $this->pathFor($application);
+        $path = $this->pathFor($application, $workingDirectory);
         $memoryMax = $size->memoryMaxMb();
         $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
@@ -119,9 +119,9 @@ final class SystemdUnitBuilder
         return str_starts_with($command, '/') ? $command : '/usr/bin/env ' . $command;
     }
 
-    private function pathFor(Application $application): string
+    private function pathFor(Application $application, string $workingDirectory): string
     {
-        $directories = [];
+        $directories = $application->type?->language()->pathDirectories($workingDirectory) ?? [];
 
         foreach ($application->runtimeVersions() as $runtime => $version) {
             AsdfManager::assertValid($runtime, $version);

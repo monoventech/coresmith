@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\Runtime\NativeGemTools;
+use App\Services\Runtime\NativePythonTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Stacks\JavaScript;
 use App\Stacks\Language;
@@ -40,6 +42,11 @@ test('PHP apps are handed to PHP-FPM, static sites to the file server and the re
         ->and(array_map(fn(Route $route): bool => $route->servesFiles(), Route::cases()))->toBe([true, false, true]);
 });
 
+test('Ruby and Python name the system packages their dependencies build against, and the others need none', function () {
+    expect(array_map(fn(ApplicationType $type): ?string => $type->language()->nativeTools() === null ? null : $type->language()->nativeTools()::class, ApplicationType::cases()))
+        ->toBe([null, null, NativeGemTools::class, null, NativePythonTools::class]);
+});
+
 test('PHP seeds shared storage from the release, Ruby from the live release, and the others share none', function () {
     expect(array_map(fn(ApplicationType $type): StorageSeed => $type->language()->storageSeed(), ApplicationType::cases()))
         ->toBe([StorageSeed::FromRelease, StorageSeed::None, StorageSeed::FromLiveRelease, StorageSeed::None, StorageSeed::None]);
@@ -58,7 +65,7 @@ test('each language names the environment its app starts with, runs with and lis
             ['NODE_ENV' => 'production'],
             ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1'],
             [],
-            ['PYTHONUNBUFFERED' => '1'],
+            ['PYTHONUNBUFFERED' => '1', 'WEB_CONCURRENCY' => '2'],
         ])
         ->and(array_map(fn(ApplicationType $type): array => $type->language()->listenEnvironment($application($type)), ApplicationType::cases()))->toBe([
             [],

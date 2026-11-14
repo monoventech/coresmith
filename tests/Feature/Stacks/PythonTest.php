@@ -30,7 +30,7 @@ test('a Python app runs a web process of its own behind Caddy, with no PHP-FPM, 
 
 test('a Python app listens on its own port and writes its logs as they happen', function () {
     expect(ApplicationType::Python->language()->listenEnvironment(pythonApp()))->toBe(['PORT' => '4300', 'HOST' => '127.0.0.1'])
-        ->and(ApplicationType::Python->language()->processEnvironment(pythonApp()))->toBe(['PYTHONUNBUFFERED' => '1']);
+        ->and(ApplicationType::Python->language()->processEnvironment(pythonApp()))->toBe(['PYTHONUNBUFFERED' => '1', 'WEB_CONCURRENCY' => '2']);
 });
 
 test('the cron example is a Django command for Django apps and a script for the others', function () {

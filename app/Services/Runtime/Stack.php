@@ -23,6 +23,7 @@ final readonly class Stack
      * @param  array<string, bool>  $gems
      * @param  array<string, bool>  $packages
      * @param  list<string>|null  $files
+     * @param  array<string, mixed>  $languageTooling
      */
     public function __construct(
         public array $runtimes = [],
@@ -32,6 +33,7 @@ final readonly class Stack
         public array $gems = [],
         public array $packages = [],
         public ?array $files = null,
+        public array $languageTooling = [],
     ) {}
 
     /**
@@ -39,7 +41,7 @@ final readonly class Stack
      */
     public function withRuntimes(array $runtimes): self
     {
-        return new self($runtimes, $this->framework, $this->tooling, $this->notes, $this->gems, $this->packages, $this->files);
+        return new self($runtimes, $this->framework, $this->tooling, $this->notes, $this->gems, $this->packages, $this->files, $this->languageTooling);
     }
 
     public function locked(string $gem): ?bool
@@ -69,7 +71,7 @@ final readonly class Stack
     }
 
     /**
-     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>, packages: array<string, bool>, files: list<string>|null}
+     * @return array{runtimes: array<string, array{runtime: string, version: string, source: string, detail: ?string}>, framework: array{name: string, major: int}|null, tooling: array<string, mixed>|null, gems: array<string, bool>, packages: array<string, bool>, files: list<string>|null, language_tooling: array<string, mixed>}
      */
     public function toArray(): array
     {
@@ -80,6 +82,7 @@ final readonly class Stack
             'gems' => $this->gems,
             'packages' => $this->packages,
             'files' => $this->files,
+            'language_tooling' => $this->languageTooling,
         ];
     }
 
@@ -113,6 +116,7 @@ final readonly class Stack
             gems: $gems,
             packages: $packages,
             files: $files,
+            languageTooling: array_filter((array) ($data['language_tooling'] ?? []), fn(int|string $key): bool => is_string($key), ARRAY_FILTER_USE_KEY),
         );
     }
 
