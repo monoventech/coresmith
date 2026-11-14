@@ -27,11 +27,11 @@ final readonly class JavaChecks
         }
 
         if (str_contains(implode("\n", JavaFrameworks::buildFiles($facts)), 'com.android.application')) {
-            return [new Blocker('repository', 'This is an Android app, which builds an APK for phones rather than a server.', '')];
+            return [new Blocker('repository', 'This is an Android app. It builds an APK for phones, and Coresmith runs apps on servers.', '')];
         }
 
         if ($tooling->war && !in_array($framework, self::RUNNABLE_WARS, true)) {
-            return [new Blocker('repository', 'This app builds a WAR for a servlet container such as Tomcat, and Coresmith runs apps that start their own web server.', 'Package it as an executable jar with an embedded server, as Spring Boot, Quarkus or Javalin apps are, then add it again.')];
+            return [new Blocker('repository', 'This app builds a WAR for a servlet container such as Tomcat, and Coresmith runs apps that start their own web server.', 'Package it as a jar that starts its own server, the way Spring Boot, Quarkus and Javalin apps do, then add it again.')];
         }
 
         if (!$tooling->wrapper) {

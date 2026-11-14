@@ -83,7 +83,7 @@
 
     const STEPS = [
         { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
-        { name: 'Install dependencies', desc: 'composer, bun, bundler, uv, go or maven' },
+        { name: 'Install dependencies', desc: 'composer, bun, bundler, uv, go, maven or gradle' },
         { name: 'Build assets', desc: 'into a new timestamped directory' },
         { name: 'Run migrations', desc: 'against the new release' },
         { name: 'Health check', desc: 'before anything goes live' },

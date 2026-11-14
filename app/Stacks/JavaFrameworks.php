@@ -20,6 +20,8 @@ final class JavaFrameworks
 
     public const MODULE_BUILDS = ['*/pom.xml', '*/build.gradle.kts', '*/build.gradle'];
 
+    public const CATALOG = 'gradle/libs.versions.toml';
+
     public const ALL = [
         'spring-boot' => ['Spring Boot', ['org.springframework.boot', 'spring-boot'], ['port' => 'SERVER_PORT', 'host' => 'SERVER_ADDRESS']],
         'jhipster' => ['JHipster', [], ['port' => 'SERVER_PORT', 'host' => 'SERVER_ADDRESS']],
@@ -84,6 +86,10 @@ final class JavaFrameworks
             foreach ($facts->matching($pattern) as $file => $content) {
                 $files[$file] = (string) $content;
             }
+        }
+
+        if ($facts->has(self::CATALOG)) {
+            $files[self::CATALOG] = (string) $facts->file(self::CATALOG);
         }
 
         return $files;

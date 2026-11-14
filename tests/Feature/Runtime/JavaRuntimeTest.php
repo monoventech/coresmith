@@ -77,7 +77,7 @@ test('the Java line comes from the version files Java projects keep, newest firs
     "Gradle's sourceCompatibility" => [['build.gradle' => "java {\n    sourceCompatibility = JavaVersion.VERSION_21\n}\n"], '21', 'build.gradle', 'sourceCompatibility = JavaVersion.VERSION_21'],
     "Groovy's quoted sourceCompatibility" => [['build.gradle' => "sourceCompatibility = '17'\n"], '17', 'build.gradle', "sourceCompatibility = '17'"],
     "Groovy's bare sourceCompatibility" => [['build.gradle' => "sourceCompatibility = 21\n"], '21', 'build.gradle', 'sourceCompatibility = 21'],
-    "an old 1.8 sourceCompatibility" => [['build.gradle' => "sourceCompatibility = '1.8'\n"], '8', 'build.gradle', "sourceCompatibility = '1.8'"],
+    'an old 1.8 sourceCompatibility' => [['build.gradle' => "sourceCompatibility = '1.8'\n"], '8', 'build.gradle', "sourceCompatibility = '1.8'"],
     "Kotlin's jvmToolchain" => [['build.gradle.kts' => "kotlin {\n    jvmToolchain(17)\n}\n"], '17', 'build.gradle.kts', 'jvmToolchain(17)'],
     "a module's Gradle toolchain" => [['settings.gradle.kts' => "include(\"app\")\n", 'app/build.gradle.kts' => "java {\n    toolchain {\n        languageVersion = JavaLanguageVersion.of(17)\n    }\n}\n"], '17', 'app/build.gradle.kts', 'JavaLanguageVersion.of(17)'],
     'the root build before a module' => [['pom.xml' => '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>', 'web/pom.xml' => '<project><properties><maven.compiler.release>17</maven.compiler.release></properties></project>'], '21', 'pom.xml', '<maven.compiler.release>21</maven.compiler.release>'],
@@ -89,5 +89,5 @@ test('a Java line picks the newest Temurin build of that line', function () {
 
 test('Java names the files it reads its version from, and the probe reads them', function () {
     expect(RuntimeDetector::SOURCES['java'])->toBe('.tool-versions, .java-version, .sdkmanrc, system.properties, pom.xml or build.gradle')
-        ->and(RepositoryProbe::FILES)->toContain('.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', '.yo-rc.json');
+        ->and(RepositoryProbe::FILES)->toContain('.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle/libs.versions.toml', '.yo-rc.json');
 });

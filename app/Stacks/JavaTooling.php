@@ -42,7 +42,7 @@ final readonly class JavaTooling
             return null;
         }
 
-        $gradle = $build === 'maven' ? '' : implode("\n", array_filter(JavaFrameworks::buildFiles($facts), fn(string $file): bool => str_contains($file, 'build.gradle'), ARRAY_FILTER_USE_KEY));
+        $gradle = $build === 'maven' ? '' : implode("\n", array_filter(JavaFrameworks::buildFiles($facts), fn(string $file): bool => str_contains($file, 'build.gradle') || $file === JavaFrameworks::CATALOG, ARRAY_FILTER_USE_KEY));
 
         return new self(
             $build,
