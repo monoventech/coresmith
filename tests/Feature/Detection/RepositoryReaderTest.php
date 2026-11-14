@@ -124,7 +124,7 @@ test('the read lists the Python versions installed on the server', function () {
     $read = readerRun($transport, RepositoryAccess::public('https://github.com/pallets/flask.git'));
 
     expect($read->installed('python'))->toBe(['3.13.18', '3.14.10'])
-        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python go; do');
+        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python go java; do');
 });
 
 test('the read says what kind of machine the server is', function () {

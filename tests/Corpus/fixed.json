@@ -603,5 +603,96 @@
             "framework": "grpc"
         },
         "why": "A gRPC server with no HTTP server, proxied over HTTP/2 cleartext, beside a client package in the same module."
+    },
+    {
+        "name": "spring-petclinic",
+        "url": "https://github.com/spring-projects/spring-petclinic.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "spring-boot"
+        },
+        "why": "Spring's own sample on Spring Boot 4 and Java 17, with both a Maven and a Gradle build. Maven builds it, and H2 needs no database."
+    },
+    {
+        "name": "gs-rest-service",
+        "url": "https://github.com/spring-guides/gs-rest-service.git",
+        "branch": "main",
+        "folder": "complete",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "spring-boot"
+        },
+        "why": "The Spring guide's finished REST service, in a folder with its own wrappers."
+    },
+    {
+        "name": "tut-spring-boot-kotlin",
+        "url": "https://github.com/spring-guides/tut-spring-boot-kotlin.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "spring-boot"
+        },
+        "why": "Spring Boot written in Kotlin, built with Maven's Kotlin plugin."
+    },
+    {
+        "name": "quarkus-getting-started",
+        "url": "https://github.com/quarkusio/quarkus-quickstarts.git",
+        "branch": "main",
+        "folder": "getting-started",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "quarkus"
+        },
+        "why": "Quarkus's first quickstart, run from its fast jar in target/quarkus-app."
+    },
+    {
+        "name": "micronaut-hello-world",
+        "url": "https://github.com/GoogleCloudPlatform/kotlin-samples.git",
+        "branch": "main",
+        "folder": "run/micronaut-hello-world",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "micronaut"
+        },
+        "why": "Micronaut in Kotlin on the Gradle Kotlin DSL with no fat jar. It runs from installDist's start script, on the Java its jvmToolchain names."
+    },
+    {
+        "name": "profile-summary-for-github",
+        "url": "https://github.com/tipsy/profile-summary-for-github.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "javalin"
+        },
+        "why": "A Javalin app in Kotlin, packaged by the assembly plugin, reading PORT, with Heroku's system.properties."
+    },
+    {
+        "name": "jhipster-sample-app",
+        "url": "https://github.com/jhipster/jhipster-sample-app.git",
+        "branch": "main",
+        "environment": "SPRING_DATASOURCE_URL=jdbc:postgresql://127.0.0.1:5432/jhipster\nSPRING_DATASOURCE_USERNAME=jhipster_app\nSPRING_DATASOURCE_PASSWORD=${CORPUS_JHIPSTER_DB_PASSWORD}",
+        "expect": {
+            "verdict": "ready",
+            "type": "java",
+            "framework": "jhipster"
+        },
+        "why": "JHipster 9's Angular monolith, built with the prod profile into one jar, on a PostgreSQL database named jhipster that Coresmith made on the node (password in CORPUS_JHIPSTER_DB_PASSWORD)."
+    },
+    {
+        "name": "javalin-heroku-example",
+        "url": "https://github.com/tipsy/javalin-heroku-example.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "There is no mvnw"
+        },
+        "why": "A Javalin app with no Maven wrapper, refused with the command that adds one."
     }
 ]

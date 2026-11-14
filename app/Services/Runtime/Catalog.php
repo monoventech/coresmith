@@ -10,7 +10,7 @@ namespace App\Services\Runtime;
 
 final class Catalog
 {
-    public const RUNTIMES = ['php', 'nodejs', 'bun', 'deno', 'ruby', 'python', 'go'];
+    public const RUNTIMES = ['php', 'nodejs', 'bun', 'deno', 'ruby', 'python', 'go', 'java'];
 
     public function label(string $runtime): string
     {

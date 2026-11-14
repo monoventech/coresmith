@@ -34,7 +34,7 @@ final class AsdfManager
 
     public const PLUGINS = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
 
-    public const RUNTIMES = [...self::PLUGINS, 'python', 'go'];
+    public const RUNTIMES = [...self::PLUGINS, 'python', 'go', 'java'];
 
     public const UV_DIR = self::DATA_DIR . '/uv';
 
@@ -114,6 +114,27 @@ final class AsdfManager
     mv "$stage/go" "$CORESMITH_GO_DIR/$CORESMITH_GO"
     BASH;
 
+    private const JAVA_SCRIPT = <<<'BASH'
+    set -e
+    case "$(uname -m)" in
+      x86_64|amd64) arch=x64 ;;
+      aarch64|arm64) arch=aarch64 ;;
+      *) echo "Temurin publishes no Java build for $(uname -m) servers, so Coresmith can't install it here."; exit 1 ;;
+    esac
+    major="${CORESMITH_JAVA%%.*}"
+    mkdir -p "$CORESMITH_JAVA_DIR"
+    stage="$(mktemp -d "$CORESMITH_JAVA_DIR/.coresmith-stage.XXXXXXXX")"
+    trap 'rm -rf "$stage"' EXIT
+    archive="https://github.com/adoptium/temurin${major}-binaries/releases/download/jdk-${CORESMITH_JAVA}%2B${CORESMITH_JAVA_BUILD}/OpenJDK${major}U-jdk_${arch}_linux_hotspot_${CORESMITH_JAVA}_${CORESMITH_JAVA_BUILD}.tar.gz"
+    curl -fsSL -o "$stage/java.tar.gz" "$archive"
+    curl -fsSL -o "$stage/java.tar.gz.sha256.txt" "$archive.sha256.txt"
+    echo "$(cut -d ' ' -f 1 < "$stage/java.tar.gz.sha256.txt")  $stage/java.tar.gz" | sha256sum -c - >/dev/null 2>&1 || { echo "The Java $CORESMITH_JAVA download did not match its published checksum, so it was not used."; exit 1; }
+    mkdir "$stage/java"
+    tar -xzf "$stage/java.tar.gz" -C "$stage/java" --strip-components=1
+    rm -rf "$CORESMITH_JAVA_DIR/$CORESMITH_JAVA"
+    mv "$stage/java" "$CORESMITH_JAVA_DIR/$CORESMITH_JAVA"
+    BASH;
+
     public static function assertValid(string $runtime, string $version): void
     {
         if (!in_array($runtime, self::RUNTIMES, true)) {
@@ -144,6 +165,22 @@ final class AsdfManager
 
         if ($runtime === 'python') {
             $this->installPython($connection, $version);
+
+            return;
+        }
+
+        if ($runtime === 'java') {
+            $build = config('coresmith.temurin_builds')[$version] ?? null;
+
+            if (!is_string($build) || preg_match('/^\d+\z/', $build) !== 1) {
+                throw InvalidRuntimeException::version($version);
+            }
+
+            $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, self::JAVA_SCRIPT, [
+                'CORESMITH_JAVA' => $version,
+                'CORESMITH_JAVA_BUILD' => $build,
+                'CORESMITH_JAVA_DIR' => self::INSTALL_DIR . '/java',
+            ]), self::INSTALL_SECONDS);
 
             return;
         }

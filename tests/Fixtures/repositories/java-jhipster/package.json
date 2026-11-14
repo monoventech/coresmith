@@ -1,0 +1,12 @@
+{
+  "name": "shop",
+  "version": "0.0.1-SNAPSHOT",
+  "private": true,
+  "scripts": {
+    "build": "npm run webapp:prod --",
+    "start": "ng serve"
+  },
+  "engines": {
+    "node": ">=22.15.0"
+  }
+}

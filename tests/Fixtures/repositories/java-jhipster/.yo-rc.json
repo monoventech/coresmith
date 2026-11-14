@@ -1,0 +1,11 @@
+{
+  "generator-jhipster": {
+    "applicationType": "monolith",
+    "baseName": "shop",
+    "buildTool": "maven",
+    "clientFramework": "angular",
+    "databaseType": "sql",
+    "prodDatabaseType": "postgresql",
+    "jhipsterVersion": "8.11.0"
+  }
+}

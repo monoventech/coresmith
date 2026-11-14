@@ -59,6 +59,7 @@ use App\Services\Panel\SmartToggles;
 use App\Services\Panel\SsrServer;
 use App\Services\Process\CrashLoopWatch;
 use App\Services\Process\ProcessManager;
+use App\Services\Process\ProcessStartAdvice;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\NativeTools;
@@ -1026,6 +1027,15 @@ final class DeployApplication implements ShouldQueue
         }
     }
 
+    private function crashAdvice(Application $application, string $output): string
+    {
+        $advice = app(ProcessStartAdvice::class)->specific($application, $output);
+
+        return $advice === null
+            ? "releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log."
+            : "{$advice} releases/{$this->timestamp} is live but not serving, so roll back to the previous release meanwhile.";
+    }
+
     private function watchProcesses(SSHConnection $connection, ProcessManager $processes, Application $application): void
     {
         if (in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true)) {
@@ -1061,7 +1071,7 @@ final class DeployApplication implements ShouldQueue
         $size = AppSize::tryFrom((string) $application->app_size) ?? AppSize::Small;
         $this->failureReason = $loop->outOfMemory
             ? "Out of memory: {$loop->unit} went past the {$size->memoryMaxMb()} MB the " . ucfirst($size->value) . " size allows, so it kept being stopped. Pick a bigger size on the app page, then deploy again. releases/{$this->timestamp} is live but not serving, so roll back to the previous release meanwhile."
-            : "Crash loop: {$loop->unit} kept stopping in the minute after going live. releases/{$this->timestamp} is live but not serving, so roll back to the previous release or fix the error in the log.";
+            : "Crash loop: {$loop->unit} kept stopping in the minute after going live. " . $this->crashAdvice($application, $loop->output);
 
         throw new DeploymentAborted($this->failureReason);
     }

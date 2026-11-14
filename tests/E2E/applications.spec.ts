@@ -890,6 +890,36 @@ test.describe('adding an application', () => {
         ).toBeVisible()
     })
 
+    test('Java offers its frameworks with Spring Boot first, starts at medium, and asks for no web root or main package', async ({
+        page
+    }) => {
+        await openAddApp(page)
+        await page.getByLabel('Language').selectOption('java')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(framework).toHaveValue('spring-boot')
+        await expect(framework.locator('option')).toHaveText([
+            'Spring Boot',
+            'JHipster',
+            'Quarkus',
+            'Micronaut',
+            'Helidon',
+            'Dropwizard',
+            'Javalin',
+            'Vert.x',
+            'Plain Java'
+        ])
+        await framework.selectOption('jhipster')
+        await expect(framework).toHaveValue('jhipster')
+        await expect(page.getByLabel('Web root')).toHaveCount(0)
+        await expect(page.getByLabel('Main package')).toHaveCount(0)
+        await expect(page.getByLabel('Size', { exact: true })).toHaveValue('medium')
+        await expect(
+            page.getByRole('radiogroup', { name: 'Java version' }).getByRole('radio', { name: /^25\./ })
+        ).toBeVisible()
+    })
+
     test('the web root is asked only of PHP apps and static sites, which serve files from it', async ({ page }) => {
         await openAddApp(page)
 
@@ -898,7 +928,7 @@ test.describe('adding an application', () => {
 
         await expect(webRoot).toHaveValue('/public')
 
-        for (const proxied of ['js', 'ruby', 'python', 'go']) {
+        for (const proxied of ['js', 'ruby', 'python', 'go', 'java']) {
             await language.selectOption(proxied)
             await expect(webRoot).toHaveCount(0)
         }

@@ -9,7 +9,7 @@ export type RuntimeOption = {
 export type RuntimeChoices = { label: string; recommended: string; sources: string; options: RuntimeOption[] }
 
 export function pickerRuntime(type: string, jsRuntime: string): string | null {
-    if (type === 'php' || type === 'ruby' || type === 'python' || type === 'go') {
+    if (type === 'php' || type === 'ruby' || type === 'python' || type === 'go' || type === 'java') {
         return type
     }
 
