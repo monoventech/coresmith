@@ -62,7 +62,7 @@ final class Angular extends JsPreset
             return Proposal::make('js', 'angular', $runtime, null, [...$sources, 'framework' => "@angular/ssr in package.json, serving {$name}"]);
         }
 
-        $web = $this->browserOutput($name, $applications[$name]);
+        $web = $this->browserOutput($facts, $name, $applications[$name]);
 
         return Proposal::staticBuild($web, ['type' => "From angular.json, where {$name} builds to " . ltrim($web, '/')], '');
     }
@@ -98,7 +98,7 @@ final class Angular extends JsPreset
             return null;
         }
 
-        $outputPath = $this->applications($facts)[$name]['architect']['build']['options']['outputPath'] ?? "dist/{$name}";
+        $outputPath = $this->buildOptions($facts, $this->applications($facts)[$name])['outputPath'] ?? "dist/{$name}";
         $base = trim(is_array($outputPath) ? (string) ($outputPath['base'] ?? "dist/{$name}") : (string) $outputPath, '/');
         $server = is_array($outputPath) && array_key_exists('server', $outputPath) ? trim((string) $outputPath['server'], '/') : 'server';
 
@@ -115,7 +115,7 @@ final class Angular extends JsPreset
         $applications = $this->applications($facts);
         $name = count($applications) === 1 ? (string) array_key_first($applications) : null;
 
-        return $name === null || $this->rendersOnServer($facts, $applications[$name]) ? null : $this->browserOutput($name, $applications[$name]);
+        return $name === null || $this->rendersOnServer($facts, $applications[$name]) ? null : $this->browserOutput($facts, $name, $applications[$name]);
     }
 
     private function serverName(RepositoryFacts $facts): ?string
@@ -143,7 +143,7 @@ final class Angular extends JsPreset
      */
     private function rendersOnServer(RepositoryFacts $facts, array $project): bool
     {
-        $ssr = $project['architect']['build']['options']['ssr'] ?? false;
+        $ssr = $this->buildOptions($facts, $project)['ssr'] ?? false;
 
         return $facts->dependency('@angular/ssr') !== null && $ssr !== false && $ssr !== null;
     }
@@ -151,14 +151,32 @@ final class Angular extends JsPreset
     /**
      * @param  array<string, mixed>  $project
      */
-    private function browserOutput(string $name, array $project): string
+    private function browserOutput(RepositoryFacts $facts, string $name, array $project): string
     {
         $build = (array) ($project['architect']['build'] ?? []);
-        $outputPath = $build['options']['outputPath'] ?? "dist/{$name}";
+        $outputPath = $this->buildOptions($facts, $project)['outputPath'] ?? "dist/{$name}";
         $base = trim(is_array($outputPath) ? (string) ($outputPath['base'] ?? "dist/{$name}") : (string) $outputPath, '/');
         $browser = is_array($outputPath) && array_key_exists('browser', $outputPath) ? trim((string) $outputPath['browser'], '/') : 'browser';
         $application = str_ends_with((string) ($build['builder'] ?? ''), ':application');
 
         return '/' . ($application && $browser !== '' ? "{$base}/{$browser}" : $base);
+    }
+
+    /**
+     * @param  array<string, mixed>  $project
+     * @return array<string, mixed>
+     */
+    private function buildOptions(RepositoryFacts $facts, array $project): array
+    {
+        $build = (array) ($project['architect']['build'] ?? []);
+        $options = (array) ($build['options'] ?? []);
+        $script = (string) ($facts->json('package.json')['scripts']['build'] ?? '');
+        $named = preg_match('/(?:--configuration[=\s]+|(?:^|\s)-c\s+)([\w,-]+)/', $script, $matches) === 1 ? $matches[1] : (string) ($build['defaultConfiguration'] ?? '');
+
+        foreach (array_filter(explode(',', $named)) as $configuration) {
+            $options = [...$options, ...(array) ($build['configurations'][$configuration] ?? [])];
+        }
+
+        return $options;
     }
 }

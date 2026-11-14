@@ -368,17 +368,6 @@
         "why": "Angular 20 with the application builder writing to dist."
     },
     {
-        "name": "angular-ssr-example",
-        "url": "https://github.com/Ismaestro/angular-example-app.git",
-        "branch": "master",
-        "expect": {
-            "verdict": "ready",
-            "type": "js",
-            "framework": "angular"
-        },
-        "why": "Angular 21 rendering on the server without a serve:ssr script, so Coresmith starts its server bundle."
-    },
-    {
         "name": "astrowind",
         "url": "https://github.com/arthelokyo/astrowind.git",
         "branch": "main",

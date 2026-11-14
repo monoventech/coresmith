@@ -82,3 +82,20 @@ test('a stored start script is kept only when it is a known name or an Angular s
     'a command hidden in the name' => ['serve:ssr:shop; rm -rf /', 'start'],
     'any other script' => ['deploy', 'start'],
 ]);
+
+test('an Angular build uses the configuration ng build picks, which can move where it writes', function (array $build, array $scripts, string $web) {
+    $project = ['projectType' => 'application', 'architect' => ['build' => ['builder' => '@angular/build:application', ...$build]]];
+
+    expect(ApplicationType::Js->language()->detect(angularFacts(['shop' => $project], scripts: $scripts))['web'])->toBe($web);
+})->with([
+    'the default configuration' => [['options' => ['outputPath' => 'dist/shop'], 'defaultConfiguration' => 'production', 'configurations' => ['production' => ['outputPath' => ['base' => 'dist/pro', 'browser' => '']]]], ['build' => 'ng build'], '/dist/pro'],
+    'a configuration named in the build script' => [['options' => ['outputPath' => 'dist/shop'], 'defaultConfiguration' => 'production', 'configurations' => ['production' => ['outputPath' => 'dist/pro'], 'staging' => ['outputPath' => 'dist/staging']]], ['build' => 'ng build --configuration=staging'], '/dist/staging/browser'],
+    'a short -c in the build script' => [['options' => ['outputPath' => 'dist/shop'], 'configurations' => ['staging' => ['outputPath' => 'dist/staging']]], ['build' => 'ng build -c staging'], '/dist/staging/browser'],
+    'a configuration that does not move it' => [['options' => ['outputPath' => 'dist/shop'], 'defaultConfiguration' => 'production', 'configurations' => ['production' => ['optimization' => true]]], ['build' => 'ng build'], '/dist/shop/browser'],
+]);
+
+test('server-side rendering switched on only in the configuration ng build uses still counts', function () {
+    $project = ['projectType' => 'application', 'architect' => ['build' => ['builder' => '@angular/build:application', 'options' => ['outputPath' => 'dist/shop', 'ssr' => false], 'defaultConfiguration' => 'production', 'configurations' => ['production' => ['ssr' => ['entry' => 'src/server.ts']]]]]];
+
+    expect(ApplicationType::Js->language()->detect(angularFacts(['shop' => $project], ['@angular/ssr' => '^20.1.0']))['framework'])->toBe('angular');
+});
