@@ -140,6 +140,10 @@
             <GitHubAppCard {app} canManage={github.can.manage} />
         {/each}
 
+        {#if github.organization}
+            <GitHubRegistration registration={github.organization} organizationOnly />
+        {/if}
+
         {#if github.connections.length === 0}
             {#if github.connect && github.apps.length === 0}
                 <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="github-connect">

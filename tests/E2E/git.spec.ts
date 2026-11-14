@@ -95,6 +95,20 @@ test.describe('git settings', () => {
         })
     }
 
+    test('an owner can add a private app owned by an organization, named after it', async ({ page }) => {
+        await gotoSettings(page, 'Git')
+
+        const card = page.getByTestId('github-organization')
+
+        await expect(card.getByRole('heading', { name: 'Add an organization' })).toBeVisible()
+        await expect(card).toContainText(
+            "GitHub installs a private app only on the account that owns it. To deploy an organization's repositories, create a Coresmith app owned by that organization, then install it there."
+        )
+        await expect(card.getByRole('radiogroup', { name: 'Owner' })).toHaveCount(0)
+        await card.getByLabel('Organization').fill('acme-labs')
+        await expect(card.getByLabel('Name on GitHub')).toHaveValue('Coresmith acme-labs')
+    })
+
     test('manage repositories opens the installation on GitHub', async ({ page }) => {
         await gotoSettings(page, 'Git')
 
@@ -192,5 +206,6 @@ asMember.describe('git settings as a member', () => {
 
         await expect(page.getByTestId('provider-card')).toContainText('Installed on monoventech')
         await expect(page.getByRole('button', { name: 'Disconnect' })).toHaveCount(0)
+        await expect(page.getByTestId('github-organization')).toHaveCount(0)
     })
 })

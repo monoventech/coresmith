@@ -18,37 +18,43 @@
         compact = false,
         submitLabel = 'Create on GitHub',
         personalOnly = false,
+        organizationOnly = false,
         actions
     }: {
         registration: GitHubRegistration
         compact?: boolean
         submitLabel?: string
         personalOnly?: boolean
+        organizationOnly?: boolean
         actions?: Snippet
     } = $props()
 
     let owner = $state('personal')
     let organization = $state('')
+    const chosen = $derived(organizationOnly ? 'organization' : owner)
     let edited = $state<string | null>(null)
     let anyway = $state(false)
     let organizationTouched = $state(false)
 
-    const name = $derived(edited ?? registration.name)
+    const name = $derived(
+        edited ??
+            (organizationOnly && organization !== '' ? `Coresmith ${organization}`.slice(0, 34) : registration.name)
+    )
     const reachability = $derived(registration.reachability)
     const host = $derived(reachability.host === '' ? 'Coresmith' : reachability.host)
     const organizationValid = $derived(ORGANIZATION_PATTERN.test(organization))
     const nameValid = $derived(APP_NAME_PATTERN.test(name))
     const organizationError = $derived(
-        owner === 'organization' && organizationTouched && !organizationValid
+        chosen === 'organization' && organizationTouched && !organizationValid
             ? "That isn't a GitHub organization name. Use letters, numbers and single hyphens."
             : null
     )
     const nameError = $derived(
         edited !== null && !nameValid ? 'Use letters, numbers, spaces and hyphens, up to 34 characters.' : null
     )
-    const ready = $derived(nameValid && (owner === 'personal' || organizationValid))
+    const ready = $derived(nameValid && (chosen === 'personal' || organizationValid))
     const action = $derived(
-        owner === 'organization' ? organizationAction(registration, organization) : registration.personal_action
+        chosen === 'organization' ? organizationAction(registration, organization) : registration.personal_action
     )
     const manifest = $derived(manifestFor(registration, name, reachability.reachable || anyway))
     const delivery = $derived(
@@ -60,24 +66,29 @@
 
 <div
     class={compact ? undefined : 'rounded-xl border border-border bg-card px-5.5 py-5'}
-    data-testid="github-registration"
+    data-testid={organizationOnly ? 'github-organization' : 'github-registration'}
 >
     {#if !compact}
         <div class="mb-1 flex flex-wrap items-center gap-2.5">
             <GitBranch class="size-4.5 text-muted-foreground" />
-            <h3 class="type-h3 m-0">Create the GitHub App</h3>
+            <h3 class="type-h3 m-0">{organizationOnly ? 'Add an organization' : 'Create the GitHub App'}</h3>
         </div>
         <p class="mb-4 text-[12.5px] text-muted-foreground">
-            Coresmith has no GitHub App yet. GitHub creates one that belongs to you, with Coresmith's addresses filled
-            in, and Coresmith keeps its key encrypted here. It asks only for contents read-only, commit statuses and
-            webhooks.
+            {#if organizationOnly}
+                GitHub installs a private app only on the account that owns it. To deploy an organization's
+                repositories, create a Coresmith app owned by that organization, then install it there.
+            {:else}
+                Coresmith has no GitHub App yet. GitHub creates one that belongs to you, with Coresmith's addresses
+                filled in, and Coresmith keeps its key encrypted here. It asks only for contents read-only, commit
+                statuses and webhooks.
+            {/if}
         </p>
     {/if}
 
     <form method="post" {action} class="flex flex-col gap-4">
         <input type="hidden" name="manifest" value={manifest} />
 
-        {#if !personalOnly}
+        {#if !personalOnly && !organizationOnly}
             <div>
                 <Label id="github-owner-label" class="mb-1.5">Owner</Label>
                 <RadioGroup.Root
@@ -99,7 +110,7 @@
             </div>
         {/if}
 
-        {#if owner === 'organization'}
+        {#if chosen === 'organization'}
             <div>
                 <Label for="github-organization" class="mb-1.5">Organization</Label>
                 <Input
