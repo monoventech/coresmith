@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\ApplicationType;
+use App\Models\Application;
 use App\Models\Server;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
@@ -14,6 +16,14 @@ use App\Services\Runtime\RuntimeResolver;
 use App\Services\Runtime\VersionConstraint;
 use App\Services\SSH\SSHConnection;
 use Tests\Support\FakeSSHTransport;
+
+function pythonRequirement(array $files, array &$notes = []): ?Requirement
+{
+    $detection = app(RuntimeDetector::class)->detect(new Application(['type' => ApplicationType::Python]), new RepositoryFacts($files, complete: true));
+    $notes = $detection->notes;
+
+    return $detection->requirements['python'] ?? null;
+}
 
 test('Python is a runtime Coresmith manages, with the upstream lines that still get fixes', function () {
     $catalog = app(Catalog::class);
@@ -49,6 +59,7 @@ test('Python installs prebuilt through uv into the same folder layout as every o
         ->and($commands)->toContain('python install "$CORESMITH_PYTHON" --install-dir "$stage" --no-bin')
         ->and($commands)->toContain("CORESMITH_PYTHON='3.14.10'")
         ->and($commands)->toContain('ln -sfn python3')
+        ->and($commands)->toContain('grep -rIl -- "$found" "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"')
         ->and($commands)->toContain('-m compileall -q -j 0')
         ->and($commands)->not->toContain('asdf install python')
         ->and($commands)->not->toContain('asdf plugin update');
@@ -65,7 +76,7 @@ test('pip version specifiers read like Composer constraints', function (string $
 ]);
 
 test('the Python version comes from .python-version, .tool-versions, requires-python or runtime.txt', function (array $files, string $constraint, string $source) {
-    $requirement = app(RuntimeDetector::class)->requirementFor('python', new RepositoryFacts($files, complete: true));
+    $requirement = pythonRequirement($files);
 
     expect($requirement?->constraint)->toBe($constraint)
         ->and($requirement?->source)->toBe($source);
@@ -79,7 +90,7 @@ test('the Python version comes from .python-version, .tool-versions, requires-py
 ]);
 
 test('Poetry\'s python line reads the way Poetry reads it', function (string $line, string $best) {
-    $requirement = app(RuntimeDetector::class)->requirementFor('python', new RepositoryFacts(['pyproject.toml' => "[tool.poetry.dependencies]\npython = \"{$line}\"\n"], complete: true));
+    $requirement = pythonRequirement(['pyproject.toml' => "[tool.poetry.dependencies]\npython = \"{$line}\"\n"]);
 
     expect(VersionConstraint::parse($requirement->constraint, $requirement->flavour)?->best(['3.11.18', '3.12.16', '3.13.18', '3.14.10', '3.15.2']))->toBe($best)
         ->and($requirement->field)->toBe('the python line in pyproject.toml');
@@ -147,13 +158,13 @@ test('an exact pip release is the version Coresmith installs, even when the cata
 });
 
 test('a .python-version naming a line picks the newest release of that line', function () {
-    $requirement = app(RuntimeDetector::class)->requirementFor('python', new RepositoryFacts(['.python-version' => "3.12\n"], complete: true));
+    $requirement = pythonRequirement(['.python-version' => "3.12\n"]);
 
     expect(VersionConstraint::parse($requirement->constraint, $requirement->flavour)?->best(['3.12.16', '3.13.18']))->toBe('3.12.16');
 });
 
 test('.tool-versions names Python the way asdf does', function () {
-    $requirement = app(RuntimeDetector::class)->requirementFor('python', new RepositoryFacts(['.tool-versions' => "python 3.13.2\n", '.python-version' => "3.12\n"], complete: true));
+    $requirement = pythonRequirement(['.tool-versions' => "python 3.13.2\n", '.python-version' => "3.12\n"]);
 
     expect($requirement->constraint)->toBe('3.13.2')
         ->and($requirement->source)->toBe('.tool-versions');
@@ -161,7 +172,7 @@ test('.tool-versions names Python the way asdf does', function () {
 
 test('a .python-version that names something other than a CPython release is ignored with a note', function () {
     $notes = [];
-    $requirement = app(RuntimeDetector::class)->requirementFor('python', new RepositoryFacts(['.python-version' => "pypy3.10\n"], complete: true), $notes);
+    $requirement = pythonRequirement(['.python-version' => "pypy3.10\n"], $notes);
 
     expect($requirement)->toBeNull()
         ->and($notes)->toBe(['Ignored .python-version, because pypy3.10 is not a Python version Coresmith knows.']);

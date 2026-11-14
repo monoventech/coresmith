@@ -50,14 +50,6 @@ final class RuntimeDetector
 
     /**
      * @param  list<string>  $notes
-     */
-    public function requirementFor(string $runtime, RepositoryFacts $facts, array &$notes = []): ?Requirement
-    {
-        return $this->toolVersions($facts, $notes)[$runtime] ?? $this->fromRuntimeFiles($runtime, $facts, $notes);
-    }
-
-    /**
-     * @param  list<string>  $notes
      * @return list<Limit>
      */
     private function composerLimits(RepositoryFacts $facts, array &$notes): array

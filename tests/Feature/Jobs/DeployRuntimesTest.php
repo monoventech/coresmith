@@ -16,9 +16,12 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Deployment\DeploymentPhases;
 use App\Services\Runtime\NativeGemTools;
 use App\Services\Runtime\NativePythonTools;
 use App\Services\Runtime\RepositoryProbe;
+use App\Services\Runtime\ResolvedRuntime;
+use App\Services\Runtime\Stack;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -307,6 +310,13 @@ test('a package that fails to build on the Python Coresmith picked says which on
     'nothing names a version' => ['{}', 'greenlet failed to build on Python 3.14.10, which Coresmith picked because the repository names no Python version. Add a .python-version with the Python the app runs on, for example 3.12, or update greenlet.'],
     'the repository names one' => ['{".python-version":"3.13\n"}', 'greenlet failed to build on Python 3.13.18, the version .python-version names. Update greenlet to a release that supports it, or name an older Python in .python-version.'],
 ]);
+
+test('a package that fails to build on the Python picked on the app page points back there', function () {
+    $stack = new Stack(['python' => new ResolvedRuntime('python', '3.13.18', ResolvedRuntime::FROM_PIN, null, true)]);
+
+    expect(ApplicationType::Python->language()->explain(DeploymentPhases::DEPENDENCIES, "  × Failed to build `greenlet==3.0.1`\n", $stack))
+        ->toBe('greenlet failed to build on Python 3.13.18, the version picked on the app page. Update greenlet to a release that supports it, or pick an older Python on the app page.');
+});
 
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();

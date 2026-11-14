@@ -89,6 +89,7 @@ final class AsdfManager
     [ -n "$found" ] || { echo "uv finished without installing Python $CORESMITH_PYTHON."; exit 1; }
     rm -rf "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"
     mv "$found" "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"
+    grep -rIl -- "$found" "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON" | while IFS= read -r file; do sed -i "s#$found#$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON#g" "$file"; done
     ln -sfn python3 "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python"
     "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python" -m compileall -q -j 0 -x '/(test|tests|idle_test)/' "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/lib" >/dev/null 2>&1 || echo "Some of Python $CORESMITH_PYTHON's standard library didn't precompile, so apps may start a little slower."
     BASH;

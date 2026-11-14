@@ -187,7 +187,7 @@ final class SmartToggles
                 'busy_on' => $key === self::CELERY ? 'Starting the Celery worker…' : 'Starting Celery beat…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
-                'disabled' => !$this->isOn($application, $key) && $this->celeryApp($application) === null,
+                'disabled' => false,
             ],
             self::INERTIA_SSR => [
                 'key' => $key,

@@ -115,7 +115,7 @@ final class Django extends PythonPreset
         $environment = 'read the list from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.';
 
         if ($hosts === []) {
-            return ["{$where} sets ALLOWED_HOSTS = [], so Django answers 400 Bad Request to every visit on the app's domain.", 'Read it from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.'];
+            return ["{$where} sets ALLOWED_HOSTS = [], so Django answers 400 Bad Request to every visit on the app's domain.", ucfirst($environment)];
         }
 
         foreach ($domains as $domain) {

@@ -206,8 +206,10 @@ final readonly class Python implements Language
 
         $package = $matches[1];
 
-        return $python->source === ResolvedRuntime::FROM_DEFAULT
-            ? "{$package} failed to build on Python {$python->version}, which Coresmith picked because the repository names no Python version. Add a .python-version with the Python the app runs on, for example 3.12, or update {$package}."
-            : "{$package} failed to build on Python {$python->version}, the version {$python->source} names. Update {$package} to a release that supports it, or name an older Python in {$python->source}.";
+        return match ($python->source) {
+            ResolvedRuntime::FROM_DEFAULT => "{$package} failed to build on Python {$python->version}, which Coresmith picked because the repository names no Python version. Add a .python-version with the Python the app runs on, for example 3.12, or update {$package}.",
+            ResolvedRuntime::FROM_PIN => "{$package} failed to build on Python {$python->version}, the version picked on the app page. Update {$package} to a release that supports it, or pick an older Python on the app page.",
+            default => "{$package} failed to build on Python {$python->version}, the version {$python->source} names. Update {$package} to a release that supports it, or name an older Python in {$python->source}.",
+        };
     }
 }

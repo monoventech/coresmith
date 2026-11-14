@@ -102,7 +102,7 @@ test('Django refuses settings that only allow an empty ALLOWED_HOSTS, which answ
     expect(pyBlockers('django', $facts))->toBe([[
         'field' => 'repository',
         'reason' => "shop/settings.py sets ALLOWED_HOSTS = [], so Django answers 400 Bad Request to every visit on the app's domain.",
-        'fix' => 'Read it from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.',
+        'fix' => 'Read the list from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.',
     ]]);
 });
 
@@ -172,6 +172,7 @@ test('an app on another framework runs what the Procfile\'s web line names', fun
     'gunicorn with uvicorn workers' => ["web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app\n", 'gunicorn', 'uvicorn', 'main:app'],
     'uvicorn through python -m' => ["web: python -m uvicorn api:app --host 0.0.0.0 --port \$PORT\n", 'uvicorn', 'uvicorn', 'api:app'],
     'options with values before the app' => ["web: gunicorn --bind 0.0.0.0:\$PORT --workers=3 shop.wsgi:application\n", 'gunicorn', 'gunicorn', 'shop.wsgi:application'],
+    'a module without its variable' => ["web: gunicorn shop.wsgi --log-file -\n", 'gunicorn', 'gunicorn', 'shop.wsgi'],
 ]);
 
 test('a Procfile that starts the app some other way is unsettled, with the line to write instead', function () {

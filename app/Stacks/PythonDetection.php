@@ -47,9 +47,9 @@ final readonly class PythonDetection
         $app = $this->generic($facts);
 
         if ($app->module !== null) {
-            [$file, $variable] = explode(':', $app->module, 2);
+            $evidence = $web === null ? (string) preg_replace('/^(\w+):(\w+)$/', '$2 in $1.py', $app->module) : 'web: ' . $this->program($web) . ' in Procfile';
 
-            return Proposal::make('python', '', null, null, [...$sources, 'framework' => $web === null ? "{$variable} in {$file}.py" : 'web: ' . $this->program($web) . ' in Procfile'], []);
+            return Proposal::make('python', '', null, null, [...$sources, 'framework' => $evidence], []);
         }
 
         if ($web !== null) {
