@@ -334,6 +334,28 @@
         "why": "Astro static with pnpm and an engines.node floor."
     },
     {
+        "name": "adonisjs-slim",
+        "url": "https://github.com/adonisjs/slim-starter-kit.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "adonisjs"
+        },
+        "why": "AdonisJS 6's slim starter: the core alone."
+    },
+    {
+        "name": "adonisjs-web",
+        "url": "https://github.com/adonisjs/web-starter-kit.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "adonisjs"
+        },
+        "why": "AdonisJS 6's web starter: Vite assets, sessions and Lucid."
+    },
+    {
         "name": "astrowind",
         "url": "https://github.com/arthelokyo/astrowind.git",
         "branch": "main",
