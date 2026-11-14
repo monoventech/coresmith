@@ -41,7 +41,7 @@ export const packageFields: Record<PackageSourceValue, PackageFields> = {
         placeholder: 'nova.laravel.com',
         targetHint: 'For Laravel Nova and Spark, the username is your account email and the password a license key.',
         username: 'optional',
-        usernameHint: 'Leave it empty to send the token as a bearer token, which private Packagist accepts.',
+        usernameHint: "Leave it empty for a bearer token, such as private Packagist's.",
         secret: 'Password or license key',
         scopes: false
     },

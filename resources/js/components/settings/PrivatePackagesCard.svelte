@@ -3,7 +3,6 @@
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
     import FieldError from '@/components/FieldError.svelte'
-    import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
@@ -30,6 +29,16 @@
         { value: '', label: 'Every app' },
         ...packages.projects.map((project) => ({ value: project.id, label: `Apps in ${project.name}` }))
     ])
+
+    function details(entry: PackageEntry): string {
+        return [
+            entry.scope,
+            entry.project === null ? 'Every\u00a0app' : `Apps in ${entry.project}`,
+            entry.hint === null ? null : `ends\u00a0in\u00a0${entry.hint}`
+        ]
+            .filter((part) => part !== null)
+            .join(' · ')
+    }
 
     function openAdd() {
         editing = null
@@ -63,13 +72,9 @@
 
 <div class="overflow-hidden rounded-xl border border-border bg-card" data-testid="private-packages-card">
     <div class="px-5.5 pt-4 pb-3">
-        <div class="flex flex-wrap items-center gap-2.5">
+        <div class="flex flex-wrap items-baseline gap-2.5">
             <h3 class="type-h3 m-0">Private packages</h3>
             <span class="font-mono text-[12px] text-muted-foreground">{count}</span>
-            {#if packages.can_manage && packages.entries.length > 0}
-                <span class="ml-auto"><Button variant="ghost" size="sm" onclick={openAdd}>Add credentials</Button></span
-                >
-            {/if}
         </div>
         <p class="mt-1 mb-0 text-[12.5px] text-muted-foreground">
             Installs and builds use these to fetch private dependencies, like Laravel Nova or a GitHub Packages scope.
@@ -93,20 +98,20 @@
         <ul class="m-0 max-h-80 list-none overflow-y-auto p-0">
             {#each packages.entries as entry (entry.id)}
                 <li
-                    class="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-5.5 py-1.5 text-[13.5px]"
+                    class="flex min-h-12 items-center gap-3 border-t border-border px-5.5 py-2"
                     data-testid="package-credential-row"
                 >
-                    <span class="font-medium">{entry.source_label}</span>
-                    <span class="min-w-0 truncate font-mono text-[12.5px]" title={entry.target}>{entry.target}</span>
-                    {#if entry.scope}
-                        <span class="min-w-0 truncate font-mono text-[12px] text-muted-foreground">{entry.scope}</span>
-                    {/if}
-                    <span class="ml-auto flex flex-wrap items-center gap-2.5">
-                        <Badge variant="outline">{entry.project ?? 'Every app'}</Badge>
-                        {#if entry.hint}
-                            <span class="font-mono text-[12px] text-muted-foreground">ends in {entry.hint}</span>
-                        {/if}
-                        {#if packages.can_manage}
+                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span class="flex min-w-0 items-baseline gap-2 text-[13.5px]">
+                            <span class="shrink-0 font-medium">{entry.source_label}</span>
+                            <span class="min-w-0 truncate font-mono text-[12.5px]" title={entry.target}
+                                >{entry.target}</span
+                            >
+                        </span>
+                        <span class="text-[12px] wrap-anywhere text-muted-foreground">{details(entry)}</span>
+                    </div>
+                    {#if packages.can_manage}
+                        <span class="flex shrink-0 items-center gap-1">
                             <Button variant="ghost" size="sm" onclick={() => openEdit(entry)}>Edit</Button>
                             <button
                                 type="button"
@@ -117,11 +122,16 @@
                             >
                                 <X class="size-4" />
                             </button>
-                        {/if}
-                    </span>
+                        </span>
+                    {/if}
                 </li>
             {/each}
         </ul>
+        {#if packages.can_manage}
+            <div class="border-t border-border px-5.5 py-2">
+                <Button variant="ghost" size="sm" onclick={openAdd}>Add credentials</Button>
+            </div>
+        {/if}
     {/if}
 
     <p class="m-0 border-t border-border px-5.5 py-3 text-[12.5px] text-muted-foreground">

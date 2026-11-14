@@ -9,10 +9,6 @@
     )
     const packagesHref = $derived(detection?.state === 'read' ? (detection.packages_href ?? null) : null)
 
-    function listed(hosts: string[]): string {
-        return hosts.length < 2 ? (hosts[0] ?? '') : `${hosts.slice(0, -1).join(', ')} and ${hosts[hosts.length - 1]}`
-    }
-
     const blocked = $derived(
         detection?.state === 'read' && detection.verdict === 'blocked'
             ? detection.blockers
@@ -75,10 +71,12 @@
         <div class="mt-2.5 flex gap-3 rounded-lg border border-border px-3.5 py-3" data-testid="private-packages-note">
             <KeyRound class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <p class="m-0 text-[13px]">
-                This app installs packages from <span class="font-mono text-[12px] wrap-anywhere"
-                    >{listed(privateHosts)}</span
-                >, and Coresmith has no credentials for {privateHosts.length === 1 ? 'it' : 'them'}. If those packages
-                are private,
+                This app installs packages from {#each privateHosts as host, index (host)}{#if index > 0}{index ===
+                        privateHosts.length - 1
+                            ? ' and '
+                            : ', '}{/if}<span class="font-mono text-[12px] wrap-anywhere">{host}</span>{/each}, and
+                Coresmith has no credentials for {privateHosts.length === 1 ? 'it' : 'them'}. If those packages are
+                private,
                 {#if packagesHref}
                     <a href={packagesHref} class="font-medium underline underline-offset-2"
                         >add credentials to Private packages in Settings, Git</a
