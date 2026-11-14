@@ -146,7 +146,7 @@ test.describe('git settings', () => {
         const webhooks = page.getByTestId('webhooks-card')
 
         await expect(webhooks).toContainText('HMAC-SHA256 verified')
-        await expect(webhooks).toContainText('GitHub cannot reach 127.0.0.1, it only answers on this machine.')
+        await expect(webhooks).toContainText("GitHub can't reach 127.0.0.1, because it only answers on this machine.")
     })
 
     test('disconnecting asks first and can be called off', async ({ page }) => {

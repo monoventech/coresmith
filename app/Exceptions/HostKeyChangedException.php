@@ -19,7 +19,7 @@ final class HostKeyChangedException extends RuntimeException
     public static function forServer(string $ipAddress, string $expected, string $actual): self
     {
         $exception = new self(
-            "Host key for {$ipAddress} has changed. This could indicate a man-in-the-middle attack or a server reinstall."
+            "Host key for {$ipAddress} has changed. That happens when a server is rebuilt, or when someone is intercepting the connection."
         );
 
         $exception->expectedFingerprint = $expected;

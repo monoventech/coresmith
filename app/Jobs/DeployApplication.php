@@ -719,7 +719,7 @@ final class DeployApplication implements ShouldQueue
 
         if ($percent >= self::DISK_ABORT_PERCENT) {
             throw new DeploymentAborted(
-                "Deployment aborted: server disk is {$percent}% full. Free up space (clear old releases, prune logs) before deploying."
+                "The deploy didn't start because the server's disk is {$percent}% full. Free up space, for example by pruning old releases, then deploy again."
             );
         }
     }
@@ -961,7 +961,7 @@ final class DeployApplication implements ShouldQueue
             $result = $connection->execute($check, sudo: true);
 
             if ($result->failed()) {
-                throw new DeploymentAborted("Health check failed: {$description} is missing, so the release was not put live.");
+                throw new DeploymentAborted("Health check failed: {$description} is missing, so the release didn't go live.");
             }
 
             $this->appendLog('health: ' . $description . ' present');

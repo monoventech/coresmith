@@ -142,7 +142,7 @@ test('a failed S3 listing says so instead of listing nothing', function () {
 
     $listing = app(DatabaseBackups::class)->list($database);
 
-    expect($listing->s3Error)->toBe("Coresmith couldn't list the copies in S3. S3 said: Access Denied. Check the bucket name, region and keys in Settings, General.")
+    expect($listing->s3Error)->toBe("Coresmith couldn't list the copies in S3. S3 said: Access Denied. Check the bucket name, region and keys in Settings, Team.")
         ->and($listing->backups)->toHaveCount(1)
         ->and($listing->backups[0]->onServer())->toBeTrue();
 });

@@ -67,7 +67,7 @@
         <p class="mb-3 text-[12.5px] text-muted-foreground">
             {pending
                 ? 'Coresmith runs eight phases and hardens the server along the way.'
-                : 'Every phase is logged. Close this page, it keeps going.'}
+                : 'Every phase is logged, and it keeps going if you close this page.'}
         </p>
         <div class="flex flex-col gap-0.5">
             {#each provisioning.phases as phase, index (phase.name)}

@@ -55,7 +55,7 @@ final class DeploymentController extends Controller
         DeployApplication::dispatch($deployment, now()->format('Ymd-His'));
 
         return to_route('servers.applications.deployments.show', [$server, $application, $deployment, 'from' => $from])
-            ->with('success', "Deploying {$application->name}. The current release keeps serving until the symlink swap.");
+            ->with('success', "Deploying {$application->name}. The current release keeps serving until the new one goes live.");
     }
 
     public function show(Request $request, Server $server, Application $application, Deployment $deployment, DeploymentPhases $phases): Response
@@ -111,7 +111,7 @@ final class DeploymentController extends Controller
 
         $target = isset($validated['release']) ? ' to releases/' . Formats::release($validated['release']) : ' to the previous release';
 
-        return back()->with('success', "Rolling back. The symlink re-points{$target}, nothing is rebuilt.");
+        return back()->with('success', "Rolling back{$target}. Nothing is rebuilt.");
     }
 
     public function cancel(Request $request, Server $server, Application $application, Deployment $deployment, DeploymentCancellation $cancellation): RedirectResponse

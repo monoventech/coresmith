@@ -16,7 +16,7 @@ class AppSetup extends Command
     /**
      * The console command description.
      */
-    protected $description = 'Ensure the .env file exists and generate APP_KEY if missing';
+    protected $description = 'Create the .env file if it\'s missing, and generate APP_KEY if it\'s empty';
 
     /**
      * Execute the console command.
@@ -50,6 +50,6 @@ class AppSetup extends Command
             $this->info('APP_KEY already exists. No action needed.');
         }
 
-        $this->info('Application setup completed successfully!');
+        $this->info('Set up.');
     }
 }

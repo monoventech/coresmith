@@ -60,7 +60,7 @@ test('a stopped application is served a maintenance page instead of the site', f
 
     expect($static['status_code'])->toBe(503)
         ->and($static['body'])->toContain('Shop is unavailable')
-        ->and($static['body'])->toContain('stopped by its owner');
+        ->and($static['body'])->toContain('Its owner has stopped it for now.');
 });
 
 test('maintenance mode serves the page while the processes keep running', function () {

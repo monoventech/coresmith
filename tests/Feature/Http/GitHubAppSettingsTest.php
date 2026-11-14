@@ -376,11 +376,11 @@ test('the git page explains each app\'s webhook', function () {
         ->assertOk()
         ->assertInertia(fn($page) => $page
             ->has('github.webhook', 1)
-            ->where('github.webhook.0.sentence', 'GitHub cannot reach localhost, it only answers on this machine.')
+            ->where('github.webhook.0.sentence', 'GitHub can\'t reach localhost, because it only answers on this machine.')
             ->where('github.webhook.0', [
                 'app_name' => 'Coresmith Monoven',
                 'instant' => false,
-                'sentence' => 'GitHub cannot reach localhost, it only answers on this machine.',
+                'sentence' => 'GitHub can\'t reach localhost, because it only answers on this machine.',
                 'sync_href' => route('github-apps.webhook', $app),
             ]));
 });
@@ -436,7 +436,7 @@ test('a member reads the webhook sentence but is not offered a repoint', functio
     $this->actingAs($member)
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page
-            ->where('github.webhook.0.sentence', 'GitHub cannot reach localhost, it only answers on this machine.')
+            ->where('github.webhook.0.sentence', 'GitHub can\'t reach localhost, because it only answers on this machine.')
             ->where('github.webhook.0.sync_href', null));
 });
 

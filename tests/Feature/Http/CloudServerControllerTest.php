@@ -78,7 +78,7 @@ test('an admin provisions a server through a connected account', function () {
     $task = CloudTask::of($server);
 
     $response->assertRedirect(route('servers.show', $server))
-        ->assertSessionHas('success', 'Creating outpost-02 at Hetzner Cloud. This page follows along, close it and it keeps going.');
+        ->assertSessionHas('success', 'Creating outpost-02 at Hetzner Cloud. This page follows along, and it keeps going if you close it.');
 
     expect($server->team_id)->toBe($team->id)
         ->and($server->status)->toBe(ServerStatus::Creating)
@@ -531,7 +531,7 @@ test('an account whose token was refused says so instead of offering sizes', fun
     $this->actingAs($user)
         ->getJson(route('servers.cloud.sizes', $server))
         ->assertOk()
-        ->assertExactJson(['error' => "Hetzner Cloud refused this account's token on Oct 30. Replace it in Settings → Team, then try again."]);
+        ->assertExactJson(['error' => "Hetzner Cloud refused this account's token on Oct 30. Replace it in Settings, Team, then try again."]);
 });
 
 test('a catalog that cannot be read says why', function () {
@@ -598,7 +598,7 @@ test('a size the provider could not be asked about says what happened, not that 
     Queue::assertNothingPushed();
 })->with([
     'no answer' => [CloudFailure::Unavailable, 503, "Coresmith couldn't check that size with Hetzner Cloud. Hetzner Cloud had a problem answering (HTTP 503). Try again in a minute.", false],
-    'a refused token' => [CloudFailure::TokenRejected, 401, "Coresmith couldn't check that size with Hetzner Cloud. Hetzner Cloud refused this account's token. Replace it in Settings → Team, then try again.", true],
+    'a refused token' => [CloudFailure::TokenRejected, 401, "Coresmith couldn't check that size with Hetzner Cloud. Hetzner Cloud refused this account's token. Replace it in Settings, Team, then try again.", true],
 ]);
 
 test('a resize whose token cannot be used says so instead of failing', function () {
@@ -611,7 +611,7 @@ test('a resize whose token cannot be used says so instead of failing', function 
         ->from(route('servers.show', $server))
         ->post(route('servers.cloud.resize', $server), ['size' => 'cx32'])
         ->assertRedirect(route('servers.show', $server))
-        ->assertSessionHas('error', 'No token is stored for this Hetzner Cloud account. Replace the token in Settings → Team, then try again.');
+        ->assertSessionHas('error', 'No token is stored for this Hetzner Cloud account. Replace the token in Settings, Team, then try again.');
 
     expect(CloudTask::of($server->fresh()))->toBeNull();
 

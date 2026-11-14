@@ -1217,7 +1217,7 @@ test('linode says a token without access to linodes cannot create', function () 
             ->and($e->retryable())->toBeFalse()
             ->and($e->status)->toBe(403)
             ->and($e->detail)->toBe('Unauthorized')
-            ->and($e->getMessage())->toBe("Linode says this token isn't allowed to do that. Linode said: Unauthorized. Give it read/write access to Linodes and read access to Images. Then replace the token in Settings → Team.");
+            ->and($e->getMessage())->toBe("Linode says this token isn't allowed to do that. Linode said: Unauthorized. Give it read/write access to Linodes and read access to Images. Then replace the token in Settings, Team.");
     });
 
     Http::assertSentCount(1);
@@ -1239,7 +1239,7 @@ test('linode reads a token the endpoint does not allow as forbidden, not as a re
             ->and($e->retryable())->toBeFalse()
             ->and($e->status)->toBe(401)
             ->and($e->detail)->toBe('Your OAuth token is not authorized to use this endpoint.')
-            ->and($e->getMessage())->toBe("Linode says this token isn't allowed to do that. Linode said: Your OAuth token is not authorized to use this endpoint. Give it read/write access to Linodes and read access to Images. Then replace the token in Settings → Team.")
+            ->and($e->getMessage())->toBe("Linode says this token isn't allowed to do that. Linode said: Your OAuth token is not authorized to use this endpoint. Give it read/write access to Linodes and read access to Images. Then replace the token in Settings, Team.")
             ->and($e->connectMessage())->toBe("Linode accepted the token, but it isn't allowed to manage servers. Linode said: Your OAuth token is not authorized to use this endpoint. Give it read/write access to Linodes and read access to Images.");
     });
 

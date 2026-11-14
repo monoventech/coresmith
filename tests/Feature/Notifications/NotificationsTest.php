@@ -168,7 +168,7 @@ test('a failure after the swap is emailed as live and needing a look', function 
     expect($mail->subject)->toBe('Shop failed to deploy')
         ->and($mail->introLines)->toBe([
             'The symlink swap step failed on web-1.',
-            'It failed after the symlink swap, so the new release is live. Check its processes.',
+            'It failed after the switch to the new release, so that release is live. Check its processes.',
         ]);
 });
 

@@ -61,7 +61,7 @@ test('deploying records who asked and which branch, queues the build and opens t
     $deployment = Deployment::query()->sole();
 
     $response->assertRedirect(screenUrl($deployment, ['from' => 'releases']))
-        ->assertSessionHas('success', 'Deploying Shop. The current release keeps serving until the symlink swap.');
+        ->assertSessionHas('success', 'Deploying Shop. The current release keeps serving until the new one goes live.');
 
     expect($deployment->triggered_by)->toBe($user->id)
         ->and($deployment->branch)->toBe('production')
@@ -341,7 +341,7 @@ test('rolling back to a release of this application queues exactly that release'
     $this->actingAs(screenMember($team))
         ->post(route('servers.applications.rollback', [$application->server_id, $application]), ['release' => $release])
         ->assertSessionHasNoErrors()
-        ->assertSessionHas('success', "Rolling back. The symlink re-points to releases/{$shown}, nothing is rebuilt.");
+        ->assertSessionHas('success', "Rolling back to releases/{$shown}. Nothing is rebuilt.");
 
     Queue::assertPushed(RollbackApplication::class, fn(RollbackApplication $job): bool => screenPrivate($job, 'release') === $release
         && screenPrivate($job, 'application')->is($application));
@@ -357,7 +357,7 @@ test('rolling back without a release goes to the previous one', function () {
 
     $this->actingAs(screenMember($team))
         ->post(route('servers.applications.rollback', [$application->server_id, $application]))
-        ->assertSessionHas('success', 'Rolling back. The symlink re-points to the previous release, nothing is rebuilt.');
+        ->assertSessionHas('success', 'Rolling back to the previous release. Nothing is rebuilt.');
 
     Queue::assertPushed(RollbackApplication::class, fn(RollbackApplication $job): bool => screenPrivate($job, 'release') === null);
 });

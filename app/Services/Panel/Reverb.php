@@ -23,7 +23,7 @@ final class Reverb
 
     public const BAD_CHARACTERS = 'REVERB_APP_ID and REVERB_APP_KEY can only use letters, numbers, dots, dashes and underscores';
 
-    public const NO_DOMAIN = 'Add a domain first, browsers reach Reverb through it';
+    public const NO_DOMAIN = 'Add a domain first. Browsers reach Reverb through it';
 
     public const NOT_INSTALLED = 'composer.json no longer requires laravel/reverb, so it does not start';
 

@@ -95,7 +95,7 @@ final class UrlGuard
         $port = (int) ($parts['port'] ?? 443);
 
         if (in_array($host, self::BLOCKED_HOSTS, true) || str_ends_with($host, '.localhost')) {
-            throw new SsoException("Coresmith will not connect to {$host}. Use your identity provider's public address.", 'url.blocked');
+            throw new SsoException("Coresmith won't connect to {$host}. Use your identity provider's public address.", 'url.blocked');
         }
 
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
@@ -125,7 +125,7 @@ final class UrlGuard
     {
         foreach (self::BLOCKED_RANGES as $range) {
             if (self::inRange($address, $range) || self::inRange((string) self::embeddedIpv4($address), $range)) {
-                throw new SsoException("Coresmith will not connect to {$host}, it points at a private address.", 'url.blocked');
+                throw new SsoException("Coresmith won't connect to {$host}, because it points at a private address.", 'url.blocked');
             }
         }
     }

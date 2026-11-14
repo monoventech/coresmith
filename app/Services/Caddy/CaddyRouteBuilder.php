@@ -130,8 +130,8 @@ final class CaddyRouteBuilder
         $name = htmlspecialchars($application->name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
         $message = $application->power_state === PowerState::Stopped
-            ? 'This site has been stopped by its owner.'
-            : 'This site is down for maintenance. It will be back shortly.';
+            ? 'Its owner has stopped it for now.'
+            : 'It is down for maintenance and will be back shortly.';
 
         return <<<HTML
             <!doctype html>

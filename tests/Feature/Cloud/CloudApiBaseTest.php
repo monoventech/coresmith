@@ -259,8 +259,8 @@ test('the task and connect copy say what happened and what to do', function (Clo
 
     expect($e->getMessage())->toBe($task)->and($e->connectMessage())->toBe($connect);
 })->with([
-    [CloudFailure::TokenRejected, "Hetzner Cloud refused this account's token. Hetzner Cloud said: unable to authenticate. Replace it in Settings → Team, then try again.", "Hetzner Cloud didn't accept that token. Hetzner Cloud said: unable to authenticate. Copy it again from Hetzner Cloud, then paste it here."],
-    [CloudFailure::Forbidden, "Hetzner Cloud says this token isn't allowed to do that. Hetzner Cloud said: unable to authenticate. Generate a Read & Write token for the project. Then replace the token in Settings → Team.", "Hetzner Cloud accepted the token, but it isn't allowed to manage servers. Hetzner Cloud said: unable to authenticate. Generate a Read & Write token for the project."],
+    [CloudFailure::TokenRejected, "Hetzner Cloud refused this account's token. Hetzner Cloud said: unable to authenticate. Replace it in Settings, Team, then try again.", "Hetzner Cloud didn't accept that token. Hetzner Cloud said: unable to authenticate. Copy it again from Hetzner Cloud, then paste it here."],
+    [CloudFailure::Forbidden, "Hetzner Cloud says this token isn't allowed to do that. Hetzner Cloud said: unable to authenticate. Generate a Read & Write token for the project. Then replace the token in Settings, Team.", "Hetzner Cloud accepted the token, but it isn't allowed to manage servers. Hetzner Cloud said: unable to authenticate. Generate a Read & Write token for the project."],
 ]);
 
 test('the client never shows its token when dumped, and its token parameter is sensitive', function () {
@@ -1045,10 +1045,10 @@ test('the copy names the provider, its host and its own permission advice', func
         ->and($forbidden->connectMessage())->toBe("{$label} accepted the token, but it isn't allowed to manage servers. {$label} said: denied. {$hint}")
         ->and($unreachable->getMessage())->toBe("Coresmith couldn't reach {$label} at {$host}. Check Coresmith can make outbound HTTPS requests, then try again.");
 })->with([
-    [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.', 'Then replace the token in Settings → Team.'],
-    [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.', 'Then replace the token in Settings → Team.'],
+    [CloudProviderType::Hetzner, 'Hetzner Cloud', 'api.hetzner.cloud', 'Generate a Read & Write token for the project.', 'Then replace the token in Settings, Team.'],
+    [CloudProviderType::DigitalOcean, 'DigitalOcean', 'api.digitalocean.com', 'Give it full access, or custom scopes with read on account, regions, sizes and images, every droplet and SSH key permission, and create and read on tags.', 'Then replace the token in Settings, Team.'],
     [CloudProviderType::Vultr, 'Vultr', 'api.vultr.com', 'Give the Vultr user this API key belongs to permission to create and manage servers.', 'Then try again.'],
-    [CloudProviderType::Linode, 'Linode', 'api.linode.com', 'Give it read/write access to Linodes and read access to Images.', 'Then replace the token in Settings → Team.'],
+    [CloudProviderType::Linode, 'Linode', 'api.linode.com', 'Give it read/write access to Linodes and read access to Images.', 'Then replace the token in Settings, Team.'],
 ]);
 
 test('a vultr key without permission is told to give its user permission, never to replace the key', function () {
@@ -1063,13 +1063,13 @@ test('a vultr key without permission is told to give its user permission, never 
 test('the other providers still tell a forbidden token to be replaced', function (CloudProviderType $provider) {
     $e = new CloudProviderException(CloudFailure::Forbidden, $provider, 'denied', 403);
 
-    expect($e->getMessage())->toEndWith(' Then replace the token in Settings → Team.');
+    expect($e->getMessage())->toEndWith(' Then replace the token in Settings, Team.');
 })->with([CloudProviderType::Hetzner, CloudProviderType::DigitalOcean, CloudProviderType::Linode]);
 
 test('a failure with no detail says nothing about what the provider said', function () {
     $e = cloudBaseFailure(CloudFailure::TokenRejected, null, 401);
 
-    expect($e->getMessage())->toBe("Hetzner Cloud refused this account's token. Replace it in Settings → Team, then try again.")
+    expect($e->getMessage())->toBe("Hetzner Cloud refused this account's token. Replace it in Settings, Team, then try again.")
         ->and($e->connectMessage())->toBe("Hetzner Cloud didn't accept that token. Copy it again from Hetzner Cloud, then paste it here.");
 });
 
@@ -1102,8 +1102,8 @@ test('a missing or unreadable token says so, and never that the provider refused
         ->and($e->getPrevious())->toBeNull()
         ->and($e)->toBeInstanceOf(ExplainsFailure::class)->toBeInstanceOf(RuntimeException::class);
 })->with([
-    'none stored' => [fn(CloudProviderType $type) => CloudProviderException::noToken($type), CloudFailure::NoToken, 'No token is stored for this Linode account. Replace the token in Settings → Team, then try again.'],
-    'one it cannot read' => [fn(CloudProviderType $type) => CloudProviderException::unreadableToken($type), CloudFailure::UnreadableToken, "Coresmith couldn't read the token stored for this Linode account. Replace the token in Settings → Team, then try again."],
+    'none stored' => [fn(CloudProviderType $type) => CloudProviderException::noToken($type), CloudFailure::NoToken, 'No token is stored for this Linode account. Replace the token in Settings, Team, then try again.'],
+    'one it cannot read' => [fn(CloudProviderType $type) => CloudProviderException::unreadableToken($type), CloudFailure::UnreadableToken, "Coresmith couldn't read the token stored for this Linode account. Replace the token in Settings, Team, then try again."],
 ]);
 
 test('a provider that refuses the panel address says to allow the address, never that the token cannot manage servers', function () {

@@ -18,7 +18,7 @@ class MigrateAllDatabases extends Command
     /**
      * The console command description.
      */
-    protected $description = 'Ensure all SQLite databases exist and run migrations for each database separately.';
+    protected $description = 'Create any missing SQLite databases, then migrate each one.';
 
     /**
      * Execute the console command.

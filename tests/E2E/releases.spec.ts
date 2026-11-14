@@ -79,7 +79,7 @@ test.describe('releases', () => {
         await rows(page).filter({ hasText: 'v2.13.2' }).getByRole('button', { name: 'Roll back to this' }).click()
         await dialog(page).getByRole('button', { name: 'Roll back' }).click()
 
-        await expect(toast(page)).toContainText('Rolling back.')
+        await expect(toast(page)).toContainText('Nothing is rebuilt.')
         await expect(dialog(page)).toHaveCount(0)
     })
 
