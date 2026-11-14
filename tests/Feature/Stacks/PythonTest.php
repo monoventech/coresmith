@@ -58,7 +58,7 @@ test('a Python line past its end of life says where to name a newer one', functi
 })->with([
     'nothing named it' => [null, 'Add a .python-version containing 3.14 to the repository, then deploy.'],
     '.python-version' => ['.python-version', 'Set .python-version to 3.14, then deploy.'],
-    'requires-python' => ['pyproject.toml', 'Set requires-python in pyproject.toml to >=3.14, then deploy.'],
+    'pyproject.toml' => ['pyproject.toml', 'Allow Python 3.14 in pyproject.toml, then deploy.'],
     'runtime.txt' => ['runtime.txt', 'Set runtime.txt to python-3.14, then deploy.'],
     '.tool-versions' => ['.tool-versions', 'Set python in .tool-versions to 3.14, then deploy.'],
 ]);

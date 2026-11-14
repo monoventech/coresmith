@@ -111,7 +111,7 @@ final class ApplicationPresenter
             '.nvmrc', '.node-version', '.ruby-version', '.dvmrc', '.python-version' => "Set {$source} to {$recommended}, then deploy.",
             'package.json' => "Set engines.node in package.json to {$recommended}, then deploy.",
             'Gemfile' => "Set the ruby line in Gemfile to {$recommended}, then deploy.",
-            'pyproject.toml' => "Set requires-python in pyproject.toml to >={$recommended}, then deploy.",
+            'pyproject.toml' => "Allow Python {$recommended} in pyproject.toml, then deploy.",
             'runtime.txt' => "Set runtime.txt to python-{$recommended}, then deploy.",
             default => match ($runtime) {
                 'php' => "Set require.php in composer.json to ^{$recommended}, then deploy.",

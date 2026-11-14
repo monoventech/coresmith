@@ -164,6 +164,7 @@ return [
             'label' => 'Python',
             'line' => 'minor',
             'recommended' => '3.14',
+            'prefer_recommended' => true,
             'versions' => [
                 ['line' => '3.15', 'latest' => '3.15.2', 'active_until' => '2028-10-31', 'eol_at' => '2031-10-31'],
                 ['line' => '3.14', 'latest' => '3.14.10', 'active_until' => '2027-10-31', 'eol_at' => '2030-10-31'],

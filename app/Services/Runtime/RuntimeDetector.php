@@ -18,7 +18,7 @@ final class RuntimeDetector
         'bun' => '.tool-versions, packageManager or engines.bun in package.json',
         'deno' => '.tool-versions or .dvmrc',
         'ruby' => '.tool-versions, .ruby-version or the ruby line in Gemfile',
-        'python' => '.tool-versions, .python-version, requires-python in pyproject.toml or runtime.txt',
+        'python' => '.tool-versions, .python-version, pyproject.toml or runtime.txt',
     ];
 
     private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python'];
@@ -137,7 +137,7 @@ final class RuntimeDetector
             'bun' => $this->bunPackageManager($facts) ?? $this->engine($facts, 'bun', 'bun'),
             'deno' => $this->firstLine($facts, '.dvmrc', 'deno'),
             'ruby' => $this->rubyVersion($facts) ?? $this->gemfileRuby($facts),
-            'python' => $this->pythonVersion($facts, $notes) ?? $this->requiresPython($facts) ?? $this->runtimeTxt($facts),
+            'python' => $this->pythonVersion($facts, $notes) ?? $this->requiresPython($facts) ?? $this->poetryPython($facts) ?? $this->runtimeTxt($facts),
             default => null,
         };
     }
@@ -243,6 +243,15 @@ final class RuntimeDetector
 
         return is_string($value) && trim($value) !== ''
             ? new Requirement('python', trim($value), trim($value), 'pyproject.toml', 'requires-python in pyproject.toml', 'pip')
+            : null;
+    }
+
+    private function poetryPython(RepositoryFacts $facts): ?Requirement
+    {
+        $value = $facts->toml('pyproject.toml', 'tool.poetry.dependencies')['python'] ?? null;
+
+        return is_string($value) && trim($value) !== ''
+            ? new Requirement('python', trim($value), trim($value), 'pyproject.toml', 'the python line in pyproject.toml', 'npm')
             : null;
     }
 

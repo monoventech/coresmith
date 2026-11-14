@@ -7,8 +7,10 @@ use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
+use App\Services\Runtime\Requirement;
 use App\Services\Runtime\RuntimeBinaries;
 use App\Services\Runtime\RuntimeDetector;
+use App\Services\Runtime\RuntimeResolver;
 use App\Services\Runtime\VersionConstraint;
 use App\Services\SSH\SSHConnection;
 use Tests\Support\FakeSSHTransport;
@@ -72,10 +74,23 @@ test('the Python version comes from .python-version, .tool-versions, requires-py
     'runtime.txt' => [['runtime.txt' => "python-3.12.4\n"], '3.12.4', 'runtime.txt'],
     'requires-python' => [['pyproject.toml' => "[project]\nname = \"shop\"\nrequires-python = \">=3.11,<3.14\"\n"], '>=3.11,<3.14', 'pyproject.toml'],
     '.python-version before pyproject.toml' => [['.python-version' => "3.12\n", 'pyproject.toml' => "[project]\nrequires-python = \">=3.13\"\n"], '3.12', '.python-version'],
+    'Poetry\'s python line' => [['pyproject.toml' => "[tool.poetry.dependencies]\npython = \">=3.8,<3.12\"\nfastapi = \"^0.104.0\"\n"], '>=3.8,<3.12', 'pyproject.toml'],
+    'requires-python before Poetry\'s line' => [['pyproject.toml' => "[project]\nrequires-python = \">=3.13\"\n[tool.poetry.dependencies]\npython = \"^3.10\"\n"], '>=3.13', 'pyproject.toml'],
+]);
+
+test('Poetry\'s python line reads the way Poetry reads it', function (string $line, string $best) {
+    $requirement = app(RuntimeDetector::class)->requirementFor('python', new RepositoryFacts(['pyproject.toml' => "[tool.poetry.dependencies]\npython = \"{$line}\"\n"], complete: true));
+
+    expect(VersionConstraint::parse($requirement->constraint, $requirement->flavour)?->best(['3.11.18', '3.12.16', '3.13.18', '3.14.10', '3.15.2']))->toBe($best)
+        ->and($requirement->field)->toBe('the python line in pyproject.toml');
+})->with([
+    'a range' => ['>=3.8,<3.12', '3.11.18'],
+    'caret' => ['^3.12', '3.15.2'],
+    'tilde' => ['~3.12', '3.12.16'],
 ]);
 
 test('Python names the files it reads its version from', function () {
-    expect(RuntimeDetector::SOURCES['python'])->toBe('.tool-versions, .python-version, requires-python in pyproject.toml or runtime.txt');
+    expect(RuntimeDetector::SOURCES['python'])->toBe('.tool-versions, .python-version, pyproject.toml or runtime.txt');
 });
 
 test('Python is not an asdf plugin, so setting up a server does not add one', function () {
@@ -150,4 +165,22 @@ test('a .python-version that names something other than a CPython release is ign
 
     expect($requirement)->toBeNull()
         ->and($notes)->toBe(['Ignored .python-version, because pypy3.10 is not a Python version Coresmith knows.']);
+});
+
+test('an open-ended Python constraint gets the recommended line, which has a year of wheels, unless it rules that line out', function (string $constraint, array $installed, string $version) {
+    $requirement = new Requirement('python', $constraint, $constraint, 'pyproject.toml', 'requires-python in pyproject.toml', 'pip');
+
+    expect(app(RuntimeResolver::class)->resolve('python', $requirement, null, $installed)->version)->toBe($version);
+})->with([
+    'a floor' => ['>=3.11', [], '3.14.10'],
+    'a floor with an older 3.14 installed' => ['>=3.11', ['3.14.9', '3.15.2'], '3.14.9'],
+    'only the newest line' => ['>=3.15', [], '3.15.2'],
+    'a ceiling below the recommended line' => ['>=3.10,<3.14', [], '3.13.18'],
+    'an exact release' => ['==3.15.1', [], '3.15.1'],
+]);
+
+test('other runtimes still take the newest version their constraint allows', function () {
+    $requirement = new Requirement('nodejs', '>=20', '>=20', 'package.json', 'engines.node in package.json', 'npm');
+
+    expect(app(RuntimeResolver::class)->resolve('nodejs', $requirement, null, [])->version)->toBe('26.9.0');
 });

@@ -61,7 +61,7 @@ final class RuntimeResolver
             }
         }
 
-        $version = $constraint->exact ?? $constraint->best($this->fitting($installed, $bounds)) ?? $constraint->best($this->fitting($catalog, $bounds));
+        $version = $constraint->exact ?? $this->recommendedWithin($runtime, $constraint, $installed, $bounds) ?? $constraint->best($this->fitting($installed, $bounds)) ?? $constraint->best($this->fitting($catalog, $bounds));
         $newest = $constraint->exact === null ? $constraint->best($catalog) : null;
 
         if ($version === null) {
@@ -164,6 +164,23 @@ final class RuntimeResolver
         }
 
         return new ResolvedRuntime($runtime, $fallback, ResolvedRuntime::FROM_DEFAULT, null, in_array($fallback, $installed, true), $note, $this->names($held), $version);
+    }
+
+    /**
+     * @param  list<string>  $installed
+     * @param  list<array{Limit, VersionConstraint}>  $bounds
+     */
+    private function recommendedWithin(string $runtime, VersionConstraint $constraint, array $installed, array $bounds): ?string
+    {
+        if (!$this->catalog->prefersRecommended($runtime)) {
+            return null;
+        }
+
+        $line = $this->catalog->recommendedLine($runtime);
+        $latest = $this->catalog->line($runtime, $line)['latest'] ?? null;
+        $ours = array_values(array_filter($installed, fn(string $version): bool => $this->catalog->lineOf($runtime, $version) === $line));
+
+        return $constraint->best($this->fitting($ours, $bounds)) ?? ($latest === null ? null : $constraint->best($this->fitting([$latest], $bounds)));
     }
 
     /**

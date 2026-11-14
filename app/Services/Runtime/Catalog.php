@@ -61,6 +61,11 @@ final class Catalog
         return (string) config("coresmith.runtimes.{$runtime}.recommended", '');
     }
 
+    public function prefersRecommended(string $runtime): bool
+    {
+        return config("coresmith.runtimes.{$runtime}.prefer_recommended") === true;
+    }
+
     public function newestLine(string $runtime): ?string
     {
         return $this->lines($runtime)[0]['line'] ?? null;
