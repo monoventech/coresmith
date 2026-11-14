@@ -26,7 +26,10 @@ const UNSURE = {
     verdict: 'unsure',
     fields: { type: 'ruby', framework: null, js_runtime: null, web_directory: null, version: '3.4.7' },
     sources: { type: 'From Gemfile and Gemfile.lock', runtime_version: 'Ruby 3.4.7 from .ruby-version' },
-    unsettled: { framework: 'Gemfile names neither rails nor sinatra. Coresmith runs Rails and Sinatra apps.' },
+    unsettled: {
+        framework:
+            "Gemfile names neither rails nor sinatra, and there is no config.ru, so Coresmith can't tell how to start the app. Add a config.ru that runs it."
+    },
     blockers: []
 }
 
@@ -117,7 +120,9 @@ test.describe('Stack detection on Add an app', () => {
 
         await expect(detection(page)).toContainText('Filled in what the repository settles.')
         await expect(page.getByLabel('Language')).toHaveValue('ruby')
-        await expect(page.getByText('Gemfile names neither rails nor sinatra.', { exact: false })).toBeVisible()
+        await expect(
+            page.getByText('Gemfile names neither rails nor sinatra, and there is no config.ru', { exact: false })
+        ).toBeVisible()
         await expect(page.getByRole('button', { name: 'Add the app' })).toBeEnabled()
     })
 

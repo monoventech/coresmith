@@ -21,6 +21,10 @@ final readonly class Ruby implements Language
 {
     public const GEM = 'Gemfile loads a gemspec, so this looks like a Ruby gem, not an app.';
 
+    public const NO_CONFIG_RU = "Gemfile names neither rails nor sinatra, and there is no config.ru, so Coresmith can't tell how to start the app. Add a config.ru that runs it.";
+
+    private const RACK_FRAMEWORKS = ['hanami', 'roda', 'grape'];
+
     public function __construct(private JsCommands $js, private AsdfManager $asdf) {}
 
     public function install(Application $application, Stack $stack): array
@@ -30,7 +34,7 @@ final readonly class Ruby implements Language
 
     public function build(Application $application, Stack $stack): array
     {
-        if ($application->framework === 'sinatra' || ($stack->locked('sprockets-rails') === false && $stack->locked('propshaft') === false)) {
+        if (in_array($application->framework, ['sinatra', 'rack'], true) || ($stack->locked('sprockets-rails') === false && $stack->locked('propshaft') === false)) {
             return [];
         }
 
@@ -39,11 +43,11 @@ final readonly class Ruby implements Language
 
     public function migrations(Application $application, Stack $stack): array
     {
-        if ($application->framework === 'sinatra') {
-            return $stack->locked('sinatra-activerecord') === true && $stack->present('Rakefile') === true ? ['RACK_ENV=production bundle exec rake db:migrate'] : [];
-        }
-
-        return $stack->present('config/database.yml') === false ? [] : ['RAILS_ENV=production bundle exec rails db:migrate'];
+        return match ($application->framework) {
+            'sinatra' => $stack->locked('sinatra-activerecord') === true && $stack->present('Rakefile') === true ? ['RACK_ENV=production bundle exec rake db:migrate'] : [],
+            'rack' => [],
+            default => $stack->present('config/database.yml') === false ? [] : ['RAILS_ENV=production bundle exec rails db:migrate'],
+        };
     }
 
     public function releaseChecks(Application $application, ReleasePaths $paths, string $release): array
@@ -81,7 +85,7 @@ final readonly class Ruby implements Language
         return [
             'RAILS_ENV' => 'production',
             'RACK_ENV' => 'production',
-            ...(strtolower((string) $application->framework) === 'sinatra' ? [] : ['RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1']),
+            ...(in_array(strtolower((string) $application->framework), ['sinatra', 'rack'], true) ? [] : ['RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1']),
         ];
     }
 
@@ -119,7 +123,11 @@ final readonly class Ruby implements Language
             return Proposal::make('ruby', $gem, null, null, [...$sources, 'framework' => $version === null ? "{$gem} in Gemfile" : "{$gem} {$version} in Gemfile.lock"], $this->oldBundler($facts));
         }
 
-        return Proposal::make('ruby', null, null, null, $sources, ['framework' => 'Gemfile names neither rails nor sinatra. Coresmith runs Rails and Sinatra apps.']);
+        if ($facts->exists('config.ru')) {
+            return Proposal::make('ruby', 'rack', null, null, [...$sources, 'framework' => $this->rackSource($facts)], $this->oldBundler($facts));
+        }
+
+        return Proposal::make('ruby', null, null, null, $sources, ['framework' => self::NO_CONFIG_RU]);
     }
 
     /**
@@ -141,10 +149,10 @@ final readonly class Ruby implements Language
             $blockers[] = new Blocker('repository', "Puma isn't in Gemfile.lock. Coresmith starts Ruby apps with Puma.", 'Add gem "puma" to the Gemfile, run bundle install and commit Gemfile.lock.');
         }
 
-        if ($framework === 'sinatra' && !$facts->exists('config.ru')) {
-            $blockers[] = new Blocker('framework', 'There is no config.ru, so Puma has no app to start.', 'Add a config.ru that runs the app, for example: run Sinatra::Application.');
+        if (in_array($framework, ['sinatra', 'rack'], true) && !$facts->exists('config.ru')) {
+            $blockers[] = new Blocker('framework', 'There is no config.ru, so Puma has no app to start.', 'Add a config.ru that runs the app, for example: ' . ($framework === 'sinatra' ? 'run Sinatra::Application.' : 'run Hanami.app.'));
         } elseif ($framework === 'rails' && !$facts->exists('bin/rails')) {
-            $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app at the repository's root.", 'Pick Sinatra if it uses Sinatra.');
+            $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app at the repository's root.", 'Pick Sinatra if it uses Sinatra, or Rack for any other app with a config.ru.');
         }
 
         $platform = $arch === null ? null : $this->platformMissing($facts, $arch);
@@ -211,5 +219,18 @@ final readonly class Ruby implements Language
             version_compare($bundler, '2.4', '<') => ['runtime_version' => "Gemfile.lock was written by Bundler {$bundler}. Coresmith builds Ruby 3.2 and newer, where locks that old often fail to install. Run bundle update --bundler, then commit Gemfile.lock."],
             default => [],
         };
+    }
+
+    private function rackSource(RepositoryFacts $facts): string
+    {
+        foreach (self::RACK_FRAMEWORKS as $gem) {
+            $version = $facts->gem($gem);
+
+            if ($version !== null || $this->gemfileNames($facts, $gem)) {
+                return 'config.ru, with ' . ($version === null ? "{$gem} in Gemfile" : "{$gem} {$version} in Gemfile.lock");
+            }
+        }
+
+        return "config.ru at the repository's root";
     }
 }

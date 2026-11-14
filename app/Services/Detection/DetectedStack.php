@@ -16,7 +16,7 @@ final readonly class DetectedStack
     private const FRAMEWORKS = [
         'php' => ['laravel' => 'Laravel', 'symfony' => 'Symfony', '' => 'Plain PHP'],
         'js' => ['sveltekit' => 'SvelteKit', 'nextjs' => 'Next.js', 'nuxt' => 'Nuxt', 'astro' => 'Astro', '' => 'API or other'],
-        'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra'],
+        'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra', 'rack' => 'Rack'],
     ];
 
     /**

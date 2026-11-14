@@ -68,7 +68,8 @@
         ],
         ruby: [
             { value: 'rails', label: 'Rails' },
-            { value: 'sinatra', label: 'Sinatra' }
+            { value: 'sinatra', label: 'Sinatra' },
+            { value: 'rack', label: 'Rack' }
         ],
         static: [{ value: '', label: 'No framework' }]
     }
