@@ -159,7 +159,7 @@ test('it stops before doing anything when not run as root', function () {
     $process->run();
 
     expect($process->getExitCode())->toBe(1)
-        ->and($process->getErrorOutput())->toContain('This uninstaller must be run as root. Use: sudo bash uninstall.sh');
+        ->and($process->getErrorOutput())->toContain('Run the uninstaller as root: sudo bash uninstall.sh');
 });
 
 test('everything the installer creates, the uninstaller removes', function () {

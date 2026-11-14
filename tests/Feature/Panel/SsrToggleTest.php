@@ -20,6 +20,7 @@ use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
@@ -308,7 +309,7 @@ test('turning it back on reuses the port it kept', function () {
     expect($application->fresh()->ssr_port)->toBe(13700);
 });
 
-test('a release without what ssr needs leaves it out, says why and stops the old server', function (bool $adapter, bool $script, string $why) {
+test('a release without what ssr needs leaves it out, says why and stops the old server', function (bool $adapter, bool $script, string $why, ?array $toggle) {
     Queue::fake();
     $application = ssrApp(['toggles' => ['inertia_ssr' => true], 'ssr_port' => 13714, 'processes' => [['name' => 'ssr', 'command' => 'INERTIA_SSR_PORT=13714 php artisan inertia:start-ssr --runtime=bun']]]);
     $deployment = Deployment::factory()->for($application)->create();
@@ -329,12 +330,10 @@ test('a release without what ssr needs leaves it out, says why and stops the old
         ->and($transport->uploads())->not->toHaveKey('/etc/systemd/system/coresmith-app-pages-ssr.service')
         ->and(Activity::query()->where('description', SmartToggles::START_FAILED)->count())->toBe(0)
         ->and($deployment->fresh()->log)->toContain("\nssr: {$why}\n")
-        ->and($row['on'])->toBeTrue()
-        ->and($row['description'])->toBe($why)
-        ->and($row['failure'])->toBeNull();
+        ->and($row === null ? null : Arr::only($row, ['on', 'description', 'failure']))->toEqual($toggle);
 })->with([
-    'the build:ssr script is gone' => [true, false, 'package.json no longer has a build:ssr script, so it does not start'],
-    'the inertia adapter is gone' => [false, true, 'composer.json and package.json no longer include Inertia, so it does not start'],
+    'the build:ssr script is gone, so the toggle stays and says why' => [true, false, 'package.json no longer has a build:ssr script, so it does not start', ['on' => true, 'description' => 'package.json no longer has a build:ssr script, so it does not start', 'failure' => null]],
+    'the inertia adapter is gone, so the toggle leaves the list' => [false, true, 'composer.json and package.json no longer include Inertia, so it does not start', null],
 ]);
 
 test('a release that brings ssr back builds and starts it, reading the release not the last one', function () {

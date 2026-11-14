@@ -21,6 +21,7 @@ final class ApplicationPresenter
         'laravel' => 'Laravel',
         'rails' => 'Rails',
         'sinatra' => 'Sinatra',
+        'rack' => 'Rack',
         'hanami' => 'Hanami',
         'sveltekit' => 'SvelteKit',
         'nextjs' => 'Next.js',

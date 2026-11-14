@@ -250,7 +250,7 @@
 </div>
 
 {#if canUpdate}
-    <CronJobDialog bind:open={editor} job={editing} storeHref={cron.store_href} {busy} {send} />
+    <CronJobDialog bind:open={editor} job={editing} storeHref={cron.store_href} example={cron.example} {busy} {send} />
 
     <Dialog.Root open={removing !== null} onOpenChange={(next) => !next && (removing = null)}>
         <Dialog.Content>
