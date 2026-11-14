@@ -59,4 +59,28 @@ final readonly class Ruby implements Language
     {
         return Route::ReverseProxy;
     }
+
+    public function storageSeed(): StorageSeed
+    {
+        return StorageSeed::FromLiveRelease;
+    }
+
+    public function initialEnvironment(?string $framework): array
+    {
+        return $framework === 'rails' ? ['SECRET_KEY_BASE' => bin2hex(random_bytes(64))] : [];
+    }
+
+    public function processEnvironment(Application $application): array
+    {
+        return [
+            'RAILS_ENV' => 'production',
+            'RACK_ENV' => 'production',
+            ...(strtolower((string) $application->framework) === 'sinatra' ? [] : ['RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1']),
+        ];
+    }
+
+    public function listenEnvironment(Application $application): array
+    {
+        return ['PORT' => (string) $application->base_port, 'HOST' => '127.0.0.1'];
+    }
 }

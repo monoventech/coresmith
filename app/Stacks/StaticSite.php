@@ -52,4 +52,24 @@ final readonly class StaticSite implements Language
     {
         return Route::FileServer;
     }
+
+    public function storageSeed(): StorageSeed
+    {
+        return StorageSeed::None;
+    }
+
+    public function initialEnvironment(?string $framework): array
+    {
+        return [];
+    }
+
+    public function processEnvironment(Application $application): array
+    {
+        return [];
+    }
+
+    public function listenEnvironment(Application $application): array
+    {
+        return [];
+    }
 }

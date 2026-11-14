@@ -70,6 +70,29 @@ final readonly class JavaScript implements Language
         return Route::ReverseProxy;
     }
 
+    public function storageSeed(): StorageSeed
+    {
+        return StorageSeed::None;
+    }
+
+    public function initialEnvironment(?string $framework): array
+    {
+        return [];
+    }
+
+    public function processEnvironment(Application $application): array
+    {
+        return [
+            'NODE_ENV' => 'production',
+            ...(strtolower((string) $application->framework) === 'sveltekit' ? ['PROTOCOL_HEADER' => 'x-forwarded-proto', 'HOST_HEADER' => 'x-forwarded-host', 'ADDRESS_HEADER' => 'x-forwarded-for'] : []),
+        ];
+    }
+
+    public function listenEnvironment(Application $application): array
+    {
+        return ['PORT' => (string) $application->base_port, 'HOST' => '127.0.0.1', 'HOSTNAME' => '127.0.0.1'];
+    }
+
     private function entry(Application $application, ?JsTooling $tooling): string
     {
         return match (strtolower((string) $application->framework)) {

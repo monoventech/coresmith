@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Services\Runtime;
 
-use App\Enums\ApplicationType;
 use App\Models\Application;
 
 final class RuntimeDetector
@@ -84,18 +83,9 @@ final class RuntimeDetector
      */
     private function runtimes(Application $application, ?JsTooling $tooling): array
     {
-        $serving = match ($application->type) {
-            ApplicationType::Php => ['php'],
-            ApplicationType::Ruby => ['ruby'],
-            ApplicationType::Js => [match ($application->js_runtime) {
-                'node' => 'nodejs',
-                'deno' => 'deno',
-                default => 'bun',
-            }],
-            default => [],
-        };
+        $serving = $application->type?->runtime($application->js_runtime);
 
-        return array_values(array_unique([...$serving, ...($tooling === null ? [] : [$tooling->runtime()])]));
+        return array_values(array_unique([...($serving === null ? [] : [$serving]), ...($tooling === null ? [] : [$tooling->runtime()])]));
     }
 
     /**

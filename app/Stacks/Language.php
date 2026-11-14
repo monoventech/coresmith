@@ -39,4 +39,21 @@ interface Language
     public function usesFpm(): bool;
 
     public function route(Application $application): Route;
+
+    public function storageSeed(): StorageSeed;
+
+    /**
+     * @return array<string, string>
+     */
+    public function initialEnvironment(?string $framework): array;
+
+    /**
+     * @return array<string, string>
+     */
+    public function processEnvironment(Application $application): array;
+
+    /**
+     * @return array<string, string>
+     */
+    public function listenEnvironment(Application $application): array;
 }

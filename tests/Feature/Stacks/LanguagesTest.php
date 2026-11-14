@@ -10,6 +10,7 @@ use App\Stacks\Php;
 use App\Stacks\Route;
 use App\Stacks\Ruby;
 use App\Stacks\StaticSite;
+use App\Stacks\StorageSeed;
 
 test('each application type speaks through its own language provider', function () {
     $providers = array_map(fn(ApplicationType $type): Language => $type->language(), ApplicationType::cases());
@@ -34,4 +35,31 @@ test('PHP apps are handed to PHP-FPM, static sites to the file server and the re
     expect(array_map(fn(ApplicationType $type): Route => $type->language()->route(new Application(['type' => $type])), ApplicationType::cases()))
         ->toBe([Route::PhpFastcgi, Route::ReverseProxy, Route::ReverseProxy, Route::FileServer])
         ->and(array_map(fn(Route $route): bool => $route->servesFiles(), Route::cases()))->toBe([true, false, true]);
+});
+
+test('PHP seeds shared storage from the release, Ruby from the live release, and the others share none', function () {
+    expect(array_map(fn(ApplicationType $type): StorageSeed => $type->language()->storageSeed(), ApplicationType::cases()))
+        ->toBe([StorageSeed::FromRelease, StorageSeed::None, StorageSeed::FromLiveRelease, StorageSeed::None]);
+});
+
+test('each language names the environment its app starts with, runs with and listens on', function () {
+    $application = fn(ApplicationType $type): Application => new Application(['type' => $type, 'framework' => null, 'base_port' => 4100]);
+
+    expect(array_map(fn(ApplicationType $type): array => array_keys($type->language()->initialEnvironment(match ($type) {
+        ApplicationType::Php => 'laravel',
+        ApplicationType::Ruby => 'rails',
+        default => null,
+    })), ApplicationType::cases()))->toBe([['APP_KEY'], [], ['SECRET_KEY_BASE'], []])
+        ->and(array_map(fn(ApplicationType $type): array => $type->language()->processEnvironment($application($type)), ApplicationType::cases()))->toBe([
+            [],
+            ['NODE_ENV' => 'production'],
+            ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1'],
+            [],
+        ])
+        ->and(array_map(fn(ApplicationType $type): array => $type->language()->listenEnvironment($application($type)), ApplicationType::cases()))->toBe([
+            [],
+            ['PORT' => '4100', 'HOST' => '127.0.0.1', 'HOSTNAME' => '127.0.0.1'],
+            ['PORT' => '4100', 'HOST' => '127.0.0.1'],
+            [],
+        ]);
 });

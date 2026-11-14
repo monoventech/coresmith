@@ -58,6 +58,30 @@ final readonly class Php implements Language
         return Route::PhpFastcgi;
     }
 
+    public function storageSeed(): StorageSeed
+    {
+        return StorageSeed::FromRelease;
+    }
+
+    public function initialEnvironment(?string $framework): array
+    {
+        return match ($framework) {
+            'laravel' => ['APP_KEY' => 'base64:' . base64_encode(random_bytes(32))],
+            'symfony' => ['APP_ENV' => 'prod', 'APP_SECRET' => bin2hex(random_bytes(16))],
+            default => [],
+        };
+    }
+
+    public function processEnvironment(Application $application): array
+    {
+        return [];
+    }
+
+    public function listenEnvironment(Application $application): array
+    {
+        return [];
+    }
+
     /**
      * @return list<string>
      */

@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Services\Process;
 
-use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
@@ -48,11 +47,8 @@ final class SystemdUnitBuilder
         $memoryMax = $size->memoryMaxMb();
         $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
-        $listen = $process === 'web'
-            ? "Environment=\"PORT={$application->base_port}\"\nEnvironment=\"HOST=127.0.0.1\"\n" . ($application->type === ApplicationType::Js ? "Environment=\"HOSTNAME=127.0.0.1\"\n" : '')
-            : '';
-        $defaults = app(StackDefaults::class)->process($application);
-        $production = implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($defaults), $defaults));
+        $listen = $process === 'web' ? $this->environment($application->type->language()->listenEnvironment($application)) : '';
+        $production = $this->environment(app(StackDefaults::class)->process($application));
         $command = $process === 'web' ? $command : $this->workerCommand($command);
         $umask = AppAccount::UMASK;
         $sandbox = implode('', array_map(fn(string $property): string => $property . "\n", AppSandbox::properties($application->server)));
@@ -101,6 +97,14 @@ final class SystemdUnitBuilder
     public function webCommand(Application $application): ?string
     {
         return $application->type->language()->webCommand($application);
+    }
+
+    /**
+     * @param  array<string, string>  $variables
+     */
+    private function environment(array $variables): string
+    {
+        return implode('', array_map(fn(string $name, string $value): string => "Environment=\"{$name}={$value}\"\n", array_keys($variables), $variables));
     }
 
     private function workerCommand(string $command): string
