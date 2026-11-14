@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.13 (2026-11-14)
+
+### Added
+- feat: Go apps, on plain net/http or any framework (#87)
+
 ## v0.8.12 (2026-11-14)
 
 ### Added

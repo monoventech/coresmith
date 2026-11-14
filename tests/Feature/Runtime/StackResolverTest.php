@@ -111,6 +111,7 @@ test('an application takes a stack as its live versions', function () {
         'deno_version' => null,
         'ruby_version' => null,
         'python_version' => null,
+        'go_version' => null,
         'stack' => $stack->toArray(),
     ]);
 });

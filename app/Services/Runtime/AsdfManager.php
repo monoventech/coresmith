@@ -34,7 +34,7 @@ final class AsdfManager
 
     public const PLUGINS = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
 
-    public const RUNTIMES = [...self::PLUGINS, 'python'];
+    public const RUNTIMES = [...self::PLUGINS, 'python', 'go'];
 
     public const UV_DIR = self::DATA_DIR . '/uv';
 
@@ -94,6 +94,26 @@ final class AsdfManager
     "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python" -m compileall -q -j 0 -x '/(test|tests|idle_test)/' "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/lib" >/dev/null 2>&1 || echo "Some of Python $CORESMITH_PYTHON's standard library didn't precompile, so apps may start a little slower."
     BASH;
 
+    private const GO_SCRIPT = <<<'BASH'
+    set -e
+    case "$(uname -m)" in
+      x86_64|amd64) arch=amd64 ;;
+      aarch64|arm64) arch=arm64 ;;
+      *) echo "Go publishes no build for $(uname -m) servers, so Coresmith can't install it here."; exit 1 ;;
+    esac
+    mkdir -p "$CORESMITH_GO_DIR"
+    stage="$(mktemp -d "$CORESMITH_GO_DIR/.coresmith-stage.XXXXXXXX")"
+    trap 'rm -rf "$stage"' EXIT
+    archive="https://dl.google.com/go/go${CORESMITH_GO}.linux-${arch}.tar.gz"
+    curl -fsSL -o "$stage/go.tar.gz" "$archive"
+    curl -fsSL -o "$stage/go.tar.gz.sha256" "$archive.sha256"
+    echo "$(tr -d '[:space:]' < "$stage/go.tar.gz.sha256")  $stage/go.tar.gz" | sha256sum -c - >/dev/null 2>&1 || { echo "The Go $CORESMITH_GO download did not match its published checksum, so it was not used."; exit 1; }
+    mkdir "$stage/go"
+    tar -xzf "$stage/go.tar.gz" -C "$stage/go" --strip-components=1
+    rm -rf "$CORESMITH_GO_DIR/$CORESMITH_GO"
+    mv "$stage/go" "$CORESMITH_GO_DIR/$CORESMITH_GO"
+    BASH;
+
     public static function assertValid(string $runtime, string $version): void
     {
         if (!in_array($runtime, self::RUNTIMES, true)) {
@@ -124,6 +144,15 @@ final class AsdfManager
 
         if ($runtime === 'python') {
             $this->installPython($connection, $version);
+
+            return;
+        }
+
+        if ($runtime === 'go') {
+            $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, self::GO_SCRIPT, [
+                'CORESMITH_GO' => $version,
+                'CORESMITH_GO_DIR' => self::INSTALL_DIR . '/go',
+            ]), self::INSTALL_SECONDS);
 
             return;
         }

@@ -19,9 +19,10 @@ final class RuntimeDetector
         'deno' => '.tool-versions or .dvmrc',
         'ruby' => '.tool-versions, .ruby-version or the ruby line in Gemfile',
         'python' => '.tool-versions, .python-version, pyproject.toml or runtime.txt',
+        'go' => '.tool-versions or go.mod',
     ];
 
-    private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python'];
+    private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python', 'golang' => 'go', 'go' => 'go'];
 
     private const NODE_CODENAMES = ['argon' => '4', 'boron' => '6', 'carbon' => '8', 'dubnium' => '10', 'erbium' => '12', 'fermium' => '14', 'gallium' => '16', 'hydrogen' => '18', 'iron' => '20', 'jod' => '22', 'krypton' => '24'];
 
@@ -130,6 +131,7 @@ final class RuntimeDetector
             'deno' => $this->firstLine($facts, '.dvmrc', 'deno'),
             'ruby' => $this->rubyVersion($facts) ?? $this->gemfileRuby($facts),
             'python' => $this->pythonVersion($facts, $notes) ?? $this->requiresPython($facts) ?? $this->poetryPython($facts) ?? $this->runtimeTxt($facts),
+            'go' => $this->goMod($facts),
             default => null,
         };
     }
@@ -206,6 +208,20 @@ final class RuntimeDetector
         $version = (string) preg_replace('/^ruby-/', '', $raw);
 
         return preg_match('/^\d/', $version) === 1 ? new Requirement('ruby', $version, $raw, '.ruby-version', '.ruby-version', 'gem') : null;
+    }
+
+    private function goMod(RepositoryFacts $facts): ?Requirement
+    {
+        $mod = (string) $facts->file('go.mod');
+        $go = preg_match('/^\s*go\s+(\d+\.\d+(?:\.\d+)?)(?:(?:rc|beta)\d+)?\s*(?:\/\/.*)?$/m', $mod, $line) === 1 ? $line[1] : null;
+        $toolchain = preg_match('/^\s*toolchain\s+go(\d+\.\d+(?:\.\d+)?)(?:(?:rc|beta)\d+)?\s*(?:\/\/.*)?$/m', $mod, $pin) === 1 ? $pin[1] : null;
+        $padded = fn(string $version): string => implode('.', array_pad(explode('.', $version), 3, '0'));
+
+        if ($toolchain !== null && ($go === null || version_compare($padded($toolchain), $padded($go), '>'))) {
+            return new Requirement('go', '>=' . $toolchain, 'go' . $toolchain, 'go.mod', 'the toolchain line in go.mod', 'npm');
+        }
+
+        return $go === null ? null : new Requirement('go', '>=' . $go, 'go ' . $go, 'go.mod', 'the go line in go.mod', 'npm');
     }
 
     /**

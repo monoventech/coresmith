@@ -51,6 +51,14 @@ function readerAnswer(string $probe): FakeSSHTransport
     return (new FakeSSHTransport)->respondTo(RepositoryReader::MARKER, "@@commit 9f3c2e1a4b5c6d7e8f9012345678901234567890\n" . $probe);
 }
 
+test("the sparse checkout takes Go files two folders deep, so a Go module's packages can be read before it's cloned", function () {
+    $transport = readerAnswer("@@done\n");
+
+    readerRun($transport, RepositoryAccess::public('https://github.com/acme/shop.git'), 'main');
+
+    expect(readerScript($transport))->toContain("'/*.go' '/*/*.go' '/*/*/*.go'");
+});
+
 test('a public repository is read with a sparse checkout of just the probe\'s files, and the folder is removed', function () {
     $transport = readerAnswer('@@file composer.json ' . base64_encode('{"require":{"laravel/framework":"^13.0"}}') . "\n@@has artisan\n@@has public/index.php\n@@done\n");
 
@@ -116,7 +124,7 @@ test('the read lists the Python versions installed on the server', function () {
     $read = readerRun($transport, RepositoryAccess::public('https://github.com/pallets/flask.git'));
 
     expect($read->installed('python'))->toBe(['3.13.18', '3.14.10'])
-        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python; do');
+        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python go; do');
 });
 
 test('the read says what kind of machine the server is', function () {
@@ -319,4 +327,30 @@ test('the folders a read finds come back with it', function () {
     $read = readerRun(readerAnswer("@@manifest apps/web/package.json\n@@manifest apps/web/public/index.html\n@@manifest packages/ui/package.json\n@@manifest node_modules/x/package.json\n@@done\n"), RepositoryAccess::public('https://github.com/acme/mono.git'));
 
     expect($read->folders)->toBe(['apps/web', 'packages/ui']);
+});
+
+test('Go modules in folders are offered by their go.mod, and vendored modules are not', function () {
+    $source = sys_get_temp_dir() . '/coresmith-go-folders-' . Str::random(8);
+
+    foreach ([
+        'run/helloworld/go.mod' => "module example.com/helloworld\n\ngo 1.25.0\n",
+        'heroku/go.mod' => "module main\n\ngo 1.26.0\n",
+        'heroku/vendor/github.com/acme/lib/go.mod' => "module github.com/acme/lib\n",
+    ] as $path => $content) {
+        File::ensureDirectoryExists(dirname($source . '/' . $path));
+        File::put($source . '/' . $path, $content);
+    }
+
+    $git = fn(string $command) => Process::path($source)->env(['GIT_AUTHOR_NAME' => 'a', 'GIT_AUTHOR_EMAIL' => 'a@example.com', 'GIT_COMMITTER_NAME' => 'a', 'GIT_COMMITTER_EMAIL' => 'a@example.com'])->run($command)->throw();
+    $git('git init --quiet --initial-branch=main');
+    $git('git config uploadpack.allowFilter true');
+    $git('git config uploadpack.allowAnySHA1InWant true');
+    $git('git add -A');
+    $git('git commit --quiet -m start');
+
+    $output = Process::input(app(RepositoryReader::class)->script('file://' . $source, 'main', ''))->run('bash -s')->output();
+
+    File::deleteDirectory($source);
+
+    expect(AppFolders::in($output))->toBe(['heroku', 'run/helloworld']);
 });

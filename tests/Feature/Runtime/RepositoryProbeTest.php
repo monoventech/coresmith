@@ -72,6 +72,40 @@ test('the probe script reads a real directory', function () {
         ->and($facts->locked)->toBe(['laravel/framework' => '13.2.0', 'rails' => '8.0.2']);
 });
 
+test('in a Go module the probe lists each Go file two folders deep with only the lines that say how it builds and listens', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-probe-' . Str::random(8);
+    File::ensureDirectoryExists($directory . '/cmd/worker');
+    File::ensureDirectoryExists($directory . '/internal/store');
+    File::ensureDirectoryExists($directory . '/examples');
+    File::ensureDirectoryExists($directory . '/vendor');
+    File::put($directory . '/go.mod', "module example.com/shop\n\ngo 1.26\n");
+    File::put($directory . '/main.go', "package main\n\nimport (\n\t\"net/http\"\n\t\"os\"\n)\n\nfunc main() {\n\thttp.ListenAndServe(\":\"+os.Getenv(\"PORT\"), nil)\n}\n");
+    File::put($directory . '/main_test.go', "package main\n");
+    File::put($directory . '/cmd/worker/main.go', "package main\n\nfunc main() {}\n");
+    File::put($directory . '/internal/store/store.go', "package store\n\nfunc Open() {}\n");
+    File::put($directory . '/examples/demo.go', "package main\n");
+    File::put($directory . '/vendor/lib.go', "package lib\n");
+
+    $result = Process::env([RepositoryProbe::DIRECTORY_VARIABLE => $directory])->input(app(RepositoryProbe::class)->script())->run('bash -s');
+    $facts = app(RepositoryProbe::class)->parse($result->output());
+
+    File::deleteDirectory($directory);
+
+    expect($result->successful())->toBeTrue()
+        ->and($facts->goLines)->toBe([
+            'main.go' => [[1, 'package main'], [9, 'http.ListenAndServe(":"+os.Getenv("PORT"), nil)']],
+            'cmd/worker/main.go' => [[1, 'package main']],
+            'internal/store/store.go' => [[1, 'package store']],
+        ]);
+});
+
+test('outside a Go module the probe reads no Go files, and Go lines from anywhere else are dropped', function () {
+    $output = "@@gofile ../etc/passwd.go\n@@goline ../etc/passwd.go " . base64_encode('1:package main') . "\n@@gofile main.go\n@@goline main.go " . base64_encode('1:package main') . "\n@@goline other.go " . base64_encode('1:package main') . "\n";
+
+    expect(app(RepositoryProbe::class)->parse($output)->goLines)->toBe(['main.go' => [[1, 'package main']]])
+        ->and(app(RepositoryProbe::class)->script())->toContain('if [ -f go.mod ] && [ ! -L go.mod ]; then');
+});
+
 test('the probe reads composer.lock whole, past the cap the other files have', function () {
     $directory = sys_get_temp_dir() . '/coresmith-probe-' . Str::random(8);
     File::ensureDirectoryExists($directory);
