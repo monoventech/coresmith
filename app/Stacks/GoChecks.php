@@ -57,7 +57,7 @@ final readonly class GoChecks
         [$file, $number, $text] = $lines[0];
         preg_match('/"(?:[A-Za-z0-9.\-]*|\[[0-9A-Fa-f:]*\])?:(\d{2,5})"/', $text, $port);
 
-        return new Blocker('repository', "{$file} line {$number} listens on port {$port[1]}, and Coresmith gives each app its own port in the PORT environment variable.", "Listen on \":\"+os.Getenv(\"PORT\") there instead of \":{$port[1]}\".");
+        return new Blocker('repository', "{$file} line {$number} listens on port {$port[1]}, and Coresmith gives each app its own port in the PORT environment variable.", "Listen on \":\"+os.Getenv(\"PORT\") there instead of port {$port[1]}.");
     }
 
     private function configPort(RepositoryFacts $facts, string $file, string $pattern, string $setting, string $fix): ?Blocker

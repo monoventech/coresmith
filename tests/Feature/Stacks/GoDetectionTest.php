@@ -129,7 +129,7 @@ test('a port written into the code is refused with the file, the line and the ch
     expect(goBlockers($hardcoded))->toBe([[
         'field' => 'repository',
         'reason' => 'main.go line 9 listens on port 8080, and Coresmith gives each app its own port in the PORT environment variable.',
-        'fix' => 'Listen on ":"+os.Getenv("PORT") there instead of ":8080".',
+        'fix' => 'Listen on ":"+os.Getenv("PORT") there instead of port 8080.',
     ]])
         ->and(goBlockers($fallback))->toBe([])
         ->and(goBlockers($other))->toBe([]);

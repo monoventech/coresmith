@@ -546,5 +546,62 @@
             "framework": "fastapi"
         },
         "why": "A FastAPI tutorial in a folder: Poetry with poetry.lock, Python held below 3.12 by Poetry's python line, uvicorn already a dependency."
+    },
+    {
+        "name": "gin-realworld",
+        "url": "https://github.com/gothinkster/golang-gin-realworld-example-app.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "go",
+            "framework": "gin"
+        },
+        "why": "Gin at the module root reading PORT through r.Run, with SQLite through go-sqlite3, so the build needs a C compiler."
+    },
+    {
+        "name": "echo-realworld",
+        "url": "https://github.com/xesina/golang-echo-realworld-example-app.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "main.go line 43 listens on port 8585"
+        },
+        "why": "Echo listening on a fixed 127.0.0.1:8585, which Coresmith refuses with the line to change."
+    },
+    {
+        "name": "fiber-heroku",
+        "url": "https://github.com/gofiber/recipes.git",
+        "branch": "master",
+        "folder": "heroku",
+        "expect": {
+            "verdict": "ready",
+            "type": "go",
+            "framework": "fiber"
+        },
+        "why": "A Fiber recipe in a folder of the recipes repository, its own module named main, reading PORT."
+    },
+    {
+        "name": "cloud-run-helloworld",
+        "url": "https://github.com/GoogleCloudPlatform/golang-samples.git",
+        "branch": "main",
+        "folder": "run/helloworld",
+        "expect": {
+            "verdict": "ready",
+            "type": "go",
+            "framework": "net-http"
+        },
+        "why": "Plain net/http from Google's Cloud Run samples, two folders deep in a large repository, with a test file beside main.go."
+    },
+    {
+        "name": "cloud-run-grpc-ping",
+        "url": "https://github.com/GoogleCloudPlatform/golang-samples.git",
+        "branch": "main",
+        "folder": "run/grpc-ping",
+        "expect": {
+            "verdict": "ready",
+            "type": "go",
+            "framework": "grpc"
+        },
+        "why": "A gRPC server with no HTTP server, proxied over HTTP/2 cleartext, beside a client package in the same module."
     }
 ]

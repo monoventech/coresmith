@@ -200,7 +200,7 @@ test('a Go app is added with the main package that answers web requests, and one
     $go = ['type' => ApplicationType::Go->value, 'framework' => 'net-http', 'web_directory' => null, 'main_package' => '.'];
 
     storeDetectionPost($owner, $server, ['detection' => storeDetectionRead($owner, $server, new RepositoryRead($fixed, installed: ['go' => ['1.27.4']])), ...$go])
-        ->assertSessionHasErrors(['repository_url' => 'main.go line 9 listens on port 8080, and Coresmith gives each app its own port in the PORT environment variable. Listen on ":"+os.Getenv("PORT") there instead of ":8080".']);
+        ->assertSessionHasErrors(['repository_url' => 'main.go line 9 listens on port 8080, and Coresmith gives each app its own port in the PORT environment variable. Listen on ":"+os.Getenv("PORT") there instead of port 8080.']);
 
     expect(storeDetectionApp())->toBeNull();
 
