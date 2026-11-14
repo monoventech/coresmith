@@ -148,7 +148,9 @@ final readonly class Python implements Language
 
     public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
     {
-        return $this->checks->checks($framework, $facts);
+        $domains = array_values(array_filter([$choice->domain, ...(array) $choice->additional_domains], fn(mixed $domain): bool => is_string($domain) && $domain !== ''));
+
+        return $this->checks->checks($framework, $facts, $domains);
     }
 
     public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string

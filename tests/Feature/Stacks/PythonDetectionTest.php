@@ -37,9 +37,9 @@ function pyTooling(?string $framework, RepositoryFacts $facts): array
     return ApplicationType::Python->language()->tooling(new Application(['type' => ApplicationType::Python, 'framework' => $framework]), $facts);
 }
 
-function pyBlockers(?string $framework, RepositoryFacts $facts): array
+function pyBlockers(?string $framework, RepositoryFacts $facts, array $attributes = []): array
 {
-    return array_map(fn(Blocker $blocker): array => $blocker->toArray(), ApplicationType::Python->language()->checks(new Application(['type' => ApplicationType::Python, 'framework' => $framework]), (string) $framework, $facts, 'x86_64'));
+    return array_map(fn(Blocker $blocker): array => $blocker->toArray(), ApplicationType::Python->language()->checks(new Application(['type' => ApplicationType::Python, 'framework' => $framework, ...$attributes]), (string) $framework, $facts, 'x86_64'));
 }
 
 test('a Django project runs the WSGI application its settings name, and collects static files into STATIC_ROOT', function () {
@@ -105,6 +105,33 @@ test('Django refuses settings that only allow an empty ALLOWED_HOSTS, which answ
         'fix' => 'Read it from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.',
     ]]);
 });
+
+test('Django refuses a fixed ALLOWED_HOSTS that leaves out the app\'s domain, and accepts one that names it', function (string $hosts, array $attributes, bool $refused) {
+    $facts = pyFacts(['requirements.txt' => "django\n", 'manage.py' => pyManage('locallibrary.settings'), 'locallibrary/settings.py' => "ALLOWED_HOSTS = {$hosts}\nWSGI_APPLICATION = 'locallibrary.wsgi.application'\n"]);
+
+    expect(pyBlockers('django', $facts, $attributes))->toBe($refused ? [[
+        'field' => 'repository',
+        'reason' => 'locallibrary/settings.py sets ALLOWED_HOSTS to .railway.app, .pythonanywhere.com and 127.0.0.1, so Django answers 400 Bad Request to library.example.com.',
+        'fix' => 'Add library.example.com to ALLOWED_HOSTS, or read the list from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.',
+    ]] : []);
+})->with([
+    'a list for other hosts' => ["['.railway.app', '.pythonanywhere.com', '127.0.0.1']", ['domain' => 'library.example.com'], true],
+    'an additional domain left out' => ["['.railway.app', '.pythonanywhere.com', '127.0.0.1']", ['domain' => 'app.railway.app', 'additional_domains' => ['library.example.com']], true],
+    'the domain named exactly' => ["['library.example.com']", ['domain' => 'Library.Example.com'], false],
+    'a parent domain with a leading dot' => ['[".example.com"]', ['domain' => 'library.example.com'], false],
+    'a wildcard' => ["['*']", ['domain' => 'library.example.com'], false],
+    'no domain yet' => ["['.railway.app', '.pythonanywhere.com', '127.0.0.1']", [], false],
+]);
+
+test('ALLOWED_HOSTS set inside a branch, or built at runtime, is left to the app', function (string $settings) {
+    $facts = pyFacts(['requirements.txt' => "django\n", 'manage.py' => pyManage(), 'shop/settings.py' => $settings . "WSGI_APPLICATION = 'shop.wsgi.application'\n"]);
+
+    expect(pyBlockers('django', $facts, ['domain' => 'shop.example.com']))->toBe([]);
+})->with([
+    'branches, one of them open to all' => ["if IS_HEROKU_APP:\n    ALLOWED_HOSTS = [\"*\"]\nelse:\n    ALLOWED_HOSTS = [\".localhost\", \"127.0.0.1\"]\n"],
+    'read from the environment' => ["ALLOWED_HOSTS = os.environ['ALLOWED_HOSTS'].split(',')\n"],
+    'extended later' => ["ALLOWED_HOSTS = ['127.0.0.1']\nALLOWED_HOSTS += env.list('EXTRA_HOSTS')\n"],
+]);
 
 test('a Flask app runs the app its module makes', function (array $files, array $markers, string $module, string $source) {
     $facts = pyFacts($files, $markers);

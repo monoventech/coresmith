@@ -217,6 +217,7 @@ final class StoreApplicationRequest extends FormRequest
             'type' => $this->input('type'),
             'framework' => $this->input('framework'),
             'js_runtime' => $this->input('js_runtime'),
+            'domain' => $this->input('domain'),
             'directory' => $this->input('directory', '/'),
             'web_directory' => $this->input('web_directory'),
             'runtime_pins' => $line === null ? null : [$this->runtime() => $line],

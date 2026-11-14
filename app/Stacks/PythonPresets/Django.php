@@ -11,6 +11,7 @@ namespace App\Stacks\PythonPresets;
 use App\Services\Runtime\RepositoryFacts;
 use App\Stacks\PythonApp;
 use App\Stacks\PythonDependencies;
+use Illuminate\Support\Arr;
 
 final class Django extends PythonPreset
 {
@@ -73,33 +74,71 @@ final class Django extends PythonPreset
     }
 
     /**
+     * @param  list<string>  $domains
      * @return array{0: string, 1: string}|null
      */
-    public function emptyAllowedHosts(RepositoryFacts $facts): ?array
+    public function hostsProblem(RepositoryFacts $facts, array $domains): ?array
     {
-        $settings = $this->settings($facts, $this->settingsModule($facts));
-        $empty = null;
+        $hosts = [];
+        $where = null;
 
-        foreach ($settings as $path => $source) {
-            if (preg_match('/^ALLOWED_HOSTS\s*(?:\+=|\.(?:append|extend|insert)\b)/m', $source) === 1 || preg_match('/\bALLOWED_HOSTS\s*(?:\+=|\.(?:append|extend|insert)\b)/', $source) === 1) {
+        foreach ($this->settings($facts, $this->settingsModule($facts)) as $path => $source) {
+            if (preg_match('/\bALLOWED_HOSTS\s*(?:\+=|\.(?:append|extend|insert)\b)/', $source) === 1) {
                 return null;
             }
 
-            if (preg_match_all('/^ALLOWED_HOSTS\s*(?::[^=\n]+)?=\s*(.+)$/m', $source, $matches) > 0) {
-                foreach ($matches[1] as $value) {
-                    if (preg_replace('/\s+|#.*$/', '', $value) !== '[]') {
-                        return null;
-                    }
+            if (preg_match_all('/^\s*ALLOWED_HOSTS\s*(?::[^=\n]+)?=\s*(.*)$/m', $source, $matches) === 0) {
+                continue;
+            }
+
+            foreach ($matches[1] as $value) {
+                $list = trim((string) preg_replace('/#.*$/', '', $value));
+
+                if (preg_match('/^[\[(]\s*((?:(?:"[^"]*"|\'[^\']*\')\s*,?\s*)*)[\])]$/', $list, $literal) !== 1) {
+                    return null;
                 }
 
-                $empty ??= $path;
+                preg_match_all('/"([^"]*)"|\'([^\']*)\'/', $literal[1], $items, PREG_SET_ORDER);
+
+                foreach ($items as $item) {
+                    $hosts[] = strtolower($item[1] !== '' ? $item[1] : ($item[2] ?? ''));
+                }
+
+                $where ??= $path;
             }
         }
 
-        return $empty === null ? null : [
-            "{$empty} sets ALLOWED_HOSTS = [], so Django answers 400 Bad Request to every visit on the app's domain.",
-            'Read it from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.',
-        ];
+        if ($where === null || in_array('*', $hosts, true)) {
+            return null;
+        }
+
+        $environment = 'read the list from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.';
+
+        if ($hosts === []) {
+            return ["{$where} sets ALLOWED_HOSTS = [], so Django answers 400 Bad Request to every visit on the app's domain.", 'Read it from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.'];
+        }
+
+        foreach ($domains as $domain) {
+            if (!$this->allows($hosts, strtolower($domain))) {
+                return ["{$where} sets ALLOWED_HOSTS to " . Arr::join(array_values(array_unique($hosts)), ', ', ' and ') . ", so Django answers 400 Bad Request to {$domain}.", "Add {$domain} to ALLOWED_HOSTS, or {$environment}"];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $hosts
+     */
+    private function allows(array $hosts, string $domain): bool
+    {
+        foreach ($hosts as $host) {
+            if ($host === $domain || (str_starts_with($host, '.') && ($domain === substr($host, 1) || str_ends_with($domain, $host)))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function settingsModule(RepositoryFacts $facts): ?string

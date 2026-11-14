@@ -1,0 +1,4 @@
+Django==5.2.8
+gunicorn==23.0.0
+psycopg2==2.9.10
+celery[redis]==5.5.3

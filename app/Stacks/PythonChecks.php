@@ -18,9 +18,10 @@ final readonly class PythonChecks
     public function __construct(private PythonPresets $presets, private PythonDetection $detection) {}
 
     /**
+     * @param  list<string>  $domains
      * @return list<Blocker>
      */
-    public function checks(string $framework, RepositoryFacts $facts): array
+    public function checks(string $framework, RepositoryFacts $facts, array $domains = []): array
     {
         $dependencies = PythonDependencies::from($facts);
         $preset = $this->presets->find($framework);
@@ -44,7 +45,7 @@ final readonly class PythonChecks
             $blockers[] = new Blocker('framework', $app->problem[0], $app->problem[1]);
         }
 
-        $hosts = $preset instanceof Django ? $preset->emptyAllowedHosts($facts) : null;
+        $hosts = $preset instanceof Django ? $preset->hostsProblem($facts, $domains) : null;
 
         if ($hosts !== null) {
             $blockers[] = new Blocker('repository', $hosts[0], $hosts[1]);

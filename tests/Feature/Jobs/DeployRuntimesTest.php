@@ -185,7 +185,7 @@ function stackPythonWithPackages(string $found, string $missing): array
         ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['.python-version' => "3.14.10\n", 'requirements.txt' => "django\npsycopg2==2.9.10\n"], markers: ['manage.py']))
         ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.14.10\n")
         ->respondTo('grep -ohiE', $found)
-        ->respondTo("|| echo 'gcc'", $missing);
+        ->respondTo("|| echo 'build-essential'", $missing);
 
     stackDeploy($deployment, $transport);
 
@@ -205,6 +205,15 @@ test('a Python app whose dependencies build against libpq gets gcc and libpq-dev
         ->and($deployment->log)->toContain('deps: installing gcc, libpq-dev, which psycopg2 needs to build');
 });
 
+test('a Python app gets a compiler before its first install, for packages with no wheel for its Python', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackPythonWithPackages('', "build-essential\n");
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, "'build-essential'")))->toBeTrue()
+        ->and($deployment->log)->toContain('deps: installing build-essential, which a package with no prebuilt wheel needs to build');
+});
+
 test('a Python app whose build tools are already there installs no packages for them', function () {
     Queue::fake();
     [$deployment, $commands] = stackPythonWithPackages("psycopg2\n", '');
@@ -216,8 +225,8 @@ test('a Python app whose build tools are already there installs no packages for 
 test('the Python packages that build against system libraries map to each family\'s packages', function (string $os, array $packages) {
     expect(app(NativePythonTools::class)->needed(Server::factory()->make(['os_name' => $os]), "mysqlclient\npsycopg2\n"))->toBe($packages);
 })->with([
-    'Debian family' => ['ubuntu', ['psycopg2' => ['gcc', 'libpq-dev'], 'mysqlclient' => ['gcc', 'pkg-config', 'default-libmysqlclient-dev']]],
-    'Red Hat family' => ['rocky', ['psycopg2' => ['gcc', 'libpq-devel'], 'mysqlclient' => ['gcc', 'pkgconf-pkg-config', 'mariadb-connector-c-devel']]],
+    'Debian family' => ['ubuntu', ['a package with no prebuilt wheel' => ['build-essential'], 'psycopg2' => ['gcc', 'libpq-dev'], 'mysqlclient' => ['gcc', 'pkg-config', 'default-libmysqlclient-dev']]],
+    'Red Hat family' => ['rocky', ['a package with no prebuilt wheel' => ['gcc', 'gcc-c++', 'make'], 'psycopg2' => ['gcc', 'libpq-devel'], 'mysqlclient' => ['gcc', 'pkgconf-pkg-config', 'mariadb-connector-c-devel']]],
 ]);
 
 test('the server finds those packages in any lockfile or dependency list, and not their prebuilt twins', function () {
