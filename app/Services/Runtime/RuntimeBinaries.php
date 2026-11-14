@@ -58,6 +58,7 @@ final class RuntimeBinaries
             'php' => $this->composer($connection, $root, $version),
             'nodejs' => $this->corepack($connection, $root),
             'python' => $this->asdf->ensureUv($connection) ? ['uv: installed ' . $this->asdf->uvVersion() . ', checksum verified'] : [],
+            'java' => $this->asdf->ensureMaven($connection) ? ['maven: installed ' . $this->asdf->mavenVersion() . ', checksum verified'] : [],
             default => [],
         };
     }
@@ -81,6 +82,10 @@ final class RuntimeBinaries
 
         if ($runtime === 'python') {
             $checks[] = 'test -x ' . escapeshellarg($this->asdf->uvPath());
+        }
+
+        if ($runtime === 'java') {
+            $checks[] = 'test -x ' . escapeshellarg($this->asdf->mavenPath());
         }
 
         return $connection->execute(implode(' && ', $checks))->successful();

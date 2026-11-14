@@ -13,7 +13,6 @@ use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Exceptions\ServerConnectionFailed;
 use App\Exceptions\ThisMachineRefused;
-use App\Http\Requests\Server\ConnectServerRequest;
 use App\Http\Requests\Server\StoreServerRequest;
 use App\Http\Requests\Server\UpdateServerRequest;
 use App\Jobs\AuditServer;
@@ -89,7 +88,7 @@ final class ServerController extends Controller
         ]);
     }
 
-    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls, ServerConnector $connector, TeamAccess $access): HttpResponse
+    public function store(StoreServerRequest $request, KeyPairGenerator $keys, PlanGate $plans, TeamContext $context, TeamUrls $urls, TeamAccess $access): HttpResponse
     {
         $team = Team::query()->findOrFail($request->validated('team_id'));
 
@@ -97,7 +96,7 @@ final class ServerController extends Controller
             $pair = $keys->generate('coresmith@' . (Str::slug((string) $request->validated('name')) ?: 'server'));
 
             return Server::create([
-                ...$request->safe()->except(['password']),
+                ...$request->validated(),
                 'ssh_private_key' => $pair->privateKey,
                 'ssh_public_key' => $pair->publicKey,
                 'status' => ServerStatus::Pending,
@@ -107,15 +106,15 @@ final class ServerController extends Controller
         activity()->performedOn($server)->log('server_added');
         $access->grant($team, $request->user(), $server);
 
-        [$tone, $added] = $this->added($server, $connector, $request->safe()->string('password')->value());
+        $added = 'Server added. Run the command below on it to connect.';
 
         if ($context->explicit() && $context->team()?->isNot($team)) {
-            $request->session()->flash($tone, $added);
+            $request->session()->flash('success', $added);
 
             return Inertia::location($urls->pathUrl($team, $request) . route('servers.show', $server, false));
         }
 
-        return to_route('servers.show', $server)->with($tone, $added);
+        return to_route('servers.show', $server)->with('success', $added);
     }
 
     public function show(Request $request, Server $server, ServerPresenter $presenter, TeamAccess $access): Response|RedirectResponse
@@ -237,19 +236,6 @@ final class ServerController extends Controller
         }
 
         return back()->with('success', $server->status === ServerStatus::Pending ? "Connected. Coresmith is checking {$server->name} before it provisions." : 'Connected.');
-    }
-
-    public function connect(ConnectServerRequest $request, Server $server, ServerConnector $connector): RedirectResponse
-    {
-        abort_unless($server->status->isBeforeProvisioning(), 404);
-
-        try {
-            $connector->withPassword($server, $request->safe()->string('ssh_user')->value(), $request->safe()->string('password')->value());
-        } catch (ServerConnectionFailed) {
-            return back()->with('error', "Coresmith couldn't connect to {$server->name}.");
-        }
-
-        return back()->with('success', "Connected. Coresmith added its key and is checking {$server->name} before it provisions.");
     }
 
     public function audit(Server $server): RedirectResponse
@@ -381,23 +367,5 @@ final class ServerController extends Controller
         PruneReleases::dispatch($server);
 
         return back()->with('success', 'Pruning old releases. Each app keeps its last ' . ReleasePaths::KEEP_RELEASES . ' and the live one. Disk readings refresh within a minute.');
-    }
-
-    /**
-     * @return array{0: string, 1: string}
-     */
-    private function added(Server $server, ServerConnector $connector, #[\SensitiveParameter] string $password): array
-    {
-        if ($password === '') {
-            return ['success', 'Server added. Connect it with a password or one command.'];
-        }
-
-        try {
-            $connector->withPassword($server, $server->ssh_user, $password);
-        } catch (ServerConnectionFailed) {
-            return ['error', "Server added, but Coresmith couldn't connect to it."];
-        }
-
-        return ['success', "Server added and connected. Coresmith is checking {$server->name} before it provisions."];
     }
 }

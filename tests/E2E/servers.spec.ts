@@ -447,14 +447,16 @@ test.describe('activity', () => {
 })
 
 test.describe('a server that is not connected yet', () => {
-    test('it offers a password login, the command that adds its key, and the phases to come', async ({ page }) => {
+    test('it offers only the command that adds its key, never a password field, and the phases to come', async ({
+        page
+    }) => {
         await gotoServer(page, 'empty-server')
 
         const card = page.getByTestId('server-connect')
 
         await expect(card.getByRole('heading', { name: 'Connect empty-server' })).toBeVisible()
-        await expect(card.getByLabel('SSH user')).toHaveValue('root')
-        await expect(card.getByLabel('Password')).toHaveAttribute('autocomplete', 'new-password')
+        await expect(card.getByLabel(/password/i)).toHaveCount(0)
+        await expect(page.locator('input[type="password"]')).toHaveCount(0)
         await expect(page.getByTestId('connect-command')).toHaveText(
             /^sudo sh -c 'k="ssh-ed25519 [A-Za-z0-9+/]+ [^"]+"; mkdir -p ~root\/\.ssh && /
         )
@@ -473,28 +475,6 @@ test.describe('a server that is not connected yet', () => {
         await expect(page.getByTestId('connect-error')).toHaveText(
             'The connection to port 1 was refused or timed out. Check the server is running and its firewall allows SSH from Coresmith.'
         )
-    })
-
-    test('a password login that cannot reach the server says why, and the password leaves the form', async ({
-        page
-    }, testInfo) => {
-        const name = own(testInfo, 'connect')
-        const password = `pw-${testInfo.project.name}-never-shown`
-
-        await gotoServer(page, name)
-
-        const card = page.getByTestId('server-connect')
-
-        await card.getByLabel('SSH user').fill('maya')
-        await card.getByLabel('Password').fill(password)
-        await card.getByRole('button', { name: 'Connect', exact: true }).click()
-
-        await expect(toast(page)).toContainText(`Coresmith couldn't connect to ${name}.`)
-        await expect(page.getByTestId('connect-error')).toContainText(
-            'The connection to port 1 was refused or timed out.'
-        )
-        await expect(card.getByLabel('Password')).toHaveValue('')
-        expect(await page.content()).not.toContain(password)
     })
 
     test('a blocked clipboard says to copy the command by hand', async ({ page }) => {
@@ -533,40 +513,21 @@ test.describe('provisioning a server', () => {
         await expect(page.getByRole('main')).toContainText('What happens next')
     })
 
-    test('a new server is added and offers both ways to connect it', async ({ page }) => {
+    test('a new server is added without a password and offers the command that connects it', async ({ page }) => {
         const name = `e2e-${Date.now().toString(36)}`
 
         await page.goto('/servers/create')
         await page.getByLabel('Provider').selectOption('manual')
+        await expect(page.locator('input[type="password"]')).toHaveCount(0)
         await page.getByLabel('Server name').fill(name)
         await page.getByLabel('IP address').fill('198.51.100.7')
         await page.getByLabel('Region').fill('lon1')
         await page.getByRole('button', { name: 'Add server' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
-        await expect(toast(page)).toContainText('Server added. Connect it with a password or one command.')
-        await expect(page.getByTestId('server-connect').getByLabel('Password')).toBeVisible()
+        await expect(toast(page)).toContainText('Server added. Run the command below on it to connect.')
+        await expect(page.getByTestId('server-connect').getByLabel(/password/i)).toHaveCount(0)
         await expect(page.getByTestId('connect-command')).toContainText(`coresmith@${name}`)
-    })
-
-    test('a server added with a password it cannot use is still added, and says why', async ({ page }) => {
-        const name = `e2e-pw-${Date.now().toString(36)}`
-
-        await page.goto('/servers/create')
-        await page.getByLabel('Provider').selectOption('manual')
-        await page.getByLabel('Server name').fill(name)
-        await page.getByLabel('IP address').fill('224.0.0.1')
-        await page.getByLabel('SSH port').fill('1')
-        await page.getByLabel('SSH user').fill('maya')
-        await page.getByLabel('Password, optional').fill('not-a-real-password')
-        await page.getByRole('button', { name: 'Add server' }).click()
-
-        await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
-        await expect(toast(page)).toContainText("Server added, but Coresmith couldn't connect to it.")
-        await expect(page.getByTestId('connect-error')).toContainText(
-            'The connection to port 1 was refused or timed out.'
-        )
-        await expect(page.getByTestId('server-connect').getByLabel('SSH user')).toHaveValue('maya')
     })
 
     test("the form starts on the team's first provider account", async ({ page }) => {

@@ -1,8 +1,5 @@
 <script lang="ts">
-    import FieldError from '@/components/FieldError.svelte'
     import { Button } from '@/components/ui/button'
-    import { Input } from '@/components/ui/input'
-    import { Label } from '@/components/ui/label'
     import type { ServerHeader } from '@/lib/servers'
     import { Form } from '@inertiajs/svelte'
     import { CircleCheck } from '@lucide/svelte'
@@ -11,7 +8,6 @@
 
     const provisioning = $derived(server.provisioning!)
     const failed = $derived(provisioning.status === 'failed')
-    const offersPassword = $derived(provisioning.password_sign_in && server.can.update)
 
     let copied = $state<'command' | 'key' | null>(null)
     let blocked = $state(false)
@@ -64,11 +60,7 @@
             </div>
         {/if}
     {:else}
-        <p class="mb-4 text-[12.5px] text-muted-foreground">
-            {offersPassword
-                ? 'Coresmith needs its own key on the server. It can add the key itself with a password, or you can run one command.'
-                : 'Coresmith needs its own key on the server.'}
-        </p>
+        <p class="mb-4 text-[12.5px] text-muted-foreground">Coresmith needs its own key on the server.</p>
 
         {#if provisioning.connect_error}
             <div
@@ -80,58 +72,7 @@
             </div>
         {/if}
 
-        {#if offersPassword}
-            <Form
-                method="post"
-                action={route('servers.connect', server.id)}
-                options={{ preserveScroll: true }}
-                resetOnSuccess={['password']}
-                resetOnError={['password']}
-                class="mb-5 border-b border-border pb-5"
-            >
-                {#snippet children({ errors, processing })}
-                    <h4 class="m-0 mb-1 text-[14px] font-medium">With a password</h4>
-                    <p id="connect-password-hint" class="mb-3 text-[12px] text-muted-foreground">
-                        Used once to add the key for root, then forgotten. Hardening turns password logins off.
-                    </p>
-                    <div class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
-                        <div>
-                            <Label for="connect-user" class="mb-1.5">SSH user</Label>
-                            <Input
-                                id="connect-user"
-                                name="ssh_user"
-                                value={provisioning.ssh_user}
-                                autocomplete="off"
-                                spellcheck="false"
-                                required
-                                aria-invalid={errors.ssh_user ? true : undefined}
-                            />
-                            <FieldError message={errors.ssh_user} />
-                        </div>
-                        <div>
-                            <Label for="connect-password" class="mb-1.5">Password</Label>
-                            <Input
-                                id="connect-password"
-                                name="password"
-                                type="password"
-                                autocomplete="new-password"
-                                required
-                                aria-describedby="connect-password-hint"
-                                aria-invalid={errors.password ? true : undefined}
-                            />
-                            <FieldError message={errors.password} />
-                        </div>
-                    </div>
-                    <Button type="submit" size="sm" class="mt-3" disabled={processing}
-                        >{processing ? 'Connecting…' : 'Connect'}</Button
-                    >
-                {/snippet}
-            </Form>
-        {/if}
-
-        <h4 class="m-0 mb-1 text-[14px] font-medium">
-            {offersPassword ? 'Or run this on the server' : 'Run this on the server'}
-        </h4>
+        <h4 class="m-0 mb-1 text-[14px] font-medium">Run this on the server</h4>
         <p class="mb-3 text-[12px] text-muted-foreground">
             As a user with sudo, or as root without the sudo. It adds the key for
             <span class="font-mono text-[11.5px]">{provisioning.ssh_user}</span>.

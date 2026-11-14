@@ -34,10 +34,8 @@ final readonly class JavaChecks
             return [new Blocker('repository', 'This app builds a WAR for a servlet container such as Tomcat, and Coresmith runs apps that start their own web server.', 'Package it as a jar that starts its own server, the way Spring Boot, Quarkus and Javalin apps do, then add it again.')];
         }
 
-        if (!$tooling->wrapper) {
-            return [$tooling->build === 'maven'
-                ? new Blocker('repository', "There is no mvnw {$facts->at()}, and Coresmith builds Java apps with the project's own Maven wrapper.", 'Run mvn wrapper:wrapper, then commit mvnw and the .mvn folder.')
-                : new Blocker('repository', "There is no gradlew {$facts->at()}, and Coresmith builds Java apps with the project's own Gradle wrapper.", 'Run gradle wrapper, then commit gradlew and the gradle folder.')];
+        if (!$tooling->wrapper && $tooling->build === 'gradle') {
+            return [new Blocker('repository', "There is no gradlew {$facts->at()}, and Coresmith builds Gradle projects with the project's own Gradle wrapper, which names the Gradle version.", 'Run gradle wrapper, then commit gradlew and the gradle folder.')];
         }
 
         return [];

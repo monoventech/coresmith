@@ -84,6 +84,7 @@ test("the build runs the project's own wrapper with the app's Java, skips the te
         ->and($commands[1])->toStartWith('JAVA_HOME=' . JAVA_HOME_25 . " sh -c '");
 })->with([
     'Spring Boot with Maven' => ['spring-boot', [], 'sh ./mvnw -B -DskipTests package'],
+    'Maven without a wrapper' => ['spring-boot', ['wrapper' => false], '/opt/asdf-data/maven/3.10.0/bin/mvn -B -DskipTests package'],
     'Spring Boot with Gradle' => ['spring-boot', ['build' => 'gradle'], 'sh ./gradlew --no-daemon -x test bootJar'],
     'JHipster with Maven' => ['jhipster', ['production' => true], 'sh ./mvnw -B -Pprod -DskipTests package'],
     'JHipster with Gradle' => ['jhipster', ['build' => 'gradle', 'production' => true], 'sh ./gradlew --no-daemon -Pprod -x test bootJar'],
@@ -170,6 +171,14 @@ test('a failed build says where it stopped and what to do', function (string $ou
     'a Gradle build that failed' => ["FAILURE: Build failed with an exception.\n\n* What went wrong:\nExecution failed for task ':bootJar'.\n> Error while evaluating property 'mainClass' of task ':bootJar'.\n   > Failed to calculate the value of task ':bootJar' property 'mainClass'.\n      > Main class name has not been configured and it could not be resolved from classpath\n\n* Try:\n> Run with --stacktrace option to get the stack trace.\n", 'The Gradle build failed: Main class name has not been configured and it could not be resolved from classpath. Fix it, then deploy again.'],
     'a Gradle too old for the Java' => ["FAILURE: Build failed with an exception.\n\n* What went wrong:\nCould not open cp_settings generic class cache for settings file '/var/coresmith/apps/shop/releases/20261114120000/settings.gradle'.\n> BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_' Unsupported class file major version 69\n", "The project's Gradle is too old to run on Java 25. Update its Gradle wrapper to a version that supports Java 25, commit it, then deploy again."],
     'no runnable jar' => ["[INFO] BUILD SUCCESS\nCoresmith found no runnable jar in target. Package the app as a jar whose manifest names its Main-Class, then deploy again.\n", 'Coresmith found no runnable jar in target. Package the app as a jar whose manifest names its Main-Class, then deploy again.'],
+]);
+
+test("npm warnings Maven's frontend plugin prints as errors are never the explanation, and a failed frontend task is", function (string $output, ?string $explained) {
+    expect(ApplicationType::Java->language()->explain(DeploymentPhases::BUILD, $output, javaDeployStack()))->toBe($explained);
+})->with([
+    'warnings and no failure' => ["[INFO] Installing node version v24.21.0\n[ERROR] npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory.\n[ERROR] npm warn deprecated glob@7.2.3: Old versions of glob are not supported\n", null],
+    'a failed frontend task' => ["[ERROR] npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory.\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal com.github.eirslett:frontend-maven-plugin:1.15.1:npm (webapp build) on project jhipster-sample-application: Failed to run task: 'npm run webapp:prod' failed. org.apache.commons.exec.ExecuteException: Process exited with an error: 1 (Exit value: 1) -> [Help 1]\n", "The Maven build failed: Failed to run task: 'npm run webapp:prod' failed. org.apache.commons.exec.ExecuteException: Process exited with an error: 1 (Exit value: 1). Fix it, then deploy again."],
+    'a failure with only warnings beside it' => ["[ERROR] npm warn deprecated inflight@1.0.6: leaks memory\n[INFO] BUILD FAILURE\n[ERROR] Could not find the selected project in the reactor: web\n", 'The Maven build failed: Could not find the selected project in the reactor: web. Fix it, then deploy again.'],
 ]);
 
 test('only the build phase is explained', function () {

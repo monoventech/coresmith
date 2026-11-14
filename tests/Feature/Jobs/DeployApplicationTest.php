@@ -709,6 +709,28 @@ test('a dependency install that hangs fails the deploy, names the command and re
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
         ->and($deployment->fresh()->failure_reason)->toStartWith('`composer install --no-dev --optimize-autoloader --no-interaction` ran for 10 minutes without finishing')
         ->and(implode("\n", $transport->commands()))->toContain('rm -rf /var/coresmith/apps/my-app/releases/' . TIMESTAMP);
+
+    $commands = $transport->commands();
+    $stopped = collect($commands)->search(fn(string $command): bool => str_contains($command, 'systemctl stop') && str_contains($command, 'build'));
+    $removed = collect($commands)->search(fn(string $command): bool => str_contains($command, 'rm -rf /var/coresmith/apps/my-app/releases/' . TIMESTAMP));
+
+    expect($stopped)->not->toBeFalse()
+        ->and($stopped)->toBeLessThan($removed);
+});
+
+test("a step's unit outlives Coresmith's wait by thirty seconds, so a step that runs too long is always reported as out of time", function () {
+    $deployment = Deployment::factory()->for(deployableApp())->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $install = collect($transport->commands())->first(fn(string $command): bool => str_contains($command, 'composer install'));
+    $migrate = collect($transport->commands())->first(fn(string $command): bool => str_contains($command, 'artisan migrate'));
+
+    expect($transport->budgetFor('composer install'))->toBe(600)
+        ->and($install)->toContain('RuntimeMaxSec=630')
+        ->and($transport->budgetFor('artisan migrate'))->toBe(600)
+        ->and($migrate)->toContain('RuntimeMaxSec=630');
 });
 
 test('the app gets its own linux account and a root controlled folder before anything is cloned', function () {
