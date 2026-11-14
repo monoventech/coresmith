@@ -23,6 +23,7 @@ use App\Exceptions\GitHubLinkProofException;
 use App\Exceptions\GitProviderException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
+use App\Exceptions\SSHCommandTimedOut;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\SourceProvider;
@@ -72,6 +73,7 @@ use App\Services\Runtime\Stack;
 use App\Services\Runtime\StackResolver;
 use App\Services\SafeName;
 use App\Services\Server\PortBlockGuard;
+use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use App\Stacks\Php;
@@ -107,6 +109,8 @@ final class DeployApplication implements ShouldQueue
     public const DEPENDENCY_RETRIES = 1;
 
     public const RETRY_SECONDS = 5;
+
+    public const UNIT_GRACE_SECONDS = 30;
 
     public const LOCK_HELD = 'Another deploy or a rollback is running for this app, so this one did not start.';
 
@@ -1223,7 +1227,13 @@ final class DeployApplication implements ShouldQueue
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
 
-                $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), unit: $unit, environment: app(StackDefaults::class)->build($application)), sudo: true);
+                try {
+                    $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application)), sudo: true);
+                } catch (SSHCommandTimedOut $e) {
+                    rescue(fn() => $connection->execute('systemctl stop ' . escapeshellarg($unit . '.service') . ' || true', sudo: true), report: false);
+
+                    throw $e;
+                }
 
                 $this->appendLog($result->output);
 

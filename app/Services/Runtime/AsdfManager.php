@@ -38,6 +38,8 @@ final class AsdfManager
 
     public const UV_DIR = self::DATA_DIR . '/uv';
 
+    public const MAVEN_DIR = self::DATA_DIR . '/maven';
+
     public const DOWNLOAD_RETRIES = 2;
 
     public const INDEX_LOCK_RETRIES = 30;
@@ -77,6 +79,21 @@ final class AsdfManager
       chmod 0755 "$CORESMITH_UV_DIR/$UV_VERSION/.$tool.$$"
       mv -f "$CORESMITH_UV_DIR/$UV_VERSION/.$tool.$$" "$CORESMITH_UV_DIR/$UV_VERSION/$tool"
     done
+    BASH;
+
+    private const MAVEN_SCRIPT = <<<'BASH'
+    set -e
+    MAVEN_VERSION="$CORESMITH_MAVEN_VERSION"
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/coresmith-maven.XXXXXXXX")"
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fsSL -o "$tmp/maven.tar.gz" "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+    echo "$CORESMITH_MAVEN_SHA512  $tmp/maven.tar.gz" | sha512sum -c - >/dev/null 2>&1 || { echo "The Maven $MAVEN_VERSION download did not match its published checksum, so it was not used."; exit 1; }
+    mkdir -p "$tmp/maven" "$CORESMITH_MAVEN_DIR"
+    tar -xzf "$tmp/maven.tar.gz" -C "$tmp/maven" --strip-components=1
+    rm -rf "$CORESMITH_MAVEN_DIR/.$MAVEN_VERSION.$$"
+    mv "$tmp/maven" "$CORESMITH_MAVEN_DIR/.$MAVEN_VERSION.$$"
+    rm -rf "$CORESMITH_MAVEN_DIR/$MAVEN_VERSION"
+    mv "$CORESMITH_MAVEN_DIR/.$MAVEN_VERSION.$$" "$CORESMITH_MAVEN_DIR/$MAVEN_VERSION"
     BASH;
 
     private const PYTHON_SCRIPT = <<<'BASH'
@@ -233,6 +250,37 @@ final class AsdfManager
         ]), SSHTransport::COMMAND_SECONDS);
 
         return true;
+    }
+
+    public function mavenPath(): string
+    {
+        return self::MAVEN_DIR . '/' . $this->mavenVersion() . '/bin/mvn';
+    }
+
+    public function ensureMaven(SSHConnection $connection): bool
+    {
+        if ($connection->execute('test -x ' . escapeshellarg($this->mavenPath()))->successful()) {
+            return false;
+        }
+
+        $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, self::MAVEN_SCRIPT, [
+            'CORESMITH_MAVEN_VERSION' => $this->mavenVersion(),
+            'CORESMITH_MAVEN_SHA512' => (string) config('coresmith.maven.sha512'),
+            'CORESMITH_MAVEN_DIR' => self::MAVEN_DIR,
+        ]), SSHTransport::COMMAND_SECONDS);
+
+        return true;
+    }
+
+    public function mavenVersion(): string
+    {
+        $version = (string) config('coresmith.maven.version');
+
+        if (preg_match('/^\d+\.\d+\.\d+\z/', $version) !== 1) {
+            throw InvalidRuntimeException::version($version);
+        }
+
+        return $version;
     }
 
     public function uvVersion(): string

@@ -649,7 +649,6 @@ test('every server route requires authentication', function (string $method, str
     ['post', 'servers.provision'],
     ['post', 'servers.audit'],
     ['post', 'servers.test-connection'],
-    ['post', 'servers.connect'],
     ['post', 'servers.reboot'],
     ['post', 'servers.prune-releases'],
 ]);

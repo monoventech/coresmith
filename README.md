@@ -2,9 +2,9 @@
 
 Server management without the complexity. Coresmith sets up your own Linux servers and deploys your apps straight onto them from the browser, without Docker.
 
-PHP apps such as Laravel, JavaScript and TypeScript apps on Node.js, Bun or Deno, Ruby apps such as Rails, and static sites can all share one server.
+Apps in PHP, Ruby, Python, Go, Java, JavaScript and TypeScript, such as Laravel, Rails, Django, Spring Boot and Next.js, can all share one server with static sites.
 
-- Add a server with its password once, or by pasting one command on it, and Coresmith provisions it over SSH and hardens it with key-only SSH, fail2ban and a firewall. It then checks those protections every hour.
+- Add a server by running one command on it that gives Coresmith its own SSH key, or create one at a connected cloud provider. Coresmith then provisions it over SSH, hardens it with key-only SSH, fail2ban and a firewall, and checks those protections every hour.
 - Connect GitHub or your own Git host and push to deploy. Every deploy builds a new release beside the live one, health-checks it, then switches over in one step, and the previous release stays ready to roll back to.
 - HTTPS certificates, domains, environment variables, background processes, cron jobs, and MySQL, PostgreSQL and Redis databases are all set from the browser.
 
@@ -87,7 +87,7 @@ Coresmith's **Finish setup** list walks you through the rest: connect GitHub (Co
 
 ### Backups
 
-Send your backups to an S3 bucket. A backup kept on the machine it protects is lost with that machine, so the backups Coresmith keeps locally are there to cover you while you set S3 up, not instead of it.
+Send your backups to an S3 bucket. A backup kept on the machine it protects is lost with that machine, so the backups Coresmith keeps locally only cover you until S3 is set up.
 
 - **Your apps' databases.** In Settings, Team, **Database backups to S3** takes your bucket, and Coresmith copies every MySQL and PostgreSQL database there each night. On a database's page Coresmith restores it from any of its backups, in S3 or on its server. **Back up now** there saves a dump on the database's own server.
 - **Coresmith itself.** Every night at 04:00 Coresmith backs up its own database and `.env` to `/opt/coresmith/shared/storage/app/private/backups` on its own machine, keeping the latest 14, and Settings, General, Backups has **Back up now**. Copy these backups to another machine too.
