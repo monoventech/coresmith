@@ -16,6 +16,7 @@ use App\Services\Panel\ServerPresenter;
 use App\Services\Panel\UnderTheHood;
 use App\Services\Server\FirewallConfigurator;
 use App\Services\Server\PasswordLogins;
+use App\Services\Server\SecurityHardening;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ use Spatie\Activitylog\Models\Activity;
 
 final class ServerTabsController extends Controller
 {
-    public function hardening(Request $request, Server $server, ServerPresenter $presenter, ProtectionRows $protections): Response|RedirectResponse
+    public function hardening(Request $request, Server $server, ServerPresenter $presenter, ProtectionRows $protections, SecurityHardening $hardening): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -66,6 +67,8 @@ final class ServerTabsController extends Controller
                 'fingerprint' => $server->host_key_fingerprint,
                 'public_key' => $server->ssh_public_key,
                 'audit_logging' => (bool) $server->audit_logging_enabled,
+                'user' => (string) $server->ssh_user,
+                'people' => $hardening->signInPeople($server),
             ],
         ]);
     }

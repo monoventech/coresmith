@@ -6,9 +6,13 @@ use App\Enums\DeploymentStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Environment;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Panel\Formats;
+use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 
 function releasesMember(Team $team, TeamRole $role = TeamRole::Member): User
@@ -63,22 +67,71 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-13 14:05:09'));
 });
 
-test('the releases link opens the application that shipped most recently', function () {
+function releasesRow(Application $application, ?string $environment, ?Deployment $live = null, array $query = []): array
+{
+    return [
+        'id' => $application->id,
+        'name' => $application->name,
+        'server' => 'web-1',
+        'environment' => $environment,
+        'href' => releasesUrl($application, $query),
+        'release' => $application->current_release === null ? null : 'releases/' . Formats::release($application->current_release),
+        'tag' => $live?->tag,
+        'when' => Formats::when($live?->finished_at),
+        'full' => Formats::absolute($live?->finished_at),
+    ];
+}
+
+test('the releases link lists every app the person can see, grouped by project, each with its live release', function () {
     $team = Team::factory()->create();
-    $earlier = releasesApp($team, ['name' => 'Blog']);
-    $latest = releasesApp($team, ['name' => 'Shop']);
-    releasesShipped($earlier, '20260913100000', hoursAgo: 4);
-    releasesShipped($latest, '20260913120000', hoursAgo: 2);
-    Deployment::factory()->for($earlier)->create(['status' => DeploymentStatus::Failed, 'release' => '20260913140000', 'finished_at' => now()]);
-    Deployment::factory()->for($earlier)->create(['status' => DeploymentStatus::Succeeded, 'release' => null, 'finished_at' => now()]);
-    releasesShipped(releasesApp(Team::factory()->create()), '20260913140500', hoursAgo: 0);
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $production = Environment::factory()->for($project)->create(['name' => 'Production', 'position' => 0]);
+    $staging = Environment::factory()->for($project)->create(['name' => 'Staging', 'position' => 1]);
+    $other = Project::factory()->for($team)->create(['name' => 'Analytics']);
+    $reports = Environment::factory()->for($other)->create(['name' => 'Production', 'position' => 0]);
+    $shop = releasesApp($team, ['name' => 'shop', 'environment_id' => $production->id, 'current_release' => '20260913120000']);
+    $preview = releasesApp($team, ['name' => 'shop-preview', 'environment_id' => $staging->id]);
+    $metrics = releasesApp($team, ['name' => 'metrics', 'environment_id' => $reports->id, 'current_release' => '20260913100000']);
+    $blog = releasesApp($team, ['name' => 'blog', 'current_release' => '20260913130000']);
+    releasesApp(Team::factory()->create(), ['name' => 'theirs']);
+    $shopLive = releasesShipped($shop, '20260913120000', hoursAgo: 2, attributes: ['tag' => 'v1.2.0']);
+    releasesShipped($shop, '20260913110000', hoursAgo: 3);
+    $metricsLive = releasesWentLive($metrics, '20260913100000', minutesAgo: 240);
+    $blogLive = releasesShipped($blog, '20260913130000', hoursAgo: 1);
 
     $this->actingAs(releasesMember($team))
         ->get(route('releases.index'))
-        ->assertRedirect(releasesUrl($latest));
+        ->assertOk()
+        ->assertInertia(fn($page) => $page
+            ->component('releases/Overview')
+            ->where('groups', [
+                ['name' => 'Analytics', 'apps' => [releasesRow($metrics, 'Production', $metricsLive)]],
+                ['name' => 'Storefront', 'apps' => [releasesRow($shop, 'Production', $shopLive), releasesRow($preview, 'Staging')]],
+                ['name' => null, 'apps' => [releasesRow($blog, null, $blogLive)]],
+            ]));
 });
 
-test('with nothing shipped the releases link renders an empty page', function (bool $hasTeam) {
+test('a project chosen on the releases list keeps only its apps, and a narrowed member sees only what is shared', function () {
+    $team = Team::factory()->create();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $production = Environment::factory()->for($project)->create(['name' => 'Production']);
+    $shop = releasesApp($team, ['name' => 'shop', 'environment_id' => $production->id]);
+    $blog = releasesApp($team, ['name' => 'blog']);
+    $member = releasesMember($team);
+    $narrowed = releasesMember($team, TeamRole::Admin);
+    $team->members()->updateExistingPivot($narrowed->id, ['sees_everything' => false]);
+    app(TeamAccess::class)->grant($team, $narrowed, $blog);
+
+    $this->actingAs($member)
+        ->get(route('releases.index', ['project' => $project->id]))
+        ->assertInertia(fn($page) => $page->where('groups', [['name' => 'Storefront', 'apps' => [releasesRow($shop, 'Production', query: ['project' => $project->id])]]])->where('scope', (string) $project->id));
+
+    $this->actingAs($narrowed->fresh())
+        ->get(route('releases.index'))
+        ->assertInertia(fn($page) => $page->where('groups', [['name' => null, 'apps' => [releasesRow($blog, null)]]]));
+});
+
+test('with no apps the releases list is empty', function (bool $hasTeam) {
     $user = User::factory()->create();
 
     if ($hasTeam) {
@@ -89,12 +142,10 @@ test('with nothing shipped the releases link renders an empty page', function (b
         ->get(route('releases.index'))
         ->assertOk()
         ->assertInertia(fn($page) => $page
-            ->component('releases/Index')
-            ->where('application', null)
-            ->where('applications', [])
-            ->where('releases', [])
-            ->where('can', ['deploy' => false]));
-})->with(['a team with no releases' => true, 'no team' => false]);
+            ->component('releases/Overview')
+            ->where('groups', [])
+            ->where('scopes', []));
+})->with(['a team with no apps' => true, 'no team' => false]);
 
 test('releases are the successful deployments with a release, newest first, with their details', function () {
     $team = Team::factory()->create();
@@ -301,9 +352,10 @@ test('the page links the application and lists the team applications to switch b
             ->where('application.deploy_href', route('servers.applications.deploy', [$application->server_id, $application]))
             ->where('application.rollback_href', route('servers.applications.rollback', [$application->server_id, $application]))
             ->where('applications', [
-                ['id' => $blog->id, 'name' => 'Blog', 'href' => releasesUrl($blog), 'current' => false],
-                ['id' => $application->id, 'name' => 'Shop', 'href' => releasesUrl($application), 'current' => true],
+                ['id' => $blog->id, 'name' => 'Blog', 'server' => 'web-1', 'project' => null, 'href' => releasesUrl($blog), 'current' => false],
+                ['id' => $application->id, 'name' => 'Shop', 'server' => 'web-1', 'project' => null, 'href' => releasesUrl($application), 'current' => true],
             ])
+            ->where('overview_href', route('releases.index'))
             ->where('rollback', '20260912090000')
             ->where('can.deploy', true));
 });

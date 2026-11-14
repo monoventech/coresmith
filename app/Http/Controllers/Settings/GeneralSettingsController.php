@@ -16,6 +16,7 @@ use App\Models\InstanceSetting;
 use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\Team;
+use App\Models\User;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Moves\MovePresenter;
 use App\Services\Panel\AddressPresenter;
@@ -82,9 +83,20 @@ final class GeneralSettingsController extends Controller
             'moves' => $moves->forUser($request->user()),
             'can' => [
                 'manageInstance' => $this->managesInstance($request),
-                'reachServers' => $request->user()->teams->contains(fn($team): bool => in_array($team->pivot->role, [TeamRole::Owner->value, TeamRole::Admin->value], true)),
             ],
+            'key_reach' => $this->keyReach($request->user()),
         ]);
+    }
+
+    private function keyReach(User $user): string
+    {
+        $roles = $user->teams->map(fn(Team $team): string => (string) $team->pivot->role);
+
+        return match (true) {
+            $roles->contains(TeamRole::Owner->value), $roles->contains(TeamRole::Admin->value) => 'managed',
+            $roles->contains(TeamRole::Developer->value) => 'added',
+            default => 'none',
+        };
     }
 
     /**

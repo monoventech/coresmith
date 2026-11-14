@@ -93,6 +93,72 @@ test("a narrowed admin's key goes only on the servers shared with them, never wi
         ->and((new SecurityHardening)->userKeys($hidden))->toBe(['ssh-ed25519 AAAAowner owner@laptop']);
 });
 
+test("a developer's key goes on the servers they added, never on one shared with them or added by someone else", function () {
+    [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner, 'developer' => TeamRole::Developer]);
+    userKeysAdd($users['owner'], 'ssh-ed25519 AAAAowner owner@laptop');
+    userKeysAdd($users['developer'], 'ssh-ed25519 AAAAdev dev@laptop');
+    $added = Server::factory()->for($team)->create(['created_by' => $users['developer']->id]);
+    $shared = Server::factory()->for($team)->create(['created_by' => $users['owner']->id]);
+    app(TeamAccess::class)->grant($team, $users['developer'], $shared);
+
+    expect((new SecurityHardening)->userKeys($added))->toBe(['ssh-ed25519 AAAAowner owner@laptop', 'ssh-ed25519 AAAAdev dev@laptop'])
+        ->and((new SecurityHardening)->userKeys($shared))->toBe(['ssh-ed25519 AAAAowner owner@laptop']);
+});
+
+test("a developer's key leaves the servers they added once they're a deployer or out of the team", function () {
+    [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner, 'developer' => TeamRole::Developer]);
+    userKeysAdd($users['developer'], 'ssh-ed25519 AAAAdev dev@laptop');
+    $server = Server::factory()->for($team)->create(['created_by' => $users['developer']->id]);
+
+    $team->members()->updateExistingPivot($users['developer']->id, ['role' => TeamRole::Member->value]);
+    $asDeployer = (new SecurityHardening)->userKeys($server->fresh());
+
+    $team->members()->detach($users['developer']->id);
+    $gone = (new SecurityHardening)->userKeys($server->fresh());
+
+    expect($asDeployer)->toBe([])->and($gone)->toBe([]);
+});
+
+test('an admin made a developer keeps their key only on the servers they added', function () {
+    [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner, 'admin' => TeamRole::Admin]);
+    userKeysAdd($users['admin'], 'ssh-ed25519 AAAAadmin admin@laptop');
+    $theirs = Server::factory()->for($team)->create(['created_by' => $users['admin']->id]);
+    $other = Server::factory()->for($team)->create(['created_by' => $users['owner']->id]);
+
+    $team->members()->updateExistingPivot($users['admin']->id, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
+
+    expect((new SecurityHardening)->userKeys($theirs->fresh()))->toBe(['ssh-ed25519 AAAAadmin admin@laptop'])
+        ->and((new SecurityHardening)->userKeys($other->fresh()))->toBe([]);
+});
+
+test('a developer who added the machine Coresmith runs on gets no key on it', function () {
+    [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner, 'developer' => TeamRole::Developer]);
+    userKeysAdd($users['developer'], 'ssh-ed25519 AAAAdev dev@laptop');
+
+    $server = Server::factory()->for($team)->create(['created_by' => $users['developer']->id, 'runs_coresmith' => true]);
+
+    expect((new SecurityHardening)->userKeys($server))->toBe([]);
+});
+
+test('the people whose keys go on a server are listed with their role and key count, owners first', function () {
+    [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner, 'admin' => TeamRole::Admin, 'developer' => TeamRole::Developer, 'member' => TeamRole::Member, 'keyless' => TeamRole::Admin]);
+    $users['owner']->forceFill(['name' => 'Zara Owner'])->save();
+    $users['admin']->forceFill(['name' => 'Ade Admin'])->save();
+    $users['developer']->forceFill(['name' => 'Dev Eloper'])->save();
+    userKeysAdd($users['developer'], 'ssh-ed25519 AAAAdev dev@laptop');
+    userKeysAdd($users['developer'], 'ssh-ed25519 AAAAdev2 dev@desktop');
+    userKeysAdd($users['admin'], 'ssh-ed25519 AAAAadmin admin@laptop');
+    userKeysAdd($users['owner'], 'ssh-ed25519 AAAAowner owner@laptop');
+    userKeysAdd($users['member'], 'ssh-ed25519 AAAAmember member@laptop');
+    $server = Server::factory()->for($team)->create(['created_by' => $users['developer']->id]);
+
+    expect((new SecurityHardening)->signInPeople($server))->toBe([
+        ['name' => 'Zara Owner', 'role' => 'Owner', 'keys' => 1],
+        ['name' => 'Ade Admin', 'role' => 'Admin', 'keys' => 1],
+        ['name' => 'Dev Eloper', 'role' => 'Developer', 'keys' => 2],
+    ]);
+});
+
 test('a stored key that would add a second line to authorized_keys is never installed', function () {
     [$team, $users] = userKeysTeamWith(['owner' => TeamRole::Owner]);
 

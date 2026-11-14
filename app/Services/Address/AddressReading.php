@@ -27,7 +27,7 @@ final class AddressReading
     }
 
     /**
-     * @return array{host: string, ready: ?bool, problems: list<string>, notes: list<string>, records: list<array{type: string, name: string, value: string}>, checked_at: string}|null
+     * @return array{host: string, ready: ?bool, problems: list<string>, notes: list<string>, records: list<array{type: string, name: string, value: string, note: string|null}>, checked_at: string}|null
      */
     public static function current(string $host): ?array
     {
