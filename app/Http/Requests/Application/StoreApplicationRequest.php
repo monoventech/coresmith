@@ -78,7 +78,7 @@ final class StoreApplicationRequest extends FormRequest
             'runtime_version' => ['nullable', 'string', Rule::in($this->runtimeLines())],
             'acknowledge_eol' => ['boolean'],
             'directory' => ['required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
-            'web_directory' => ['required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
+            'web_directory' => [Rule::excludeIf(fn(): bool => !$this->servesFiles()), 'required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
             'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['boolean'],
             'environment_id' => ['nullable', 'string', new FillableEnvironment($server?->team, $this->user())],
@@ -331,5 +331,12 @@ final class StoreApplicationRequest extends FormRequest
         $runtime = $this->runtime();
 
         return $runtime === null ? [] : array_column(app(Catalog::class)->lines($runtime), 'line');
+    }
+
+    private function servesFiles(): bool
+    {
+        $type = ApplicationType::tryFrom((string) $this->input('type'));
+
+        return $type === null || $type->language()->route(new Application(['type' => $type]))->servesFiles();
     }
 }

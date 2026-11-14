@@ -145,6 +145,27 @@
         "why": "Sinatra with Bootstrap."
     },
     {
+        "name": "rack-grape-files-mock",
+        "url": "https://github.com/Files-com/files-mock-server.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "ruby",
+            "framework": "rack"
+        },
+        "why": "Files.com's API mock server: Grape on Puma, no database."
+    },
+    {
+        "name": "rack-roda-falcon",
+        "url": "https://github.com/html2rss/html2rss-web.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "blocked",
+            "reason": "Puma"
+        },
+        "why": "A Roda app served by Falcon, so Coresmith asks for Puma."
+    },
+    {
         "name": "sinatra-on-thin",
         "url": "https://github.com/chillu/github-dashing.git",
         "branch": "master",

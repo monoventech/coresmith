@@ -26,9 +26,28 @@ const UNSURE = {
     verdict: 'unsure',
     fields: { type: 'ruby', framework: null, js_runtime: null, web_directory: null, version: '3.4.7' },
     sources: { type: 'From Gemfile and Gemfile.lock', runtime_version: 'Ruby 3.4.7 from .ruby-version' },
-    unsettled: { framework: 'Gemfile names neither rails nor sinatra. Coresmith runs Rails and Sinatra apps.' },
+    unsettled: {
+        framework:
+            "Gemfile names neither rails nor sinatra, and there is no config.ru, so Coresmith can't tell how to start the app. Add a config.ru that runs it."
+    },
     blockers: []
 }
+
+const MONOREPO = {
+    id: 'm4wq8mz9xw4hpbn6tq8rjf3ylc5ds0gf',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'unsure',
+    fields: { type: null, framework: null, js_runtime: null, web_directory: null, version: null },
+    sources: {},
+    unsettled: {
+        type: "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on. Pick the folder the app is in."
+    },
+    blockers: [],
+    folders: ['apps/api', 'apps/dashboard']
+}
+
+const DASHBOARD = { ...READY, id: 'm5wq8mz9xw4hpbn6tq8rjf3ylc5ds0gh', folders: ['apps/api', 'apps/dashboard'] }
 
 const UNREAD = {
     id: 't6wq8mz9xw4hpbn6tq8rjf3ylc5ds0ge',
@@ -117,7 +136,9 @@ test.describe('Stack detection on Add an app', () => {
 
         await expect(detection(page)).toContainText('Filled in what the repository settles.')
         await expect(page.getByLabel('Language')).toHaveValue('ruby')
-        await expect(page.getByText('Gemfile names neither rails nor sinatra.', { exact: false })).toBeVisible()
+        await expect(
+            page.getByText('Gemfile names neither rails nor sinatra, and there is no config.ru', { exact: false })
+        ).toBeVisible()
         await expect(page.getByRole('button', { name: 'Add the app' })).toBeEnabled()
     })
 
@@ -223,10 +244,43 @@ test.describe('Stack detection on Add an app', () => {
         await expect(page.getByLabel('Framework')).toHaveValue('laravel')
     })
 
+    test('a repository with apps in folders offers them, and the folder picked is the one read and added', async ({
+        page
+    }) => {
+        const asked = await answer(page, [MONOREPO, DASHBOARD])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/mono.git')
+
+        const folder = page.getByLabel('Folder')
+
+        await expect(page.getByText('Pick the folder the app is in.', { exact: false })).toBeVisible()
+        await expect(folder).toHaveValue('/')
+        await folder.selectOption('apps/dashboard')
+
+        await expect.poll(() => asked.length).toBe(2)
+        await expect(page.getByLabel('Language')).toHaveValue('php')
+        await expect(page.getByLabel('Framework')).toHaveValue('laravel')
+        await expect(page.locator('input[name="directory"]')).toHaveValue('apps/dashboard')
+        expect(new URL(asked[1]).searchParams.get('directory')).toBe('apps/dashboard')
+    })
+
+    test('a repository whose app is at its root has no folder to pick', async ({ page }) => {
+        await answer(page, [READY])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
+
+        await expect(detection(page)).toContainText('Filled in')
+        await expect(page.getByLabel('Folder')).toHaveCount(0)
+        await expect(page.locator('input[name="directory"]')).toHaveValue('/')
+    })
+
     for (const [label, state] of [
         ['fills in', READY],
         ['leaves a field open', UNSURE],
-        ['refuses', BLOCKED]
+        ['refuses', BLOCKED],
+        ['offers folders', MONOREPO]
     ] as const) {
         test(`the form passes axe in light and dark while it ${label}`, async ({ page }) => {
             for (const theme of ['light', 'dark'] as const) {

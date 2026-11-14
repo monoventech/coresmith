@@ -213,8 +213,7 @@ test('a release that drops laravel/reverb leaves it out, says why and stops the 
         ->and($transport->uploads()['/etc/coresmith/env/chat.env'] ?? '')->not->toContain('REVERB_SERVER_PORT')
         ->and(app(Reverb::class)->live($application->fresh()))->toBeFalse()
         ->and($deployment->fresh()->log)->toContain("\nreverb: {$why}\n")
-        ->and(reverbRow($application)['on'])->toBeTrue()
-        ->and(reverbRow($application)['description'])->toBe($why);
+        ->and(reverbRow($application))->toBeNull();
 });
 
 function reverbRollback(Application $application, array $packages, FakeSSHTransport $transport): void
@@ -247,7 +246,7 @@ test('rolling back to a release without reverb stops it and takes its route down
         ->and($commands)->toContain("systemctl disable --now 'coresmith-app-chat-reverb' || true")
         ->and($commands)->toContain("rm -f '/etc/systemd/system/coresmith-app-chat-reverb.service'")
         ->and(Activity::query()->where('description', 'application_rolled_back')->count())->toBe(1)
-        ->and(reverbRow($application)['description'])->toBe('composer.json no longer requires laravel/reverb, so it does not start');
+        ->and(reverbRow($application))->toBeNull();
 
     Queue::assertPushed(SyncApplicationRoute::class);
 });

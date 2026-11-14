@@ -12,6 +12,7 @@ use App\Enums\ApplicationType;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\SSH\SSHConnection;
+use App\Stacks\StorageSeed;
 use Throwable;
 
 final class SharedStorage
@@ -69,10 +70,10 @@ final class SharedStorage
         $shared = $paths->shared() . '/storage';
         $local = $paths->appDirectory($release) . '/storage';
 
-        $seed = match ($application->type) {
-            ApplicationType::Php => $this->fromRelease($local, $shared),
-            ApplicationType::Ruby => $this->fromLive($paths->appDirectory($paths->current()) . '/storage', $shared) . $this->fromRelease($local, $shared, self::PRIVATE_MODES),
-            default => '',
+        $seed = match ($application->type->language()->storageSeed()) {
+            StorageSeed::FromRelease => $this->fromRelease($local, $shared),
+            StorageSeed::FromLiveRelease => $this->fromLive($paths->appDirectory($paths->current()) . '/storage', $shared) . $this->fromRelease($local, $shared, self::PRIVATE_MODES),
+            StorageSeed::None => '',
         };
 
         $laravel = $this->laravel($application);

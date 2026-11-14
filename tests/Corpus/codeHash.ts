@@ -12,6 +12,7 @@ export const WATCHED = [
     'app/Services/Deployment',
     'app/Services/Process',
     'app/Jobs/DeployApplication.php',
+    'app/Stacks',
     'tests/Corpus/fixed.json'
 ]
 

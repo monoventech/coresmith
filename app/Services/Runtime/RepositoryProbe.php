@@ -66,16 +66,16 @@ final class RepositoryProbe
     exit 0
     BASH;
 
-    public function read(SSHConnection $connection, string $directory, ?Application $as = null): RepositoryFacts
+    public function read(SSHConnection $connection, string $directory, ?Application $as = null, string $folder = ''): RepositoryFacts
     {
         $command = 'echo ' . escapeshellarg(base64_encode($this->script())) . ' | base64 -d | '
             . self::DIRECTORY_VARIABLE . '=' . escapeshellarg($directory) . ' bash -s';
 
         if ($as === null) {
-            return $this->parse($connection->execute($command)->output);
+            return $this->parse($connection->execute($command)->output, $folder);
         }
 
-        return $this->parse($connection->execute(app(AppShell::class)->run($as, $command, $directory), sudo: true)->output);
+        return $this->parse($connection->execute(app(AppShell::class)->run($as, $command, $directory), sudo: true)->output, $folder);
     }
 
     public function script(): string
@@ -90,7 +90,7 @@ final class RepositoryProbe
         ]) . "\n";
     }
 
-    public function parse(string $output): RepositoryFacts
+    public function parse(string $output, string $folder = ''): RepositoryFacts
     {
         $files = [];
         $lockfiles = [];
@@ -119,6 +119,6 @@ final class RepositoryProbe
             }
         }
 
-        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete);
+        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete, $folder);
     }
 }

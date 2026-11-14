@@ -86,10 +86,10 @@ final class SmartToggles
         $rails = $application->type === ApplicationType::Ruby && $framework === 'rails';
 
         return array_values(array_filter([
-            $framework === 'laravel' && ($this->ssrDetected($application) || $this->ssrOn($application)) ? self::INERTIA_SSR : null,
+            $framework === 'laravel' && ($this->ssrDetected($application) || ($this->ssrOn($application) && !$this->dropped($application, 'inertia'))) ? self::INERTIA_SSR : null,
             $framework === 'laravel' ? self::QUEUE : null,
             $framework === 'laravel' ? self::SCHEDULER : null,
-            $framework === 'laravel' && (($this->packages($application)['reverb'] ?? false) === true || app(Reverb::class)->on($application)) ? self::REVERB : null,
+            $framework === 'laravel' && (($this->packages($application)['reverb'] ?? false) === true || (app(Reverb::class)->on($application) && !$this->dropped($application, 'reverb'))) ? self::REVERB : null,
             $rails && $this->offers($application, self::SIDEKIQ) ? self::SIDEKIQ : null,
             $rails && $this->offers($application, self::SOLID_QUEUE) ? self::SOLID_QUEUE : null,
             self::MAINTENANCE,
@@ -485,6 +485,11 @@ final class SmartToggles
     private function horizon(Application $application): bool
     {
         return ($this->packages($application)['horizon'] ?? false) === true;
+    }
+
+    private function dropped(Application $application, string $package): bool
+    {
+        return ($this->packages($application)[$package] ?? null) === false;
     }
 
     private function offers(Application $application, string $key): bool

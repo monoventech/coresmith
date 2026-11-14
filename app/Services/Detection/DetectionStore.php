@@ -73,6 +73,7 @@ final class DetectionStore
             (array) $stored['facts']['markers'],
             (array) $stored['facts']['env_keys'],
             (bool) $stored['facts']['complete'],
+            trim((string) $stored['directory'], '/'),
         ) : null;
 
         return new RepositoryRead($facts, $stored['commit'] ?? null, $stored['failure'] ?? null, (bool) ($stored['definitive'] ?? false), (array) ($stored['installed'] ?? []), (array) ($stored['extensions'] ?? []), is_string($stored['arch'] ?? null) ? $stored['arch'] : null);

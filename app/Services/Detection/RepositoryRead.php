@@ -15,6 +15,7 @@ final readonly class RepositoryRead
     /**
      * @param  array<string, list<string>>  $installed
      * @param  array<string, list<string>>  $extensions
+     * @param  list<string>  $folders
      */
     public function __construct(
         public ?RepositoryFacts $facts,
@@ -24,6 +25,7 @@ final readonly class RepositoryRead
         public array $installed = [],
         public array $extensions = [],
         public ?string $arch = null,
+        public array $folders = [],
     ) {}
 
     /**

@@ -126,12 +126,13 @@ function verdictOf(text: string): string {
 
 async function fieldsOf(page: Page): Promise<Record<string, string | null>> {
     const runtime = page.getByLabel('Runtime', { exact: true })
+    const webRoot = page.getByLabel('Web root', { exact: true })
 
     return {
         type: await page.getByLabel('Language', { exact: true }).inputValue(),
         framework: await page.getByLabel('Framework', { exact: true }).inputValue(),
         js_runtime: (await runtime.count()) > 0 ? await runtime.inputValue() : null,
-        web_directory: await page.getByLabel('Web root', { exact: true }).inputValue()
+        web_directory: (await webRoot.count()) > 0 ? await webRoot.inputValue() : null
     }
 }
 
