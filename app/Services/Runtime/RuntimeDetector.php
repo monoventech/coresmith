@@ -12,6 +12,12 @@ use App\Models\Application;
 
 final class RuntimeDetector
 {
+    private const JAVA_BUILDS = [
+        'pom.xml' => '/<(?:maven\.compiler\.release|java\.version|maven\.compiler\.target|maven\.compiler\.source|release)>\s*(?:1\.)?(\d+)[^<]*<\/[^>]+>/',
+        'build.gradle.kts' => '/(?:jvmToolchain\(\s*(\d+)\s*\)|JavaLanguageVersion\.of\(\s*(\d+)\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_(?:1_)?(\d+)|[\'"](?:1\.)?(\d+)[^\'"]*[\'"]))/',
+        'build.gradle' => '/(?:jvmToolchain\(\s*(\d+)\s*\)|JavaLanguageVersion\.of\(\s*(\d+)\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_(?:1_)?(\d+)|[\'"](?:1\.)?(\d+)[^\'"]*[\'"]|(?:1\.)?(\d+)(?:\.\d+)*))/',
+    ];
+
     public const SOURCES = [
         'php' => '.tool-versions or require.php in composer.json',
         'nodejs' => '.tool-versions, .nvmrc, .node-version or engines.node in package.json',
@@ -20,9 +26,10 @@ final class RuntimeDetector
         'ruby' => '.tool-versions, .ruby-version or the ruby line in Gemfile',
         'python' => '.tool-versions, .python-version, pyproject.toml or runtime.txt',
         'go' => '.tool-versions or go.mod',
+        'java' => '.tool-versions, .java-version, .sdkmanrc, system.properties, pom.xml or build.gradle',
     ];
 
-    private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python', 'golang' => 'go', 'go' => 'go'];
+    private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python', 'golang' => 'go', 'go' => 'go', 'java' => 'java'];
 
     private const NODE_CODENAMES = ['argon' => '4', 'boron' => '6', 'carbon' => '8', 'dubnium' => '10', 'erbium' => '12', 'fermium' => '14', 'gallium' => '16', 'hydrogen' => '18', 'iron' => '20', 'jod' => '22', 'krypton' => '24'];
 
@@ -107,6 +114,12 @@ final class RuntimeDetector
                 continue;
             }
 
+            if ($runtime === 'java' && preg_match('/^(?:[a-z]+-)?(\d+)/', $value, $java) === 1) {
+                $found[$runtime] = new Requirement($runtime, $java[1], $value, '.tool-versions', '.tool-versions', 'npm');
+
+                continue;
+            }
+
             if (preg_match('/^v?\d/', $value) !== 1) {
                 $notes[] = "Ignored {$parts[0]} {$value} in .tool-versions, because it is not a version number.";
 
@@ -132,6 +145,7 @@ final class RuntimeDetector
             'ruby' => $this->rubyVersion($facts) ?? $this->gemfileRuby($facts),
             'python' => $this->pythonVersion($facts, $notes) ?? $this->requiresPython($facts) ?? $this->poetryPython($facts) ?? $this->runtimeTxt($facts),
             'go' => $this->goMod($facts),
+            'java' => $this->javaVersion($facts),
             default => null,
         };
     }
@@ -208,6 +222,35 @@ final class RuntimeDetector
         $version = (string) preg_replace('/^ruby-/', '', $raw);
 
         return preg_match('/^\d/', $version) === 1 ? new Requirement('ruby', $version, $raw, '.ruby-version', '.ruby-version', 'gem') : null;
+    }
+
+    private function javaVersion(RepositoryFacts $facts): ?Requirement
+    {
+        $sources = [
+            ['.java-version', '/^\s*(?:[a-z]+-)?(\d+)\S*/m'],
+            ['.sdkmanrc', '/^\s*java\s*=\s*(\d+)\S*/m'],
+            ['system.properties', '/^\s*java\.runtime\.version\s*=\s*(?:1\.)?(\d+)\S*/m'],
+        ];
+
+        foreach (['', '*/'] as $folder) {
+            foreach (self::JAVA_BUILDS as $build => $pattern) {
+                foreach ($folder === '' ? [$build => null] : $facts->matching($folder . $build) as $file => $content) {
+                    $sources[] = [$file, $pattern];
+                }
+            }
+        }
+
+        foreach ($sources as [$file, $pattern]) {
+            if (preg_match($pattern, (string) $facts->file($file), $matches) === 1) {
+                $line = (string) (array_values(array_filter(array_slice($matches, 1), fn(string $part): bool => $part !== ''))[0] ?? '');
+
+                if ($line !== '') {
+                    return new Requirement('java', $line, trim($matches[0]), $file, $file, 'npm');
+                }
+            }
+        }
+
+        return null;
     }
 
     private function goMod(RepositoryFacts $facts): ?Requirement

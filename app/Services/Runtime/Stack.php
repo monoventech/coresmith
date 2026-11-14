@@ -135,6 +135,7 @@ final readonly class Stack
             'ruby_version' => $versions['ruby'] ?? null,
             'python_version' => $versions['python'] ?? null,
             'go_version' => $versions['go'] ?? null,
+            'java_version' => $versions['java'] ?? null,
             'stack' => $this->toArray(),
         ];
     }

@@ -108,6 +108,7 @@ class Application extends Model
             'ruby' => $this->ruby_version,
             'python' => $this->python_version,
             'go' => $this->go_version,
+            'java' => $this->java_version,
         ], fn(?string $version): bool => $version !== null && $version !== '');
     }
 

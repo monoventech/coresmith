@@ -51,6 +51,7 @@ use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\Teams\TeamAccess;
 use App\Stacks\GoFrameworks;
+use App\Stacks\JavaFrameworks;
 use App\Stacks\JsPresets\JsPresets;
 use App\Stacks\PythonPresets\PythonPresets;
 use Carbon\CarbonImmutable;
@@ -77,6 +78,7 @@ final class ApplicationController extends Controller
             'js_frameworks' => app(JsPresets::class)->choices(),
             'python_frameworks' => app(PythonPresets::class)->choices(),
             'go_frameworks' => GoFrameworks::options(),
+            'java_frameworks' => JavaFrameworks::options(),
             'runtimes' => collect(Catalog::RUNTIMES)->mapWithKeys(fn(string $runtime): array => [$runtime => [
                 'label' => $catalog->label($runtime),
                 'recommended' => $catalog->recommendedLine($runtime),

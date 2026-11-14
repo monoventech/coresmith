@@ -112,6 +112,7 @@ test('an application takes a stack as its live versions', function () {
         'ruby_version' => null,
         'python_version' => null,
         'go_version' => null,
+        'java_version' => null,
         'stack' => $stack->toArray(),
     ]);
 });

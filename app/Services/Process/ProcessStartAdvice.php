@@ -8,14 +8,32 @@ declare(strict_types=1);
 
 namespace App\Services\Process;
 
+use App\Enums\ApplicationType;
 use App\Models\Application;
 use App\Services\Deployment\EnvironmentFile;
 
 final class ProcessStartAdvice
 {
+    private const GENERAL = 'The process log says why. Fix it and deploy again, or roll back to the previous release.';
+
+    private const SPRING_DATABASE = 'SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME and SPRING_DATASOURCE_PASSWORD';
+
+    private const DATABASE_VARIABLES = [
+        'spring-boot' => self::SPRING_DATABASE,
+        'jhipster' => self::SPRING_DATABASE,
+        'quarkus' => 'QUARKUS_DATASOURCE_JDBC_URL, QUARKUS_DATASOURCE_USERNAME and QUARKUS_DATASOURCE_PASSWORD',
+        'micronaut' => 'DATASOURCES_DEFAULT_URL, DATASOURCES_DEFAULT_USERNAME and DATASOURCES_DEFAULT_PASSWORD',
+    ];
+
     public function for(Application $application, string $output): string
     {
+        return $this->specific($application, $output) ?? self::GENERAL;
+    }
+
+    public function specific(Application $application, string $output): ?string
+    {
         $port = $application->base_port;
+        $java = $application->type === ApplicationType::Java;
         $slug = $application->slug;
         $railsEnv = $this->railsEnv($application);
 
@@ -25,13 +43,17 @@ final class ProcessStartAdvice
             str_contains($output, 'Failed to set up mount namespacing') || str_contains($output, 'status=226/NAMESPACE') => "The server couldn't set up the app's sandbox. Check the app's folders exist under /var/coresmith/apps/{$slug}/, then deploy again.",
             $railsEnv !== null && str_contains($output, 'cannot load such file') => "This Rails app runs with RAILS_ENV={$railsEnv}, but its gems were installed for production only. Set RAILS_ENV=production in its environment variables, then deploy again.",
             str_contains($output, 'Environment: development') && str_contains($output, 'cannot load such file') => 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.',
-            str_contains($output, 'Address already in use') || str_contains($output, 'EADDRINUSE') => "Port {$port} is already taken by another process. Find it with ss -tlnp | grep {$port}, stop it, then deploy again.",
+            $java && preg_match('/Connection to \S+ refused|Communications link failure|Failed to configure a DataSource/', $output) === 1 => "The app couldn't reach its database. Add one on the server's Databases tab, then " . (isset(self::DATABASE_VARIABLES[(string) $application->framework]) ? 'set ' . self::DATABASE_VARIABLES[(string) $application->framework] . " in the app's environment" : 'point the app at it in its environment') . ' and deploy again.',
+            $java && str_contains($output, 'com.ecwid.consul') && preg_match('/Connection refused|ConnectException/', $output) === 1 => "The app couldn't reach Consul, the registry JHipster gateways and microservices register with. Coresmith doesn't run Consul, so run it where this server can reach it, set SPRING_CLOUD_CONSUL_HOST to its address in the app's environment, then deploy again.",
+            $java && str_contains($output, 'Cannot execute request on any known server') => "The app couldn't reach its Eureka registry, which JHipster gateways and microservices register with. Coresmith doesn't run Eureka, so run it where this server can reach it, set EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE to its address in the app's environment, then deploy again.",
+            str_contains($output, 'java.lang.OutOfMemoryError') => 'The app ran out of Java heap. Pick a bigger size on the app page, or raise MaxRAMPercentage in its JAVA_OPTS, then deploy again.',
+            str_contains($output, 'Address already in use') || str_contains($output, 'EADDRINUSE') || preg_match('/Port \d+ was already in use/', $output) === 1 => "Port {$port} is already taken by another process. Find it with ss -tlnp | grep {$port}, stop it, then deploy again.",
             str_contains($output, 'EACCES') => 'The app wasn\'t allowed to listen on its port. Check nothing else on the server uses it, then deploy again.',
             str_contains($output, 'MODULE_NOT_FOUND') || str_contains($output, 'Cannot find module') => 'A Node module is missing. The dependency install may have failed without saying so, so deploy again.',
             str_contains($output, 'Permission denied') => "The process could not read its files. Check ownership with ls -la /var/coresmith/apps/{$slug}/current/, then deploy again.",
             str_contains($output, 'No such file or directory') => 'The entry point was not found. Check the build produced the file the process starts, then deploy again.',
             str_contains($output, 'SyntaxError') || str_contains($output, 'Parse error') => 'The code has a syntax error. The process log names the file and line.',
-            default => 'The process log says why. Fix it and deploy again, or roll back to the previous release.',
+            default => null,
         };
     }
 

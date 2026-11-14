@@ -610,6 +610,20 @@ test('a release the memory limit keeps killing says it ran out of memory and to 
     expect($deployment->fresh()->failure_reason)->toBe('Out of memory: coresmith-app-my-app-fpm went past the 256 MB the Small size allows, so it kept being stopped. Pick a bigger size on the app page, then deploy again. releases/' . TIMESTAMP . ' is live but not serving, so roll back to the previous release meanwhile.');
 });
 
+test('a crash loop whose log says why gets the advice for it before the way back', function () {
+    Event::fake([DeploymentFailed::class]);
+    $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000']))->create();
+    $transport = healthyDeployTransport()
+        ->respondToSequence("systemctl is-active 'coresmith-app-my-app-fpm'", [["active\n", 0], ["failed\n", 3]])
+        ->respondTo("journalctl -u 'coresmith-app-my-app-fpm'", "ERROR: unable to bind listening socket: Address already in use (98)\n");
+
+    expect(fn() => deploy($deployment, $transport))->toThrow(DeploymentAborted::class);
+
+    $port = $deployment->application->base_port;
+
+    expect($deployment->fresh()->failure_reason)->toBe("Crash loop: coresmith-app-my-app-fpm kept stopping in the minute after going live. Port {$port} is already taken by another process. Find it with ss -tlnp | grep {$port}, stop it, then deploy again. releases/" . TIMESTAMP . ' is live but not serving, so roll back to the previous release meanwhile.');
+});
+
 test('a release that crash loops after the swap fails the deploy and says to roll back', function () {
     Event::fake([DeploymentFailed::class]);
     $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-000000']))->create();

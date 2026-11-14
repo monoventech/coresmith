@@ -41,7 +41,7 @@ final class ActivityFeed
             $access = app(TeamAccess::class);
             $servers = $access->servers($viewer, $team)->get()->keyBy('id');
             $applications = $access->applications($viewer, $team)->with('server')->get()->keyBy('id');
-            $databases = ManagedDatabase::query()->where('team_id', $team->getKey())->whereIn('server_id', $servers->keys())->get()->keyBy('id');
+            $databases = $access->databases($viewer, $team)->get()->keyBy('id');
 
             return $this->merge($servers, $applications, $databases, collect(), $limit, panel: true);
         }
@@ -57,10 +57,17 @@ final class ActivityFeed
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    public function forServer(Server $server, int $limit = 25): array
+    public function forServer(Server $server, int $limit = 25, ?User $viewer = null): array
     {
-        $applications = Application::withTrashed()->where('server_id', $server->getKey())->with('server')->get()->keyBy('id');
-        $databases = ManagedDatabase::withTrashed()->where('server_id', $server->getKey())->get()->keyBy('id');
+        $team = $server->team;
+        $access = app(TeamAccess::class);
+        $narrowed = $viewer !== null && $team !== null && !$access->seesEverything($viewer, $team);
+        $applications = Application::withTrashed()->where('server_id', $server->getKey())
+            ->when($narrowed, fn($query) => $query->whereIn('id', $access->applications($viewer, $team)->withTrashed()->select('id')))
+            ->with('server')->get()->keyBy('id');
+        $databases = ManagedDatabase::withTrashed()->where('server_id', $server->getKey())
+            ->when($narrowed, fn($query) => $query->whereIn('id', $access->databases($viewer, $team)->withTrashed()->select('id')))
+            ->get()->keyBy('id');
 
         return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit);
     }
