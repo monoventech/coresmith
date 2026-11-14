@@ -109,17 +109,20 @@ final class TeamController extends Controller
     }
 
     /**
-     * @return array{servers: list<array{id: string, name: string, applications: list<array{id: string, name: string}>}>, projects: list<array{id: string, name: string, environments: list<array{id: string, name: string}>}>}
+     * @return array{servers: list<array{id: string, name: string, this_machine: bool, applications: list<array{id: string, name: string}>, databases: list<array{id: string, name: string}>}>, projects: list<array{id: string, name: string, environments: list<array{id: string, name: string}>}>}
      */
     private function shareable(Team $team): array
     {
         $applications = $team->applications()->orderBy('name')->get(['id', 'name', 'server_id'])->groupBy('server_id');
+        $databases = $team->databases()->orderBy('name')->get(['id', 'name', 'server_id'])->groupBy('server_id');
 
         return [
-            'servers' => $team->servers()->orderBy('name')->get(['id', 'name'])->map(fn(Server $server): array => [
+            'servers' => $team->servers()->orderBy('name')->get(['id', 'name', 'runs_coresmith'])->map(fn(Server $server): array => [
                 'id' => $server->id,
                 'name' => $server->name,
+                'this_machine' => (bool) $server->runs_coresmith,
                 'applications' => $applications->get($server->id, collect())->map(fn(Application $application): array => ['id' => $application->id, 'name' => $application->name])->values()->all(),
+                'databases' => $databases->get($server->id, collect())->map(fn(ManagedDatabase $database): array => ['id' => $database->id, 'name' => $database->name])->values()->all(),
             ])->values()->all(),
             'projects' => $team->projects()->with('environments')->orderBy('name')->get()->map(fn(Project $project): array => [
                 'id' => $project->id,

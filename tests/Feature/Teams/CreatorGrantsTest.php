@@ -84,7 +84,7 @@ test('a narrowed admin who adds a server sees it straight away', function (strin
 
     $this->actingAs($admin)->get(route('servers.show', $server))->assertOk();
 
-    expect(app(TeamAccess::class)->summary($team, $admin))->toBe(['everything' => false, 'servers' => [$server->id], 'applications' => [], 'projects' => [], 'environments' => []]);
+    expect(app(TeamAccess::class)->summary($team, $admin))->toBe(['everything' => false, 'servers' => [$server->id], 'applications' => [], 'projects' => [], 'environments' => [], 'withheld_applications' => [], 'withheld_databases' => []]);
 })->with(['by its address', 'at a cloud provider', 'this machine']);
 
 test('a narrowed admin who adds an app keeps it shared on its own, apart from its server', function () {
@@ -101,5 +101,5 @@ test('a narrowed admin who adds an app keeps it shared on its own, apart from it
         'app_size' => 'small',
     ])->assertSessionHasNoErrors()->assertRedirect();
 
-    expect(app(TeamAccess::class)->summary($team, $admin))->toBe(['everything' => false, 'servers' => [$web->id], 'applications' => [Application::query()->sole()->id], 'projects' => [], 'environments' => []]);
+    expect(app(TeamAccess::class)->summary($team, $admin))->toBe(['everything' => false, 'servers' => [$web->id], 'applications' => [Application::query()->sole()->id], 'projects' => [], 'environments' => [], 'withheld_applications' => [], 'withheld_databases' => []]);
 });

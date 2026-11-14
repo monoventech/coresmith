@@ -97,7 +97,7 @@ final class ServerTabsController extends Controller
 
         return Inertia::render('servers/Activity', [
             'server' => $presenter->header($server, $request->user()),
-            'activity' => $feed->forServer($server),
+            'activity' => $feed->forServer($server, viewer: $request->user()),
         ]);
     }
 

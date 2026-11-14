@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Server;
 
 use App\Enums\TeamRole;
+use App\Models\AccessGrant;
 use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\User;
@@ -188,9 +189,18 @@ final class SecurityHardening
         }
 
         $access = app(TeamAccess::class);
+        $holdsBack = AccessGrant::query()
+            ->where('team_id', $team->getKey())
+            ->where('withheld', true)
+            ->where(fn($query) => $query
+                ->whereHas('application', fn($held) => $held->where('server_id', $server->getKey()))
+                ->orWhereHas('database', fn($held) => $held->where('server_id', $server->getKey())))
+            ->pluck('user_id')
+            ->all();
 
         return $team->members()
             ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value, TeamRole::Developer->value])
+            ->whereNotIn('users.id', $holdsBack)
             ->get()
             ->filter(fn(User $member): bool => $member->pivot->role === TeamRole::Developer->value ? $server->addedBy($member) : $access->canSeeServer($member, $server))
             ->values();

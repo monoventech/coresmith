@@ -38,6 +38,8 @@ final class TeamMemberAccessController extends Controller
             'applications' => ['sometimes', 'array', $this->within($team->applications(), "One of those apps isn't in {$team->name} any more. Reload the page and choose again.")],
             'projects' => ['sometimes', 'array', $this->within($team->projects(), "One of those projects isn't in {$team->name} any more. Reload the page and choose again.")],
             'environments' => ['sometimes', 'array', $this->within(Environment::query()->whereIn('project_id', $team->projects()->select('id')), "One of those environments isn't in {$team->name} any more. Reload the page and choose again.")],
+            'withheld_applications' => ['sometimes', 'array', $this->within($team->applications(), "One of those apps isn't in {$team->name} any more. Reload the page and choose again.")],
+            'withheld_databases' => ['sometimes', 'array', $this->within($team->databases(), "One of those databases isn't in {$team->name} any more. Reload the page and choose again.")],
         ]);
 
         $everything = (bool) $validated['everything'];
@@ -49,8 +51,14 @@ final class TeamMemberAccessController extends Controller
         $applications = array_values(array_unique($validated['applications'] ?? []));
         $projects = array_values(array_unique($validated['projects'] ?? []));
         $environments = array_values(array_unique($validated['environments'] ?? []));
+        $withheldApplications = array_values(array_unique($validated['withheld_applications'] ?? []));
+        $withheldDatabases = array_values(array_unique($validated['withheld_databases'] ?? []));
 
-        $access->sync($team, $user, $everything, $servers, $applications, $projects, $environments);
+        if ($role === TeamRole::Admin) {
+            $this->refuseSignedIn($team, $user, $servers, array_values(array_diff($withheldApplications, $applications)), $withheldDatabases);
+        }
+
+        $access->sync($team, $user, $everything, $servers, $applications, $projects, $environments, $withheldApplications, $withheldDatabases);
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties([
             'email' => $user->email,
@@ -59,6 +67,8 @@ final class TeamMemberAccessController extends Controller
             'applications' => $applications,
             'projects' => $projects,
             'environments' => $environments,
+            'withheld_applications' => $withheldApplications,
+            'withheld_databases' => $withheldDatabases,
         ])->log('member_access_changed');
 
         if ($role === TeamRole::Admin) {
@@ -66,6 +76,29 @@ final class TeamMemberAccessController extends Controller
         }
 
         return back()->with('success', 'Saved.');
+    }
+
+    /**
+     * @param  list<string>  $servers
+     * @param  list<string>  $applications
+     * @param  list<string>  $databases
+     */
+    private function refuseSignedIn(Team $team, User $user, array $servers, array $applications, array $databases): void
+    {
+        $reached = $team->servers()
+            ->whereIn('id', $servers)
+            ->where('runs_coresmith', false)
+            ->where(fn($query) => $query->whereHas('applications', fn($held) => $held->whereIn('id', $applications))->orWhereHas('databases', fn($held) => $held->whereIn('id', $databases)))
+            ->orderBy('name')
+            ->first();
+
+        if ($reached === null) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            $reached->applications()->whereIn('id', $applications)->exists() ? 'withheld_applications' : 'withheld_databases' => "{$user->name} signs in to {$reached->name} over SSH, which reaches every app and database on it, so nothing there can be held back from them. Untick {$reached->name} and tick the apps to share one by one instead.",
+        ]);
     }
 
     private function within(HasMany|Builder $owned, string $message): Closure

@@ -34,4 +34,17 @@ final class AccessGrant extends Model
     {
         return $this->belongsTo(Environment::class);
     }
+
+    public function database(): BelongsTo
+    {
+        return $this->belongsTo(ManagedDatabase::class, 'database_id');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return ['withheld' => 'boolean'];
+    }
 }
