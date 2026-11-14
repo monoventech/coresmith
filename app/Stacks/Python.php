@@ -17,6 +17,7 @@ use App\Services\Runtime\NativeTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
+use App\Stacks\PythonPresets\PythonPresets;
 
 final readonly class Python implements Language
 {
@@ -24,7 +25,9 @@ final readonly class Python implements Language
 
     private const WORKERS = ['small' => 2, 'medium' => 4, 'large' => 8];
 
-    public function __construct(private AsdfManager $asdf, private JsCommands $js) {}
+    private const DJANGO_PYTHON = ['2.2' => '3.9', '3.0' => '3.9', '3.1' => '3.9', '3.2' => '3.10', '4.0' => '3.10', '4.1' => '3.11', '4.2' => '3.12', '5.0' => '3.12', '5.1' => '3.13', '5.2' => '3.14', '6.0' => '3.14'];
+
+    public function __construct(private AsdfManager $asdf, private JsCommands $js, private PythonDetection $detection, private PythonChecks $checks, private PythonPresets $presets) {}
 
     public function install(Application $application, Stack $stack): array
     {
@@ -115,7 +118,7 @@ final readonly class Python implements Language
 
     public function initialEnvironment(?string $framework): array
     {
-        return [];
+        return $this->presets->find((string) $framework)?->initialEnvironment() ?? [];
     }
 
     public function processEnvironment(Application $application): array
@@ -135,17 +138,27 @@ final readonly class Python implements Language
      */
     public function detect(RepositoryFacts $facts): ?array
     {
-        return null;
+        return $this->detection->detect($facts);
     }
 
     public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
     {
-        return [];
+        return $this->checks->checks($framework, $facts);
     }
 
     public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string
     {
-        return null;
+        if ($runtime === null || $runtime->source !== ResolvedRuntime::FROM_DEFAULT) {
+            return null;
+        }
+
+        $django = PythonDependencies::from($facts)->minor('django');
+        $most = $django === null ? null : (self::DJANGO_PYTHON[$django] ?? null);
+        $line = implode('.', array_slice(explode('.', $runtime->version), 0, 2));
+
+        return $most !== null && version_compare($line, $most, '>')
+            ? "Nothing names a Python version, so Coresmith would pick Python {$runtime->version}, and Django {$django} supports Python {$most} at most. Add a .python-version with the Python the app runs on, for example {$most}."
+            : null;
     }
 
     public function cronExample(Application $application): string
@@ -155,7 +168,9 @@ final readonly class Python implements Language
 
     public function tooling(Application $application, RepositoryFacts $facts): array
     {
-        return (new PythonTooling($this->manager($facts), 'gunicorn', null))->toArray();
+        $app = $this->detection->app($application->framework, $facts);
+
+        return (new PythonTooling(PythonTooling::managerFor($facts), $app->server, $app->module, $app->collectstatic, $app->migrate))->toArray();
     }
 
     public function pathDirectories(string $appDirectory): array
@@ -168,17 +183,8 @@ final readonly class Python implements Language
         return app(NativePythonTools::class);
     }
 
-    private function manager(RepositoryFacts $facts): string
+    public function frameworkLabel(string $framework): ?string
     {
-        return match (true) {
-            $facts->exists('uv.lock') => 'uv',
-            $facts->exists('poetry.lock') => 'poetry',
-            $facts->exists('Pipfile.lock') => 'pipenv',
-            $facts->has('requirements.txt') => 'pip',
-            $facts->toml('pyproject.toml', 'tool.poetry.dependencies') !== [] || $facts->toml('pyproject.toml', 'tool.poetry') !== [] => 'poetry',
-            $facts->has('Pipfile') => 'pipenv',
-            $facts->toml('pyproject.toml', 'project') !== [] => 'pyproject',
-            default => 'none',
-        };
+        return $this->presets->find($framework)?->label();
     }
 }

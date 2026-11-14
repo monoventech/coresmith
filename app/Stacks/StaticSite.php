@@ -148,4 +148,9 @@ final readonly class StaticSite implements Language
     {
         return null;
     }
+
+    public function frameworkLabel(string $framework): ?string
+    {
+        return null;
+    }
 }

@@ -728,6 +728,20 @@ test.describe('adding an application', () => {
         await expect(framework).toHaveValue('angular')
     })
 
+    test('Python offers its frameworks and versions, and no web root', async ({ page }) => {
+        await openAddApp(page)
+        await page.getByLabel('Language').selectOption('python')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(framework).toHaveValue('django')
+        await expect(framework.locator('option')).toHaveText(['Django', 'FastAPI', 'Starlette', 'Flask', 'Other framework'])
+        await framework.selectOption('fastapi')
+        await expect(framework).toHaveValue('fastapi')
+        await expect(page.getByLabel('Web root')).toHaveCount(0)
+        await expect(page.getByRole('radiogroup', { name: 'Python version' }).getByRole('radio', { name: /^3\.14\./ })).toBeVisible()
+    })
+
     test('the web root is asked only of PHP apps and static sites, which serve files from it', async ({ page }) => {
         await openAddApp(page)
 
@@ -736,7 +750,7 @@ test.describe('adding an application', () => {
 
         await expect(webRoot).toHaveValue('/public')
 
-        for (const proxied of ['js', 'ruby']) {
+        for (const proxied of ['js', 'ruby', 'python']) {
             await language.selectOption(proxied)
             await expect(webRoot).toHaveCount(0)
         }

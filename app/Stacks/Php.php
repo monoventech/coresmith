@@ -221,6 +221,11 @@ final readonly class Php implements Language
         return null;
     }
 
+    public function frameworkLabel(string $framework): ?string
+    {
+        return null;
+    }
+
     /**
      * @return list<string>
      */

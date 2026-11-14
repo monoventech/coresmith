@@ -8,9 +8,9 @@ declare(strict_types=1);
 
 namespace App\Services\Detection;
 
+use App\Enums\ApplicationType;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\Stack;
-use App\Stacks\JsPresets\JsPresets;
 
 final readonly class DetectedStack
 {
@@ -18,6 +18,7 @@ final readonly class DetectedStack
         'php' => ['laravel' => 'Laravel', 'symfony' => 'Symfony', '' => 'Plain PHP'],
         'js' => ['' => 'API or other'],
         'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra', 'rack' => 'Rack'],
+        'python' => ['' => 'Other framework'],
     ];
 
     /**
@@ -55,7 +56,7 @@ final readonly class DetectedStack
     {
         $version = $this->version();
         $runtime = $this->runtime === null || $version === null ? null : $catalog->label($this->runtime) . ' ' . $version;
-        $framework = ($this->type === 'js' ? app(JsPresets::class)->find((string) $this->framework)?->label() : null) ?? self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
+        $framework = ApplicationType::tryFrom((string) $this->type)?->language()->frameworkLabel((string) $this->framework) ?? self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
 
         return match ($this->type) {
             'static' => 'Static site, web root ' . ($this->webDirectory ?? '/'),

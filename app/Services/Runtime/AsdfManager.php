@@ -90,7 +90,7 @@ final class AsdfManager
     rm -rf "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"
     mv "$found" "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"
     ln -sfn python3 "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python"
-    "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python" -m compileall -q -j 0 -x '/(test|tests|idle_test)/' "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/lib" >/dev/null 2>&1 || echo "Python $CORESMITH_PYTHON's standard library could not all be precompiled, so apps may start a little slower."
+    "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python" -m compileall -q -j 0 -x '/(test|tests|idle_test)/' "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/lib" >/dev/null 2>&1 || echo "Some of Python $CORESMITH_PYTHON's standard library didn't precompile, so apps may start a little slower."
     BASH;
 
     public static function assertValid(string $runtime, string $version): void

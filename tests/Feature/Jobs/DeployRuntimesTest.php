@@ -237,6 +237,43 @@ test('the server finds those packages in any lockfile or dependency list, and no
     expect(preg_split('/\s+/', trim($output)))->toBe(['mysqlclient', 'psycopg2']);
 });
 
+test('a Django app deploys into a virtualenv, collects its static files, migrates and starts gunicorn on its port', function () {
+    Queue::fake();
+    $application = stackApp(['type' => ApplicationType::Python, 'framework' => 'django', 'run_migrations' => true]);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $settings = "import os\nALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')\nWSGI_APPLICATION = 'shop.wsgi.application'\nSTATIC_ROOT = BASE_DIR / 'staticfiles'\n";
+    $probe = ProbeOutput::for([
+        '.python-version' => "3.13\n",
+        'requirements.txt' => "Django==5.1.4\ngunicorn==23.0.0\n",
+        'manage.py' => "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'shop.settings')\n",
+        'shop/settings.py' => $settings,
+        'shop/wsgi.py' => "application = get_wsgi_application()\n",
+    ]) . "@@done\n";
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, $probe)
+        ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.13.18\n");
+
+    stackDeploy($deployment, $transport);
+
+    $commands = collect($transport->commands());
+    $position = fn(string $needle): int|false => $commands->search(fn(string $command): bool => str_contains($command, $needle));
+    $unit = $transport->uploads()['/etc/systemd/system/coresmith-app-shop-web.service'] ?? '';
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($application->fresh()->python_version)->toBe('3.13.18')
+        ->and($application->fresh()->stack['language_tooling'])->toBe(['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'collectstatic' => true, 'migrate' => 'django'])
+        ->and(array_map($position, ['uv venv --clear', '-r requirements.txt', 'collectstatic --noinput', 'manage.py migrate --noinput']))->each->toBeInt()
+        ->and($position('uv venv --clear'))->toBeLessThan($position('-r requirements.txt'))
+        ->and($position('-r requirements.txt'))->toBeLessThan($position('collectstatic --noinput'))
+        ->and($position('collectstatic --noinput'))->toBeLessThan($position('manage.py migrate --noinput'))
+        ->and($commands->first(fn(string $command): bool => str_contains($command, 'manage.py migrate')))->toContain("'PATH=/var/coresmith/apps/shop/releases/")
+        ->and($unit)->toContain("\nExecStart=/var/coresmith/apps/shop/current/.venv/bin/gunicorn --bind 127.0.0.1:8000 --access-logfile - shop.wsgi:application\n")
+        ->and($unit)->toContain('Environment="PATH=/var/coresmith/apps/shop/current/.venv/bin:/opt/asdf-data/installs/python/3.13.18/bin:/usr/local/bin:/usr/bin:/bin"')
+        ->and($unit)->toContain('Environment="WEB_CONCURRENCY=2"');
+});
+
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();
     $application = stackApp();

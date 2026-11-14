@@ -118,6 +118,18 @@ final readonly class RepositoryFacts
     }
 
     /**
+     * @return array<string, string>
+     */
+    public function matching(string $pattern): array
+    {
+        $found = array_filter($this->files, fn(string $path): bool => fnmatch($pattern, $path, FNM_PATHNAME), ARRAY_FILTER_USE_KEY);
+
+        ksort($found);
+
+        return $found;
+    }
+
+    /**
      * @return array<string, string|list<string>>
      */
     public function toml(string $file, string $table): array

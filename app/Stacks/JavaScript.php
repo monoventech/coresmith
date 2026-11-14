@@ -136,6 +136,11 @@ final readonly class JavaScript implements Language
         return null;
     }
 
+    public function frameworkLabel(string $framework): ?string
+    {
+        return $this->presets->find($framework)?->label();
+    }
+
     private function entry(Application $application, ?JsTooling $tooling): string
     {
         return $this->presets->find((string) $application->framework)?->entry() ?? $tooling?->main ?? 'server.js';

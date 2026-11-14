@@ -14,7 +14,6 @@ use App\Enums\PowerState;
 use App\Models\Application;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
-use App\Stacks\JsPresets\JsPresets;
 
 final class ApplicationPresenter
 {
@@ -35,7 +34,7 @@ final class ApplicationPresenter
     {
         $framework = strtolower((string) $application->framework);
 
-        $preset = $application->type === ApplicationType::Js ? app(JsPresets::class)->find($framework)?->label() : null;
+        $preset = $application->type?->language()->frameworkLabel($framework);
 
         if ($preset !== null) {
             $label = $preset;

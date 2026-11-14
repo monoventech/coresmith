@@ -191,6 +191,11 @@ final readonly class Ruby implements Language
         return app(NativeGemTools::class);
     }
 
+    public function frameworkLabel(string $framework): ?string
+    {
+        return null;
+    }
+
     private function platformMissing(RepositoryFacts $facts, string $arch): ?Blocker
     {
         $local = match ($arch) {

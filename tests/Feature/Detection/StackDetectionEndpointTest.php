@@ -135,7 +135,7 @@ test('the form is told which folders hold an app, and a root with none of its ow
     stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/mono.git', 'repository_branch' => 'main'])
         ->assertOk()
         ->assertJsonPath('folders', ['apps/api', 'apps/web'])
-        ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on. Pick the folder the app is in.");
+        ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on. Pick the folder the app is in.");
 });
 
 test('a folder is read on its own, and its messages name it', function () {
@@ -145,5 +145,5 @@ test('a folder is read on its own, and its messages name it', function () {
     stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/mono.git', 'repository_branch' => 'main', 'directory' => 'apps/web'])
         ->assertOk()
         ->assertJsonPath('folders', ['apps/web'])
-        ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, package.json, deno.json or index.html in apps/web, so Coresmith can't tell what the app runs on.");
+        ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, package.json, deno.json or index.html in apps/web, so Coresmith can't tell what the app runs on.");
 });

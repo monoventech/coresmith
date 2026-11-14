@@ -86,4 +86,6 @@ interface Language
     public function pathDirectories(string $appDirectory): array;
 
     public function nativeTools(): ?NativeTools;
+
+    public function frameworkLabel(string $framework): ?string;
 }

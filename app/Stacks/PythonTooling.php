@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Stacks;
 
+use App\Services\Runtime\RepositoryFacts;
+
 final readonly class PythonTooling
 {
     public const MANAGERS = ['uv', 'poetry', 'pipenv', 'pip', 'pyproject', 'none'];
@@ -17,6 +19,20 @@ final readonly class PythonTooling
     public const MIGRATIONS = ['django', 'alembic'];
 
     public const MODULE = '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?::[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)?\z/';
+
+    public static function managerFor(RepositoryFacts $facts): string
+    {
+        return match (true) {
+            $facts->exists('uv.lock') => 'uv',
+            $facts->exists('poetry.lock') => 'poetry',
+            $facts->exists('Pipfile.lock') => 'pipenv',
+            $facts->has('requirements.txt') => 'pip',
+            $facts->toml('pyproject.toml', 'tool.poetry.dependencies') !== [] || $facts->toml('pyproject.toml', 'tool.poetry') !== [] => 'poetry',
+            $facts->has('Pipfile') => 'pipenv',
+            $facts->toml('pyproject.toml', 'project') !== [] => 'pyproject',
+            default => 'none',
+        };
+    }
 
     public function __construct(
         public string $manager,
