@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.8 (2026-11-14)
+
+### Fixed
+- fix: copy across the app reads as a person wrote it, with no comma splices, no symlink or operations jargon, plain errors in place of Unable to, and the right roles named (#75)
+
 ## v0.8.7 (2026-11-13)
 
 ### Added
