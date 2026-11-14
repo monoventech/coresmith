@@ -81,7 +81,8 @@ test('the folder is removed when an install fails', function () {
 
     expect(fn() => privatePackagesDeploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
 
-    expect(privatePackagesCommand($transport, "rm -rf -- '" . PRIVATE_PACKAGES_FOLDER . "'"))->not->toBeNull();
+    expect(privatePackagesCommand($transport, "rm -rf -- '" . PRIVATE_PACKAGES_FOLDER . "'"))->not->toBeNull()
+        ->and($deployment->fresh()->failure_reason)->toBe("nova.laravel.com didn't accept the credentials Coresmith has for it. Check them in Private packages in Settings, Git, then deploy again.");
 });
 
 test('a custom blueprint runs with the step secrets and has them removed afterwards', function () {

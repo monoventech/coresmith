@@ -55,6 +55,7 @@ use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\SuspensionCheck;
 use App\Services\Git\GitProviderFactory;
+use App\Services\Packages\RegistryAuthFailure;
 use App\Services\Packages\StepSecretsInstaller;
 use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
@@ -1280,7 +1281,9 @@ final class DeployApplication implements ShouldQueue
                         $this->failureReason = DatabaseFailure::reason($result->output, $this->deployment->application->type) ?? $this->failureReason;
                     }
 
-                    $this->failureReason = $application->type->language()->explain($phase, $result->output, $stack) ?? $this->failureReason;
+                    $this->failureReason = app(RegistryAuthFailure::class)->reason($result->output, $application)
+                        ?? $application->type->language()->explain($phase, $result->output, $stack)
+                        ?? $this->failureReason;
 
                     $result->throw();
                 }

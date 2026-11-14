@@ -11,6 +11,7 @@ use App\Http\Controllers\Settings\GitHubAppController;
 use App\Http\Controllers\Settings\MoveCodeController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\OffsiteBackupController;
+use App\Http\Controllers\Settings\PackageCredentialController;
 use App\Http\Controllers\Settings\PanelUpdateController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\RemovalController;
@@ -148,6 +149,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('settings/api-tokens/{token}', [ApiTokenController::class, 'destroy'])->name('api-tokens.destroy');
 
     Route::get('settings/git', [SourceProviderController::class, 'index'])->name('source-providers.index');
+    Route::post('settings/git/packages', [PackageCredentialController::class, 'store'])
+        ->middleware('throttle:20,1,package-credentials')
+        ->name('package-credentials.store');
+    Route::put('settings/git/packages/{packageCredential}', [PackageCredentialController::class, 'update'])
+        ->whereUlid('packageCredential')
+        ->middleware('throttle:20,1,package-credentials')
+        ->name('package-credentials.update');
+    Route::delete('settings/git/packages/{packageCredential}', [PackageCredentialController::class, 'destroy'])
+        ->whereUlid('packageCredential')
+        ->name('package-credentials.destroy');
     Route::get('settings/git/github/registered', [GitHubAppController::class, 'registered'])
         ->middleware('throttle:10,1,github-app-registered')
         ->name('github-apps.registered');

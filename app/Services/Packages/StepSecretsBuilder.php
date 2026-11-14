@@ -76,11 +76,13 @@ final class StepSecretsBuilder
         }
 
         if ($by[PackageSource::Git->value] !== []) {
-            $variables['GOPRIVATE'] = implode(',', array_values(array_unique(array_map(fn(PackageCredential $credential): string => strtolower((string) $credential->target), $by[PackageSource::Git->value]))));
+            $variables['GOPRIVATE'] = implode(',', array_values(array_unique(array_map(fn(PackageCredential $credential): string => (string) $credential->target, $by[PackageSource::Git->value]))));
         }
 
         foreach ([...$by[PackageSource::Git->value], ...$by[PackageSource::Ruby->value]] as $credential) {
-            $variables[self::bundlerKey(self::host((string) $credential->target))] = rawurlencode($this->username($credential)) . ':' . rawurlencode((string) $credential->secret);
+            $variables[self::bundlerKey(self::host((string) $credential->target))] = $credential->source === PackageSource::Ruby && blank($credential->username)
+                ? rawurlencode((string) $credential->secret)
+                : rawurlencode($this->username($credential)) . ':' . rawurlencode((string) $credential->secret);
         }
 
         return new StepSecrets($variables, $files, array_values(array_unique(array_filter($secrets, fn(string $secret): bool => $secret !== ''))));

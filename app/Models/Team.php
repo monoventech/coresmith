@@ -105,6 +105,11 @@ class Team extends Model
         return $this->hasMany(ManagedDatabase::class);
     }
 
+    public function packageCredentials(): HasMany
+    {
+        return $this->hasMany(PackageCredential::class);
+    }
+
     public function projects(): HasMany
     {
         return $this->hasMany(Project::class);

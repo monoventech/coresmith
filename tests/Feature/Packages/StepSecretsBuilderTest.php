@@ -202,3 +202,9 @@ test('one npm entry can serve several scopes from its registry', function () {
         '',
     ]))->and($secrets->files['.yarnrc.yml'])->toContain("npmScopes:\n  \"acme\":\n    npmRegistryServer: \"https://npm.pkg.github.com\"\n  \"acme-ui\":\n");
 });
+
+test('a gem source without a username sends the token where the username goes', function () {
+    $secrets = stepSecretsFor([PackageCredential::factory()->ruby('gem.fury.io', '', 'fury-token-0001')->make(['username' => null])]);
+
+    expect($secrets->environment)->toBe(['BUNDLE_GEM__FURY__IO' => 'fury-token-0001']);
+});
