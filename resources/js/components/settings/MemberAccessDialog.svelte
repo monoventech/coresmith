@@ -352,7 +352,7 @@
                                         >
                                             {#if locked}
                                                 <p
-                                                    class="m-0 pt-1 pb-2 pl-6.5 text-[12px] leading-[1.5] text-muted-foreground"
+                                                    class="m-0 pt-1 pb-2 pl-6.5 text-[12px] leading-normal text-muted-foreground"
                                                     data-testid="share-signs-in"
                                                 >
                                                     {member?.name} signs in to {server.name} over SSH, which reaches everything
