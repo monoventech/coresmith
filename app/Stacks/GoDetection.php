@@ -27,7 +27,7 @@ final readonly class GoDetection
         $framework = GoFrameworks::claiming($module, $source);
         $mains = $source->mains();
         [$web, $unsettled] = $this->web($source, $mains, $facts);
-        $sources = ['type' => 'go.mod', 'framework' => GoFrameworks::evidence($framework, $module)];
+        $sources = ['type' => 'From go.mod', 'framework' => GoFrameworks::evidence($framework, $module)];
 
         if ($web !== null) {
             $sources['main_package'] = count($mains) === 1 ? 'the only package main' : 'the package main that starts a server';
