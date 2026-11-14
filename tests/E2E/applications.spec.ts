@@ -715,6 +715,19 @@ test.describe('adding an application', () => {
         await expect(toast(page)).toContainText('App added.')
     })
 
+    test('the JavaScript frameworks come from the presets, AdonisJS and Angular among them', async ({ page }) => {
+        await openAddApp(page)
+        await page.getByLabel('Language').selectOption('js')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(framework).toHaveValue('sveltekit')
+        await framework.selectOption('adonisjs')
+        await expect(framework).toHaveValue('adonisjs')
+        await framework.selectOption('angular')
+        await expect(framework).toHaveValue('angular')
+    })
+
     test('the web root is asked only of PHP apps and static sites, which serve files from it', async ({ page }) => {
         await openAddApp(page)
 

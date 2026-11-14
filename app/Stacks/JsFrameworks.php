@@ -85,18 +85,6 @@ final readonly class JsFrameworks
         return $facts->dependency('@astrojs/node') !== null && $this->config($facts, ['astro.config.mjs', 'astro.config.ts', 'astro.config.js'], '~@astrojs/node~');
     }
 
-    public function staticOutput(RepositoryFacts $facts): ?string
-    {
-        return match (true) {
-            $facts->dependency('@sveltejs/kit') !== null => $this->svelteAdapter($facts) === '@sveltejs/adapter-static' && !$this->config($facts, ['svelte.config.js', 'svelte.config.ts'], '~pages\s*:~') ? '/build' : null,
-            $facts->dependency('next') !== null => $this->nextExport($facts) && !$this->config($facts, ['next.config.js', 'next.config.mjs', 'next.config.ts'], '~distDir\s*:~') ? '/out' : null,
-            $facts->dependency('nuxt') !== null => $this->nuxtGenerate($facts) ? '/.output/public' : null,
-            $facts->dependency('astro') !== null => !$this->astroServer($facts) && !$this->config($facts, ['astro.config.mjs', 'astro.config.ts', 'astro.config.js'], '~outDir\s*:~') ? '/dist' : null,
-            $facts->dependency('vite') !== null => $this->config($facts, ['vite.config.ts', 'vite.config.js'], '~outDir\s*:~') ? null : '/dist',
-            default => null,
-        };
-    }
-
     /**
      * @param  list<string>  $files
      */
