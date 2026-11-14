@@ -33,7 +33,7 @@ final readonly class Go implements Language
             return [];
         }
 
-        return [...($tooling->vendored ? [] : ["{$go} mod download"]), ...$this->js->install($stack)];
+        return [...($tooling->vendored ? [] : ["case \"\$({$go} env GOWORK)\" in ''|off) {$go} mod download ;; esac"]), ...$this->js->install($stack)];
     }
 
     public function build(Application $application, Stack $stack): array

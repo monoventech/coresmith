@@ -30,8 +30,8 @@ function goDeployApp(array $attributes = [], ?GoTooling $tooling = null): Applic
     return new Application(['type' => ApplicationType::Go, 'framework' => 'chi', 'slug' => 'shop', 'system_user' => 'coresmith-app-shop', 'go_version' => '1.27.4', 'base_port' => 4400, 'app_size' => 'small', 'stack' => ['language_tooling' => ($tooling ?? goDeployTooling())->toArray()], ...$attributes]);
 }
 
-test('modules download with the Go Coresmith installed, never one Go fetches itself, and a vendored module downloads nothing', function () {
-    expect(ApplicationType::Go->language()->install(goDeployApp(), goDeployStack()))->toBe([GO_BIN . ' mod download'])
+test('modules download with the Go Coresmith installed, never one Go fetches itself, and a vendored module or a workspace downloads nothing up front', function () {
+    expect(ApplicationType::Go->language()->install(goDeployApp(), goDeployStack()))->toBe(['case "$(' . GO_BIN . " env GOWORK)\" in ''|off) " . GO_BIN . ' mod download ;; esac'])
         ->and(ApplicationType::Go->language()->install(goDeployApp(), goDeployStack(goDeployTooling(['vendored' => true]))))->toBe([]);
 });
 
