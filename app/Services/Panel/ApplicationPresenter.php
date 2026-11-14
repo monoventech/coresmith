@@ -14,6 +14,7 @@ use App\Enums\PowerState;
 use App\Models\Application;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
+use App\Stacks\JsPresets\JsPresets;
 
 final class ApplicationPresenter
 {
@@ -23,11 +24,6 @@ final class ApplicationPresenter
         'sinatra' => 'Sinatra',
         'rack' => 'Rack',
         'hanami' => 'Hanami',
-        'sveltekit' => 'SvelteKit',
-        'nextjs' => 'Next.js',
-        'next' => 'Next.js',
-        'nuxt' => 'Nuxt',
-        'astro' => 'Astro',
         'remix' => 'Remix',
         'express' => 'Express',
         'hono' => 'Hono',
@@ -39,7 +35,11 @@ final class ApplicationPresenter
     {
         $framework = strtolower((string) $application->framework);
 
-        if ($framework !== '' && isset(self::FRAMEWORKS[$framework])) {
+        $preset = $application->type === ApplicationType::Js ? app(JsPresets::class)->find($framework)?->label() : null;
+
+        if ($preset !== null) {
+            $label = $preset;
+        } elseif ($framework !== '' && isset(self::FRAMEWORKS[$framework])) {
             $label = self::FRAMEWORKS[$framework];
         } elseif ($framework !== '') {
             $label = ucfirst($framework);

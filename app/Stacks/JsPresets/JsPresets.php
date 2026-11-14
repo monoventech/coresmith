@@ -35,6 +35,14 @@ final readonly class JsPresets
         return null;
     }
 
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    public function choices(): array
+    {
+        return array_values(array_map(fn(JsPreset $preset): array => ['value' => $preset->key(), 'label' => $preset->label()], array_filter($this->all(), fn(JsPreset $preset): bool => $preset->serves())));
+    }
+
     public function staticOutput(RepositoryFacts $facts): ?string
     {
         foreach ($this->all() as $preset) {
