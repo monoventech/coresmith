@@ -109,12 +109,13 @@ test.describe('an admin who sees only what is shared', () => {
 
         await page.goto('/releases')
 
-        const apps = page.getByRole('navigation', { name: 'Applications' })
+        const app = (name: string) =>
+            page.getByTestId('releases-app').filter({ has: page.getByText(name, { exact: true }) })
 
-        await expect(apps.getByRole('link', { name: 'warehouse', exact: true })).toBeVisible()
-        await expect(apps.getByRole('link', { name: 'relay', exact: true })).toBeVisible()
-        await expect(apps.getByRole('link', { name: 'hungry', exact: true })).toHaveCount(0)
-        await expect(apps.getByRole('link', { name: 'atlas-staging', exact: true })).toHaveCount(0)
+        await expect(app('warehouse')).toBeVisible()
+        await expect(app('relay')).toBeVisible()
+        await expect(app('hungry')).toHaveCount(0)
+        await expect(app('atlas-staging')).toHaveCount(0)
     })
 })
 

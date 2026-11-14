@@ -41,7 +41,8 @@
         updates,
         moves = null,
         removal = null,
-        can
+        can,
+        key_reach = 'none'
     }: {
         instance: {
             name: string
@@ -59,10 +60,22 @@
         updates: PanelUpdates
         moves?: Moves | null
         removal?: Removal | null
-        can: { manageInstance: boolean; reachServers: boolean }
+        can: { manageInstance: boolean }
+        key_reach?: 'managed' | 'added' | 'none'
     } = $props()
 
     const cloud = $derived(page.props.edition === 'cloud')
+    const reach = $derived(
+        {
+            managed: cloud
+                ? 'Installed on every server you manage. Password login stays off.'
+                : 'Installed on every server you manage, except the machine Coresmith runs on. Password login stays off.',
+            added: cloud
+                ? 'Installed on the servers you add. Password login stays off.'
+                : 'Installed on the servers you add, except the machine Coresmith runs on. Password login stays off.',
+            none: "Coresmith installs only owners', admins' and developers' keys on servers, so these aren't on any of them."
+        }[key_reach]
+    )
     const cardsBeforeDanger = $derived(3 + (moves ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0))
 
     let dialog = $state<'key' | 'delete' | 'team' | null>(null)
@@ -166,11 +179,7 @@
             <Button variant="ghost" size="sm" onclick={() => (dialog = 'key')}>Add key</Button>
         </div>
         <p class="mb-2 text-[12.5px] text-muted-foreground" data-testid="ssh-keys-reach">
-            {can.reachServers
-                ? cloud
-                    ? 'Installed on every server you manage. Password login stays off.'
-                    : 'Installed on every server you manage, except the machine Coresmith runs on. Password login stays off.'
-                : "Coresmith installs only owners' and admins' keys on servers, so these aren't on any of them."}
+            {reach}
         </p>
         <div class="flex max-h-72 flex-col overflow-y-auto">
             {#each keys as key (key.id)}
@@ -351,9 +360,11 @@
                 <Dialog.Header>
                     <Dialog.Title>Add an SSH key</Dialog.Title>
                     <Dialog.Description
-                        >{can.reachServers
-                            ? "Public keys only. It's installed on your servers straight away."
-                            : "Public keys only. It's installed once you're an owner or admin of a team."}</Dialog.Description
+                        >{{
+                            managed: "Public keys only. It's installed on your servers straight away.",
+                            added: "Public keys only. It's installed on the servers you add.",
+                            none: "Public keys only. It's installed once you're an owner, admin or developer of a team."
+                        }[key_reach]}</Dialog.Description
                     >
                 </Dialog.Header>
                 <div class="mt-4 flex flex-col gap-3">

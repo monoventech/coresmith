@@ -27,7 +27,7 @@ final class AddressCheck
     }
 
     /**
-     * @return array{host: string, ok: bool, problems: list<string>, notes: list<string>, records?: list<array{type: string, name: string, value: string}>, checked_at: string}|null
+     * @return array{host: string, ok: bool, problems: list<string>, notes: list<string>, records?: list<array{type: string, name: string, value: string, note: string|null}>, checked_at: string}|null
      */
     public static function current(): ?array
     {

@@ -16,7 +16,9 @@ use App\Services\SafeName;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\Teams\TeamAccess;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection as SupportCollection;
 use InvalidArgumentException;
 
 final class SecurityHardening
@@ -150,28 +152,64 @@ final class SecurityHardening
      */
     public function userKeys(Server $server): array
     {
-        $team = $server->team;
-
-        if ($team === null || $server->runs_coresmith) {
-            return [];
-        }
-
-        $access = app(TeamAccess::class);
-        $managers = $team->members()
-            ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value])
-            ->get()
-            ->filter(fn(User $manager): bool => $access->canSeeServer($manager, $server))
-            ->modelKeys();
-
-        return SshKey::query()
-            ->whereIn('user_id', $managers)
-            ->orderBy('created_at')
+        return $this->installableKeys($this->keyHolders($server)->modelKeys())
             ->pluck('public_key')
-            ->map(fn(mixed $key): string => trim((string) $key))
-            ->filter(fn(string $key): bool => preg_match(self::PUBLIC_KEY_PATTERN, $key) === 1)
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * @return list<array{name: string, role: string, keys: int}>
+     */
+    public function signInPeople(Server $server): array
+    {
+        $holders = $this->keyHolders($server);
+        $counts = $this->installableKeys($holders->modelKeys())->countBy('user_id');
+        $order = [TeamRole::Owner->value => 0, TeamRole::Admin->value => 1, TeamRole::Developer->value => 2];
+
+        return $holders
+            ->filter(fn(User $holder): bool => ($counts[$holder->getKey()] ?? 0) > 0)
+            ->sortBy([fn(User $a, User $b): int => $order[$a->pivot->role] <=> $order[$b->pivot->role], fn(User $a, User $b): int => strcasecmp($a->name, $b->name)])
+            ->map(fn(User $holder): array => ['name' => (string) $holder->name, 'role' => TeamRole::from($holder->pivot->role)->label(), 'keys' => (int) $counts[$holder->getKey()]])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private function keyHolders(Server $server): Collection
+    {
+        $team = $server->team;
+
+        if ($team === null || $server->runs_coresmith) {
+            return new Collection;
+        }
+
+        $access = app(TeamAccess::class);
+
+        return $team->members()
+            ->wherePivotIn('role', [TeamRole::Owner->value, TeamRole::Admin->value, TeamRole::Developer->value])
+            ->get()
+            ->filter(fn(User $member): bool => $member->pivot->role === TeamRole::Developer->value ? $server->addedBy($member) : $access->canSeeServer($member, $server))
+            ->values();
+    }
+
+    /**
+     * @param  list<string>  $userIds
+     * @return SupportCollection<int, array{user_id: string, public_key: string}>
+     */
+    private function installableKeys(array $userIds): SupportCollection
+    {
+        return SshKey::query()
+            ->whereIn('user_id', $userIds)
+            ->orderBy('created_at')
+            ->get(['user_id', 'public_key'])
+            ->map(fn(SshKey $key): array => ['user_id' => (string) $key->user_id, 'public_key' => trim((string) $key->public_key)])
+            ->filter(fn(array $key): bool => preg_match(self::PUBLIC_KEY_PATTERN, $key['public_key']) === 1)
+            ->values()
+            ->toBase();
     }
 
     /**

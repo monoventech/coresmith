@@ -204,11 +204,11 @@ asMember.describe('ssh keys as a deployer', () => {
         const keys = page.getByTestId('ssh-keys-card')
 
         await expect(keys.getByTestId('ssh-keys-reach')).toHaveText(
-            "Coresmith installs only owners' and admins' keys on servers, so these aren't on any of them."
+            "Coresmith installs only owners', admins' and developers' keys on servers, so these aren't on any of them."
         )
 
         await keys.getByRole('button', { name: 'Add key' }).click()
-        await expect(dialog(page)).toContainText("It's installed once you're an owner or admin of a team.")
+        await expect(dialog(page)).toContainText("It's installed once you're an owner, admin or developer of a team.")
     })
 
     asMember('a deployer can open the dialog that closes the account and keep the account', async ({ page }) => {

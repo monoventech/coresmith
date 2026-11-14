@@ -6,6 +6,7 @@ use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Server;
+use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Panel\ProtectionRows;
@@ -58,7 +59,32 @@ test('the hardening tab shows each protection with its real state, the firewall 
                 'fingerprint' => 'SHA256:Xl/jKyuvKrFTpjRJe7mfKlKvBCANaqbn86pG1sf2G4k',
                 'public_key' => $server->ssh_public_key,
                 'audit_logging' => true,
+                'user' => 'deploy',
+                'people' => [],
             ]));
+});
+
+test('the hardening tab lists who can sign in with their own key: owners and admins who see the server, and the developer who added it', function () {
+    $team = Team::factory()->create();
+    $developer = serverTabMember($team, TeamRole::Developer);
+    $admin = serverTabMember($team, TeamRole::Admin);
+    $developer->forceFill(['name' => 'Dev Eloper'])->save();
+    $admin->forceFill(['name' => 'Ade Admin'])->save();
+    SshKey::factory()->for($developer)->create(['public_key' => 'ssh-ed25519 AAAAdev dev@laptop']);
+    SshKey::factory()->for($admin)->create(['public_key' => 'ssh-ed25519 AAAAadmin admin@laptop']);
+    $theirs = serverTabServer($team, ['created_by' => $developer->id]);
+    $other = serverTabServer($team, ['name' => 'web-2', 'created_by' => $admin->id]);
+
+    $this->actingAs($developer)
+        ->get(route('servers.hardening', $theirs))
+        ->assertInertia(fn($page) => $page->where('access.people', [
+            ['name' => 'Ade Admin', 'role' => 'Admin', 'keys' => 1],
+            ['name' => 'Dev Eloper', 'role' => 'Developer', 'keys' => 1],
+        ]));
+
+    $this->actingAs($admin)
+        ->get(route('servers.hardening', $other))
+        ->assertInertia(fn($page) => $page->where('access.people', [['name' => 'Ade Admin', 'role' => 'Admin', 'keys' => 1]]));
 });
 
 test("on Coresmith's own machine whose firewall was already on, only the web ports are listed as opened", function () {

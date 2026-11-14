@@ -3,6 +3,7 @@ import {
     dialog,
     expect,
     gotoServer,
+    gotoServerTab,
     gotoSettings,
     own,
     asDeveloper as test,
@@ -29,6 +30,28 @@ test.describe('a developer', () => {
         await expect(apps.getByRole('link', { name: /^side-notes / })).toBeVisible()
         await expect(apps.getByRole('link', { name: /^atlas-staging / })).toHaveCount(0)
         await expect(apps.getByRole('link', { name: /^storefront-staging / })).toHaveCount(0)
+    })
+
+    test('its own key goes on the server it added, never on the one shared with it, and both say who can sign in', async ({
+        page
+    }) => {
+        await gotoSettings(page, 'General')
+        await expect(page.getByTestId('ssh-keys-reach')).toHaveText(
+            'Installed on the servers you add, except the machine Coresmith runs on. Password login stays off.'
+        )
+
+        await gotoServerTab(page, 'lena-01', 'Hardening')
+
+        const lena = page.getByTestId('ssh-people').getByTestId('ssh-person').filter({ hasText: 'Lena Brandt' })
+
+        await expect(lena).toContainText('Developer')
+        await expect(lena).toContainText('1 key')
+
+        await gotoServerTab(page, 'forge-02', 'Hardening')
+        await expect(page.getByTestId('ssh-people').getByTestId('ssh-person').first()).toBeVisible()
+        await expect(
+            page.getByTestId('ssh-people').getByTestId('ssh-person').filter({ hasText: 'Lena Brandt' })
+        ).toHaveCount(0)
     })
 
     test("adding a server offers the team's cloud accounts and its own VM, but no provider to connect", async ({

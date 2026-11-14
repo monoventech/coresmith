@@ -18,7 +18,8 @@ import {
     tabs,
     test,
     toast,
-    useTheme
+    useTheme,
+    withProps
 } from './support/fixtures'
 
 function toggle(page: Page, name: string) {
@@ -385,8 +386,11 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(reach).toContainText(
             'atlas.monoven.io points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet.'
         )
-        await expect(reach).toContainText('use IPv6: add an AAAA record for atlas.monoven.io pointing at 2001:db8::7')
-        await expect(reach).toContainText('Checked')
+        await expect(reach).toContainText(
+            "The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for atlas.monoven.io pointing at 2001:db8::7"
+        )
+        await expect(reach.getByTestId('dns-record-note')).toHaveText("Best fix, with Cloudflare's proxy on")
+        await expect(page.getByTestId('domain-reach-summary')).toContainText('Checked')
     })
 
     test('the record a reading asks for is ready to copy', async ({ page }) => {
@@ -439,7 +443,7 @@ test.describe('what the full app page adds on a wider screen', () => {
     test('the domains are checked again from outside on request', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        await page.getByTestId('domain-reach').getByRole('button', { name: 'Check again' }).click()
+        await page.getByTestId('domains-card').getByRole('button', { name: 'Check again' }).click()
 
         await expect(toast(page)).toContainText('Checking from outside. The results show here in a few seconds.')
     })
@@ -480,6 +484,75 @@ test.describe('what the full app page adds on a wider screen', () => {
         expect(cron.x + cron.width).toBeCloseTo(environment.x + environment.width, 0)
         expect(cron.y).toBeGreaterThan(toggles.y + toggles.height)
     })
+
+    test("long advice for several domains sits under the row at full width, and each card's links follow its content", async ({
+        page
+    }) => {
+        const domains = ['atlas.monoven.io', 'www.atlas.monoven.io', 'shop.atlas.monoven.io']
+
+        await withProps(page, /\/applications\/[A-Za-z0-9]+$/, (props) => {
+            const application = props.application as Record<string, unknown>
+
+            application.additional_domains = domains.slice(1)
+            application.domain_reach = domains.map((domain) => ({
+                domain,
+                ready: false,
+                problems: [
+                    `${domain} points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet.`
+                ],
+                notes: [
+                    `Your internet provider may share 203.0.113.7 with other customers, or ports 80 and 443 aren't forwarded to this server. Keep the AAAA record for ${domain} and turn on Cloudflare's proxy for it.`
+                ],
+                records: [
+                    { type: 'AAAA', name: domain, value: '2001:db8::7' },
+                    { type: 'A', name: domain, value: '203.0.113.7' }
+                ],
+                checked: '2 minutes ago'
+            }))
+        })
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const box = async (id: string) => {
+            const found = await page.getByTestId(id).boundingBox()
+
+            expect(found, id).not.toBeNull()
+
+            return found ?? { x: 0, y: 0, width: 0, height: 0 }
+        }
+        const [release, domainsCard, source, advice] = await Promise.all(
+            ['release-card', 'domains-card', 'source-card', 'domain-reach'].map(box)
+        )
+
+        await expect(page.getByTestId('domain-advice')).toHaveCount(3)
+        await expect(page.getByTestId('domain-reach').getByTestId('domain-records')).toHaveCount(3)
+        await expect(page.getByTestId('domains-card').getByTestId('domain-records')).toHaveCount(0)
+
+        for (const card of [domainsCard, source]) {
+            expect(card.y).toBeCloseTo(release.y, 0)
+            expect(card.height).toBeCloseTo(release.height, 0)
+        }
+
+        expect(advice.y).toBeGreaterThan(release.y + release.height)
+        expect(advice.x).toBeCloseTo(release.x, 0)
+        expect(advice.x + advice.width).toBeCloseTo(source.x + source.width, 0)
+
+        const detail = await page.getByTestId('release-detail').boundingBox()
+        const link = await page.getByTestId('release-card').getByRole('link', { name: 'All releases' }).boundingBox()
+
+        expect(detail).not.toBeNull()
+        expect(link).not.toBeNull()
+        expect((link?.y ?? 0) - ((detail?.y ?? 0) + (detail?.height ?? 0))).toBeLessThan(24)
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the full-width domain advice is accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await gotoApplication(page, 'forge-01', 'atlas')
+            await expect(page.getByTestId('domain-reach')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 
     test('the live log says it is following once the access log is read', async ({ page }) => {
         await page.route('**/applications/*/logs', (route) =>
