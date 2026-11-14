@@ -19,12 +19,14 @@ final readonly class DetectedStack
         'js' => ['' => 'API or other'],
         'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra', 'rack' => 'Rack'],
         'python' => ['' => 'Other framework'],
+        'go' => ['' => 'net/http'],
     ];
 
     /**
      * @param  array<string, string>  $sources
      * @param  array<string, string>  $unsettled
      * @param  list<Blocker>  $blockers
+     * @param  array<string, list<string>>  $options
      */
     public function __construct(
         public ?string $type,
@@ -36,6 +38,8 @@ final readonly class DetectedStack
         public array $blockers = [],
         public ?Stack $stack = null,
         public ?string $runtime = null,
+        public ?string $mainPackage = null,
+        public array $options = [],
     ) {}
 
     public function verdict(): string
@@ -75,6 +79,7 @@ final readonly class DetectedStack
             'framework' => $this->framework,
             'js_runtime' => $this->jsRuntime,
             'web_directory' => $this->webDirectory,
+            'main_package' => $this->mainPackage,
         ], fn(?string $value): bool => $value !== null);
     }
 
@@ -90,8 +95,10 @@ final readonly class DetectedStack
                 'framework' => $this->framework,
                 'js_runtime' => $this->jsRuntime,
                 'web_directory' => $this->webDirectory,
+                'main_package' => $this->mainPackage,
                 'version' => $this->version(),
             ],
+            'options' => $this->options,
             'sources' => $this->sources,
             'unsettled' => $this->unsettled,
             'blockers' => array_map(fn(Blocker $blocker): array => $blocker->toArray(), $this->blockers),

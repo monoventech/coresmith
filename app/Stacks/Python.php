@@ -140,7 +140,7 @@ final readonly class Python implements Language
     }
 
     /**
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}|null
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}|null
      */
     public function detect(RepositoryFacts $facts): ?array
     {

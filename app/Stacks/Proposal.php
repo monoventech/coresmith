@@ -13,15 +13,17 @@ final class Proposal
     /**
      * @param  array<string, string>  $sources
      * @param  array<string, string>  $unsettled
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @param  array<string, ?string>  $fields
+     * @param  array<string, list<string>>  $options
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
-    public static function make(?string $type, ?string $framework, ?string $runtime, ?string $web, array $sources, array $unsettled = []): array
+    public static function make(?string $type, ?string $framework, ?string $runtime, ?string $web, array $sources, array $unsettled = [], array $fields = [], array $options = []): array
     {
-        return ['type' => $type, 'framework' => $framework, 'js_runtime' => $runtime, 'web' => $web, 'sources' => $sources, 'unsettled' => $unsettled];
+        return ['type' => $type, 'framework' => $framework, 'js_runtime' => $runtime, 'web' => $web, 'sources' => $sources, 'unsettled' => $unsettled, ...array_filter(['fields' => $fields, 'options' => $options])];
     }
 
     /**
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
     public static function unsure(string $field, string $reason): array
     {
@@ -30,7 +32,7 @@ final class Proposal
 
     /**
      * @param  array<string, string>  $sources
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
     public static function staticBuild(?string $output, array $sources, string $unknown): array
     {

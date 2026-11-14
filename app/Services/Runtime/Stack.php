@@ -134,6 +134,7 @@ final readonly class Stack
             'deno_version' => $versions['deno'] ?? null,
             'ruby_version' => $versions['ruby'] ?? null,
             'python_version' => $versions['python'] ?? null,
+            'go_version' => $versions['go'] ?? null,
             'stack' => $this->toArray(),
         ];
     }

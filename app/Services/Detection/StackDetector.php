@@ -22,7 +22,7 @@ final class StackDetector
 {
     public const UNFINISHED = "Coresmith couldn't read all of the repository's files, so it can't tell what the app runs on.";
 
-    private const ORDER = [ApplicationType::Php, ApplicationType::Ruby, ApplicationType::Python, ApplicationType::Js, ApplicationType::Static];
+    private const ORDER = [ApplicationType::Php, ApplicationType::Ruby, ApplicationType::Python, ApplicationType::Go, ApplicationType::Js, ApplicationType::Static];
 
     public function __construct(
         private readonly StackChecks $checks,
@@ -62,6 +62,7 @@ final class StackDetector
             'js_runtime' => $proposal['js_runtime'],
             'web_directory' => $proposal['web'] ?? '/public',
             'directory' => '/',
+            ...($proposal['fields'] ?? []),
         ]);
 
         $stack = $this->stack($application, $facts, $installed);
@@ -95,6 +96,8 @@ final class StackDetector
             isset($unsettled['framework']) ? [] : $this->checks->blockers($application, $facts, $installed, extensions: $extensions, arch: $arch),
             $stack,
             $runtime,
+            $proposal['fields']['main_package'] ?? null,
+            $proposal['options'] ?? [],
         );
     }
 

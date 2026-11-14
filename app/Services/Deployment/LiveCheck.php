@@ -23,7 +23,7 @@ final class LiveCheck
     public function ask(SSHConnection $connection, Application $application): ?LiveAnswer
     {
         $domain = trim((string) $application->domain);
-        $served = $application->type->language()->route($application) === Route::ReverseProxy && $application->base_port !== null;
+        $served = $application->type->language()->route($application)->proxies() && $application->base_port !== null;
 
         if ($domain === '' && !$served) {
             return null;

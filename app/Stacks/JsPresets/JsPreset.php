@@ -23,7 +23,7 @@ abstract class JsPreset
 
     /**
      * @param  array<string, string>  $sources
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
     abstract public function propose(RepositoryFacts $facts, string $runtime, array $sources, ?string $output): array;
 

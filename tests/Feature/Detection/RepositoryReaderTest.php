@@ -51,6 +51,14 @@ function readerAnswer(string $probe): FakeSSHTransport
     return (new FakeSSHTransport)->respondTo(RepositoryReader::MARKER, "@@commit 9f3c2e1a4b5c6d7e8f9012345678901234567890\n" . $probe);
 }
 
+test("the sparse checkout takes Go files two folders deep, so a Go module's packages can be read before it's cloned", function () {
+    $transport = readerAnswer("@@done\n");
+
+    readerRun($transport, RepositoryAccess::public('https://github.com/acme/shop.git'), 'main');
+
+    expect(readerScript($transport))->toContain("'/*.go' '/*/*.go' '/*/*/*.go'");
+});
+
 test('a public repository is read with a sparse checkout of just the probe\'s files, and the folder is removed', function () {
     $transport = readerAnswer('@@file composer.json ' . base64_encode('{"require":{"laravel/framework":"^13.0"}}') . "\n@@has artisan\n@@has public/index.php\n@@done\n");
 
@@ -116,7 +124,7 @@ test('the read lists the Python versions installed on the server', function () {
     $read = readerRun($transport, RepositoryAccess::public('https://github.com/pallets/flask.git'));
 
     expect($read->installed('python'))->toBe(['3.13.18', '3.14.10'])
-        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python; do');
+        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python go; do');
 });
 
 test('the read says what kind of machine the server is', function () {

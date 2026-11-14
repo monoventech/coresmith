@@ -22,16 +22,23 @@ final class RepositoryProbe
         'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml', 'angular.json',
         '.python-version', 'runtime.txt', 'pyproject.toml', 'requirements.txt', 'Pipfile', 'Procfile', 'manage.py',
         'app.py', 'main.py', 'wsgi.py', 'asgi.py', 'server.py', 'application.py', 'run.py', 'api.py', 'tasks.py', 'worker.py', 'celery_app.py',
+        'go.mod', 'go.work', 'conf/app.conf',
     ];
 
-    public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py', 'requirements/*.txt'];
+    public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py', 'requirements/*.txt', 'etc/*.yaml', 'etc/*.yml'];
+
+    public const GO_GLOBS = ['*.go', '*/*.go', '*/*/*.go'];
+
+    public const GO_PATTERN = '^package |^//go:build |^import "C"|^[[:space:]]*"C"$|ListenAndServe|Getenv\\(|LookupEnv\\(|flag\\.|Flags\\(\\)|\\.Run\\(|\\.Start\\(|\\.Listen\\(|\\.Serve\\(|env:"|envconfig:"|AutomaticEnv|BindEnv|grpc\\.NewServer|WithHostPorts|Addr:';
+
+    public const GO_LINES_PER_FILE = 60;
 
     public const LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'deno.lock'];
 
     public const MARKERS = [
         'artisan', 'bin/rails', 'bin/console', 'config.ru', 'Rakefile', 'index.php', 'public/index.php', 'web/index.php',
         'index.html', 'public/index.html', 'main.ts', 'config/master.key', 'config/database.yml', 'symfony.lock', 'config/bundles.php', 'server.js', 'ace.js',
-        'uv.lock', 'poetry.lock', 'Pipfile.lock', 'alembic.ini',
+        'uv.lock', 'poetry.lock', 'Pipfile.lock', 'alembic.ini', 'vendor/modules.txt',
     ];
 
     public const ENV_SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'RAILS_MASTER_KEY', 'SECRET_KEY'];
@@ -70,6 +77,15 @@ final class RepositoryProbe
       sed -n 's/^    sidekiq (\([^)]*\))$/@@locked sidekiq \1/p' Gemfile.lock | head -n 1
       sed -n 's/^    solid_queue (\([^)]*\))$/@@locked solid_queue \1/p' Gemfile.lock | head -n 1
     fi
+    if [ -f go.mod ] && [ ! -L go.mod ]; then
+      for f in {goglobs}; do
+        case "/$f" in */vendor/*|*/testdata/*|*/examples/*|*/example/*|*/_examples/*|*/.*|*_test.go) continue ;; esac
+        if [ -f "$f" ] && [ ! -L "$f" ]; then
+          printf '@@gofile %s\n' "$f"
+          grep -nE {gopattern} "$f" 2>/dev/null | head -n {golines} | while IFS= read -r line; do printf '@@goline %s %s\n' "$f" "$(printf '%s' "$line" | base64 | tr -d '\n')"; done
+        fi
+      done
+    fi
     printf '@@done\n'
     exit 0
     BASH;
@@ -96,7 +112,15 @@ final class RepositoryProbe
             '{secrets}' => implode(' ', self::ENV_SECRETS),
             '{bytes}' => (string) self::MAX_BYTES,
             '{lockbytes}' => (string) self::COMPOSER_LOCK_MAX_BYTES,
+            '{goglobs}' => implode(' ', self::GO_GLOBS),
+            '{gopattern}' => escapeshellarg(self::GO_PATTERN),
+            '{golines}' => (string) self::GO_LINES_PER_FILE,
         ]) . "\n";
+    }
+
+    public static function goFile(string $path): bool
+    {
+        return preg_match('~^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*/){0,2}[A-Za-z0-9_][A-Za-z0-9_.-]*\.go\z~', $path) === 1 && !str_contains($path, '..');
     }
 
     public function parse(string $output, string $folder = ''): RepositoryFacts
@@ -106,6 +130,7 @@ final class RepositoryProbe
         $locked = [];
         $markers = [];
         $envKeys = [];
+        $goLines = [];
         $complete = false;
 
         foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
@@ -125,10 +150,18 @@ final class RepositoryProbe
                 $markers[] = $matches[1];
             } elseif (preg_match('/^@@envkey (\S+)$/', $line, $matches) === 1 && in_array($matches[1], self::ENV_SECRETS, true)) {
                 $envKeys[] = $matches[1];
+            } elseif (preg_match('~^@@gofile (\S+)$~', $line, $matches) === 1 && self::goFile($matches[1])) {
+                $goLines[$matches[1]] ??= [];
+            } elseif (preg_match('~^@@goline (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && isset($goLines[$matches[1]])) {
+                $decoded = base64_decode($matches[2], true);
+
+                if ($decoded !== false && preg_match('/^(\d+):(.*)$/s', $decoded, $parts) === 1) {
+                    $goLines[$matches[1]][] = [(int) $parts[1], trim($parts[2])];
+                }
             }
         }
 
-        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete, $folder);
+        return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete, $folder, $goLines);
     }
 
     public static function globbed(string $path): bool

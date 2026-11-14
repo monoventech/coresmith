@@ -107,6 +107,7 @@ class Application extends Model
             'deno' => $this->deno_version,
             'ruby' => $this->ruby_version,
             'python' => $this->python_version,
+            'go' => $this->go_version,
         ], fn(?string $version): bool => $version !== null && $version !== '');
     }
 
