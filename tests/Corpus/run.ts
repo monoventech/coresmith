@@ -168,6 +168,18 @@ function matches(entry: Entry, result: Result): boolean | null {
     return result.verdict === 'ready' && fields && result.deploy?.status === 'Deployed' && answered
 }
 
+function withSecrets(lines: string): string {
+    return lines.replace(/\$\{([A-Z0-9_]+)\}/g, (_, name: string) => {
+        const value = process.env[name]
+
+        if (value === undefined || value === '') {
+            throw new Error(`${name} is not set, and the entry's environment names it`)
+        }
+
+        return value
+    })
+}
+
 async function setEnvironment(page: Page, lines: string): Promise<void> {
     await page.getByRole('button', { name: 'Edit variables' }).click()
 
@@ -333,7 +345,7 @@ for (const [index, entry] of entries.entries()) {
             await page.getByRole('heading', { level: 1, name, exact: true }).waitFor({ timeout: 60_000 })
 
             if (entry.environment !== undefined) {
-                await setEnvironment(page, entry.environment)
+                await setEnvironment(page, withSecrets(entry.environment))
             }
 
             deployed = await deploy(page, name)

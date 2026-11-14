@@ -93,6 +93,7 @@ test('a Java line past its end of life says where to name a newer one', function
     '.java-version' => ['.java-version', 'Set .java-version to 25, then deploy.'],
     '.sdkmanrc' => ['.sdkmanrc', 'Set java in .sdkmanrc to a 25 release, then deploy.'],
     '.tool-versions' => ['.tool-versions', 'Set java in .tool-versions to 25, then deploy.'],
+    'system.properties' => ['system.properties', 'Set java.runtime.version in system.properties to 25, then deploy.'],
     'pom.xml' => ['pom.xml', 'Set the Java release in pom.xml to 25, then deploy.'],
     'build.gradle.kts' => ['build.gradle.kts', 'Set the Java toolchain in build.gradle.kts to 25, then deploy.'],
     "a module's build.gradle.kts" => ['app/build.gradle.kts', 'Set the Java toolchain in app/build.gradle.kts to 25, then deploy.'],

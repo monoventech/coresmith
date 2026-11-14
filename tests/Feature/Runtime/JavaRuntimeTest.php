@@ -70,6 +70,7 @@ test('the Java line comes from the version files Java projects keep, newest firs
     '.java-version' => [['.java-version' => "21.0.5\n"], '21', '.java-version', '21.0.5'],
     '.sdkmanrc' => [['.sdkmanrc' => "# sdkman\njava=17.0.12-tem\n"], '17', '.sdkmanrc', 'java=17.0.12-tem'],
     '.tool-versions' => [['.tool-versions' => "java temurin-25.0.1+8\n"], '25', '.tool-versions', 'temurin-25.0.1+8'],
+    "Heroku's system.properties" => [['system.properties' => "java.runtime.version=17\nmaven.version=3.9.4\n"], '17', 'system.properties', 'java.runtime.version=17'],
     "Maven's release" => [['pom.xml' => '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>'], '21', 'pom.xml', '<maven.compiler.release>21</maven.compiler.release>'],
     "Spring Boot's java.version" => [['pom.xml' => '<project><properties><java.version>17</java.version></properties></project>'], '17', 'pom.xml', '<java.version>17</java.version>'],
     "Gradle's toolchain" => [['build.gradle.kts' => "java {\n    toolchain {\n        languageVersion = JavaLanguageVersion.of(25)\n    }\n}\n"], '25', 'build.gradle.kts', 'JavaLanguageVersion.of(25)'],
@@ -87,6 +88,6 @@ test('a Java line picks the newest Temurin build of that line', function () {
 });
 
 test('Java names the files it reads its version from, and the probe reads them', function () {
-    expect(RuntimeDetector::SOURCES['java'])->toBe('.tool-versions, .java-version, .sdkmanrc, pom.xml or build.gradle')
-        ->and(RepositoryProbe::FILES)->toContain('.java-version', '.sdkmanrc', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', '.yo-rc.json');
+    expect(RuntimeDetector::SOURCES['java'])->toBe('.tool-versions, .java-version, .sdkmanrc, system.properties, pom.xml or build.gradle')
+        ->and(RepositoryProbe::FILES)->toContain('.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', '.yo-rc.json');
 });

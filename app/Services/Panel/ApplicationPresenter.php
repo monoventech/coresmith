@@ -115,6 +115,7 @@ final class ApplicationPresenter
             'composer.json' => "Set require.php in composer.json to ^{$recommended}, then deploy.",
             '.nvmrc', '.node-version', '.ruby-version', '.dvmrc', '.python-version', '.java-version' => "Set {$source} to {$recommended}, then deploy.",
             '.sdkmanrc' => "Set java in .sdkmanrc to a {$recommended} release, then deploy.",
+            'system.properties' => "Set java.runtime.version in system.properties to {$recommended}, then deploy.",
             'pom.xml' => "Set the Java release in {$source} to {$recommended}, then deploy.",
             'build.gradle', 'build.gradle.kts' => "Set the Java toolchain in {$source} to {$recommended}, then deploy.",
             'package.json' => "Set engines.node in package.json to {$recommended}, then deploy.",

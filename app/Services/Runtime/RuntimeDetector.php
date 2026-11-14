@@ -26,7 +26,7 @@ final class RuntimeDetector
         'ruby' => '.tool-versions, .ruby-version or the ruby line in Gemfile',
         'python' => '.tool-versions, .python-version, pyproject.toml or runtime.txt',
         'go' => '.tool-versions or go.mod',
-        'java' => '.tool-versions, .java-version, .sdkmanrc, pom.xml or build.gradle',
+        'java' => '.tool-versions, .java-version, .sdkmanrc, system.properties, pom.xml or build.gradle',
     ];
 
     private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python', 'golang' => 'go', 'go' => 'go', 'java' => 'java'];
@@ -229,6 +229,7 @@ final class RuntimeDetector
         $sources = [
             ['.java-version', '/^\s*(?:[a-z]+-)?(\d+)\S*/m'],
             ['.sdkmanrc', '/^\s*java\s*=\s*(\d+)\S*/m'],
+            ['system.properties', '/^\s*java\.runtime\.version\s*=\s*(?:1\.)?(\d+)\S*/m'],
         ];
 
         foreach (['', '*/'] as $folder) {
