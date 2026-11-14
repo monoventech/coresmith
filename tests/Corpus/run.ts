@@ -12,7 +12,15 @@ export type Expectation =
     | { verdict: 'ready'; type: string; framework: string; js_runtime?: string | null; web_directory?: string | null }
     | { verdict: 'blocked' | 'unsure'; reason: string }
 
-export type Entry = { name: string; url: string; branch: string; folder?: string; expect?: Expectation; why?: string }
+export type Entry = {
+    name: string
+    url: string
+    branch: string
+    folder?: string
+    environment?: string
+    expect?: Expectation
+    why?: string
+}
 
 export type Deploy = { status: string; reason: string | null; live: string | null; seconds: number; log: string }
 
@@ -158,6 +166,18 @@ function matches(entry: Entry, result: Result): boolean | null {
     const answered = live === null || !/\b5\d\d\b/.test(live)
 
     return result.verdict === 'ready' && fields && result.deploy?.status === 'Deployed' && answered
+}
+
+async function setEnvironment(page: Page, lines: string): Promise<void> {
+    await page.getByRole('button', { name: 'Edit variables' }).click()
+
+    const dialog = page.getByRole('dialog')
+    const editor = dialog.getByRole('textbox', { name: 'Environment variables' })
+    const current = (await editor.inputValue()).trim()
+
+    await editor.fill(current === '' ? lines : `${current}\n${lines}`)
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    await dialog.waitFor({ state: 'detached', timeout: 30_000 })
 }
 
 async function deploy(page: Page, name: string): Promise<Deploy> {
@@ -311,6 +331,11 @@ for (const [index, entry] of entries.entries()) {
             await page.getByLabel('Domain', { exact: true }).fill(`${name}.internal`)
             await page.getByRole('button', { name: 'Add the app' }).click()
             await page.getByRole('heading', { level: 1, name, exact: true }).waitFor({ timeout: 60_000 })
+
+            if (entry.environment !== undefined) {
+                await setEnvironment(page, entry.environment)
+            }
+
             deployed = await deploy(page, name)
 
             if (!values.keep) {

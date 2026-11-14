@@ -109,6 +109,21 @@ const GO_SERVERS = {
     options: { main_package: ['cmd/admin', 'cmd/api', 'cmd/worker'] }
 }
 
+const JHIPSTER = {
+    id: 'j8wq8mz9xw4hpbn6tq8rjf3ylc5ds0gm',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'ready',
+    fields: { type: 'java', framework: 'jhipster', js_runtime: null, web_directory: null, version: '21.0.13' },
+    sources: {
+        type: 'From pom.xml',
+        framework: 'generator-jhipster in .yo-rc.json',
+        runtime_version: 'Java 21.0.13 from pom.xml (<java.version>21</java.version>)'
+    },
+    unsettled: {},
+    blockers: []
+}
+
 async function answer(page: Page, answers: object[]): Promise<string[]> {
     const asked: string[] = []
 
@@ -172,6 +187,23 @@ test.describe('Stack detection on Add an app', () => {
         await main.selectOption('cmd/api')
         await expect(main).toHaveValue('cmd/api')
         await expect(main.locator('option')).toHaveText(['cmd/admin', 'cmd/api', 'cmd/worker'])
+    })
+
+    test('a JHipster app is read as Java, with the Java line its pom.xml names and no web root', async ({ page }) => {
+        await answer(page, [JHIPSTER])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/store.git')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Language')).toHaveValue('java')
+        await expect(page.getByLabel('Framework')).toHaveValue('jhipster')
+        await expect(page.getByText('generator-jhipster in .yo-rc.json')).toBeVisible()
+        await expect(page.getByLabel('Web root')).toHaveCount(0)
+        await expect(page.getByLabel('Size', { exact: true })).toHaveValue('medium')
+        await expect(
+            page.getByRole('radiogroup', { name: 'Java version' }).getByRole('radio', { name: /From the repository/ })
+        ).toHaveAccessibleName(/Java 21\.0\.13 from pom\.xml/)
     })
 
     test('a field the files do not settle is left for the person, with the reason', async ({ page }) => {

@@ -48,6 +48,7 @@ final class ApplicationPresenter
                 ApplicationType::Ruby => 'Ruby',
                 ApplicationType::Python => 'Python',
                 ApplicationType::Go => 'Go',
+                ApplicationType::Java => 'Java',
                 ApplicationType::Static => 'Static site',
                 default => 'API',
             };
@@ -67,6 +68,7 @@ final class ApplicationPresenter
             ApplicationType::Ruby => trim('Ruby ' . self::minor($application->ruby_version)),
             ApplicationType::Python => trim('Python ' . self::minor($application->python_version)),
             ApplicationType::Go => trim('Go ' . self::minor($application->go_version)),
+            ApplicationType::Java => trim('Java ' . self::major($application->java_version)),
             ApplicationType::Static => 'Static files',
             default => match ($application->js_runtime) {
                 'deno' => trim('Deno ' . self::minor($application->deno_version)),
@@ -107,11 +109,14 @@ final class ApplicationPresenter
 
     private static function runtimeFix(string $runtime, ?string $source, string $recommended): string
     {
-        return match ($source) {
+        return match ($runtime === 'java' && $source !== null ? basename($source) : $source) {
             '.tool-versions' => 'Set ' . ($runtime === 'go' ? 'golang' : $runtime) . " in .tool-versions to {$recommended}, then deploy.",
             'go.mod' => "Raise the go line in go.mod to {$recommended}, then deploy.",
             'composer.json' => "Set require.php in composer.json to ^{$recommended}, then deploy.",
-            '.nvmrc', '.node-version', '.ruby-version', '.dvmrc', '.python-version' => "Set {$source} to {$recommended}, then deploy.",
+            '.nvmrc', '.node-version', '.ruby-version', '.dvmrc', '.python-version', '.java-version' => "Set {$source} to {$recommended}, then deploy.",
+            '.sdkmanrc' => "Set java in .sdkmanrc to a {$recommended} release, then deploy.",
+            'pom.xml' => "Set the Java release in {$source} to {$recommended}, then deploy.",
+            'build.gradle', 'build.gradle.kts' => "Set the Java toolchain in {$source} to {$recommended}, then deploy.",
             'package.json' => "Set engines.node in package.json to {$recommended}, then deploy.",
             'Gemfile' => "Set the ruby line in Gemfile to {$recommended}, then deploy.",
             'pyproject.toml' => "Allow Python {$recommended} in pyproject.toml, then deploy.",
@@ -122,6 +127,7 @@ final class ApplicationPresenter
                 'ruby' => "Add a .ruby-version containing {$recommended} to the repository, then deploy.",
                 'python' => "Add a .python-version containing {$recommended} to the repository, then deploy.",
                 'go' => "Add a go line naming {$recommended} to go.mod, then deploy.",
+                'java' => "Add a .java-version containing {$recommended} to the repository, then deploy.",
                 default => 'Name a supported version in .tool-versions, then deploy.',
             },
         };

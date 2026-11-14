@@ -33,7 +33,8 @@
         projects = [],
         js_frameworks = [],
         python_frameworks = [],
-        go_frameworks = []
+        go_frameworks = [],
+        java_frameworks = []
     }: {
         server: {
             id: string
@@ -47,6 +48,7 @@
         js_frameworks: { value: string; label: string }[]
         python_frameworks: { value: string; label: string }[]
         go_frameworks: { value: string; label: string }[]
+        java_frameworks: { value: string; label: string }[]
     } = $props()
 
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
@@ -63,6 +65,7 @@
         ],
         python: [...python_frameworks, { value: '', label: 'Other framework' }],
         go: go_frameworks,
+        java: java_frameworks,
         static: [{ value: '', label: 'No framework' }]
     })
 
@@ -80,7 +83,7 @@
 
     const STEPS = [
         { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
-        { name: 'Install dependencies', desc: 'composer, bun, bundler, uv or go' },
+        { name: 'Install dependencies', desc: 'composer, bun, bundler, uv, go or maven' },
         { name: 'Build assets', desc: 'into a new timestamped directory' },
         { name: 'Run migrations', desc: 'against the new release' },
         { name: 'Health check', desc: 'before anything goes live' },
@@ -102,7 +105,7 @@
     const picker = $derived(pickerRuntime(type, jsRuntime))
     let pickedSize = $state<string | null>(null)
     let domainName = $state('')
-    const size = $derived(pickedSize ?? (type === 'ruby' ? 'medium' : 'small'))
+    const size = $derived(pickedSize ?? (type === 'ruby' || type === 'java' ? 'medium' : 'small'))
     let chosenSource = $state<string | null>(null)
     const source = $derived(
         chosenSource !== null &&
@@ -435,6 +438,7 @@
                                     { value: 'ruby', label: 'Ruby' },
                                     { value: 'python', label: 'Python' },
                                     { value: 'go', label: 'Go' },
+                                    { value: 'java', label: 'Java' },
                                     { value: 'static', label: 'Static site' }
                                 ]}
                                 aria-invalid={errors.type ? true : undefined}

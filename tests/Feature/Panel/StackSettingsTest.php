@@ -36,6 +36,8 @@ test('each stack is offered only the smart toggles that apply to it', function (
     'Django with Celery' => [['type' => ApplicationType::Python, 'framework' => 'django', 'stack' => ['language_tooling' => ['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'celery' => 'shop']]], ['celery_worker', 'celery_beat', 'maintenance_mode', 'auto_deploy']],
     'FastAPI with Celery' => [['type' => ApplicationType::Python, 'framework' => 'fastapi', 'stack' => ['language_tooling' => ['manager' => 'uv', 'server' => 'uvicorn', 'module' => 'app.main:app', 'celery' => 'worker:app']]], ['celery_worker', 'celery_beat', 'maintenance_mode', 'auto_deploy']],
     'Go' => [['type' => ApplicationType::Go, 'framework' => 'gin', 'stack' => ['language_tooling' => ['mains' => ['.' => 'shop', 'cmd/worker' => 'worker'], 'web' => '.']]], ['maintenance_mode', 'auto_deploy']],
+    'Spring Boot' => [['type' => ApplicationType::Java, 'framework' => 'spring-boot', 'stack' => ['language_tooling' => ['build' => 'maven', 'wrapper' => true]]], ['maintenance_mode', 'auto_deploy']],
+    'JHipster' => [['type' => ApplicationType::Java, 'framework' => 'jhipster', 'stack' => ['language_tooling' => ['build' => 'gradle', 'wrapper' => true, 'production' => true]]], ['maintenance_mode', 'auto_deploy']],
     'Python still running a Celery worker it no longer has' => [['type' => ApplicationType::Python, 'framework' => 'flask', 'processes' => [['name' => 'celery', 'command' => 'celery -A shop worker --loglevel=INFO --concurrency=2']], 'stack' => ['language_tooling' => ['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'app:app']]], ['celery_worker', 'maintenance_mode', 'auto_deploy']],
     'Rails with a celery entry somehow' => [['type' => ApplicationType::Ruby, 'framework' => 'rails', 'stack' => ['language_tooling' => ['celery' => 'shop']]], ['maintenance_mode', 'auto_deploy']],
 ]);
@@ -55,5 +57,6 @@ test('the cron dialog suggests a command in the app\'s own stack', function (arr
     'a static site' => [['type' => ApplicationType::Static], 'sh scripts/nightly.sh'],
     'Django' => [['type' => ApplicationType::Python, 'framework' => 'django'], 'python manage.py clearsessions'],
     'Flask' => [['type' => ApplicationType::Python, 'framework' => 'flask'], 'python cron/cleanup.py'],
+    'Java' => [['type' => ApplicationType::Java, 'framework' => 'spring-boot'], 'sh scripts/nightly.sh'],
     'Go with a second binary' => [['type' => ApplicationType::Go, 'framework' => 'chi', 'stack' => ['language_tooling' => ['mains' => ['cmd/api' => 'api', 'cmd/cleanup' => 'cleanup'], 'web' => 'cmd/api']]], 'cleanup'],
 ]);

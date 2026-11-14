@@ -22,7 +22,7 @@ final class StackDetector
 {
     public const UNFINISHED = "Coresmith couldn't read all of the repository's files, so it can't tell what the app runs on.";
 
-    private const ORDER = [ApplicationType::Php, ApplicationType::Ruby, ApplicationType::Python, ApplicationType::Go, ApplicationType::Js, ApplicationType::Static];
+    private const ORDER = [ApplicationType::Php, ApplicationType::Ruby, ApplicationType::Python, ApplicationType::Go, ApplicationType::Java, ApplicationType::Js, ApplicationType::Static];
 
     public function __construct(
         private readonly StackChecks $checks,
