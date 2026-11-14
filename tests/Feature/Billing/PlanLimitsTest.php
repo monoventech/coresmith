@@ -343,7 +343,7 @@ test('a server added on another team\'s address opens on its own team\'s address
     $server = $pro->servers()->sole();
 
     $response->assertRedirect(url("/{$pro->slug}/servers/{$server->id}"))
-        ->assertSessionHas('success', 'Server added. Connect it with a password or one command.');
+        ->assertSessionHas('success', 'Server added. Run the command below on it to connect.');
 
     $this->get("/{$pro->slug}/servers/{$server->id}")->assertOk();
 });

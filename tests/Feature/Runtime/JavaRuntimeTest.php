@@ -77,7 +77,12 @@ test('the Java line comes from the version files Java projects keep, newest firs
     "Gradle's sourceCompatibility" => [['build.gradle' => "java {\n    sourceCompatibility = JavaVersion.VERSION_21\n}\n"], '21', 'build.gradle', 'sourceCompatibility = JavaVersion.VERSION_21'],
     "Groovy's quoted sourceCompatibility" => [['build.gradle' => "sourceCompatibility = '17'\n"], '17', 'build.gradle', "sourceCompatibility = '17'"],
     "Groovy's bare sourceCompatibility" => [['build.gradle' => "sourceCompatibility = 21\n"], '21', 'build.gradle', 'sourceCompatibility = 21'],
-    'an old 1.8 sourceCompatibility' => [['build.gradle' => "sourceCompatibility = '1.8'\n"], '8', 'build.gradle', "sourceCompatibility = '1.8'"],
+    'an old 1.8 sourceCompatibility, a floor the oldest offered line meets' => [['build.gradle' => "sourceCompatibility = '1.8'\n"], '17', 'build.gradle', "sourceCompatibility = '1.8'"],
+    "Maven's java.version 11, a floor" => [['pom.xml' => '<project><properties><java.version>11</java.version></properties></project>'], '17', 'pom.xml', '<java.version>11</java.version>'],
+    "the compiler plugin's own source and target" => [['pom.xml' => '<project><build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId><configuration><source>1.8</source><target>1.8</target></configuration></plugin></plugins></build></project>'], '17', 'pom.xml', '<source>1.8</source>'],
+    'a floor no offered line meets stays as it is' => [['pom.xml' => '<project><properties><maven.compiler.release>26</maven.compiler.release></properties></project>'], '26', 'pom.xml', '<maven.compiler.release>26</maven.compiler.release>'],
+    'a Gradle toolchain is exact, since Gradle runs on that Java' => [['build.gradle.kts' => "java {\n    toolchain {\n        languageVersion = JavaLanguageVersion.of(11)\n    }\n}\n"], '11', 'build.gradle.kts', 'JavaLanguageVersion.of(11)'],
+    '.java-version is exact' => [['.java-version' => "11\n"], '11', '.java-version', '11'],
     "Kotlin's jvmToolchain" => [['build.gradle.kts' => "kotlin {\n    jvmToolchain(17)\n}\n"], '17', 'build.gradle.kts', 'jvmToolchain(17)'],
     "a module's Gradle toolchain" => [['settings.gradle.kts' => "include(\"app\")\n", 'app/build.gradle.kts' => "java {\n    toolchain {\n        languageVersion = JavaLanguageVersion.of(17)\n    }\n}\n"], '17', 'app/build.gradle.kts', 'JavaLanguageVersion.of(17)'],
     'the root build before a module' => [['pom.xml' => '<project><properties><maven.compiler.release>21</maven.compiler.release></properties></project>', 'web/pom.xml' => '<project><properties><maven.compiler.release>17</maven.compiler.release></properties></project>'], '21', 'pom.xml', '<maven.compiler.release>21</maven.compiler.release>'],
@@ -90,4 +95,34 @@ test('a Java line picks the newest Temurin build of that line', function () {
 test('Java names the files it reads its version from, and the probe reads them', function () {
     expect(RuntimeDetector::SOURCES['java'])->toBe('.tool-versions, .java-version, .sdkmanrc, system.properties, pom.xml or build.gradle')
         ->and(RepositoryProbe::FILES)->toContain('.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle/libs.versions.toml', '.yo-rc.json');
+});
+
+test('Maven installs once per server from Maven Central, checked against the SHA-512 Coresmith pins, beside the runtimes', function () {
+    $server = Server::factory()->create();
+    $missing = (new FakeSSHTransport)->respondTo('test -x', '', 1);
+    $present = new FakeSSHTransport;
+
+    $installed = app(AsdfManager::class)->ensureMaven(new SSHConnection($server, $missing));
+    $skipped = app(AsdfManager::class)->ensureMaven(new SSHConnection($server, $present));
+    $commands = implode("\n", $missing->commands());
+
+    expect(config('coresmith.maven'))->toBe(['version' => '3.10.0', 'sha512' => '908b1501bfb420bf7c8affb855534a9c407fd6099367bfb9f2f2dcb8e9799102bffb84518cde74c679bd76870247c6528683abdd620581bffa90f95d92d175aa'])
+        ->and($installed)->toBeTrue()
+        ->and($skipped)->toBeFalse()
+        ->and($commands)->toContain('https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.tar.gz')
+        ->and($commands)->toContain('sha512sum -c')
+        ->and($commands)->toContain("CORESMITH_MAVEN_VERSION='3.10.0'")
+        ->and($commands)->toContain("CORESMITH_MAVEN_DIR='/opt/asdf-data/maven'")
+        ->and(app(AsdfManager::class)->mavenPath())->toBe('/opt/asdf-data/maven/3.10.0/bin/mvn')
+        ->and(implode("\n", $present->commands()))->not->toContain('curl');
+});
+
+test('a server with Java gets Maven beside it, so projects without a wrapper build', function () {
+    $server = Server::factory()->create();
+    $transport = (new FakeSSHTransport)->respondTo('test -x ' . escapeshellarg('/opt/asdf-data/maven/3.10.0/bin/mvn'), '', 1);
+    $connection = new SSHConnection($server, $transport);
+
+    expect(app(RuntimeBinaries::class)->ensure($connection, 'java', '25.0.5'))->toBe(['maven: installed 3.10.0, checksum verified'])
+        ->and(app(RuntimeBinaries::class)->installed(new SSHConnection($server, new FakeSSHTransport), 'java', '25.0.5'))->toBeTrue()
+        ->and(implode("\n", $transport->commands()))->toContain("test -x '/opt/asdf-data/installs/java/25.0.5/bin/java'");
 });

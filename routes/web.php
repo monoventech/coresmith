@@ -100,9 +100,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('servers/{server}/test-connection', [ServerController::class, 'testConnection'])
         ->middleware('throttle:10,1,server-test')
         ->name('servers.test-connection');
-    Route::post('servers/{server}/connect', [ServerController::class, 'connect'])
-        ->middleware('throttle:server-password')
-        ->name('servers.connect');
     Route::post('servers/{server}/provision', [ServerController::class, 'provision'])
         ->name('servers.provision');
     Route::post('servers/{server}/provisioning/retry', [ServerController::class, 'retryProvisioning'])

@@ -67,7 +67,7 @@ final readonly class Java implements Language
 
         $profile = $tooling->production ? ' -Pprod' : '';
         $build = $tooling->build === 'maven'
-            ? "sh ./mvnw -B{$profile} -DskipTests package"
+            ? ($tooling->wrapper ? 'sh ./mvnw' : $this->asdf->mavenPath()) . " -B{$profile} -DskipTests package"
             : "sh ./gradlew --no-daemon{$profile} -x test " . $tooling->gradleTasks((string) $application->framework);
 
         return ["JAVA_HOME={$home} {$build}", "JAVA_HOME={$home} sh -c " . escapeshellarg(strtr(self::LAUNCH, ['{output}' => $tooling->output()]))];
@@ -205,7 +205,7 @@ final readonly class Java implements Language
             return "The Java build stopped at {$compile[1]} line {$line}: " . rtrim(trim($compile[4]), '.') . '. Fix it, then deploy again.';
         }
 
-        if (preg_match('/^\[ERROR\] Failed to execute goal (?:\S+ \(\S+\) )?on project \S+: (.+?)(?: -> \[Help \d+\])?$/m', $output, $goal) === 1) {
+        if (preg_match('/^\[ERROR\] Failed to execute goal (?:\S+ \([^)]*\) )?on project \S+: (.+?)(?: -> \[Help \d+\])?$/m', $output, $goal) === 1) {
             return 'The Maven build failed: ' . rtrim(trim($goal[1]), '.') . '. Fix it, then deploy again.';
         }
 
@@ -217,7 +217,7 @@ final readonly class Java implements Language
             return 'The Gradle build failed: ' . rtrim($cause, '.') . '. Fix it, then deploy again.';
         }
 
-        if (preg_match('/^\[ERROR\] (?!COMPILATION ERROR)(\S.+)$/m', $output, $maven) === 1) {
+        if (str_contains($output, 'BUILD FAILURE') && preg_match('/^\[ERROR\] (?!COMPILATION ERROR|npm (?:warn|WARN|notice) )(\S.+)$/m', $output, $maven) === 1) {
             return 'The Maven build failed: ' . rtrim(trim($maven[1]), '.') . '. Fix it, then deploy again.';
         }
 
