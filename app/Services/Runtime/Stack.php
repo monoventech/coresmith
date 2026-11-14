@@ -129,6 +129,7 @@ final readonly class Stack
             'bun_version' => $versions['bun'] ?? null,
             'deno_version' => $versions['deno'] ?? null,
             'ruby_version' => $versions['ruby'] ?? null,
+            'python_version' => $versions['python'] ?? null,
             'stack' => $this->toArray(),
         ];
     }

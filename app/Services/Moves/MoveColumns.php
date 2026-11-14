@@ -24,7 +24,7 @@ final class MoveColumns
     public const APPLICATIONS = [
         'name', 'slug', 'type', 'js_runtime', 'framework', 'domain', 'repository_url', 'repository_branch',
         'repository_provider', 'custom_blueprint', 'env_variables', 'system_user', 'base_port', 'php_version',
-        'node_version', 'ruby_version', 'bun_version', 'deno_version', 'directory', 'web_directory',
+        'node_version', 'ruby_version', 'bun_version', 'deno_version', 'python_version', 'directory', 'web_directory',
         'database_type', 'run_migrations', 'max_upload_size_mb', 'status', 'quick_deploy', 'power_state',
         'app_size', 'idle_timeout_minutes', 'ssr_port', 'toggles', 'processes', 'cron_jobs',
         'additional_domains', 'deploy_key_private', 'deploy_key_public', 'current_release', 'runtime_pins',

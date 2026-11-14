@@ -47,6 +47,7 @@ final class ApplicationPresenter
             $label = match ($application->type) {
                 ApplicationType::Php => 'PHP',
                 ApplicationType::Ruby => 'Ruby',
+                ApplicationType::Python => 'Python',
                 ApplicationType::Static => 'Static site',
                 default => 'API',
             };
@@ -64,6 +65,7 @@ final class ApplicationPresenter
         return match ($application->type) {
             ApplicationType::Php => trim('PHP ' . self::minor($application->php_version)),
             ApplicationType::Ruby => trim('Ruby ' . self::minor($application->ruby_version)),
+            ApplicationType::Python => trim('Python ' . self::minor($application->python_version)),
             ApplicationType::Static => 'Static files',
             default => match ($application->js_runtime) {
                 'deno' => trim('Deno ' . self::minor($application->deno_version)),
@@ -78,16 +80,7 @@ final class ApplicationPresenter
      */
     public static function runtimeEol(Application $application): ?array
     {
-        $runtime = match ($application->type) {
-            ApplicationType::Php => 'php',
-            ApplicationType::Ruby => 'ruby',
-            ApplicationType::Js => match ($application->js_runtime) {
-                'node' => 'nodejs',
-                'deno' => 'deno',
-                default => 'bun',
-            },
-            default => null,
-        };
+        $runtime = $application->type?->runtime($application->js_runtime);
 
         $version = $runtime === null ? null : ($application->runtimeVersions()[$runtime] ?? null);
 
@@ -116,13 +109,16 @@ final class ApplicationPresenter
         return match ($source) {
             '.tool-versions' => "Set {$runtime} in .tool-versions to {$recommended}, then deploy.",
             'composer.json' => "Set require.php in composer.json to ^{$recommended}, then deploy.",
-            '.nvmrc', '.node-version', '.ruby-version', '.dvmrc' => "Set {$source} to {$recommended}, then deploy.",
+            '.nvmrc', '.node-version', '.ruby-version', '.dvmrc', '.python-version' => "Set {$source} to {$recommended}, then deploy.",
             'package.json' => "Set engines.node in package.json to {$recommended}, then deploy.",
             'Gemfile' => "Set the ruby line in Gemfile to {$recommended}, then deploy.",
+            'pyproject.toml' => "Set requires-python in pyproject.toml to >={$recommended}, then deploy.",
+            'runtime.txt' => "Set runtime.txt to python-{$recommended}, then deploy.",
             default => match ($runtime) {
                 'php' => "Set require.php in composer.json to ^{$recommended}, then deploy.",
                 'nodejs' => "Add a .nvmrc containing {$recommended} to the repository, then deploy.",
                 'ruby' => "Add a .ruby-version containing {$recommended} to the repository, then deploy.",
+                'python' => "Add a .python-version containing {$recommended} to the repository, then deploy.",
                 default => 'Name a supported version in .tool-versions, then deploy.',
             },
         };
