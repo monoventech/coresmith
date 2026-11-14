@@ -12,10 +12,12 @@ use App\Models\Application;
 
 final class RuntimeDetector
 {
+    private const JAVA_TOOLCHAIN = '/(?:jvmToolchain\(\s*(\d+)\s*\)|JavaLanguageVersion\.of\(\s*(\d+)\s*\))/';
+
     private const JAVA_BUILDS = [
-        'pom.xml' => '/<(?:maven\.compiler\.release|java\.version|maven\.compiler\.target|maven\.compiler\.source|release)>\s*(?:1\.)?(\d+)[^<]*<\/[^>]+>/',
-        'build.gradle.kts' => '/(?:jvmToolchain\(\s*(\d+)\s*\)|JavaLanguageVersion\.of\(\s*(\d+)\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_(?:1_)?(\d+)|[\'"](?:1\.)?(\d+)[^\'"]*[\'"]))/',
-        'build.gradle' => '/(?:jvmToolchain\(\s*(\d+)\s*\)|JavaLanguageVersion\.of\(\s*(\d+)\s*\)|(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_(?:1_)?(\d+)|[\'"](?:1\.)?(\d+)[^\'"]*[\'"]|(?:1\.)?(\d+)(?:\.\d+)*))/',
+        'pom.xml' => ['/<(?:maven\.compiler\.release|java\.version|maven\.compiler\.target|maven\.compiler\.source|release|source|target)>\s*(?:1\.)?(\d+)[^<]*<\/[^>]+>/'],
+        'build.gradle.kts' => [self::JAVA_TOOLCHAIN, '/(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_(?:1_)?(\d+)|[\'"](?:1\.)?(\d+)[^\'"]*[\'"])/'],
+        'build.gradle' => [self::JAVA_TOOLCHAIN, '/(?:source|target)Compatibility\s*=\s*(?:JavaVersion\.VERSION_(?:1_)?(\d+)|[\'"](?:1\.)?(\d+)[^\'"]*[\'"]|(?:1\.)?(\d+)(?:\.\d+)*)/'],
     ];
 
     public const SOURCES = [
@@ -227,30 +229,46 @@ final class RuntimeDetector
     private function javaVersion(RepositoryFacts $facts): ?Requirement
     {
         $sources = [
-            ['.java-version', '/^\s*(?:[a-z]+-)?(\d+)\S*/m'],
-            ['.sdkmanrc', '/^\s*java\s*=\s*(\d+)\S*/m'],
-            ['system.properties', '/^\s*java\.runtime\.version\s*=\s*(?:1\.)?(\d+)\S*/m'],
+            ['.java-version', '/^\s*(?:[a-z]+-)?(\d+)\S*/m', false],
+            ['.sdkmanrc', '/^\s*java\s*=\s*(\d+)\S*/m', false],
+            ['system.properties', '/^\s*java\.runtime\.version\s*=\s*(?:1\.)?(\d+)\S*/m', false],
         ];
 
         foreach (['', '*/'] as $folder) {
-            foreach (self::JAVA_BUILDS as $build => $pattern) {
+            foreach (self::JAVA_BUILDS as $build => $patterns) {
                 foreach ($folder === '' ? [$build => null] : $facts->matching($folder . $build) as $file => $content) {
-                    $sources[] = [$file, $pattern];
+                    foreach ($patterns as $pattern) {
+                        $sources[] = [$file, $pattern, $pattern !== self::JAVA_TOOLCHAIN];
+                    }
                 }
             }
         }
 
-        foreach ($sources as [$file, $pattern]) {
+        foreach ($sources as [$file, $pattern, $floor]) {
             if (preg_match($pattern, (string) $facts->file($file), $matches) === 1) {
                 $line = (string) (array_values(array_filter(array_slice($matches, 1), fn(string $part): bool => $part !== ''))[0] ?? '');
 
                 if ($line !== '') {
-                    return new Requirement('java', $line, trim($matches[0]), $file, $file, 'npm');
+                    return new Requirement('java', $floor ? $this->javaFloor($line) : $line, trim($matches[0]), $file, $file, 'npm');
                 }
             }
         }
 
         return null;
+    }
+
+    private function javaFloor(string $line): string
+    {
+        $offered = array_map(fn(array $version): int => (int) $version['line'], (array) config('coresmith.runtimes.java.versions'));
+        sort($offered);
+
+        foreach ($offered as $candidate) {
+            if ($candidate >= (int) $line) {
+                return (string) $candidate;
+            }
+        }
+
+        return $line;
     }
 
     private function goMod(RepositoryFacts $facts): ?Requirement

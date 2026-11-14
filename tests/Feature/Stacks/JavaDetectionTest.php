@@ -108,12 +108,18 @@ test('Dropwizard is started with its config file when the repository has one', f
 test('a project that cannot build or run on a server is refused with what to change', function (array $files, array $markers, string $framework, array $blockers) {
     expect(javaBlockers(javaFacts($files, $markers), $framework))->toBe($blockers);
 })->with([
-    'Maven without its wrapper' => [['pom.xml' => javaBootPom()], [], 'spring-boot', [['field' => 'repository', 'reason' => "There is no mvnw at the repository's root, and Coresmith builds Java apps with the project's own Maven wrapper.", 'fix' => 'Run mvn wrapper:wrapper, then commit mvnw and the .mvn folder.']]],
-    'Gradle without its wrapper' => [['build.gradle' => "plugins {\n    id 'org.springframework.boot' version '3.5.7'\n}\n"], [], 'spring-boot', [['field' => 'repository', 'reason' => "There is no gradlew at the repository's root, and Coresmith builds Java apps with the project's own Gradle wrapper.", 'fix' => 'Run gradle wrapper, then commit gradlew and the gradle folder.']]],
+    'Gradle without its wrapper' => [['build.gradle' => "plugins {\n    id 'org.springframework.boot' version '3.5.7'\n}\n"], [], 'spring-boot', [['field' => 'repository', 'reason' => "There is no gradlew at the repository's root, and Coresmith builds Gradle projects with the project's own Gradle wrapper, which names the Gradle version.", 'fix' => 'Run gradle wrapper, then commit gradlew and the gradle folder.']]],
     'an Android app' => [['build.gradle' => "plugins {\n    id 'com.android.application'\n}\n"], ['gradlew'], 'plain', [['field' => 'repository', 'reason' => 'This is an Android app. It builds an APK for phones, and Coresmith runs apps on servers.', 'fix' => '']]],
     'a WAR for a servlet container' => [['pom.xml' => javaPom(javaDependency('jakarta.servlet', 'jakarta.servlet-api'), "  <packaging>war</packaging>\n")], ['mvnw'], 'plain', [['field' => 'repository', 'reason' => 'This app builds a WAR for a servlet container such as Tomcat, and Coresmith runs apps that start their own web server.', 'fix' => 'Package it as a jar that starts its own server, the way Spring Boot, Quarkus and Javalin apps do, then add it again.']]],
     'a Gradle WAR for a servlet container' => [['build.gradle' => "plugins {\n    id 'war'\n}\n"], ['gradlew'], 'plain', [['field' => 'repository', 'reason' => 'This app builds a WAR for a servlet container such as Tomcat, and Coresmith runs apps that start their own web server.', 'fix' => 'Package it as a jar that starts its own server, the way Spring Boot, Quarkus and Javalin apps do, then add it again.']]],
 ]);
+
+test('a Maven project without mvnw is not refused, since it builds with the Maven Coresmith installs', function () {
+    $facts = javaFacts(['pom.xml' => javaBootPom()], []);
+
+    expect(javaBlockers($facts, 'spring-boot'))->toBe([])
+        ->and(javaToolingFor($facts, 'spring-boot')['wrapper'])->toBeFalse();
+});
 
 test('a Spring Boot WAR runs on its own, so it is not refused', function () {
     $maven = javaFacts(['pom.xml' => javaBootPom("  <packaging>war</packaging>\n")], ['mvnw']);

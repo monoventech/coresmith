@@ -84,6 +84,7 @@ test("the build runs the project's own wrapper with the app's Java, skips the te
         ->and($commands[1])->toStartWith('JAVA_HOME=' . JAVA_HOME_25 . " sh -c '");
 })->with([
     'Spring Boot with Maven' => ['spring-boot', [], 'sh ./mvnw -B -DskipTests package'],
+    'Maven without a wrapper' => ['spring-boot', ['wrapper' => false], '/opt/asdf-data/maven/3.10.0/bin/mvn -B -DskipTests package'],
     'Spring Boot with Gradle' => ['spring-boot', ['build' => 'gradle'], 'sh ./gradlew --no-daemon -x test bootJar'],
     'JHipster with Maven' => ['jhipster', ['production' => true], 'sh ./mvnw -B -Pprod -DskipTests package'],
     'JHipster with Gradle' => ['jhipster', ['build' => 'gradle', 'production' => true], 'sh ./gradlew --no-daemon -Pprod -x test bootJar'],

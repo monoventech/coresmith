@@ -197,6 +197,11 @@ return [
 
     'temurin_builds' => ['25.0.5' => '8', '21.0.13' => '9', '17.0.21' => '9'],
 
+    'maven' => [
+        'version' => '3.10.0',
+        'sha512' => '908b1501bfb420bf7c8affb855534a9c407fd6099367bfb9f2f2dcb8e9799102bffb84518cde74c679bd76870247c6528683abdd620581bffa90f95d92d175aa',
+    ],
+
     'uv' => [
         'version' => '0.13.6',
         'sha256' => [

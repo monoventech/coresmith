@@ -690,9 +690,10 @@
         "url": "https://github.com/tipsy/javalin-heroku-example.git",
         "branch": "master",
         "expect": {
-            "verdict": "blocked",
-            "reason": "There is no mvnw"
+            "verdict": "ready",
+            "type": "java",
+            "framework": "javalin"
         },
-        "why": "A Javalin app with no Maven wrapper, refused with the command that adds one."
+        "why": "A Javalin app with no Maven wrapper, built with the Maven Coresmith installs, its Java 8 target met by Java 17, reading PORT."
     }
 ]

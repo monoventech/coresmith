@@ -67,7 +67,7 @@ final readonly class Java implements Language
 
         $profile = $tooling->production ? ' -Pprod' : '';
         $build = $tooling->build === 'maven'
-            ? "sh ./mvnw -B{$profile} -DskipTests package"
+            ? ($tooling->wrapper ? 'sh ./mvnw' : $this->asdf->mavenPath()) . " -B{$profile} -DskipTests package"
             : "sh ./gradlew --no-daemon{$profile} -x test " . $tooling->gradleTasks((string) $application->framework);
 
         return ["JAVA_HOME={$home} {$build}", "JAVA_HOME={$home} sh -c " . escapeshellarg(strtr(self::LAUNCH, ['{output}' => $tooling->output()]))];
