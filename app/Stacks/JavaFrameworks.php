@@ -25,7 +25,7 @@ final class JavaFrameworks
     public const ALL = [
         'spring-boot' => ['Spring Boot', ['org.springframework.boot', 'spring-boot'], ['port' => 'SERVER_PORT', 'host' => 'SERVER_ADDRESS']],
         'jhipster' => ['JHipster', [], ['port' => 'SERVER_PORT', 'host' => 'SERVER_ADDRESS']],
-        'quarkus' => ['Quarkus', ['io.quarkus'], ['port' => 'QUARKUS_HTTP_PORT', 'host' => 'QUARKUS_HTTP_HOST']],
+        'quarkus' => ['Quarkus', ['io.quarkus'], ['port' => 'QUARKUS_HTTP_PORT', 'host' => 'QUARKUS_HTTP_HOST', 'set' => ['QUARKUS_HTTP_HOST_VALIDATION_REQUIRE_LOCALHOST' => 'false']]],
         'micronaut' => ['Micronaut', ['io.micronaut'], ['port' => 'MICRONAUT_SERVER_PORT', 'host' => 'MICRONAUT_SERVER_HOST']],
         'helidon' => ['Helidon', ['io.helidon'], ['port' => 'SERVER_PORT', 'host' => 'SERVER_HOST']],
         'dropwizard' => ['Dropwizard', ['dropwizard-core'], []],
@@ -111,7 +111,7 @@ final class JavaFrameworks
     }
 
     /**
-     * @return array{port?: string, host?: string}
+     * @return array{port?: string, host?: string, set?: array<string, string>}
      */
     public static function listen(string $key): array
     {

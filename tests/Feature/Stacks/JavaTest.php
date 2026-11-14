@@ -39,7 +39,7 @@ test('each framework is told its port and address in the variables it reads, and
 })->with([
     'Spring Boot' => ['spring-boot', ['SERVER_PORT' => '4500', 'SERVER_ADDRESS' => '127.0.0.1']],
     'JHipster' => ['jhipster', ['SERVER_PORT' => '4500', 'SERVER_ADDRESS' => '127.0.0.1']],
-    'Quarkus' => ['quarkus', ['QUARKUS_HTTP_PORT' => '4500', 'QUARKUS_HTTP_HOST' => '127.0.0.1']],
+    'Quarkus, which would refuse the domain when bound to localhost' => ['quarkus', ['QUARKUS_HTTP_PORT' => '4500', 'QUARKUS_HTTP_HOST' => '127.0.0.1', 'QUARKUS_HTTP_HOST_VALIDATION_REQUIRE_LOCALHOST' => 'false']],
     'Micronaut' => ['micronaut', ['MICRONAUT_SERVER_PORT' => '4500', 'MICRONAUT_SERVER_HOST' => '127.0.0.1']],
     'Helidon' => ['helidon', ['SERVER_PORT' => '4500', 'SERVER_HOST' => '127.0.0.1']],
     'Javalin' => ['javalin', []],

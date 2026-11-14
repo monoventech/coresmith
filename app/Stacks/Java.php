@@ -132,6 +132,7 @@ final readonly class Java implements Language
             'HOST' => '127.0.0.1',
             ...(isset($listen['port']) ? [$listen['port'] => $port] : []),
             ...(isset($listen['host']) ? [$listen['host'] => '127.0.0.1'] : []),
+            ...($listen['set'] ?? []),
         ];
     }
 
