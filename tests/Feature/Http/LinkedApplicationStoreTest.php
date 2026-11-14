@@ -716,3 +716,16 @@ test('the add an app page offers Python with its frameworks and versions', funct
             ->where('runtimes.python.recommended', '3.14')
             ->where('runtimes.python.sources', '.tool-versions, .python-version, pyproject.toml or runtime.txt'));
 });
+
+test('the add an app page offers Go with every framework it knows, plain net/http last, and its versions', function () {
+    [$owner, $server] = linkedStoreTeam();
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $server))
+        ->assertInertia(fn($page) => $page
+            ->component('applications/Create')
+            ->where('go_frameworks.0', ['value' => 'gin', 'label' => 'Gin'])
+            ->where('go_frameworks.15', ['value' => 'net-http', 'label' => 'net/http'])
+            ->where('runtimes.go.label', 'Go')
+            ->where('runtimes.go.recommended', '1.27')
+            ->where('runtimes.go.sources', '.tool-versions or go.mod'));
+});

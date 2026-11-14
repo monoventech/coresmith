@@ -18,6 +18,7 @@ final readonly class RepositoryFacts
      * @param  array<string, string>  $locked
      * @param  list<string>  $markers
      * @param  list<string>  $envKeys
+     * @param  array<string, list<array{int, string}>>  $goLines
      */
     public function __construct(
         public array $files = [],
@@ -27,6 +28,7 @@ final readonly class RepositoryFacts
         public array $envKeys = [],
         public bool $complete = false,
         public string $folder = '',
+        public array $goLines = [],
     ) {}
 
     public function at(): string

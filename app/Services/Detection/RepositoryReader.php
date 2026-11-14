@@ -143,7 +143,7 @@ final class RepositoryReader
     public function script(string $url, string $branch, string $subfolder, string $credentials = ''): string
     {
         $prefix = $subfolder === '' ? '' : $subfolder . '/';
-        $patterns = array_map(fn(string $file): string => escapeshellarg('/' . $prefix . $file), [...RepositoryProbe::FILES, ...RepositoryProbe::GLOBS, ...RepositoryProbe::MARKERS, RepositoryProbe::COMPOSER_LOCK]);
+        $patterns = array_map(fn(string $file): string => escapeshellarg('/' . $prefix . $file), [...RepositoryProbe::FILES, ...RepositoryProbe::GLOBS, ...RepositoryProbe::MARKERS, ...RepositoryProbe::GO_GLOBS, RepositoryProbe::COMPOSER_LOCK]);
         $folder = $subfolder === ''
             ? 'app="$dir/repo"'
             : 'if [ "$(git cat-file -t ' . escapeshellarg('HEAD:' . $subfolder) . ' 2>/dev/null)" != tree ]; then printf \'@@nodir\n\'; exit 0; fi' . "\n" . 'app="$dir/repo"/' . escapeshellarg($subfolder) . "\n" . 'mkdir -p "$app"';

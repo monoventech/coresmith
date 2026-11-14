@@ -191,3 +191,31 @@ test('the store refuses a Django app whose fixed ALLOWED_HOSTS leaves out the do
 
     expect(storeDetectionApp())->toBeNull();
 });
+
+test('a Go app is added with the main package that answers web requests, and one that writes its port into the code is refused', function () {
+    [$owner, $server] = storeDetectionServer();
+    $mod = "module github.com/acme/shop\n\ngo 1.26\n";
+    $reads = new RepositoryFacts(['go.mod' => $mod], complete: true, goLines: ['main.go' => [[1, 'package main'], [9, 'http.ListenAndServe(":"+os.Getenv("PORT"), nil)']]]);
+    $fixed = new RepositoryFacts(['go.mod' => $mod], complete: true, goLines: ['main.go' => [[1, 'package main'], [9, 'http.ListenAndServe(":8080", nil)']]]);
+    $go = ['type' => ApplicationType::Go->value, 'framework' => 'net-http', 'web_directory' => null, 'main_package' => '.'];
+
+    storeDetectionPost($owner, $server, ['detection' => storeDetectionRead($owner, $server, new RepositoryRead($fixed, installed: ['go' => ['1.27.4']])), ...$go])
+        ->assertSessionHasErrors(['repository_url' => 'main.go line 9 listens on port 8080, and Coresmith gives each app its own port in the PORT environment variable. Listen on ":"+os.Getenv("PORT") there instead of port 8080.']);
+
+    expect(storeDetectionApp())->toBeNull();
+
+    storeDetectionPost($owner, $server, ['detection' => storeDetectionRead($owner, $server, new RepositoryRead($reads, installed: ['go' => ['1.27.4']])), ...$go])
+        ->assertSessionHasNoErrors();
+
+    expect(storeDetectionApp()?->only(['type', 'framework', 'main_package']))->toBe(['type' => ApplicationType::Go, 'framework' => 'net-http', 'main_package' => '.']);
+});
+
+test('a Go app needs a main package, named as a folder inside the module', function (?string $main, string $error) {
+    [$owner, $server] = storeDetectionServer();
+
+    storeDetectionPost($owner, $server, ['type' => ApplicationType::Go->value, 'framework' => 'net-http', 'web_directory' => null, 'main_package' => $main])
+        ->assertSessionHasErrors(['main_package' => $error]);
+})->with([
+    'none' => [null, 'Pick the package that answers web requests.'],
+    'outside the module' => ['../secrets', 'Use the folder of a package in the module, like cmd/server, or a dot for the module root.'],
+]);

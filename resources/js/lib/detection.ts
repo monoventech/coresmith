@@ -21,6 +21,7 @@ export type DetectionFields = {
     framework: string | null
     js_runtime: string | null
     web_directory: string | null
+    main_package?: string | null
     version: string | null
 }
 
@@ -34,6 +35,7 @@ export type DetectionRead = {
     unsettled: Record<string, string>
     blockers: DetectionBlocker[]
     folders: string[]
+    options?: Record<string, string[]>
 }
 
 export type Detection =

@@ -173,6 +173,16 @@ return [
                 ['line' => '3.11', 'latest' => '3.11.18', 'active_until' => '2024-04-30', 'eol_at' => '2027-10-31'],
             ],
         ],
+        'go' => [
+            'label' => 'Go',
+            'line' => 'minor',
+            'recommended' => '1.27',
+            'versions' => [
+                ['line' => '1.27', 'latest' => '1.27.4', 'active_until' => '2027-08-31', 'eol_at' => '2027-08-31'],
+                ['line' => '1.26', 'latest' => '1.26.11', 'active_until' => '2027-02-28', 'eol_at' => '2027-02-28'],
+                ['line' => '1.25', 'latest' => '1.25.14', 'active_until' => '2026-08-19', 'eol_at' => '2026-08-19'],
+            ],
+        ],
     ],
 
     'uv' => [
