@@ -26,7 +26,7 @@ final class NativePythonTools extends NativeTools
     public function find(string $appDirectory): string
     {
         $names = implode('|', array_keys(self::PACKAGES));
-        $files = implode(' ', array_map(fn(string $file): string => escapeshellarg($appDirectory . '/' . $file), self::FILES));
+        $files = implode(' ', array_map(fn(string $file): string => escapeshellarg($appDirectory . '/' . $file), self::FILES)) . ' ' . escapeshellarg($appDirectory . '/requirements') . '/*.txt';
 
         return 'grep -ohiE ' . escapeshellarg('(^|["\'])(' . $names . ')([^-a-z0-9._]|$)') . " {$files} 2>/dev/null | grep -oiE " . escapeshellarg($names) . " | tr 'A-Z' 'a-z' | sort -u";
     }

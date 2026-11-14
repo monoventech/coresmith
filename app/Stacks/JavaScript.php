@@ -141,6 +141,11 @@ final readonly class JavaScript implements Language
         return $this->presets->find($framework)?->label();
     }
 
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        return null;
+    }
+
     private function entry(Application $application, ?JsTooling $tooling): string
     {
         return $this->presets->find((string) $application->framework)?->entry() ?? $tooling?->main ?? 'server.js';

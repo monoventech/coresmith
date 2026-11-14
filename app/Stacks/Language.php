@@ -88,4 +88,6 @@ interface Language
     public function nativeTools(): ?NativeTools;
 
     public function frameworkLabel(string $framework): ?string;
+
+    public function explain(string $phase, string $output, Stack $stack): ?string;
 }

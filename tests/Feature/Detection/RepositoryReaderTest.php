@@ -286,6 +286,35 @@ test('the read lists the folders that hold an app, three folders deep at most, l
     expect(AppFolders::in($output))->toBe(['a/b/c', 'apps/api', 'apps/web', 'services/edge', 'site']);
 });
 
+test('Python apps in folders are offered by their dependency list, and a virtualenv is not', function () {
+    $source = sys_get_temp_dir() . '/coresmith-py-folders-' . Str::random(8);
+
+    foreach ([
+        'backend/pyproject.toml' => "[project]\nname = 'api'\n",
+        'examples/javascript/pyproject.toml' => "[project]\nname = 'js_example'\n",
+        'services/worker/requirements.txt' => "celery\n",
+        'billing/Pipfile' => "[packages]\n",
+        'venv/requirements.txt' => "pip\n",
+        'site-packages/requirements.txt' => "pip\n",
+    ] as $path => $content) {
+        File::ensureDirectoryExists(dirname($source . '/' . $path));
+        File::put($source . '/' . $path, $content);
+    }
+
+    $git = fn(string $command) => Process::path($source)->env(['GIT_AUTHOR_NAME' => 'a', 'GIT_AUTHOR_EMAIL' => 'a@example.com', 'GIT_COMMITTER_NAME' => 'a', 'GIT_COMMITTER_EMAIL' => 'a@example.com'])->run($command)->throw();
+    $git('git init --quiet --initial-branch=main');
+    $git('git config uploadpack.allowFilter true');
+    $git('git config uploadpack.allowAnySHA1InWant true');
+    $git('git add -A');
+    $git('git commit --quiet -m start');
+
+    $output = Process::input(app(RepositoryReader::class)->script('file://' . $source, 'main', ''))->run('bash -s')->output();
+
+    File::deleteDirectory($source);
+
+    expect(AppFolders::in($output))->toBe(['backend', 'billing', 'examples/javascript', 'services/worker']);
+});
+
 test('the folders a read finds come back with it', function () {
     $read = readerRun(readerAnswer("@@manifest apps/web/package.json\n@@manifest apps/web/public/index.html\n@@manifest packages/ui/package.json\n@@manifest node_modules/x/package.json\n@@done\n"), RepositoryAccess::public('https://github.com/acme/mono.git'));
 

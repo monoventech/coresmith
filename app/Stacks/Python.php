@@ -10,6 +10,7 @@ namespace App\Stacks;
 
 use App\Enums\AppSize;
 use App\Models\Application;
+use App\Services\Deployment\DeploymentPhases;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\NativePythonTools;
@@ -193,5 +194,20 @@ final readonly class Python implements Language
     public function frameworkLabel(string $framework): ?string
     {
         return $this->presets->find($framework)?->label();
+    }
+
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        $python = $stack->runtimes['python'] ?? null;
+
+        if ($phase !== DeploymentPhases::DEPENDENCIES || $python === null || preg_match('/Failed to (?:download and )?build `([A-Za-z0-9._-]+)/', $output, $matches) !== 1) {
+            return null;
+        }
+
+        $package = $matches[1];
+
+        return $python->source === ResolvedRuntime::FROM_DEFAULT
+            ? "{$package} failed to build on Python {$python->version}, which Coresmith picked because the repository names no Python version. Add a .python-version with the Python the app runs on, for example 3.12, or update {$package}."
+            : "{$package} failed to build on Python {$python->version}, the version {$python->source} names. Update {$package} to a release that supports it, or name an older Python in {$python->source}.";
     }
 }

@@ -12,13 +12,13 @@ use App\Services\SafeName;
 
 final class AppFolders
 {
-    public const LISTING = "git ls-tree -r --name-only HEAD 2>/dev/null | grep -E '(^|/)(composer\\.json|Gemfile|package\\.json|deno\\.jsonc?|index\\.html)$' | head -n 2000 | sed 's/^/@@manifest /'";
+    public const LISTING = "git ls-tree -r --name-only HEAD 2>/dev/null | grep -E '(^|/)(composer\\.json|Gemfile|package\\.json|deno\\.jsonc?|index\\.html|requirements\\.txt|pyproject\\.toml|Pipfile)$' | head -n 2000 | sed 's/^/@@manifest /'";
 
-    private const MANIFESTS = ['composer.json', 'Gemfile', 'package.json', 'deno.json', 'deno.jsonc', 'index.html'];
+    private const MANIFESTS = ['composer.json', 'Gemfile', 'package.json', 'deno.json', 'deno.jsonc', 'index.html', 'requirements.txt', 'pyproject.toml', 'Pipfile'];
 
     private const DEPTH = 3;
 
-    private const DEPENDENCIES = ['node_modules', 'vendor', 'bower_components'];
+    private const DEPENDENCIES = ['node_modules', 'vendor', 'bower_components', 'venv', 'site-packages', '__pycache__'];
 
     private const NOT_SITES = ['public', 'dist', 'build', 'out', 'static', 'src', 'assets', 'templates'];
 

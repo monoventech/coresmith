@@ -253,3 +253,19 @@ test('the probe reads Django settings and app modules one folder down, wherever 
         ->and(array_keys($facts->files))->toBe(['shop/settings.py', 'config/settings/production.py', 'app/main.py'])
         ->and(app(RepositoryReader::class)->script('https://github.com/monoven/shop.git', 'main', ''))->toContain("'/*/settings.py'");
 });
+
+test('requirements.txt that includes other files is read through its includes', function () {
+    $facts = pyFacts([
+        'requirements.txt' => "-r requirements/production.txt\n",
+        'requirements/production.txt' => "-r base.txt\nuwsgi>=2.0.17,<2.1\n",
+        'requirements/base.txt' => "Django>=6.0,<6.1\nwagtail>=8.1,<8.2\n-r production.txt\n",
+        'manage.py' => pyManage('bakerydemo.settings.dev'),
+        'bakerydemo/settings/base.py' => "ALLOWED_HOSTS = []\nWSGI_APPLICATION = 'bakerydemo.wsgi.application'\nSTATIC_ROOT = os.path.join(PROJECT_DIR, 'collect_static')\n",
+        'bakerydemo/settings/dev.py' => "from .base import *\nDEBUG = True\nALLOWED_HOSTS = ['*']\n",
+    ]);
+
+    expect(pyDetect($facts))->toBe(['type' => 'python', 'framework' => 'django', 'js_runtime' => null, 'web' => null, 'sources' => ['type' => 'From requirements.txt', 'framework' => 'django in requirements/base.txt, with manage.py'], 'unsettled' => []])
+        ->and(pyTooling('django', $facts)['module'])->toBe('bakerydemo.wsgi:application')
+        ->and(pyBlockers('django', $facts, ['domain' => 'bakery.example.com']))->toBe([])
+        ->and(RepositoryProbe::GLOBS)->toContain('requirements/*.txt');
+});

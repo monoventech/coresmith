@@ -196,6 +196,11 @@ final readonly class Ruby implements Language
         return null;
     }
 
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        return null;
+    }
+
     private function platformMissing(RepositoryFacts $facts, string $arch): ?Blocker
     {
         $local = match ($arch) {

@@ -153,4 +153,9 @@ final readonly class StaticSite implements Language
     {
         return null;
     }
+
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        return null;
+    }
 }

@@ -25,13 +25,7 @@ final readonly class PythonDependencies
     {
         $found = [];
 
-        foreach (preg_split('/\r\n|\n|\r/', (string) $facts->file('requirements.txt')) ?: [] as $line) {
-            $line = (string) preg_replace('/(^|\s)#.*$/', '', $line);
-
-            if (preg_match(self::REQUIREMENT, $line, $matches) === 1) {
-                $found[self::normalize($matches[1])] ??= ['file' => 'requirements.txt', 'spec' => trim($matches[2])];
-            }
-        }
+        self::requirements($facts, 'requirements.txt', $found);
 
         $project = $facts->toml('pyproject.toml', 'project')['dependencies'] ?? [];
 
@@ -50,6 +44,44 @@ final readonly class PythonDependencies
         }
 
         return new self($found);
+    }
+
+    /**
+     * @param  array<string, array{file: string, spec: string}>  $found
+     * @param  list<string>  $seen
+     */
+    private static function requirements(RepositoryFacts $facts, string $file, array &$found, array $seen = []): void
+    {
+        $content = $facts->file($file);
+
+        if ($content === null || in_array($file, $seen, true) || count($seen) > 8) {
+            return;
+        }
+
+        foreach (preg_split('/\r\n|\n|\r/', $content) ?: [] as $line) {
+            $line = (string) preg_replace('/(^|\s)#.*$/', '', $line);
+
+            if (preg_match('/^\s*(?:-r|--requirement)[\s=]+(\S+)/', $line, $include) === 1) {
+                self::requirements($facts, self::relative($file, $include[1]), $found, [...$seen, $file]);
+            } elseif (preg_match(self::REQUIREMENT, $line, $matches) === 1) {
+                $found[self::normalize($matches[1])] ??= ['file' => $file, 'spec' => trim($matches[2])];
+            }
+        }
+    }
+
+    private static function relative(string $from, string $path): string
+    {
+        $parts = [];
+
+        foreach (explode('/', (dirname($from) === '.' ? '' : dirname($from) . '/') . $path) as $part) {
+            if ($part === '..') {
+                array_pop($parts);
+            } elseif ($part !== '' && $part !== '.') {
+                $parts[] = $part;
+            }
+        }
+
+        return implode('/', $parts);
     }
 
     public static function normalize(string $name): string

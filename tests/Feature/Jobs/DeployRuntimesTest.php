@@ -8,6 +8,7 @@ use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\RuntimeUnavailable;
+use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\DeployApplication;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\InstallRuntimes;
@@ -234,12 +235,15 @@ test('the server finds those packages in any lockfile or dependency list, and no
     mkdir($directory);
     file_put_contents($directory . '/requirements.txt', "Django>=5.1\npsycopg2-binary==2.9.10\n# psycopg2 is not used\n");
     file_put_contents($directory . '/uv.lock', "[[package]]\nname = \"mysqlclient\"\nversion = \"2.2.7\"\n");
-    file_put_contents($directory . '/pyproject.toml', "[project]\ndependencies = [\"PSYCOPG2>=2.9\", \"psycopg2-pool\"]\n");
+    file_put_contents($directory . '/pyproject.toml', "[project]\ndependencies = [\"psycopg2-pool\"]\n");
+    mkdir($directory . '/requirements');
+    file_put_contents($directory . '/requirements/base.txt', "Django\nPSYCOPG2==2.9.10\n");
 
     try {
         $output = (string) shell_exec(app(NativePythonTools::class)->find($directory));
     } finally {
-        array_map(unlink(...), glob($directory . '/*') ?: []);
+        array_map(unlink(...), [...glob($directory . '/*.*') ?: [], ...glob($directory . '/requirements/*') ?: []]);
+        rmdir($directory . '/requirements');
         rmdir($directory);
     }
 
@@ -282,6 +286,27 @@ test('a Django app deploys into a virtualenv, collects its static files, migrate
         ->and($unit)->toContain('Environment="PATH=/var/coresmith/apps/shop/current/.venv/bin:/opt/asdf-data/installs/python/3.13.18/bin:/usr/local/bin:/usr/bin:/bin"')
         ->and($unit)->toContain('Environment="WEB_CONCURRENCY=2"');
 });
+
+test('a package that fails to build on the Python Coresmith picked says which one, and how to name the Python the app runs on', function (string $files, string $reason) {
+    Queue::fake();
+    $application = stackApp(['type' => ApplicationType::Python, 'framework' => 'flask']);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $probe = ProbeOutput::for([...json_decode($files, true), 'requirements.txt' => "Flask==3.0.0\ngreenlet==3.0.1\n", 'app.py' => "app = Flask(__name__)\n"]) . "@@done\n";
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, $probe)
+        ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.13.18\n3.14.10\n")
+        ->respondTo('-r requirements.txt', "Resolved 12 packages in 210ms\n  × Failed to build `greenlet==3.0.1`\n  ├─▶ The build backend returned an error\n  ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)\n", 1);
+
+    expect(fn() => stackDeploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($deployment->fresh()->failure_reason)->toBe($reason);
+})->with([
+    'nothing names a version' => ['{}', 'greenlet failed to build on Python 3.14.10, which Coresmith picked because the repository names no Python version. Add a .python-version with the Python the app runs on, for example 3.12, or update greenlet.'],
+    'the repository names one' => ['{".python-version":"3.13\n"}', 'greenlet failed to build on Python 3.13.18, the version .python-version names. Update greenlet to a release that supports it, or name an older Python in .python-version.'],
+]);
 
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();

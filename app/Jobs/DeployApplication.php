@@ -1232,6 +1232,8 @@ final class DeployApplication implements ShouldQueue
                         $this->failureReason = DatabaseFailure::reason($result->output, $this->deployment->application->type) ?? $this->failureReason;
                     }
 
+                    $this->failureReason = $application->type->language()->explain($phase, $result->output, $stack) ?? $this->failureReason;
+
                     $result->throw();
                 }
 
