@@ -2,7 +2,7 @@
 
 Server management without the complexity. Coresmith sets up your own Linux servers and deploys your apps straight onto them from the browser, without Docker.
 
-PHP apps such as Laravel, JavaScript and TypeScript apps on Node.js, Bun or Deno, Ruby apps such as Rails, and static sites can all share one server. Each app gets its own Linux user, its own block of ports and an environment file only root can read.
+PHP apps such as Laravel, JavaScript and TypeScript apps on Node.js, Bun or Deno, Ruby apps such as Rails, and static sites can all share one server.
 
 - Add a server with its password once, or by pasting one command on it, and Coresmith provisions it over SSH and hardens it with key-only SSH, fail2ban and a firewall. It then checks those protections every hour.
 - Connect GitHub or your own Git host and push to deploy. Every deploy builds a new release beside the live one, health-checks it, then switches over in one step, and the previous release stays ready to roll back to.
