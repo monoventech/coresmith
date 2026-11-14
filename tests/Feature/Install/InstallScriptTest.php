@@ -363,7 +363,7 @@ test('continuous integration runs the feature tests on every database the panel 
         ->and($definition)->not->toHaveKey('if')
         ->and(array_column($definition['services'] ?? [], 'image'))->toBe([$image])
         ->and($definition['env']['DB_CONNECTION'] ?? null)->toBe($driver)
-        ->and(array_map(trim(...), array_column($definition['steps'] ?? [], 'run')))->toContain('php artisan test');
+        ->and(array_map(trim(...), array_column($definition['steps'] ?? [], 'run')))->toContain('php artisan test --parallel');
 })->with([
     'PostgreSQL' => ['tests-pgsql', 'postgres:17', 'pgsql'],
     'MySQL' => ['tests-mysql', 'mysql:8.0', 'mysql'],
