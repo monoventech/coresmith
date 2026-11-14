@@ -356,6 +356,18 @@
         "why": "AdonisJS 6's web starter: Vite assets, sessions and Lucid."
     },
     {
+        "name": "angular-realworld",
+        "url": "https://github.com/realworld-apps/angular-realworld-example-app.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/dist/angular-conduit/browser"
+        },
+        "why": "Angular 21's RealWorld app: the application builder on Bun, without server-side rendering."
+    },
+    {
         "name": "astrowind",
         "url": "https://github.com/arthelokyo/astrowind.git",
         "branch": "main",
