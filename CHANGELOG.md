@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.14 (2026-11-14)
+
+### Added
+- feat: a shared server can hold back some of its apps and databases, and a Developer's access dialog shows what a server share gives them (#90)
+- feat: Java apps on Spring Boot, JHipster, Quarkus, Micronaut and more, built with the project's own Maven or Gradle wrapper (#89)
+
 ## v0.8.13 (2026-11-14)
 
 ### Added
