@@ -32,6 +32,11 @@
                         >The internet can't reach this address on ports 80 and 443 yet.</span
                     >
                 {/if}
+                {#if record.note}
+                    <span class="block text-[11.5px] text-muted-foreground" data-testid="dns-record-note"
+                        >{record.note}</span
+                    >
+                {/if}
             </span>
             <button
                 type="button"

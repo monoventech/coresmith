@@ -327,7 +327,7 @@ test('a check that asks for a DNS record keeps the record, for the dialog to sho
         'host' => 'coresmith.example.com',
         'ok' => false,
         'problems' => ["coresmith.example.com doesn't point anywhere yet. Add an A record for coresmith.example.com pointing at 151.226.169.196, then check again."],
-        'records' => [['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196']],
+        'records' => [['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196', 'note' => null]],
     ]);
 });
 
@@ -364,8 +364,11 @@ test('Coresmith reads its own address every morning, and the settings page carri
         ->get(route('settings.general'))
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('address.ipv6_only', true)
-            ->where('address.reach.notes', ["coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. Nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443, so if you can open or forward those ports, add an A record for coresmith.example.com pointing at 151.226.169.196. If your internet provider shares that address with other customers, put coresmith.example.com behind a proxy that answers on IPv4, such as Cloudflare's."])
-            ->where('address.reach.records', [['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196']]));
+            ->where('address.reach.notes', ["coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. The surest fix is to turn on Cloudflare's proxy for coresmith.example.com. Cloudflare answers those visitors over IPv4 and reaches this server over IPv6, which already works, so your router needs no changes. That needs coresmith.example.com's DNS on Cloudflare. Nothing on the internet reaches this server's IPv4 address, 151.226.169.196, on ports 80 and 443, so add an A record for it only if that address is yours and you can forward ports 80 and 443 to 192.168.0.248."])
+            ->where('address.reach.records', [
+                ['type' => 'AAAA', 'name' => 'coresmith.example.com', 'value' => '2001:db8::10', 'note' => "Best fix, with Cloudflare's proxy on"],
+                ['type' => 'A', 'name' => 'coresmith.example.com', 'value' => '151.226.169.196', 'note' => 'Only if the address is yours and you can forward ports 80 and 443'],
+            ]));
 
     config(['app.url' => 'https://coresmith.example.org']);
 

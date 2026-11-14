@@ -17,6 +17,10 @@ use App\Services\Network\StableAddresses;
 
 final class Reachability
 {
+    private const BEST = "Best fix, with Cloudflare's proxy on";
+
+    private const IF_YOURS = 'Only if the address is yours and you can forward ports 80 and 443';
+
     public function __construct(
         private readonly AddressResolver $resolver,
         private readonly LocalAddresses $local,
@@ -46,7 +50,7 @@ final class Reachability
 
         if ($v4 === true || $v6 === true) {
             $rows = [];
-            $notes = $this->notes($host, $v4, $v6, $v4Records, $direct, $rows);
+            $notes = $this->notes($host, $v4, $v6, $v4Records, $v6Records, $direct, $rows);
 
             return new ReachReport(true, [], $proxied ? [...$notes, $this->proxied($host, $direct, $stable, $rows)] : $notes, $rows);
         }
@@ -60,29 +64,43 @@ final class Reachability
 
     /**
      * @param  list<string>  $stable
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      */
     private function unpointed(string $host, ?DirectReach $direct, array $stable, array &$rows): string
     {
+        if ($direct === null && $stable !== []) {
+            $this->row($rows, 'AAAA', $host, $stable[0], self::BEST);
+
+            return "{$host} doesn't point anywhere yet. Add an AAAA record for {$host} pointing at {$stable[0]} and turn on Cloudflare's proxy for it, so visitors without IPv6 reach it too. That needs {$host}'s DNS on Cloudflare. Coresmith couldn't check this server's IPv4 address from outside, so it can't suggest an A record. Then check again.";
+        }
+
         if ($direct === null) {
             return "{$host} doesn't point anywhere yet. Add a DNS record that points it at this server, then check again.";
         }
 
-        $this->row($rows, 'A', $host, $direct->address);
-
         if ($direct->http) {
-            return "{$host} doesn't point anywhere yet. Add an A record for {$host} pointing at {$direct->address}, then check again.";
-        }
+            $this->row($rows, 'A', $host, $direct->address);
 
-        if ($stable !== []) {
-            $this->row($rows, 'AAAA', $host, $stable[0]);
+            return "{$host} doesn't point anywhere yet. Add an A record for {$host} pointing at {$direct->address}, then check again.";
         }
 
         $lan = $this->lanAddress();
         $closed = "{$host} doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, {$direct->address}, on ports 80 and 443.";
 
+        if ($lan !== null && $stable !== []) {
+            $this->row($rows, 'AAAA', $host, $stable[0], self::BEST);
+            $this->row($rows, 'A', $host, $direct->address, self::IF_YOURS);
+
+            return "{$closed} Either your router isn't forwarding those ports to {$lan}, or your internet provider shares that address with other customers, as many home connections do. The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for {$host} pointing at {$stable[0]} and turn the proxy on, so visitors without IPv6 reach it too. That needs {$host}'s DNS on Cloudflare. If your router blocks incoming IPv6, allow ports 80 and 443 to {$stable[0]} in its IPv6 firewall. Add the A record only if {$direct->address} is yours and you can forward ports 80 and 443 to {$lan}. Then check again.";
+        }
+
+        $this->row($rows, 'A', $host, $direct->address);
+
+        if ($stable !== []) {
+            $this->row($rows, 'AAAA', $host, $stable[0]);
+        }
+
         return match (true) {
-            $lan !== null && $stable !== [] => "{$closed} Either your router isn't forwarding those ports to {$lan}, or your internet provider shares that address with other customers, as many home connections do. If you can forward them, add an A record for {$host} pointing at {$direct->address}. If you can't, add an AAAA record for {$host} pointing at {$stable[0]}. That reaches visitors with IPv6; to reach everyone else as well, put {$host} behind a proxy that answers on IPv4, such as Cloudflare's. Then check again.",
             $lan !== null => "{$closed} Forward TCP ports 80 and 443 on your router to {$lan}, then add an A record for {$host} pointing at {$direct->address}. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.",
             $stable !== [] => "{$closed} Open ports 80 and 443 in your provider's firewall and add an A record for {$host} pointing at {$direct->address}, or add an AAAA record for {$host} pointing at {$stable[0]}, which only reaches visitors with IPv6. Then check again.",
             default => "{$closed} Open ports 80 and 443 in your provider's firewall, then add an A record for {$host} pointing at {$direct->address}.",
@@ -93,7 +111,7 @@ final class Reachability
      * @param  list<string>  $records
      * @param  list<string>  $stable
      * @param  list<string>  $problems
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      */
     private function ipv6(string $host, array $records, array $stable, array &$problems, array &$rows): ?bool
     {
@@ -129,7 +147,7 @@ final class Reachability
      * @param  list<string>  $records
      * @param  list<string>  $stable
      * @param  list<string>  $problems
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      */
     private function ipv4(string $host, array $records, ?DirectReach $direct, array $stable, array &$problems, array &$rows): ?bool
     {
@@ -152,13 +170,13 @@ final class Reachability
         $problem = "{$host} points at {$direct->address}, but nothing reaches this server on ports 80 and 443 from the internet.";
 
         if ($lan !== null && $stable !== []) {
-            $this->row($rows, 'AAAA', $host, $stable[0]);
+            $this->row($rows, 'AAAA', $host, $stable[0], self::BEST);
         }
 
         $problems[] = match (true) {
             $lan === null => "{$problem} Open ports 80 and 443 in your provider's firewall, then check again.",
             $stable === [] => "{$problem} Forward TCP ports 80 and 443 on your router to {$lan}, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.",
-            default => "{$problem} Forward TCP ports 80 and 443 on your router to {$lan}, then check again. If you can't, or your internet provider shares that address with other customers, use IPv6: add an AAAA record for {$host} pointing at {$stable[0]}, remove the A record, and allow ports 80 and 443 to it in your router's IPv6 firewall. To reach visitors without IPv6 too, put {$host} behind a proxy that answers on IPv4, such as Cloudflare's.",
+            default => "{$problem} Either your router isn't forwarding those ports to {$lan}, or your internet provider shares that address with other customers. The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for {$host} pointing at {$stable[0]}, remove the A record, and turn the proxy on, so visitors without IPv6 reach it too. That needs {$host}'s DNS on Cloudflare. If your router blocks incoming IPv6, allow ports 80 and 443 to {$stable[0]} in its IPv6 firewall. Keep the A record instead only if {$direct->address} is yours and you can forward ports 80 and 443 to {$lan}, then check again.",
         };
 
         return false;
@@ -166,10 +184,11 @@ final class Reachability
 
     /**
      * @param  list<string>  $v4Records
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<string>  $v6Records
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      * @return list<string>
      */
-    private function notes(string $host, ?bool $v4, ?bool $v6, array $v4Records, ?DirectReach $direct, array &$rows): array
+    private function notes(string $host, ?bool $v4, ?bool $v6, array $v4Records, array $v6Records, ?DirectReach $direct, array &$rows): array
     {
         $lan = $this->lanAddress();
         $notes = [];
@@ -179,37 +198,54 @@ final class Reachability
         }
 
         if ($v6 === true && $v4 === false && $direct !== null) {
-            $notes[] = "The A record for {$host} points at {$direct->address}, which the internet can't reach on ports 80 and 443. Remove it so visitors without IPv6 aren't left waiting. To reach them, put {$host} behind a proxy that answers on IPv4, such as Cloudflare's.";
+            $waiting = "The A record for {$host} points at {$direct->address}, which the internet can't reach on ports 80 and 443, so visitors without IPv6 are left waiting.";
+            $notes[] = $lan === null
+                ? "{$waiting} Open ports 80 and 443 in your provider's firewall. If you'd rather not, remove the A record and turn on Cloudflare's proxy for {$host}, which reaches this server over IPv6."
+                : "{$waiting} The surest fix is to remove that A record and turn on Cloudflare's proxy for {$host}. Cloudflare answers those visitors over IPv4 and reaches this server over IPv6, which already works, so your router needs no changes. That needs {$host}'s DNS on Cloudflare. Keep the A record only if {$direct->address} is yours and you can forward ports 80 and 443 to {$lan}.";
         }
 
-        if ($v6 === true && $v4Records === []) {
-            $notes[] = $this->ipv6Only($host, $direct, $rows);
+        if ($v6 === true && $v4Records === [] && $v6Records !== []) {
+            $notes[] = $this->ipv6Only($host, $v6Records[0], $direct, $lan, $rows);
         }
 
         return $notes;
     }
 
     /**
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      */
-    private function ipv6Only(string $host, ?DirectReach $direct, array &$rows): string
+    private function ipv6Only(string $host, string $v6, ?DirectReach $direct, ?string $lan, array &$rows): string
     {
         $only = "{$host} has only an IPv6 address, so visitors on networks without IPv6 can't open it.";
+        $proxy = "Cloudflare answers those visitors over IPv4 and reaches this server over IPv6, which already works, so your router needs no changes. That needs {$host}'s DNS on Cloudflare.";
 
         if ($direct === null) {
-            return "{$only} To reach them, add an A record for this server's IPv4 address if the internet reaches it on ports 80 and 443, or put {$host} behind a proxy that answers on IPv4, such as Cloudflare's.";
+            $this->row($rows, 'AAAA', $host, $v6, self::BEST);
+
+            return "{$only} Coresmith couldn't reach the internet over IPv4 from this server, so Cloudflare's proxy is the way to reach them: turn it on for {$host}, and Cloudflare answers them over IPv4 and reaches this server over IPv6. That needs {$host}'s DNS on Cloudflare.";
         }
 
-        $this->row($rows, 'A', $host, $direct->address);
+        if ($direct->http) {
+            $this->row($rows, 'A', $host, $direct->address);
 
-        return $direct->http
-            ? "{$only} The internet reaches this server's IPv4 address too, so add an A record for {$host} pointing at {$direct->address}."
-            : "{$only} Nothing on the internet reaches this server's IPv4 address, {$direct->address}, on ports 80 and 443, so if you can open or forward those ports, add an A record for {$host} pointing at {$direct->address}. If your internet provider shares that address with other customers, put {$host} behind a proxy that answers on IPv4, such as Cloudflare's.";
+            return "{$only} The internet reaches this server's IPv4 address too, so add an A record for {$host} pointing at {$direct->address}.";
+        }
+
+        if ($lan === null) {
+            $this->row($rows, 'A', $host, $direct->address);
+
+            return "{$only} Nothing on the internet reaches this server's IPv4 address, {$direct->address}, on ports 80 and 443. Open those ports in your provider's firewall and add an A record for {$host} pointing at {$direct->address}, or turn on Cloudflare's proxy for {$host}, which reaches this server over IPv6.";
+        }
+
+        $this->row($rows, 'AAAA', $host, $v6, self::BEST);
+        $this->row($rows, 'A', $host, $direct->address, self::IF_YOURS);
+
+        return "{$only} The surest fix is to turn on Cloudflare's proxy for {$host}. {$proxy} Nothing on the internet reaches this server's IPv4 address, {$direct->address}, on ports 80 and 443, so add an A record for it only if that address is yours and you can forward ports 80 and 443 to {$lan}.";
     }
 
     /**
      * @param  list<string>  $stable
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      */
     private function proxied(string $host, ?DirectReach $direct, array $stable, array &$rows): string
     {
@@ -225,15 +261,17 @@ final class Reachability
     }
 
     /**
-     * @param  list<array{type: string, name: string, value: string}>  $rows
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $rows
      */
-    private function row(array &$rows, string $type, string $host, string $value): void
+    private function row(array &$rows, string $type, string $host, string $value, ?string $note = null): void
     {
-        $row = ['type' => $type, 'name' => $host, 'value' => $value];
-
-        if (!in_array($row, $rows, true)) {
-            $rows[] = $row;
+        foreach ($rows as $row) {
+            if ($row['type'] === $type && $row['value'] === $value) {
+                return;
+            }
         }
+
+        $rows[] = ['type' => $type, 'name' => $host, 'value' => $value, 'note' => $note];
     }
 
     private function lanAddress(): ?string

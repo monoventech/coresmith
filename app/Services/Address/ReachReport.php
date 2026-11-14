@@ -13,7 +13,7 @@ final readonly class ReachReport
     /**
      * @param  list<string>  $problems
      * @param  list<string>  $notes
-     * @param  list<array{type: string, name: string, value: string}>  $records
+     * @param  list<array{type: string, name: string, value: string, note: string|null}>  $records
      */
     public function __construct(
         public ?bool $ready,
