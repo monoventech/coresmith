@@ -68,3 +68,10 @@ test('output without a registry refusal has no reason', function (string $output
     'a test hitting an api' => ['GET /api/user 401 in 12ms'],
     'a 404' => ['npm error 404 Not Found - GET https://registry.npmjs.org/left-padd - Not found'],
 ]);
+
+test('a gradle repository without credentials names the id to add them under', function () {
+    $output = "* What went wrong:\nExecution failed for task ':compileJava'.\n> The following Gradle properties are missing for 'acmeReleases' credentials:\n    - acmeReleasesUsername\n    - acmeReleasesPassword";
+
+    expect(app(RegistryAuthFailure::class)->reason($output, registryFailureApp()))
+        ->toBe('The build needs credentials for the Gradle repository acmeReleases, and Coresmith has none. Add them to Private packages in Settings, Git as Maven or Gradle with acmeReleases as the repository ID, then deploy again.');
+});

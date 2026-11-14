@@ -43,6 +43,8 @@ final class MoveColumns
 
     public const WEBHOOK_ENDPOINTS = ['secret', 'provider', 'active'];
 
+    public const PACKAGE_CREDENTIALS = ['source', 'target', 'scope', 'username', 'secret'];
+
     /**
      * @param  list<string>  $columns
      * @return array<string, mixed>

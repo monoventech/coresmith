@@ -15,6 +15,7 @@ use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\Environment;
 use App\Models\ManagedDatabase;
+use App\Models\PackageCredential;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -79,6 +80,8 @@ final class TeamExporter
             'databases' => ManagedDatabase::query()->where('team_id', $team->id)->orderBy('id')->get()
                 ->map(fn(ManagedDatabase $database): array => ['server' => $database->server_id, 'environment' => $database->environment_id, ...MoveColumns::read($database, MoveColumns::DATABASES)])->values()->all(),
             'backup_destination' => $team->backupDestination === null ? null : MoveColumns::read($team->backupDestination, MoveColumns::BACKUP_DESTINATION),
+            'package_credentials' => $team->packageCredentials()->orderBy('id')->get()
+                ->map(fn(PackageCredential $credential): array => ['project' => $credential->project_id, ...MoveColumns::read($credential, MoveColumns::PACKAGE_CREDENTIALS)])->values()->all(),
         ];
     }
 

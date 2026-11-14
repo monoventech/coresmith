@@ -15,6 +15,8 @@ final class RegistryAuthFailure
 {
     private const UNSET_VARIABLE = '/Failed to replace env in config: \$\{(?<variable>[A-Za-z_][A-Za-z0-9_]*)\}/';
 
+    private const GRADLE_MISSING = "/The following Gradle properties are missing for '(?<id>[A-Za-z0-9]+)' credentials/";
+
     private const REFUSALS = [
         '~The "(?<url>https?://[^"]+)" file could not be downloaded \(HTTP/[\d.]+ (?<status>40[13])~',
         "~The '(?<url>https?://[^']+)' URL required authentication \\(HTTP (?<status>40[13])\\)~",
@@ -41,6 +43,10 @@ final class RegistryAuthFailure
     {
         if (preg_match(self::UNSET_VARIABLE, $output, $match) === 1) {
             return "The repository's .npmrc reads {$match['variable']}, which isn't set. Add the registry's token to Private packages in Settings, Git, then deploy again.";
+        }
+
+        if (preg_match(self::GRADLE_MISSING, $output, $match) === 1) {
+            return "The build needs credentials for the Gradle repository {$match['id']}, and Coresmith has none. Add them to Private packages in Settings, Git as Maven or Gradle with {$match['id']} as the repository ID, then deploy again.";
         }
 
         foreach (self::REFUSALS as $pattern) {
