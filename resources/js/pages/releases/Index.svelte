@@ -4,6 +4,7 @@
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
+    import AppSwitcher from '@/components/releases/AppSwitcher.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { cn } from '@/lib/utils'
@@ -36,6 +37,7 @@
     let {
         application,
         applications = [],
+        overview_href = route('releases.index'),
         releases = [],
         rollback = null,
         can,
@@ -43,7 +45,15 @@
         scopes = []
     }: {
         application: AppRef | null
-        applications: { id: string; name: string; href: string; current: boolean }[]
+        applications: {
+            id: string
+            name: string
+            server: string | null
+            project: string | null
+            href: string
+            current: boolean
+        }[]
+        overview_href?: string
         releases: Release[]
         rollback?: string | null
         can: { deploy: boolean }
@@ -109,26 +119,17 @@
     {/if}
 </div>
 
-<ProjectScopeSelect {scopes} {scope} class="mt-4 block w-56 max-sm:w-full" />
-
-{#if applications.length > 1}
-    <nav class="mt-4 flex flex-wrap gap-2" aria-label="Applications">
-        {#each applications as each (each.id)}
-            <Link
-                href={each.href}
-                aria-current={each.current ? 'page' : undefined}
-                class={cn(
-                    'focus-ring inline-flex h-8 items-center rounded-md border px-3 font-mono text-[12.5px] font-medium no-underline transition-colors duration-(--dur-fast)',
-                    each.current
-                        ? 'chip-selected text-foreground'
-                        : 'border-border bg-transparent text-muted-foreground'
-                )}
-            >
-                {each.name}
-            </Link>
-        {/each}
-    </nav>
-{/if}
+<div class="mt-4 flex flex-wrap items-center gap-3">
+    <ProjectScopeSelect {scopes} {scope} class="block w-56 max-sm:w-full" />
+    {#if applications.length > 1}
+        <AppSwitcher {applications} />
+    {/if}
+    <Link
+        href={overview_href}
+        class="text-[13px] font-medium text-foreground underline underline-offset-2"
+        data-testid="all-apps-link">All apps</Link
+    >
+</div>
 
 {#if application?.rolled_back}
     <div

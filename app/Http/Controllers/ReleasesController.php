@@ -14,39 +14,26 @@ use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Panel\Formats;
+use App\Services\Panel\ReleasesOverview;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Projects\ProjectScope;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class ReleasesController extends Controller
 {
-    public function latest(Request $request): RedirectResponse|Response
+    public function overview(Request $request, ReleasesOverview $overview): Response
     {
         $team = $this->currentTeam();
         $scope = ProjectScope::from($request, $request->user(), $team);
 
-        $deployment = $team === null ? null : Deployment::query()
-            ->whereIn('application_id', $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->select('id'))
-            ->where('status', DeploymentStatus::Succeeded->value)
-            ->whereNotNull('release')
-            ->with('application')
-            ->latest('finished_at')
-            ->first();
-
-        if ($deployment?->application !== null) {
-            return to_route('servers.applications.releases.index', [$deployment->application->server_id, $deployment->application, ...$scope->query()]);
-        }
-
-        return Inertia::render('releases/Index', [
-            'application' => null,
-            'applications' => [],
-            'releases' => [],
-            'can' => ['deploy' => false],
+        return Inertia::render('releases/Overview', [
+            'groups' => $overview->present($request->user(), $team, $scope),
+            'scope' => $scope->value(),
+            'scopes' => $team === null ? [] : ProjectScope::options($request->user(), $team),
         ]);
     }
 
@@ -83,12 +70,15 @@ final class ReleasesController extends Controller
                 'rollback_href' => route('servers.applications.rollback', [$server, $application]),
                 'rolled_back' => $rolledBack ? Formats::release($current) : null,
             ],
-            'applications' => ($team === null ? collect() : $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->orderBy('name')->get())->map(fn(Application $each): array => [
+            'applications' => ($team === null ? collect() : $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->with(['server', 'environment.project'])->orderBy('name')->get())->map(fn(Application $each): array => [
                 'id' => $each->id,
                 'name' => $each->name,
+                'server' => $each->server?->name,
+                'project' => $each->environment?->project?->name,
                 'href' => route('servers.applications.releases.index', [$each->server_id, $each, ...$scope->query()]),
                 'current' => $each->id === $application->id,
             ])->values(),
+            'overview_href' => route('releases.index', $scope->query()),
             'releases' => $deployments->map(fn(Deployment $deployment): array => [
                 'id' => $deployment->id,
                 'release' => $deployment->release,

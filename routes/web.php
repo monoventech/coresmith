@@ -51,7 +51,7 @@ Route::get('/', HomeController::class)->name('home');
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
-    Route::get('releases', [ReleasesController::class, 'latest'])->name('releases.index');
+    Route::get('releases', [ReleasesController::class, 'overview'])->name('releases.index');
 
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
