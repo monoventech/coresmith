@@ -26,6 +26,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\SourceProvider;
+use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
@@ -46,6 +47,7 @@ use App\Services\Server\PortAllocator;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
+use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamAccess;
 use App\Services\Updates\ReleaseLayout;
@@ -134,6 +136,9 @@ final class E2ESeeder extends Seeder
         $this->team->members()->attach($developer, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
         app(TeamAccess::class)->grant($this->team, $developer, $tenant->servers['forge-02']);
         $this->application('side-notes', 9620, ['created_by' => $developer->id, 'domain' => 'side-notes.lena.dev'], $tenant->servers['forge-02']);
+        $this->server('lena-01', '198.51.100.44', ServerStatus::Active)->forceFill(['created_by' => $developer->id])->save();
+        $lenaKey = (new KeyPairGenerator)->generate()->publicKey;
+        SshKey::factory()->for($developer)->create(['name' => 'lena@laptop', 'public_key' => $lenaKey, 'fingerprint' => (string) HostKeyFingerprint::fromPublicKey($lenaKey)]);
 
         $this->movers();
 
@@ -935,9 +940,9 @@ final class E2ESeeder extends Seeder
         $atlas->forceFill(['domain_reach' => [
             $domain => [
                 'ready' => false,
-                'problems' => ["{$domain} points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If you can't, or your internet provider shares that address with other customers, use IPv6: add an AAAA record for {$domain} pointing at 2001:db8::7, remove the A record, and allow ports 80 and 443 to it in your router's IPv6 firewall. To reach visitors without IPv6 too, put {$domain} behind a proxy that answers on IPv4, such as Cloudflare's."],
+                'problems' => ["{$domain} points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers. The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for {$domain} pointing at 2001:db8::7, remove the A record, and turn the proxy on, so visitors without IPv6 reach it too. That needs {$domain}'s DNS on Cloudflare. If your router blocks incoming IPv6, allow ports 80 and 443 to 2001:db8::7 in its IPv6 firewall. Keep the A record instead only if 203.0.113.7 is yours and you can forward ports 80 and 443 to 192.168.0.248, then check again."],
                 'notes' => [],
-                'records' => [['type' => 'AAAA', 'name' => $domain, 'value' => '2001:db8::7']],
+                'records' => [['type' => 'AAAA', 'name' => $domain, 'value' => '2001:db8::7', 'note' => "Best fix, with Cloudflare's proxy on"]],
                 'checked_at' => now()->subMinutes(20)->toIso8601String(),
             ],
         ]])->save();

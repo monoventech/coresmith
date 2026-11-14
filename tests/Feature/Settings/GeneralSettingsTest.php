@@ -77,8 +77,17 @@ test('the general settings page shows the instance as configured', function () {
             ->where('backups', ['last' => null, 'keep' => 14])
             ->where('timezones', fn($timezones) => $timezones->contains('Europe/London') && $timezones->contains('UTC'))
             ->where('can.manageInstance', true)
-            ->where('can.reachServers', true)
+            ->where('key_reach', 'managed')
             ->where('updates.mode', 'unmanaged'));
+});
+
+test("a developer's keys reach the servers they add, and someone who is an admin anywhere reaches every server they manage", function () {
+    $developer = generalSettingsUser(TeamRole::Developer);
+    $both = generalSettingsUser(TeamRole::Developer);
+    Team::factory()->create()->members()->attach($both, ['role' => TeamRole::Admin->value]);
+
+    $this->actingAs($developer)->get(route('settings.general'))->assertInertia(fn($page) => $page->where('key_reach', 'added')->missing('can.reachServers'));
+    $this->actingAs($both->fresh())->get(route('settings.general'))->assertInertia(fn($page) => $page->where('key_reach', 'managed'));
 });
 
 test('an unconfigured instance falls back to the application defaults', function () {
@@ -92,7 +101,7 @@ test('an unconfigured instance falls back to the application defaults', function
             ->where('instance.timezone', 'UTC')
             ->where('instance.notification_email', null)
             ->where('can.manageInstance', false)
-            ->where('can.reachServers', false)
+            ->where('key_reach', 'none')
             ->where('account.refusal', null));
 });
 

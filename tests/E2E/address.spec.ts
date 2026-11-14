@@ -30,7 +30,7 @@ const FAILED = {
 }
 
 const IPV6_ONLY_NOTE =
-    "coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. Nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443, so if you can open or forward those ports, add an A record for coresmith.example.com pointing at 203.0.113.7. If your internet provider shares that address with other customers, put coresmith.example.com behind a proxy that answers on IPv4, such as Cloudflare's."
+    "coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. The surest fix is to turn on Cloudflare's proxy for coresmith.example.com. Cloudflare answers those visitors over IPv4 and reaches this server over IPv6, which already works, so your router needs no changes. That needs coresmith.example.com's DNS on Cloudflare. Nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443, so add an A record for it only if that address is yours and you can forward ports 80 and 443 to 192.168.0.248."
 
 const IPV6_ONLY = {
     host: 'coresmith.example.com',
@@ -42,7 +42,20 @@ const IPV6_ONLY = {
         ready: true,
         problems: [],
         notes: [IPV6_ONLY_NOTE],
-        records: [{ type: 'A', name: 'coresmith.example.com', value: '203.0.113.7' }],
+        records: [
+            {
+                type: 'AAAA',
+                name: 'coresmith.example.com',
+                value: '2001:db8::10',
+                note: "Best fix, with Cloudflare's proxy on"
+            },
+            {
+                type: 'A',
+                name: 'coresmith.example.com',
+                value: '203.0.113.7',
+                note: 'Only if the address is yours and you can forward ports 80 and 443'
+            }
+        ],
         checked_at: '2026-11-13T05:50:00Z'
     }
 }
@@ -90,12 +103,14 @@ test.describe("Coresmith's address", () => {
         })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people on networks without IPv6 can't open Coresmith. If the internet reaches this server's IPv4 address on ports 80 and 443, add an A record for it. If your internet provider shares that address with other customers, put coresmith.example.com behind a proxy that answers on IPv4, such as Cloudflare's."
+            "coresmith.example.com has only an IPv6 address, so people on networks without IPv6 can't open Coresmith. The surest fix is to turn on Cloudflare's proxy for coresmith.example.com, which answers them over IPv4 and reaches this server over IPv6. That needs its DNS on Cloudflare. Add an A record only if this server's IPv4 address is yours and you can forward ports 80 and 443 to it."
         )
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })
 
-    test("the daily reading of an IPv6-only domain names this server's IPv4 address, ready to copy", async ({ page }) => {
+    test('the daily reading of an IPv6-only domain leads with the AAAA record behind Cloudflare, and gives the A record only with its condition', async ({
+        page
+    }) => {
         await captureClipboard(page)
         await settingsShowing(page, IPV6_ONLY)
 
@@ -104,6 +119,10 @@ test.describe("Coresmith's address", () => {
         const records = card(page).getByTestId('address-ipv6-records')
 
         await expect(records).toContainText('coresmith.example.com')
+        await expect(records.getByTestId('dns-record-note')).toHaveText([
+            "Best fix, with Cloudflare's proxy on",
+            'Only if the address is yours and you can forward ports 80 and 443'
+        ])
         await records.getByRole('button', { name: 'Copy the A value 203.0.113.7' }).click()
 
         await expect(records.getByRole('button', { name: 'Copied the A value 203.0.113.7' })).toBeVisible()

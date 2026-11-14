@@ -231,6 +231,10 @@ test.describe('this machine', () => {
         )
         await expect(page.getByTestId('protection-ssh')).toContainText('Left to you')
         await expect(page.getByTestId('protection-ssh').getByRole('button')).toHaveCount(0)
+        await expect(page.getByTestId('ssh-people')).toContainText(
+            "Coresmith adds no one's keys to the machine it runs on. Who signs in here is up to you."
+        )
+        await expect(page.getByTestId('ssh-person')).toHaveCount(0)
     })
 
     test('when password login is on, this machine shows the exact steps to turn it off', async ({ page }) => {

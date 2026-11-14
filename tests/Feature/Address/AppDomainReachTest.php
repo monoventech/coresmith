@@ -102,10 +102,10 @@ test('a domain on a home server nobody reaches over IPv4 is told why, with both 
 
     $report = app(AppDomainReach::class)->check($application)['notes.example.net'];
 
-    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers, as many home connections do. If you can forward them, add an A record for notes.example.net pointing at 203.0.113.7. If you can't, add an AAAA record for notes.example.net pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8. That reaches visitors with IPv6; to reach everyone else as well, put notes.example.net behind a proxy that answers on IPv4, such as Cloudflare's. Then check again."])
+    expect($report->problems)->toBe(["notes.example.net doesn't point anywhere yet, and nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers, as many home connections do. The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for notes.example.net pointing at 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8 and turn the proxy on, so visitors without IPv6 reach it too. That needs notes.example.net's DNS on Cloudflare. If your router blocks incoming IPv6, allow ports 80 and 443 to 2a06:5902:360e:2700:9ec7:d3ff:feb8:32b8 in its IPv6 firewall. Add the A record only if 203.0.113.7 is yours and you can forward ports 80 and 443 to 192.168.0.248. Then check again."])
         ->and($report->records)->toBe([
-            ['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7'],
-            ['type' => 'AAAA', 'name' => 'notes.example.net', 'value' => appReachIpv6()],
+            ['type' => 'AAAA', 'name' => 'notes.example.net', 'value' => appReachIpv6(), 'note' => "Best fix, with Cloudflare's proxy on"],
+            ['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7', 'note' => 'Only if the address is yours and you can forward ports 80 and 443'],
         ]);
 });
 
@@ -158,7 +158,7 @@ test("the check stores each domain's reading on the app", function () {
     expect(array_keys($reach))->toBe(['notes.example.net', 'www.notes.example.net'])
         ->and($reach['notes.example.net']['ready'])->toBeFalse()
         ->and($reach['notes.example.net']['problems'][0])->toStartWith("notes.example.net doesn't point anywhere yet.")
-        ->and($reach['notes.example.net']['records'])->toEqual([['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7']])
+        ->and($reach['notes.example.net']['records'])->toEqual([['type' => 'A', 'name' => 'notes.example.net', 'value' => '203.0.113.7', 'note' => null]])
         ->and($reach['notes.example.net']['checked_at'])->toBe(now()->toIso8601String());
 });
 

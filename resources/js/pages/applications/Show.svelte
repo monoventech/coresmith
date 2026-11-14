@@ -172,6 +172,11 @@
     const domains = $derived([...(application.domain ? [application.domain] : []), ...application.additional_domains])
     let checkingReach = $state(false)
     const reachChecked = $derived(application.domain_reach.filter((reading) => reading.checked !== null))
+    const advice = $derived(
+        application.domain_reach.filter(
+            (reading) => reading.problems.length > 0 || reading.notes.length > 0 || reading.records.length > 0
+        )
+    )
     const reachWhen = $derived(reachChecked[0]?.checked === 'now' ? 'just now' : (reachChecked[0]?.checked ?? ''))
     const reachSummary = $derived(
         reachChecked.length === 0
@@ -670,7 +675,7 @@
                         Nothing is live yet. Deploy to create the first release.
                     </p>
                 {/if}
-                <div class="mt-auto flex flex-wrap gap-x-5 gap-y-2 pt-3">
+                <div class="flex flex-wrap gap-x-5 gap-y-2 pt-3">
                     <Link href={application.releases_href} class={cardAction}>All releases</Link>
                     {#if application.rollback_href}
                         <Link href={application.rollback_href} class={cardAction}>Roll back</Link>
@@ -704,31 +709,18 @@
                 {/each}
                 {#if domains.length > 0}
                     <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
-                    <div class="mt-3 flex flex-col gap-1.5 border-t border-border pt-3" data-testid="domain-reach">
-                        {#each application.domain_reach as reading (reading.domain)}
-                            {#each reading.problems as line (line)}
-                                <p class="m-0 text-[12.5px] text-warning-strong">{line}</p>
-                            {/each}
-                            {#each reading.notes as line (line)}
-                                <p class="m-0 text-[12.5px] text-muted-foreground">{line}</p>
-                            {/each}
-                            {#if reading.records.length > 0}
-                                <DnsRecords records={reading.records} testid="domain-records" />
-                            {/if}
-                        {/each}
-                        <p class="m-0 text-[12px] text-muted-foreground">{reachSummary}</p>
-                        {#if can.update}
-                            <div>
-                                <Button variant="link" class="min-h-6" disabled={checkingReach} onclick={checkReach}
-                                    >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
-                                >
-                            </div>
-                        {/if}
-                    </div>
+                    <p class="m-0 mt-1 text-[12px] text-muted-foreground" data-testid="domain-reach-summary">
+                        {reachSummary}
+                    </p>
                 {/if}
                 {#if can.update}
-                    <div class="mt-auto pt-3">
+                    <div class="flex flex-wrap gap-x-5 gap-y-2 pt-3">
                         <Button variant="link" class="min-h-6" onclick={openDomain}>Add domain</Button>
+                        {#if domains.length > 0}
+                            <Button variant="link" class="min-h-6" disabled={checkingReach} onclick={checkReach}
+                                >{reachChecked.length > 0 ? 'Check again' : 'Check from outside'}</Button
+                            >
+                        {/if}
                     </div>
                 {/if}
             </div>
@@ -756,13 +748,42 @@
                     >
                         {application.deploy_key.short}
                     </p>
-                    <div class="mt-auto pt-3">
+                    <div class="pt-3">
                         <Button variant="link" class="min-h-6" onclick={copyKey}
                             >{copied ? 'Copied' : 'Copy public key'}</Button
                         >
                     </div>
                 {/if}
             </div>
+
+            {#if advice.length > 0}
+                <div
+                    class="min-w-0 rounded-xl border border-border bg-card px-5.5 py-5 max-sm:hidden @3xl:col-span-3"
+                    data-testid="domain-reach"
+                >
+                    <h3 class="type-h3 m-0 mb-1.5">Reaching your domains</h3>
+                    <div class="flex flex-col gap-4">
+                        {#each advice as reading (reading.domain)}
+                            <div
+                                class="grid min-w-0 gap-x-8 gap-y-2 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]"
+                                data-testid="domain-advice"
+                            >
+                                <div class="flex min-w-0 flex-col gap-1.5">
+                                    {#each reading.problems as line (line)}
+                                        <p class="m-0 max-w-[75ch] text-[12.5px] text-warning-strong">{line}</p>
+                                    {/each}
+                                    {#each reading.notes as line (line)}
+                                        <p class="m-0 max-w-[75ch] text-[12.5px] text-muted-foreground">{line}</p>
+                                    {/each}
+                                </div>
+                                {#if reading.records.length > 0}
+                                    <DnsRecords records={reading.records} testid="domain-records" />
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
         </div>
     </section>
 

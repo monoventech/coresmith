@@ -240,8 +240,8 @@ const PAGES: [string, Visit][] = [
         async (page) => {
             await page.goto('/releases')
             await page
-                .getByRole('navigation', { name: 'Applications' })
-                .getByRole('link', { name: 'dev-mode', exact: true })
+                .getByTestId('releases-app')
+                .filter({ has: page.getByText('dev-mode', { exact: true }) })
                 .click()
             await page.getByRole('heading', { level: 1, name: 'Releases · dev-mode' }).waitFor()
         }
