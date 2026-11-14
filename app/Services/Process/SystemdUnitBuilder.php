@@ -16,7 +16,6 @@ use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\StackDefaults;
 use App\Services\Runtime\AsdfManager;
-use App\Services\Runtime\JsTooling;
 use App\Services\SafeName;
 
 final class SystemdUnitBuilder
@@ -101,28 +100,7 @@ final class SystemdUnitBuilder
 
     public function webCommand(Application $application): ?string
     {
-        return match ($application->type) {
-            ApplicationType::Js => $this->jsCommand($application),
-            ApplicationType::Ruby => $this->asdf->binaryPath('ruby', (string) $application->ruby_version, 'bundle')
-                . ' exec puma -b tcp://127.0.0.1:' . $application->base_port,
-            default => null,
-        };
-    }
-
-    private function jsCommand(Application $application): string
-    {
-        $data = ((array) $application->stack)['tooling'] ?? null;
-        $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
-        $start = $tooling?->start ?? false;
-        $script = $tooling?->startScript ?? 'start';
-
-        return match ($application->js_runtime) {
-            'node' => $start
-                ? $this->asdf->binaryPath('nodejs', (string) $application->node_version, 'npm') . ' run ' . $script
-                : $this->asdf->binaryPath('nodejs', (string) $application->node_version) . ' ' . $this->entry($application, $tooling),
-            'deno' => $this->asdf->binaryPath('deno', (string) $application->deno_version) . ($start ? ' task start' : ' run --allow-net --allow-read --allow-env main.ts'),
-            default => $this->asdf->binaryPath('bun', (string) $application->bun_version) . ($start ? ' run --bun ' . $script : ' ' . $this->entry($application, $tooling)),
-        };
+        return $application->type->language()->webCommand($application);
     }
 
     private function workerCommand(string $command): string
@@ -135,16 +113,6 @@ final class SystemdUnitBuilder
         }
 
         return str_starts_with($command, '/') ? $command : '/usr/bin/env ' . $command;
-    }
-
-    private function entry(Application $application, ?JsTooling $tooling): string
-    {
-        return match (strtolower((string) $application->framework)) {
-            'sveltekit' => 'build/index.js',
-            'nuxt' => '.output/server/index.mjs',
-            'astro' => 'dist/server/entry.mjs',
-            default => $tooling?->main ?? 'server.js',
-        };
     }
 
     private function pathFor(Application $application): string

@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Services\Process;
 
-use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Exceptions\ProcessDidNotStart;
 use App\Models\Application;
@@ -55,7 +54,7 @@ final class ProcessManager
     {
         $connection->execute('mkdir -p ' . (new ReleasePaths($application))->logs(), sudo: true)->throw();
 
-        if ($application->type === ApplicationType::Php) {
+        if ($application->type->language()->usesFpm()) {
             $connection->execute($this->account->shareStorage($application), sudo: true)->throw();
             $connection->execute('mkdir -p /etc/php-fpm.d /var/run/php', sudo: true)->throw();
             $connection->uploadContent($this->fpm->pool($application), $this->fpm->poolPath($application));
@@ -114,7 +113,7 @@ final class ProcessManager
             $connection->execute('rm -f ' . escapeshellarg(SystemdUnitBuilder::UNIT_DIR . '/' . $unit . '.service'), sudo: true)->throw();
         }
 
-        if ($application->type === ApplicationType::Php) {
+        if ($application->type->language()->usesFpm()) {
             $connection->execute('rm -f ' . escapeshellarg($this->fpm->poolPath($application)), sudo: true)->throw();
         }
 
@@ -143,7 +142,7 @@ final class ProcessManager
 
     public function refresh(SSHConnection $connection, Application $application, bool $restart = false): void
     {
-        $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;
+        $fpm = $application->type->language()->usesFpm() ? $this->fpm->unitName($application) : null;
 
         foreach ($this->unitNames($application) as $unit) {
             $connection->execute('systemctl enable ' . escapeshellarg($unit), sudo: true)->throw();
@@ -164,7 +163,7 @@ final class ProcessManager
 
         Sleep::for(self::START_GRACE_SECONDS)->seconds();
 
-        $fpm = $application->type === ApplicationType::Php ? $this->fpm->unitName($application) : null;
+        $fpm = $application->type->language()->usesFpm() ? $this->fpm->unitName($application) : null;
 
         foreach ($units as $unit) {
             $state = trim($connection->execute('systemctl is-active ' . escapeshellarg($unit))->output);
@@ -186,7 +185,7 @@ final class ProcessManager
 
     public function serves(Application $application, string $unit): bool
     {
-        return ($application->type === ApplicationType::Php && $unit === $this->fpm->unitName($application))
+        return ($application->type->language()->usesFpm() && $unit === $this->fpm->unitName($application))
             || ($this->units->webCommand($application) !== null && $unit === $this->units->unitName($application, 'web'));
     }
 
@@ -221,7 +220,7 @@ final class ProcessManager
     {
         $names = [];
 
-        if ($application->type === ApplicationType::Php) {
+        if ($application->type->language()->usesFpm()) {
             $names[] = $this->fpm->unitName($application);
         }
 

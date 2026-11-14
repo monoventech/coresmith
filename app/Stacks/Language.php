@@ -33,4 +33,8 @@ interface Language
      * @return array<string, string>
      */
     public function releaseChecks(Application $application, ReleasePaths $paths, string $release): array;
+
+    public function webCommand(Application $application): ?string;
+
+    public function usesFpm(): bool;
 }

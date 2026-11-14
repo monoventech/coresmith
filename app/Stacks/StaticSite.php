@@ -37,4 +37,14 @@ final readonly class StaticSite implements Language
 
         return [($web === '' ? 'the release root' : $web . '/') => 'test -d ' . escapeshellarg($paths->webRoot($release))];
     }
+
+    public function webCommand(Application $application): ?string
+    {
+        return null;
+    }
+
+    public function usesFpm(): bool
+    {
+        return false;
+    }
 }

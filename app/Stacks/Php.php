@@ -43,6 +43,16 @@ final readonly class Php implements Language
         return [($web === '' ? '' : $web . '/') . 'index.php' => 'test -f ' . escapeshellarg($paths->webRoot($release) . '/index.php')];
     }
 
+    public function webCommand(Application $application): ?string
+    {
+        return null;
+    }
+
+    public function usesFpm(): bool
+    {
+        return true;
+    }
+
     /**
      * @return list<string>
      */

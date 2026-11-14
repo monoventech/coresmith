@@ -10,11 +10,12 @@ namespace App\Stacks;
 
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Stack;
 
 final readonly class Ruby implements Language
 {
-    public function __construct(private JsCommands $js) {}
+    public function __construct(private JsCommands $js, private AsdfManager $asdf) {}
 
     public function install(Application $application, Stack $stack): array
     {
@@ -42,5 +43,15 @@ final readonly class Ruby implements Language
     public function releaseChecks(Application $application, ReleasePaths $paths, string $release): array
     {
         return ['Gemfile' => 'test -f ' . escapeshellarg($paths->appDirectory($release) . '/Gemfile')];
+    }
+
+    public function webCommand(Application $application): ?string
+    {
+        return $this->asdf->binaryPath('ruby', (string) $application->ruby_version, 'bundle') . ' exec puma -b tcp://127.0.0.1:' . $application->base_port;
+    }
+
+    public function usesFpm(): bool
+    {
+        return false;
     }
 }
