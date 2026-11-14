@@ -11,6 +11,7 @@ namespace App\Enums;
 use App\Stacks\JavaScript;
 use App\Stacks\Language;
 use App\Stacks\Php;
+use App\Stacks\Python;
 use App\Stacks\Ruby;
 use App\Stacks\StaticSite;
 
@@ -20,12 +21,14 @@ enum ApplicationType: string
     case Js = 'js';
     case Ruby = 'ruby';
     case Static = 'static';
+    case Python = 'python';
 
     public function runtime(?string $jsRuntime = null): ?string
     {
         return match ($this) {
             self::Php => 'php',
             self::Ruby => 'ruby',
+            self::Python => 'python',
             self::Js => match ($jsRuntime) {
                 'node' => 'nodejs',
                 'deno' => 'deno',
@@ -42,6 +45,7 @@ enum ApplicationType: string
             self::Js => JavaScript::class,
             self::Ruby => Ruby::class,
             self::Static => StaticSite::class,
+            self::Python => Python::class,
         });
     }
 }

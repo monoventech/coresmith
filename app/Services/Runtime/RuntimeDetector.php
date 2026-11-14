@@ -18,9 +18,10 @@ final class RuntimeDetector
         'bun' => '.tool-versions, packageManager or engines.bun in package.json',
         'deno' => '.tool-versions or .dvmrc',
         'ruby' => '.tool-versions, .ruby-version or the ruby line in Gemfile',
+        'python' => '.tool-versions, .python-version, pyproject.toml or runtime.txt',
     ];
 
-    private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby'];
+    private const TOOL_NAMES = ['php' => 'php', 'node' => 'nodejs', 'nodejs' => 'nodejs', 'bun' => 'bun', 'deno' => 'deno', 'ruby' => 'ruby', 'python' => 'python'];
 
     private const NODE_CODENAMES = ['argon' => '4', 'boron' => '6', 'carbon' => '8', 'dubnium' => '10', 'erbium' => '12', 'fermium' => '14', 'gallium' => '16', 'hydrogen' => '18', 'iron' => '20', 'jod' => '22', 'krypton' => '24'];
 
@@ -128,6 +129,7 @@ final class RuntimeDetector
             'bun' => $this->bunPackageManager($facts) ?? $this->engine($facts, 'bun', 'bun'),
             'deno' => $this->firstLine($facts, '.dvmrc', 'deno'),
             'ruby' => $this->rubyVersion($facts) ?? $this->gemfileRuby($facts),
+            'python' => $this->pythonVersion($facts, $notes) ?? $this->requiresPython($facts) ?? $this->poetryPython($facts) ?? $this->runtimeTxt($facts),
             default => null,
         };
     }
@@ -204,6 +206,54 @@ final class RuntimeDetector
         $version = (string) preg_replace('/^ruby-/', '', $raw);
 
         return preg_match('/^\d/', $version) === 1 ? new Requirement('ruby', $version, $raw, '.ruby-version', '.ruby-version', 'gem') : null;
+    }
+
+    /**
+     * @param  list<string>  $notes
+     */
+    private function pythonVersion(RepositoryFacts $facts, array &$notes): ?Requirement
+    {
+        $lines = preg_grep('/^\s*(?:#.*)?$/', preg_split('/\r\n|\n|\r/', (string) $facts->file('.python-version')) ?: [], PREG_GREP_INVERT);
+        $raw = trim((string) reset($lines));
+
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^(?:cpython[-@])?(\d+(?:\.\d+){0,2})$/i', $raw, $matches) !== 1) {
+            $notes[] = "Ignored .python-version, because {$raw} is not a Python version Coresmith knows.";
+
+            return null;
+        }
+
+        return new Requirement('python', $matches[1], $raw, '.python-version', '.python-version', 'npm');
+    }
+
+    private function requiresPython(RepositoryFacts $facts): ?Requirement
+    {
+        $value = $facts->toml('pyproject.toml', 'project')['requires-python'] ?? null;
+
+        return is_string($value) && trim($value) !== ''
+            ? new Requirement('python', trim($value), trim($value), 'pyproject.toml', 'requires-python in pyproject.toml', 'pip')
+            : null;
+    }
+
+    private function poetryPython(RepositoryFacts $facts): ?Requirement
+    {
+        $value = $facts->toml('pyproject.toml', 'tool.poetry.dependencies')['python'] ?? null;
+
+        return is_string($value) && trim($value) !== ''
+            ? new Requirement('python', trim($value), trim($value), 'pyproject.toml', 'the python line in pyproject.toml', 'npm')
+            : null;
+    }
+
+    private function runtimeTxt(RepositoryFacts $facts): ?Requirement
+    {
+        $raw = trim(explode("\n", (string) $facts->file('runtime.txt'))[0]);
+
+        return preg_match('/^python-(\d+\.\d+(?:\.\d+)?)$/', $raw, $matches) === 1
+            ? new Requirement('python', $matches[1], $raw, 'runtime.txt', 'runtime.txt', 'npm')
+            : null;
     }
 
     private function gemfileRuby(RepositoryFacts $facts): ?Requirement

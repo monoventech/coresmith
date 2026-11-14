@@ -11,6 +11,7 @@ namespace App\Stacks;
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Detection\Blocker;
+use App\Services\Runtime\NativeTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
@@ -73,4 +74,20 @@ interface Language
     public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string;
 
     public function cronExample(Application $application): string;
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function tooling(Application $application, RepositoryFacts $facts): array;
+
+    /**
+     * @return list<string>
+     */
+    public function pathDirectories(string $appDirectory): array;
+
+    public function nativeTools(): ?NativeTools;
+
+    public function frameworkLabel(string $framework): ?string;
+
+    public function explain(string $phase, string $output, Stack $stack): ?string;
 }

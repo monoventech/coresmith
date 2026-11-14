@@ -8,6 +8,7 @@ use App\Enums\DeploymentStatus;
 use App\Events\DeploymentFailed;
 use App\Exceptions\DeploymentAborted;
 use App\Exceptions\RuntimeUnavailable;
+use App\Exceptions\SSHCommandFailedException;
 use App\Jobs\DeployApplication;
 use App\Jobs\DetectStaleDeployments;
 use App\Jobs\InstallRuntimes;
@@ -15,8 +16,12 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
 use App\Services\Deployment\DeploymentCommands;
+use App\Services\Deployment\DeploymentPhases;
 use App\Services\Runtime\NativeGemTools;
+use App\Services\Runtime\NativePythonTools;
 use App\Services\Runtime\RepositoryProbe;
+use App\Services\Runtime\ResolvedRuntime;
+use App\Services\Runtime\Stack;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -173,6 +178,147 @@ test('the gems that need system packages to compile map to each family\'s packag
     ['ubuntu', ['cmake', 'libclang-dev']],
     ['rocky', ['cmake', 'clang-devel']],
 ]);
+
+function stackPythonWithPackages(string $found, string $missing): array
+{
+    $application = stackApp(['type' => ApplicationType::Python, 'framework' => 'django']);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, ProbeOutput::for(['.python-version' => "3.14.10\n", 'requirements.txt' => "django\npsycopg2==2.9.10\n"], markers: ['manage.py']))
+        ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.14.10\n")
+        ->respondTo('grep -ohiE', $found)
+        ->respondTo("|| echo 'build-essential'", $missing);
+
+    stackDeploy($deployment, $transport);
+
+    return [$deployment->fresh(), collect($transport->commands())];
+}
+
+test('a Python app whose dependencies build against libpq gets gcc and libpq-dev before they install', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackPythonWithPackages("psycopg2\n", "gcc\nlibpq-dev\n");
+    $install = $commands->search(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, "'libpq-dev'"));
+    $pip = $commands->search(fn(string $command): bool => str_contains($command, 'pip install --python .venv/bin/python -r requirements.txt'));
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($install)->toBeInt()
+        ->and($pip)->toBeInt()
+        ->and($install)->toBeLessThan($pip)
+        ->and($deployment->log)->toContain('deps: installing gcc, libpq-dev, which psycopg2 needs to build');
+});
+
+test('a Python app gets a compiler before its first install, for packages with no wheel for its Python', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackPythonWithPackages('', "build-essential\n");
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, "'build-essential'")))->toBeTrue()
+        ->and($deployment->log)->toContain('deps: installing build-essential, which a package with no prebuilt wheel needs to build');
+});
+
+test('a Python app whose build tools are already there installs no packages for them', function () {
+    Queue::fake();
+    [$deployment, $commands] = stackPythonWithPackages("psycopg2\n", '');
+
+    expect($deployment->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'apt-get install') && str_contains($command, 'libpq-dev')))->toBeFalse();
+});
+
+test('the Python packages that build against system libraries map to each family\'s packages', function (string $os, array $packages) {
+    expect(app(NativePythonTools::class)->needed(Server::factory()->make(['os_name' => $os]), "mysqlclient\npsycopg2\n"))->toBe($packages);
+})->with([
+    'Debian family' => ['ubuntu', ['a package with no prebuilt wheel' => ['build-essential'], 'psycopg2' => ['gcc', 'libpq-dev'], 'mysqlclient' => ['gcc', 'pkg-config', 'default-libmysqlclient-dev']]],
+    'Red Hat family' => ['rocky', ['a package with no prebuilt wheel' => ['gcc', 'gcc-c++', 'make'], 'psycopg2' => ['gcc', 'libpq-devel'], 'mysqlclient' => ['gcc', 'pkgconf-pkg-config', 'mariadb-connector-c-devel']]],
+]);
+
+test('the server finds those packages in any lockfile or dependency list, and not their prebuilt twins', function () {
+    $directory = sys_get_temp_dir() . '/coresmith-native-' . bin2hex(random_bytes(4));
+    mkdir($directory);
+    file_put_contents($directory . '/requirements.txt', "Django>=5.1\npsycopg2-binary==2.9.10\n# psycopg2 is not used\n");
+    file_put_contents($directory . '/uv.lock', "[[package]]\nname = \"mysqlclient\"\nversion = \"2.2.7\"\n");
+    file_put_contents($directory . '/pyproject.toml', "[project]\ndependencies = [\"psycopg2-pool\"]\n");
+    mkdir($directory . '/requirements');
+    file_put_contents($directory . '/requirements/base.txt', "Django\nPSYCOPG2==2.9.10\n");
+
+    try {
+        $output = (string) shell_exec(app(NativePythonTools::class)->find($directory));
+    } finally {
+        array_map(unlink(...), [...glob($directory . '/*.*') ?: [], ...glob($directory . '/requirements/*') ?: []]);
+        rmdir($directory . '/requirements');
+        rmdir($directory);
+    }
+
+    expect(preg_split('/\s+/', trim($output)))->toBe(['mysqlclient', 'psycopg2']);
+});
+
+test('a Django app deploys into a virtualenv, collects its static files, migrates and starts gunicorn on its port', function () {
+    Queue::fake();
+    $application = stackApp(['type' => ApplicationType::Python, 'framework' => 'django', 'run_migrations' => true]);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $settings = "import os\nALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')\nWSGI_APPLICATION = 'shop.wsgi.application'\nSTATIC_ROOT = BASE_DIR / 'staticfiles'\n";
+    $probe = ProbeOutput::for([
+        '.python-version' => "3.13\n",
+        'requirements.txt' => "Django==5.1.4\ngunicorn==23.0.0\n",
+        'manage.py' => "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'shop.settings')\n",
+        'shop/settings.py' => $settings,
+        'shop/wsgi.py' => "application = get_wsgi_application()\n",
+    ]) . "@@done\n";
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, $probe)
+        ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.13.18\n");
+
+    stackDeploy($deployment, $transport);
+
+    $commands = collect($transport->commands());
+    $position = fn(string $needle): int|false => $commands->search(fn(string $command): bool => str_contains($command, $needle));
+    $unit = $transport->uploads()['/etc/systemd/system/coresmith-app-shop-web.service'] ?? '';
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($application->fresh()->python_version)->toBe('3.13.18')
+        ->and($application->fresh()->stack['language_tooling'])->toEqual(['manager' => 'pip', 'server' => 'gunicorn', 'module' => 'shop.wsgi:application', 'collectstatic' => true, 'migrate' => 'django', 'celery' => null])
+        ->and($application->fresh()->stack['language_tooling']['collectstatic'])->toBeTrue()
+        ->and($application->fresh()->stack['language_tooling']['celery'])->toBeNull()
+        ->and(array_map($position, ['uv venv --clear', '-r requirements.txt', 'collectstatic --noinput', 'manage.py migrate --noinput']))->each->toBeInt()
+        ->and($position('uv venv --clear'))->toBeLessThan($position('-r requirements.txt'))
+        ->and($position('-r requirements.txt'))->toBeLessThan($position('collectstatic --noinput'))
+        ->and($position('collectstatic --noinput'))->toBeLessThan($position('manage.py migrate --noinput'))
+        ->and($commands->first(fn(string $command): bool => str_contains($command, 'manage.py migrate')))->toContain("'PATH=/var/coresmith/apps/shop/releases/")
+        ->and($unit)->toContain("\nExecStart=/var/coresmith/apps/shop/current/.venv/bin/gunicorn --bind 127.0.0.1:8000 --access-logfile - shop.wsgi:application\n")
+        ->and($unit)->toContain('Environment="PATH=/var/coresmith/apps/shop/current/.venv/bin:/opt/asdf-data/installs/python/3.13.18/bin:/usr/local/bin:/usr/bin:/bin"')
+        ->and($unit)->toContain('Environment="WEB_CONCURRENCY=2"');
+});
+
+test('a package that fails to build on the Python Coresmith picked says which one, and how to name the Python the app runs on', function (string $files, string $reason) {
+    Queue::fake();
+    $application = stackApp(['type' => ApplicationType::Python, 'framework' => 'flask']);
+    $application->server->forceFill(['os_name' => 'ubuntu'])->save();
+    $deployment = Deployment::factory()->for($application)->create();
+    $probe = ProbeOutput::for([...json_decode($files, true), 'requirements.txt' => "Flask==3.0.0\ngreenlet==3.0.1\n", 'app.py' => "app = Flask(__name__)\n"]) . "@@done\n";
+    $transport = (new FakeSSHTransport)
+        ->respondTo('df /', "40\n")
+        ->respondTo(RepositoryProbe::DIRECTORY_VARIABLE, $probe)
+        ->respondTo("ls -1 '/opt/asdf-data/installs/python'", "3.13.18\n3.14.10\n")
+        ->respondTo('-r requirements.txt', "Resolved 12 packages in 210ms\n  × Failed to build `greenlet==3.0.1`\n  ├─▶ The build backend returned an error\n  ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)\n", 1);
+
+    expect(fn() => stackDeploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
+        ->and($deployment->fresh()->failure_reason)->toBe($reason);
+})->with([
+    'nothing names a version' => ['{}', 'greenlet failed to build on Python 3.14.10, which Coresmith picked because the repository names no Python version. Add a .python-version with the Python the app runs on, for example 3.12, or update greenlet.'],
+    'the repository names one' => ['{".python-version":"3.13\n"}', 'greenlet failed to build on Python 3.13.18, the version .python-version names. Update greenlet to a release that supports it, or name an older Python in .python-version.'],
+]);
+
+test('a package that fails to build on the Python picked on the app page points back there', function () {
+    $stack = new Stack(['python' => new ResolvedRuntime('python', '3.13.18', ResolvedRuntime::FROM_PIN, null, true)]);
+
+    expect(ApplicationType::Python->language()->explain(DeploymentPhases::DEPENDENCIES, "  × Failed to build `greenlet==3.0.1`\n", $stack))
+        ->toBe('greenlet failed to build on Python 3.13.18, the version picked on the app page. Update greenlet to a release that supports it, or pick an older Python on the app page.');
+});
 
 test('a runtime that is not installed hands the deploy to the installer, keeping its lock', function () {
     Queue::fake();

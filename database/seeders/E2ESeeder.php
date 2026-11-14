@@ -163,6 +163,7 @@ final class E2ESeeder extends Seeder
         $this->rollbackLeftAWorkerStopped($this->rails('rollback-sidekiq', 8350, attributes: ['processes' => [['name' => 'sidekiq', 'command' => 'bundle exec sidekiq']]]));
         $this->failedClone($this->application('wrong-branch', 8040, ['repository_branch' => 'release/2.0']));
         $this->failedStorageCopy($this->rails('storage-copy', 8360));
+        $this->succeeded($this->python('celery-tasks', 8370), 3 * 60, 'v0.4.0');
 
         $hungry = $this->application('hungry', 8050, ['app_size' => 'small']);
         $this->succeeded($hungry, 6 * 60, 'v3.1.0');
@@ -1220,6 +1221,20 @@ final class E2ESeeder extends Seeder
             ...MonovenTenant::stack(['ruby' => ['3.4.10', '.ruby-version', '3.4.10']], ['name' => 'rails', 'major' => 8], null, ['sidekiq' => false, 'solid_queue' => true]),
             'env_variables' => $env ?? "RAILS_ENV=production\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16)),
             ...$attributes,
+        ]);
+    }
+
+    private function python(string $name, int $port): Application
+    {
+        $attributes = MonovenTenant::stack(['python' => ['3.14.10', '.python-version', '3.14']]);
+        $attributes['stack']['language_tooling'] = ['manager' => 'uv', 'server' => 'gunicorn', 'module' => 'tasks.wsgi:application', 'collectstatic' => true, 'migrate' => 'django', 'celery' => 'tasks'];
+
+        return $this->application($name, $port, [
+            'type' => ApplicationType::Python,
+            'framework' => 'django',
+            'php_version' => null,
+            ...$attributes,
+            'env_variables' => 'SECRET_KEY=' . bin2hex(random_bytes(32)) . "\nALLOWED_HOSTS={$name}.bench.monoven.io",
         ]);
     }
 

@@ -21,7 +21,7 @@ test('application status covers every spec value', function () {
 });
 
 test('application type covers every spec value', function () {
-    expect(array_column(ApplicationType::cases(), 'value'))->toBe(['php', 'js', 'ruby', 'static']);
+    expect(array_column(ApplicationType::cases(), 'value'))->toBe(['php', 'js', 'ruby', 'static', 'python']);
 });
 
 test('power state covers every spec value', function () {

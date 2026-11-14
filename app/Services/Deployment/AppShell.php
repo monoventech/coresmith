@@ -75,10 +75,11 @@ final class AppShell
 
     /**
      * @param  array<string, string>  $versions
+     * @param  list<string>  $first
      */
-    public function path(array $versions): string
+    public function path(array $versions, array $first = []): string
     {
-        $directories = [];
+        $directories = $first;
 
         foreach ($versions as $runtime => $version) {
             AsdfManager::assertValid($runtime, $version);
@@ -109,7 +110,7 @@ final class AppShell
             ...array_map(fn(string $property): string => '-p ' . escapeshellarg($property), AppSandbox::properties($application->server)),
             '-p UMask=' . AppAccount::UMASK,
             '-p NoNewPrivileges=yes',
-            '-E ' . escapeshellarg('PATH=' . $this->path($versions)),
+            '-E ' . escapeshellarg('PATH=' . $this->path($versions, $application->type?->language()->pathDirectories($directory) ?? [])),
             '--',
         ]);
     }

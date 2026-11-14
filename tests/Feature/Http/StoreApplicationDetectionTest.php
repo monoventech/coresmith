@@ -176,3 +176,18 @@ test('a new app starts with the variables its framework needs', function (string
     'rails' => ['ruby', 'rails', ['SECRET_KEY_BASE']],
     'sinatra' => ['ruby', 'sinatra', []],
 ]);
+
+test('the store refuses a Django app whose fixed ALLOWED_HOSTS leaves out the domain it is added with', function () {
+    [$owner, $server] = storeDetectionServer();
+    $facts = new RepositoryFacts([
+        'requirements.txt' => "Django==6.1.1\ngunicorn\n",
+        'manage.py' => "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'locallibrary.settings')\n",
+        'locallibrary/settings.py' => "ALLOWED_HOSTS = ['.railway.app', '.pythonanywhere.com', '127.0.0.1']\nWSGI_APPLICATION = 'locallibrary.wsgi.application'\n",
+    ], complete: true);
+    $id = storeDetectionRead($owner, $server, new RepositoryRead($facts, installed: ['python' => ['3.14.10']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, 'type' => ApplicationType::Python->value, 'framework' => 'django', 'web_directory' => null, 'domain' => 'library.example.com'])
+        ->assertSessionHasErrors(['repository_url' => 'locallibrary/settings.py sets ALLOWED_HOSTS to .railway.app, .pythonanywhere.com and 127.0.0.1, so Django answers 400 Bad Request to library.example.com. Add library.example.com to ALLOWED_HOSTS, or read the list from the environment, for example ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(","), then add ALLOWED_HOSTS with your domain to the app\'s environment.']);
+
+    expect(storeDetectionApp())->toBeNull();
+});
