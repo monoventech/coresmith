@@ -543,7 +543,7 @@ test.describe('provisioning a server', () => {
         await page.goto('/servers/create')
         await page.getByLabel('Provider').selectOption('manual')
         await page.getByLabel('Server name').fill(name)
-        await page.getByLabel('IP address').fill('0.0.0.1')
+        await page.getByLabel('IP address').fill('224.0.0.1')
         await page.getByLabel('SSH port').fill('1')
         await page.getByLabel('SSH user').fill('maya')
         await page.getByLabel('Password, optional').fill('not-a-real-password')

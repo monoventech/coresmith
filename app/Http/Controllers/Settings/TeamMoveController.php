@@ -35,7 +35,7 @@ final class TeamMoveController extends Controller
         abort_if($team->moving_at === null || $team->move_file === null, 404);
 
         return response((string) $team->move_file, 200, [
-            'Content-Type' => 'application/json',
+            'Content-Type' => 'application/octet-stream',
             'Content-Disposition' => 'attachment; filename="' . $team->slug . '.coresmith-move"',
             'Cache-Control' => 'no-store',
         ]);
