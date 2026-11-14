@@ -110,6 +110,15 @@ test('the read lists the PHP extensions of each PHP on the server', function () 
         ->and(readerScript($transport))->toContain('/bin/php -m');
 });
 
+test('the read lists the Python versions installed on the server', function () {
+    $transport = readerAnswer("@@installed python 3.13.18\n@@installed python 3.14.10\n@@done\n");
+
+    $read = readerRun($transport, RepositoryAccess::public('https://github.com/pallets/flask.git'));
+
+    expect($read->installed('python'))->toBe(['3.13.18', '3.14.10'])
+        ->and(readerScript($transport))->toContain('for r in php nodejs bun deno ruby python; do');
+});
+
 test('the read says what kind of machine the server is', function () {
     $transport = readerAnswer("@@arch aarch64\n@@done\n");
 

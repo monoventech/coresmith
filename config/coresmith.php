@@ -160,6 +160,26 @@ return [
                 ['line' => '3.2', 'latest' => '3.2.11', 'active_until' => '2025-03-31', 'eol_at' => '2026-03-31'],
             ],
         ],
+        'python' => [
+            'label' => 'Python',
+            'line' => 'minor',
+            'recommended' => '3.14',
+            'versions' => [
+                ['line' => '3.15', 'latest' => '3.15.2', 'active_until' => '2028-10-31', 'eol_at' => '2031-10-31'],
+                ['line' => '3.14', 'latest' => '3.14.10', 'active_until' => '2027-10-31', 'eol_at' => '2030-10-31'],
+                ['line' => '3.13', 'latest' => '3.13.18', 'active_until' => '2026-10-31', 'eol_at' => '2029-10-31'],
+                ['line' => '3.12', 'latest' => '3.12.16', 'active_until' => '2025-04-30', 'eol_at' => '2028-10-31'],
+                ['line' => '3.11', 'latest' => '3.11.18', 'active_until' => '2024-04-30', 'eol_at' => '2027-10-31'],
+            ],
+        ],
+    ],
+
+    'uv' => [
+        'version' => '0.13.6',
+        'sha256' => [
+            'x86_64' => 'f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645',
+            'aarch64' => '229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d',
+        ],
     ],
 
     'cloud' => [

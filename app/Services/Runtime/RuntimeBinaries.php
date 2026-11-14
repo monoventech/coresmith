@@ -20,6 +20,7 @@ final class RuntimeBinaries
         'bun' => ['bin/bun'],
         'deno' => ['bin/deno'],
         'ruby' => ['bin/ruby', 'bin/bundle'],
+        'python' => ['bin/python'],
     ];
 
     public const COMPOSER_INSTALLER = 'https://getcomposer.org/installer';
@@ -54,6 +55,7 @@ final class RuntimeBinaries
         return match ($runtime) {
             'php' => $this->composer($connection, $root, $version),
             'nodejs' => $this->corepack($connection, $root),
+            'python' => $this->asdf->ensureUv($connection) ? ['uv: installed ' . $this->asdf->uvVersion() . ', checksum verified'] : [],
             default => [],
         };
     }
@@ -74,6 +76,10 @@ final class RuntimeBinaries
         }
 
         $checks = array_map(fn(string $binary): string => 'test -x ' . escapeshellarg($root . '/' . $binary), $binaries);
+
+        if ($runtime === 'python') {
+            $checks[] = 'test -x ' . escapeshellarg($this->asdf->uvPath());
+        }
 
         return $connection->execute(implode(' && ', $checks))->successful();
     }

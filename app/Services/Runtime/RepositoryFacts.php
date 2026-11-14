@@ -117,6 +117,16 @@ final readonly class RepositoryFacts
         return is_array($decoded) ? $decoded : [];
     }
 
+    /**
+     * @return array<string, string|list<string>>
+     */
+    public function toml(string $file, string $table): array
+    {
+        $content = $this->files[$file] ?? null;
+
+        return $content === null ? [] : Toml::table($content, $table);
+    }
+
     public function lockfile(): ?string
     {
         foreach (self::JS_LOCKFILES as $lockfile) {

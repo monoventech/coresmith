@@ -32,7 +32,7 @@ final class VersionConstraint
             return new self([[['=', self::floor(self::partial($exact[1]) ?? [0, 0, 0])]]], $exact[1]);
         }
 
-        if (in_array($flavour, ['composer', 'gem'], true) && preg_match('/^(?:==?\s*)?v?(\d+(?:\.\d+)?)$/', $constraint, $partial) === 1) {
+        if (in_array($flavour, ['composer', 'gem', 'pip'], true) && preg_match('/^(?:==?\s*)?v?(\d+(?:\.\d+)?)$/', $constraint, $partial) === 1) {
             $floor = self::floor(self::partial($partial[1]) ?? [0, 0, 0]);
 
             return new self([[['=', $floor]]], implode('.', $floor));
@@ -89,7 +89,7 @@ final class VersionConstraint
      */
     private static function alternative(string $alternative, string $flavour): ?array
     {
-        $alternative = (string) preg_replace('/(>=|<=|~>|!=|==|[<>=^~])\s+/', '$1', $alternative);
+        $alternative = (string) preg_replace('/(>=|<=|~>|~=|!=|==|[<>=^~])\s+/', '$1', $alternative);
 
         if (preg_match('/^(\S+)\s+-\s+(\S+)$/', $alternative, $hyphen) === 1) {
             $low = self::partial($hyphen[1]);
@@ -129,7 +129,7 @@ final class VersionConstraint
      */
     private static function token(string $token, string $flavour): ?array
     {
-        if (preg_match('/^(>=|<=|~>|!=|==|[<>=^~])?(.+)$/', $token, $matches) !== 1) {
+        if (preg_match('/^(>=|<=|~>|~=|!=|==|[<>=^~])?(.+)$/', $token, $matches) !== 1) {
             return null;
         }
 
@@ -146,13 +146,17 @@ final class VersionConstraint
 
         return match ($matches[1]) {
             '^' => [['>=', $floor], ['<', self::caret($parts)]],
-            '~>' => [['>=', $floor], ['<', self::pessimistic($parts)]],
+            '~>', '~=' => [['>=', $floor], ['<', self::pessimistic($parts)]],
             '~' => [['>=', $floor], ['<', $flavour === 'npm' ? self::tilde($parts) : self::pessimistic($parts)]],
             '>=' => [['>=', $floor]],
             '>' => $widens ? [['>=', self::ceiling($parts)]] : [['>', $floor]],
             '<' => [['<', $floor]],
             '<=' => $widens ? [['<', self::ceiling($parts)]] : [['<=', $floor]],
-            '!=' => $wildcard || ($missing && $flavour === 'npm') ? null : [['!=', $floor]],
+            '!=' => match (true) {
+                $wildcard && $flavour === 'pip' => [[$parts[1] === null ? '!major' : '!minor', $floor]],
+                $wildcard || ($missing && $flavour === 'npm') => null,
+                default => [['!=', $floor]],
+            },
             default => $widens ? [['>=', $floor], ['<', self::ceiling($parts)]] : [['=', $floor]],
         };
     }
@@ -251,6 +255,8 @@ final class VersionConstraint
                 '<' => $order < 0,
                 '<=' => $order <= 0,
                 '!=' => $order !== 0,
+                '!major' => $candidate[0] !== $bound[0],
+                '!minor' => [$candidate[0], $candidate[1]] !== [$bound[0], $bound[1]],
                 default => $order === 0,
             };
 

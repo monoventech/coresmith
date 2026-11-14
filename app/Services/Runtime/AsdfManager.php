@@ -34,6 +34,10 @@ final class AsdfManager
 
     public const PLUGINS = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
 
+    public const RUNTIMES = [...self::PLUGINS, 'python'];
+
+    public const UV_DIR = self::DATA_DIR . '/uv';
+
     public const DOWNLOAD_RETRIES = 2;
 
     public const INDEX_LOCK_RETRIES = 30;
@@ -54,9 +58,44 @@ final class AsdfManager
 
     private const INDEX_LOCKED = 'Could not get lock';
 
+    private const UV_SCRIPT = <<<'BASH'
+    set -e
+    UV_VERSION="$CORESMITH_UV_VERSION"
+    case "$(uname -m)" in
+      x86_64|amd64) arch=x86_64; sum="$CORESMITH_UV_SHA256_X86_64" ;;
+      aarch64|arm64) arch=aarch64; sum="$CORESMITH_UV_SHA256_AARCH64" ;;
+      *) echo "Coresmith can't install uv on $(uname -m) servers, so it can't install Python here."; exit 1 ;;
+    esac
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/coresmith-uv.XXXXXXXX")"
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fsSL -o "$tmp/uv.tar.gz" "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$arch-unknown-linux-gnu.tar.gz"
+    echo "$sum  $tmp/uv.tar.gz" | sha256sum -c - >/dev/null 2>&1 || { echo "The uv $UV_VERSION download did not match its published checksum, so it was not used."; exit 1; }
+    tar -xzf "$tmp/uv.tar.gz" -C "$tmp"
+    mkdir -p "$CORESMITH_UV_DIR/$UV_VERSION"
+    for tool in uv uvx; do
+      cp "$tmp/uv-$arch-unknown-linux-gnu/$tool" "$CORESMITH_UV_DIR/$UV_VERSION/.$tool.$$"
+      chmod 0755 "$CORESMITH_UV_DIR/$UV_VERSION/.$tool.$$"
+      mv -f "$CORESMITH_UV_DIR/$UV_VERSION/.$tool.$$" "$CORESMITH_UV_DIR/$UV_VERSION/$tool"
+    done
+    BASH;
+
+    private const PYTHON_SCRIPT = <<<'BASH'
+    set -e
+    mkdir -p "$CORESMITH_PYTHON_DIR"
+    stage="$(mktemp -d "$CORESMITH_PYTHON_DIR/.coresmith-stage.XXXXXXXX")"
+    trap 'rm -rf "$stage"' EXIT
+    "$CORESMITH_UV" python install "$CORESMITH_PYTHON" --install-dir "$stage" --no-bin
+    found="$(find "$stage" -mindepth 1 -maxdepth 1 -type d -name "cpython-$CORESMITH_PYTHON-*" | head -n 1)"
+    [ -n "$found" ] || { echo "uv finished without installing Python $CORESMITH_PYTHON."; exit 1; }
+    rm -rf "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"
+    mv "$found" "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON"
+    ln -sfn python3 "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python"
+    "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/bin/python" -m compileall -q -j 0 -x '/(test|tests|idle_test)/' "$CORESMITH_PYTHON_DIR/$CORESMITH_PYTHON/lib" >/dev/null 2>&1 || echo "Python $CORESMITH_PYTHON's standard library could not all be precompiled, so apps may start a little slower."
+    BASH;
+
     public static function assertValid(string $runtime, string $version): void
     {
-        if (!in_array($runtime, self::PLUGINS, true)) {
+        if (!in_array($runtime, self::RUNTIMES, true)) {
             throw InvalidRuntimeException::runtime($runtime);
         }
 
@@ -82,6 +121,12 @@ final class AsdfManager
             return;
         }
 
+        if ($runtime === 'python') {
+            $this->installPython($connection, $version);
+
+            return;
+        }
+
         $dependencies = BuildDependencies::for($runtime, $server->os_name);
 
         if ($dependencies !== []) {
@@ -93,6 +138,56 @@ final class AsdfManager
 
         $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, 'asdf plugin update "$CORESMITH_RUNTIME"', ['CORESMITH_RUNTIME' => $runtime]), SSHTransport::COMMAND_SECONDS);
         $this->withDownloadRetries($connection, $this->asdfCommand($connection, 'install', $runtime, $version, self::BUILD_ENVIRONMENT[$runtime] ?? []), self::INSTALL_SECONDS);
+    }
+
+    public function uvPath(): string
+    {
+        return self::UV_DIR . '/' . $this->uvVersion() . '/uv';
+    }
+
+    public function uvInstalled(SSHConnection $connection): bool
+    {
+        return $connection->execute('test -x ' . escapeshellarg($this->uvPath()))->successful();
+    }
+
+    public function ensureUv(SSHConnection $connection): bool
+    {
+        if ($this->uvInstalled($connection)) {
+            return false;
+        }
+
+        $sums = (array) config('coresmith.uv.sha256');
+
+        $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, self::UV_SCRIPT, [
+            'CORESMITH_UV_VERSION' => $this->uvVersion(),
+            'CORESMITH_UV_DIR' => self::UV_DIR,
+            'CORESMITH_UV_SHA256_X86_64' => (string) ($sums['x86_64'] ?? ''),
+            'CORESMITH_UV_SHA256_AARCH64' => (string) ($sums['aarch64'] ?? ''),
+        ]), SSHTransport::COMMAND_SECONDS);
+
+        return true;
+    }
+
+    public function uvVersion(): string
+    {
+        $version = (string) config('coresmith.uv.version');
+
+        if (preg_match('/^\d+\.\d+\.\d+\z/', $version) !== 1) {
+            throw InvalidRuntimeException::version($version);
+        }
+
+        return $version;
+    }
+
+    private function installPython(SSHConnection $connection, string $version): void
+    {
+        $this->ensureUv($connection);
+
+        $this->withDownloadRetries($connection, $this->asRuntimeUser($connection, self::PYTHON_SCRIPT, [
+            'CORESMITH_UV' => $this->uvPath(),
+            'CORESMITH_PYTHON' => $version,
+            'CORESMITH_PYTHON_DIR' => self::INSTALL_DIR . '/python',
+        ]), self::INSTALL_SECONDS);
     }
 
     public function withDownloadRetries(SSHConnection $connection, string $command, int $timeout): void
@@ -154,7 +249,11 @@ final class AsdfManager
     {
         self::assertValid($runtime, $version);
 
-        $connection->execute($this->asdfCommand($connection, 'uninstall', $runtime, $version), sudo: true)->throw();
+        $command = in_array($runtime, self::PLUGINS, true)
+            ? $this->asdfCommand($connection, 'uninstall', $runtime, $version)
+            : 'rm -rf -- ' . escapeshellarg($this->versionPath($runtime, $version));
+
+        $connection->execute($command, sudo: true)->throw();
     }
 
     /**
