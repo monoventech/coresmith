@@ -142,6 +142,8 @@ test('sync keeps project and environment grants and drops ones from another team
         'applications' => [],
         'projects' => [$fleet['storefront']->id],
         'environments' => [$fleet['staging']->id],
+        'withheld_applications' => [],
+        'withheld_databases' => [],
     ]);
 });
 

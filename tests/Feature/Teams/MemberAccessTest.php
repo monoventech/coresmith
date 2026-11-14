@@ -131,12 +131,12 @@ test('the team page shows owners what each member sees and everything there is t
 
     $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
         ->where('can.shareAccess', true)
-        ->where('members', fn($members): bool => collect($members)->firstWhere('id', $member->id)['access'] === ['everything' => false, 'servers' => [$web->id], 'applications' => [], 'projects' => [], 'environments' => []]
+        ->where('members', fn($members): bool => collect($members)->firstWhere('id', $member->id)['access'] === ['everything' => false, 'servers' => [$web->id], 'applications' => [], 'projects' => [], 'environments' => [], 'withheld_applications' => [], 'withheld_databases' => []]
             && collect($members)->firstWhere('id', $owner->id)['access'] === null)
         ->where('shareable', ['servers' => [
-            ['id' => $cache->id, 'name' => 'cache', 'applications' => [['id' => $api->id, 'name' => 'api']]],
-            ['id' => $db->id, 'name' => 'db', 'applications' => []],
-            ['id' => $web->id, 'name' => 'web', 'applications' => [['id' => $shop->id, 'name' => 'shop']]],
+            ['id' => $cache->id, 'name' => 'cache', 'this_machine' => false, 'applications' => [['id' => $api->id, 'name' => 'api']], 'databases' => []],
+            ['id' => $db->id, 'name' => 'db', 'this_machine' => false, 'applications' => [], 'databases' => []],
+            ['id' => $web->id, 'name' => 'web', 'this_machine' => false, 'applications' => [['id' => $shop->id, 'name' => 'shop']], 'databases' => []],
         ], 'projects' => []]));
 });
 
@@ -201,7 +201,7 @@ test('an invitation to only what I share narrows the member when they accept', f
 
     $this->actingAs($newcomer)->post(route('invitations.accept', memberAccessInviteToken('newcomer@example.test')))->assertRedirect();
 
-    expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => []]);
+    expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [], 'withheld_applications' => [], 'withheld_databases' => []]);
 });
 
 test('an invitation from an owner who picks nothing sees everything', function () {
@@ -247,11 +247,11 @@ test('an owner shares one environment of a project with a member', function () {
     $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
     $staging = $project->environments()->where('name', 'Staging')->sole();
 
-    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$staging->id]])
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$staging->id], 'withheld_applications' => [], 'withheld_databases' => []])
         ->assertSessionHasNoErrors()
         ->assertSessionHas('success', 'Saved.');
 
-    expect(app(TeamAccess::class)->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id]])
+    expect(app(TeamAccess::class)->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id], 'withheld_applications' => [], 'withheld_databases' => []])
         ->and(Activity::query()->where('description', 'member_access_changed')->sole()->properties['environments'])->toBe([$staging->id]);
 
     memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$project->id]])->assertSessionHasNoErrors();
@@ -265,7 +265,7 @@ test('a project or environment from another team is refused', function () {
 
     memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$theirs->id]])
         ->assertSessionHasErrors(['projects' => "One of those projects isn't in Acme any more. Reload the page and choose again."]);
-    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$theirs->environments()->sole()->id]])
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$theirs->environments()->sole()->id], 'withheld_applications' => [], 'withheld_databases' => []])
         ->assertSessionHasErrors(['environments' => "One of those environments isn't in Acme any more. Reload the page and choose again."]);
 
     expect(app(TeamAccess::class)->seesEverything($member, $team))->toBeTrue();
