@@ -22,8 +22,6 @@ final class StackDetector
 {
     public const UNFINISHED = "Coresmith couldn't read all of the repository's files, so it can't tell what the app runs on.";
 
-    public const NOTHING = "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on.";
-
     private const ORDER = [ApplicationType::Php, ApplicationType::Ruby, ApplicationType::Js, ApplicationType::Static];
 
     public function __construct(
@@ -51,7 +49,7 @@ final class StackDetector
             }
         }
 
-        $proposal ??= Proposal::unsure('type', self::NOTHING);
+        $proposal ??= Proposal::unsure('type', "There is no composer.json, Gemfile, package.json, deno.json or index.html {$facts->at()}, so Coresmith can't tell what the app runs on.");
 
         if ($proposal['type'] === null) {
             return new DetectedStack(null, null, null, null, $proposal['sources'], $proposal['unsettled']);

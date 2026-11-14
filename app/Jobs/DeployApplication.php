@@ -452,7 +452,7 @@ final class DeployApplication implements ShouldQueue
     {
         $asdf = app(AsdfManager::class);
         $binaries = app(RuntimeBinaries::class);
-        $facts = $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(RepositoryProbe::class)->read($connection, $paths->appDirectory($release), $application));
+        $facts = $this->reconnecting($connection, DeploymentPhases::CLONE, fn() => app(RepositoryProbe::class)->read($connection, $paths->appDirectory($release), $application, trim((string) $application->directory, '/')));
         $this->refuseUnrunnable($application, $facts);
         $this->fillMissingSecrets($application, $facts);
         $stack = $this->reconnecting($connection, DeploymentPhases::CLONE, function () use ($connection, $application, $facts, $asdf, $binaries): Stack {

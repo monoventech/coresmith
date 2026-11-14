@@ -26,7 +26,13 @@ final readonly class RepositoryFacts
         public array $markers = [],
         public array $envKeys = [],
         public bool $complete = false,
+        public string $folder = '',
     ) {}
+
+    public function at(): string
+    {
+        return $this->folder === '' ? "at the repository's root" : "in {$this->folder}";
+    }
 
     public function has(string $file): bool
     {

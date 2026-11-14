@@ -112,7 +112,7 @@ final readonly class Php implements Language
         if (!$facts->has('composer.json')) {
             return $index === null || $this->otherServer($facts) ? null : Proposal::make('php', '', null, $index, [
                 'type' => 'From index.php',
-                'web_directory' => $this->indexSource($index),
+                'web_directory' => $this->indexSource($facts, $index),
             ]);
         }
 
@@ -146,7 +146,7 @@ final readonly class Php implements Language
         }
 
         if ($index !== null) {
-            return Proposal::make('php', '', null, $index, ['type' => 'From composer.json', 'framework' => 'No framework in composer.json', 'web_directory' => $this->indexSource($index)]);
+            return Proposal::make('php', '', null, $index, ['type' => 'From composer.json', 'framework' => 'No framework in composer.json', 'web_directory' => $this->indexSource($facts, $index)]);
         }
 
         return $this->otherServer($facts) ? null : Proposal::unsure('type', self::LIBRARY);
@@ -161,9 +161,9 @@ final readonly class Php implements Language
         $name = $framework === 'symfony' ? 'Symfony' : 'Laravel';
 
         if (in_array($framework, ['laravel', 'symfony'], true) && !$facts->has('composer.json')) {
-            $blockers[] = new Blocker('framework', "There is no composer.json, so this isn't a {$name} app at the repository's root.", 'Pick Plain PHP.');
+            $blockers[] = new Blocker('framework', "There is no composer.json, so this isn't a {$name} app {$facts->at()}.", 'Pick Plain PHP.');
         } elseif ($framework === 'laravel' && !$facts->exists('artisan')) {
-            $blockers[] = new Blocker('framework', "There is no artisan file at the repository's root, so this isn't a Laravel app.", 'Pick Plain PHP, or Symfony if it uses Symfony.');
+            $blockers[] = new Blocker('framework', "There is no artisan file {$facts->at()}, so this isn't a Laravel app.", 'Pick Plain PHP, or Symfony if it uses Symfony.');
         }
 
         $platform = $this->platformBehindLock($facts);
@@ -276,8 +276,8 @@ final readonly class Php implements Language
         return $locked === null ? "{$package} " . (is_string($constraint) ? $constraint : '') . ' in composer.json' : "{$package} {$locked} in composer.lock";
     }
 
-    private function indexSource(string $index): string
+    private function indexSource(RepositoryFacts $facts, string $index): string
     {
-        return $index === '/' ? "index.php is at the repository's root" : "index.php is in {$index}";
+        return $index === '/' ? "index.php is {$facts->at()}" : "index.php is in {$index}";
     }
 }

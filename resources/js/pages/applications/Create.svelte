@@ -109,6 +109,8 @@
     let repositoryUrl = $state('')
     let pickedRepository = $state<GitHubPick | null>(null)
     let detection = $state<Detection | null>(null)
+    let folder = $state('/')
+    let folders = $state<string[]>([])
     let reading = $state(false)
     let touched = $state<Record<string, boolean>>({})
     let controller: AbortController | null = null
@@ -137,6 +139,7 @@
         chosenSource = value
         branches = []
         pickedRepository = null
+        leaveFolder()
 
         if (!branchEdited) {
             branch = DEFAULT_BRANCH
@@ -156,8 +159,20 @@
         pickedRepository = pick
 
         if (repositoryChanged) {
+            leaveFolder()
             detectSoon(0)
         }
+    }
+
+    function leaveFolder() {
+        folder = '/'
+        folders = []
+    }
+
+    function pickFolder(value: string) {
+        folder = value
+        touched = {}
+        detectSoon(0)
     }
 
     function forget() {
@@ -172,12 +187,19 @@
             return null
         }
 
+        const directory = folder === '/' ? {} : { directory: folder }
+
         if (connection && pickedRepository) {
-            return { source_provider_id: connection.id, repository_id: pickedRepository.id, repository_branch: branch }
+            return {
+                source_provider_id: connection.id,
+                repository_id: pickedRepository.id,
+                repository_branch: branch,
+                ...directory
+            }
         }
 
         return !connection && repositoryUrl.trim() !== ''
-            ? { repository_url: repositoryUrl.trim(), repository_branch: branch }
+            ? { repository_url: repositoryUrl.trim(), repository_branch: branch, ...directory }
             : null
     }
 
@@ -218,6 +240,7 @@
         detection = answer
 
         if (answer.state === 'read') {
+            folders = answer.folders ?? []
             fill(answer.fields, answer.unsettled)
         }
     }
@@ -276,7 +299,7 @@
     <div class="rounded-xl border border-border bg-card p-6">
         <Form method="post" action={route('servers.applications.store', server.id)}>
             {#snippet children({ errors, processing })}
-                <input type="hidden" name="directory" value="/" />
+                <input type="hidden" name="directory" value={folder} />
                 <input type="hidden" name="detection" value={detectionId(detection)} />
                 <div class="flex flex-col gap-4">
                     <div>
@@ -320,7 +343,10 @@
                                 id="repository_url"
                                 name="repository_url"
                                 bind:value={repositoryUrl}
-                                oninput={() => detectSoon()}
+                                oninput={() => {
+                                    leaveFolder()
+                                    detectSoon()
+                                }}
                                 placeholder="git@github.com:you/atlas.git"
                                 autocomplete="off"
                                 class="font-mono text-[13px]"
@@ -363,6 +389,21 @@
                         {/if}
                         <FieldError message={errors.repository_branch} />
                     </div>
+                    {#if folders.length > 0}
+                        <div>
+                            <Label for="folder" class="mb-1.5">Folder</Label>
+                            <NativeSelect
+                                id="folder"
+                                bind:value={() => folder, pickFolder}
+                                options={[
+                                    { value: '/', label: '/ (repository root)' },
+                                    ...folders.map((path) => ({ value: path, label: path }))
+                                ]}
+                                class="font-mono text-[13px]"
+                            />
+                            <FieldError message={errors.directory} />
+                        </div>
+                    {/if}
                     <StackDetection {detection} {reading} server={server.name} />
                     <div class="grid grid-cols-2 gap-3">
                         <div>

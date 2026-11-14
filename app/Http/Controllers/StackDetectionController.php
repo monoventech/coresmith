@@ -62,11 +62,18 @@ final class StackDetectionController extends Controller
             return response()->json(['id' => $id, 'state' => 'failed', 'failure' => $read->failure, 'definitive' => $read->definitive]);
         }
 
+        $detected = $detector->detect($read->facts, fn(string $runtime): array => $read->installed($runtime), fn(string $version): ?array => $read->extensions($version), $read->arch)->toArray();
+
+        if ($read->facts->complete && $read->folders !== [] && trim($directory, '/') === '' && isset($detected['unsettled']['type'])) {
+            $detected['unsettled']['type'] .= ' Pick the folder the app is in.';
+        }
+
         return response()->json([
             'id' => $id,
             'state' => 'read',
             'commit' => $read->commit,
-            ...$detector->detect($read->facts, fn(string $runtime): array => $read->installed($runtime), fn(string $version): ?array => $read->extensions($version), $read->arch)->toArray(),
+            ...$detected,
+            'folders' => $read->folders,
         ]);
     }
 

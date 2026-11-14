@@ -136,7 +136,7 @@ final readonly class Ruby implements Language
     public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
     {
         if (!$facts->has('Gemfile')) {
-            return [new Blocker('type', "There is no Gemfile at the repository's root, so this isn't a Ruby app.", 'Pick the language the repository uses.')];
+            return [new Blocker('type', "There is no Gemfile {$facts->at()}, so this isn't a Ruby app.", 'Pick the language the repository uses.')];
         }
 
         if (!$facts->has('Gemfile.lock')) {
@@ -152,7 +152,7 @@ final readonly class Ruby implements Language
         if (in_array($framework, ['sinatra', 'rack'], true) && !$facts->exists('config.ru')) {
             $blockers[] = new Blocker('framework', 'There is no config.ru, so Puma has no app to start.', 'Add a config.ru that runs the app, for example: ' . ($framework === 'sinatra' ? 'run Sinatra::Application.' : 'run Hanami.app.'));
         } elseif ($framework === 'rails' && !$facts->exists('bin/rails')) {
-            $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app at the repository's root.", 'Pick Sinatra if it uses Sinatra, or Rack for any other app with a config.ru.');
+            $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app {$facts->at()}.", 'Pick Sinatra if it uses Sinatra, or Rack for any other app with a config.ru.');
         }
 
         $platform = $arch === null ? null : $this->platformMissing($facts, $arch);
@@ -236,6 +236,6 @@ final readonly class Ruby implements Language
             }
         }
 
-        return "config.ru at the repository's root";
+        return "config.ru {$facts->at()}";
     }
 }

@@ -127,3 +127,23 @@ test('a person can read twenty repositories a minute through the form', function
 
     stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/site.git', 'repository_branch' => 'main'])->assertTooManyRequests();
 });
+
+test('the form is told which folders hold an app, and a root with none of its own asks for one', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('empty-repository', "@@manifest apps/api/Gemfile\n@@manifest apps/web/package.json\n");
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/mono.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('folders', ['apps/api', 'apps/web'])
+        ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on. Pick the folder the app is in.");
+});
+
+test('a folder is read on its own, and its messages name it', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('empty-repository', "@@manifest apps/web/package.json\n");
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/mono.git', 'repository_branch' => 'main', 'directory' => 'apps/web'])
+        ->assertOk()
+        ->assertJsonPath('folders', ['apps/web'])
+        ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, package.json, deno.json or index.html in apps/web, so Coresmith can't tell what the app runs on.");
+});

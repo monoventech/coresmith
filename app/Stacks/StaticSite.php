@@ -85,7 +85,7 @@ final readonly class StaticSite implements Language
     {
         foreach (['index.html' => '/', 'public/index.html' => '/public'] as $file => $web) {
             if ($facts->exists($file)) {
-                return Proposal::make('static', '', null, $web, ['type' => "From {$file}", 'web_directory' => $web === '/' ? "index.html is at the repository's root" : 'index.html is in /public']);
+                return Proposal::make('static', '', null, $web, ['type' => "From {$file}", 'web_directory' => $web === '/' ? "index.html is {$facts->at()}" : 'index.html is in /public']);
             }
         }
 

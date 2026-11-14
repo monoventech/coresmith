@@ -13,7 +13,7 @@ use App\Services\Runtime\RepositoryFacts;
 
 final readonly class JavaScriptDetection
 {
-    public const WORKSPACE = 'This is a workspace root: it lists other packages, and Coresmith deploys one app per folder. Pick the stack of the app you want.';
+    public const WORKSPACE = 'This is a workspace root: it lists other packages, and Coresmith deploys one app per folder.';
 
     public const MAIN_ONLY = 'package.json names a main file but no start script, so it looks like a library, not a server. Add a start script if it is an app.';
 
