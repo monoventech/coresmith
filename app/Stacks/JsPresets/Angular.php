@@ -71,11 +71,11 @@ final class Angular extends JsPreset
     {
         $name = $this->serverName($facts);
 
-        if ($name === null || $facts->script("serve:ssr:{$name}")) {
+        if ($name === null || $this->startScript($facts) !== null || $this->main($facts) !== null) {
             return [];
         }
 
-        return [new Blocker('repository', "There is no serve:ssr:{$name} script in package.json, so Coresmith has nothing to start the Angular server with.", "Add \"serve:ssr:{$name}\": \"node dist/{$name}/server/server.mjs\" to the scripts in package.json.")];
+        return [new Blocker('repository', "angular.json doesn't say plainly where {$name}'s server bundle goes, so Coresmith can't start it.", "Add \"serve:ssr:{$name}\": \"node <the path to server.mjs>\" to the scripts in package.json.")];
     }
 
     public function startScript(RepositoryFacts $facts): ?string
@@ -83,6 +83,26 @@ final class Angular extends JsPreset
         $name = $this->serverName($facts);
 
         return $name !== null && $facts->script("serve:ssr:{$name}") ? "serve:ssr:{$name}" : null;
+    }
+
+    public function ownsStart(): bool
+    {
+        return true;
+    }
+
+    public function main(RepositoryFacts $facts): ?string
+    {
+        $name = $this->serverName($facts);
+
+        if ($name === null) {
+            return null;
+        }
+
+        $outputPath = $this->applications($facts)[$name]['architect']['build']['options']['outputPath'] ?? "dist/{$name}";
+        $base = trim(is_array($outputPath) ? (string) ($outputPath['base'] ?? "dist/{$name}") : (string) $outputPath, '/');
+        $server = is_array($outputPath) && array_key_exists('server', $outputPath) ? trim((string) $outputPath['server'], '/') : 'server';
+
+        return JsTooling::safeMain($server === '' ? "{$base}/server.mjs" : "{$base}/{$server}/server.mjs");
     }
 
     public function rulesOutput(): bool

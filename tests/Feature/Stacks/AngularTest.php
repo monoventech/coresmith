@@ -53,14 +53,13 @@ test('an Angular app with server-side rendering runs its server from the serve:s
         ->and(ApplicationType::Js->language()->checks($application, 'angular', $facts, null))->toBe([]);
 });
 
-test('an Angular server without its serve:ssr script is blocked with the line to add', function () {
+test('an Angular server without a serve:ssr script starts its server bundle directly, never ng serve', function () {
     $facts = angularFacts(['shop' => angularApp(options: ['outputPath' => 'dist/shop', 'ssr' => ['entry' => 'src/server.ts']])], ['@angular/ssr' => '^20.1.0']);
-    $blockers = ApplicationType::Js->language()->checks(new Application(['type' => ApplicationType::Js, 'framework' => 'angular', 'js_runtime' => 'node']), 'angular', $facts, null);
+    $application = new Application(['type' => ApplicationType::Js, 'framework' => 'angular', 'js_runtime' => 'node', 'node_version' => '24.15.0']);
+    $application->stack = ['tooling' => JsTooling::for($application, $facts)?->toArray()];
 
-    expect(array_map(fn($blocker): array => [$blocker->reason, $blocker->fix], $blockers))->toBe([[
-        'There is no serve:ssr:shop script in package.json, so Coresmith has nothing to start the Angular server with.',
-        'Add "serve:ssr:shop": "node dist/shop/server/server.mjs" to the scripts in package.json.',
-    ]]);
+    expect(ApplicationType::Js->language()->webCommand($application))->toBe('/opt/asdf-data/installs/nodejs/24.15.0/bin/node dist/shop/server/server.mjs')
+        ->and(ApplicationType::Js->language()->checks($application, 'angular', $facts, null))->toBe([]);
 });
 
 test('an Angular workspace with more than one application leaves the framework open, naming them', function () {

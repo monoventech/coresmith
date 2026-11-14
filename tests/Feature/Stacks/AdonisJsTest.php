@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 
@@ -44,7 +45,10 @@ test('without ace.js, @adonisjs/core alone is left to the start script, as befor
 });
 
 test('an AdonisJS app starts from its build, not from the start script meant for inside it', function () {
-    expect(ApplicationType::Js->language()->webCommand(adonisApp()))->toBe('/opt/asdf-data/installs/nodejs/24.15.0/bin/node build/bin/server.js');
+    $application = adonisApp();
+    $application->stack = ['tooling' => JsTooling::for($application, adonisFacts())?->toArray()];
+
+    expect(ApplicationType::Js->language()->webCommand($application))->toBe('/opt/asdf-data/installs/nodejs/24.15.0/bin/node build/bin/server.js');
 });
 
 test('an AdonisJS app gets an APP_KEY when it is added, and runs with a log level and a session driver it can change', function () {

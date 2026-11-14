@@ -53,7 +53,7 @@ final class AdonisJs extends JsPreset
         return 'build/bin/server.js';
     }
 
-    public function startsFromEntry(): bool
+    public function ownsStart(): bool
     {
         return true;
     }

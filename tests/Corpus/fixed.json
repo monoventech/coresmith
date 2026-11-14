@@ -356,16 +356,27 @@
         "why": "AdonisJS 6's web starter: Vite assets, sessions and Lucid."
     },
     {
-        "name": "angular-realworld",
-        "url": "https://github.com/realworld-apps/angular-realworld-example-app.git",
-        "branch": "main",
+        "name": "angular-jira-clone",
+        "url": "https://github.com/trungvose/jira-clone-angular.git",
+        "branch": "master",
         "expect": {
             "verdict": "ready",
             "type": "static",
             "framework": "",
-            "web_directory": "/dist/angular-conduit/browser"
+            "web_directory": "/dist/browser"
         },
-        "why": "Angular 21's RealWorld app: the application builder on Bun, without server-side rendering."
+        "why": "Angular 20 with the application builder writing to dist."
+    },
+    {
+        "name": "angular-ssr-example",
+        "url": "https://github.com/Ismaestro/angular-example-app.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "angular"
+        },
+        "why": "Angular 21 rendering on the server without a serve:ssr script, so Coresmith starts its server bundle."
     },
     {
         "name": "astrowind",

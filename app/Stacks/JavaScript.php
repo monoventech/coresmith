@@ -51,7 +51,7 @@ final readonly class JavaScript implements Language
     {
         $data = ((array) $application->stack)['tooling'] ?? null;
         $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
-        $start = ($tooling?->start ?? false) && !($this->presets->find((string) $application->framework)?->startsFromEntry() ?? false);
+        $start = $tooling?->start ?? false;
         $script = $tooling?->startScript ?? 'start';
 
         return match ($application->js_runtime) {

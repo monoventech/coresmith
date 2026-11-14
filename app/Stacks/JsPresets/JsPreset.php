@@ -71,9 +71,14 @@ abstract class JsPreset
         return null;
     }
 
-    public function startsFromEntry(): bool
+    public function ownsStart(): bool
     {
         return false;
+    }
+
+    public function main(RepositoryFacts $facts): ?string
+    {
+        return null;
     }
 
     /**

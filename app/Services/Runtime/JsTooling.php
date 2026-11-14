@@ -114,9 +114,10 @@ final readonly class JsTooling
         $declared = (string) ($facts->json('package.json')['packageManager'] ?? '');
         $version = preg_match('/^' . $manager . '@(\d[\w.+-]*)/', $declared, $matches) === 1 ? $matches[1] : null;
 
-        $start = ($isJs ? app(JsPresets::class)->find((string) $application->framework)?->startScript($facts) : null) ?? self::startScriptFor($facts);
+        $preset = $isJs ? app(JsPresets::class)->find((string) $application->framework) : null;
+        $start = $preset?->ownsStart() === true ? $preset->startScript($facts) : self::startScriptFor($facts);
 
-        return new self($manager, $lockfile !== null, $build, $start !== null, $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null), startScript: $start ?? 'start');
+        return new self($manager, $lockfile !== null, $build, $start !== null, $version, ssr: $facts->script('build:ssr'), main: self::safeMain($preset?->main($facts) ?? $facts->json('package.json')['main'] ?? null), startScript: $start ?? 'start');
     }
 
     public function runtime(): string
