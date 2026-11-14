@@ -184,7 +184,7 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_DATABASE: coresmith_test
-      DB_USERNAME: coresmith
+      DB_USERNAME: root
       DB_PASSWORD: coresmith
     steps:
       - uses: actions/checkout@v7
