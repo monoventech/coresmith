@@ -10,7 +10,7 @@ namespace App\Services\Runtime;
 
 final class Catalog
 {
-    public const RUNTIMES = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
+    public const RUNTIMES = ['php', 'nodejs', 'bun', 'deno', 'ruby', 'python'];
 
     public function label(string $runtime): string
     {
@@ -59,6 +59,11 @@ final class Catalog
     public function recommendedLine(string $runtime): string
     {
         return (string) config("coresmith.runtimes.{$runtime}.recommended", '');
+    }
+
+    public function prefersRecommended(string $runtime): bool
+    {
+        return config("coresmith.runtimes.{$runtime}.prefer_recommended") === true;
     }
 
     public function newestLine(string $runtime): ?string

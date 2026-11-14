@@ -20,16 +20,21 @@ final class RepositoryProbe
         '.tool-versions', 'composer.json', 'package.json', '.nvmrc', '.node-version', '.ruby-version', 'Gemfile', 'Gemfile.lock', '.dvmrc', 'deno.json', 'deno.jsonc',
         'svelte.config.js', 'svelte.config.ts', 'next.config.js', 'next.config.mjs', 'next.config.ts', 'nuxt.config.ts', 'nuxt.config.js',
         'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml', 'angular.json',
+        '.python-version', 'runtime.txt', 'pyproject.toml', 'requirements.txt', 'Pipfile', 'Procfile', 'manage.py',
+        'app.py', 'main.py', 'wsgi.py', 'asgi.py', 'server.py', 'application.py', 'run.py', 'api.py', 'tasks.py', 'worker.py', 'celery_app.py',
     ];
+
+    public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py', 'requirements/*.txt'];
 
     public const LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'deno.lock'];
 
     public const MARKERS = [
         'artisan', 'bin/rails', 'bin/console', 'config.ru', 'Rakefile', 'index.php', 'public/index.php', 'web/index.php',
         'index.html', 'public/index.html', 'main.ts', 'config/master.key', 'config/database.yml', 'symfony.lock', 'config/bundles.php', 'server.js', 'ace.js',
+        'uv.lock', 'poetry.lock', 'Pipfile.lock', 'alembic.ini',
     ];
 
-    public const ENV_SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'RAILS_MASTER_KEY'];
+    public const ENV_SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'RAILS_MASTER_KEY', 'SECRET_KEY'];
 
     public const MAX_BYTES = 262144;
 
@@ -40,6 +45,9 @@ final class RepositoryProbe
     private const SCRIPT = <<<'BASH'
     cd "$CORESMITH_PROBE_DIR" 2>/dev/null || exit 0
     for f in {files}; do
+      if [ -f "$f" ] && [ ! -L "$f" ]; then printf '@@file %s ' "$f"; head -c {bytes} "$f" | base64 | tr -d '\n'; printf '\n'; fi
+    done
+    for f in {globs}; do
       if [ -f "$f" ] && [ ! -L "$f" ]; then printf '@@file %s ' "$f"; head -c {bytes} "$f" | base64 | tr -d '\n'; printf '\n'; fi
     done
     for f in {lockfiles}; do
@@ -82,6 +90,7 @@ final class RepositoryProbe
     {
         return strtr(self::SCRIPT, [
             '{files}' => implode(' ', self::FILES),
+            '{globs}' => implode(' ', self::GLOBS),
             '{lockfiles}' => implode(' ', self::LOCKFILES),
             '{markers}' => implode(' ', self::MARKERS),
             '{secrets}' => implode(' ', self::ENV_SECRETS),
@@ -100,7 +109,7 @@ final class RepositoryProbe
         $complete = false;
 
         foreach (preg_split('/\r\n|\n|\r/', $output) ?: [] as $line) {
-            if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && in_array($matches[1], [...self::FILES, self::COMPOSER_LOCK], true)) {
+            if (preg_match('~^@@file (\S+) ([A-Za-z0-9+/=]*)$~', $line, $matches) === 1 && (in_array($matches[1], [...self::FILES, self::COMPOSER_LOCK], true) || self::globbed($matches[1]))) {
                 $content = base64_decode($matches[2], true);
 
                 if ($content !== false) {
@@ -120,5 +129,16 @@ final class RepositoryProbe
         }
 
         return new RepositoryFacts($files, array_values(array_unique($lockfiles)), $locked, array_values(array_unique($markers)), array_values(array_unique($envKeys)), $complete, $folder);
+    }
+
+    public static function globbed(string $path): bool
+    {
+        foreach (self::GLOBS as $pattern) {
+            if (fnmatch($pattern, $path, FNM_PATHNAME)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.11 (2026-11-14)
+
+### Added
+- feat: Python apps on Django, Flask, FastAPI and Starlette, with uv-installed Python and Celery switches (#83)
+
 ## v0.8.10 (2026-11-14)
 
 ### Added

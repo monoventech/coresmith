@@ -51,6 +51,7 @@ use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\Teams\TeamAccess;
 use App\Stacks\JsPresets\JsPresets;
+use App\Stacks\PythonPresets\PythonPresets;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -73,7 +74,8 @@ final class ApplicationController extends Controller
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targets($server->public_addresses)],
             'projects' => $projects->choices($request->user(), $server->team),
             'js_frameworks' => app(JsPresets::class)->choices(),
-            'runtimes' => collect(['php', 'ruby', 'bun', 'nodejs', 'deno'])->mapWithKeys(fn(string $runtime): array => [$runtime => [
+            'python_frameworks' => app(PythonPresets::class)->choices(),
+            'runtimes' => collect(Catalog::RUNTIMES)->mapWithKeys(fn(string $runtime): array => [$runtime => [
                 'label' => $catalog->label($runtime),
                 'recommended' => $catalog->recommendedLine($runtime),
                 'sources' => RuntimeDetector::SOURCES[$runtime],

@@ -12,6 +12,8 @@ use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Detection\Blocker;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Runtime\NativeGemTools;
+use App\Services\Runtime\NativeTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
@@ -172,6 +174,31 @@ final readonly class Ruby implements Language
     public function cronExample(Application $application): string
     {
         return strtolower((string) $application->framework) === 'rails' ? 'bin/rails reports:send' : 'bundle exec rake reports:send';
+    }
+
+    public function tooling(Application $application, RepositoryFacts $facts): array
+    {
+        return [];
+    }
+
+    public function pathDirectories(string $appDirectory): array
+    {
+        return [];
+    }
+
+    public function nativeTools(): ?NativeTools
+    {
+        return app(NativeGemTools::class);
+    }
+
+    public function frameworkLabel(string $framework): ?string
+    {
+        return null;
+    }
+
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        return null;
     }
 
     private function platformMissing(RepositoryFacts $facts, string $arch): ?Blocker

@@ -500,5 +500,51 @@
             "web_directory": "/"
         },
         "why": "index.html at the root."
+    },
+    {
+        "name": "django-heroku-getting-started",
+        "url": "https://github.com/heroku/python-getting-started.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "python",
+            "framework": "django"
+        },
+        "why": "Heroku's Django sample: Python 3.15 in .python-version, a gunicorn.conf.py whose bind Coresmith overrides, WhiteNoise and collectstatic. Off Heroku its ALLOWED_HOSTS is local only, so it answers 400 until the app sets DYNO or edits the list."
+    },
+    {
+        "name": "wagtail-bakerydemo",
+        "url": "https://github.com/wagtail/bakerydemo.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "python",
+            "framework": "django"
+        },
+        "why": "Wagtail's demo: requirements.txt includes requirements/production.txt and base.txt, settings split under bakerydemo/settings, uwsgi built from source, collectstatic and migrations on SQLite."
+    },
+    {
+        "name": "flask-javascript-example",
+        "url": "https://github.com/pallets/flask.git",
+        "branch": "main",
+        "folder": "examples/javascript",
+        "expect": {
+            "verdict": "ready",
+            "type": "python",
+            "framework": "flask"
+        },
+        "why": "Flask's own example in a folder of the Flask repository: pyproject.toml without a lockfile, the app made in js_example/__init__.py."
+    },
+    {
+        "name": "fastapi-tutorial-part-1",
+        "url": "https://github.com/ChristopherGS/ultimate-fastapi-tutorial.git",
+        "branch": "main",
+        "folder": "part-01-hello-world",
+        "expect": {
+            "verdict": "ready",
+            "type": "python",
+            "framework": "fastapi"
+        },
+        "why": "A FastAPI tutorial in a folder: Poetry with poetry.lock, Python held below 3.12 by Poetry's python line, uvicorn already a dependency."
     }
 ]

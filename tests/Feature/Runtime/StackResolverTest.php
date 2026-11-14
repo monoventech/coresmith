@@ -110,6 +110,7 @@ test('an application takes a stack as its live versions', function () {
         'bun_version' => '1.4.2',
         'deno_version' => null,
         'ruby_version' => null,
+        'python_version' => null,
         'stack' => $stack->toArray(),
     ]);
 });
