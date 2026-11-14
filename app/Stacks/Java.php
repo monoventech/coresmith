@@ -23,6 +23,8 @@ final readonly class Java implements Language
 
     public const HEAP = '-XX:MaxRAMPercentage=75';
 
+    public const JHIPSTER_SECRET = 'JHIPSTER_SECURITY_AUTHENTICATION_JWT_BASE64_SECRET';
+
     private const LAUNCH = <<<'BASH'
     mkdir -p .coresmith && rm -f .coresmith/app
     set -- $(ls -1 target/quarkus-app/quarkus-run.jar build/quarkus-app/quarkus-run.jar */target/quarkus-app/quarkus-run.jar */build/quarkus-app/quarkus-run.jar 2>/dev/null)
@@ -112,7 +114,7 @@ final readonly class Java implements Language
 
     public function initialEnvironment(?string $framework): array
     {
-        return [];
+        return $framework === 'jhipster' ? [self::JHIPSTER_SECRET => base64_encode(random_bytes(64))] : [];
     }
 
     public function processEnvironment(Application $application): array
