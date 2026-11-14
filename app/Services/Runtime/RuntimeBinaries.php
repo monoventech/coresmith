@@ -21,6 +21,7 @@ final class RuntimeBinaries
         'deno' => ['bin/deno'],
         'ruby' => ['bin/ruby', 'bin/bundle'],
         'python' => ['bin/python'],
+        'go' => ['bin/go'],
     ];
 
     public const COMPOSER_INSTALLER = 'https://getcomposer.org/installer';

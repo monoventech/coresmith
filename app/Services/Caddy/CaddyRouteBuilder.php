@@ -281,6 +281,13 @@ final class CaddyRouteBuilder
                     'upstreams' => [['dial' => '127.0.0.1:' . $application->base_port]],
                 ]]],
             ],
+            Route::ReverseProxyHttp2 => [
+                ['handle' => [[
+                    'handler' => 'reverse_proxy',
+                    'transport' => ['protocol' => 'http', 'versions' => ['h2c', '2']],
+                    'upstreams' => [['dial' => '127.0.0.1:' . $application->base_port]],
+                ]]],
+            ],
         };
     }
 

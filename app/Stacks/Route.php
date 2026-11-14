@@ -12,10 +12,16 @@ enum Route
 {
     case PhpFastcgi;
     case ReverseProxy;
+    case ReverseProxyHttp2;
     case FileServer;
 
     public function servesFiles(): bool
     {
-        return $this !== self::ReverseProxy;
+        return !$this->proxies();
+    }
+
+    public function proxies(): bool
+    {
+        return $this === self::ReverseProxy || $this === self::ReverseProxyHttp2;
     }
 }

@@ -32,7 +32,8 @@
         github,
         projects = [],
         js_frameworks = [],
-        python_frameworks = []
+        python_frameworks = [],
+        go_frameworks = []
     }: {
         server: {
             id: string
@@ -45,6 +46,7 @@
         projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
         js_frameworks: { value: string; label: string }[]
         python_frameworks: { value: string; label: string }[]
+        go_frameworks: { value: string; label: string }[]
     } = $props()
 
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
@@ -60,6 +62,7 @@
             { value: 'rack', label: 'Rack' }
         ],
         python: [...python_frameworks, { value: '', label: 'Other framework' }],
+        go: go_frameworks,
         static: [{ value: '', label: 'No framework' }]
     })
 
@@ -69,7 +72,7 @@
 
     const WAIT_MS = 700
 
-    const STACK_FIELDS = ['type', 'framework', 'js_runtime', 'web_directory']
+    const STACK_FIELDS = ['type', 'framework', 'js_runtime', 'web_directory', 'main_package']
 
     const UNSET = 'unset'
 
@@ -77,7 +80,7 @@
 
     const STEPS = [
         { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
-        { name: 'Install dependencies', desc: 'composer, bun, bundler or uv' },
+        { name: 'Install dependencies', desc: 'composer, bun, bundler, uv or go' },
         { name: 'Build assets', desc: 'into a new timestamped directory' },
         { name: 'Run migrations', desc: 'against the new release' },
         { name: 'Health check', desc: 'before anything goes live' },
@@ -94,6 +97,8 @@
     let frameworkSelect = $state<HTMLSelectElement | null>(null)
     let jsRuntime = $state('bun')
     let webDirectory = $state('/public')
+    let mainPackage = $state('')
+    let mainPackages = $state<string[]>([])
     const picker = $derived(pickerRuntime(type, jsRuntime))
     let pickedSize = $state<string | null>(null)
     let domainName = $state('')
@@ -244,6 +249,7 @@
 
         if (answer.state === 'read') {
             folders = answer.folders ?? []
+            mainPackages = answer.options?.main_package ?? []
             fill(answer.fields, answer.unsettled)
         }
     }
@@ -254,6 +260,7 @@
             framework: string | null
             js_runtime: string | null
             web_directory: string | null
+            main_package?: string | null
         },
         unsettled: Record<string, string>
     ) {
@@ -271,6 +278,10 @@
 
         if (fields.web_directory !== null && !touched.web_directory) {
             webDirectory = fields.web_directory
+        }
+
+        if (!touched.main_package) {
+            mainPackage = fields.main_package ?? ''
         }
     }
 
@@ -423,6 +434,7 @@
                                     { value: 'js', label: 'JavaScript' },
                                     { value: 'ruby', label: 'Ruby' },
                                     { value: 'python', label: 'Python' },
+                                    { value: 'go', label: 'Go' },
                                     { value: 'static', label: 'Static site' }
                                 ]}
                                 aria-invalid={errors.type ? true : undefined}
@@ -480,6 +492,42 @@
                         {#if read?.unsettled.runtime_version}
                             <p class="-mt-2.5 mb-0 text-[12px] text-warning-strong">{read.unsettled.runtime_version}</p>
                         {/if}
+                    {/if}
+                    {#if type === 'go'}
+                        <div>
+                            <Label for="main_package" class="mb-1.5">Main package</Label>
+                            {#if mainPackages.length > 1}
+                                <NativeSelect
+                                    id="main_package"
+                                    name="main_package"
+                                    bind:value={mainPackage}
+                                    onchange={() => touch('main_package')}
+                                    options={[
+                                        ...(mainPackage === '' ? [{ value: '', label: 'Pick one' }] : []),
+                                        ...mainPackages.map((path) => ({
+                                            value: path,
+                                            label: path === '.' ? '. (module root)' : path
+                                        }))
+                                    ]}
+                                    required
+                                    class="font-mono text-[13px]"
+                                    aria-invalid={errors.main_package ? true : undefined}
+                                />
+                            {:else}
+                                <Input
+                                    id="main_package"
+                                    name="main_package"
+                                    bind:value={mainPackage}
+                                    oninput={() => touch('main_package')}
+                                    placeholder="cmd/server"
+                                    required
+                                    class="font-mono text-[13px]"
+                                    aria-invalid={errors.main_package ? true : undefined}
+                                />
+                            {/if}
+                            {@render note('main_package')}
+                            <FieldError message={errors.main_package} />
+                        </div>
                     {/if}
                     {#if SERVES_FILES.includes(type)}
                         <div>

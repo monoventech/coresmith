@@ -44,7 +44,7 @@ final readonly class JavaScriptDetection
     public function __construct(private JsPresets $presets) {}
 
     /**
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}|null
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}|null
      */
     public function detect(RepositoryFacts $facts): ?array
     {
@@ -83,7 +83,7 @@ final readonly class JavaScriptDetection
 
     /**
      * @param  array<string, string>  $sources
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
     private function fromStartScript(RepositoryFacts $facts, string $runtime, array $sources): array
     {
@@ -120,7 +120,7 @@ final readonly class JavaScriptDetection
     }
 
     /**
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
     private function deno(RepositoryFacts $facts): array
     {
@@ -137,7 +137,7 @@ final readonly class JavaScriptDetection
 
     /**
      * @param  array<string, string>  $sources
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
      */
     private function unbuilt(string $runtime, array $sources, string $package, string $command, string $label): array
     {

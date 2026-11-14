@@ -28,6 +28,7 @@ use App\Services\Git\RefusalReason;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
 use App\Services\SafeName;
+use App\Stacks\GoTooling;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -79,6 +80,7 @@ final class StoreApplicationRequest extends FormRequest
             'acknowledge_eol' => ['boolean'],
             'directory' => ['required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
             'web_directory' => [Rule::excludeIf(fn(): bool => !$this->servesFiles()), 'required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
+            'main_package' => [Rule::excludeIf(fn(): bool => $this->input('type') !== ApplicationType::Go->value), 'required', 'string', 'max:200', 'regex:' . GoTooling::PACKAGE],
             'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['boolean'],
             'environment_id' => ['nullable', 'string', new FillableEnvironment($server?->team, $this->user())],
@@ -96,6 +98,8 @@ final class StoreApplicationRequest extends FormRequest
             'repository_branch.regex' => 'That is not a branch name Git accepts. Use something like main or release/2.0.',
             'directory.regex' => 'Use a folder inside the repository, like / or apps/web.',
             'web_directory.regex' => 'Use a folder inside the app, like /public or dist.',
+            'main_package.required' => 'Pick the package that answers web requests.',
+            'main_package.regex' => 'Use the folder of a package in the module, like cmd/server, or a dot for the module root.',
             'repository_url.regex' => 'Use an https:// URL for public repositories, or git@host:owner/repo.git for private ones.',
             'source_provider_id.required_with' => self::CONNECTION_UNAVAILABLE,
             'source_provider_id.string' => self::CONNECTION_UNAVAILABLE,
@@ -220,6 +224,7 @@ final class StoreApplicationRequest extends FormRequest
             'domain' => $this->input('domain'),
             'directory' => $this->input('directory', '/'),
             'web_directory' => $this->input('web_directory'),
+            'main_package' => $this->input('main_package'),
             'runtime_pins' => $line === null ? null : [$this->runtime() => $line],
         ]);
 

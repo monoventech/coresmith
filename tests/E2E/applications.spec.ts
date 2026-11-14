@@ -127,7 +127,9 @@ test.describe('an application', () => {
         await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
 
-    test('a Django app with Celery is offered its worker and beat, and no Laravel or Rails toggles', async ({ page }) => {
+    test('a Django app with Celery is offered its worker and beat, and no Laravel or Rails toggles', async ({
+        page
+    }) => {
         await gotoApplication(page, 'bench-01', 'celery-tasks')
 
         await expect(page.getByRole('main')).toContainText('Django · Python 3.14')
@@ -837,11 +839,55 @@ test.describe('adding an application', () => {
         const framework = page.getByLabel('Framework')
 
         await expect(framework).toHaveValue('django')
-        await expect(framework.locator('option')).toHaveText(['Django', 'FastAPI', 'Starlette', 'Flask', 'Other framework'])
+        await expect(framework.locator('option')).toHaveText([
+            'Django',
+            'FastAPI',
+            'Starlette',
+            'Flask',
+            'Other framework'
+        ])
         await framework.selectOption('fastapi')
         await expect(framework).toHaveValue('fastapi')
         await expect(page.getByLabel('Web root')).toHaveCount(0)
-        await expect(page.getByRole('radiogroup', { name: 'Python version' }).getByRole('radio', { name: /^3\.14\./ })).toBeVisible()
+        await expect(
+            page.getByRole('radiogroup', { name: 'Python version' }).getByRole('radio', { name: /^3\.14\./ })
+        ).toBeVisible()
+    })
+
+    test('Go offers every framework it knows with plain net/http, asks for the main package, and has no web root', async ({
+        page
+    }) => {
+        await openAddApp(page)
+        await page.getByLabel('Language').selectOption('go')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(framework).toHaveValue('gin')
+        await expect(framework.locator('option')).toHaveText([
+            'Gin',
+            'Echo',
+            'Fiber',
+            'Chi',
+            'Gorilla',
+            'Iris',
+            'Hertz',
+            'Beego',
+            'Buffalo',
+            'go-zero',
+            'Kratos',
+            'GoFrame',
+            'Huma',
+            'Connect',
+            'gRPC',
+            'net/http'
+        ])
+        await framework.selectOption('net-http')
+        await expect(framework).toHaveValue('net-http')
+        await expect(page.getByLabel('Web root')).toHaveCount(0)
+        await expect(page.getByLabel('Main package')).toHaveAttribute('placeholder', 'cmd/server')
+        await expect(
+            page.getByRole('radiogroup', { name: 'Go version' }).getByRole('radio', { name: /^1\.27\./ })
+        ).toBeVisible()
     })
 
     test('the web root is asked only of PHP apps and static sites, which serve files from it', async ({ page }) => {
@@ -852,7 +898,7 @@ test.describe('adding an application', () => {
 
         await expect(webRoot).toHaveValue('/public')
 
-        for (const proxied of ['js', 'ruby', 'python']) {
+        for (const proxied of ['js', 'ruby', 'python', 'go']) {
             await language.selectOption(proxied)
             await expect(webRoot).toHaveCount(0)
         }
