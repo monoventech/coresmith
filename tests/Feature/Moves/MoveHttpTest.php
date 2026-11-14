@@ -109,7 +109,8 @@ describe('on coresmith cloud', function () {
 
         $response = $this->actingAs(moveHttpOwner($team))->get(route('settings.billing.move.file'))
             ->assertOk()
-            ->assertHeader('content-disposition', 'attachment; filename="acme.coresmith-move"');
+            ->assertHeader('content-disposition', 'attachment; filename="acme.coresmith-move"')
+            ->assertHeader('content-type', 'application/octet-stream');
 
         expect($response->getContent())->toBe($team->fresh()->move_file);
     });
