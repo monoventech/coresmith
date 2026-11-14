@@ -19,14 +19,14 @@ final class RepositoryProbe
     public const FILES = [
         '.tool-versions', 'composer.json', 'package.json', '.nvmrc', '.node-version', '.ruby-version', 'Gemfile', 'Gemfile.lock', '.dvmrc', 'deno.json', 'deno.jsonc',
         'svelte.config.js', 'svelte.config.ts', 'next.config.js', 'next.config.mjs', 'next.config.ts', 'nuxt.config.ts', 'nuxt.config.js',
-        'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml',
+        'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml', 'angular.json',
     ];
 
     public const LOCKFILES = ['bun.lock', 'bun.lockb', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'deno.lock'];
 
     public const MARKERS = [
         'artisan', 'bin/rails', 'bin/console', 'config.ru', 'Rakefile', 'index.php', 'public/index.php', 'web/index.php',
-        'index.html', 'public/index.html', 'main.ts', 'config/master.key', 'config/database.yml', 'symfony.lock', 'config/bundles.php', 'server.js',
+        'index.html', 'public/index.html', 'main.ts', 'config/master.key', 'config/database.yml', 'symfony.lock', 'config/bundles.php', 'server.js', 'ace.js',
     ];
 
     public const ENV_SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'RAILS_MASTER_KEY'];

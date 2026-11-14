@@ -694,3 +694,13 @@ test('the links on the add an app page carry the team address', function () {
             ->where('github.connections.0.repositories_href', 'http://localhost/monoven/settings/source-providers/' . $connection->id . '/repositories')
             ->where('github.settings_href', 'http://localhost/monoven/settings/git'));
 });
+
+test('the add an app page offers the JavaScript frameworks the presets serve', function () {
+    [$owner, $server] = linkedStoreTeam();
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $server))
+        ->assertInertia(fn($page) => $page
+            ->component('applications/Create')
+            ->where('js_frameworks.0', ['value' => 'sveltekit', 'label' => 'SvelteKit'])
+            ->where('js_frameworks.3', ['value' => 'astro', 'label' => 'Astro']));
+});

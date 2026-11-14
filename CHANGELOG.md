@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.10 (2026-11-14)
+
+### Added
+- feat: JavaScript presets, AdonisJS and Angular apps, and the SQLite lock wait (#81)
+
+### Fixed
+- fix: the move file downloads as a plain file in every browser, and the password test uses an address Linux refuses at once (#80)
+
+### Changed
+- ci: the MySQL job runs Pest as root, so each parallel worker can create its own test database (#79)
+
 ## v0.8.9 (2026-11-14)
 
 ### Added

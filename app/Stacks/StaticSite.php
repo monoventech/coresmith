@@ -14,12 +14,13 @@ use App\Services\Detection\Blocker;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
+use App\Stacks\JsPresets\JsPresets;
 
 final readonly class StaticSite implements Language
 {
     private const STATIC_INDEXES = ['' => 'index.html', 'public' => 'public/index.html'];
 
-    public function __construct(private JsCommands $js, private JsFrameworks $frameworks) {}
+    public function __construct(private JsCommands $js, private JsPresets $presets) {}
 
     public function install(Application $application, Stack $stack): array
     {
@@ -100,7 +101,7 @@ final readonly class StaticSite implements Language
         $web = trim((string) $choice->web_directory, '/');
 
         if ($facts->script('build')) {
-            $output = $this->frameworks->staticOutput($facts);
+            $output = $this->presets->staticOutput($facts);
 
             return $output !== null && $output !== '/' . $web
                 ? [new Blocker('web_directory', "The build writes to {$output}, so the web root /{$web} would be empty.", "Set the web root to {$output}.")]

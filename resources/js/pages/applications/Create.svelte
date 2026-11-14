@@ -30,7 +30,8 @@
         server,
         runtimes,
         github,
-        projects = []
+        projects = [],
+        js_frameworks = []
     }: {
         server: {
             id: string
@@ -41,7 +42,23 @@
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
         projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
+        js_frameworks: { value: string; label: string }[]
     } = $props()
+
+    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
+        php: [
+            { value: 'laravel', label: 'Laravel' },
+            { value: 'symfony', label: 'Symfony' },
+            { value: '', label: 'Plain PHP' }
+        ],
+        js: [...js_frameworks, { value: '', label: 'API or other' }],
+        ruby: [
+            { value: 'rails', label: 'Rails' },
+            { value: 'sinatra', label: 'Sinatra' },
+            { value: 'rack', label: 'Rack' }
+        ],
+        static: [{ value: '', label: 'No framework' }]
+    })
 
     const GIT_URL = 'url'
 
@@ -52,27 +69,6 @@
     const STACK_FIELDS = ['type', 'framework', 'js_runtime', 'web_directory']
 
     const UNSET = 'unset'
-
-    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = {
-        php: [
-            { value: 'laravel', label: 'Laravel' },
-            { value: 'symfony', label: 'Symfony' },
-            { value: '', label: 'Plain PHP' }
-        ],
-        js: [
-            { value: 'sveltekit', label: 'SvelteKit' },
-            { value: 'nextjs', label: 'Next.js' },
-            { value: 'nuxt', label: 'Nuxt' },
-            { value: 'astro', label: 'Astro' },
-            { value: '', label: 'API or other' }
-        ],
-        ruby: [
-            { value: 'rails', label: 'Rails' },
-            { value: 'sinatra', label: 'Sinatra' },
-            { value: 'rack', label: 'Rack' }
-        ],
-        static: [{ value: '', label: 'No framework' }]
-    }
 
     const SERVES_FILES = ['php', 'static']
 

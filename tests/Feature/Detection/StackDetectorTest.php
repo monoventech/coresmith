@@ -47,6 +47,8 @@ test('each repository gets the stack its files settle', function (string $fixtur
     'nuxt' => ['nuxt-app', 'ready', 'js', 'nuxt', 'node', null],
     'nuxt generate' => ['nuxt-generate', 'ready', 'static', '', null, '/.output/public'],
     'astro on node' => ['astro-node', 'ready', 'js', 'astro', 'node', null],
+    'adonisjs 6' => ['adonisjs-web', 'ready', 'js', 'adonisjs', 'node', null],
+    'angular, static' => ['angular-static', 'ready', 'static', '', null, '/dist/shop/browser'],
     'astro static, astro-paper' => ['astro-paper', 'ready', 'static', '', null, '/dist'],
     'vite react' => ['vite-react', 'ready', 'static', '', null, '/dist'],
     'vite with its own outDir' => ['vite-outdir', 'unsure', 'static', '', null, null],

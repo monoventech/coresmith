@@ -10,12 +10,13 @@ namespace App\Services\Detection;
 
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\Stack;
+use App\Stacks\JsPresets\JsPresets;
 
 final readonly class DetectedStack
 {
     private const FRAMEWORKS = [
         'php' => ['laravel' => 'Laravel', 'symfony' => 'Symfony', '' => 'Plain PHP'],
-        'js' => ['sveltekit' => 'SvelteKit', 'nextjs' => 'Next.js', 'nuxt' => 'Nuxt', 'astro' => 'Astro', '' => 'API or other'],
+        'js' => ['' => 'API or other'],
         'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra', 'rack' => 'Rack'],
     ];
 
@@ -54,7 +55,7 @@ final readonly class DetectedStack
     {
         $version = $this->version();
         $runtime = $this->runtime === null || $version === null ? null : $catalog->label($this->runtime) . ' ' . $version;
-        $framework = self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
+        $framework = ($this->type === 'js' ? app(JsPresets::class)->find((string) $this->framework)?->label() : null) ?? self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
 
         return match ($this->type) {
             'static' => 'Static site, web root ' . ($this->webDirectory ?? '/'),
