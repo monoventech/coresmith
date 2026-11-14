@@ -173,6 +173,14 @@ test('a failed build says where it stopped and what to do', function (string $ou
     'no runnable jar' => ["[INFO] BUILD SUCCESS\nCoresmith found no runnable jar in target. Package the app as a jar whose manifest names its Main-Class, then deploy again.\n", 'Coresmith found no runnable jar in target. Package the app as a jar whose manifest names its Main-Class, then deploy again.'],
 ]);
 
+test("npm warnings Maven's frontend plugin prints as errors are never the explanation, and a failed frontend task is", function (string $output, ?string $explained) {
+    expect(ApplicationType::Java->language()->explain(DeploymentPhases::BUILD, $output, javaDeployStack()))->toBe($explained);
+})->with([
+    'warnings and no failure' => ["[INFO] Installing node version v24.21.0\n[ERROR] npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory.\n[ERROR] npm warn deprecated glob@7.2.3: Old versions of glob are not supported\n", null],
+    'a failed frontend task' => ["[ERROR] npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory.\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal com.github.eirslett:frontend-maven-plugin:1.15.1:npm (webapp build) on project jhipster-sample-application: Failed to run task: 'npm run webapp:prod' failed. org.apache.commons.exec.ExecuteException: Process exited with an error: 1 (Exit value: 1) -> [Help 1]\n", "The Maven build failed: Failed to run task: 'npm run webapp:prod' failed. org.apache.commons.exec.ExecuteException: Process exited with an error: 1 (Exit value: 1). Fix it, then deploy again."],
+    'a failure with only warnings beside it' => ["[ERROR] npm warn deprecated inflight@1.0.6: leaks memory\n[INFO] BUILD FAILURE\n[ERROR] Could not find the selected project in the reactor: web\n", 'The Maven build failed: Could not find the selected project in the reactor: web. Fix it, then deploy again.'],
+]);
+
 test('only the build phase is explained', function () {
     expect(ApplicationType::Java->language()->explain(DeploymentPhases::DEPENDENCIES, "[ERROR] boom\n", javaDeployStack()))->toBeNull()
         ->and(ApplicationType::Java->language()->explain(DeploymentPhases::BUILD, "BUILD SUCCESSFUL\n", javaDeployStack()))->toBeNull();
