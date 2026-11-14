@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.12 (2026-11-14)
+
+### Added
+- feat: Developer SSH keys, a searchable Releases list, level Now cards and DNS advice that leads with Cloudflare's proxy (#85)
+
 ## v0.8.11 (2026-11-14)
 
 ### Added
