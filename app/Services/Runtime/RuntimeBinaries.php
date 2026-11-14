@@ -22,6 +22,7 @@ final class RuntimeBinaries
         'ruby' => ['bin/ruby', 'bin/bundle'],
         'python' => ['bin/python'],
         'go' => ['bin/go'],
+        'java' => ['bin/java'],
     ];
 
     public const COMPOSER_INSTALLER = 'https://getcomposer.org/installer';

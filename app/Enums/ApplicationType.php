@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Enums;
 
 use App\Stacks\Go;
+use App\Stacks\Java;
 use App\Stacks\JavaScript;
 use App\Stacks\Language;
 use App\Stacks\Php;
@@ -24,6 +25,7 @@ enum ApplicationType: string
     case Static = 'static';
     case Python = 'python';
     case Go = 'go';
+    case Java = 'java';
 
     public function runtime(?string $jsRuntime = null): ?string
     {
@@ -32,6 +34,7 @@ enum ApplicationType: string
             self::Ruby => 'ruby',
             self::Python => 'python',
             self::Go => 'go',
+            self::Java => 'java',
             self::Js => match ($jsRuntime) {
                 'node' => 'nodejs',
                 'deno' => 'deno',
@@ -50,6 +53,7 @@ enum ApplicationType: string
             self::Static => StaticSite::class,
             self::Python => Python::class,
             self::Go => Go::class,
+            self::Java => Java::class,
         });
     }
 }

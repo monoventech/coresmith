@@ -28,6 +28,8 @@ test('a new app starts with the variables its framework needs', function (Applic
     'plain php' => [ApplicationType::Php, null, []],
     'next.js' => [ApplicationType::Js, 'nextjs', []],
     'static' => [ApplicationType::Static, null, []],
+    'JHipster' => [ApplicationType::Java, 'jhipster', ['JHIPSTER_SECURITY_AUTHENTICATION_JWT_BASE64_SECRET' => '~^[A-Za-z0-9+/]{86}==$~']],
+    'Spring Boot' => [ApplicationType::Java, 'spring-boot', []],
 ]);
 
 test('each app gets its own secrets', function () {
@@ -51,6 +53,13 @@ test('Rails with a master key gets no SECRET_KEY_BASE', function (string $env, R
     'in the environment' => ["RAILS_MASTER_KEY=0123456789abcdef0123456789abcdef\n", new RepositoryFacts(complete: true)],
     'in the committed .env' => ['', new RepositoryFacts(envKeys: ['RAILS_MASTER_KEY'], complete: true)],
     'committed as config/master.key' => ['', new RepositoryFacts(markers: ['config/master.key'], complete: true)],
+]);
+
+test("a JHipster deploy fills the JWT secret JHipster's prod profile leaves out, unless the app sets one", function (string $env, array $missing) {
+    expect(array_keys(app(StackDefaults::class)->missing(stackDefaultsApp('jhipster', $env, ApplicationType::Java), new RepositoryFacts(complete: true))))->toBe($missing);
+})->with([
+    'nowhere' => ['', ['JHIPSTER_SECURITY_AUTHENTICATION_JWT_BASE64_SECRET']],
+    'set in the environment' => ["JHIPSTER_SECURITY_AUTHENTICATION_JWT_BASE64_SECRET=c2VjcmV0\n", []],
 ]);
 
 test('a deploy fills only secrets, never APP_ENV', function () {

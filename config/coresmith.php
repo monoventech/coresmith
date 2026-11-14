@@ -183,7 +183,19 @@ return [
                 ['line' => '1.25', 'latest' => '1.25.14', 'active_until' => '2026-08-19', 'eol_at' => '2026-08-19'],
             ],
         ],
+        'java' => [
+            'label' => 'Java',
+            'line' => 'major',
+            'recommended' => '25',
+            'versions' => [
+                ['line' => '25', 'latest' => '25.0.5', 'active_until' => '2031-09-30', 'eol_at' => '2031-09-30'],
+                ['line' => '21', 'latest' => '21.0.13', 'active_until' => '2029-12-31', 'eol_at' => '2029-12-31'],
+                ['line' => '17', 'latest' => '17.0.21', 'active_until' => '2027-10-31', 'eol_at' => '2027-10-31'],
+            ],
+        ],
     ],
+
+    'temurin_builds' => ['25.0.5' => '8', '21.0.13' => '9', '17.0.21' => '9'],
 
     'uv' => [
         'version' => '0.13.6',

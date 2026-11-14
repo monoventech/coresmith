@@ -12,9 +12,9 @@ use App\Services\SafeName;
 
 final class AppFolders
 {
-    public const LISTING = "git ls-tree -r --name-only HEAD 2>/dev/null | grep -E '(^|/)(composer\\.json|Gemfile|package\\.json|deno\\.jsonc?|index\\.html|requirements\\.txt|pyproject\\.toml|Pipfile|go\\.mod)$' | head -n 2000 | sed 's/^/@@manifest /'";
+    public const LISTING = "git ls-tree -r --name-only HEAD 2>/dev/null | grep -E '(^|/)(composer\\.json|Gemfile|package\\.json|deno\\.jsonc?|index\\.html|requirements\\.txt|pyproject\\.toml|Pipfile|go\\.mod|pom\\.xml|build\\.gradle(\\.kts)?)$' | head -n 2000 | sed 's/^/@@manifest /'";
 
-    private const MANIFESTS = ['composer.json', 'Gemfile', 'package.json', 'deno.json', 'deno.jsonc', 'index.html', 'requirements.txt', 'pyproject.toml', 'Pipfile', 'go.mod'];
+    private const MANIFESTS = ['composer.json', 'Gemfile', 'package.json', 'deno.json', 'deno.jsonc', 'index.html', 'requirements.txt', 'pyproject.toml', 'Pipfile', 'go.mod', 'pom.xml', 'build.gradle', 'build.gradle.kts'];
 
     private const DEPTH = 3;
 

@@ -11,10 +11,11 @@ namespace App\Services\Deployment;
 use App\Enums\ApplicationType;
 use App\Models\Application;
 use App\Services\Runtime\RepositoryFacts;
+use App\Stacks\Java;
 
 final class StackDefaults
 {
-    private const SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'SECRET_KEY'];
+    private const SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'SECRET_KEY', Java::JHIPSTER_SECRET];
 
     /**
      * @return array<string, string>
