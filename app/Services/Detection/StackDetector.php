@@ -49,7 +49,7 @@ final class StackDetector
             }
         }
 
-        $proposal ??= Proposal::unsure('type', "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, package.json, deno.json or index.html {$facts->at()}, so Coresmith can't tell what the app runs on.");
+        $proposal ??= Proposal::unsure('type', "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, go.mod, package.json, deno.json or index.html {$facts->at()}, so Coresmith can't tell what the app runs on.");
 
         if ($proposal['type'] === null) {
             return new DetectedStack(null, null, null, null, $proposal['sources'], $proposal['unsettled']);

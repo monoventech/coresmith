@@ -328,3 +328,29 @@ test('the folders a read finds come back with it', function () {
 
     expect($read->folders)->toBe(['apps/web', 'packages/ui']);
 });
+
+test('Go modules in folders are offered by their go.mod, and vendored modules are not', function () {
+    $source = sys_get_temp_dir() . '/coresmith-go-folders-' . Str::random(8);
+
+    foreach ([
+        'run/helloworld/go.mod' => "module example.com/helloworld\n\ngo 1.25.0\n",
+        'heroku/go.mod' => "module main\n\ngo 1.26.0\n",
+        'heroku/vendor/github.com/acme/lib/go.mod' => "module github.com/acme/lib\n",
+    ] as $path => $content) {
+        File::ensureDirectoryExists(dirname($source . '/' . $path));
+        File::put($source . '/' . $path, $content);
+    }
+
+    $git = fn(string $command) => Process::path($source)->env(['GIT_AUTHOR_NAME' => 'a', 'GIT_AUTHOR_EMAIL' => 'a@example.com', 'GIT_COMMITTER_NAME' => 'a', 'GIT_COMMITTER_EMAIL' => 'a@example.com'])->run($command)->throw();
+    $git('git init --quiet --initial-branch=main');
+    $git('git config uploadpack.allowFilter true');
+    $git('git config uploadpack.allowAnySHA1InWant true');
+    $git('git add -A');
+    $git('git commit --quiet -m start');
+
+    $output = Process::input(app(RepositoryReader::class)->script('file://' . $source, 'main', ''))->run('bash -s')->output();
+
+    File::deleteDirectory($source);
+
+    expect(AppFolders::in($output))->toBe(['heroku', 'run/helloworld']);
+});
