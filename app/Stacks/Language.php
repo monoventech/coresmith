@@ -37,4 +37,6 @@ interface Language
     public function webCommand(Application $application): ?string;
 
     public function usesFpm(): bool;
+
+    public function route(Application $application): Route;
 }

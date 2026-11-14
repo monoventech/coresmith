@@ -54,4 +54,9 @@ final readonly class Ruby implements Language
     {
         return false;
     }
+
+    public function route(Application $application): Route
+    {
+        return Route::ReverseProxy;
+    }
 }

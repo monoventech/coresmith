@@ -47,4 +47,9 @@ final readonly class StaticSite implements Language
     {
         return false;
     }
+
+    public function route(Application $application): Route
+    {
+        return Route::FileServer;
+    }
 }

@@ -65,6 +65,11 @@ final readonly class JavaScript implements Language
         return false;
     }
 
+    public function route(Application $application): Route
+    {
+        return Route::ReverseProxy;
+    }
+
     private function entry(Application $application, ?JsTooling $tooling): string
     {
         return match (strtolower((string) $application->framework)) {

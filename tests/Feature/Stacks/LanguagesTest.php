@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Stacks\JavaScript;
 use App\Stacks\Language;
 use App\Stacks\Php;
+use App\Stacks\Route;
 use App\Stacks\Ruby;
 use App\Stacks\StaticSite;
 
@@ -27,4 +28,10 @@ test('only PHP apps run under PHP-FPM, and only JavaScript and Ruby apps run a w
             '/opt/asdf-data/installs/ruby/3.4.1/bin/bundle exec puma -b tcp://127.0.0.1:4100',
             null,
         ]);
+});
+
+test('PHP apps are handed to PHP-FPM, static sites to the file server and the rest to their own port', function () {
+    expect(array_map(fn(ApplicationType $type): Route => $type->language()->route(new Application(['type' => $type])), ApplicationType::cases()))
+        ->toBe([Route::PhpFastcgi, Route::ReverseProxy, Route::ReverseProxy, Route::FileServer])
+        ->and(array_map(fn(Route $route): bool => $route->servesFiles(), Route::cases()))->toBe([true, false, true]);
 });

@@ -53,6 +53,11 @@ final readonly class Php implements Language
         return true;
     }
 
+    public function route(Application $application): Route
+    {
+        return Route::PhpFastcgi;
+    }
+
     /**
      * @return list<string>
      */
