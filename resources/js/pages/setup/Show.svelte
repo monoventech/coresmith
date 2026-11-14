@@ -69,7 +69,7 @@
         {
             key: 'existing' as const,
             label: 'Use an existing VM',
-            desc: 'Any Ubuntu 24.04 or Debian 12 machine with SSH access'
+            desc: 'A Linux machine with SSH access, such as Ubuntu 24.04 or Debian 12'
         }
     ]
 
@@ -200,8 +200,8 @@
                 {#if github?.connected}<Badge variant="success">Connected</Badge>{/if}
             </div>
             <p class="type-body-sm mb-4 text-muted-foreground">
-                Install the Coresmith GitHub App on your organization. It asks for the minimum: contents read-only,
-                commit statuses and webhooks, per repository, not your whole account.
+                Install the Coresmith GitHub App on your account or organization, on the repositories you choose. It
+                asks only for read-only contents, commit statuses and webhooks.
             </p>
             <ul class="m-0 mb-5 flex list-none flex-col gap-2 p-0 text-[13.5px]">
                 <li class="flex items-center gap-2.5">
@@ -418,8 +418,8 @@
                                 />
                                 <FieldError message={errors.ip_address} />
                                 <p class="mt-1.5 text-[12px] text-muted-foreground">
-                                    Needs root SSH access and Ubuntu 24.04 or Debian 12. Coresmith hardens it during
-                                    provisioning.
+                                    Needs root SSH access and Ubuntu, Debian, Rocky Linux, AlmaLinux, Fedora or Amazon
+                                    Linux. Coresmith hardens it during provisioning.
                                 </p>
                             </div>
                         </div>

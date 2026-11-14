@@ -133,7 +133,7 @@ final class SingleSignOnController extends Controller
         if ($failure !== null) {
             return back()->with('error', $failure === SsoConnections::WRONG_VALUE
                 ? 'The TXT record is there but its value does not match. Copy it again from this page.'
-                : 'The TXT record is not visible yet. DNS can take a few minutes, check again shortly.');
+                : 'The TXT record is not visible yet. DNS can take a few minutes, so check again shortly.');
         }
 
         activity()

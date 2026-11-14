@@ -314,7 +314,7 @@ test.describe('changing an application', () => {
         )
         await expect(toggle(page, 'Maintenance page')).toBeDisabled()
         await expect(page.getByTestId('toggle-maintenance_mode')).toContainText(
-            'The application is stopped, so visitors already see one.'
+            'The app is stopped, so visitors already see one.'
         )
     })
 })
@@ -578,7 +578,9 @@ test.describe('what the full app page adds on a wider screen', () => {
 })
 
 test.describe('adding an application', () => {
-    test("the domain help shows this server's addresses ready to copy, named as the domain is typed", async ({ page }) => {
+    test("the domain help shows this server's addresses ready to copy, named as the domain is typed", async ({
+        page
+    }) => {
         await captureClipboard(page)
         await gotoServer(page, 'forge-01')
         await page.getByRole('link', { name: 'Add an app' }).click()
@@ -1379,11 +1381,11 @@ test.describe('an app that follows its branch', () => {
         await expect(toast(page)).toContainText('Saved. Auto deploy is on, trunk deploys whenever it changes.')
         await expect(toggle(page, 'Auto deploy')).toBeChecked()
         await expect(row).toContainText('Checks trunk for new commits every minute.')
-        await expect(row).toContainText('GitHub cannot reach 127.0.0.1, it only answers on this machine.')
+        await expect(row).toContainText("GitHub can't reach 127.0.0.1, because it only answers on this machine.")
 
         await toggle(page, 'Auto deploy').click()
 
-        await expect(toast(page)).toContainText('Saved. Auto deploy is off, deploy from this page when you are ready.')
+        await expect(toast(page)).toContainText("Saved. Auto deploy is off. Deploy from this page when you're ready.")
         await expect(toggle(page, 'Auto deploy')).not.toBeChecked()
         await expect(row).toContainText('Deploy trunk whenever it changes')
     })
@@ -1416,7 +1418,7 @@ test.describe('an app that follows its branch', () => {
 
         await expect(toggle(page, 'Auto deploy')).toBeChecked()
         await expect(row).toContainText('Checks trunk for new commits every minute.')
-        await expect(row).toContainText('GitHub cannot reach 127.0.0.1, it only answers on this machine.')
+        await expect(row).toContainText("GitHub can't reach 127.0.0.1, because it only answers on this machine.")
     })
 })
 
@@ -1430,7 +1432,7 @@ test.describe('an app whose GitHub connection is gone', () => {
             'This app clones monoventech/relay through GitHub, and that connection was removed.'
         )
         await expect(banner).toContainText(
-            'Public repositories still deploy, private ones need GitHub connected again.'
+            'Public repositories still deploy. Private ones need GitHub connected again.'
         )
         await expect(page.getByTestId('source-card')).toContainText(
             'Cloned through GitHub, which needs connecting again.'
@@ -1559,7 +1561,7 @@ test.describe('what the repository installs', () => {
         await gotoApplication(page, 'bench-01', name)
 
         await expect(row).toContainText('Reverb websockets')
-        await expect(row).toContainText(/Available, turning it on gives it port 91[2-6]2 from the next deploy/)
+        await expect(row).toContainText(/Available\. Turning it on gives it port 91[2-6]2 from the next deploy/)
 
         await toggle(page, 'Reverb websockets').click()
 

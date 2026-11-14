@@ -90,7 +90,7 @@ test("a refused account's catalog says so without asking the provider", function
 
     $catalog = app(CloudPresenter::class)->catalog($account);
 
-    expect($catalog['error'])->toBe("Hetzner Cloud refused this account's token on Oct 20. Replace it in Settings → Team, then try again.")
+    expect($catalog['error'])->toBe("Hetzner Cloud refused this account's token on Oct 20. Replace it in Settings, Team, then try again.")
         ->and([$catalog['regions'], $catalog['sizes'], $catalog['images']])->toBe([[], [], []])
         ->and($fake->api->calls())->toBe([]);
 });

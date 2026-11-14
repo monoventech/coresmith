@@ -99,7 +99,7 @@
     <div class="max-w-165">
         <EmptyState
             title="No API tokens yet."
-            description="Tokens let the CLI and your CI deploy for you, with only the abilities you give them. You see each token once, Coresmith stores it hashed, and you can revoke it at any time."
+            description="Tokens let scripts and your CI deploy for you, with only the abilities you give them. You see each token once, Coresmith stores it hashed, and you can revoke it at any time."
         />
         <div class="mt-4"><Button onclick={() => (creating = true)}>Create a token</Button></div>
     </div>

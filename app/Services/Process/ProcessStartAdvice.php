@@ -27,7 +27,7 @@ final class ProcessStartAdvice
             str_contains($output, 'Environment: development') && str_contains($output, 'cannot load such file') => 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.',
             str_contains($output, 'Address already in use') || str_contains($output, 'EADDRINUSE') => "Port {$port} is already taken by another process. Find it with ss -tlnp | grep {$port}, stop it, then deploy again.",
             str_contains($output, 'EACCES') => 'The app wasn\'t allowed to listen on its port. Check nothing else on the server uses it, then deploy again.',
-            str_contains($output, 'MODULE_NOT_FOUND') || str_contains($output, 'Cannot find module') => 'A Node module is missing. Deploy again, the dependency install may have failed quietly.',
+            str_contains($output, 'MODULE_NOT_FOUND') || str_contains($output, 'Cannot find module') => 'A Node module is missing. The dependency install may have failed without saying so, so deploy again.',
             str_contains($output, 'Permission denied') => "The process could not read its files. Check ownership with ls -la /var/coresmith/apps/{$slug}/current/, then deploy again.",
             str_contains($output, 'No such file or directory') => 'The entry point was not found. Check the build produced the file the process starts, then deploy again.',
             str_contains($output, 'SyntaxError') || str_contains($output, 'Parse error') => 'The code has a syntax error. The process log names the file and line.',

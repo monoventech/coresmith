@@ -339,7 +339,7 @@ final class StackChecks
         return match (true) {
             $adapter === null, in_array($adapter, self::SERVER_ADAPTERS, true) => [],
             $adapter === '@sveltejs/adapter-static' => [new Blocker('type', 'svelte.config.js uses @sveltejs/adapter-static, so the build is static files, not a server.', 'Pick Static site with the web root /build.')],
-            default => [new Blocker('framework', "svelte.config.js uses {$adapter}, which builds for a hosting platform, not for a server Coresmith runs.", 'Install @sveltejs/adapter-node, use it in svelte.config.js, then commit both.')],
+            default => [new Blocker('framework', "svelte.config.js uses {$adapter}, which builds the app for that hosting platform's own servers.", 'Install @sveltejs/adapter-node, use it in svelte.config.js, then commit both.')],
         };
     }
 

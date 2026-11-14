@@ -408,7 +408,7 @@ test('an admin can provision a server whose recent check found nothing blocking'
     $this->actingAs(teamMember($team, TeamRole::Admin))
         ->post(route('servers.provision', $server))
         ->assertRedirect()
-        ->assertSessionHas('success', 'Provisioning started. Every phase is logged, close this page and it keeps going.');
+        ->assertSessionHas('success', 'Provisioning started. Every phase is logged, and it keeps going if you close this page.');
 
     expect($server->fresh()->status)->toBe(ServerStatus::Provisioning);
 

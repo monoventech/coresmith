@@ -312,7 +312,7 @@ final class PreProvisioningAudit
 
             $version = preg_match('/\d+\.\d+(?:\.\d+)?/', Str::after($line, ' '), $matches) === 1 ? ' ' . $matches[0] : '';
 
-            $findings[] = new AuditFinding("runtime_{$bin}", AuditSeverity::Info, self::RUNTIMES[$bin] . $version . ' is installed from system packages', 'Coresmith installs its own runtimes. This one stays, and apps just don\'t use it.');
+            $findings[] = new AuditFinding("runtime_{$bin}", AuditSeverity::Info, self::RUNTIMES[$bin] . $version . ' is installed from system packages', 'Coresmith installs its own runtimes. This one stays, and apps don\'t use it.');
         }
 
         foreach ($managers as $path) {

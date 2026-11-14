@@ -160,7 +160,7 @@ test('the maintenance page cannot be toggled while the application is stopped', 
 
     $this->actingAs(toggleRouteMember($team, TeamRole::Owner))
         ->put(toggleRouteUrl($application, 'maintenance_mode'), ['on' => true])
-        ->assertSessionHas('error', 'The application is stopped, so visitors already see the maintenance page. Start it first.');
+        ->assertSessionHas('error', 'The app is stopped, so visitors already see the maintenance page. Start it first.');
 
     expect($application->fresh()->toggles)->toBe(['maintenance_mode' => false])
         ->and(Activity::query()->where('description', 'toggle_changed')->exists())->toBeFalse();

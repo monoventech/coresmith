@@ -41,7 +41,7 @@
     {#if projects.length === 0 && unfiled.length === 0 && narrowed}
         <EmptyState
             title="Nothing is shared with you yet."
-            description="Ask an owner of your team to share a project, a server or an app with you."
+            description="Ask an owner or admin of your team to share a project, a server or an app with you."
         />
     {:else if projects.length === 0}
         <EmptyState

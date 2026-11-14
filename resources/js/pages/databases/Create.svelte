@@ -30,13 +30,13 @@
                   ['Localhost only', 'never bound to a public interface'],
                   ['An instance of its own', 'its own port, process and data, apart from every other app'],
                   ['Its own password', 'anything without it is turned away'],
-                  ['Encrypted at rest', 'the password is vaulted after it is shown once']
+                  ['Encrypted at rest', 'the password is stored encrypted after it is shown once']
               ]
             : [
                   ['Localhost only', 'never bound to a public interface'],
                   ['Its own user', 'no shared credentials between apps'],
                   ['Least privilege', 'standard grants unless you choose more'],
-                  ['Encrypted at rest', 'the password is vaulted after it is shown once']
+                  ['Encrypted at rest', 'the password is stored encrypted after it is shown once']
               ]
     )
 </script>

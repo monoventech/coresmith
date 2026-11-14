@@ -43,7 +43,7 @@ test.describe('setup', () => {
         const step = page.getByTestId('setup-step')
 
         await expect(step).toContainText(
-            'Install the Coresmith GitHub App on your organization. It asks for the minimum: contents read-only, commit statuses and webhooks, per repository, not your whole account.'
+            'Install the Coresmith GitHub App on your account or organization, on the repositories you choose. It asks only for read-only contents, commit statuses and webhooks.'
         )
         await expect(step.getByText('Fine-grained, per-repository permissions')).toBeVisible()
         await expect(step.getByText('Installation tokens expire after one hour')).toBeVisible()

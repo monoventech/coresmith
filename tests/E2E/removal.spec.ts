@@ -119,7 +119,7 @@ test.describe('removing Coresmith', () => {
         await openRemoval(page)
         await dialog(page).getByRole('button', { name: 'Continue' }).click()
 
-        await expect(dialog(page).getByRole('heading', { name: 'Are you sure?' })).toBeVisible()
+        await expect(dialog(page).getByRole('heading', { name: 'Remove Coresmith for good?' })).toBeVisible()
         await expect(dialog(page)).toContainText(
             "There's no undo. Type 127.0.0.1 and your password to remove Coresmith."
         )
@@ -227,7 +227,7 @@ test.describe('removing Coresmith', () => {
             expect(await blockingViolations(page), `removal step 1 in ${theme}`).toEqual([])
 
             await dialog(page).getByRole('button', { name: 'Continue' }).click()
-            await expect(dialog(page).getByRole('heading', { name: 'Are you sure?' })).toBeVisible()
+            await expect(dialog(page).getByRole('heading', { name: 'Remove Coresmith for good?' })).toBeVisible()
             expect(await blockingViolations(page), `removal step 2 in ${theme}`).toEqual([])
         })
 

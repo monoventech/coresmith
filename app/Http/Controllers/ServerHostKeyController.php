@@ -49,7 +49,7 @@ final class ServerHostKeyController extends Controller
 
         SyncAuthorizedKeys::dispatch($server);
 
-        return back()->with('success', 'New host key accepted. Operations on this server can resume.');
+        return back()->with('success', 'New host key accepted. Coresmith connects to this server again.');
     }
 
     public function reject(Request $request, Server $server): RedirectResponse
@@ -73,6 +73,6 @@ final class ServerHostKeyController extends Controller
             ->withProperties(['rejected' => $pending])
             ->log('ssh_host_key_rejected');
 
-        return back()->with('success', 'Dismissed. The original key is still the only one trusted, so operations stay blocked until the server presents it again.');
+        return back()->with('success', 'Dismissed. Coresmith still trusts only the original key, so it won\'t connect until the server presents it again.');
     }
 }

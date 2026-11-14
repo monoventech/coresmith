@@ -263,9 +263,9 @@
                 <Dialog.Header>
                     <Dialog.Title>Change Coresmith's address</Dialog.Title>
                     <Dialog.Description
-                        >Check the domain first: Coresmith tests it from outside and says what to fix. Once it passes,
-                        Coresmith switches once there's a certificate for it, and the current address then sends people
-                        there. You'll sign in again at the new address.</Dialog.Description
+                        >Check the domain first: Coresmith tests it from outside and says what to fix. When it passes,
+                        Coresmith switches as soon as it has a certificate, and the current address sends people to the
+                        new one. You'll sign in again at the new address.</Dialog.Description
                     >
                 </Dialog.Header>
                 <div class="mt-4">

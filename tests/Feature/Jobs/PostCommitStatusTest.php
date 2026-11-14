@@ -178,8 +178,8 @@ test('a failed deploy posts failure', function (?string $live, string $descripti
     expect(commitStatusStates())->toBe(['pending', 'failure'])
         ->and(commitStatusPosts()[1]['description'])->toBe($description);
 })->with([
-    'an app with a live release' => ['20261018090000', 'Deploy failed, the previous release is still live'],
-    'a first deploy' => [null, 'Deploy failed, the app has no live release yet'],
+    'an app with a live release' => ['20261018090000', 'Deploy failed. The previous release is still live'],
+    'a first deploy' => [null, 'Deploy failed. The app has no live release yet'],
 ]);
 
 test('a deploy that failed after going live says so', function () {
@@ -192,7 +192,7 @@ test('a deploy that failed after going live says so', function () {
     expect(fn() => commitStatusRun($deployment, $transport))->toThrow(ProcessDidNotStart::class);
 
     expect(commitStatusStates())->toBe(['pending', 'failure'])
-        ->and(commitStatusPosts()[1]['description'])->toBe('Deploy failed after going live, read the log');
+        ->and(commitStatusPosts()[1]['description'])->toBe('Deploy failed after going live. Read the log');
 });
 
 test('apps without a github link post nothing', function () {
@@ -278,7 +278,7 @@ test('a deploy the stale sweep stops posts failure', function () {
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
         ->and(commitStatusStates())->toBe(['failure'])
-        ->and(commitStatusPosts()[0]['description'])->toBe('Deploy failed, the previous release is still live');
+        ->and(commitStatusPosts()[0]['description'])->toBe('Deploy failed. The previous release is still live');
 });
 
 test('a deploy that never learned its commit posts nothing', function () {
@@ -331,7 +331,7 @@ test('a server name too long for github is shortened to fit, so the rest of the 
 })->with([
     'pending' => [DeploymentStatus::Running, 'Deploying to ' . str_repeat('a', 127)],
     'success' => [DeploymentStatus::Succeeded, 'Live on ' . str_repeat('a', 113) . ' as 20261019-120000'],
-    'failure' => [DeploymentStatus::Failed, 'Deploy failed, the previous release is still live'],
+    'failure' => [DeploymentStatus::Failed, 'Deploy failed. The previous release is still live'],
 ]);
 
 test('an older deployment retried late never overwrites a newer deploy of the same commit', function () {
@@ -388,7 +388,7 @@ test('a deploy whose runtime install fails posts failure', function () {
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed)
         ->and(commitStatusStates())->toBe(['failure'])
-        ->and(commitStatusPosts()[0]['description'])->toBe('Deploy failed, the previous release is still live');
+        ->and(commitStatusPosts()[0]['description'])->toBe('Deploy failed. The previous release is still live');
 });
 
 test('a success that lands while a pending post is in flight waits for it, so success is the last post', function () {

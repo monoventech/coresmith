@@ -216,7 +216,7 @@ final class CloudPresenter
     {
         $label = $account->type->label();
 
-        return "{$label} refused this account's token on {$account->token_failed_at?->format('M j')}. Replace it in Settings → Team, then try again.";
+        return "{$label} refused this account's token on {$account->token_failed_at?->format('M j')}. Replace it in Settings, Team, then try again.";
     }
 
     /**

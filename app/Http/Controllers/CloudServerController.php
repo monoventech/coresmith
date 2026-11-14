@@ -78,7 +78,7 @@ final class CloudServerController extends Controller
 
         RunCloudTask::dispatch($server);
 
-        $message = "Creating {$name} at {$label}. This page follows along, close it and it keeps going.";
+        $message = "Creating {$name} at {$label}. This page follows along, and it keeps going if you close it.";
 
         return $request->validated('return_to') === 'setup'
             ? to_route('setup.show', ['step' => 2])->with('success', $message)

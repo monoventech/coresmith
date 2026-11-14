@@ -79,7 +79,7 @@ test('an app without a webhook on a private address polls and says why', functio
     expect($mode)->toBeInstanceOf(WebhookMode::class)
         ->and($mode->instant)->toBeFalse()
         ->and($mode->reason)->toBe('unreachable')
-        ->and($mode->sentence)->toBe('GitHub cannot reach 192.168.0.248, it is not a public address.');
+        ->and($mode->sentence)->toBe('GitHub can\'t reach 192.168.0.248, because it isn\'t a public address.');
 });
 
 test('an app without a webhook on a public address is told to point one here', function () {

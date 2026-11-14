@@ -36,7 +36,7 @@ final class RequireSetupToken
         abort_unless(
             $this->token->matches(is_string($provided) ? $provided : null),
             403,
-            'Invalid setup link. Use the URL shown during installation.',
+            'That setup link isn\'t valid. Use the link the installer printed.',
         );
 
         return $next($request);

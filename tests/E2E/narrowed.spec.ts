@@ -97,7 +97,7 @@ test.describe('an admin who sees only what is shared', () => {
         await emptyFleet(page)
 
         await expect(main(page)).toContainText('Nothing is shared with you yet.')
-        await expect(main(page)).toContainText('Ask an owner of your team to share a server or app with you.')
+        await expect(main(page)).toContainText('Ask an owner or admin of your team to share a server or app with you.')
         await expect(page.getByTestId('server-card')).toHaveCount(0)
     })
 

@@ -91,7 +91,7 @@ final class ApiTokenController extends Controller
             ->log('api_token_created');
 
         return back()->with([
-            'success' => 'Token created. Copy it now, it can\'t be shown again.',
+            'success' => 'Token created. Copy it now. It won\'t be shown again.',
             'plainTextToken' => $token->plainTextToken,
         ]);
     }
