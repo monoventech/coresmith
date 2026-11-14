@@ -57,7 +57,7 @@
             { value: 'symfony', label: 'Symfony' },
             { value: '', label: 'Plain PHP' }
         ],
-        js: [...js_frameworks, { value: '', label: 'API or other' }],
+        js: [...js_frameworks, { value: '', label: 'Other server' }],
         ruby: [
             { value: 'rails', label: 'Rails' },
             { value: 'sinatra', label: 'Sinatra' },
@@ -439,7 +439,7 @@
                                     { value: 'python', label: 'Python' },
                                     { value: 'go', label: 'Go' },
                                     { value: 'java', label: 'Java' },
-                                    { value: 'static', label: 'Static site' }
+                                    { value: 'static', label: 'Static or SPA' }
                                 ]}
                                 aria-invalid={errors.type ? true : undefined}
                             />
@@ -462,6 +462,11 @@
                                 ]}
                                 aria-invalid={errors.framework ? true : undefined}
                             />
+                            {#if type === 'js' && framework === ''}
+                                <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground" data-testid="server-hint">
+                                    Express, Hono, Elysia or any server its start script runs.
+                                </p>
+                            {/if}
                             {@render note('framework')}
                             <FieldError message={errors.framework} />
                         </div>
