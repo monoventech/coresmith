@@ -13,7 +13,7 @@ use App\Stacks\JsPresets\JsPresets;
 
 test('the JavaScript presets are tried in a fixed order', function () {
     expect(array_map(fn(JsPreset $preset): string => $preset->key(), app(JsPresets::class)->all()))
-        ->toBe(['sveltekit', 'nextjs', 'nuxt', 'astro', 'adonisjs', 'react-scripts', 'vite']);
+        ->toBe(['sveltekit', 'nextjs', 'nuxt', 'astro', 'adonisjs', 'angular', 'react-scripts', 'vite']);
 });
 
 test('a server preset is found by the framework an app stores, in any case, and next finds Next.js, while static-only presets are never an app\'s framework', function () {
@@ -30,8 +30,8 @@ test('a server preset is found by the framework an app stores, in any case, and 
 test('only server presets name the file they start from, and only SvelteKit adds to the environment', function () {
     $presets = app(JsPresets::class)->all();
 
-    expect(array_map(fn(JsPreset $preset): ?string => $preset->entry(), $presets))->toBe(['build/index.js', null, '.output/server/index.mjs', 'dist/server/entry.mjs', 'build/bin/server.js', null, null])
-        ->and(array_map(fn(JsPreset $preset): array => array_keys($preset->environment()), $presets))->toBe([['PROTOCOL_HEADER', 'HOST_HEADER', 'ADDRESS_HEADER'], [], [], [], ['LOG_LEVEL', 'SESSION_DRIVER'], [], []]);
+    expect(array_map(fn(JsPreset $preset): ?string => $preset->entry(), $presets))->toBe(['build/index.js', null, '.output/server/index.mjs', 'dist/server/entry.mjs', 'build/bin/server.js', null, null, null])
+        ->and(array_map(fn(JsPreset $preset): array => array_keys($preset->environment()), $presets))->toBe([['PROTOCOL_HEADER', 'HOST_HEADER', 'ADDRESS_HEADER'], [], [], [], ['LOG_LEVEL', 'SESSION_DRIVER'], [], [], []]);
 });
 
 test('Add an app offers the server presets as JavaScript frameworks, by name', function () {
@@ -41,6 +41,7 @@ test('Add an app offers the server presets as JavaScript frameworks, by name', f
         ['value' => 'nuxt', 'label' => 'Nuxt'],
         ['value' => 'astro', 'label' => 'Astro'],
         ['value' => 'adonisjs', 'label' => 'AdonisJS'],
+        ['value' => 'angular', 'label' => 'Angular'],
     ]);
 });
 

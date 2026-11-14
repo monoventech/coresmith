@@ -10,12 +10,15 @@ namespace App\Services\Runtime;
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Stacks\JsPresets\JsPresets;
 
 final readonly class JsTooling
 {
     public const MANAGERS = ['bun' => 'bun', 'npm' => 'nodejs', 'pnpm' => 'nodejs', 'yarn' => 'nodejs', 'deno' => 'deno'];
 
     public const START_SCRIPTS = ['start:prod', 'start'];
+
+    public const SERVER_SCRIPT = '/^serve:ssr:[A-Za-z0-9._-]+$/D';
 
     public const LOCKFILES = ['npm' => ['package-lock.json'], 'pnpm' => ['pnpm-lock.yaml'], 'yarn' => ['yarn.lock'], 'bun' => ['bun.lock', 'bun.lockb']];
 
@@ -111,7 +114,7 @@ final readonly class JsTooling
         $declared = (string) ($facts->json('package.json')['packageManager'] ?? '');
         $version = preg_match('/^' . $manager . '@(\d[\w.+-]*)/', $declared, $matches) === 1 ? $matches[1] : null;
 
-        $start = self::startScriptFor($facts);
+        $start = ($isJs ? app(JsPresets::class)->find((string) $application->framework)?->startScript($facts) : null) ?? self::startScriptFor($facts);
 
         return new self($manager, $lockfile !== null, $build, $start !== null, $version, ssr: $facts->script('build:ssr'), main: self::safeMain($facts->json('package.json')['main'] ?? null), startScript: $start ?? 'start');
     }
@@ -197,7 +200,7 @@ final readonly class JsTooling
             (bool) ($data['manifest'] ?? true),
             (bool) ($data['ssr'] ?? false),
             self::safeMain($data['main'] ?? null),
-            in_array($data['start_script'] ?? null, self::START_SCRIPTS, true) ? (string) $data['start_script'] : 'start',
+            in_array($data['start_script'] ?? null, self::START_SCRIPTS, true) || preg_match(self::SERVER_SCRIPT, (string) ($data['start_script'] ?? '')) === 1 ? (string) $data['start_script'] : 'start',
         );
     }
 

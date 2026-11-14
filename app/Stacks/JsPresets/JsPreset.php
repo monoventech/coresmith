@@ -66,6 +66,11 @@ abstract class JsPreset
         return [];
     }
 
+    public function startScript(RepositoryFacts $facts): ?string
+    {
+        return null;
+    }
+
     public function startsFromEntry(): bool
     {
         return false;
