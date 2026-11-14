@@ -12,7 +12,7 @@ export type Expectation =
     | { verdict: 'ready'; type: string; framework: string; js_runtime?: string | null; web_directory?: string | null }
     | { verdict: 'blocked' | 'unsure'; reason: string }
 
-export type Entry = { name: string; url: string; branch: string; expect?: Expectation; why?: string }
+export type Entry = { name: string; url: string; branch: string; folder?: string; expect?: Expectation; why?: string }
 
 export type Deploy = { status: string; reason: string | null; live: string | null; seconds: number; log: string }
 
@@ -280,6 +280,18 @@ for (const [index, entry] of entries.entries()) {
             await page.waitForTimeout(30_000)
             await page.getByLabel('Branch', { exact: true }).fill('')
             await page.getByLabel('Branch', { exact: true }).fill(entry.branch)
+            detail = await read()
+        }
+
+        if (entry.folder !== undefined) {
+            const before = detail
+
+            await page.getByLabel('Folder', { exact: true }).selectOption(entry.folder)
+            await until(
+                async () =>
+                    ((await page.getByTestId('stack-detection').innerText()) ?? '').trim() !== before ? true : null,
+                60
+            )
             detail = await read()
         }
 
