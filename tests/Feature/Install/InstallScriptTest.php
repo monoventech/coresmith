@@ -369,6 +369,13 @@ test('continuous integration runs the feature tests on every database the panel 
     'MySQL' => ['tests-mysql', 'mysql:8.0', 'mysql'],
 ]);
 
+test('the MySQL job runs the feature tests as a user that can create a database for each parallel worker', function () {
+    $definition = Yaml::parseFile(base_path('.github/workflows/ci.yml'))['jobs']['tests-mysql'] ?? [];
+
+    expect($definition['env']['DB_USERNAME'] ?? null)->toBe('root')
+        ->and($definition['env']['DB_PASSWORD'] ?? null)->toBe($definition['services']['mysql']['env']['MYSQL_ROOT_PASSWORD'] ?? false);
+});
+
 test('the installer clones from a directory the coresmith user can enter', function () {
     $body = installScriptBody();
     $clone = preg_match('/sudo -u coresmith git [^\n]*\bclone\b/', $body, $match, PREG_OFFSET_CAPTURE) === 1 ? $match[0][1] : false;
