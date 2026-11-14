@@ -10,11 +10,17 @@ namespace App\Stacks;
 
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Detection\Blocker;
 use App\Services\Runtime\AsdfManager;
+use App\Services\Runtime\RepositoryFacts;
+use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
+use Illuminate\Support\Arr;
 
 final readonly class Ruby implements Language
 {
+    public const GEM = 'Gemfile loads a gemspec, so this looks like a Ruby gem, not an app.';
+
     public function __construct(private JsCommands $js, private AsdfManager $asdf) {}
 
     public function install(Application $application, Stack $stack): array
@@ -82,5 +88,128 @@ final readonly class Ruby implements Language
     public function listenEnvironment(Application $application): array
     {
         return ['PORT' => (string) $application->base_port, 'HOST' => '127.0.0.1'];
+    }
+
+    /**
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}|null
+     */
+    public function detect(RepositoryFacts $facts): ?array
+    {
+        if (!$facts->has('Gemfile')) {
+            return null;
+        }
+
+        if (preg_match('/^\s*gemspec\b/m', (string) $facts->file('Gemfile')) === 1) {
+            return Proposal::unsure('type', self::GEM);
+        }
+
+        $sources = ['type' => $facts->has('Gemfile.lock') ? 'From Gemfile and Gemfile.lock' : 'From Gemfile'];
+
+        foreach (['rails' => 'bin/rails', 'sinatra' => 'config.ru'] as $gem => $marker) {
+            $version = $facts->gem($gem);
+
+            if ($version === null && !$this->gemfileNames($facts, $gem)) {
+                continue;
+            }
+
+            if ($gem === 'rails' && !$facts->exists($marker)) {
+                return Proposal::make('ruby', null, null, null, $sources, ['framework' => 'Gemfile names rails, but there is no bin/rails, so this looks like a Rails engine or gem, not an app.']);
+            }
+
+            return Proposal::make('ruby', $gem, null, null, [...$sources, 'framework' => $version === null ? "{$gem} in Gemfile" : "{$gem} {$version} in Gemfile.lock"], $this->oldBundler($facts));
+        }
+
+        return Proposal::make('ruby', null, null, null, $sources, ['framework' => 'Gemfile names neither rails nor sinatra. Coresmith runs Rails and Sinatra apps.']);
+    }
+
+    /**
+     * @return list<Blocker>
+     */
+    public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
+    {
+        if (!$facts->has('Gemfile')) {
+            return [new Blocker('type', "There is no Gemfile at the repository's root, so this isn't a Ruby app.", 'Pick the language the repository uses.')];
+        }
+
+        if (!$facts->has('Gemfile.lock')) {
+            return [new Blocker('repository', 'There is no Gemfile.lock. Coresmith installs gems in deployment mode, which needs it.', 'Commit Gemfile.lock: run bundle install, then commit the file it writes.')];
+        }
+
+        $blockers = [];
+
+        if ($facts->gem('puma') === null) {
+            $blockers[] = new Blocker('repository', "Puma isn't in Gemfile.lock. Coresmith starts Ruby apps with Puma.", 'Add gem "puma" to the Gemfile, run bundle install and commit Gemfile.lock.');
+        }
+
+        if ($framework === 'sinatra' && !$facts->exists('config.ru')) {
+            $blockers[] = new Blocker('framework', 'There is no config.ru, so Puma has no app to start.', 'Add a config.ru that runs the app, for example: run Sinatra::Application.');
+        } elseif ($framework === 'rails' && !$facts->exists('bin/rails')) {
+            $blockers[] = new Blocker('framework', "There is no bin/rails, so this isn't a Rails app at the repository's root.", 'Pick Sinatra if it uses Sinatra.');
+        }
+
+        $platform = $arch === null ? null : $this->platformMissing($facts, $arch);
+
+        return $platform === null ? $blockers : [...$blockers, $platform];
+    }
+
+    public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string
+    {
+        $rails = $facts->gem('railties');
+
+        return $runtime !== null && $runtime->source === ResolvedRuntime::FROM_DEFAULT && $rails !== null
+            ? "Nothing names a Ruby version, so Coresmith would pick the newest, Ruby {$runtime->version}, which gems locked with Rails {$rails} may not install or load on. Add a .ruby-version with the Ruby the app runs on, for example 3.3.6."
+            : null;
+    }
+
+    private function platformMissing(RepositoryFacts $facts, string $arch): ?Blocker
+    {
+        $local = match ($arch) {
+            'x86_64', 'amd64' => 'x86_64-linux',
+            'aarch64', 'arm64' => 'aarch64-linux',
+            default => null,
+        };
+
+        if ($local === null || preg_match('/^PLATFORMS\r?\n((?:  \S[^\r\n]*\r?\n?)+)/m', (string) $facts->file('Gemfile.lock'), $matches) !== 1) {
+            return null;
+        }
+
+        $platforms = array_values(array_filter(array_map(trim(...), preg_split('/\r\n|\n|\r/', $matches[1]) ?: []), fn(string $platform): bool => $platform !== ''));
+
+        foreach ($platforms as $platform) {
+            if ($platform === 'ruby' || $platform === $local || str_starts_with($platform, $local . '-')) {
+                return null;
+            }
+        }
+
+        return new Blocker(
+            'repository',
+            'Gemfile.lock lists only the ' . Arr::join($platforms, ', ', ' and ') . ' platform' . (count($platforms) === 1 ? '' : 's') . ", and this server is {$local}, so bundle install refuses it.",
+            "Run bundle lock --add-platform {$local}, then commit Gemfile.lock.",
+        );
+    }
+
+    private function gemfileNames(RepositoryFacts $facts, string $gem): bool
+    {
+        return preg_match('/^\s*gem\s+[\'"]' . preg_quote($gem, '/') . '[\'"]/m', (string) $facts->file('Gemfile')) === 1;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function oldBundler(RepositoryFacts $facts): array
+    {
+        $lock = $facts->file('Gemfile.lock');
+
+        if ($lock === null) {
+            return [];
+        }
+
+        $bundler = preg_match('/^BUNDLED WITH\R\s+(\d+\.\d+[\w.]*)/m', $lock, $matches) === 1 ? $matches[1] : null;
+
+        return match (true) {
+            $bundler === null => ['runtime_version' => "Gemfile.lock doesn't say which Bundler wrote it, so it predates Bundler 1.10. Coresmith builds Ruby 3.2 and newer, where locks that old often fail to install. Run bundle update --bundler, then commit Gemfile.lock."],
+            version_compare($bundler, '2.4', '<') => ['runtime_version' => "Gemfile.lock was written by Bundler {$bundler}. Coresmith builds Ruby 3.2 and newer, where locks that old often fail to install. Run bundle update --bundler, then commit Gemfile.lock."],
+            default => [],
+        };
     }
 }

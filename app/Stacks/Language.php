@@ -10,6 +10,9 @@ namespace App\Stacks;
 
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Detection\Blocker;
+use App\Services\Runtime\RepositoryFacts;
+use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
 
 interface Language
@@ -56,4 +59,16 @@ interface Language
      * @return array<string, string>
      */
     public function listenEnvironment(Application $application): array;
+
+    /**
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}|null
+     */
+    public function detect(RepositoryFacts $facts): ?array;
+
+    /**
+     * @return list<Blocker>
+     */
+    public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array;
+
+    public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string;
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Services\Runtime\RepositoryFacts;
 use App\Stacks\JavaScript;
 use App\Stacks\Language;
 use App\Stacks\Php;
@@ -63,3 +64,12 @@ test('each language names the environment its app starts with, runs with and lis
             [],
         ]);
 });
+
+test('each language detects only the repositories written in it', function (Closure $facts, array $types) {
+    expect(array_map(fn(ApplicationType $type): ?string => $type->language()->detect($facts())['type'] ?? null, ApplicationType::cases()))->toBe($types);
+})->with([
+    'composer.json and public/index.php' => [fn(): RepositoryFacts => new RepositoryFacts(['composer.json' => '{"require":{"slim/slim":"^4.12"}}'], markers: ['public/index.php'], complete: true), ['php', null, null, null]],
+    'a package.json server' => [fn(): RepositoryFacts => new RepositoryFacts(['package.json' => '{"scripts":{"start":"node server.js"},"dependencies":{"express":"^5.0.0"}}'], complete: true), [null, 'js', null, null]],
+    'a Sinatra Gemfile' => [fn(): RepositoryFacts => new RepositoryFacts(['Gemfile' => "gem 'sinatra'\n"], markers: ['config.ru'], complete: true), [null, null, 'ruby', null]],
+    'index.html alone' => [fn(): RepositoryFacts => new RepositoryFacts([], markers: ['index.html'], complete: true), [null, null, null, 'static']],
+]);

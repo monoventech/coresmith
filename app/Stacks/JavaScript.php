@@ -12,11 +12,13 @@ use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\JsTooling;
+use App\Services\Runtime\RepositoryFacts;
+use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
 
 final readonly class JavaScript implements Language
 {
-    public function __construct(private JsCommands $js, private AsdfManager $asdf) {}
+    public function __construct(private JsCommands $js, private AsdfManager $asdf, private JavaScriptDetection $detection, private JavaScriptChecks $checks) {}
 
     public function install(Application $application, Stack $stack): array
     {
@@ -91,6 +93,21 @@ final readonly class JavaScript implements Language
     public function listenEnvironment(Application $application): array
     {
         return ['PORT' => (string) $application->base_port, 'HOST' => '127.0.0.1', 'HOSTNAME' => '127.0.0.1'];
+    }
+
+    public function detect(RepositoryFacts $facts): ?array
+    {
+        return $this->detection->detect($facts);
+    }
+
+    public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
+    {
+        return $this->checks->checks($choice, $framework, $facts, $arch);
+    }
+
+    public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string
+    {
+        return null;
     }
 
     private function entry(Application $application, ?JsTooling $tooling): string

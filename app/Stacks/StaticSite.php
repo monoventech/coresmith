@@ -10,11 +10,16 @@ namespace App\Stacks;
 
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Detection\Blocker;
+use App\Services\Runtime\RepositoryFacts;
+use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
 
 final readonly class StaticSite implements Language
 {
-    public function __construct(private JsCommands $js) {}
+    private const STATIC_INDEXES = ['' => 'index.html', 'public' => 'public/index.html'];
+
+    public function __construct(private JsCommands $js, private JsFrameworks $frameworks) {}
 
     public function install(Application $application, Stack $stack): array
     {
@@ -71,5 +76,54 @@ final readonly class StaticSite implements Language
     public function listenEnvironment(Application $application): array
     {
         return [];
+    }
+
+    /**
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}|null
+     */
+    public function detect(RepositoryFacts $facts): ?array
+    {
+        foreach (['index.html' => '/', 'public/index.html' => '/public'] as $file => $web) {
+            if ($facts->exists($file)) {
+                return Proposal::make('static', '', null, $web, ['type' => "From {$file}", 'web_directory' => $web === '/' ? "index.html is at the repository's root" : 'index.html is in /public']);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<Blocker>
+     */
+    public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
+    {
+        $web = trim((string) $choice->web_directory, '/');
+
+        if ($facts->script('build')) {
+            $output = $this->frameworks->staticOutput($facts);
+
+            return $output !== null && $output !== '/' . $web
+                ? [new Blocker('web_directory', "The build writes to {$output}, so the web root /{$web} would be empty.", "Set the web root to {$output}.")]
+                : [];
+        }
+
+        $index = self::STATIC_INDEXES[$web] ?? null;
+
+        if ($index === null || $facts->exists($index)) {
+            return [];
+        }
+
+        $found = array_search(true, array_map(fn(string $path): bool => $facts->exists($path), self::STATIC_INDEXES), true);
+
+        return [new Blocker(
+            'web_directory',
+            "There is no {$index}, so the web root /{$web} would serve nothing.",
+            is_string($found) ? 'Set the web root to /' . $found . ', where index.html is.' : 'Set the web root to the folder that holds index.html.',
+        )];
+    }
+
+    public function versionDoubt(RepositoryFacts $facts, ?ResolvedRuntime $runtime): ?string
+    {
+        return null;
     }
 }
