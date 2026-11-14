@@ -12,7 +12,6 @@ use App\Exceptions\HostKeyChangedException;
 use App\Exceptions\ServerHasNoAddress;
 use App\Exceptions\SSHAuthenticationException;
 use App\Exceptions\SSHCommandTimedOut;
-use App\Exceptions\SSHPasswordRefused;
 use App\Models\Server;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\SSH\Contracts\SSHTransport;
@@ -66,19 +65,6 @@ final class SSHConnection
 
         if (!$this->transport->login($this->server->ssh_user, $key)) {
             throw SSHAuthenticationException::forServer($this->server->ip_address, $this->server->ssh_user);
-        }
-
-        $this->authenticated = true;
-
-        return $this;
-    }
-
-    public function signInWithPassword(string $user, #[\SensitiveParameter] string $password): static
-    {
-        $this->open();
-
-        if (!$this->transport->loginWithPassword($user, $password)) {
-            throw SSHPasswordRefused::forUser((string) $this->server->ip_address, $user, $this->transport->acceptsPasswords());
         }
 
         $this->authenticated = true;

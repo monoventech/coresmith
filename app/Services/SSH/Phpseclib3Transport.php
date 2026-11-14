@@ -76,16 +76,6 @@ final class Phpseclib3Transport implements SSHTransport
         return $this->connection()->login($user, $key);
     }
 
-    public function loginWithPassword(string $user, #[\SensitiveParameter] string $password): bool
-    {
-        return $this->connection()->login($user, $password);
-    }
-
-    public function acceptsPasswords(): bool
-    {
-        return array_intersect(['password', 'keyboard-interactive'], $this->connection()->getAuthMethodsToContinue() ?? []) !== [];
-    }
-
     public function exec(string $command, ?callable $onOutput = null, int $timeout = self::COMMAND_SECONDS): string
     {
         $ssh = $this->connection();

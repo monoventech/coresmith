@@ -348,3 +348,17 @@ test('disconnecting closes the transport', function () {
     $connection->disconnect();
     expect($transport->connected())->toBeFalse();
 });
+
+test('input goes to the command on stdin, never into its command line or the activity log', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null]);
+    $transport = new FakeSSHTransport;
+
+    $result = (new SSHConnection($server, $transport))->executeWithInput('psql -X', "ALTER USER app PASSWORD 'correct horse';\n");
+    $logged = Activity::query()->where('description', SSHConnection::COMMAND_ACTIVITY)->get();
+
+    expect($result->successful())->toBeTrue()
+        ->and($transport->inputFor('psql -X'))->toBe("ALTER USER app PASSWORD 'correct horse';\n")
+        ->and(implode("\n", $transport->commands()))->not->toContain('correct horse')
+        ->and($logged)->toHaveCount(1)
+        ->and(json_encode($logged->first()->properties))->not->toContain('correct horse');
+});

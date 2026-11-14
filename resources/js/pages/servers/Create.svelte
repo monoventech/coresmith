@@ -320,21 +320,6 @@
                                 <FieldError message={errors.ssh_user} />
                             </div>
                         </div>
-                        <div>
-                            <Label for="password" class="mb-1.5">Password, optional</Label>
-                            <Input
-                                id="password"
-                                name="password"
-                                type="password"
-                                autocomplete="new-password"
-                                aria-describedby="password-hint"
-                                aria-invalid={errors.password ? true : undefined}
-                            />
-                            <FieldError message={errors.password} />
-                            <p id="password-hint" class="mt-1.5 text-[12px] text-muted-foreground">
-                                The SSH user's password. Coresmith uses it once to add its own key, then forgets it.
-                            </p>
-                        </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <Label for="environment" class="mb-1.5">Environment</Label>
@@ -361,8 +346,8 @@
                         {@render teamField(errors.team_id)}
                         <p class="-mt-1 text-[12px] text-muted-foreground">
                             Needs SSH access and Ubuntu, Debian, Rocky Linux, AlmaLinux, Fedora or Amazon Linux, with
-                            Ubuntu 24.04 and Debian 12 tested most. Coresmith makes a key for this server alone. Without
-                            a password, you run one command to add it.
+                            Ubuntu 24.04 and Debian 12 tested most. Coresmith makes a key for this server alone, and you
+                            run one command on the server to add it.
                         </p>
                         {#if note}
                             {@render limitBanner(note)}
