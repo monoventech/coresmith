@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.15 (2026-11-14)
+
+### Changed
+- Maven without a wrapper, Java version floors, and no server passwords (#93)
+- Update README.md
+
 ## v0.8.14 (2026-11-14)
 
 ### Added
