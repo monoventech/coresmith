@@ -72,7 +72,7 @@ test('a domain the internet cannot reach is refused with what to fix, and no swi
     addressRequestNetwork(new DirectReach('151.226.169.196', false, false));
 
     expect(Artisan::call('coresmith:address-request', ['host' => 'coresmith.example.com']))->toBe(1)
-        ->and(Artisan::output())->toBe("coresmith.example.com points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.\n")
+        ->and(Artisan::output())->toBe("coresmith.example.com points at 151.226.169.196, which doesn't answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, this server needs IPv6 instead.\n")
         ->and(AddressChange::current())->toBeNull()
         ->and(file_exists(AddressRequest::file()))->toBeFalse();
 });
@@ -81,7 +81,7 @@ test('a domain that passes is handed to the address service, with the notes afte
     addressRequestNetwork(new DirectReach('151.226.169.196', true, true));
 
     expect(Artisan::call('coresmith:address-request', ['host' => 'coresmith.example.com']))->toBe(0)
-        ->and(Artisan::output())->toBe("Switching to coresmith.example.com.\nInside your own network, your router may not loop back to 151.226.169.196. If coresmith.example.com doesn't load there, add 192.168.0.248 coresmith.example.com to your local DNS or /etc/hosts.\n")
+        ->and(Artisan::output())->toBe("Switching to coresmith.example.com.\nIf coresmith.example.com doesn't load inside your own network, add 192.168.0.248 coresmith.example.com to your local DNS or /etc/hosts.\n")
         ->and(AddressChange::current())->toMatchArray(['state' => 'running', 'from' => '192.168.0.248', 'to' => 'coresmith.example.com'])
         ->and(AddressRequest::take())->toBe('coresmith.example.com');
 });

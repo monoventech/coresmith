@@ -386,10 +386,10 @@ test.describe('what the full app page adds on a wider screen', () => {
         const reach = page.getByTestId('domain-reach')
 
         await expect(reach).toContainText(
-            'atlas.monoven.io points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet.'
+            "atlas.monoven.io points at 203.0.113.7, which doesn't answer on ports 80 and 443 from the internet."
         )
         await expect(reach).toContainText(
-            "The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for atlas.monoven.io pointing at 2001:db8::7"
+            "Add an AAAA record pointing at 2001:db8::7, remove the A record and turn on Cloudflare's proxy for atlas.monoven.io"
         )
         await expect(reach.getByTestId('dns-record-note')).toHaveText("Best fix, with Cloudflare's proxy on")
         await expect(page.getByTestId('domain-reach-summary')).toContainText('Checked')

@@ -140,11 +140,9 @@
                 {/each}
             {:else}
                 <p class="m-0">
-                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people on
-                    networks without IPv6 can't open Coresmith. The surest fix is to turn on Cloudflare's proxy for
-                    <span class="font-mono text-[12px]">{address.host}</span>, which answers them over IPv4 and reaches
-                    this server over IPv6. That needs its DNS on Cloudflare. Add an A record only if this server's IPv4
-                    address is yours and you can forward ports 80 and 443 to it.
+                    <span class="font-mono text-[12px]">{address.host}</span> has only an IPv6 address, so people without
+                    IPv6 can't open Coresmith. Turn on Cloudflare's proxy for it to fix that. If you can forward ports 80
+                    and 443 to this server, an A record for its IPv4 address works too.
                 </p>
             {/if}
         </div>
