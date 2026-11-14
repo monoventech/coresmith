@@ -184,7 +184,7 @@ test('the browser seed files the monoven apps into projects and has a member who
         ->and($storefront->environments()->pluck('name')->all())->toBe(['Production', 'Staging'])
         ->and($team->applications()->where('name', 'storefront-staging')->sole()->environment_id)->toBe($staging->id)
         ->and($team->databases()->where('name', 'atlas_production')->sole()->environment?->name)->toBe('Production')
-        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id]])
+        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id], 'withheld_applications' => [], 'withheld_databases' => []])
         ->and($team->applications()->whereIn('name', array_map(fn(string $code): string => "filed-{$code}", array_values(E2ESeeder::PROJECTS)))->count())->toBe(count(E2ESeeder::PROJECTS))
         ->and($team->servers()->whereIn('name', array_map(fn(string $code): string => "label-{$code}", array_values(E2ESeeder::PROJECTS)))->whereNull('environment')->count())->toBe(count(E2ESeeder::PROJECTS));
 });
