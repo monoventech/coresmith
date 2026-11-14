@@ -73,6 +73,7 @@ use App\Services\SafeName;
 use App\Services\Server\PortBlockGuard;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use App\Stacks\Php;
 use Closure;
 use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -1219,7 +1220,7 @@ final class DeployApplication implements ShouldQueue
                     break;
                 }
 
-                if (in_array($step, DeploymentCommands::LARAVEL_CACHES, true) && !DeploymentCancellation::requested($this->deployment)) {
+                if (in_array($step, Php::LARAVEL_CACHES, true) && !DeploymentCancellation::requested($this->deployment)) {
                     $this->appendLog("{$step} failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.");
 
                     break;

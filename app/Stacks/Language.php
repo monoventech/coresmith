@@ -1,0 +1,36 @@
+<?php
+
+// Copyright 2026 Monoven Ltd. All rights reserved.
+// Licensed under the Elastic License v2 (ELv2).
+// See LICENSE file in the project root.
+
+declare(strict_types=1);
+
+namespace App\Stacks;
+
+use App\Models\Application;
+use App\Services\Deployment\ReleasePaths;
+use App\Services\Runtime\Stack;
+
+interface Language
+{
+    /**
+     * @return list<string>
+     */
+    public function install(Application $application, Stack $stack): array;
+
+    /**
+     * @return list<string>
+     */
+    public function build(Application $application, Stack $stack): array;
+
+    /**
+     * @return list<string>
+     */
+    public function migrations(Application $application, Stack $stack): array;
+
+    /**
+     * @return array<string, string>
+     */
+    public function releaseChecks(Application $application, ReleasePaths $paths, string $release): array;
+}
