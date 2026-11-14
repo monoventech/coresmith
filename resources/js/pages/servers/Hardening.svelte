@@ -68,7 +68,14 @@
             checked: string | null
         }
         firewall: { open: number[]; kept_ssh: boolean; ssh_port: number; changes: Change[] }
-        access: { ssh: string | null; fingerprint: string | null; public_key: string; audit_logging: boolean }
+        access: {
+            ssh: string | null
+            fingerprint: string | null
+            public_key: string
+            audit_logging: boolean
+            user: string
+            people: { name: string; role: string; keys: number }[]
+        }
     } = $props()
 
     let auditBusy = $state(false)
@@ -321,5 +328,37 @@
         </div>
         <pre
             class="terminal mt-3 max-h-24 text-[11px] leading-[1.6] break-all whitespace-pre-wrap">{access.public_key}</pre>
+        <div class="mt-4 border-t border-border pt-3" data-testid="ssh-people">
+            <p class="m-0 text-[13.5px] font-medium">People who can sign in</p>
+            {#if server.this_machine}
+                <p class="m-0 mt-1 text-[12.5px] text-muted-foreground">
+                    Coresmith adds no one's keys to the machine it runs on. Who signs in here is up to you.
+                </p>
+            {:else}
+                <p class="m-0 mt-1 mb-2 text-[12.5px] text-muted-foreground">
+                    Coresmith adds SSH keys from owners and admins who can see this server, and from a developer who
+                    added it. They sign in as <span class="font-mono text-[12px]">{access.user}</span>.
+                </p>
+                {#each access.people as person, index (`${index}-${person.name}`)}
+                    <div
+                        class="flex min-h-10 items-center gap-3 border-t border-border text-[13px]"
+                        data-testid="ssh-person"
+                    >
+                        <span class="min-w-0 flex-1 truncate font-medium">{person.name}</span>
+                        <span class="text-[12px] text-muted-foreground">{person.role}</span>
+                        <span class="w-13 text-right font-mono text-[12px] text-muted-foreground"
+                            >{person.keys} {person.keys === 1 ? 'key' : 'keys'}</span
+                        >
+                    </div>
+                {:else}
+                    <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+                        No one's keys are here yet. Each person adds theirs in
+                        <Link href={route('settings.general')} class="text-foreground underline underline-offset-2"
+                            >Settings</Link
+                        >.
+                    </p>
+                {/each}
+            {/if}
+        </div>
     </div>
 </div>

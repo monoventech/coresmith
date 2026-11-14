@@ -26,6 +26,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\SourceProvider;
+use App\Models\SshKey;
 use App\Models\Team;
 use App\Models\TeamDomain;
 use App\Models\TeamInvitation;
@@ -46,6 +47,7 @@ use App\Services\Server\PortAllocator;
 use App\Services\Server\ProvisioningLog;
 use App\Services\Server\SchedulerLogReader;
 use App\Services\Server\ServerReachability;
+use App\Services\SSH\HostKeyFingerprint;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamAccess;
 use App\Services\Updates\ReleaseLayout;
@@ -134,6 +136,9 @@ final class E2ESeeder extends Seeder
         $this->team->members()->attach($developer, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
         app(TeamAccess::class)->grant($this->team, $developer, $tenant->servers['forge-02']);
         $this->application('side-notes', 9620, ['created_by' => $developer->id, 'domain' => 'side-notes.lena.dev'], $tenant->servers['forge-02']);
+        $this->server('lena-01', '198.51.100.44', ServerStatus::Active)->forceFill(['created_by' => $developer->id])->save();
+        $lenaKey = (new KeyPairGenerator)->generate()->publicKey;
+        SshKey::factory()->for($developer)->create(['name' => 'lena@laptop', 'public_key' => $lenaKey, 'fingerprint' => (string) HostKeyFingerprint::fromPublicKey($lenaKey)]);
 
         $this->movers();
 

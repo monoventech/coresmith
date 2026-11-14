@@ -259,6 +259,18 @@ test.describe('hardening', () => {
         await expect(page.getByRole('switch', { name: 'Audit logging' })).toBeVisible()
     })
 
+    test('the SSH card lists the people whose own keys are on the server, with their role', async ({ page }) => {
+        await gotoServerTab(page, 'forge-01', 'Hardening')
+
+        const people = page.getByTestId('ssh-people')
+
+        await expect(people).toContainText(
+            'Coresmith adds SSH keys from owners and admins who can see this server, and from a developer who added it. They sign in as root.'
+        )
+        await expect(people.getByTestId('ssh-person').filter({ hasText: 'Owner' })).toContainText(/\d+ keys?$/)
+        await expect(people.getByTestId('ssh-person').filter({ hasText: 'Lena Brandt' })).toHaveCount(0)
+    })
+
     test('a server Coresmith has not checked yet says when it will', async ({ page }) => {
         await gotoServerTab(page, 'bench-01', 'Hardening')
 
