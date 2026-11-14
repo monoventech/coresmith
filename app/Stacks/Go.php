@@ -207,7 +207,7 @@ final readonly class Go implements Language
             return "The build needs the C header {$header[1]}, which isn't on the server. Install the library's development package on the server, then deploy again.";
         }
 
-        if ($phase === DeploymentPhases::DEPENDENCIES && preg_match('/go: ([\w.\/-]+)@[\w.+-]+: .*(?:terminal prompts disabled|could not read Username|Repository not found|410 Gone|404 Not Found)/', $output, $module) === 1) {
+        if ($phase === DeploymentPhases::DEPENDENCIES && preg_match('/^go: ([\w.\/-]+)@[\w.+-]+: /m', $output, $module) === 1 && preg_match('/terminal prompts disabled|could not read Username|Repository not found|410 Gone|404 Not Found/', $output) === 1) {
             return "Go couldn't download {$module[1]}, which looks private. Commit the app's dependencies with go mod vendor, so the deploy needs no access to them, then deploy again.";
         }
 
