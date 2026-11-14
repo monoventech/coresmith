@@ -24,7 +24,7 @@
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { pickerRuntime } from '@/lib/runtimes'
     import { Form } from '@inertiajs/svelte'
-    import { onDestroy } from 'svelte'
+    import { onDestroy, untrack } from 'svelte'
 
     let {
         server,
@@ -85,7 +85,11 @@
     ]
 
     let type = $state('php')
-    let framework = $derived(FRAMEWORKS[type]?.[0]?.value ?? '')
+    let framework = $derived.by(() => {
+        const language = type
+
+        return untrack(() => FRAMEWORKS[language]?.[0]?.value ?? '')
+    })
     let typeSelect = $state<HTMLSelectElement | null>(null)
     let frameworkSelect = $state<HTMLSelectElement | null>(null)
     let jsRuntime = $state('bun')

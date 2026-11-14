@@ -739,6 +739,24 @@ test.describe('adding an application', () => {
         await expect(framework).toHaveValue('angular')
     })
 
+    test('a framework picked by hand stays picked when the page refreshes itself', async ({ page }) => {
+        await page.clock.install()
+        await openAddApp(page)
+
+        const framework = page.getByLabel('Framework')
+
+        await framework.selectOption('symfony')
+
+        const refreshed = page.waitForRequest((request) => request.headers()['x-inertia-partial-data'] !== undefined)
+
+        await page.clock.runFor(61_000)
+        await refreshed
+        await page.waitForLoadState('networkidle')
+
+        await expect(page.getByLabel('Language')).toHaveValue('php')
+        await expect(framework).toHaveValue('symfony')
+    })
+
     test('Python offers its frameworks and versions, and no web root', async ({ page }) => {
         await openAddApp(page)
         await page.getByLabel('Language').selectOption('python')
