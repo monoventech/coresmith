@@ -21,7 +21,7 @@ final class DatabaseBackups
 
     public const CACHE_SECONDS = 120;
 
-    private const CHECK_S3 = 'Check the bucket name, region and keys in Settings, General.';
+    private const CHECK_S3 = 'Check the bucket name, region and keys in Settings, Team.';
 
     public function __construct(
         private readonly SSHConnectionManager $connections,

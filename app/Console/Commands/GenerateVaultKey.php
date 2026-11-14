@@ -31,7 +31,7 @@ final class GenerateVaultKey extends Command
 
         if (!empty($existing) && !$this->option('force')) {
             $this->error('CORESMITH_VAULT_KEY is already set. Overwriting it makes every stored credential unrecoverable.');
-            $this->line('Re-run with --force if that is genuinely what you want.');
+            $this->line('Run it again with --force if you mean to.');
 
             return self::FAILURE;
         }

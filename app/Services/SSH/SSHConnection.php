@@ -132,7 +132,7 @@ final class SSHConnection
         $content = @file_get_contents($localPath);
 
         if ($content === false) {
-            throw new RuntimeException("Unable to read local file [{$localPath}].");
+            throw new RuntimeException("Coresmith couldn't read the local file [{$localPath}].");
         }
 
         $this->uploadContent($content, $remotePath);

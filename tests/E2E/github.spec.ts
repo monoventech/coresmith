@@ -153,7 +153,7 @@ test.describe('creating a GitHub App from the panel', () => {
         await page.goto('/acme/settings/git')
 
         await expect(page.getByTestId('github-registration')).toContainText(
-            'GitHub cannot reach 127.0.0.1, it only answers on this machine. Apps with auto deploy check their branch every minute instead.'
+            "GitHub can't reach 127.0.0.1, because it only answers on this machine. Apps with auto deploy check their branch every minute instead."
         )
 
         await page
@@ -210,7 +210,7 @@ test.describe('a GitHub App registered but not installed', () => {
         await expect(page.getByRole('link', { name: 'Install on GitHub' })).toHaveCount(1)
         await expect(page.getByTestId('github-connect')).toHaveCount(0)
         await expect(page.getByTestId('webhooks-card')).toContainText(
-            'GitHub cannot reach 127.0.0.1, it only answers on this machine.'
+            "GitHub can't reach 127.0.0.1, because it only answers on this machine."
         )
         await expect(
             page.getByTestId('webhooks-card').getByRole('button', { name: 'Point the webhook here' })
@@ -314,7 +314,7 @@ test.describe('with the environment GitHub App', () => {
         })
 
         await expect(card).toContainText(
-            'Install the Coresmith GitHub App on your organization. It asks for the minimum: contents read-only, commit statuses and webhooks, per repository, not your whole account.'
+            'Install the Coresmith GitHub App on your account or organization, on the repositories you choose. It asks only for read-only contents, commit statuses and webhooks.'
         )
         await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('href', connect)
         await expect(card.getByRole('link', { name: 'Install on GitHub' })).toHaveAttribute('target', '_self')

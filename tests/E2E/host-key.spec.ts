@@ -69,7 +69,7 @@ test.describe('a changed host key', () => {
 
         await page.getByRole('button', { name: 'Dismiss for now' }).click()
 
-        await expect(toast(page)).toContainText('Dismissed. The original key is still the only one trusted')
+        await expect(toast(page)).toContainText('Dismissed. Coresmith still trusts only the original key')
         await expect(page.getByTestId('host-key-alert')).toHaveCount(0)
     })
 })

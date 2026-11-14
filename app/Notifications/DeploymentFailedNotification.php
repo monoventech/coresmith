@@ -43,7 +43,7 @@ final class DeploymentFailedNotification extends Notification implements ShouldQ
             ->subject("{$application->name} failed to deploy" . ($reached ? '' : ', nothing changed'))
             ->line("The {$phase} step failed on {$application->server?->name}.")
             ->line($reached
-                ? 'It failed after the symlink swap, so the new release is live. Check its processes.'
+                ? 'It failed after the switch to the new release, so that release is live. Check its processes.'
                 : 'The current release kept serving the whole time, so no one saw an error page.')
             ->action('Read the log', route('servers.applications.deployments.show', [$application->server_id, $application, $this->deployment]));
     }

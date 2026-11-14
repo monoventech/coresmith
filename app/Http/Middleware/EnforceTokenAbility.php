@@ -28,7 +28,7 @@ final class EnforceTokenAbility
         $team = $token->team;
 
         if ($team === null) {
-            return $this->deny('This token is not bound to a team. Issue a new one.', 403);
+            return $this->deny('This token isn\'t tied to a team. Create a new one.', 403);
         }
 
         if (!$token->can($ability)) {

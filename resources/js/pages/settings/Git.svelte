@@ -144,8 +144,8 @@
                         <h3 class="type-h3 m-0">Connect GitHub</h3>
                     </div>
                     <p class="mb-3 text-[12.5px] text-muted-foreground">
-                        Install the Coresmith GitHub App on your organization. It asks for the minimum: contents
-                        read-only, commit statuses and webhooks, per repository, not your whole account.
+                        Install the Coresmith GitHub App on your account or organization, on the repositories you
+                        choose. It asks only for read-only contents, commit statuses and webhooks.
                     </p>
                     <div class="flex flex-wrap gap-2">
                         <Button size="sm" href={github.connect.install_href} target="_self">Install on GitHub</Button>

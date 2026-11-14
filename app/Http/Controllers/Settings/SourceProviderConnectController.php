@@ -31,7 +31,7 @@ final class SourceProviderConnectController extends Controller
 
     public const UNVERIFIED = 'That connection attempt could not be verified. Start again from this page.';
 
-    private const GITHUB_ELSEWHERE = 'GitHub connects through its app installation, not this flow.';
+    private const GITHUB_ELSEWHERE = 'GitHub connects through its app installation in Settings, Git.';
 
     public function __construct(private readonly GitHubConnector $github) {}
 
@@ -244,7 +244,7 @@ final class SourceProviderConnectController extends Controller
                 'state' => $state,
             ]),
             SourceProviderType::GitHubApp => throw new GitProviderException(self::GITHUB_ELSEWHERE),
-            SourceProviderType::Custom => throw new GitProviderException('A custom provider is connected with an SSH deploy key, not OAuth.'),
+            SourceProviderType::Custom => throw new GitProviderException('A custom provider connects with an SSH deploy key, so there\'s nothing to authorize.'),
         };
     }
 

@@ -14,11 +14,11 @@ final class VaultDecryptionException extends RuntimeException
 {
     public static function forPayload(): self
     {
-        return new self('Unable to decrypt vault payload. The CORESMITH_VAULT_KEY may have changed, or the stored value is corrupt.');
+        return new self('Coresmith couldn\'t decrypt a stored value. The CORESMITH_VAULT_KEY may have changed, or the stored value is corrupt.');
     }
 
     public static function forAttribute(string $model, string $attribute): self
     {
-        return new self("Unable to decrypt [{$attribute}] on [{$model}]. The CORESMITH_VAULT_KEY may have changed since this value was stored.");
+        return new self("Coresmith couldn't decrypt [{$attribute}] on [{$model}]. The CORESMITH_VAULT_KEY may have changed since this value was stored.");
     }
 }

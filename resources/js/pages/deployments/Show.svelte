@@ -326,7 +326,7 @@
                 <span class="font-semibold">{liveFailure}.</span>
                 {live.failure_reason
                     ? ` ${live.failure_reason}`
-                    : ` releases/${live.release} is live, check its processes before pushing again.`}
+                    : ` releases/${live.release} is live. Check its processes before pushing again.`}
             {:else}
                 <span class="font-semibold"
                     >{FAILURES[live.failed_step ?? live.failed_phase ?? ''] ?? 'The deploy failed'}, so nothing changed.</span
@@ -340,7 +340,7 @@
                         >, users never saw an error page. Fix {FIXES[live.failed_step ?? live.failed_phase ?? ''] ??
                             'it'} and push again, or retry.
                     </span>
-                    <span class="sm:hidden">The old release is still live, users saw no error page.</span>
+                    <span class="sm:hidden">The old release is still live, so visitors saw no error page.</span>
                 {:else}
                     Nothing was live yet, so no one saw an error page.
                 {/if}
@@ -401,7 +401,7 @@
         <p class="mt-2.5 mb-0.5 text-[12px] leading-normal text-muted-foreground max-sm:hidden">
             {live.reached_users
                 ? 'Every phase finished and the swap went through, so this release is the one being served.'
-                : 'The current release keeps serving traffic until the symlink swap. If any phase fails, nothing changes.'}
+                : 'The current release keeps serving traffic until the new one goes live. If any phase fails, nothing changes.'}
         </p>
     </div>
 
@@ -431,7 +431,7 @@
 
 {#if running}
     <p class="mt-3 text-[11.5px] leading-normal text-muted-foreground sm:hidden">
-        The current release keeps serving traffic until the symlink swap.
+        The current release keeps serving traffic until the new one goes live.
     </p>
 {:else if live.status === 'succeeded'}
     <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden"

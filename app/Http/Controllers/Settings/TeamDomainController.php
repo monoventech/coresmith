@@ -67,7 +67,7 @@ final class TeamDomainController extends Controller
 
         return back()->with('error', $domain->failure === TeamDomains::WRONG_VALUE
             ? 'The TXT record is there but its value does not match. Copy it again from this page.'
-            : 'The TXT record is not visible yet. DNS can take a few minutes, check again shortly.');
+            : 'The TXT record is not visible yet. DNS can take a few minutes, so check again shortly.');
     }
 
     public function destroy(TeamContext $context): RedirectResponse

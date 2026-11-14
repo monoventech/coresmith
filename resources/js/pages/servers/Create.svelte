@@ -360,8 +360,9 @@
                         </div>
                         {@render teamField(errors.team_id)}
                         <p class="-mt-1 text-[12px] text-muted-foreground">
-                            Needs Ubuntu 24.04 or Debian 12 and SSH access. Coresmith makes a key for this server alone.
-                            Without a password, you run one command to add it.
+                            Needs SSH access and Ubuntu, Debian, Rocky Linux, AlmaLinux, Fedora or Amazon Linux, with
+                            Ubuntu 24.04 and Debian 12 tested most. Coresmith makes a key for this server alone. Without
+                            a password, you run one command to add it.
                         </p>
                         {#if note}
                             {@render limitBanner(note)}

@@ -130,7 +130,7 @@ test('an admin can prune old releases', function () {
         ->from(route('servers.show', $server))
         ->post(route('servers.prune-releases', $server))
         ->assertRedirect(route('servers.show', $server))
-        ->assertSessionHas('success', 'Pruning old releases. Each app keeps its last 5 and the live one, disk readings refresh within a minute.');
+        ->assertSessionHas('success', 'Pruning old releases. Each app keeps its last 5 and the live one. Disk readings refresh within a minute.');
 
     Queue::assertPushed(PruneReleases::class, 1);
 });

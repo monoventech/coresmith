@@ -308,7 +308,7 @@ final class ServerController extends Controller
 
         ProvisionServer::begin($server);
 
-        return back()->with('success', 'Provisioning started. Every phase is logged, close this page and it keeps going.');
+        return back()->with('success', 'Provisioning started. Every phase is logged, and it keeps going if you close this page.');
     }
 
     public function retryProvisioning(Server $server): RedirectResponse
@@ -380,7 +380,7 @@ final class ServerController extends Controller
 
         PruneReleases::dispatch($server);
 
-        return back()->with('success', 'Pruning old releases. Each app keeps its last ' . ReleasePaths::KEEP_RELEASES . ' and the live one, disk readings refresh within a minute.');
+        return back()->with('success', 'Pruning old releases. Each app keeps its last ' . ReleasePaths::KEEP_RELEASES . ' and the live one. Disk readings refresh within a minute.');
     }
 
     /**

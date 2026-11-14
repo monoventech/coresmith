@@ -44,7 +44,7 @@ final class RunCloudTask implements ShouldBeUniqueUntilProcessing, ShouldQueue
 
     public const HANDOVER_SECONDS = 5;
 
-    public const NO_ACCOUNT = 'The provider account this server was created with is no longer connected. Connect it again in Settings → Team, then try again.';
+    public const NO_ACCOUNT = 'The provider account this server was created with is no longer connected. Connect it again in Settings, Team, then try again.';
 
     public const NO_HANDLER = 'Coresmith could not continue this task after an update. Start it again.';
 

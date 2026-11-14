@@ -117,7 +117,7 @@
                     <span class="text-[12.5px] text-muted-foreground">Resolve the blockers to continue.</span>
                 {:else if !audit.fresh}
                     <span class="text-[12.5px] text-muted-foreground"
-                        >The check is over an hour old, check again first.</span
+                        >The check is over an hour old. Check again first.</span
                     >
                 {/if}
             </div>

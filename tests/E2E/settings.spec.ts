@@ -204,7 +204,7 @@ asMember.describe('ssh keys as a deployer', () => {
         const keys = page.getByTestId('ssh-keys-card')
 
         await expect(keys.getByTestId('ssh-keys-reach')).toHaveText(
-            "Deployers don't get shell access, so these aren't installed on any server."
+            "Coresmith installs only owners' and admins' keys on servers, so these aren't on any of them."
         )
 
         await keys.getByRole('button', { name: 'Add key' }).click()

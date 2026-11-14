@@ -33,7 +33,7 @@ final class FreePlanCommand extends Command
     public function handle(TeamBilling $billing): int
     {
         if (Edition::current()->isSelfHosted()) {
-            return $this->refuse('Free plans are part of Coresmith Cloud, not self-hosted Coresmith.');
+            return $this->refuse('Free plans exist only on Coresmith Cloud.');
         }
 
         $name = $this->argument('team');

@@ -124,7 +124,7 @@ test('the maintenance toggle is disabled while the application is stopped', func
     $described = collect(togglesService()->describe(togglesApp(['power_state' => PowerState::Stopped])))->keyBy('key');
 
     expect($described['maintenance_mode']['disabled'])->toBeTrue()
-        ->and($described['maintenance_mode']['description'])->toBe('The application is stopped, so visitors already see one.')
+        ->and($described['maintenance_mode']['description'])->toBe('The app is stopped, so visitors already see one.')
         ->and($described['queue_worker']['disabled'])->toBeFalse();
 });
 

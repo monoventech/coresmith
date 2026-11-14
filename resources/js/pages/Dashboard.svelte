@@ -98,7 +98,7 @@
     {#if servers.length === 0 && shared.length === 0 && narrowed}
         <EmptyState
             title="Nothing is shared with you yet."
-            description="Ask an owner of your team to share a server or app with you."
+            description="Ask an owner or admin of your team to share a server or app with you."
         />
     {:else if servers.length === 0 && shared.length === 0}
         <EmptyState

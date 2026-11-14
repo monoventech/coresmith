@@ -120,7 +120,7 @@ test('the git page offers a registration with this panel\'s manifest when no app
         ->where('github.registration.reachability', [
             'reachable' => false,
             'host' => 'localhost',
-            'sentence' => 'GitHub cannot reach localhost, it only answers on this machine.',
+            'sentence' => 'GitHub can\'t reach localhost, because it only answers on this machine.',
         ]));
 
     expect(array_keys($registration))->toBe(['state', 'key', 'personal_action', 'organization_action', 'manifest', 'webhook', 'name', 'reachability'])

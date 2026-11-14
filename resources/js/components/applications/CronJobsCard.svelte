@@ -128,7 +128,7 @@
 >
     <h3 class="type-h3 m-0 mb-1">Cron jobs</h3>
     <p class="mb-3 text-[12.5px] text-muted-foreground">
-        {`Each job runs in the current release with the app's permissions and environment. Saving changes what runs on ${server}, no deployment needed.`}
+        {`Each job runs in the current release with the app's permissions and environment. Saving changes what runs on ${server} straight away, without a deploy.`}
     </p>
 
     {#if cron.note}
