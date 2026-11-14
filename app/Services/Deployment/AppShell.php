@@ -50,18 +50,20 @@ final class AppShell
     /**
      * @param  array<string, string>  $versions
      * @param  array<string, string>  $environment
+     * @param  list<string>  $properties
      */
-    public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null, array $environment = []): string
+    public function run(Application $application, string $command, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null, array $environment = [], array $properties = []): string
     {
-        return $this->unit($application, $directory, $versions, $this->build($seconds), $environment, $unit) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
+        return $this->unit($application, $directory, $versions, $this->build($seconds), $environment, $unit, $properties) . ' /bin/bash -c ' . escapeshellarg(str_replace('$', '$$', $command));
     }
 
     /**
      * @param  array<string, string>  $versions
+     * @param  list<string>  $properties
      */
-    public function runScript(Application $application, string $script, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null): string
+    public function runScript(Application $application, string $script, string $directory, array $versions = [], int $seconds = SSHTransport::COMMAND_SECONDS, ?string $unit = null, array $properties = []): string
     {
-        return $this->unit($application, $directory, $versions, $this->build($seconds), unit: $unit) . ' /bin/bash -s < ' . escapeshellarg($script);
+        return $this->unit($application, $directory, $versions, $this->build($seconds), unit: $unit, step: $properties) . ' /bin/bash -s < ' . escapeshellarg($script);
     }
 
     /**
@@ -93,8 +95,9 @@ final class AppShell
      * @param  array<string, string>  $versions
      * @param  list<string>  $properties
      * @param  array<string, string>  $environment
+     * @param  list<string>  $step
      */
-    private function unit(Application $application, string $directory, array $versions, array $properties, array $environment = [], ?string $unit = null): string
+    private function unit(Application $application, string $directory, array $versions, array $properties, array $environment = [], ?string $unit = null, array $step = []): string
     {
         $user = SafeName::assertSystemUser($application->system_user);
 
@@ -106,6 +109,7 @@ final class AppShell
             '-p ' . escapeshellarg('WorkingDirectory=' . $directory),
             ...array_map(fn(string $name, string $value): string => '-E ' . escapeshellarg($name . '=' . $value), array_keys($environment), $environment),
             '-p ' . escapeshellarg('EnvironmentFile=' . (new ReleasePaths($application))->envFile()),
+            ...array_map(fn(string $property): string => '-p ' . escapeshellarg($property), $step),
             ...array_map(fn(string $property): string => '-p ' . $property, $properties),
             ...array_map(fn(string $property): string => '-p ' . escapeshellarg($property), AppSandbox::properties($application->server)),
             '-p UMask=' . AppAccount::UMASK,
