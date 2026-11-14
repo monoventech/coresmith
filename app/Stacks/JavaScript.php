@@ -15,10 +15,11 @@ use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
+use App\Stacks\JsPresets\JsPresets;
 
 final readonly class JavaScript implements Language
 {
-    public function __construct(private JsCommands $js, private AsdfManager $asdf, private JavaScriptDetection $detection, private JavaScriptChecks $checks) {}
+    public function __construct(private JsCommands $js, private AsdfManager $asdf, private JavaScriptDetection $detection, private JavaScriptChecks $checks, private JsPresets $presets) {}
 
     public function install(Application $application, Stack $stack): array
     {
@@ -86,7 +87,7 @@ final readonly class JavaScript implements Language
     {
         return [
             'NODE_ENV' => 'production',
-            ...(strtolower((string) $application->framework) === 'sveltekit' ? ['PROTOCOL_HEADER' => 'x-forwarded-proto', 'HOST_HEADER' => 'x-forwarded-host', 'ADDRESS_HEADER' => 'x-forwarded-for'] : []),
+            ...($this->presets->find((string) $application->framework)?->environment() ?? []),
         ];
     }
 
@@ -121,11 +122,6 @@ final readonly class JavaScript implements Language
 
     private function entry(Application $application, ?JsTooling $tooling): string
     {
-        return match (strtolower((string) $application->framework)) {
-            'sveltekit' => 'build/index.js',
-            'nuxt' => '.output/server/index.mjs',
-            'astro' => 'dist/server/entry.mjs',
-            default => $tooling?->main ?? 'server.js',
-        };
+        return $this->presets->find((string) $application->framework)?->entry() ?? $tooling?->main ?? 'server.js';
     }
 }

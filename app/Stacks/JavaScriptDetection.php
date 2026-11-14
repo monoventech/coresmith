@@ -10,6 +10,7 @@ namespace App\Stacks;
 
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
+use App\Stacks\JsPresets\JsPresets;
 
 final readonly class JavaScriptDetection
 {
@@ -40,7 +41,7 @@ final readonly class JavaScriptDetection
 
     private const JS_LOCKFILES = ['bun.lock' => 'bun', 'bun.lockb' => 'bun', 'package-lock.json' => 'node', 'pnpm-lock.yaml' => 'node', 'yarn.lock' => 'node'];
 
-    public function __construct(private JsFrameworks $frameworks) {}
+    public function __construct(private JsPresets $presets) {}
 
     /**
      * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>}|null
@@ -59,66 +60,22 @@ final readonly class JavaScriptDetection
 
         [$runtime, $runtimeSource] = $this->jsRuntime($facts);
         $sources = ['type' => 'From package.json', 'js_runtime' => $runtimeSource];
-        $output = $this->frameworks->staticOutput($facts);
-
+        $output = $this->presets->staticOutput($facts);
         $build = (string) ($facts->json('package.json')['scripts']['build'] ?? '');
+        $presets = $this->presets->all();
 
-        if ($facts->dependency('@sveltejs/kit') !== null && !str_contains($build, 'vite build')) {
-            return $this->unbuilt($runtime, $sources, '@sveltejs/kit', 'vite build', 'SvelteKit');
-        }
+        foreach ($presets as $preset) {
+            $command = $preset->claims($facts, $build) ? $preset->unbuilt($build) : null;
 
-        if ($facts->dependency('next') !== null && !str_contains($build, 'next build')) {
-            return $this->unbuilt($runtime, $sources, 'next', 'next build', 'Next.js');
-        }
-
-        if ($facts->dependency('nuxt') !== null && preg_match('/\bnux[ti] (build|generate)\b/', $build) !== 1) {
-            return $this->unbuilt($runtime, $sources, 'nuxt', 'nuxt build', 'Nuxt');
-        }
-
-        if ($facts->dependency('astro') !== null && !str_contains($build, 'astro build')) {
-            return $this->unbuilt($runtime, $sources, 'astro', 'astro build', 'Astro');
-        }
-
-        if ($facts->dependency('@sveltejs/kit') !== null) {
-            $adapter = $this->frameworks->svelteAdapter($facts);
-
-            if ($adapter === '@sveltejs/adapter-static') {
-                return Proposal::staticBuild($output, ['type' => 'From @sveltejs/adapter-static in svelte.config.js'], 'Coresmith couldn\'t tell where adapter-static writes, because svelte.config.js sets its own pages folder. Set the web root to that folder.');
+            if ($command !== null) {
+                return $this->unbuilt($runtime, $sources, $preset->package(), $command, $preset->label());
             }
-
-            return Proposal::make('js', 'sveltekit', $runtime, null, [...$sources, 'framework' => $adapter === null ? '@sveltejs/kit in package.json' : "@sveltejs/kit with {$adapter}"], $adapter === null ? ['framework' => "Coresmith couldn't tell which adapter svelte.config.js uses. SvelteKit needs @sveltejs/adapter-node to run on a server."] : []);
         }
 
-        if ($facts->dependency('next') !== null) {
-            return $this->frameworks->nextExport($facts)
-                ? Proposal::staticBuild($output, ['type' => "From output: 'export' in next.config"], 'next.config sets its own distDir, so Coresmith can\'t be sure where the export goes. Set the web root to that folder.')
-                : Proposal::make('js', 'nextjs', $runtime, null, [...$sources, 'framework' => 'next in package.json']);
-        }
-
-        if ($facts->dependency('nuxt') !== null) {
-            $preset = $this->frameworks->nitroPreset($facts);
-
-            return $this->frameworks->nuxtGenerate($facts)
-                ? Proposal::staticBuild($output, ['type' => 'From the nuxt generate build script'], '')
-                : Proposal::make('js', 'nuxt', $runtime, null, [...$sources, 'framework' => 'nuxt in package.json'], match (true) {
-                    $preset !== null && !$preset[1] => ['framework' => "nuxt.config can set Nitro's preset to {$preset[0]}, which makes the app for that host, not the Node server Coresmith runs. Set the preset to node-server."],
-                    $facts->dependency('@nuxthub/core') !== null => ['framework' => '@nuxthub/core builds the app for Cloudflare, not the Node server Coresmith runs.'],
-                    default => [],
-                });
-        }
-
-        if ($facts->dependency('astro') !== null) {
-            return $this->frameworks->astroServer($facts)
-                ? Proposal::make('js', 'astro', $runtime, null, [...$sources, 'framework' => 'astro with @astrojs/node in package.json'])
-                : Proposal::staticBuild($output, ['type' => 'From astro in package.json, with no server adapter'], 'astro.config sets its own outDir, so Coresmith can\'t be sure where the build goes. Set the web root to that folder.');
-        }
-
-        if ($facts->dependency('react-scripts') !== null && str_contains($build, 'react-scripts build')) {
-            return Proposal::staticBuild('/build', ['type' => 'From the react-scripts build script in package.json'], '');
-        }
-
-        if ($facts->dependency('vite') !== null && str_contains($build, 'vite build') && $this->viteOnly($facts)) {
-            return Proposal::staticBuild($output, ['type' => 'From the vite build script in package.json'], 'vite.config sets its own outDir, so Coresmith can\'t be sure where the build goes. Set the web root to that folder.');
+        foreach ($presets as $preset) {
+            if ($preset->claims($facts, $build)) {
+                return $preset->propose($facts, $runtime, $sources, $output);
+            }
         }
 
         return $this->fromStartScript($facts, $runtime, $sources);
@@ -203,12 +160,5 @@ final readonly class JavaScriptDetection
         }
 
         return ['node', 'No lockfile, so Node, which every npm package supports'];
-    }
-
-    private function viteOnly(RepositoryFacts $facts): bool
-    {
-        $start = (string) ($facts->json('package.json')['scripts']['start'] ?? '');
-
-        return trim($start) === '' || preg_match('~^\s*vite(\s|$)~', $start) === 1;
     }
 }
