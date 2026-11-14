@@ -37,6 +37,7 @@ final class DetectionStore
                 'markers' => $read->facts->markers,
                 'env_keys' => $read->facts->envKeys,
                 'complete' => $read->facts->complete,
+                'go_lines' => $read->facts->goLines,
             ],
             'commit' => $read->commit,
             'failure' => $read->failure,
@@ -74,6 +75,7 @@ final class DetectionStore
             (array) $stored['facts']['env_keys'],
             (bool) $stored['facts']['complete'],
             trim((string) $stored['directory'], '/'),
+            (array) ($stored['facts']['go_lines'] ?? []),
         ) : null;
 
         return new RepositoryRead($facts, $stored['commit'] ?? null, $stored['failure'] ?? null, (bool) ($stored['definitive'] ?? false), (array) ($stored['installed'] ?? []), (array) ($stored['extensions'] ?? []), is_string($stored['arch'] ?? null) ? $stored['arch'] : null);

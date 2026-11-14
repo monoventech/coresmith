@@ -84,6 +84,31 @@ const BLOCKED = {
     ]
 }
 
+const GO_SERVERS = {
+    id: 'g7wq8mz9xw4hpbn6tq8rjf3ylc5ds0gk',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'unsure',
+    fields: {
+        type: 'go',
+        framework: 'chi',
+        js_runtime: null,
+        web_directory: null,
+        main_package: null,
+        version: '1.27.4'
+    },
+    sources: {
+        type: 'From go.mod',
+        framework: 'github.com/go-chi/chi in go.mod',
+        runtime_version: 'Go 1.27.4 from go.mod (go 1.26)'
+    },
+    unsettled: {
+        main_package: 'Several packages start a server (cmd/admin, cmd/api). Pick the one that answers web requests.'
+    },
+    blockers: [],
+    options: { main_package: ['cmd/admin', 'cmd/api', 'cmd/worker'] }
+}
+
 async function answer(page: Page, answers: object[]): Promise<string[]> {
     const asked: string[] = []
 
@@ -126,6 +151,27 @@ test.describe('Stack detection on Add an app', () => {
         expect(asked).toHaveLength(1)
         expect(new URL(asked[0]).searchParams.get('repository_url')).toBe('https://github.com/acme/shop.git')
         expect(new URL(asked[0]).searchParams.get('repository_branch')).toBe('main')
+    })
+
+    test('a Go module with several servers asks which package answers web requests, and lists every package main', async ({
+        page
+    }) => {
+        await answer(page, [GO_SERVERS])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/platform.git')
+
+        const main = page.getByLabel('Main package')
+
+        await expect(page.getByLabel('Language')).toHaveValue('go')
+        await expect(page.getByLabel('Framework')).toHaveValue('chi')
+        await expect(main.locator('option')).toHaveText(['Pick one', 'cmd/admin', 'cmd/api', 'cmd/worker'])
+        await expect(
+            page.getByText('Several packages start a server (cmd/admin, cmd/api).', { exact: false })
+        ).toBeVisible()
+        await main.selectOption('cmd/api')
+        await expect(main).toHaveValue('cmd/api')
+        await expect(main.locator('option')).toHaveText(['cmd/admin', 'cmd/api', 'cmd/worker'])
     })
 
     test('a field the files do not settle is left for the person, with the reason', async ({ page }) => {
