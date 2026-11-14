@@ -12,7 +12,7 @@ use App\Services\Runtime\RepositoryFacts;
 
 final readonly class JsPresets
 {
-    private const ORDER = [SvelteKit::class, NextJs::class, Nuxt::class, Astro::class, CreateReactApp::class, Vite::class];
+    private const ORDER = [SvelteKit::class, NextJs::class, Nuxt::class, Astro::class, AdonisJs::class, CreateReactApp::class, Vite::class];
 
     /**
      * @return list<JsPreset>

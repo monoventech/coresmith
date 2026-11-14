@@ -141,7 +141,7 @@ final readonly class JavaScriptDetection
      */
     private function unbuilt(string $runtime, array $sources, string $package, string $command, string $label): array
     {
-        return Proposal::make('js', null, $runtime, null, $sources, ['framework' => "{$package} is in package.json, but the build script doesn't run {$command}, so Coresmith can't tell this is a {$label} app."]);
+        return Proposal::make('js', null, $runtime, null, $sources, ['framework' => "{$package} is in package.json, but the build script doesn't run {$command}, so Coresmith can't tell this is " . (preg_match('/^[AEIOU]/i', $label) === 1 ? 'an' : 'a') . " {$label} app."]);
     }
 
     /**

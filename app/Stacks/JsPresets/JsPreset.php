@@ -66,6 +66,19 @@ abstract class JsPreset
         return [];
     }
 
+    public function startsFromEntry(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function initialEnvironment(): array
+    {
+        return [];
+    }
+
     public function rulesOutput(): bool
     {
         return false;

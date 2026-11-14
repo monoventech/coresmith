@@ -51,7 +51,7 @@ final readonly class JavaScript implements Language
     {
         $data = ((array) $application->stack)['tooling'] ?? null;
         $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
-        $start = $tooling?->start ?? false;
+        $start = ($tooling?->start ?? false) && !($this->presets->find((string) $application->framework)?->startsFromEntry() ?? false);
         $script = $tooling?->startScript ?? 'start';
 
         return match ($application->js_runtime) {
@@ -80,7 +80,7 @@ final readonly class JavaScript implements Language
 
     public function initialEnvironment(?string $framework): array
     {
-        return [];
+        return $this->presets->find((string) $framework)?->initialEnvironment() ?? [];
     }
 
     public function processEnvironment(Application $application): array
