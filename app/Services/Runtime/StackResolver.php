@@ -50,6 +50,7 @@ final class StackResolver
             $this->gems($application, $facts),
             $this->packages($application, $facts),
             $facts->complete ? array_values(array_unique([...array_keys($facts->files), ...$facts->markers])) : null,
+            $application->type?->language()->tooling($application, $facts) ?? [],
         );
     }
 

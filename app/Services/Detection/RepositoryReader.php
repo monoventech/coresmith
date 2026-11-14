@@ -37,8 +37,6 @@ final class RepositoryReader
 
     private const SECONDS = 300;
 
-    private const RUNTIMES = ['php', 'nodejs', 'bun', 'deno', 'ruby'];
-
     private const SCRIPT = <<<'BASH'
     set -o pipefail
     export GIT_TERMINAL_PROMPT=0
@@ -145,7 +143,7 @@ final class RepositoryReader
     public function script(string $url, string $branch, string $subfolder, string $credentials = ''): string
     {
         $prefix = $subfolder === '' ? '' : $subfolder . '/';
-        $patterns = array_map(fn(string $file): string => escapeshellarg('/' . $prefix . $file), [...RepositoryProbe::FILES, ...RepositoryProbe::MARKERS, RepositoryProbe::COMPOSER_LOCK]);
+        $patterns = array_map(fn(string $file): string => escapeshellarg('/' . $prefix . $file), [...RepositoryProbe::FILES, ...RepositoryProbe::GLOBS, ...RepositoryProbe::MARKERS, RepositoryProbe::COMPOSER_LOCK]);
         $folder = $subfolder === ''
             ? 'app="$dir/repo"'
             : 'if [ "$(git cat-file -t ' . escapeshellarg('HEAD:' . $subfolder) . ' 2>/dev/null)" != tree ]; then printf \'@@nodir\n\'; exit 0; fi' . "\n" . 'app="$dir/repo"/' . escapeshellarg($subfolder) . "\n" . 'mkdir -p "$app"';
@@ -160,7 +158,7 @@ final class RepositoryReader
             '{prefix}' => escapeshellarg($prefix),
             '{lockfiles}' => implode(' ', RepositoryProbe::LOCKFILES),
             '{probe}' => escapeshellarg(base64_encode($this->probe->script())),
-            '{runtimes}' => implode(' ', self::RUNTIMES),
+            '{runtimes}' => implode(' ', AsdfManager::RUNTIMES),
             '{folders}' => AppFolders::LISTING,
             '{installs}' => escapeshellarg(AsdfManager::INSTALL_DIR),
         ]) . "\n";
@@ -205,7 +203,7 @@ final class RepositoryReader
     {
         $installed = [];
 
-        preg_match_all('/^@@installed (' . implode('|', self::RUNTIMES) . ') (\d[0-9A-Za-z.+-]*)$/m', $output, $matches, PREG_SET_ORDER);
+        preg_match_all('/^@@installed (' . implode('|', AsdfManager::RUNTIMES) . ') (\d[0-9A-Za-z.+-]*)$/m', $output, $matches, PREG_SET_ORDER);
 
         foreach ($matches as [, $runtime, $version]) {
             $installed[$runtime][] = $version;

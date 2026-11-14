@@ -704,3 +704,15 @@ test('the add an app page offers the JavaScript frameworks the presets serve', f
             ->where('js_frameworks.0', ['value' => 'sveltekit', 'label' => 'SvelteKit'])
             ->where('js_frameworks.3', ['value' => 'astro', 'label' => 'Astro']));
 });
+
+test('the add an app page offers Python with its frameworks and versions', function () {
+    [$owner, $server] = linkedStoreTeam();
+
+    $this->actingAs($owner)->get(route('servers.applications.create', $server))
+        ->assertInertia(fn($page) => $page
+            ->component('applications/Create')
+            ->where('python_frameworks', [['value' => 'django', 'label' => 'Django'], ['value' => 'fastapi', 'label' => 'FastAPI'], ['value' => 'starlette', 'label' => 'Starlette'], ['value' => 'flask', 'label' => 'Flask']])
+            ->where('runtimes.python.label', 'Python')
+            ->where('runtimes.python.recommended', '3.14')
+            ->where('runtimes.python.sources', '.tool-versions, .python-version, pyproject.toml or runtime.txt'));
+});

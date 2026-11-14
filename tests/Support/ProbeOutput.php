@@ -10,10 +10,11 @@ final class ProbeOutput
      * @param  array<string, string>  $files
      * @param  list<string>  $lockfiles
      * @param  array<string, string>  $locked
+     * @param  list<string>  $markers
      */
-    public static function for(array $files = [], array $lockfiles = [], array $locked = []): string
+    public static function for(array $files = [], array $lockfiles = [], array $locked = [], array $markers = []): string
     {
-        $lines = [];
+        $lines = array_map(fn(string $marker): string => '@@has ' . $marker, $markers);
 
         foreach ($files as $name => $content) {
             $lines[] = '@@file ' . $name . ' ' . base64_encode($content);

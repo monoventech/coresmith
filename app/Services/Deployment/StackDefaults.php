@@ -14,7 +14,7 @@ use App\Services\Runtime\RepositoryFacts;
 
 final class StackDefaults
 {
-    private const SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE'];
+    private const SECRETS = ['APP_KEY', 'APP_SECRET', 'SECRET_KEY_BASE', 'SECRET_KEY'];
 
     /**
      * @return array<string, string>

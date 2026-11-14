@@ -126,6 +126,17 @@ test.describe('an application', () => {
         await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
     })
 
+    test('a Django app with Celery is offered its worker and beat, and no Laravel or Rails toggles', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'celery-tasks')
+
+        await expect(page.getByRole('main')).toContainText('Django · Python 3.14')
+        await expect(toggle(page, 'Celery worker')).not.toBeChecked()
+        await expect(page.getByTestId('toggle-celery_worker')).toContainText('celery -A tasks worker')
+        await expect(toggle(page, 'Celery beat')).not.toBeChecked()
+        await expect(toggle(page, 'Queue worker')).toHaveCount(0)
+        await expect(toggle(page, 'Sidekiq')).toHaveCount(0)
+    })
+
     test('the current release names its commit and who shipped it', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
@@ -728,6 +739,38 @@ test.describe('adding an application', () => {
         await expect(framework).toHaveValue('angular')
     })
 
+    test('a framework picked by hand stays picked when the page refreshes itself', async ({ page }) => {
+        await page.clock.install()
+        await openAddApp(page)
+
+        const framework = page.getByLabel('Framework')
+
+        await framework.selectOption('symfony')
+
+        const refreshed = page.waitForRequest((request) => request.headers()['x-inertia-partial-data'] !== undefined)
+
+        await page.clock.runFor(61_000)
+        await refreshed
+        await page.waitForLoadState('networkidle')
+
+        await expect(page.getByLabel('Language')).toHaveValue('php')
+        await expect(framework).toHaveValue('symfony')
+    })
+
+    test('Python offers its frameworks and versions, and no web root', async ({ page }) => {
+        await openAddApp(page)
+        await page.getByLabel('Language').selectOption('python')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(framework).toHaveValue('django')
+        await expect(framework.locator('option')).toHaveText(['Django', 'FastAPI', 'Starlette', 'Flask', 'Other framework'])
+        await framework.selectOption('fastapi')
+        await expect(framework).toHaveValue('fastapi')
+        await expect(page.getByLabel('Web root')).toHaveCount(0)
+        await expect(page.getByRole('radiogroup', { name: 'Python version' }).getByRole('radio', { name: /^3\.14\./ })).toBeVisible()
+    })
+
     test('the web root is asked only of PHP apps and static sites, which serve files from it', async ({ page }) => {
         await openAddApp(page)
 
@@ -736,7 +779,7 @@ test.describe('adding an application', () => {
 
         await expect(webRoot).toHaveValue('/public')
 
-        for (const proxied of ['js', 'ruby']) {
+        for (const proxied of ['js', 'ruby', 'python']) {
             await language.selectOption(proxied)
             await expect(webRoot).toHaveCount(0)
         }

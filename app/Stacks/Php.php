@@ -11,6 +11,7 @@ namespace App\Stacks;
 use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Detection\Blocker;
+use App\Services\Runtime\NativeTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\Runtime\ResolvedRuntime;
@@ -203,6 +204,31 @@ final readonly class Php implements Language
             'symfony' => 'php bin/console app:send-reports',
             default => 'php cron/cleanup.php',
         };
+    }
+
+    public function tooling(Application $application, RepositoryFacts $facts): array
+    {
+        return [];
+    }
+
+    public function pathDirectories(string $appDirectory): array
+    {
+        return [];
+    }
+
+    public function nativeTools(): ?NativeTools
+    {
+        return null;
+    }
+
+    public function frameworkLabel(string $framework): ?string
+    {
+        return null;
+    }
+
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        return null;
     }
 
     /**

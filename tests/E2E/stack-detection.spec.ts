@@ -41,7 +41,7 @@ const MONOREPO = {
     fields: { type: null, framework: null, js_runtime: null, web_directory: null, version: null },
     sources: {},
     unsettled: {
-        type: "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on. Pick the folder the app is in."
+        type: "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on. Pick the folder the app is in."
     },
     blockers: [],
     folders: ['apps/api', 'apps/dashboard']
@@ -57,7 +57,7 @@ const UNREAD = {
     fields: { type: null, framework: null, js_runtime: null, web_directory: null, version: null },
     sources: {},
     unsettled: {
-        type: "There is no composer.json, Gemfile, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on."
+        type: "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, package.json, deno.json or index.html at the repository's root, so Coresmith can't tell what the app runs on."
     },
     blockers: []
 }

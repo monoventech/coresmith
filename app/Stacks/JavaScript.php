@@ -12,6 +12,7 @@ use App\Models\Application;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\JsTooling;
+use App\Services\Runtime\NativeTools;
 use App\Services\Runtime\RepositoryFacts;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\Stack;
@@ -118,6 +119,31 @@ final readonly class JavaScript implements Language
             'deno' => 'deno task cleanup',
             default => 'bun run cleanup',
         };
+    }
+
+    public function tooling(Application $application, RepositoryFacts $facts): array
+    {
+        return [];
+    }
+
+    public function pathDirectories(string $appDirectory): array
+    {
+        return [];
+    }
+
+    public function nativeTools(): ?NativeTools
+    {
+        return null;
+    }
+
+    public function frameworkLabel(string $framework): ?string
+    {
+        return $this->presets->find($framework)?->label();
+    }
+
+    public function explain(string $phase, string $output, Stack $stack): ?string
+    {
+        return null;
     }
 
     private function entry(Application $application, ?JsTooling $tooling): string

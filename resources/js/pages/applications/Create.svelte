@@ -24,14 +24,15 @@
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { pickerRuntime } from '@/lib/runtimes'
     import { Form } from '@inertiajs/svelte'
-    import { onDestroy } from 'svelte'
+    import { onDestroy, untrack } from 'svelte'
 
     let {
         server,
         runtimes,
         github,
         projects = [],
-        js_frameworks = []
+        js_frameworks = [],
+        python_frameworks = []
     }: {
         server: {
             id: string
@@ -43,6 +44,7 @@
         github: { connections: GitHubSource[]; settings_href: string }
         projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
         js_frameworks: { value: string; label: string }[]
+        python_frameworks: { value: string; label: string }[]
     } = $props()
 
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
@@ -57,6 +59,7 @@
             { value: 'sinatra', label: 'Sinatra' },
             { value: 'rack', label: 'Rack' }
         ],
+        python: [...python_frameworks, { value: '', label: 'Other framework' }],
         static: [{ value: '', label: 'No framework' }]
     })
 
@@ -74,7 +77,7 @@
 
     const STEPS = [
         { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
-        { name: 'Install dependencies', desc: 'composer, bun or bundler' },
+        { name: 'Install dependencies', desc: 'composer, bun, bundler or uv' },
         { name: 'Build assets', desc: 'into a new timestamped directory' },
         { name: 'Run migrations', desc: 'against the new release' },
         { name: 'Health check', desc: 'before anything goes live' },
@@ -82,7 +85,11 @@
     ]
 
     let type = $state('php')
-    let framework = $derived(FRAMEWORKS[type]?.[0]?.value ?? '')
+    let framework = $derived.by(() => {
+        const language = type
+
+        return untrack(() => FRAMEWORKS[language]?.[0]?.value ?? '')
+    })
     let typeSelect = $state<HTMLSelectElement | null>(null)
     let frameworkSelect = $state<HTMLSelectElement | null>(null)
     let jsRuntime = $state('bun')
@@ -415,6 +422,7 @@
                                     { value: 'php', label: 'PHP' },
                                     { value: 'js', label: 'JavaScript' },
                                     { value: 'ruby', label: 'Ruby' },
+                                    { value: 'python', label: 'Python' },
                                     { value: 'static', label: 'Static site' }
                                 ]}
                                 aria-invalid={errors.type ? true : undefined}

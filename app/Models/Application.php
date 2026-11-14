@@ -106,6 +106,7 @@ class Application extends Model
             'bun' => $this->bun_version,
             'deno' => $this->deno_version,
             'ruby' => $this->ruby_version,
+            'python' => $this->python_version,
         ], fn(?string $version): bool => $version !== null && $version !== '');
     }
 
