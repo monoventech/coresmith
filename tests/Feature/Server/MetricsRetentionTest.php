@@ -162,6 +162,16 @@ test('each reading card says, in plain amounts, what its percentage is of', func
             ->where('server.metrics.disk.detail', "16\u{00A0}GB of 913\u{00A0}GB used · 852\u{00A0}GB free"));
 });
 
+test('a processor model stored as a placeholder is left out of the processor card', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['meta' => ['cpu_cores' => 4, 'cpu_model' => '-']]);
+    ServerMetric::factory()->for($server)->create(['load_1m' => 0.27, 'recorded_at' => now()->subMinute()]);
+
+    $this->actingAs(metricsUser($team, TeamRole::Member))
+        ->get(route('servers.show', $server))
+        ->assertInertia(fn($page) => $page->where('server.metrics.cpu.detail', "4\u{00A0}cores · load\u{00A0}0.27"));
+});
+
 test('without a current reading, the cards still say what the server has', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create(['meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'memory_installed_mb' => 4096, 'disk_gb' => 80]]);

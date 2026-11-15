@@ -31,6 +31,10 @@ final class ReadingMonitor
 
     public const RECOVERY_MINUTES = 5;
 
+    public const LOOKBACK_SECONDS = 30;
+
+    public const DRIFT_SECONDS = 5;
+
     public const ACTIVITY = [
         'disk' => 'disk_pressure',
         'memory' => 'memory_pressure',
@@ -52,7 +56,7 @@ final class ReadingMonitor
         $longest = max(array_map(fn(MonitorLimit $limit): int => max($limit->duration, self::RECOVERY_MINUTES), $limits));
         $readings = ServerMetric::query()
             ->where('server_id', $server->getKey())
-            ->where('recorded_at', '>=', now()->subMinutes($longest))
+            ->where('recorded_at', '>=', $metric->recorded_at->subMinutes($longest)->subSeconds(self::LOOKBACK_SECONDS))
             ->get();
 
         foreach (self::KINDS as $kind) {
@@ -76,7 +80,7 @@ final class ReadingMonitor
         $held = $this->values($server, $kind, $limit->duration, $metric, $readings);
 
         if ($held !== null && min($held) >= $limit->threshold) {
-            $open === null ? $this->open($server, $kind, $limit, $held) : $this->hold($server, $open, $held);
+            $open === null ? $this->open($server, $limit, $held, $metric) : $this->hold($server, $open, $held);
 
             return;
         }
@@ -88,15 +92,16 @@ final class ReadingMonitor
         $clear = $this->values($server, $kind, max($limit->duration, self::RECOVERY_MINUTES), $metric, $readings);
 
         if ($clear !== null && max($clear) < $limit->threshold) {
-            $this->recover($server, $open);
+            $this->recover($server, $open, $limit);
         }
     }
 
     /**
      * @param  list<float>  $values
      */
-    private function open(Server $server, MonitorKind $kind, MonitorLimit $limit, array $values): void
+    private function open(Server $server, MonitorLimit $limit, array $values, ServerMetric $metric): void
     {
+        $kind = $limit->kind;
         $critical = $kind === MonitorKind::Disk && max($values) >= DeployApplication::DISK_ABORT_PERCENT;
         $level = $kind === MonitorKind::Disk ? ($critical ? 'critical' : 'warning') : null;
         $shown = $kind === MonitorKind::Disk ? max($values) : min($values);
@@ -109,7 +114,7 @@ final class ReadingMonitor
 
         $sent = $this->notify($server, $kind, $kind === MonitorKind::Disk
             ? new DiskPressureNotification($server, (int) round($shown), critical: $critical)
-            : new MonitorAlertNotification($server, $kind, $shown, $limit));
+            : new MonitorAlertNotification($server, $kind, $shown, $limit, latest: self::value($kind, $metric, self::cores($server))));
 
         if (!$sent) {
             $alert->delete();
@@ -152,13 +157,14 @@ final class ReadingMonitor
         FleetChanged::forServer($server);
     }
 
-    private function recover(Server $server, MonitorAlert $alert): void
+    private function recover(Server $server, MonitorAlert $alert, MonitorLimit $limit): void
     {
         if (!$alert->close()) {
             return;
         }
 
-        $minutes = max(1, (int) round($alert->opened_at->diffInMinutes($alert->closed_at)));
+        $past = $alert->opened_at->diffInSeconds($alert->closed_at) + ($limit->duration - max($limit->duration, self::RECOVERY_MINUTES)) * 60;
+        $minutes = max(1, (int) round($past / 60));
 
         $this->notify($server, $alert->kind, new MonitorRecoveredNotification($server, $alert->kind, $minutes));
         activity()->performedOn($server)->withProperties(['kind' => $alert->kind->value, 'minutes' => $minutes])->log('monitor_recovered');
@@ -171,26 +177,41 @@ final class ReadingMonitor
      */
     private function values(Server $server, MonitorKind $kind, int $minutes, ServerMetric $metric, Collection $readings): ?array
     {
-        $cores = (int) (((array) $server->meta)['cpu_cores'] ?? 0);
+        $cores = self::cores($server);
 
         if ($kind === MonitorKind::Load && $cores < 1) {
             return null;
         }
 
-        $since = now()->subMinutes($minutes);
-        $window = $minutes === 0 ? collect([$metric]) : $readings->filter(fn(ServerMetric $reading): bool => $reading->recorded_at->gte($since));
+        if ($minutes === 0) {
+            return [self::value($kind, $metric, $cores)];
+        }
 
-        if ($window->count() < max(1, $minutes - 1)) {
+        $start = $metric->recorded_at->subMinutes($minutes);
+        $window = $readings->filter(fn(ServerMetric $reading): bool => $reading->recorded_at->gte($start->subSeconds(self::LOOKBACK_SECONDS)));
+        $first = $window->min(fn(ServerMetric $reading): int => $reading->recorded_at->getTimestamp());
+
+        if ($first === null || $first > $start->getTimestamp() + self::DRIFT_SECONDS || $window->count() < $minutes) {
             return null;
         }
 
-        return $window->map(fn(ServerMetric $reading): float => match ($kind) {
+        return $window->map(fn(ServerMetric $reading): float => self::value($kind, $reading, $cores))->values()->all();
+    }
+
+    private static function value(MonitorKind $kind, ServerMetric $reading, int $cores): float
+    {
+        return match ($kind) {
             MonitorKind::Disk => (float) $reading->disk_percent,
             MonitorKind::Memory => (float) $reading->memory_percent,
             MonitorKind::Cpu => (float) $reading->cpu_percent,
             MonitorKind::Load => (float) $reading->load_5m / $cores,
             MonitorKind::Apps, MonitorKind::Cron => 0.0,
-        })->values()->all();
+        };
+    }
+
+    private static function cores(Server $server): int
+    {
+        return (int) (((array) $server->meta)['cpu_cores'] ?? 0);
     }
 
     private function notify(Server $server, MonitorKind $kind, Notification $notification): bool

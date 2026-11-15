@@ -41,6 +41,14 @@ test.describe('a server', () => {
         await expect(detail('Disk · 24h')).toHaveText('67 GB of 160 GB used · 85 GB free')
     })
 
+    test('a processor the server prints only a dash for is left out of its card', async ({ page }) => {
+        await gotoServer(page, 'bench-01')
+
+        await expect(
+            page.getByText('CPU · 24h', { exact: true }).locator('xpath=../..').getByTestId('metric-detail')
+        ).toHaveText(/^2\scores( · load\s\d+\.\d{2})?$/)
+    })
+
     test('the last day of readings is drawn for cpu, memory and disk', async ({ page }) => {
         await gotoServer(page, 'forge-01')
 

@@ -76,6 +76,13 @@ function alertsReading(Server $server, int|float $memory, int $minutesAgo): Serv
     return ServerMetric::factory()->for($server)->create(['memory_percent' => $memory, 'disk_percent' => 40, 'recorded_at' => now()->subMinutes($minutesAgo)]);
 }
 
+function alertsHighMemory(Server $server, int|float $memory = 96): void
+{
+    foreach ([4, 3, 2, 1] as $minutesAgo) {
+        alertsReading($server, $memory, $minutesAgo);
+    }
+}
+
 function alertsRow(Model $subject, string $description, array $properties, CarbonInterface $at): void
 {
     activity()->performedOn($subject)->withProperties($properties)->log($description);
@@ -258,9 +265,9 @@ test('a disk under the line for five minutes closes its alert, and the next rise
 
     expect($recovered)->toHaveCount(1)
         ->and($recovered[0]->kind)->toBe(MonitorKind::Disk)
-        ->and($recovered[0]->minutes)->toBe(6)
+        ->and($recovered[0]->minutes)->toBe(1)
         ->and(MonitorAlert::query()->sole()->closed_at)->not->toBeNull()
-        ->and(Activity::query()->where('description', 'monitor_recovered')->sole()->properties->toArray())->toBeInAnyKeyOrder(['kind' => 'disk', 'minutes' => 6]);
+        ->and(Activity::query()->where('description', 'monitor_recovered')->sole()->properties->toArray())->toBeInAnyKeyOrder(['kind' => 'disk', 'minutes' => 1]);
 
     $this->travel(1)->minutes();
     alertsCollect($server, disk: 88);
@@ -309,8 +316,7 @@ test('memory at 95% for four minutes emails once, holds quietly and warns again 
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
-    alertsReading($server, 95, minutesAgo: 2);
-    alertsReading($server, 96, minutesAgo: 1);
+    alertsHighMemory($server, 95);
 
     alertsCollect($server, memory: 98);
 
@@ -344,7 +350,7 @@ test('memory at 95% for four minutes emails once, holds quietly and warns again 
     expect(Activity::query()->where('description', 'memory_pressure')->count())->toBe(2);
 });
 
-test('the memory mail names the lowest reading of the four minutes, rounded down', function (array $earlier, int $latest, int $named) {
+test('the memory mail names the latest reading, and the lowest of the four minutes as the level it stayed at, rounded down', function (array $earlier, int $latest, int $named) {
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
@@ -357,22 +363,21 @@ test('the memory mail names the lowest reading of the four minutes, rounded down
 
     $mail = alertsSent($member, MonitorAlertNotification::class)[0]->toMail($member);
 
-    expect($mail->subject)->toBe("web-1 memory is at {$named}%")
+    expect($mail->subject)->toBe("web-1 memory is at {$latest}%")
         ->and($mail->introLines[0])->toBe("Memory has stayed at {$named}% or more for 4 minutes. An app that asks for more is killed and started again.")
         ->and(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBeInAnyKeyOrder(['percent' => $named, 'minutes' => 4]);
 })->with([
-    'the first is the lowest' => [[[95, 2], [96, 1]], 98, 95],
-    'the middle is the lowest' => [[[98, 2], [96, 1]], 97, 96],
-    'the latest is the lowest' => [[[98, 2], [97, 1]], 96, 96],
-    'a fraction is rounded down, never up' => [[[95.6, 2], [97, 1]], 98, 95],
+    'the first is the lowest' => [[[95, 4], [97, 3], [97, 2], [96, 1]], 98, 95],
+    'the middle is the lowest' => [[[98, 4], [97, 3], [96, 2], [97, 1]], 97, 96],
+    'the latest is the lowest' => [[[98, 4], [98, 3], [98, 2], [97, 1]], 96, 96],
+    'a fraction is rounded down, never up' => [[[97, 4], [97, 3], [95.6, 2], [97, 1]], 98, 95],
 ]);
 
 test('a memory alert that cannot be sent is reported, leaves no row and is retried the next minute', function () {
     Exceptions::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
-    alertsReading($server, 96, minutesAgo: 2);
-    alertsReading($server, 97, minutesAgo: 1);
+    alertsHighMemory($server);
     Notification::shouldReceive('send')->once()->andThrow(new RuntimeException('Queue is down'));
 
     $metric = alertsCollect($server, memory: 98);
@@ -405,7 +410,8 @@ test('a memory spike does not email', function (array $readings) {
     Notification::assertNothingSent();
     expect(Activity::query()->where('description', 'memory_pressure')->exists())->toBeFalse();
 })->with([
-    'a low reading in between' => [[[40, 2], [96, 1]]],
+    'a low reading in between' => [[[96, 4], [96, 3], [40, 2], [96, 1]]],
+    'high readings for three of the four minutes' => [[[97, 3], [97, 2], [97, 1]]],
     'high readings too long ago' => [[[96, 7], [97, 6]]],
     'only one earlier reading' => [[[97, 1]]],
     'no earlier readings' => [[]],
@@ -415,7 +421,9 @@ test('the memory line is 95%: at it counts, under it does not', function (int $f
     Notification::fake();
     $server = alertsServer();
     alertsMember($server->team);
-    alertsReading($server, $first, minutesAgo: 2);
+    alertsReading($server, $first, minutesAgo: 4);
+    alertsReading($server, $first, minutesAgo: 3);
+    alertsReading($server, $second, minutesAgo: 2);
     alertsReading($server, $second, minutesAgo: 1);
 
     alertsCollect($server, memory: $latest);
@@ -428,7 +436,7 @@ test('the memory line is 95%: at it counts, under it does not', function (int $f
         Notification::assertNothingSent();
     }
 })->with([
-    'all three at the line' => [95, 95, 95, true],
+    'every reading at the line' => [95, 95, 95, true],
     'the first under it' => [94, 96, 96, false],
     'the second under it' => [96, 94, 96, false],
     'the latest under it' => [97, 97, 94, false],
@@ -440,8 +448,9 @@ test('another server\'s readings do not count towards this one', function () {
     $other = alertsServer();
     alertsMember($server->team);
     alertsMember($other->team);
+    alertsReading($other, 97, minutesAgo: 4);
+    alertsReading($other, 97, minutesAgo: 3);
     alertsReading($other, 97, minutesAgo: 2);
-    alertsReading($other, 97, minutesAgo: 1);
     alertsReading($server, 97, minutesAgo: 1);
 
     alertsCollect($server, memory: 98);
@@ -456,8 +465,7 @@ test('memory and memory kill mails follow Server problems, not the disk or provi
     $wanting = alertsMember($server->team);
     $quiet = alertsMember($server->team, ['server_alerts' => false]);
     $noDisk = alertsMember($server->team, ['disk_pressure' => false, 'provisioning' => false]);
-    alertsReading($server, 96, minutesAgo: 2);
-    alertsReading($server, 97, minutesAgo: 1);
+    alertsHighMemory($server);
 
     alertsCollect($server, memory: 98);
     alertsRead($server, alertsKill('coresmith-app-shop-web', 20));
@@ -607,8 +615,7 @@ test('a server whose team is gone still logs its memory alerts without emailing 
     $server = alertsServer();
     alertsMember($server->team);
     alertsApplication($server, 'shop');
-    alertsReading($server, 96, minutesAgo: 2);
-    alertsReading($server, 97, minutesAgo: 1);
+    alertsHighMemory($server);
     $server->team->delete();
     $server = $server->fresh();
 
@@ -634,9 +641,10 @@ test('each alert says what happened and what to do', function (string $alert, st
     $notification = match ($alert) {
         'provisioning stopped' => new ProvisioningFailedNotification($server, 2, 'Base system'),
         'killed for memory' => new ApplicationOomKilledNotification($application, 'web', 512, CarbonImmutable::parse('2026-09-14 09:59:10')),
-        'memory' => new MonitorAlertNotification($server, MonitorKind::Memory, 98.4, new MonitorLimit(MonitorKind::Memory, 95, 4, true, 'default')),
-        'processor' => new MonitorAlertNotification($server, MonitorKind::Cpu, 93.7, new MonitorLimit(MonitorKind::Cpu, 90, 10, true, 'team')),
-        'load' => new MonitorAlertNotification($server, MonitorKind::Load, 1.625, new MonitorLimit(MonitorKind::Load, 1.5, 1, true, 'server')),
+        'memory' => new MonitorAlertNotification($server, MonitorKind::Memory, 98.4, new MonitorLimit(MonitorKind::Memory, 95, 4, true, 'default'), latest: 99.1),
+        'processor' => new MonitorAlertNotification($server, MonitorKind::Cpu, 93.7, new MonitorLimit(MonitorKind::Cpu, 90, 10, true, 'team'), latest: 97.2),
+        'processor fully busy' => new MonitorAlertNotification($server, MonitorKind::Cpu, 100.0, new MonitorLimit(MonitorKind::Cpu, 90, 10, true, 'default'), latest: 100.0),
+        'load' => new MonitorAlertNotification($server, MonitorKind::Load, 1.625, new MonitorLimit(MonitorKind::Load, 1.5, 1, true, 'server'), latest: 1.8),
         'recovered' => new MonitorRecoveredNotification($server, MonitorKind::Memory, 12),
         'recovered after hours' => new MonitorRecoveredNotification($server, MonitorKind::Disk, 125),
         'disk' => new DiskPressureNotification($server, 96, critical: true),
@@ -663,19 +671,25 @@ test('each alert says what happened and what to do', function (string $alert, st
     ],
     'memory' => [
         'memory',
-        'web-1 memory is at 98%',
+        'web-1 memory is at 99%',
         ['Memory has stayed at 98% or more for 4 minutes. An app that asks for more is killed and started again.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
         'Open web-1',
     ],
     'processor' => [
         'processor',
-        'web-1 processor is 93% busy',
+        'web-1 processor is 97% busy',
         ['The processor has stayed 93% busy or more for 10 minutes, so apps on it may answer slowly.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
+        'Open web-1',
+    ],
+    'processor fully busy' => [
+        'processor fully busy',
+        'web-1 processor is 100% busy',
+        ['The processor has been 100% busy for 10 minutes, so apps on it may answer slowly.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
         'Open web-1',
     ],
     'load' => [
         'load',
-        'web-1 load is at 1.63 per core',
+        'web-1 load is at 1.80 per core',
         ['The load has stayed at 1.63 per core or more for a minute, so work is waiting its turn for the processor.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
         'Open web-1',
     ],
@@ -731,7 +745,7 @@ test('every new alert is a queued email', function (object $notification) {
 })->with([
     'provisioned' => fn() => new ServerProvisionedNotification(new Server, 372),
     'provisioning stopped' => fn() => new ProvisioningFailedNotification(new Server, 2, 'Base system'),
-    'memory' => fn() => new MonitorAlertNotification(new Server, MonitorKind::Memory, 98, new MonitorLimit(MonitorKind::Memory, 95, 4, true, 'default')),
+    'memory' => fn() => new MonitorAlertNotification(new Server, MonitorKind::Memory, 98, new MonitorLimit(MonitorKind::Memory, 95, 4, true, 'default'), latest: 98),
     'recovered' => fn() => new MonitorRecoveredNotification(new Server, MonitorKind::Cpu, 12),
     'killed for memory' => fn() => new ApplicationOomKilledNotification(new Application, 'web', 512, CarbonImmutable::now()),
 ]);

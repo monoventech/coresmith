@@ -50,7 +50,7 @@ final class CronJobRecoveredNotification extends Notification implements ShouldQ
 
         return (new MailMessage)
             ->subject("{$name}: {$this->job} ran without an error")
-            ->line("It ran at {$when} and took {$took}.")
+            ->line("It ran on {$when} and took {$took}.")
             ->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
     }
 }

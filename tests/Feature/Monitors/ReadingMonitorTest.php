@@ -51,6 +51,14 @@ function readingMonitorLimit(Server $server, MonitorKind $kind, float $threshold
     return Monitor::query()->create(['team_id' => $server->team_id, 'kind' => $kind, 'threshold' => $threshold, 'duration' => $duration, 'enabled' => $enabled]);
 }
 
+function readingMonitorAt(Server $server, string $time, array $values): void
+{
+    test()->travelTo(CarbonImmutable::parse("2026-11-15 {$time}"));
+    $metric = ServerMetric::factory()->for($server)->create([...['cpu_percent' => 10, 'memory_percent' => 40, 'disk_percent' => 40, 'load_5m' => 0.4], ...$values, 'recorded_at' => now()]);
+
+    app(ReadingMonitor::class)->evaluate($server, $metric);
+}
+
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-11-15 09:00:00'));
     Notification::fake();
@@ -286,3 +294,87 @@ test('the evaluator watches disk, memory, processor and load, each with its own 
         ->and(ReadingMonitor::ACTIVITY)->toBe(['disk' => 'disk_pressure', 'memory' => 'memory_pressure', 'cpu' => 'cpu_pressure', 'load' => 'load_pressure'])
         ->and(ReadingMonitor::RECOVERY_MINUTES)->toBe(5);
 });
+
+test('a reading a second before the stretch began still counts, so the alert waits for the full duration', function () {
+    $server = readingMonitorServer();
+    readingMonitorMember($server);
+    readingMonitorLimit($server, MonitorKind::Cpu, 70, 5);
+    readingMonitorAt($server, '06:03:02', ['cpu_percent' => 2]);
+
+    foreach (['06:04:03', '06:05:03', '06:06:03', '06:07:03', '06:08:03'] as $time) {
+        readingMonitorAt($server, $time, ['cpu_percent' => 100]);
+    }
+
+    expect(MonitorAlert::query()->exists())->toBeFalse();
+
+    readingMonitorAt($server, '06:09:03', ['cpu_percent' => 100]);
+
+    expect(MonitorAlert::query()->sole()->opened_at->format('H:i:s'))->toBe('06:09:03');
+});
+
+test('a missed reading at the start of a stretch keeps the alert waiting until the readings cover the duration', function () {
+    $server = readingMonitorServer();
+    readingMonitorMember($server);
+    readingMonitorLimit($server, MonitorKind::Cpu, 70, 5);
+    readingMonitorAt($server, '06:00:59', ['cpu_percent' => 2]);
+
+    foreach (['06:03:00', '06:04:00', '06:05:00', '06:06:00', '06:07:00'] as $time) {
+        readingMonitorAt($server, $time, ['cpu_percent' => 100]);
+    }
+
+    expect(MonitorAlert::query()->exists())->toBeFalse();
+
+    readingMonitorAt($server, '06:08:00', ['cpu_percent' => 100]);
+
+    expect(MonitorAlert::query()->sole()->opened_at->format('H:i:s'))->toBe('06:08:00');
+});
+
+test('a stretch with missed readings inside it opens the alert only if one at most is missing', function (array $times, bool $alerted) {
+    $server = readingMonitorServer();
+    readingMonitorMember($server);
+    readingMonitorLimit($server, MonitorKind::Cpu, 70, 5);
+    readingMonitorAt($server, '06:00:00', ['cpu_percent' => 2]);
+
+    foreach ($times as $time) {
+        readingMonitorAt($server, $time, ['cpu_percent' => 100]);
+    }
+
+    expect(MonitorAlert::query()->exists())->toBe($alerted);
+})->with([
+    'one missing' => [['06:01:00', '06:03:00', '06:04:00', '06:05:00', '06:06:00'], true],
+    'two missing' => [['06:01:00', '06:04:00', '06:05:00', '06:06:00'], false],
+]);
+
+test('an alert closes only once the readings cover five whole minutes under the line', function () {
+    $server = readingMonitorServer();
+    readingMonitorMember($server);
+    readingMonitorLimit($server, MonitorKind::Cpu, 70, 5);
+
+    foreach (['06:00:00', '06:01:00', '06:02:00', '06:03:00', '06:04:00', '06:05:00', '06:05:59'] as $time) {
+        readingMonitorAt($server, $time, ['cpu_percent' => 100]);
+    }
+
+    foreach (['06:07:00', '06:08:00', '06:09:00', '06:10:00', '06:11:00'] as $time) {
+        readingMonitorAt($server, $time, ['cpu_percent' => 20]);
+    }
+
+    expect(MonitorAlert::query()->sole()->open_key)->not->toBeNull();
+
+    readingMonitorAt($server, '06:12:00', ['cpu_percent' => 20]);
+
+    expect(MonitorAlert::query()->sole()->closed_at?->format('H:i:s'))->toBe('06:12:00');
+});
+
+test('a recovery says how long the readings were past the line, not how long the alert was open', function (array $past, int $minutes) {
+    $server = readingMonitorServer();
+    $member = readingMonitorMember($server);
+
+    readingMonitorMinutes($server, $past[1], $past[0]);
+    readingMonitorMinutes($server, 6, ['disk_percent' => 40, 'memory_percent' => 40]);
+
+    expect(Notification::sent($member, MonitorRecoveredNotification::class)->sole()->minutes)->toBe($minutes)
+        ->and(Activity::query()->where('description', 'monitor_recovered')->sole()->properties['minutes'])->toBe($minutes);
+})->with([
+    'disk past 80% for one reading' => [[['disk_percent' => 85], 1], 1],
+    'memory past 95% for six readings' => [[['memory_percent' => 97], 6], 6],
+]);
