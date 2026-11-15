@@ -729,8 +729,7 @@
                         </div>
                         <div role="img" aria-label={application.uptime.label} class="flex gap-0.5">
                             {#each application.uptime.days as day (day.date)}
-                                <span class="h-5.5 flex-1 rounded-xs {uptimeTones[day.state]}" title={day.title}
-                                ></span>
+                                <span class="h-5.5 flex-1 rounded-xs {uptimeTones[day.state]}" title={day.title}></span>
                             {/each}
                         </div>
                         <p class="m-0 text-[12px] text-muted-foreground">{application.uptime.note}</p>
