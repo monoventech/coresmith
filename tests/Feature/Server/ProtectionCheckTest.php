@@ -160,6 +160,7 @@ test('the hourly check records what it read and when', function () {
         'kernel_off' => [],
         'patches' => 'on',
         'controls' => 'on',
+        'http3' => 'on',
         'checked_at' => now()->toIso8601String(),
     ]);
 });

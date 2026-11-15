@@ -31,7 +31,7 @@ test('a server that was never checked says so, and when Coresmith checks', funct
     $rows = collect($card['rows'])->keyBy('key');
 
     expect($card['checked'])->toBeNull()
-        ->and($rows->pluck('key')->all())->toBe(['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts'])
+        ->and($rows->pluck('key')->all())->toBe(['ssh', 'fail2ban', 'kernel', 'patches', 'http3', 'controls', 'unknown_hosts'])
         ->and($rows['fail2ban']['state'])->toBe('pending')
         ->and($rows['fail2ban']['detail'])->toBe('Coresmith checks this within the hour.')
         ->and($rows['kernel']['state'])->toBe('pending')
