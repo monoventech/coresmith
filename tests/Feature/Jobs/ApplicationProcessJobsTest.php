@@ -272,7 +272,7 @@ test('detaching disables and deletes every unit of the app and its php-fpm pool,
     expect(array_slice($transport->commands(), 0, 7))->toBe([
         ...detachUnitCommands('shop', ['fpm', 'queue']),
         "rm -f '/etc/php-fpm.d/coresmith-app-shop.conf'",
-        "rm -rf '/etc/coresmith/php/shop'",
+        "rm -rf '/etc/coresmith-php/shop'",
         'systemctl daemon-reload',
     ])
         ->and($commands)->toContain("-X DELETE 'http://localhost:2019/id/app-{$application->id}'")
@@ -334,7 +334,7 @@ test('a unit systemd no longer knows does not stop the rest of the app from bein
     expect(array_slice($transport->commands(), 0, 7))->toBe([
         ...detachUnitCommands('shop', ['fpm', 'queue']),
         "rm -f '/etc/php-fpm.d/coresmith-app-shop.conf'",
-        "rm -rf '/etc/coresmith/php/shop'",
+        "rm -rf '/etc/coresmith-php/shop'",
         'systemctl daemon-reload',
     ]);
 });

@@ -35,7 +35,7 @@ const STACK_RELEASE = '20260925120000';
 
 function deployRuntimesPhpIni(Application $application): string
 {
-    return " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith/php/{$application->slug}'";
+    return " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith-php/{$application->slug}'";
 }
 
 function stackApp(array $attributes = []): Application

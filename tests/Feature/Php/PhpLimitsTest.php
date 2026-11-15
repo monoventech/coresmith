@@ -80,6 +80,11 @@ test('checking files every 2 seconds turns timestamp checks back on', function (
 });
 
 test('each app has its own folder for the file', function () {
-    expect(PhpLimits::directory(phpLimitsApp(['slug' => 'shop-2'])))->toBe('/etc/coresmith/php/shop-2')
-        ->and(PhpLimits::scanDir(phpLimitsApp(['slug' => 'shop-2'])))->toBe(':/etc/coresmith/php/shop-2');
+    expect(PhpLimits::directory(phpLimitsApp(['slug' => 'shop-2'])))->toBe('/etc/coresmith-php/shop-2')
+        ->and(PhpLimits::scanDir(phpLimitsApp(['slug' => 'shop-2'])))->toBe(':/etc/coresmith-php/shop-2');
+});
+
+test('the limits sit outside /etc/coresmith, which app users cannot enter, so workers, cron jobs and deploy steps read them too', function () {
+    expect(PhpLimits::DIRECTORY)->toBe('/etc/coresmith-php')
+        ->and(PhpLimits::directory(phpLimitsApp()))->not->toStartWith('/etc/coresmith/');
 });

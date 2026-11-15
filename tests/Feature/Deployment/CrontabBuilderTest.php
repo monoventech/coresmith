@@ -70,7 +70,7 @@ function cronRun(int $index): string
         . " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
         . ' -p KillMode=process -p UMask=0027 -p NoNewPrivileges=yes'
         . " -E 'PATH=/opt/asdf-data/installs/php/8.5.5/bin:/usr/local/bin:/usr/bin:/bin'"
-        . " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith/php/shop'"
+        . " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith-php/shop'"
         . " -- /bin/bash -s < '/etc/coresmith/cron/shop/{$index}.sh'";
 }
 

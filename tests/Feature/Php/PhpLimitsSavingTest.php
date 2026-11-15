@@ -125,7 +125,7 @@ test('applying writes the file, reloads PHP-FPM gracefully and restarts the work
         SSHConnectionManager::createTransportUsing(null);
     }
 
-    expect($transport->uploads()['/etc/coresmith/php/shop/coresmith.ini'])->toContain("upload_max_filesize = 256M\n")
+    expect($transport->uploads()['/etc/coresmith-php/shop/coresmith.ini'])->toContain("upload_max_filesize = 256M\n")
         ->and($transport->commands())->toContain("systemctl reload-or-restart 'coresmith-app-shop-fpm'")
         ->and($transport->commands())->toContain("systemctl restart 'coresmith-app-shop-queue'")
         ->and($application->fresh()->php_written_at)->not->toBeNull();
@@ -142,13 +142,13 @@ test('a stopped app gets its file, and its processes take it when it starts', fu
         SSHConnectionManager::createTransportUsing(null);
     }
 
-    expect($transport->uploads())->toHaveKey('/etc/coresmith/php/shop/coresmith.ini')
+    expect($transport->uploads())->toHaveKey('/etc/coresmith-php/shop/coresmith.ini')
         ->and(implode("\n", $transport->commands()))->not->toContain('reload-or-restart');
 });
 
 test('a write that fails is logged with what the server said', function () {
     $application = phpSavingApp();
-    $transport = (new FakeSSHTransport)->respondTo("mkdir -p '/etc/coresmith/php/shop'", 'mkdir: cannot create directory: Read-only file system', 1);
+    $transport = (new FakeSSHTransport)->respondTo("mkdir -p '/etc/coresmith-php/shop'", 'mkdir: cannot create directory: Read-only file system', 1);
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {

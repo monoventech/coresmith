@@ -24,7 +24,7 @@ final class PhpLimits
 
     public const RELOAD_TIMESTAMPS = 'timestamps';
 
-    public const DIRECTORY = '/etc/coresmith/php';
+    public const DIRECTORY = '/etc/coresmith-php';
 
     public const FILE = 'coresmith.ini';
 
