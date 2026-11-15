@@ -62,7 +62,7 @@ test('a crontab points at the current symlink so it follows deployments', functi
     $crontab = app(CrontabBuilder::class)->build($app);
     $scripts = implode("\n", app(CrontabBuilder::class)->scripts($app));
 
-    expect($crontab)->toContain("-p 'WorkingDirectory=/var/coresmith/apps/my-app/current'")
+    expect($scripts)->toContain("-p 'WorkingDirectory=/var/coresmith/apps/my-app/current'")
         ->and($scripts)->toContain("\nphp artisan schedule:run\n")
         ->and($crontab . $scripts)->not->toContain('/releases/');
 });
@@ -70,7 +70,7 @@ test('a crontab points at the current symlink so it follows deployments', functi
 test('a crontab carries the resolved runtime path and logs to the scheduler log', function () {
     $app = cronApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']]]);
 
-    expect(app(CrontabBuilder::class)->build($app))->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin')
+    expect(implode("\n", app(CrontabBuilder::class)->scripts($app)))->toContain('PATH=/opt/asdf-data/installs/php/8.5.5/bin')
         ->and(app(CrontabBuilder::class)->scripts($app)['/etc/coresmith/cron/my-app/0.sh'] ?? '')->toStartWith("exec >> '/var/coresmith/apps/my-app/shared/logs/scheduler.log' 2>&1\n");
 });
 

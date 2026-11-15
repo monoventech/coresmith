@@ -189,7 +189,7 @@ final class ReadingMonitor
             MonitorKind::Memory => (float) $reading->memory_percent,
             MonitorKind::Cpu => (float) $reading->cpu_percent,
             MonitorKind::Load => (float) $reading->load_5m / $cores,
-            MonitorKind::Apps => 0.0,
+            MonitorKind::Apps, MonitorKind::Cron => 0.0,
         })->values()->all();
     }
 

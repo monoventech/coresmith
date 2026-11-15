@@ -19,28 +19,29 @@ class MonitorAlert extends Model
 
     protected $guarded = ['id'];
 
-    public static function keyFor(Server $server, MonitorKind $kind, ?Application $application = null): string
+    public static function keyFor(Server $server, MonitorKind $kind, ?Application $application = null, ?string $job = null): string
     {
-        return implode(':', array_filter([$server->getKey(), $kind->value, $application?->getKey()]));
+        return implode(':', array_filter([$server->getKey(), $kind->value, $application?->getKey(), $job]));
     }
 
-    public static function open(Server $server, MonitorKind $kind, ?Application $application = null, ?string $level = null, ?float $peak = null): self
+    public static function open(Server $server, MonitorKind $kind, ?Application $application = null, ?string $level = null, ?float $peak = null, ?string $job = null): self
     {
         return self::query()->create([
             'team_id' => $server->team_id,
             'server_id' => $server->getKey(),
             'application_id' => $application?->getKey(),
+            'job' => $job,
             'kind' => $kind,
             'level' => $level,
             'peak' => $peak,
             'opened_at' => now(),
-            'open_key' => self::keyFor($server, $kind, $application),
+            'open_key' => self::keyFor($server, $kind, $application, $job),
         ]);
     }
 
-    public static function current(Server $server, MonitorKind $kind, ?Application $application = null): ?self
+    public static function current(Server $server, MonitorKind $kind, ?Application $application = null, ?string $job = null): ?self
     {
-        return self::query()->where('open_key', self::keyFor($server, $kind, $application))->first();
+        return self::query()->where('open_key', self::keyFor($server, $kind, $application, $job))->first();
     }
 
     public static function closeAllFor(Server|Application $subject): void

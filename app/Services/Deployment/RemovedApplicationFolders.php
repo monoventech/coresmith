@@ -11,6 +11,7 @@ namespace App\Services\Deployment;
 use App\Exceptions\SSHCommandFailedException;
 use App\Models\Application;
 use App\Models\Server;
+use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -73,6 +74,6 @@ final class RemovedApplicationFolders
 
     public static function command(Application $application): string
     {
-        return 'rm -rf ' . escapeshellarg((new ReleasePaths($application))->base());
+        return 'rm -rf ' . escapeshellarg((new ReleasePaths($application))->base()) . ' ' . escapeshellarg(CrontabBuilder::RECORDS . '/' . SafeName::assertSlug($application->slug));
     }
 }

@@ -12,6 +12,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\AppSize;
 use App\Enums\DeploymentStatus;
+use App\Enums\MonitorKind;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
@@ -25,9 +26,12 @@ use App\Jobs\ReservePortBlock;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\MonitorAlert;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
+use App\Services\Cron\CronRunLine;
+use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\StackDefaults;
 use App\Services\Detection\RepositoryAccess;
@@ -420,12 +424,22 @@ final class ApplicationController extends Controller
     private function cron(Server $server, Application $application, CronJobs $cron): array
     {
         $card = $cron->describe($application);
+        $runs = (array) $application->cron_runs;
+        $timezone = CronJobs::timezone($application);
+        $scheduled = app(CrontabBuilder::class)->runs($application);
+        $alerts = MonitorAlert::query()
+            ->where('application_id', $application->getKey())
+            ->where('kind', MonitorKind::Cron)
+            ->whereNotNull('open_key')
+            ->get()
+            ->keyBy('job');
 
         return [
             ...$card,
             'jobs' => array_map(fn(array $job): array => [
                 ...$job,
                 'href' => route('servers.applications.cron-jobs.update', [$server, $application, $job['id']]),
+                'run' => CronRunLine::for($job, (array) ($runs[$job['id']] ?? []), now()->getTimestamp(), $timezone, $alerts->get($job['id']), $scheduled),
             ], $card['jobs']),
             'store_href' => route('servers.applications.cron-jobs.store', [$server, $application]),
             'sync_href' => route('servers.applications.cron-jobs.sync', [$server, $application]),

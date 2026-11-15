@@ -34,7 +34,7 @@ test('the crontab and every unit get the same PATH as the deploy', function () {
         'cron_jobs' => [['schedule' => '* * * * *', 'command' => 'php artisan schedule:run']],
     ]);
 
-    expect(app(CrontabBuilder::class)->build($application))->toContain('PATH=/opt/asdf-data/installs/php/8.4.20/bin:/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin')
+    expect(implode("\n", app(CrontabBuilder::class)->scripts($application)))->toContain('PATH=/opt/asdf-data/installs/php/8.4.20/bin:/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin')
         ->and(app(SystemdUnitBuilder::class)->build($application, 'queue', 'php artisan queue:work'))
         ->toContain('Environment="PATH=/opt/asdf-data/installs/php/8.4.20/bin:/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin"')
         ->toContain("\nExecStart=/usr/bin/env php artisan queue:work\n");

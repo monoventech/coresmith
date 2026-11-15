@@ -21,6 +21,7 @@
         job,
         storeHref,
         example,
+        zone = 'UTC',
         busy,
         send
     }: {
@@ -28,6 +29,7 @@
         job: CronJob | null
         storeHref: string
         example: string
+        zone?: string
         busy: boolean
         send: CronSend
     } = $props()
@@ -189,7 +191,7 @@
                                 </div>
                             {/if}
                             <div>
-                                <Label for="cron-time" class="mb-1.5">Time, UTC</Label>
+                                <Label for="cron-time" class="mb-1.5">Time, {zone}</Label>
                                 <Input
                                     id="cron-time"
                                     type="time"
