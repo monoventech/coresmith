@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Tests\Support\TemporaryEnvironment;
+use Tevkert\QueuePrefork\Preflight;
 
 function queueTopologyEnvironments(array $values): array
 {
@@ -71,3 +72,7 @@ test('a worker count that makes no sense never stops a queue', function (string 
     'a word' => ['many', 1],
     'below zero' => ['-2', 1],
 ]);
+
+test('Horizon stays within what queue-prefork has tested, so its processes keep sharing compiled code', function () {
+    expect(Preflight::check(app(), probes: false))->toBe([]);
+});
