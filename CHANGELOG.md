@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.16 (2026-11-15)
+
+### Changed
+- Private packages, a sign-out that sticks, GitHub organizations and 13 security fixes (#95)
+
 ## v0.8.15 (2026-11-14)
 
 ### Changed
