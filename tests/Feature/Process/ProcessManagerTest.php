@@ -255,7 +255,8 @@ test('a php app gets its PHP limits file in its own folder when its processes ar
 
     expect($transport->uploads())->toHaveKey('/etc/coresmith-php/my-app/coresmith.ini')
         ->and($transport->uploads()['/etc/coresmith-php/my-app/coresmith.ini'])->toBe(PhpLimits::for($app)->ini())
-        ->and($transport->commands())->toContain("mkdir -p '/etc/coresmith-php/my-app'")
+        ->and($transport->commands())->toContain("install -d -m 0755 '/etc/coresmith-php' '/etc/coresmith-php/my-app'")
+        ->and($transport->commands())->toContain("chmod 0644 '/etc/coresmith-php/my-app/coresmith.ini'")
         ->and($app->fresh()->php_written_at)->not->toBeNull();
 });
 

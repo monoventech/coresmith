@@ -148,7 +148,7 @@ test('a stopped app gets its file, and its processes take it when it starts', fu
 
 test('a write that fails is logged with what the server said', function () {
     $application = phpSavingApp();
-    $transport = (new FakeSSHTransport)->respondTo("mkdir -p '/etc/coresmith-php/shop'", 'mkdir: cannot create directory: Read-only file system', 1);
+    $transport = (new FakeSSHTransport)->respondTo("install -d -m 0755 '/etc/coresmith-php' '/etc/coresmith-php/shop'", 'install: cannot create directory: Read-only file system', 1);
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport);
 
     try {

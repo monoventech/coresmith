@@ -63,8 +63,10 @@ final class ProcessManager
                 $this->fpm->unit($application),
                 SystemdUnitBuilder::UNIT_DIR . '/' . $this->fpm->unitName($application) . '.service',
             );
-            $connection->execute('mkdir -p ' . escapeshellarg(PhpLimits::directory($application)), sudo: true)->throw();
-            $connection->uploadContent(PhpLimits::for($application)->ini(), PhpLimits::directory($application) . '/' . PhpLimits::FILE);
+            $ini = PhpLimits::directory($application) . '/' . PhpLimits::FILE;
+            $connection->execute('install -d -m 0755 ' . escapeshellarg(PhpLimits::DIRECTORY) . ' ' . escapeshellarg(PhpLimits::directory($application)), sudo: true)->throw();
+            $connection->uploadContent(PhpLimits::for($application)->ini(), $ini);
+            $connection->execute('chmod 0644 ' . escapeshellarg($ini), sudo: true)->throw();
         }
 
         $webCommand = $this->units->webCommand($application);
