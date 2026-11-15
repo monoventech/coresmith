@@ -16,10 +16,19 @@ final readonly class DetectedStack
 {
     private const FRAMEWORKS = [
         'php' => ['laravel' => 'Laravel', 'symfony' => 'Symfony', '' => 'Plain PHP'],
-        'js' => ['' => 'API or other'],
+        'js' => ['' => 'Other server'],
         'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra', 'rack' => 'Rack'],
         'python' => ['' => 'Other framework'],
         'go' => ['' => 'net/http'],
+    ];
+
+    private const SERVER_LABELS = [
+        'express' => 'Express', 'fastify' => 'Fastify', 'hono' => 'Hono', '@hono/node-server' => 'Hono', 'koa' => 'Koa', '@nestjs/core' => 'NestJS',
+        '@hapi/hapi' => 'hapi', 'restify' => 'Restify', 'polka' => 'Polka', '@adonisjs/core' => 'AdonisJS', 'h3' => 'h3', 'elysia' => 'Elysia',
+        'socket.io' => 'Socket.IO', 'ws' => 'ws', '@feathersjs/feathers' => 'Feathers', '@loopback/core' => 'LoopBack', 'sails' => 'Sails',
+        '@remix-run/serve' => 'Remix', '@react-router/serve' => 'React Router', 'json-server' => 'JSON Server', '@strapi/strapi' => 'Strapi',
+        '@keystone-6/core' => 'Keystone', 'payload' => 'Payload', '@medusajs/medusa' => 'Medusa', 'micro' => 'Micro', '@tinyhttp/app' => 'tinyhttp',
+        'hyper-express' => 'HyperExpress', 'srvx' => 'srvx',
     ];
 
     /**
@@ -40,6 +49,7 @@ final readonly class DetectedStack
         public ?string $runtime = null,
         public ?string $mainPackage = null,
         public array $options = [],
+        public ?string $serverPackage = null,
     ) {}
 
     public function verdict(): string
@@ -60,7 +70,8 @@ final readonly class DetectedStack
     {
         $version = $this->version();
         $runtime = $this->runtime === null || $version === null ? null : $catalog->label($this->runtime) . ' ' . $version;
-        $framework = ApplicationType::tryFrom((string) $this->type)?->language()->frameworkLabel((string) $this->framework) ?? self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
+        $framework = ($this->type === 'js' && $this->framework === '' && $this->serverPackage !== null ? (self::SERVER_LABELS[$this->serverPackage] ?? $this->serverPackage) : null)
+            ?? ApplicationType::tryFrom((string) $this->type)?->language()->frameworkLabel((string) $this->framework) ?? self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
 
         return match ($this->type) {
             'static' => 'Static site, web root ' . ($this->webDirectory ?? '/'),

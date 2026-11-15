@@ -20,7 +20,7 @@ final readonly class JavaScriptDetection
 
     public const NO_START = "There is no start script in package.json, so Coresmith can't tell how the app starts. Add one, for example \"start\": \"node server.js\".";
 
-    public const NO_SERVER = "The start script doesn't use a server package Coresmith knows, such as Express, Fastify, Hono, Koa or NestJS, so it can't tell the app listens on a port. Pick API or other if it does.";
+    public const NO_SERVER = "The start script doesn't use a server package Coresmith knows, such as Express, Fastify, Hono, Koa or NestJS, so it can't tell the app listens on a port. Pick Other server if it does.";
 
     public const DENO_LIBRARY = 'deno.json publishes exports and has no start task, so it looks like a library, not an app.';
 
@@ -116,7 +116,7 @@ final readonly class JavaScriptDetection
 
         return $server === null
             ? Proposal::make('js', null, $runtime, null, $sources, ['framework' => self::NO_SERVER])
-            : Proposal::make('js', '', $runtime, null, [...$sources, 'framework' => "The {$name} script in package.json, with {$server}"]);
+            : Proposal::make('js', '', $runtime, null, [...$sources, 'framework' => "The {$name} script in package.json, with {$server}"], server: $server);
     }
 
     /**
