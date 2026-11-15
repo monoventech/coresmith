@@ -33,6 +33,7 @@ use App\Services\Deployment\StackDefaults;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
+use App\Services\Monitors\AppUptime;
 use App\Services\Network\ServerAddresses;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CronJobs;
@@ -203,6 +204,7 @@ final class ApplicationController extends Controller
                 'additional_domains' => array_values((array) $application->additional_domains),
                 'certificates' => $certificates->forApplication($application),
                 'domain_reach' => $this->domainReach($application),
+                'uptime' => app(AppUptime::class)->for($application),
                 'domain_check_href' => route('servers.applications.domains.check', [$server, $application]),
                 'dns_targets' => ServerAddresses::targets($server->public_addresses),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
