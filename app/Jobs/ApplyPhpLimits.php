@@ -18,6 +18,7 @@ use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 final class ApplyPhpLimits implements ShouldQueue
@@ -29,6 +30,8 @@ final class ApplyPhpLimits implements ShouldQueue
     public const FAILED = 'php_limits_failed';
 
     public const CATCH_UP_BATCH = 20;
+
+    public const CATCH_UP_WAIT_SECONDS = 3600;
 
     public bool $deleteWhenMissingModels = true;
 
@@ -43,15 +46,28 @@ final class ApplyPhpLimits implements ShouldQueue
 
     public static function catchUp(): void
     {
-        Application::query()
+        $queued = 0;
+        $due = Application::query()
             ->where('type', ApplicationType::Php->value)
             ->whereNull('php_written_at')
             ->whereNotNull('current_release')
-            ->whereHas('server', fn($server) => $server->where('status', ServerStatus::Active->value)->where('connection_failures', '<', ServerReachability::FAILURES_BEFORE_UNREACHABLE))
+            ->whereHas('server', fn($server) => $server
+                ->where('status', ServerStatus::Active->value)
+                ->where('connection_failures', '<', ServerReachability::FAILURES_BEFORE_UNREACHABLE)
+                ->whereNull('pending_host_key_fingerprint'))
             ->orderBy('id')
-            ->limit(self::CATCH_UP_BATCH)
-            ->get()
-            ->each(fn(Application $application) => self::dispatch($application));
+            ->lazy();
+
+        foreach ($due as $application) {
+            if ($queued >= self::CATCH_UP_BATCH) {
+                return;
+            }
+
+            if (Cache::add('php-limits-catch-up:' . $application->getKey(), true, self::CATCH_UP_WAIT_SECONDS)) {
+                self::dispatch($application);
+                $queued++;
+            }
+        }
     }
 
     public function handle(SSHConnectionManager $connections, ProcessManager $processes): void

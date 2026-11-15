@@ -168,11 +168,51 @@ test('PHP apps whose limits were never written get them, a few at a time, once t
     $unreleased = phpSavingApp(['slug' => 'unreleased', 'current_release' => null]);
     $unreachable = phpSavingApp(['slug' => 'unreachable']);
     $unreachable->server->forceFill(['connection_failures' => 3])->save();
+    $rekeyed = phpSavingApp(['slug' => 'rekeyed']);
+    $rekeyed->server->forceFill(['pending_host_key_fingerprint' => 'SHA256:changed'])->save();
 
     ApplyPhpLimits::catchUp();
 
     Queue::assertPushed(ApplyPhpLimits::class, 1);
     Queue::assertPushed(ApplyPhpLimits::class, fn(ApplyPhpLimits $job): bool => $job->application->is($due));
+});
+
+test('the catch-up queues 20 apps a run, and the next run takes the ones left over without making them wait', function () {
+    Queue::fake();
+    $application = phpSavingApp();
+
+    foreach (range(1, 20) as $index) {
+        Application::factory()->for($application->team)->for($application->server)->create([
+            'slug' => "shop-{$index}",
+            'type' => ApplicationType::Php,
+            'current_release' => '20261115-080000',
+        ]);
+    }
+
+    ApplyPhpLimits::catchUp();
+
+    Queue::assertPushed(ApplyPhpLimits::class, 20);
+
+    ApplyPhpLimits::catchUp();
+
+    Queue::assertPushed(ApplyPhpLimits::class, 21);
+});
+
+test('an app the catch-up already tried waits an hour before the next try, so a server that keeps refusing does not fill the feed', function () {
+    Queue::fake();
+    phpSavingApp();
+
+    ApplyPhpLimits::catchUp();
+    ApplyPhpLimits::catchUp();
+    $this->travel(59)->minutes();
+    ApplyPhpLimits::catchUp();
+
+    Queue::assertPushed(ApplyPhpLimits::class, 1);
+
+    $this->travel(2)->minutes();
+    ApplyPhpLimits::catchUp();
+
+    Queue::assertPushed(ApplyPhpLimits::class, 2);
 });
 
 test('the feed says what changed and what went wrong', function () {
