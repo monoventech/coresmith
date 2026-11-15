@@ -9,6 +9,8 @@ declare(strict_types=1);
 namespace App\Services\Deployment;
 
 use App\Models\Application;
+use App\Services\Packages\PackageCredentials;
+use App\Services\Packages\StepSecretsBuilder;
 
 final class LogSanitizer
 {
@@ -41,6 +43,7 @@ final class LogSanitizer
     {
         $output = (string) preg_replace(self::TERMINAL_CODES, '', $output);
         $output = $this->redactEnvironmentValues($output, $application);
+        $output = $this->redactPackageSecrets($output, $application);
         $output = $this->redactCredentialsInUrls($output);
         $output = $this->redactSqlPasswords($output);
 
@@ -67,6 +70,31 @@ final class LogSanitizer
 
         foreach ($pairs as $key => $value) {
             $output = str_replace($value, "[REDACTED:{$key}]", $output);
+        }
+
+        return $output;
+    }
+
+    private function redactPackageSecrets(string $output, ?Application $application): string
+    {
+        if ($application?->team_id === null) {
+            return $output;
+        }
+
+        $pairs = [];
+
+        foreach (app(PackageCredentials::class)->forApplication($application) as $credential) {
+            foreach (StepSecretsBuilder::forms((string) $credential->secret) as $form) {
+                if (strlen($form) >= self::MIN_REDACTABLE_LENGTH) {
+                    $pairs[] = [$form, PackageCredentials::label($credential)];
+                }
+            }
+        }
+
+        usort($pairs, static fn(array $a, array $b): int => strlen($b[0]) <=> strlen($a[0]));
+
+        foreach ($pairs as [$secret, $label]) {
+            $output = str_replace($secret, "[REDACTED:{$label}]", $output);
         }
 
         return $output;

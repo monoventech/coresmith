@@ -1,8 +1,13 @@
 <script lang="ts">
     import type { Detection } from '@/lib/detection'
-    import { TriangleAlert } from '@lucide/svelte'
+    import { KeyRound, TriangleAlert } from '@lucide/svelte'
 
     let { detection, reading, server }: { detection: Detection | null; reading: boolean; server: string } = $props()
+
+    const privateHosts = $derived(
+        detection?.state === 'read' ? (detection.packages ?? []).map((found) => found.host) : []
+    )
+    const packagesHref = $derived(detection?.state === 'read' ? (detection.packages_href ?? null) : null)
 
     const blocked = $derived(
         detection?.state === 'read' && detection.verdict === 'blocked'
@@ -60,5 +65,27 @@
             Coresmith reads the repository once {detection.server} is ready. You can add the app now and check it before the
             first deploy.
         </p>
+    {/if}
+
+    {#if !reading && privateHosts.length > 0}
+        <div class="mt-2.5 flex gap-3 rounded-lg border border-border px-3.5 py-3" data-testid="private-packages-note">
+            <KeyRound class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <p class="m-0 text-[13px]">
+                This app installs packages from {#each privateHosts as host, index (host)}{#if index > 0}{index ===
+                        privateHosts.length - 1
+                            ? ' and '
+                            : ', '}{/if}<span class="font-mono text-[12px] wrap-anywhere">{host}</span>{/each}, and
+                Coresmith has no credentials for {privateHosts.length === 1 ? 'it' : 'them'}. If those packages are
+                private,
+                {#if packagesHref}
+                    <a href={packagesHref} class="font-medium underline underline-offset-2"
+                        >add credentials to Private packages in Settings, Git</a
+                    > before the first deploy.
+                {:else}
+                    ask an owner or admin to add credentials to Private packages in Settings, Git before the first
+                    deploy.
+                {/if}
+            </p>
+        </div>
     {/if}
 </div>

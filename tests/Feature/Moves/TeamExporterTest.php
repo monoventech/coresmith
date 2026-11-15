@@ -11,6 +11,7 @@ use App\Models\BackupDestination;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
+use App\Models\PackageCredential;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -120,7 +121,7 @@ test('the export leaves billing, history and sign-in settings behind', function 
 
     expect($json)->not->toContain('cus_never_moves')
         ->and($json)->not->toContain('history stays behind')
-        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination']);
+        ->and(array_keys(app(TeamExporter::class)->payload($team, $team->owner)))->toBe(['id', 'made_at', 'from', 'team', 'members', 'cloud_providers', 'servers', 'source_providers', 'projects', 'applications', 'webhook_endpoints', 'databases', 'backup_destination', 'package_credentials']);
 });
 
 test('a server that is not ready stops the export', function (ServerStatus $status) {
@@ -166,4 +167,18 @@ test('the export carries projects, their environments and what is filed in them'
         ->and(collect($payload['applications'])->firstWhere('name', 'site')['environment'])->toBe($staging->id)
         ->and(collect($payload['applications'])->firstWhere('name', 'docs')['environment'])->toBeNull()
         ->and($payload['databases'][0]['environment'])->toBeNull();
+});
+
+test('package credentials move with their project and their secret', function () {
+    $team = Team::factory()->owned()->create();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    PackageCredential::factory()->for($team)->create(['target' => 'nova.laravel.com', 'secret' => 'nova-license-moves']);
+    PackageCredential::factory()->for($team)->for($project)->npm('https://npm.pkg.github.com/', '@acme', 'ghp_moves_token')->create();
+
+    $payload = app(TeamExporter::class)->payload($team, $team->owner);
+
+    expect(collect($payload['package_credentials'])->sortBy('source')->values()->all())->toBe([
+        ['project' => null, 'source' => 'composer', 'target' => 'nova.laravel.com', 'scope' => null, 'username' => 'ops@example.com', 'secret' => 'nova-license-moves'],
+        ['project' => $project->id, 'source' => 'npm', 'target' => 'https://npm.pkg.github.com/', 'scope' => '@acme', 'username' => null, 'secret' => 'ghp_moves_token'],
+    ]);
 });

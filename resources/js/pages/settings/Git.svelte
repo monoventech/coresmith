@@ -4,10 +4,12 @@
     import GitHubChooser from '@/components/settings/GitHubChooser.svelte'
     import GitHubConnectionCard from '@/components/settings/GitHubConnectionCard.svelte'
     import GitHubRegistration from '@/components/settings/GitHubRegistration.svelte'
+    import PrivatePackagesCard from '@/components/settings/PrivatePackagesCard.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import type { GitHubSettings } from '@/lib/github'
+    import type { PackageSettings } from '@/lib/packages'
     import { Link, router } from '@inertiajs/svelte'
     import { GitBranch, Timer } from '@lucide/svelte'
 
@@ -41,6 +43,7 @@
         deployKeys = [],
         webhooks,
         github,
+        packages,
         can
     }: {
         providers: Provider[]
@@ -48,6 +51,7 @@
         deployKeys: DeployKey[]
         webhooks: { count: number; last: Delivery | null }
         github: GitHubSettings
+        packages: PackageSettings
         can: { manage: boolean }
     } = $props()
 
@@ -135,6 +139,10 @@
         {#each notInstalled as app (app.key)}
             <GitHubAppCard {app} canManage={github.can.manage} />
         {/each}
+
+        {#if github.organization}
+            <GitHubRegistration registration={github.organization} organizationOnly />
+        {/if}
 
         {#if github.connections.length === 0}
             {#if github.connect && github.apps.length === 0}
@@ -307,46 +315,50 @@
         </div>
     </div>
 
-    <div
-        class="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card"
-        data-testid="deploy-keys-card"
-    >
-        <div class="px-5.5 pt-5 pb-2">
-            <div class="mb-1 flex items-baseline gap-2">
-                <h3 class="type-h3 m-0">Deploy keys</h3>
-                <span class="font-mono text-[12px] text-muted-foreground"
-                    >{deployKeys.length} {deployKeys.length === 1 ? 'key' : 'keys'}</span
-                >
+    <div class="flex h-full flex-col gap-4">
+        <div
+            class="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
+            data-testid="deploy-keys-card"
+        >
+            <div class="px-5.5 pt-5 pb-2">
+                <div class="mb-1 flex items-baseline gap-2">
+                    <h3 class="type-h3 m-0">Deploy keys</h3>
+                    <span class="font-mono text-[12px] text-muted-foreground"
+                        >{deployKeys.length} {deployKeys.length === 1 ? 'key' : 'keys'}</span
+                    >
+                </div>
+                <p class="m-0 text-[12.5px] text-muted-foreground">
+                    One Ed25519 key per app cloned over SSH, read-only. GitHub apps clone with a one-hour token instead.
+                </p>
             </div>
-            <p class="m-0 text-[12.5px] text-muted-foreground">
-                One Ed25519 key per app cloned over SSH, read-only. GitHub apps clone with a one-hour token instead.
+            <div class="max-h-72 flex-1 overflow-y-auto">
+                {#each deployKeys as key (key.id)}
+                    <Link
+                        href={key.href}
+                        class="focus-ring flex min-h-12 w-full items-center gap-3 border-t border-border px-5.5 py-1.5 text-left text-[13px] text-foreground no-underline transition-colors duration-(--dur-fast) hover:bg-muted"
+                    >
+                        <span class="w-24 shrink-0 truncate font-mono font-medium">{key.name}</span>
+                        <span
+                            class="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground"
+                            title={key.fingerprint ?? undefined}
+                        >
+                            {short(key.fingerprint)}{#if key.repository}{` · ${key.repository}`}{/if}
+                        </span>
+                        <Badge variant="outline">read-only</Badge>
+                        <span class="text-[12px] text-muted-foreground" aria-hidden="true">→</span>
+                    </Link>
+                {:else}
+                    <p class="border-t border-border px-5.5 py-3 text-[12.5px] text-muted-foreground">
+                        No app uses a deploy key yet. Apps cloned over SSH get one when they're created.
+                    </p>
+                {/each}
+            </div>
+            <p class="mt-auto border-t border-border px-5.5 py-3 text-[12.5px] text-muted-foreground">
+                Keys are created with the app and rotated from it. Open an app to see or replace its key.
             </p>
         </div>
-        <div class="max-h-72 flex-1 overflow-y-auto">
-            {#each deployKeys as key (key.id)}
-                <Link
-                    href={key.href}
-                    class="focus-ring flex min-h-12 w-full items-center gap-3 border-t border-border px-5.5 py-1.5 text-left text-[13px] text-foreground no-underline transition-colors duration-(--dur-fast) hover:bg-muted"
-                >
-                    <span class="w-24 shrink-0 truncate font-mono font-medium">{key.name}</span>
-                    <span
-                        class="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground"
-                        title={key.fingerprint ?? undefined}
-                    >
-                        {short(key.fingerprint)}{#if key.repository}{` · ${key.repository}`}{/if}
-                    </span>
-                    <Badge variant="outline">read-only</Badge>
-                    <span class="text-[12px] text-muted-foreground" aria-hidden="true">→</span>
-                </Link>
-            {:else}
-                <p class="border-t border-border px-5.5 py-3 text-[12.5px] text-muted-foreground">
-                    No app uses a deploy key yet. Apps cloned over SSH get one when they're created.
-                </p>
-            {/each}
-        </div>
-        <p class="mt-auto border-t border-border px-5.5 py-3 text-[12.5px] text-muted-foreground">
-            Keys are created with the app and rotated from it. Open an app to see or replace its key.
-        </p>
+
+        <PrivatePackagesCard {packages} />
     </div>
 </div>
 

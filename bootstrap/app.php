@@ -13,12 +13,14 @@ use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequireSetupToken;
 use App\Http\Middleware\ResolveTeamUrl;
+use App\Http\Middleware\StartSession;
 use App\Http\Middleware\ThrottleSignups;
 use App\Http\Responses\RefusedForm;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Session\Middleware\StartSession as LaravelStartSession;
 use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -49,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->web(prepend: [ContentSecurityPolicy::class, EnsureInstalled::class]);
+        $middleware->web(replace: [LaravelStartSession::class => StartSession::class]);
         $middleware->api(prepend: [EnsureInstalled::class]);
 
         $middleware->web(append: [

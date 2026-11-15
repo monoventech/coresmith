@@ -36,6 +36,8 @@ export type DetectionRead = {
     blockers: DetectionBlocker[]
     folders: string[]
     options?: Record<string, string[]>
+    packages?: { host: string; source: string }[]
+    packages_href?: string | null
 }
 
 export type Detection =

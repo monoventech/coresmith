@@ -10,6 +10,7 @@ use App\Models\Application;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
 use App\Models\MoveCode;
+use App\Models\PackageCredential;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
@@ -238,4 +239,25 @@ test('an environment without a reference in the move file never collects apps th
     expect($team->projects()->sole()->environments()->sole()->name)->toBe('Production')
         ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0)
         ->and($team->databases()->whereNotNull('environment_id')->count())->toBe(0);
+});
+
+test('package credentials arrive sealed and keep their project', function () {
+    $owner = User::factory()->create(['email' => 'owner@acme.test']);
+    $payload = teamImporterPayload([
+        'projects' => [['ref' => 'p1', 'name' => 'Storefront', 'environments' => []]],
+        'package_credentials' => [
+            ['project' => null, 'source' => 'composer', 'target' => 'nova.laravel.com', 'scope' => null, 'username' => 'ops@acme.test', 'secret' => 'nova-license-moves'],
+            ['project' => 'p1', 'source' => 'npm', 'target' => 'https://npm.pkg.github.com/', 'scope' => '@acme', 'username' => null, 'secret' => 'ghp_moves_token'],
+            ['project' => null, 'source' => 'cargo', 'target' => 'crates.acme.test', 'scope' => null, 'username' => null, 'secret' => 'ignored'],
+        ],
+    ]);
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+    $credentials = PackageCredential::query()->where('team_id', $team->id)->orderBy('source')->get();
+
+    expect($credentials->pluck('target')->all())->toBe(['nova.laravel.com', 'https://npm.pkg.github.com/'])
+        ->and($credentials[0]->secret)->toBe('nova-license-moves')
+        ->and($credentials[0]->hint)->toBe('oves')
+        ->and($credentials[0]->getRawOriginal('secret'))->not->toContain('nova-license')
+        ->and($credentials[1]->project?->name)->toBe('Storefront');
 });

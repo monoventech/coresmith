@@ -17,6 +17,7 @@ use App\Models\WebhookEndpoint;
 use App\Services\Git\GitHub\GitHubSettingsPresenter;
 use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Repository;
+use App\Services\Packages\PackageCredentialPresenter;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
@@ -29,7 +30,7 @@ final class SourceProviderController extends Controller
 {
     public function __construct(private readonly GitProviderFactory $clients) {}
 
-    public function index(Request $request, GitHubSettingsPresenter $github): Response
+    public function index(Request $request, GitHubSettingsPresenter $github, PackageCredentialPresenter $packages): Response
     {
         $team = $this->currentTeam();
 
@@ -87,6 +88,7 @@ final class SourceProviderController extends Controller
                     'configured' => (string) config("services.{$type->value}.client_id") !== '',
                 ])->values(),
             'github' => fn(): array => $github->present($team, $request->user()),
+            'packages' => fn(): array => $packages->present($team, $request->user()),
             'can' => ['manage' => $request->user()->can('update', $team)],
         ]);
     }

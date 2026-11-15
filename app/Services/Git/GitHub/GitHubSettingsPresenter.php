@@ -35,7 +35,7 @@ final class GitHubSettingsPresenter
     ) {}
 
     /**
-     * @return array{can_register: bool, registration: ?array<string, mixed>, elsewhere: ?string, connections: list<array<string, mixed>>, apps: list<array<string, mixed>>, connect: ?array{install_href: string, link_href: string}, choose: ?array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, refusal: ?string}>, post_href: string}, webhook: list<array{app_name: string, instant: bool, sentence: string, sync_href: ?string}>, can: array{manage: bool}}
+     * @return array{can_register: bool, registration: ?array<string, mixed>, elsewhere: ?string, organization: ?array<string, mixed>, connections: list<array<string, mixed>>, apps: list<array<string, mixed>>, connect: ?array{install_href: string, link_href: string}, choose: ?array{app: string, installations: list<array{id: string, account: string, account_type: string, repository_selection: string, refusal: ?string}>, post_href: string}, webhook: list<array{app_name: string, instant: bool, sentence: string, sync_href: ?string}>, can: array{manage: bool}}
      */
     public function present(Team $team, User $user): array
     {
@@ -55,6 +55,7 @@ final class GitHubSettingsPresenter
             'can_register' => $canRegister,
             'registration' => $canRegister && !$viaHost ? $this->registration($team, $user) : null,
             'elsewhere' => $canRegister && $viaHost ? $this->gitSettingsUrl($team, request()) : null,
+            'organization' => $canManage && $this->apps->canRegister() && $available !== [] && !$viaHost ? $this->registration($team, $user) : null,
             'connections' => $connections->map(fn(SourceProvider $provider): array => $this->connection($provider, $connected[$provider->id]))->values()->all(),
             'apps' => $this->registered($available, $connections, $canManage),
             'connect' => $canManage && $available !== [] ? $this->connectLinks($available[0]->key) : null,
