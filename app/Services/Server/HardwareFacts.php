@@ -78,10 +78,15 @@ final class HardwareFacts
         return !is_string($at) || Carbon::parse($at)->lte(now()->subHours(self::REFRESH_HOURS));
     }
 
+    public static function reported(mixed $value): ?string
+    {
+        return is_string($value) && preg_match('/[\p{L}\p{N}]/u', $value) === 1 ? $value : null;
+    }
+
     private function text(?string $value): ?string
     {
         $clean = trim((string) preg_replace('/\s+/', ' ', (string) preg_replace('/[^\P{C}\t ]/u', '', (string) $value)));
 
-        return $clean === '' ? null : mb_substr($clean, 0, self::LONGEST);
+        return self::reported(mb_substr($clean, 0, self::LONGEST));
     }
 }
