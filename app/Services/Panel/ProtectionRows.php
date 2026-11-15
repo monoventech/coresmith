@@ -49,6 +49,12 @@ final class ProtectionRows
                     'fix' => 'Turn them back on',
                     'failed' => "Coresmith couldn't turn them back on: ",
                 ]),
+                $this->managed('http3', 'Browsers can use HTTP/3', $reading, $meta, [
+                    'on' => 'The firewall lets HTTP/3 through.',
+                    'off' => 'The firewall blocks HTTP/3, so browsers try it first and fall back to HTTP/2.',
+                    'fix' => 'Open it',
+                    'failed' => "Coresmith couldn't open it: ",
+                ]),
                 $this->controls($server, $reading),
                 $this->unknownHosts($server),
             ]),
@@ -153,6 +159,7 @@ final class ProtectionRows
             'patches' => 'Turning them back on…',
             'ssh' => 'Turning off password login…',
             'controls', 'unknown_hosts' => 'Closing them now…',
+            'http3' => 'Opening it…',
             default => 'Turning it back on…',
         }, 'fix' => null];
     }

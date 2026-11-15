@@ -9,6 +9,7 @@ use App\Services\Server\ProtectionCheck;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Queue;
+use Symfony\Component\Process\Process;
 use Tests\Support\FakeSSHTransport;
 use Tests\Support\ProtectionReading;
 
@@ -21,6 +22,28 @@ function protectionServer(string $os = 'ubuntu', bool $ownMachine = false): Serv
     return Server::factory()->create(['os_name' => $os, 'runs_coresmith' => $ownMachine, 'host_key_fingerprint' => null]);
 }
 
+/**
+ * @param  array<string, string>  $fakes
+ */
+function protectionWebCheck(array $fakes): string
+{
+    $bin = sys_get_temp_dir() . '/protection-web-' . bin2hex(random_bytes(4));
+    mkdir($bin);
+
+    foreach ($fakes as $command => $body) {
+        file_put_contents("{$bin}/{$command}", "#!/bin/sh\n{$body}\n");
+        chmod("{$bin}/{$command}", 0755);
+    }
+
+    $process = new Process(['/bin/sh', '-c', ProtectionCheck::HTTP3_CHECK], null, ['PATH' => $bin . ':/usr/bin:/bin']);
+    $process->run();
+
+    array_map(unlink(...), glob($bin . '/*') ?: []);
+    rmdir($bin);
+
+    return trim($process->getOutput());
+}
+
 test('a server with every protection in place reads as on', function () {
     expect(app(ProtectionCheck::class)->parse(protectionServer(), ProtectionReading::output()))->toBe([
         'ssh' => 'on',
@@ -29,6 +52,7 @@ test('a server with every protection in place reads as on', function () {
         'kernel_off' => [],
         'patches' => 'on',
         'controls' => 'on',
+        'http3' => 'on',
     ]);
 });
 
@@ -92,6 +116,26 @@ test('the routing controls read as off while anything can still reach them over 
 })->with([
     'still on tcp' => [['no-socket', 'tcp']],
     'socket and tcp' => [['socket', 'tcp']],
+]);
+
+test('HTTP/3 reads as off only while a running firewall blocks UDP 443', function (array $lines, string $state) {
+    expect(app(ProtectionCheck::class)->parse(protectionServer(), ProtectionReading::output(['web' => $lines]))['http3'])->toBe($state);
+})->with([
+    'blocked' => [['udp-closed'], 'off'],
+    'let through' => [['udp-open'], 'on'],
+]);
+
+test('the firewall check tells UDP 443 apart on ufw and firewalld, and counts no firewall as open', function (array $fakes, string $expected) {
+    expect(protectionWebCheck($fakes))->toBe($expected);
+})->with([
+    'ufw with udp 443' => [['ufw' => "printf 'Status: active\\n\\nTo Action From\\n443/tcp ALLOW Anywhere\\n443/udp ALLOW Anywhere\\n'"], 'udp-open'],
+    'ufw with 443 for both' => [['ufw' => "printf 'Status: active\\n\\n443 ALLOW Anywhere\\n'"], 'udp-open'],
+    'ufw with tcp only' => [['ufw' => "printf 'Status: active\\n\\n80/tcp ALLOW Anywhere\\n443/tcp ALLOW Anywhere\\n'"], 'udp-closed'],
+    'ufw switched off' => [['ufw' => "printf 'Status: inactive\\n'"], 'udp-open'],
+    'firewalld with the port' => [['firewall-cmd' => '[ "$1" = --list-ports ] && echo "443/udp 8080/tcp"; exit 0'], 'udp-open'],
+    'firewalld with the service' => [['firewall-cmd' => '[ "$1" = --list-services ] && echo "http https http3"; exit 0'], 'udp-open'],
+    'firewalld without it' => [['firewall-cmd' => '[ "$1" = --list-services ] && echo "http https ssh"; exit 0'], 'udp-closed'],
+    'no firewall' => [[], 'udp-open'],
 ]);
 
 test('the script only reads, and asks each family for its own update tool', function () {
