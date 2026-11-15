@@ -87,8 +87,12 @@ function card(page: Page) {
 }
 
 async function changeTo(page: Page, monitor: Mine, [level, duration]: [string, string]) {
-    await card(page).getByRole('button', { name: `Change the limit for ${monitor.name}` }).click()
-    await expect(dialog(page).getByRole('heading', { name: `Change the ${monitor.name.toLowerCase()} monitor` })).toBeVisible()
+    await card(page)
+        .getByRole('button', { name: `Change the limit for ${monitor.name}` })
+        .click()
+    await expect(
+        dialog(page).getByRole('heading', { name: `Change the ${monitor.name.toLowerCase()} monitor` })
+    ).toBeVisible()
     await dialog(page).getByLabel(monitor.labels[0]).selectOption({ label: level })
     await dialog(page).getByLabel(monitor.labels[1]).selectOption({ label: duration })
     await dialog(page).getByRole('button', { name: 'Save' }).click()
@@ -121,6 +125,17 @@ test.describe('Monitors in Settings, Notifications', () => {
         await expect(card(page)).toContainText(
             'Owners and admins can change monitors. Everyone else sees them. A change applies from the next reading.'
         )
+    })
+
+    test('Cron jobs has a switch and nothing to change', async ({ page }) => {
+        await gotoSettings(page, 'Notifications')
+
+        const row = page.getByTestId('monitor-cron')
+
+        await expect(row).toContainText('Cron jobs')
+        await expect(row).toContainText("A job exits with an error, or doesn't run within 2 minutes of when it's due")
+        await expect(row.getByRole('switch')).toBeChecked()
+        await expect(row.getByRole('button', { name: /Change/ })).toHaveCount(0)
     })
 
     test('a monitor switched off says so, and switches back on', async ({ page }, testInfo) => {
@@ -219,7 +234,9 @@ asMember('a member sees the monitors but cannot change them', async ({ page }) =
 })
 
 test.describe('Alerts on a server', () => {
-    test('the Alerts filter keeps alerts and their recoveries, and Everything brings the rest back', async ({ page }) => {
+    test('the Alerts filter keeps alerts and their recoveries, and Everything brings the rest back', async ({
+        page
+    }) => {
         await gotoServerTab(page, 'outpost-01', 'Activity')
 
         const activity = page.getByTestId('server-activity')

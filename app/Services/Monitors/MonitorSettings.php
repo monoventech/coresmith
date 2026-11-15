@@ -72,6 +72,7 @@ final class MonitorSettings
                     'duration' => $duration,
                     'levels' => array_map(fn(float $level): array => ['value' => $level, 'label' => MonitorChoices::levelLabel($kind, $level)], MonitorChoices::levels($kind)),
                     'durations' => array_map(fn(int $minutes): array => ['value' => $minutes, 'label' => MonitorChoices::durationLabel($kind, $minutes)], MonitorChoices::durations($kind)),
+                    'changeable' => MonitorChoices::levels($kind) !== [],
                 ];
             }, MonitorKind::cases()),
             'overrides' => $overrides,

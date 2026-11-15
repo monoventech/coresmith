@@ -14,8 +14,10 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\RemovedApplicationFolders;
 use App\Services\Panel\CronJobs;
 use App\Services\SSH\SSHConnection;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Symfony\Component\Process\Process;
@@ -42,7 +44,28 @@ function cronConnection(FakeSSHTransport $transport, string $user = 'root'): SSH
 
 function cronLine(string $schedule, int $index): string
 {
-    return $schedule . ' root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop'
+    return "{$schedule} root /bin/sh '/etc/coresmith/cron/shop/{$index}.run'";
+}
+
+function cronId(string $schedule, string $command): string
+{
+    return CronJobs::id(['schedule' => $schedule, 'command' => $command]);
+}
+
+function cronWrapper(int $index, string $id, ?string $run = null): string
+{
+    $record = "'/var/lib/coresmith/cron/shop/{$id}.runs'";
+
+    return "umask 077\nstarted=\$(date +%s)\nmkdir -p '/var/lib/coresmith/cron/shop'\nrunning='/var/lib/coresmith/cron/shop/{$id}.'\"\$\$\".running\nprintf '%s\\n' \"\$started\" > \"\$running\"\n"
+        . ($run ?? cronRun($index)) . "\nstatus=\$?\nrm -f \"\$running\"\n{\n    flock 9\n"
+        . "    printf '%s %s %s\\n' \"\$started\" \"\$((\$(date +%s) - started))\" \"\$status\" >> {$record}\n"
+        . "    if [ \"\$(wc -l < {$record})\" -gt 50 ]; then tail -n 50 {$record} > {$record}.new && mv -f {$record}.new {$record}; fi\n"
+        . "} 9>> '/var/lib/coresmith/cron/shop/.lock'\nexit \"\$status\"\n";
+}
+
+function cronRun(int $index): string
+{
+    return 'systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop'
         . " -p 'WorkingDirectory=/var/coresmith/apps/shop/current'"
         . " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
         . ' -p KillMode=process -p UMask=0027 -p NoNewPrivileges=yes'
@@ -72,15 +95,17 @@ function cronRunScript(string $command): array
     return [$run, $written];
 }
 
-function cronInstall(int $scripts = 1): string
+function cronInstall(array $jobs = [['* * * * *', 'php artisan schedule:run']]): string
 {
-    $staged = implode(' ', array_map(fn(int $index): string => "'/etc/coresmith/cron/.shop.new/{$index}.sh'", range(0, $scripts - 1)));
+    $staged = implode(' ', array_merge(...array_map(fn(int $index): array => ["'/etc/coresmith/cron/.shop.new/{$index}.sh'", "'/etc/coresmith/cron/.shop.new/{$index}.run'"], array_keys($jobs))));
+    $keep = implode('|', array_map(fn(array $job): string => cronId(...$job), $jobs));
 
     return "chown root:root {$staged} && chmod 600 {$staged}"
         . " && chown root:root '/etc/cron.d/.coresmith-app-shop.new' && chmod 644 '/etc/cron.d/.coresmith-app-shop.new'"
         . " && rm -rf '/etc/coresmith/cron/shop' && mv -T '/etc/coresmith/cron/.shop.new' '/etc/coresmith/cron/shop'"
         . " && mv -f '/etc/cron.d/.coresmith-app-shop.new' '/etc/cron.d/coresmith-app-shop'"
-        . " && if crontab -u 'coresmith-app-shop' -l >/dev/null 2>&1; then crontab -u 'coresmith-app-shop' -r; fi";
+        . " && if crontab -u 'coresmith-app-shop' -l >/dev/null 2>&1; then crontab -u 'coresmith-app-shop' -r; fi"
+        . " && for record in '/var/lib/coresmith/cron/shop'/*.runs; do [ -e \"\$record\" ] || continue; case \"\$(basename \"\$record\" .runs)\" in {$keep}) ;; *) rm -f \"\$record\" ;; esac; done";
 }
 
 function cronStage(): string
@@ -98,25 +123,30 @@ function cronRemoval(): string
 }
 
 test('an app cron entry runs as root, feeding its script to a shell that runs as the app user with its environment, path and sandbox', function () {
-    expect(app(CrontabBuilder::class)->build(scheduledApp()))
-        ->toBe("# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('* * * * *', 0) . "\n");
+    $application = scheduledApp();
+
+    expect(app(CrontabBuilder::class)->build($application))
+        ->toBe("# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('* * * * *', 0) . "\n")
+        ->and(app(CrontabBuilder::class)->scripts($application)['/etc/coresmith/cron/shop/0.run'])->toBe(cronWrapper(0, cronId('* * * * *', 'php artisan schedule:run')));
 });
 
 test('a cron run leaves the work it started in the background running when the command returns', function () {
-    $file = app(CrontabBuilder::class)->build(scheduledApp(['cron_jobs' => [
+    $application = scheduledApp(['cron_jobs' => [
         ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
         ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'],
-    ]]));
-    $lines = array_slice(explode("\n", trim($file)), 1);
+    ]]);
+    $lines = array_slice(explode("\n", trim(app(CrontabBuilder::class)->build($application))), 1);
+    $runs = collect(app(CrontabBuilder::class)->scripts($application))->filter(fn(string $script, string $path): bool => str_ends_with($path, '.run'));
 
     expect($lines)->toHaveCount(2)
-        ->and(collect($lines)->every(fn(string $line): bool => str_contains($line, ' -p KillMode=process ')))->toBeTrue();
+        ->and($runs)->toHaveCount(2)
+        ->and($runs->every(fn(string $script): bool => str_contains($script, ' -p KillMode=process ')))->toBeTrue();
 });
 
 test('a cron run shares the host /tmp, as cron always did, while a build keeps a private one', function () {
     $shell = app(AppShell::class);
     $application = scheduledApp();
-    $line = explode("\n", app(CrontabBuilder::class)->build($application))[1];
+    $line = app(CrontabBuilder::class)->scripts($application)['/etc/coresmith/cron/shop/0.run'];
 
     expect($line)->not->toContain('PrivateTmp')
         ->and($line)->toContain(' -p NoNewPrivileges=yes ')
@@ -135,9 +165,8 @@ test('deploy steps still stop everything they started', function () {
 test('a rails cron run gets the production defaults the app units get, before the env file so the app can still override them', function () {
     $application = scheduledApp(['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.3.6']);
 
-    expect(app(CrontabBuilder::class)->build($application))->toBe(
-        "# Managed by Coresmith for shop. Change these jobs on the app page.\n"
-        . '* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop'
+    expect(app(CrontabBuilder::class)->scripts($application)['/etc/coresmith/cron/shop/0.run'])->toContain(
+        "\nsystemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-shop --gid=coresmith-app-shop"
         . " -p 'WorkingDirectory=/var/coresmith/apps/shop/current'"
         . " -E 'RAILS_ENV=production' -E 'RACK_ENV=production' -E 'RAILS_SERVE_STATIC_FILES=1' -E 'RAILS_LOG_TO_STDOUT=1'"
         . " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
@@ -148,7 +177,7 @@ test('a rails cron run gets the production defaults the app units get, before th
 });
 
 test('a php cron run gets no rails or rack defaults', function () {
-    $file = app(CrontabBuilder::class)->build(scheduledApp());
+    $file = implode("\n", app(CrontabBuilder::class)->scripts(scheduledApp()));
 
     expect($file)->not->toContain('RAILS_ENV')
         ->and($file)->not->toContain('RACK_ENV');
@@ -173,26 +202,35 @@ test('each command lives in its own script, after the redirection that sends all
         ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'],
     ]])))->toBe([
         '/etc/coresmith/cron/shop/0.sh' => cronScript(HOSTILE_CRON_COMMAND),
+        '/etc/coresmith/cron/shop/0.run' => cronWrapper(0, cronId('*/5 * * * *', HOSTILE_CRON_COMMAND)),
         '/etc/coresmith/cron/shop/1.sh' => cronScript('php artisan schedule:run'),
+        '/etc/coresmith/cron/shop/1.run' => cronWrapper(1, cronId('* * * * *', 'php artisan schedule:run')),
     ]);
 });
 
-test('the generated cron line and script are valid bash', function (array $attributes) {
+test('the generated cron line, wrapper and script are valid shell', function (array $attributes) {
     $application = scheduledApp([...$attributes, 'cron_jobs' => [['schedule' => '*/5 * * * *', 'command' => HOSTILE_CRON_COMMAND]]]);
     $line = explode("\n", app(CrontabBuilder::class)->build($application))[1];
+    $scripts = app(CrontabBuilder::class)->scripts($application);
     $script = tempnam(sys_get_temp_dir(), 'coresmith-cron-');
-    file_put_contents($script, app(CrontabBuilder::class)->scripts($application)['/etc/coresmith/cron/shop/0.sh']);
+    $wrapper = tempnam(sys_get_temp_dir(), 'coresmith-cron-');
+    file_put_contents($script, $scripts['/etc/coresmith/cron/shop/0.sh']);
+    file_put_contents($wrapper, $scripts['/etc/coresmith/cron/shop/0.run']);
 
-    $cron = new Process(['bash', '-n', '-c', (string) preg_replace('/^(?:\S+ ){5}root /', '', $line)]);
+    $cron = new Process(['sh', '-n', '-c', (string) preg_replace('/^(?:\S+ ){5}root /', '', $line)]);
     $cron->run();
     $shell = new Process(['bash', '-n', $script]);
     $shell->run();
+    $run = new Process(['sh', '-n', $wrapper]);
+    $run->run();
 
     unlink($script);
+    unlink($wrapper);
 
-    expect($line)->toStartWith('*/5 * * * * root systemd-run ')
+    expect($line)->toBe("*/5 * * * * root /bin/sh '/etc/coresmith/cron/shop/0.run'")
         ->and($cron->getExitCode())->toBe(0, $cron->getErrorOutput())
-        ->and($shell->getExitCode())->toBe(0, $shell->getErrorOutput());
+        ->and($shell->getExitCode())->toBe(0, $shell->getErrorOutput())
+        ->and($run->getExitCode())->toBe(0, $run->getErrorOutput());
 })->with([
     'php' => [[]],
     'rails' => [['type' => ApplicationType::Ruby, 'framework' => 'rails', 'php_version' => null, 'ruby_version' => '3.3.6']],
@@ -262,10 +300,12 @@ test('the scripts folder is rebuilt beside the live one and swapped in with the 
 
     expect($transport->uploads())->toBe([
         '/etc/coresmith/cron/.shop.new/0.sh' => cronScript('php artisan schedule:run'),
+        '/etc/coresmith/cron/.shop.new/0.run' => cronWrapper(0, cronId('* * * * *', 'php artisan schedule:run')),
         '/etc/coresmith/cron/.shop.new/1.sh' => cronScript('php artisan backup:run'),
+        '/etc/coresmith/cron/.shop.new/1.run' => cronWrapper(1, cronId('0 3 * * *', 'php artisan backup:run')),
         '/etc/cron.d/.coresmith-app-shop.new' => app(CrontabBuilder::class)->build($application),
     ])
-        ->and($transport->commands())->toBe([cronStage(), cronInstall(2)]);
+        ->and($transport->commands())->toBe([cronStage(), cronInstall([['* * * * *', 'php artisan schedule:run'], ['0 3 * * *', 'php artisan backup:run']])]);
 });
 
 test('the cron file is root owned and readable by cron, the scripts are root only, and the old user crontab goes so nothing runs twice', function () {
@@ -310,7 +350,10 @@ test('an app with no cron jobs has its cron file, its scripts and any old user c
 test('an entry with no command is left out rather than written as an empty script', function () {
     $application = scheduledApp(['cron_jobs' => [['schedule' => '* * * * *', 'command' => '  '], ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run']]]);
 
-    expect(app(CrontabBuilder::class)->scripts($application))->toBe(['/etc/coresmith/cron/shop/0.sh' => cronScript('php artisan backup:run')])
+    expect(app(CrontabBuilder::class)->scripts($application))->toBe([
+        '/etc/coresmith/cron/shop/0.sh' => cronScript('php artisan backup:run'),
+        '/etc/coresmith/cron/shop/0.run' => cronWrapper(0, cronId('0 3 * * *', 'php artisan backup:run')),
+    ])
         ->and(app(CrontabBuilder::class)->build($application))->toBe("# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('0 3 * * *', 0) . "\n");
 });
 
@@ -370,6 +413,7 @@ test('the cron file is written from the jobs as saved now, not the copy the call
 
     expect($transport->uploads())->toBe([
         '/etc/coresmith/cron/.shop.new/0.sh' => cronScript('php artisan backup:run'),
+        '/etc/coresmith/cron/.shop.new/0.run' => cronWrapper(0, cronId('0 3 * * *', 'php artisan backup:run')),
         '/etc/cron.d/.coresmith-app-shop.new' => "# Managed by Coresmith for shop. Change these jobs on the app page.\n" . cronLine('0 3 * * *', 0) . "\n",
     ]);
 });
@@ -478,4 +522,144 @@ test('a write for an app removed meanwhile clears its file and settles nothing',
     expect($transport->commands())->toContain(cronRemoval())
         ->and($transport->uploads())->toBe([])
         ->and(Application::withTrashed()->find($application->id)->cron_pending_since)->not->toBeNull();
+});
+
+/**
+ * @param  list<string>|null  $before
+ * @return array{0: int|null, 1: list<string>, 2: array{directory: string, record: string}|null, 3: list<string>}
+ */
+function cronRecorded(string $command, ?array $before = null): array
+{
+    $records = sys_get_temp_dir() . '/coresmith-records-' . bin2hex(random_bytes(4));
+    $record = $records . '/' . cronId('* * * * *', 'php artisan schedule:run') . '.runs';
+    $wrapper = app(CrontabBuilder::class)->scripts(scheduledApp())['/etc/coresmith/cron/shop/0.run'];
+
+    if ($before !== null) {
+        mkdir($records, 0700, true);
+        file_put_contents($record, implode("\n", $before) . "\n");
+    }
+
+    $run = new Process(['sh', '-s'], null, null, str_replace([cronRun(0), '/var/lib/coresmith/cron/shop', '    flock 9'], [$command, $records, '    :'], $wrapper));
+    $run->run();
+
+    $lines = file_exists($record) ? file($record, FILE_IGNORE_NEW_LINES) : [];
+    $modes = file_exists($record) ? ['directory' => substr(sprintf('%o', fileperms($records)), -4), 'record' => substr(sprintf('%o', fileperms($record)), -4)] : null;
+
+    $left = array_values(array_diff(scandir($records) ?: [], ['.', '..', '.lock', basename($record)]));
+
+    array_map(unlink(...), [...(glob($records . '/*.{runs,running}', GLOB_BRACE) ?: []), ...(file_exists("{$records}/.lock") ? ["{$records}/.lock"] : [])]);
+    @rmdir($records);
+
+    return [$run->getExitCode(), $lines === false ? [] : $lines, $modes, $left];
+}
+
+test('a run records when it started, how long it took and how it ended, in files only root can read', function () {
+    $before = time();
+    [$exit, $lines, $modes] = cronRecorded("sh -c 'sleep 1; exit 3'");
+
+    expect($exit)->toBe(3)
+        ->and($lines)->toHaveCount(1)
+        ->and($modes)->toBe(['directory' => '0700', 'record' => '0600']);
+
+    [$started, $seconds, $status] = explode(' ', $lines[0]);
+
+    expect((int) $started)->toBeGreaterThanOrEqual($before)->toBeLessThanOrEqual(time())
+        ->and((int) $seconds)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(3)
+        ->and($status)->toBe('3');
+});
+
+test('a run that succeeds is recorded with exit code 0, hands that code back to cron and leaves nothing marked running', function () {
+    [$exit, $lines, , $left] = cronRecorded('true');
+
+    expect($exit)->toBe(0)
+        ->and($lines)->toHaveCount(1)
+        ->and($lines[0])->toMatch('/^\d+ \d+ 0$/')
+        ->and($left)->toBe([]);
+});
+
+test('while a job runs, a marker named by its process holds when it started', function () {
+    $seen = sys_get_temp_dir() . '/coresmith-seen-' . bin2hex(random_bytes(4));
+    [, , , $left] = cronRecorded('cp "$running" ' . escapeshellarg($seen) . ' && echo "$running" >> ' . escapeshellarg($seen));
+    $marker = (string) @file_get_contents($seen);
+    @unlink($seen);
+
+    expect($left)->toBe([])
+        ->and($marker)->toMatch('/^\d{10,}\n.+\/' . cronId('* * * * *', 'php artisan schedule:run') . '\.\d+\.running\n$/');
+});
+
+test('a record keeps the last 50 runs', function () {
+    [, $lines] = cronRecorded('true', array_map(fn(int $start): string => "{$start} 1 0", range(1, 60)));
+
+    expect($lines)->toHaveCount(50)
+        ->and($lines[0])->toBe('12 1 0')
+        ->and($lines[48])->toBe('60 1 0')
+        ->and($lines[49])->toMatch('/^\d{10,} \d+ 0$/');
+});
+
+test('each job keeps its record by its id, so moving it keeps its history and editing it starts a new one', function () {
+    $backup = ['schedule' => '0 3 * * *', 'command' => 'php artisan backup:run'];
+    $scheduler = ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'];
+    $application = scheduledApp(['cron_jobs' => [$backup, $scheduler]]);
+    $before = app(CrontabBuilder::class)->scripts($application);
+    $application->cron_jobs = [$scheduler, $backup];
+    $moved = app(CrontabBuilder::class)->scripts($application);
+    $application->cron_jobs = [['schedule' => '0 4 * * *', 'command' => 'php artisan backup:run']];
+    $edited = app(CrontabBuilder::class)->scripts($application);
+    $id = cronId('0 3 * * *', 'php artisan backup:run');
+
+    expect($before['/etc/coresmith/cron/shop/0.run'])->toContain("/{$id}.runs'")
+        ->and($moved['/etc/coresmith/cron/shop/1.run'])->toContain("/{$id}.runs'")
+        ->and($edited['/etc/coresmith/cron/shop/0.run'])->not->toContain("/{$id}.runs'")
+        ->and($edited['/etc/coresmith/cron/shop/0.run'])->toContain('/' . cronId('0 4 * * *', 'php artisan backup:run') . ".runs'");
+});
+
+test('a write removes the records of jobs that are gone and keeps the rest', function () {
+    $transport = new FakeSSHTransport;
+    app(CrontabBuilder::class)->write(cronConnection($transport), scheduledApp());
+
+    $install = collect($transport->commands())->last();
+    $records = sys_get_temp_dir() . '/coresmith-records-' . bin2hex(random_bytes(4));
+    $kept = cronId('* * * * *', 'php artisan schedule:run');
+    mkdir($records);
+
+    foreach ([$kept, 'aaaaaaaaaaaaaaaa'] as $id) {
+        file_put_contents("{$records}/{$id}.runs", "1 1 0\n");
+    }
+
+    file_put_contents("{$records}/.lock", '');
+
+    $prune = new Process(['sh', '-c', str_replace('/var/lib/coresmith/cron/shop', $records, substr($install, (int) strrpos($install, ' && for record in ') + 4))]);
+    $prune->run();
+
+    $left = array_values(array_diff(scandir($records) ?: [], ['.', '..']));
+
+    array_map(unlink(...), [...(glob($records . '/*.runs') ?: []), "{$records}/.lock"]);
+    rmdir($records);
+
+    expect($prune->getExitCode())->toBe(0, $prune->getErrorOutput())
+        ->and($left)->toBe(['.lock', "{$kept}.runs"]);
+});
+
+test('run records stay while an app is stopped or detached, and go with its folders once it is cleared for good', function () {
+    $transport = new FakeSSHTransport;
+    $application = scheduledApp();
+
+    app(CrontabBuilder::class)->remove(cronConnection($transport), $application);
+
+    expect($transport->commands())->toBe([cronRemoval()])
+        ->and(cronRemoval())->not->toContain('/var/lib/coresmith/cron')
+        ->and(RemovedApplicationFolders::command($application))->toBe("rm -rf '/var/coresmith/apps/shop' '/var/lib/coresmith/cron/shop'");
+});
+
+test('a job id Coresmith did not make is refused before it reaches a path', function () {
+    CrontabBuilder::assertId('../../etc/passwd');
+})->throws(UnsafeNameException::class, 'is not a cron job id');
+
+test('a write notes when the crontab was written, so runs due before it are not judged', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-15 10:00:00'));
+    $application = scheduledApp();
+
+    app(CrontabBuilder::class)->write(cronConnection(new FakeSSHTransport), $application);
+
+    expect($application->fresh()->cron_written_at->toDateTimeString())->toBe('2026-11-15 10:00:00');
 });

@@ -18,6 +18,7 @@ use App\Models\ServerMetric;
 use App\Notifications\ApplicationOomKilledNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
+use App\Services\Cron\CronRuns;
 use App\Services\Monitors\ReadingMonitor;
 use App\Services\SSH\SSHConnection;
 use Carbon\CarbonImmutable;
@@ -135,6 +136,15 @@ final class MetricsCollector
         }
 
         return false;
+    }
+
+    public function recordCronRuns(SSHConnection $connection): void
+    {
+        try {
+            app(CronRuns::class)->read($connection, $connection->server()->applications()->get());
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     public function recordOomKills(SSHConnection $connection): void

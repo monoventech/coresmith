@@ -10,6 +10,7 @@ namespace App\Services\Monitors;
 
 use App\Enums\MonitorKind;
 use App\Jobs\DeployApplication;
+use App\Services\Cron\CronDue;
 
 final class MonitorChoices
 {
@@ -19,6 +20,7 @@ final class MonitorChoices
         'cpu' => 'Processor',
         'load' => 'Load',
         'apps' => 'Apps answering',
+        'cron' => 'Cron jobs',
     ];
 
     public const ANY_ERROR = 400;
@@ -34,6 +36,7 @@ final class MonitorChoices
             MonitorKind::Cpu => [70.0, 80.0, 90.0, 95.0],
             MonitorKind::Load => [1.0, 1.5, 2.0],
             MonitorKind::Apps => [(float) self::ANY_ERROR, 500.0],
+            MonitorKind::Cron => [],
         };
     }
 
@@ -48,6 +51,7 @@ final class MonitorChoices
             MonitorKind::Cpu => [5, 10, 30],
             MonitorKind::Load => [5, 15, 30],
             MonitorKind::Apps => [2, 3],
+            MonitorKind::Cron => [],
         };
     }
 
@@ -80,6 +84,7 @@ final class MonitorChoices
             MonitorKind::Cpu => "Above {$level}% busy {$for}",
             MonitorKind::Load => "Above {$level} per core {$for}",
             MonitorKind::Apps => "An app's domain doesn't answer, or answers with " . ($threshold <= self::ANY_ERROR ? 'any error' : 'a server error') . ', ' . self::checks($duration) . ' checks in a row',
+            MonitorKind::Cron => "A job exits with an error, or doesn't run within " . intdiv(CronDue::GRACE_SECONDS, 60) . " minutes of when it's due",
         };
     }
 

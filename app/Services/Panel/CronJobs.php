@@ -261,9 +261,11 @@ final class CronJobs
     public function describe(Application $application): array
     {
         $live = $application->current_release !== null;
+        $timezone = self::timezone($application);
 
         return [
-            'jobs' => array_map(fn(array $entry): array => $this->row($entry), $this->entries($application)),
+            'jobs' => array_map(fn(array $entry): array => $this->row($entry, $timezone), $this->entries($application)),
+            'zone' => CronSchedule::zone($timezone),
             'limit' => self::MAX_ENTRIES,
             'state' => $this->state($application),
             'note' => match (true) {
@@ -291,9 +293,25 @@ final class CronJobs
 
     /**
      * @param  array{id: string, schedule: string, command: string, description: string|null}  $entry
+     */
+    public static function timezone(Application $application): string
+    {
+        return (string) (((array) $application->server?->meta)['timezone'] ?? 'UTC');
+    }
+
+    /**
+     * @param  array{id: string, schedule: string, command: string, description: string|null}  $entry
+     */
+    public function title(array $entry): string
+    {
+        return $entry['description'] ?? ($this->isScheduler($entry) ? self::SCHEDULER_LABEL : self::summary($entry['command']));
+    }
+
+    /**
+     * @param  array{id: string, schedule: string, command: string, description: string|null}  $entry
      * @return array<string, mixed>
      */
-    private function row(array $entry): array
+    private function row(array $entry, string $timezone = 'UTC'): array
     {
         $summary = self::summary($entry['command']);
         $scheduler = $this->isScheduler($entry);
@@ -304,7 +322,7 @@ final class CronJobs
             'command_summary' => $summary,
             'title' => $title ?? $summary,
             'title_is_command' => $title === null,
-            'sentence' => CronSchedule::sentence($entry['schedule']),
+            'sentence' => CronSchedule::sentence($entry['schedule'], $timezone),
             'preset' => CronSchedule::preset($entry['schedule']),
             'scheduler' => $scheduler,
         ];

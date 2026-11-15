@@ -73,7 +73,13 @@ final class AppAnswers
 
     public static function domain(Application $application): string
     {
-        return (string) ($application->allDomains()[0] ?? '');
+        foreach ($application->allDomains() as $domain) {
+            if (!str_starts_with($domain, '*.')) {
+                return $domain;
+            }
+        }
+
+        return '';
     }
 
     /**

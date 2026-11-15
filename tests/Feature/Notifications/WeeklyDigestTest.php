@@ -151,7 +151,7 @@ test('alerts about the readers applications count as warnings, other teams do no
 });
 
 test('the digest counts exactly the alerts the panel raises', function () {
-    expect(WeeklyDigestCommand::WARNINGS)->toBe(['disk_pressure', 'memory_pressure', 'cpu_pressure', 'load_pressure', 'server_unreachable', 'app_oom_killed', 'app_not_answering', 'certificate_expiring'])
+    expect(WeeklyDigestCommand::WARNINGS)->toBe(['disk_pressure', 'memory_pressure', 'cpu_pressure', 'load_pressure', 'server_unreachable', 'app_oom_killed', 'app_not_answering', 'cron_failed', 'cron_missed', 'certificate_expiring'])
         ->and(array_values(array_diff(ReadingMonitor::ACTIVITY, WeeklyDigestCommand::WARNINGS)))->toBe([]);
 });
 

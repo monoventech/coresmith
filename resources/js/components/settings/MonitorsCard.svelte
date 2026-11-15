@@ -10,6 +10,7 @@
         duration: number
         levels: MonitorOption[]
         durations: MonitorOption[]
+        changeable: boolean
     }
 
     export type MonitorOverride = {
@@ -177,13 +178,15 @@
                 </div>
             </div>
             <div class="flex items-center gap-3 max-sm:w-full max-sm:justify-end">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!changeable}
-                    aria-label="Change the limit for {monitor.name}"
-                    onclick={() => edit(monitor)}>Change</Button
-                >
+                {#if monitor.changeable}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!changeable}
+                        aria-label="Change the limit for {monitor.name}"
+                        onclick={() => edit(monitor)}>Change</Button
+                    >
+                {/if}
                 <Switch
                     checked={monitor.enabled}
                     busy={busy[monitor.kind]}

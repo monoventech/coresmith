@@ -29,6 +29,14 @@
         class?: string
     } = $props()
 
+    const dots = {
+        succeeded: 'bg-success',
+        failed: 'bg-destructive',
+        missed: 'bg-warning',
+        running: 'bg-primary',
+        none: 'bg-muted-foreground/40'
+    } as const
+
     let editing = $state<CronJob | null>(null)
     let editor = $state(false)
     let removing = $state<CronJob | null>(null)
@@ -159,6 +167,9 @@
 
     {#each cron.jobs as job, index (`${index}:${job.id}`)}
         <div class="flex min-h-14 items-center gap-3 border-t border-border py-2" data-testid="cron-job">
+            {#if job.run}
+                <span class={cn('size-2 shrink-0 rounded-full', dots[job.run.state])} aria-hidden="true"></span>
+            {/if}
             <div class="min-w-0 flex-1">
                 <div
                     class={job.title_is_command
@@ -171,7 +182,23 @@
                     {job.sentence ?? 'Custom schedule'} · <span class="font-mono text-[12px]">{job.schedule}</span>
                     {#if !job.title_is_command}· <span class="font-mono text-[12px]">{job.command_summary}</span>{/if}
                 </div>
+                {#if job.run}
+                    <div
+                        class={cn(
+                            'mt-0.5 text-[12.5px]',
+                            job.run.state === 'failed' || job.run.state === 'missed'
+                                ? 'text-foreground'
+                                : 'text-muted-foreground'
+                        )}
+                        data-testid="cron-run"
+                    >
+                        {job.run.text}
+                    </div>
+                {/if}
             </div>
+            {#if job.run?.state === 'failed' && canViewLogs && cron.live}
+                <Button variant="outline" size="sm" onclick={() => (open = true)}>Read the log</Button>
+            {/if}
             {#if canUpdate}
                 <Button variant="ghost" size="sm" aria-label={`Edit ${job.title}`} onclick={() => edit(job)}
                     >Edit</Button
@@ -200,7 +227,8 @@
     {/if}
 
     <p class="mt-2 text-[12px] text-muted-foreground">
-        Times are UTC, the server's clock. Every job writes to <span class="font-mono">shared/logs/scheduler.log</span>.
+        Times are {cron.zone}, the server's clock. Every job writes to
+        <span class="font-mono">shared/logs/scheduler.log</span>.
     </p>
     {#if canUpdate || (canViewLogs && cron.live)}
         <div class="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 pt-3">
@@ -250,7 +278,15 @@
 </div>
 
 {#if canUpdate}
-    <CronJobDialog bind:open={editor} job={editing} storeHref={cron.store_href} example={cron.example} {busy} {send} />
+    <CronJobDialog
+        bind:open={editor}
+        job={editing}
+        storeHref={cron.store_href}
+        example={cron.example}
+        zone={cron.zone}
+        {busy}
+        {send}
+    />
 
     <Dialog.Root open={removing !== null} onOpenChange={(next) => !next && (removing = null)}>
         <Dialog.Content>

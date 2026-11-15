@@ -32,6 +32,11 @@ final class UnsafeNameException extends InvalidArgumentException
         return new self('[' . addcslashes($value, "\0..\37") . '] is not a valid cron schedule. Write five fields separated by single spaces, using only digits and * / , - in each, such as */5 * * * *.');
     }
 
+    public static function cronJob(string $value): self
+    {
+        return new self('[' . addcslashes($value, "\0..\37") . '] is not a cron job id. Job ids are 16 lowercase hexadecimal characters.');
+    }
+
     public static function domain(string $value): self
     {
         return new self("[{$value}] is not a valid domain name.");
