@@ -93,6 +93,38 @@ final class PhpLimits
         ]) . "\n";
     }
 
+    /**
+     * @return array{uploads: int, memory: int, seconds: int, reload: string}
+     */
+    public function toArray(): array
+    {
+        return ['uploads' => $this->uploads, 'memory' => $this->memory, 'seconds' => $this->seconds, 'reload' => $this->reload];
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    public static function sentence(array $values): string
+    {
+        $seconds = (int) ($values['seconds'] ?? self::DEFAULT_SECONDS);
+
+        return implode(', ', [
+            'uploads up to ' . self::size((int) ($values['uploads'] ?? self::DEFAULT_UPLOADS)),
+            self::size((int) ($values['memory'] ?? 128)) . ' of memory',
+            'web requests stop after ' . match (true) {
+                $seconds === 60 => 'a minute',
+                $seconds > 60 => intdiv($seconds, 60) . ' minutes',
+                default => "{$seconds} seconds",
+            },
+            'new code loads ' . (($values['reload'] ?? null) === self::RELOAD_TIMESTAMPS ? 'every 2 seconds' : 'at each deploy'),
+        ]);
+    }
+
+    public static function size(int $megabytes): string
+    {
+        return $megabytes >= 1024 && $megabytes % 1024 === 0 ? intdiv($megabytes, 1024) . ' GB' : "{$megabytes} MB";
+    }
+
     private static function defaultReload(Application $application): string
     {
         return in_array($application->framework, self::FRAMEWORKS, true) ? self::RELOAD_DEPLOY : self::RELOAD_TIMESTAMPS;

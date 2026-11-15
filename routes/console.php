@@ -2,6 +2,7 @@
 
 use App\Enums\Edition;
 use App\Enums\ServerStatus;
+use App\Jobs\ApplyPhpLimits;
 use App\Jobs\CheckAppsAnswering;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
@@ -46,6 +47,8 @@ Schedule::call(function (): void {
         ->whereHas('applications')
         ->each(fn(Server $server) => CheckAppsAnswering::dispatch($server));
 })->everyFiveMinutes()->name('coresmith:check-apps')->withoutOverlapping();
+
+Schedule::call(fn() => ApplyPhpLimits::catchUp())->everyFiveMinutes()->name('coresmith:write-php-limits')->withoutOverlapping();
 
 Schedule::call(function (): void {
     Server::query()
