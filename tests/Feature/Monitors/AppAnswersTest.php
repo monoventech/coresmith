@@ -316,3 +316,17 @@ test('the check runs every five minutes for each active server with apps, one at
     Queue::assertPushed(CheckAppsAnswering::class, 1);
     Queue::assertPushed(CheckAppsAnswering::class, fn(CheckAppsAnswering $job): bool => $job->uniqueId() === $server->id);
 });
+
+test('a wildcard domain is passed over for the first plain one, and an app with only wildcards is not checked', function (array $domains, ?string $asked) {
+    $server = appAnswersServer();
+    appAnswersApp($server, ['domain' => $domains[0], 'additional_domains' => array_slice($domains, 1)]);
+
+    appAnswersCheck($server, 200);
+
+    $asked === null
+        ? Http::assertNothingSent()
+        : Http::assertSent(fn(Request $request): bool => $request->url() === "https://{$asked}/");
+})->with([
+    'a wildcard first' => [['*.shop.example.com', 'shop.example.com'], 'shop.example.com'],
+    'only wildcards' => [['*.shop.example.com'], null],
+]);
