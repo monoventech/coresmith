@@ -58,3 +58,14 @@ test('a schedule opens the dialog on the preset it matches exactly', function (s
     'weekdays' => ['0 9 * * 1-5', ['kind' => 'custom', 'minute' => 0, 'hour' => 3, 'weekday' => 1]],
     'not a schedule' => ['61 * * * *', ['kind' => 'custom', 'minute' => 0, 'hour' => 3, 'weekday' => 1]],
 ]);
+
+test('a schedule names the server\'s own zone when it is not UTC', function (string $timezone, string $sentence) {
+    expect(CronSchedule::sentence('0 3 * * *', $timezone))->toBe($sentence)
+        ->and(CronSchedule::phrase('30 8 * * 1', $timezone))->toBe('weekly on Monday at 8:30 AM ' . CronSchedule::zone($timezone));
+})->with([
+    'UTC' => ['UTC', 'Daily at 3:00 AM UTC'],
+    'UTC by its other name' => ['Etc/UTC', 'Daily at 3:00 AM UTC'],
+    'London' => ['Europe/London', 'Daily at 3:00 AM London time'],
+    'a city with two words' => ['America/New_York', 'Daily at 3:00 AM New York time'],
+    'a city under a region' => ['America/Argentina/Buenos_Aires', 'Daily at 3:00 AM Buenos Aires time'],
+]);

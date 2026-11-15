@@ -605,7 +605,7 @@ final class SmartToggles
         $cron = app(CronJobs::class);
         $entry = collect($cron->entries($application))->first(fn(array $entry): bool => $cron->isScheduler($entry));
 
-        return $entry === null ? 'every minute' : CronSchedule::phrase($entry['schedule']);
+        return $entry === null ? 'every minute' : CronSchedule::phrase($entry['schedule'], CronJobs::timezone($application));
     }
 
     private function autoDeploy(Application $application, bool $on): void

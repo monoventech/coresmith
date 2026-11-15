@@ -56,6 +56,7 @@ final class CollectServerMetrics implements ShouldBeUnique, ShouldQueue
             $answered = true;
             $metrics->recordTraffic($connection);
             $metrics->recordOomKills($connection);
+            $metrics->recordCronRuns($connection);
         } catch (Throwable $e) {
             if ($answered || !ServerReachability::isConnectionFailure($e)) {
                 throw $e;

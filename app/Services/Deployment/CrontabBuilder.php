@@ -24,6 +24,10 @@ final class CrontabBuilder
 
     public const SCRIPTS = '/etc/coresmith/cron';
 
+    public const RECORDS = '/var/lib/coresmith/cron';
+
+    public const KEPT_RUNS = 50;
+
     public const LOCK_SECONDS = 120;
 
     public const LOCK_WAIT_SECONDS = 60;
@@ -51,17 +55,20 @@ final class CrontabBuilder
         return self::SCRIPTS . '/' . SafeName::assertSlug($application->slug);
     }
 
+    public function recordDirectory(Application $application): string
+    {
+        return self::RECORDS . '/' . SafeName::assertSlug($application->slug);
+    }
+
     public function build(Application $application): string
     {
         $slug = SafeName::assertSlug($application->slug);
-        $paths = new ReleasePaths($application);
-        $current = $paths->appDirectory($paths->current());
         $scripts = $this->scriptDirectory($application);
 
         $lines = ["# Managed by Coresmith for {$slug}. Change these jobs on the app page."];
 
         foreach ($this->entries($application) as $index => $entry) {
-            $lines[] = $entry['schedule'] . ' root ' . $this->shell->scheduled($application, $scripts . '/' . $index . '.sh', $current, $application->runtimeVersions(), app(StackDefaults::class)->process($application));
+            $lines[] = $entry['schedule'] . ' root /bin/sh ' . escapeshellarg($scripts . '/' . $index . '.run');
         }
 
         return implode("\n", $lines) . "\n";
@@ -78,9 +85,46 @@ final class CrontabBuilder
 
         foreach ($this->entries($application) as $index => $entry) {
             $scripts[$directory . '/' . $index . '.sh'] = 'exec >> ' . $log . " 2>&1\n{\n" . $entry['command'] . "\n} < /dev/null\n";
+            $scripts[$directory . '/' . $index . '.run'] = $this->wrapper($application, $index, $entry['id']);
         }
 
         return $scripts;
+    }
+
+    public function wrapper(Application $application, int $index, string $id): string
+    {
+        $paths = new ReleasePaths($application);
+        $records = $this->recordDirectory($application);
+        $record = escapeshellarg($records . '/' . self::assertId($id) . '.runs');
+        $running = escapeshellarg($records . '/' . $id . '.') . '"$$".running';
+        $kept = self::KEPT_RUNS;
+        $run = $this->shell->scheduled($application, $this->scriptDirectory($application) . '/' . $index . '.sh', $paths->appDirectory($paths->current()), $application->runtimeVersions(), app(StackDefaults::class)->process($application));
+
+        return implode("\n", [
+            'umask 077',
+            'started=$(date +%s)',
+            'mkdir -p ' . escapeshellarg($records),
+            'running=' . $running,
+            'printf \'%s\\n\' "$started" > "$running"',
+            $run,
+            'status=$?',
+            'rm -f "$running"',
+            '{',
+            '    flock 9',
+            "    printf '%s %s %s\\n' \"\$started\" \"\$((\$(date +%s) - started))\" \"\$status\" >> {$record}",
+            "    if [ \"\$(wc -l < {$record})\" -gt {$kept} ]; then tail -n {$kept} {$record} > {$record}.new && mv -f {$record}.new {$record}; fi",
+            '} 9>> ' . escapeshellarg($records . '/.lock'),
+            'exit "$status"',
+        ]) . "\n";
+    }
+
+    public static function assertId(string $id): string
+    {
+        if (preg_match('/^[0-9a-f]{16}$/D', $id) !== 1) {
+            throw UnsafeNameException::cronJob($id);
+        }
+
+        return $id;
     }
 
     public function lockKey(Application $application): string
@@ -98,7 +142,7 @@ final class CrontabBuilder
 
     public function settle(Application $application): void
     {
-        $this->cron->ifUnchanged($application, ['cron_pending_since' => null, 'cron_error' => null]);
+        $this->cron->ifUnchanged($application, ['cron_pending_since' => null, 'cron_error' => null, 'cron_written_at' => now()]);
     }
 
     public function write(SSHConnection $connection, Application $application): void
@@ -160,7 +204,16 @@ final class CrontabBuilder
             'mv -T ' . escapeshellarg($stagedDirectory) . ' ' . escapeshellarg($directory),
             'mv -f ' . escapeshellarg($stagedFile) . ' ' . escapeshellarg($file),
             $this->removeUserCrontab($application),
+            $this->pruneRecords($application),
         ]), sudo: true, timeout: self::COMMAND_SECONDS)->throw();
+    }
+
+    private function pruneRecords(Application $application): string
+    {
+        $keep = implode('|', array_map(fn(array $entry): string => self::assertId($entry['id']), $this->entries($application)));
+
+        return 'for record in ' . escapeshellarg($this->recordDirectory($application)) . '/*.runs; do [ -e "$record" ] || continue; '
+            . 'case "$(basename "$record" .runs)" in ' . $keep . ') ;; *) rm -f "$record" ;; esac; done';
     }
 
     private function clear(SSHConnection $connection, Application $application): void
@@ -188,20 +241,14 @@ final class CrontabBuilder
     }
 
     /**
-     * @return list<array{schedule: string, command: string}>
+     * @return list<array{id: string, schedule: string, command: string}>
      */
     private function entries(Application $application): array
     {
-        $entries = [];
-
-        foreach ((array) $application->cron_jobs as $job) {
-            if (!is_array($job) || !isset($job['schedule'], $job['command']) || trim((string) $job['command']) === '') {
-                continue;
-            }
-
-            $entries[] = ['schedule' => self::assertSchedule((string) $job['schedule']), 'command' => (string) $job['command']];
-        }
-
-        return $entries;
+        return array_map(fn(array $entry): array => [
+            'id' => $entry['id'],
+            'schedule' => self::assertSchedule($entry['schedule']),
+            'command' => $entry['command'],
+        ], $this->cron->entries($application));
     }
 }

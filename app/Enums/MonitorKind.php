@@ -15,6 +15,7 @@ enum MonitorKind: string
     case Cpu = 'cpu';
     case Load = 'load';
     case Apps = 'apps';
+    case Cron = 'cron';
 
     public function defaultThreshold(): float
     {
@@ -24,6 +25,7 @@ enum MonitorKind: string
             self::Cpu => 90.0,
             self::Load => 1.5,
             self::Apps => 500.0,
+            self::Cron => 0.0,
         };
     }
 
@@ -35,6 +37,7 @@ enum MonitorKind: string
             self::Cpu => 10,
             self::Load => 15,
             self::Apps => 2,
+            self::Cron => 0,
         };
     }
 }

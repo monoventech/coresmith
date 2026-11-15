@@ -3,7 +3,18 @@
 // See LICENSE file in the project root.
 
 import type { Page, TestInfo } from '@playwright/test'
-import { dialog, expect, gotoApplication, noSidewaysScroll, own, test, toast } from './support/fixtures'
+import {
+    blockingViolations,
+    dialog,
+    expect,
+    gotoApplication,
+    isMobile,
+    noSidewaysScroll,
+    own,
+    test,
+    toast,
+    useTheme
+} from './support/fixtures'
 
 function cronCard(page: Page) {
     return page.getByTestId('cron-jobs')
@@ -363,5 +374,52 @@ test.describe('changing cron jobs', () => {
 
         await schedulerSwitch(page).click()
         await expect(cronRow(page, 'Laravel scheduler')).toBeVisible()
+    })
+})
+
+test.describe('how each job last ran', () => {
+    test('each job shows how its last run went and when it runs next, and a failure opens the log', async ({
+        page
+    }, testInfo) => {
+        await gotoApplication(page, 'bench-01', 'cron-runs')
+
+        if (isMobile(testInfo)) {
+            await expect(cronCard(page)).toBeHidden()
+
+            return
+        }
+
+        const when = '(?:[A-Z][a-z]+ (?:\\d{1,2} )?)?at \\d{1,2}:\\d{2} [AP]M'
+
+        await expect(cronRow(page, 'Laravel scheduler').getByTestId('cron-run')).toHaveText(
+            new RegExp(`^Ran (?:yesterday )?${when} in 1 second · next (?:tomorrow )?${when}$`)
+        )
+        await expect(cronRow(page, 'php artisan reports:send').getByTestId('cron-run')).toHaveText(
+            new RegExp(
+                `^Failed (?:yesterday |today )?${when} after 12 seconds, exit code 1 · next (?:tomorrow )?${when}$`
+            )
+        )
+        await expect(cronRow(page, 'php artisan backup:clean').getByTestId('cron-run')).toHaveText(
+            new RegExp(`^Didn't run when due (?:yesterday )?${when} · next (?:tomorrow )?${when}$`)
+        )
+        await expect(cronRow(page, 'node scripts/sync.js').getByTestId('cron-run')).toHaveText(
+            new RegExp(`^Hasn't run yet · first (?:tomorrow )?${when}$`)
+        )
+        await expect(cronRow(page, 'Laravel scheduler').getByRole('button', { name: 'Read the log' })).toHaveCount(0)
+
+        await cronRow(page, 'php artisan reports:send').getByRole('button', { name: 'Read the log' }).click()
+        await expect(page.getByTestId('scheduler-log')).toBeVisible()
+    })
+
+    test('the card with each run state passes axe in light and dark', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'The cron card is hidden on phones, as in the phone prototype')
+
+        for (const theme of ['light', 'dark'] as const) {
+            await useTheme(page, theme)
+            await gotoApplication(page, 'bench-01', 'cron-runs')
+            await expect(cronCard(page).getByTestId('cron-run').first()).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        }
     })
 })

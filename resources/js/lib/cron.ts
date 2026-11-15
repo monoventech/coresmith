@@ -18,6 +18,7 @@ export type CronJob = {
     preset: CronPreset
     scheduler: boolean
     href: string
+    run?: { state: 'succeeded' | 'failed' | 'missed' | 'running' | 'none'; text: string }
 }
 
 export type CronCard = {
@@ -28,6 +29,7 @@ export type CronCard = {
     error: string | null
     live: boolean
     example: string
+    zone: string
     store_href: string
     sync_href: string
     log_href: string

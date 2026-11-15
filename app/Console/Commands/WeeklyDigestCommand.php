@@ -21,7 +21,7 @@ use Spatie\Activitylog\Models\Activity;
 
 final class WeeklyDigestCommand extends Command
 {
-    public const WARNINGS = ['disk_pressure', 'memory_pressure', 'cpu_pressure', 'load_pressure', 'server_unreachable', 'app_oom_killed', 'app_not_answering', 'certificate_expiring'];
+    public const WARNINGS = ['disk_pressure', 'memory_pressure', 'cpu_pressure', 'load_pressure', 'server_unreachable', 'app_oom_killed', 'app_not_answering', 'cron_failed', 'cron_missed', 'certificate_expiring'];
 
     protected $signature = 'coresmith:weekly-digest';
 

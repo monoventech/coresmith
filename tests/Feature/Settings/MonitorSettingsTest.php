@@ -49,15 +49,17 @@ test('the notifications page lists every monitor with its rule and its choices',
 
     expect($monitors['canChange'])->toBeTrue()
         ->and($monitors['plan'])->toBeTrue()
-        ->and(array_column($monitors['monitors'], 'name'))->toBe(['Disk space', 'Memory', 'Processor', 'Load', 'Apps answering'])
+        ->and(array_column($monitors['monitors'], 'name'))->toBe(['Disk space', 'Memory', 'Processor', 'Load', 'Apps answering', 'Cron jobs'])
         ->and(array_column($monitors['monitors'], 'rule'))->toBe([
             'Above 80% used, as soon as a reading shows it, and again at 95%, where deploys stop',
             'Above 95% used for 4 minutes',
             'Above 90% busy for 10 minutes',
             'Above 1.5 per core for 15 minutes',
             "An app's domain doesn't answer, or answers with a server error, two checks in a row",
+            "A job exits with an error, or doesn't run within 2 minutes of when it's due",
         ])
-        ->and(array_column($monitors['monitors'], 'enabled'))->toBe([true, true, true, true, true])
+        ->and(array_column($monitors['monitors'], 'enabled'))->toBe([true, true, true, true, true, true])
+        ->and(array_column($monitors['monitors'], 'changeable'))->toBe([true, true, true, true, true, false])
         ->and(array_column($monitors['monitors'][0]['levels'], 'label'))->toBe(['70%', '75%', '80%', '85%', '90%'])
         ->and(array_column($monitors['monitors'][0]['durations'], 'label'))->toBe(['As soon as seen', 'For 5 minutes', 'For 15 minutes'])
         ->and(array_column($monitors['monitors'][3]['levels'], 'label'))->toBe(['1 per core', '1.5 per core', '2 per core'])
@@ -107,6 +109,15 @@ test('a limit outside the choices is refused', function (string $kind, array $in
     'an apps line that is not a status' => ['apps', ['threshold' => 1.5], 'threshold'],
     'a switch that is not a yes or no' => ['memory', ['enabled' => 'sometimes'], 'enabled'],
 ]);
+
+test('cron jobs can be switched off but have no line or duration to set', function () {
+    $owner = monitorSettingsOwner();
+
+    $this->actingAs($owner)->put(route('settings.monitors.update', ['kind' => 'cron']), ['enabled' => false])->assertSessionHas('success', 'Saved.');
+    $this->actingAs($owner)->put(route('settings.monitors.update', ['kind' => 'cron']), ['threshold' => 1, 'duration' => 5])->assertSessionHasErrors(['threshold', 'duration']);
+
+    expect(Monitor::query()->sole()->only(['kind', 'enabled']))->toBe(['kind' => MonitorKind::Cron, 'enabled' => false]);
+});
 
 test('a monitor Coresmith does not have is not found', function () {
     $this->actingAs(monitorSettingsOwner())->put('/settings/monitors/temperature', ['enabled' => false])->assertNotFound();
