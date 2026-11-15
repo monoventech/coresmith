@@ -14,6 +14,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
+use App\Models\AppCheckDay;
 use App\Models\Application;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
@@ -89,6 +90,7 @@ final class MonovenTenant
         $this->projects();
         $this->deployments();
         $this->activity();
+        $this->uptime();
 
         return $this;
     }
@@ -179,7 +181,7 @@ final class MonovenTenant
                 'status' => ServerStatus::Active,
                 'os_name' => 'ubuntu',
                 'os_version' => '24.04',
-                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'cpu_model' => 'AMD EPYC-Milan Processor', 'memory_mb' => $memory, 'disk_gb' => 160, 'os_pretty' => 'Ubuntu 24.04.3 LTS', 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified', 'caddy_unknown_hosts' => 'closed', 'protections' => ['ssh' => 'on', 'fail2ban' => 'on', 'kernel' => 'on', 'kernel_off' => [], 'patches' => 'on', 'controls' => 'on', 'checked_at' => now()->subMinutes(20)->toIso8601String()]],
+                'meta' => ['cpu_cores' => max(1, intdiv($memory, 2048)), 'cpu_model' => 'AMD EPYC-Milan Processor', 'memory_mb' => $memory, 'disk_gb' => 160, 'os_pretty' => 'Ubuntu 24.04.3 LTS', 'caddy_admin' => 'socket', 'ssh_hardening' => 'verified', 'caddy_unknown_hosts' => 'closed', 'protections' => ['ssh' => 'on', 'fail2ban' => 'on', 'kernel' => 'on', 'kernel_off' => [], 'patches' => 'on', 'controls' => 'on', 'http3' => 'on', 'checked_at' => now()->subMinutes(20)->toIso8601String()]],
                 'provisioning_phase' => 8,
                 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', $name, true)), 0, 43),
                 'last_connected_at' => now(),
@@ -418,6 +420,26 @@ final class MonovenTenant
         $application->forceFill(['status' => ApplicationStatus::Deploying])->save();
     }
 
+    private function uptime(): void
+    {
+        $storefront = $this->applications['storefront'];
+        $storefront->forceFill(['answered_at' => now()])->save();
+
+        foreach (range(24, 0) as $daysAgo) {
+            $gap = $daysAgo === 3;
+
+            AppCheckDay::query()->insert([
+                'application_id' => $storefront->id,
+                'day' => now()->subDays($daysAgo)->toDateString(),
+                'checks' => 288,
+                'answered' => $gap ? 286 : 288,
+                'last_failure_at' => $gap ? now()->subDays($daysAgo)->setTime(1, 40) : null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
     private function activity(): void
     {
         $entries = [
@@ -425,6 +447,10 @@ final class MonovenTenant
             [$this->servers['forge-01'], 'firewall_rule_changed', ['action' => 'allow', 'port' => 9090, 'from' => '203.0.113.50'], now()->subDays(1)->subHours(6)],
             [$this->servers['outpost-01'], 'disk_pressure', ['percent' => 84], now()->subDay()],
             [$this->servers['outpost-01'], 'server_provisioned', ['duration_seconds' => 372], now()->subDays(131)],
+            [$this->servers['outpost-01'], 'cpu_pressure', ['percent' => 96, 'minutes' => 10], now()->subDays(4)],
+            [$this->servers['outpost-01'], 'monitor_recovered', ['kind' => 'cpu', 'minutes' => 22], now()->subDays(4)->addMinutes(22)],
+            [$this->applications['relay-edge'], 'app_not_answering', ['domain' => 'edge.relay.monoven.io', 'status' => 502, 'checks' => 2], now()->subDays(5)],
+            [$this->applications['relay-edge'], 'app_answering', ['minutes' => 15], now()->subDays(5)->addMinutes(15)],
         ];
 
         foreach ($entries as [$subject, $description, $properties, $at]) {

@@ -12,8 +12,8 @@ test('each plan includes exactly the features it sells', function (Plan $plan, P
     $included = [
         Plan::SelfHosted->value => PlanFeature::cases(),
         Plan::Business->value => PlanFeature::cases(),
-        Plan::Pro->value => [PlanFeature::TeamRoles, PlanFeature::CustomDomain],
-        Plan::Trial->value => [PlanFeature::TeamRoles, PlanFeature::CustomDomain],
+        Plan::Pro->value => [PlanFeature::TeamRoles, PlanFeature::CustomDomain, PlanFeature::Monitors],
+        Plan::Trial->value => [PlanFeature::TeamRoles, PlanFeature::CustomDomain, PlanFeature::Monitors],
         Plan::Starter->value => [],
     ];
 
@@ -85,6 +85,7 @@ test('every feature says which plans have it', function () {
         'Single sign-on is part of Business.',
         'Database backups to S3 are part of Business.',
         'Audit log export is part of Business.',
+        'Changing monitor limits is part of Pro and Business.',
     ]);
 });
 

@@ -98,6 +98,7 @@ final class StackDetector
             $runtime,
             $proposal['fields']['main_package'] ?? null,
             $proposal['options'] ?? [],
+            $proposal['server_package'] ?? null,
         );
     }
 

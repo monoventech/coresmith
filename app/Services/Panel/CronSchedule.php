@@ -18,7 +18,16 @@ final class CronSchedule
 
     private const DEFAULTS = ['minute' => 0, 'hour' => 3, 'weekday' => 1];
 
-    public static function sentence(string $schedule): ?string
+    public static function zone(string $timezone): string
+    {
+        if (in_array($timezone, ['UTC', 'Etc/UTC', 'Etc/Universal', 'Universal', 'Etc/Zulu', 'Zulu'], true)) {
+            return 'UTC';
+        }
+
+        return str_replace('_', ' ', (string) last(explode('/', $timezone))) . ' time';
+    }
+
+    public static function sentence(string $schedule, string $timezone = 'UTC'): ?string
     {
         if (CronExpression::problem($schedule) !== null) {
             return null;
@@ -32,7 +41,7 @@ final class CronSchedule
 
         if ($day === '*' && $weekday === '*') {
             return self::number($minute) && self::number($hour)
-                ? 'Daily at ' . self::time((int) $hour, (int) $minute)
+                ? 'Daily at ' . self::time((int) $hour, (int) $minute, $timezone)
                 : self::frequent($minute, $hour);
         }
 
@@ -40,7 +49,7 @@ final class CronSchedule
             return null;
         }
 
-        $time = self::time((int) $hour, (int) $minute);
+        $time = self::time((int) $hour, (int) $minute, $timezone);
 
         return match (true) {
             $day === '*' && self::number($weekday) => 'Weekly on ' . self::WEEKDAYS[(int) $weekday] . " at {$time}",
@@ -50,9 +59,9 @@ final class CronSchedule
         };
     }
 
-    public static function phrase(string $schedule): string
+    public static function phrase(string $schedule, string $timezone = 'UTC'): string
     {
-        $sentence = self::sentence($schedule);
+        $sentence = self::sentence($schedule, $timezone);
 
         return $sentence === null ? 'on a custom schedule' : lcfirst($sentence);
     }
@@ -105,11 +114,11 @@ final class CronSchedule
         return $hours === 1 ? "Every hour{$past}" : "Every {$hours} hours{$past}";
     }
 
-    private static function time(int $hour, int $minute): string
+    private static function time(int $hour, int $minute, string $timezone): string
     {
         $twelve = $hour % 12 === 0 ? 12 : $hour % 12;
 
-        return $twelve . ':' . self::padded($minute) . ($hour < 12 ? ' AM' : ' PM') . ' UTC';
+        return $twelve . ':' . self::padded($minute) . ($hour < 12 ? ' AM' : ' PM') . ' ' . self::zone($timezone);
     }
 
     private static function ordinal(int $day): string

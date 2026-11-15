@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.17 (2026-11-15)
+
+### Changed
+- Monitor and cron mails say what was measured, alerts wait for their whole window (#100)
+- Cron jobs that report how they ran, with an alert when one fails or is missed (#99)
+- Monitors with alerts, a check that each app answers, 30-day uptime, and JavaScript servers named by their package (#98)
+- Queue workers that share compiled code, and HTTP/3 through the firewall (#97)
+
 ## v0.8.16 (2026-11-15)
 
 ### Changed

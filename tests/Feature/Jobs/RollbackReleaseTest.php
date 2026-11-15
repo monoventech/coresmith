@@ -356,12 +356,14 @@ test('rolling back to a release on another php version installs a cron file whos
     rollbackRun($application, $transport, '20260912-090000');
 
     $crontab = $transport->uploads()['/etc/cron.d/.coresmith-app-my-app.new'] ?? '';
+    $wrapper = $transport->uploads()['/etc/coresmith/cron/.my-app.new/0.run'] ?? '';
 
-    expect($crontab)->toContain(" -E 'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin' ")
-        ->and($crontab)->toContain("* * * * * root systemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-abcd --gid=coresmith-app-abcd -p 'WorkingDirectory=/var/coresmith/apps/my-app/current'")
-        ->and($crontab)->toContain("-- /bin/bash -s < '/etc/coresmith/cron/my-app/0.sh'")
+    expect($crontab)->toContain("* * * * * root /bin/sh '/etc/coresmith/cron/my-app/0.run'")
+        ->and($wrapper)->toContain(" -E 'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin' ")
+        ->and($wrapper)->toContain("\nsystemd-run --quiet --wait --pipe --collect --service-type=exec --uid=coresmith-app-abcd --gid=coresmith-app-abcd -p 'WorkingDirectory=/var/coresmith/apps/my-app/current'")
+        ->and($wrapper)->toContain("-- /bin/bash -s < '/etc/coresmith/cron/my-app/0.sh'")
         ->and($transport->uploads()['/etc/coresmith/cron/.my-app.new/0.sh'] ?? '')->toContain("\nphp artisan schedule:run\n")
-        ->and($crontab)->not->toContain('8.5.10');
+        ->and($crontab . $wrapper)->not->toContain('8.5.10');
 });
 
 test('a stopped app still gets its units rewritten, so it starts on the right versions', function () {

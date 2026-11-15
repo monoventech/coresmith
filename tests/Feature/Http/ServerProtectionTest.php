@@ -82,6 +82,22 @@ test('a fix that worked clears its failure and the running mark, and the check r
         ->and(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'sysctl --system')))->toBeTrue();
 });
 
+test('opening HTTP/3 lets UDP 443 through the firewall without touching packages, and says so', function () {
+    [, $owner, $server] = protectionFixture();
+    $transport = new FakeSSHTransport;
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => $transport->respondTo('== fail2ban', ProtectionReading::output()));
+
+    $this->actingAs($owner)->post(route('servers.protections.restore', [$server, 'http3']))
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Opening it.');
+
+    app()->call([new RestoreProtection($server, 'http3'), 'handle']);
+
+    expect(implode("\n", $transport->commands()))->toContain('ufw allow 443/udp')
+        ->and(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'apt-get')))->toBeFalse()
+        ->and(((array) $server->fresh()->meta)['protections']['http3'])->toBe('on');
+});
+
 test('a fix that failed keeps why, for the hardening tab', function () {
     [, , $server] = protectionFixture();
     SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)

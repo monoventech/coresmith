@@ -12,8 +12,10 @@
     <span class="w-13 flex-none font-mono text-[12px] text-muted-foreground" title={new Date(item.at).toLocaleString()}
         >{item.time}</span
     >
-    <span class="flex-1 text-[13.5px]">
-        {#each item.parts as part, index (index)}{#if part.mono}<span class="font-mono">{part.text}</span
+    <span class="min-w-0 flex-1 text-[13.5px]">
+        {#each item.parts as part, index (index)}{#if part.mono}<span
+                    class="inline-block max-w-full truncate align-bottom font-mono"
+                    title={part.text}>{part.text}</span
                 >{:else}{part.text}{/if}{/each}
     </span>
     {#if arrow}

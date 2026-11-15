@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Services\Detection\DetectedStack;
 use App\Services\Detection\StackDetector;
+use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RepositoryFacts;
 use Tests\Support\RepositoryFixture;
 
@@ -225,4 +226,11 @@ test('a probe that did not finish settles nothing', function () {
     expect($detected->verdict())->toBe('unsure')
         ->and($detected->type)->toBeNull()
         ->and($detected->unsettled)->toHaveKey('type');
+});
+
+test('a start-script server is named after the server package it uses', function () {
+    $detected = stackDetectorRun('express-api');
+
+    expect($detected->serverPackage)->toBe('express')
+        ->and($detected->label(app(Catalog::class)))->toStartWith('Express');
 });

@@ -41,6 +41,14 @@ test.describe('a server', () => {
         await expect(detail('Disk · 24h')).toHaveText('67 GB of 160 GB used · 85 GB free')
     })
 
+    test('a processor the server prints only a dash for is left out of its card', async ({ page }) => {
+        await gotoServer(page, 'bench-01')
+
+        await expect(
+            page.getByText('CPU · 24h', { exact: true }).locator('xpath=../..').getByTestId('metric-detail')
+        ).toHaveText(/^2\scores( · load\s\d+\.\d{2})?$/)
+    })
+
     test('the last day of readings is drawn for cpu, memory and disk', async ({ page }) => {
         await gotoServer(page, 'forge-01')
 
@@ -247,7 +255,7 @@ test.describe('hardening', () => {
             /^Checked (today \d{2}:\d{2}|[A-Z][a-z]{2} \d{1,2})$/
         )
 
-        for (const key of ['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts']) {
+        for (const key of ['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts', 'http3']) {
             await expect(page.getByTestId(`protection-${key}`)).toHaveAttribute('data-state', 'on')
         }
 
@@ -304,6 +312,32 @@ test.describe('hardening', () => {
             (sent) => sent.url().endsWith('/protections/fail2ban') && sent.method() === 'POST'
         )
         await row.getByRole('button', { name: 'Turn it back on' }).click()
+        await request
+    })
+
+    test('a firewall that blocks HTTP/3 says browsers fall back, and opens it on request', async ({ page }) => {
+        await withProps(page, /\/hardening$/, (props) => {
+            protectionRow(props, 'http3', {
+                state: 'off',
+                detail: 'The firewall blocks HTTP/3, so browsers try it first and fall back to HTTP/2.',
+                fix: 'Open it'
+            })
+        })
+        await page.route('**/protections/http3', (route) =>
+            route.fulfill({ status: 409, headers: { 'x-inertia-location': page.url() } })
+        )
+        await gotoServerTab(page, 'forge-01', 'Hardening')
+
+        const row = page.getByTestId('protection-http3')
+
+        await expect(row).toHaveAttribute('data-state', 'off')
+        await expect(row).toContainText('Browsers can use HTTP/3')
+        await expect(row).toContainText('The firewall blocks HTTP/3, so browsers try it first and fall back to HTTP/2.')
+
+        const request = page.waitForRequest(
+            (sent) => sent.url().endsWith('/protections/http3') && sent.method() === 'POST'
+        )
+        await row.getByRole('button', { name: 'Open it' }).click()
         await request
     })
 

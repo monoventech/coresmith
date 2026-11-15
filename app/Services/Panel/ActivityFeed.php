@@ -32,6 +32,23 @@ final class ActivityFeed
 
     private const PANEL_UPDATES = ['panel_updated', 'panel_update_rolled_back', 'panel_update_failed'];
 
+    public const ALERTS = [
+        'disk_pressure',
+        'memory_pressure',
+        'cpu_pressure',
+        'load_pressure',
+        'monitor_recovered',
+        'app_not_answering',
+        'app_answering',
+        'cron_failed',
+        'cron_missed',
+        'cron_recovered',
+        'app_oom_killed',
+        'server_unreachable',
+        'server_reachable',
+        'certificate_expiring',
+    ];
+
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
@@ -57,7 +74,7 @@ final class ActivityFeed
     /**
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    public function forServer(Server $server, int $limit = 25, ?User $viewer = null): array
+    public function forServer(Server $server, int $limit = 25, ?User $viewer = null, bool $alerts = false): array
     {
         $team = $server->team;
         $access = app(TeamAccess::class);
@@ -69,7 +86,7 @@ final class ActivityFeed
             ->when($narrowed, fn($query) => $query->whereIn('id', $access->databases($viewer, $team)->withTrashed()->select('id')))
             ->get()->keyBy('id');
 
-        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit);
+        return $this->merge(collect([$server->getKey() => $server]), $applications, $databases, collect(), $limit, alerts: $alerts);
     }
 
     /**
@@ -79,12 +96,13 @@ final class ActivityFeed
      * @param  Collection<string, CloudProvider>  $accounts
      * @return list<array{time: string, at: string, parts: list<array{text: string, mono: bool}>, href: string|null}>
      */
-    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit, bool $panel = false): array
+    private function merge(Collection $servers, Collection $applications, Collection $databases, Collection $accounts, int $limit, bool $panel = false, bool $alerts = false): array
     {
         $rows = [];
 
         $activities = Activity::query()
             ->whereNotIn('description', self::QUIET)
+            ->when($alerts, fn($query) => $query->whereIn('description', self::ALERTS))
             ->where(function ($query) use ($servers, $applications, $databases, $accounts, $panel): void {
                 $query->where(fn($inner) => $inner->where('subject_type', (new Server)->getMorphClass())->whereIn('subject_id', $servers->keys()))
                     ->orWhere(fn($inner) => $inner->where('subject_type', (new Application)->getMorphClass())->whereIn('subject_id', $applications->keys()))
@@ -115,7 +133,7 @@ final class ActivityFeed
         }
 
         $deployments = Deployment::query()
-            ->whereIn('application_id', $applications->keys())
+            ->whereIn('application_id', $alerts ? [] : $applications->keys())
             ->whereNot('status', DeploymentStatus::Cancelled->value)
             ->whereNotNull('started_at')
             ->latest('started_at')
@@ -258,7 +276,10 @@ final class ActivityFeed
             'disk_pressure' => ($properties['level'] ?? 'warning') === 'critical'
                 ? [$this->text('Disk at ' . (int) ($properties['percent'] ?? 0) . '% on '), $this->mono($server?->name), $this->text(', deploys are paused until space is freed')]
                 : [$this->text('Disk warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%, consider pruning old releases')],
-            'memory_pressure' => [$this->text('Memory warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '% for three minutes')],
+            'memory_pressure' => [$this->text('Memory warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%' . $this->lasting($properties['minutes'] ?? null, ' for three minutes'))],
+            'cpu_pressure' => [$this->text('Processor warning, '), $this->mono($server?->name), $this->text(' at ' . (int) ($properties['percent'] ?? 0) . '%' . $this->lasting($properties['minutes'] ?? null))],
+            'load_pressure' => [$this->text('Load warning, '), $this->mono($server?->name), $this->text(' at ' . number_format((float) ($properties['load'] ?? 0), 2) . ' per core' . $this->lasting($properties['minutes'] ?? null))],
+            'monitor_recovered' => [$this->text($this->recovered($properties['kind'] ?? null) . ' back to normal on '), $this->mono($server?->name), $this->text(is_numeric($properties['minutes'] ?? null) ? ' after ' . $this->span((int) $properties['minutes']) : '')],
             'provisioning_failed' => [$this->text('Provisioning stopped on '), $this->mono($server?->name), $this->text(' at phase ' . (int) ($properties['phase'] ?? 1) . ', ' . ($properties['name'] ?? 'Provisioning'))],
             'firewall_rule_changed' => [$this->text('Firewall ' . ($properties['action'] ?? 'changed') . ' port ' . ($properties['port'] ?? '') . ' on '), $this->mono($server?->name)],
             'server_unreachable' => [$this->mono($server?->name), $this->text(' stopped answering over SSH')],
@@ -285,9 +306,14 @@ final class ActivityFeed
             'application_started' => [$this->mono($application?->name), $this->text(' started again')],
             'certificate_expiring' => [$this->text('Certificate for '), $this->mono((string) ($properties['domain'] ?? '')), $this->text(' on '), $this->mono($application?->name), $this->text(' ' . CertificateCheck::expiry((int) ($properties['days'] ?? 0)))],
             'app_oom_killed' => [$this->mono($application?->name), $this->text(' ' . ($properties['process'] ?? 'a') . ' process killed for going over its ' . (int) ($properties['limit_mb'] ?? 0) . ' MB memory limit and was started again')],
+            'app_not_answering' => [$this->mono($application?->name), $this->text((is_numeric($properties['status'] ?? null) ? ' answered ' . (int) $properties['status'] : ' stopped answering') . ' at ' . ($properties['domain'] ?? 'its domain'))],
+            'cron_failed' => [$this->mono($application?->name), $this->text(' cron job '), $this->mono((string) ($properties['job'] ?? '')), $this->text(' failed with exit code ' . (int) ($properties['exit'] ?? 1))],
+            'cron_missed' => [$this->mono($application?->name), $this->text(' cron job '), $this->mono((string) ($properties['job'] ?? '')), $this->text(" didn't run when it was due")],
+            'cron_recovered' => [$this->mono($application?->name), $this->text(' cron job '), $this->mono((string) ($properties['job'] ?? '')), $this->text(' ran without an error again')],
+            'app_answering' => [$this->mono($application?->name), $this->text(' answering again' . (is_numeric($properties['minutes'] ?? null) ? ' after ' . $this->span((int) $properties['minutes']) : ''))],
             'runtime_eol_chosen' => [$this->mono($application?->name), $this->text(' was added on ' . app(Catalog::class)->label((string) ($properties['runtime'] ?? '')) . ' ' . ($properties['line'] ?? '') . ', which no longer gets security fixes')],
-            CronJobs::ADDED => [$this->text('Cron job added to '), $this->mono($application?->name), $this->text(', ' . CronSchedule::phrase((string) ($properties['schedule'] ?? '')))],
-            CronJobs::UPDATED => [$this->text('Cron job changed on '), $this->mono($application?->name), $this->text(', runs ' . CronSchedule::phrase((string) ($properties['schedule'] ?? '')))],
+            CronJobs::ADDED => [$this->text('Cron job added to '), $this->mono($application?->name), $this->text(', ' . CronSchedule::phrase((string) ($properties['schedule'] ?? ''), $application === null ? 'UTC' : CronJobs::timezone($application)))],
+            CronJobs::UPDATED => [$this->text('Cron job changed on '), $this->mono($application?->name), $this->text(', runs ' . CronSchedule::phrase((string) ($properties['schedule'] ?? ''), $application === null ? 'UTC' : CronJobs::timezone($application)))],
             CronJobs::REMOVED => [$this->text('Cron job removed from '), $this->mono($application?->name)],
             SyncApplicationCron::FAILED => [$this->text("Couldn't write the cron jobs for "), $this->mono($application?->name), $this->text('. ' . ($properties['error'] ?? 'The server did not respond.'))],
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
@@ -352,6 +378,31 @@ final class ActivityFeed
     private function after(mixed $seconds): string
     {
         return is_numeric($seconds) ? ' after ' . Formats::downFor((int) $seconds) : '';
+    }
+
+    private function lasting(mixed $minutes, string $fallback = ''): string
+    {
+        return is_numeric($minutes) && (int) $minutes > 0 ? ' for ' . $this->span((int) $minutes) : $fallback;
+    }
+
+    private function span(int $minutes): string
+    {
+        return match (true) {
+            $minutes <= 1 => 'a minute',
+            $minutes < 60 => "{$minutes} minutes",
+            default => Formats::downFor($minutes * 60),
+        };
+    }
+
+    private function recovered(mixed $kind): string
+    {
+        return match ($kind) {
+            'disk' => 'Disk space',
+            'memory' => 'Memory',
+            'load' => 'Load',
+            'cpu' => 'Processor',
+            default => 'Server',
+        };
     }
 
     private function cancelledBy(mixed $name): string

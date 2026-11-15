@@ -400,7 +400,7 @@ test('a mail that cannot be queued does not hide why provisioning stopped', func
     Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
 });
 
-test('phase 6 opens only ssh, http and https', function () {
+test('phase 6 opens only ssh, http, https and https over udp for HTTP/3', function () {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'ssh_port' => 2222]);
     $transport = provisioningTransport();
 
@@ -411,6 +411,7 @@ test('phase 6 opens only ssh, http and https', function () {
     expect($commands)->toContain('ufw allow 2222/tcp')
         ->and($commands)->toContain('ufw allow 80/tcp')
         ->and($commands)->toContain('ufw allow 443/tcp')
+        ->and($commands)->toContain('ufw allow 443/udp')
         ->and($commands)->toContain('default deny incoming')
         ->and($commands)->not->toContain('ufw allow 22/tcp');
 });
@@ -425,6 +426,7 @@ test("phase 6 on Coresmith's own machine keeps the firewall it already has, open
 
     expect($commands)->toContain('ufw allow 80/tcp')
         ->and($commands)->toContain('ufw allow 443/tcp')
+        ->and($commands)->toContain('ufw allow 443/udp')
         ->and($commands)->not->toContain('ufw allow 22/tcp')
         ->and($commands)->not->toContain('default deny incoming')
         ->and($commands)->not->toContain('ufw --force enable')

@@ -73,6 +73,8 @@ class Application extends Model
                 }
             }
         });
+
+        static::deleted(fn(self $application) => MonitorAlert::closeAllFor($application));
     }
 
     /**
@@ -206,6 +208,8 @@ class Application extends Model
             'toggles' => 'array',
             'processes' => 'array',
             'cron_jobs' => 'array',
+            'cron_runs' => 'array',
+            'cron_written_at' => 'datetime',
             'cron_pending_since' => 'datetime',
             'run_migrations' => 'boolean',
             'quick_deploy' => 'boolean',
@@ -219,6 +223,8 @@ class Application extends Model
             'polled_at' => 'datetime',
             'runtime_pins' => 'array',
             'stack' => 'array',
+            'answered_at' => 'datetime',
+            'failed_checks' => 'integer',
         ];
     }
 }

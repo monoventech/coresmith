@@ -95,9 +95,12 @@ final class ServerTabsController extends Controller
 
         $this->authorize('view', $server);
 
+        $alerts = $request->query('show') === 'alerts';
+
         return Inertia::render('servers/Activity', [
             'server' => $presenter->header($server, $request->user()),
-            'activity' => $feed->forServer($server, viewer: $request->user()),
+            'activity' => $feed->forServer($server, viewer: $request->user(), alerts: $alerts),
+            'show' => $alerts ? 'alerts' : 'everything',
         ]);
     }
 

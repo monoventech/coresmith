@@ -65,7 +65,7 @@ final class Nuxt extends JsPreset
         $preset = $this->frameworks->nitroPreset($facts);
 
         return match (true) {
-            $facts->dependency('nuxt') === null => [new Blocker('framework', "nuxt isn't in package.json, so this isn't a Nuxt app.", 'Pick the framework the app uses, or API or other.')],
+            $facts->dependency('nuxt') === null => [new Blocker('framework', "nuxt isn't in package.json, so this isn't a Nuxt app.", 'Pick the framework the app uses, or Other server.')],
             $this->frameworks->nuxtGenerate($facts) => [new Blocker('type', 'The build script runs nuxt generate, so the build is static files, not a server.', 'Pick Static site with the web root /.output/public.')],
             !$facts->script('build') => [new Blocker('repository', 'There is no build script in package.json, so the Nuxt server is never built.', 'Add "build": "nuxt build" to the scripts in package.json.')],
             $preset !== null && $preset[1] => [new Blocker('framework', "Nitro's preset is {$preset[0]}, so nuxt build makes the app for that host, not the Node server Coresmith runs.", 'Remove the preset or set it to node-server. If the app is static, pick Static site with the web root /.output/public.')],

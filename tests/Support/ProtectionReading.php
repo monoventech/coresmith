@@ -18,6 +18,7 @@ final class ProtectionReading
             'kernel' => self::kernel(),
             'patches' => ["UNATTENDED='1'", 'installed', 'enabled'],
             'ssh' => ['passwordauthentication no', 'kbdinteractiveauthentication no', 'permitrootlogin without-password'],
+            'web' => ['udp-open'],
             'controls' => ['socket', 'no-tcp'],
             ...$overrides,
         ];

@@ -11,6 +11,7 @@ namespace Database\Seeders;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
+use App\Enums\MonitorKind;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
@@ -23,6 +24,7 @@ use App\Models\CloudProvider;
 use App\Models\Deployment;
 use App\Models\GitHubApp;
 use App\Models\ManagedDatabase;
+use App\Models\MonitorAlert;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\SourceProvider;
@@ -143,6 +145,7 @@ final class E2ESeeder extends Seeder
         $this->movers();
 
         $this->bench = $this->server('bench-01', '198.51.100.40', ServerStatus::Active);
+        $this->bench->forceFill(['meta' => [...(array) $this->bench->meta, 'cpu_model' => '-']])->save();
 
         $hetzner = CloudProvider::factory()->for($this->team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'hetzner-e2e-never-sent']);
         CloudCatalog::put($hetzner, CloudCatalogs::hetzner(), 30 * 24 * 3600);
@@ -884,6 +887,27 @@ final class E2ESeeder extends Seeder
         ])->save();
     }
 
+    /**
+     * @param  array{schedule: string, command: string}  $scheduler
+     */
+    private function cronRuns(array $scheduler): void
+    {
+        $reports = ['schedule' => '0 6 * * *', 'command' => 'php artisan reports:send'];
+        $backup = ['schedule' => '0 3 * * 0', 'command' => 'php artisan backup:clean'];
+        $sync = ['schedule' => '*/15 * * * *', 'command' => 'node scripts/sync.js'];
+        $runs = $this->application('cron-runs', 8560, ['cron_jobs' => [$scheduler, $reports, $backup, $sync]]);
+        $seen = now()->subDays(8)->getTimestamp();
+
+        $this->succeeded($runs, 4 * 60, 'v1.0.0');
+        $runs->forceFill(['cron_runs' => [
+            CronJobs::id($scheduler) => ['seen' => $seen, 'last' => ['started' => now()->subSeconds(40)->getTimestamp(), 'seconds' => 1, 'exit' => 0], 'running' => null],
+            CronJobs::id($reports) => ['seen' => $seen, 'last' => ['started' => now()->subHours(2)->getTimestamp(), 'seconds' => 12, 'exit' => 1], 'running' => null],
+            CronJobs::id($backup) => ['seen' => $seen, 'last' => ['started' => now()->subDays(7)->getTimestamp(), 'seconds' => 40, 'exit' => 0], 'running' => null],
+        ]])->save();
+
+        MonitorAlert::open($runs->server, MonitorKind::Cron, $runs, level: 'missed', peak: (float) now()->subHour()->getTimestamp(), job: CronJobs::id($backup));
+    }
+
     private function cronFixtures(): void
     {
         $scheduler = ['schedule' => '* * * * *', 'command' => 'php artisan schedule:run'];
@@ -911,6 +935,7 @@ final class E2ESeeder extends Seeder
         Cache::put(ReadSchedulerLog::cacheKey($cronPaused), ['lines' => [], 'error' => "Couldn't read the scheduler log on bench-01.", 'read_at' => now()->subDay()->timestamp], now()->addYear());
         $this->succeeded($this->application('cron-full', 8550, ['cron_jobs' => array_map(fn(int $minute): array => ['schedule' => "{$minute} * * * *", 'command' => "php artisan report:{$minute}"], range(0, CronJobs::MAX_ENTRIES - 1))]), 4 * 60, 'v1.0.0');
         $this->application('cron-new', 8530, ['cron_jobs' => [$scheduler]]);
+        $this->cronRuns($scheduler);
         $this->succeeded($this->application('cron-waiting', 8540, ['cron_jobs' => [$scheduler], 'cron_pending_since' => now()->subMinutes(10)]), 4 * 60, 'v1.0.0');
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
