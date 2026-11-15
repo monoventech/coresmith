@@ -29,6 +29,10 @@ test('a fact the machine does not report is left unknown rather than guessed', f
     ]);
 });
 
+test('a placeholder the machine prints for a model it cannot name is left unknown', function (string $model) {
+    expect((new HardwareFacts)->parse("cpu_model={$model}\ncpu_cores=4\n")['cpu_model'])->toBeNull();
+})->with(['-', ' - ', '--', '?']);
+
 test('text from the machine is kept to one short, printable line', function () {
     $facts = (new HardwareFacts)->parse("cpu_model=Intel(R)  Xeon(R)\tGold \e[31m6230\n" . 'os=' . str_repeat('x', 300) . "\n");
 

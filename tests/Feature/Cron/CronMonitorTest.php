@@ -177,9 +177,9 @@ test('the mails say what failed or was missed, and when it ran again', function 
         ->and($mail->introLines)->toBe($lines)
         ->and($mail->actionText)->toBe('Open Shop');
 })->with([
-    'failed' => [fn() => new CronJobNotification(cronMonitorApp(cronMonitorServer()), 'php artisan backup:run', 'failed', CarbonImmutable::parse('2026-11-15 03:00:00')->getTimestamp(), 3, 'Europe/London'), 'Shop: php artisan backup:run failed', ["It exited with code 3 at Nov 15 at 03:00 GMT. What it printed is in the scheduler log on the app's page.", "You'll get one more email when it runs without an error."]],
-    'missed' => [fn() => new CronJobNotification(cronMonitorApp(cronMonitorServer()), 'Laravel scheduler', 'missed', CarbonImmutable::parse('2026-07-15 02:00:00')->getTimestamp(), null, 'Europe/London'), "Shop: Laravel scheduler didn't run", ["It was due at Jul 15 at 03:00 BST and didn't start. Check that cron is running on web-1.", "You'll get one more email when it runs again."]],
-    'recovered' => [fn() => new CronJobRecoveredNotification(cronMonitorApp(cronMonitorServer()), 'php artisan backup:run', CarbonImmutable::parse('2026-11-16 03:00:01')->getTimestamp(), 9, 'UTC'), 'Shop: php artisan backup:run ran without an error', ['It ran at Nov 16 at 03:00 UTC and took 9 seconds.']],
+    'failed' => [fn() => new CronJobNotification(cronMonitorApp(cronMonitorServer()), 'php artisan backup:run', 'failed', CarbonImmutable::parse('2026-11-15 03:00:00')->getTimestamp(), 3, 'Europe/London'), 'Shop: php artisan backup:run failed', ["It exited with code 3 on Nov 15 at 03:00 GMT. What it printed is in the scheduler log on the app's page.", "You'll get one more email when it runs without an error."]],
+    'missed' => [fn() => new CronJobNotification(cronMonitorApp(cronMonitorServer()), 'Laravel scheduler', 'missed', CarbonImmutable::parse('2026-07-15 02:00:00')->getTimestamp(), null, 'Europe/London'), "Shop: Laravel scheduler didn't run", ["It was due on Jul 15 at 03:00 BST and didn't start. Check that cron is running on web-1.", "You'll get one more email when it runs again."]],
+    'recovered' => [fn() => new CronJobRecoveredNotification(cronMonitorApp(cronMonitorServer()), 'php artisan backup:run', CarbonImmutable::parse('2026-11-16 03:00:01')->getTimestamp(), 9, 'UTC'), 'Shop: php artisan backup:run ran without an error', ['It ran on Nov 16 at 03:00 UTC and took 9 seconds.']],
 ]);
 
 test('the feed says which cron job failed, was missed or ran again', function (string $description, array $properties, string $sentence) {

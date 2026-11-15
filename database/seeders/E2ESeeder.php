@@ -145,6 +145,7 @@ final class E2ESeeder extends Seeder
         $this->movers();
 
         $this->bench = $this->server('bench-01', '198.51.100.40', ServerStatus::Active);
+        $this->bench->forceFill(['meta' => [...(array) $this->bench->meta, 'cpu_model' => '-']])->save();
 
         $hetzner = CloudProvider::factory()->for($this->team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'hetzner-e2e-never-sent']);
         CloudCatalog::put($hetzner, CloudCatalogs::hetzner(), 30 * 24 * 3600);

@@ -16,6 +16,7 @@ use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\User;
 use App\Services\Server\Audit\ServerAudit;
+use App\Services\Server\HardwareFacts;
 use App\Services\SSH\AuthorizedKeyCommand;
 use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
@@ -140,7 +141,7 @@ final class ServerPresenter
         $cores = (int) ($meta['cpu_physical_cores'] ?? 0);
 
         return $this->detail([
-            is_string($meta['cpu_model'] ?? null) ? $meta['cpu_model'] : null,
+            HardwareFacts::reported($meta['cpu_model'] ?? null),
             match (true) {
                 $cores > 0 && $threads > $cores => "{$cores}\u{00A0}cores, {$threads}\u{00A0}threads",
                 $threads > 0 => $threads . "\u{00A0}" . ($threads === 1 ? 'core' : 'cores'),
