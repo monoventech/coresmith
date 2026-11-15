@@ -11,16 +11,14 @@ namespace App\Services\Server;
 use App\Enums\AppSize;
 use App\Enums\PowerState;
 use App\Events\FleetChanged;
-use App\Jobs\DeployApplication;
 use App\Jobs\WakeApplication;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Notifications\ApplicationOomKilledNotification;
-use App\Notifications\DiskPressureNotification;
-use App\Notifications\MemoryPressureNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
+use App\Services\Monitors\ReadingMonitor;
 use App\Services\SSH\SSHConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\Notification;
@@ -33,15 +31,7 @@ final class MetricsCollector
 {
     public const ACCESS_LOG = '/var/log/caddy/access.log';
 
-    public const DISK_PRESSURE_PERCENT = 80;
-
-    public const MEMORY_PRESSURE_PERCENT = 95;
-
-    public const MEMORY_PRESSURE_READINGS = 3;
-
     public const PROBE_SECONDS = 20;
-
-    private const MEMORY_PRESSURE_WINDOW_MINUTES = 4;
 
     public function __construct(private readonly HardwareFacts $facts = new HardwareFacts) {}
 
@@ -57,10 +47,6 @@ final class MetricsCollector
 
         if ($this->facts->due($server)) {
             $server->forceFill(['meta' => [...(array) ($server->fresh()?->meta ?? $server->meta), ...$this->facts->toMeta($this->facts->read($connection))]])->save();
-        }
-
-        if ($values['disk'] >= self::DISK_PRESSURE_PERCENT) {
-            $this->recordDiskPressure($server, $values['disk']);
         }
 
         $metric = ServerMetric::create([
@@ -81,83 +67,9 @@ final class MetricsCollector
             'recorded_at' => now(),
         ]);
 
-        $this->recordMemoryPressure($server, $values['memory']);
+        app(ReadingMonitor::class)->evaluate($server, $metric);
 
         return $metric;
-    }
-
-    private function recordDiskPressure(Server $server, float $percent): void
-    {
-        $level = $percent >= DeployApplication::DISK_ABORT_PERCENT ? 'critical' : 'warning';
-
-        $recent = Activity::query()
-            ->where('subject_type', $server->getMorphClass())
-            ->where('subject_id', $server->getKey())
-            ->where('description', 'disk_pressure')
-            ->where('created_at', '>=', now()->subDay())
-            ->where(fn($query) => $level === 'critical'
-                ? $query->where('properties->level', 'critical')
-                : $query->where('properties->level', 'warning')->orWhereNull('properties->level'))
-            ->exists();
-
-        if ($recent) {
-            return;
-        }
-
-        if (!$this->alert($server, Preferences::DISK_PRESSURE, new DiskPressureNotification($server, (int) round($percent), critical: $level === 'critical'))) {
-            return;
-        }
-
-        activity()
-            ->performedOn($server)
-            ->withProperties(['percent' => (int) round($percent), 'level' => $level])
-            ->log('disk_pressure');
-
-        FleetChanged::forServer($server);
-    }
-
-    private function recordMemoryPressure(Server $server, float $latest): void
-    {
-        if ($latest < self::MEMORY_PRESSURE_PERCENT) {
-            return;
-        }
-
-        $readings = ServerMetric::query()
-            ->where('server_id', $server->getKey())
-            ->where('recorded_at', '>=', now()->subMinutes(self::MEMORY_PRESSURE_WINDOW_MINUTES))
-            ->latest('recorded_at')
-            ->limit(self::MEMORY_PRESSURE_READINGS)
-            ->pluck('memory_percent');
-
-        $lowest = (float) $readings->min();
-
-        if ($readings->count() < self::MEMORY_PRESSURE_READINGS || $lowest < self::MEMORY_PRESSURE_PERCENT) {
-            return;
-        }
-
-        $recent = Activity::query()
-            ->where('subject_type', $server->getMorphClass())
-            ->where('subject_id', $server->getKey())
-            ->where('description', 'memory_pressure')
-            ->where('created_at', '>=', now()->subDay())
-            ->exists();
-
-        if ($recent) {
-            return;
-        }
-
-        $percent = (int) floor($lowest);
-
-        if (!$this->alert($server, Preferences::SERVER_ALERTS, new MemoryPressureNotification($server, $percent))) {
-            return;
-        }
-
-        activity()
-            ->performedOn($server)
-            ->withProperties(['percent' => $percent])
-            ->log('memory_pressure');
-
-        FleetChanged::forServer($server);
     }
 
     private function alert(Server $server, string $preference, Notification $notification): bool

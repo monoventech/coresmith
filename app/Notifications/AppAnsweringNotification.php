@@ -8,19 +8,20 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
-use App\Models\Server;
+use App\Models\Application;
+use App\Services\Panel\Formats;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-final class MemoryPressureNotification extends Notification implements ShouldQueue
+final class AppAnsweringNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
     public bool $deleteWhenMissingModels = true;
 
-    public function __construct(public readonly Server $server, public readonly int $percent) {}
+    public function __construct(public readonly Application $application, public readonly int $minutes) {}
 
     /**
      * @return list<string>
@@ -32,10 +33,12 @@ final class MemoryPressureNotification extends Notification implements ShouldQue
 
     public function toMail(object $notifiable): MailMessage
     {
+        $name = $this->application->name;
+        $lasted = $this->minutes < 60 ? "{$this->minutes} minutes" : Formats::downFor($this->minutes * 60);
+
         return (new MailMessage)
-            ->subject("{$this->server->name} memory is at {$this->percent}%")
-            ->line("Memory has stayed at {$this->percent}% or more for three minutes. An app that asks for more is killed and started again.")
-            ->line('Check which process is using it on the server.')
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->subject("{$name} is answering again")
+            ->line("It was failing checks for about {$lasted}.")
+            ->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
     }
 }

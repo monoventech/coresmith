@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\DeploymentStatus;
+use App\Enums\MonitorKind;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Events\ServerProvisioned;
@@ -11,17 +12,20 @@ use App\Jobs\CollectServerMetrics;
 use App\Listeners\NotifyProvisioning;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\MonitorAlert;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Team;
 use App\Models\User;
 use App\Notifications\ApplicationOomKilledNotification;
 use App\Notifications\DiskPressureNotification;
-use App\Notifications\MemoryPressureNotification;
+use App\Notifications\MonitorAlertNotification;
+use App\Notifications\MonitorRecoveredNotification;
 use App\Notifications\Preferences;
 use App\Notifications\ProvisioningFailedNotification;
 use App\Notifications\ServerProvisionedNotification;
 use App\Notifications\TeamNotifier;
+use App\Services\Monitors\MonitorLimit;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Server\MetricsCollector;
@@ -198,39 +202,30 @@ test('a mail that cannot be queued is reported and never thrown at the provision
     'a provision that stopped' => ['stopped'],
 ]);
 
-test('disk at 95% sends the critical mail even after today\'s warning', function () {
+test('disk at 95% sends the critical mail once while a warning is open', function () {
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
-    alertsRow($server, 'disk_pressure', ['percent' => 85, 'level' => 'warning'], now()->subHours(5));
 
+    alertsCollect($server, disk: 85);
+    $this->travel(1)->minutes();
     alertsCollect($server, disk: 96);
 
     Notification::assertSentTo($member, DiskPressureNotification::class, fn(DiskPressureNotification $notification): bool => $notification->critical && $notification->percent === 96 && $notification->server->is($server));
 
+    $this->travel(1)->minutes();
     alertsCollect($server, disk: 96);
 
-    Notification::assertSentTimes(DiskPressureNotification::class, 1);
+    Notification::assertSentTimes(DiskPressureNotification::class, 2);
 
     $rows = Activity::query()->where('description', 'disk_pressure')->oldest('id')->get();
 
     expect($rows)->toHaveCount(2)
-        ->and($rows[1]->properties->toArray())->toBeInAnyKeyOrder(['percent' => 96, 'level' => 'critical']);
+        ->and($rows[1]->properties->toArray())->toBeInAnyKeyOrder(['percent' => 96, 'level' => 'critical'])
+        ->and(MonitorAlert::query()->sole()->level)->toBe('critical');
 });
 
-test('a warning row without a level still counts as today\'s warning', function () {
-    Notification::fake();
-    $server = alertsServer();
-    alertsMember($server->team);
-    alertsRow($server, 'disk_pressure', ['percent' => 82], now()->subHours(5));
-
-    alertsCollect($server, disk: 85);
-
-    Notification::assertNothingSent();
-    expect(Activity::query()->where('description', 'disk_pressure')->count())->toBe(1);
-});
-
-test('the warning and the critical alert each go once a day', function () {
+test('an open disk alert sends nothing more while the disk stays full, even a day later', function () {
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
@@ -239,17 +234,40 @@ test('the warning and the critical alert each go once a day', function () {
     alertsCollect($server, disk: 96);
     alertsCollect($server, disk: 86);
     alertsCollect($server, disk: 97);
-
-    expect(array_map(fn(DiskPressureNotification $notification): bool => $notification->critical, alertsSent($member, DiskPressureNotification::class)))->toBe([false, true]);
-
     $this->travel(25)->hours();
     alertsCollect($server, disk: 96);
 
-    expect(array_map(fn(DiskPressureNotification $notification): bool => $notification->critical, alertsSent($member, DiskPressureNotification::class)))->toBe([false, true, true])
-        ->and(Activity::query()->where('description', 'disk_pressure')->oldest('id')->get()->map(fn(Activity $row): string => $row->properties['level'])->all())->toBe(['warning', 'critical', 'critical']);
+    expect(array_map(fn(DiskPressureNotification $notification): bool => $notification->critical, alertsSent($member, DiskPressureNotification::class)))->toBe([false, true])
+        ->and(Activity::query()->where('description', 'disk_pressure')->oldest('id')->get()->map(fn(Activity $row): string => $row->properties['level'])->all())->toBe(['warning', 'critical']);
 });
 
-test('both disk mails follow Disk above 80%, not Server problems', function () {
+test('a disk under the line for five minutes closes its alert, and the next rise warns again', function () {
+    Notification::fake();
+    $server = alertsServer();
+    $member = alertsMember($server->team);
+
+    alertsCollect($server, disk: 85);
+
+    foreach (range(1, 6) as $minute) {
+        $this->travel(1)->minutes();
+        alertsCollect($server, disk: 70);
+    }
+
+    $recovered = alertsSent($member, MonitorRecoveredNotification::class);
+
+    expect($recovered)->toHaveCount(1)
+        ->and($recovered[0]->kind)->toBe(MonitorKind::Disk)
+        ->and($recovered[0]->minutes)->toBe(6)
+        ->and(MonitorAlert::query()->sole()->closed_at)->not->toBeNull()
+        ->and(Activity::query()->where('description', 'monitor_recovered')->sole()->properties->toArray())->toBeInAnyKeyOrder(['kind' => 'disk', 'minutes' => 6]);
+
+    $this->travel(1)->minutes();
+    alertsCollect($server, disk: 88);
+
+    Notification::assertSentToTimes($member, DiskPressureNotification::class, 2);
+});
+
+test('both disk mails follow Disk warnings, not Server problems', function () {
     Notification::fake();
     $server = alertsServer();
     $wanting = alertsMember($server->team);
@@ -273,7 +291,8 @@ test('a disk alert that cannot be sent is reported, leaves no row and is retried
     $metric = alertsCollect($server, disk: 96);
 
     expect($metric->exists)->toBeTrue()
-        ->and(Activity::query()->where('description', 'disk_pressure')->exists())->toBeFalse();
+        ->and(Activity::query()->where('description', 'disk_pressure')->exists())->toBeFalse()
+        ->and(MonitorAlert::query()->exists())->toBeFalse();
     Exceptions::assertReportedCount(1);
     Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
 
@@ -285,7 +304,7 @@ test('a disk alert that cannot be sent is reported, leaves no row and is retried
     expect(Activity::query()->where('description', 'disk_pressure')->count())->toBe(1);
 });
 
-test('memory at 95% for three readings emails once a day', function () {
+test('memory at 95% for four minutes emails once, holds quietly and warns again only after it recovers', function () {
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
@@ -294,15 +313,11 @@ test('memory at 95% for three readings emails once a day', function () {
 
     alertsCollect($server, memory: 98);
 
-    Notification::assertSentTo($member, MemoryPressureNotification::class, fn(MemoryPressureNotification $notification): bool => $notification->server->is($server) && $notification->percent === 95);
-    expect(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBe(['percent' => 95]);
+    Notification::assertSentTo($member, MonitorAlertNotification::class, fn(MonitorAlertNotification $notification): bool => $notification->server->is($server) && $notification->kind === MonitorKind::Memory && $notification->value === 95.0);
+    expect(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBeInAnyKeyOrder(['percent' => 95, 'minutes' => 4]);
 
     $this->travel(1)->minutes();
     alertsCollect($server, memory: 99);
-
-    Notification::assertSentTimes(MemoryPressureNotification::class, 1);
-    expect(Activity::query()->where('description', 'memory_pressure')->count())->toBe(1);
-
     $this->travel(25)->hours();
 
     foreach (range(1, 3) as $reading) {
@@ -310,11 +325,25 @@ test('memory at 95% for three readings emails once a day', function () {
         $this->travel(1)->minutes();
     }
 
-    Notification::assertSentTimes(MemoryPressureNotification::class, 2);
+    Notification::assertSentTimes(MonitorAlertNotification::class, 1);
+
+    foreach (range(1, 6) as $reading) {
+        alertsCollect($server, memory: 40);
+        $this->travel(1)->minutes();
+    }
+
+    Notification::assertSentTimes(MonitorRecoveredNotification::class, 1);
+
+    foreach (range(1, 5) as $reading) {
+        alertsCollect($server, memory: 99);
+        $this->travel(1)->minutes();
+    }
+
+    Notification::assertSentTimes(MonitorAlertNotification::class, 2);
     expect(Activity::query()->where('description', 'memory_pressure')->count())->toBe(2);
 });
 
-test('the memory mail names the lowest of the three readings, rounded down', function (array $earlier, int $latest, int $named) {
+test('the memory mail names the lowest reading of the four minutes, rounded down', function (array $earlier, int $latest, int $named) {
     Notification::fake();
     $server = alertsServer();
     $member = alertsMember($server->team);
@@ -325,13 +354,11 @@ test('the memory mail names the lowest of the three readings, rounded down', fun
 
     alertsCollect($server, memory: $latest);
 
-    $notification = alertsSent($member, MemoryPressureNotification::class)[0];
-    $mail = $notification->toMail($member);
+    $mail = alertsSent($member, MonitorAlertNotification::class)[0]->toMail($member);
 
-    expect($notification->percent)->toBe($named)
-        ->and($mail->subject)->toBe("web-1 memory is at {$named}%")
-        ->and($mail->introLines[0])->toBe("Memory has stayed at {$named}% or more for three minutes. An app that asks for more is killed and started again.")
-        ->and(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBe(['percent' => $named]);
+    expect($mail->subject)->toBe("web-1 memory is at {$named}%")
+        ->and($mail->introLines[0])->toBe("Memory has stayed at {$named}% or more for 4 minutes. An app that asks for more is killed and started again.")
+        ->and(Activity::query()->where('description', 'memory_pressure')->sole()->properties->toArray())->toBeInAnyKeyOrder(['percent' => $named, 'minutes' => 4]);
 })->with([
     'the first is the lowest' => [[[95, 2], [96, 1]], 98, 95],
     'the middle is the lowest' => [[[98, 2], [96, 1]], 97, 96],
@@ -350,7 +377,8 @@ test('a memory alert that cannot be sent is reported, leaves no row and is retri
     $metric = alertsCollect($server, memory: 98);
 
     expect($metric->exists)->toBeTrue()
-        ->and(Activity::query()->where('description', 'memory_pressure')->exists())->toBeFalse();
+        ->and(Activity::query()->where('description', 'memory_pressure')->exists())->toBeFalse()
+        ->and(MonitorAlert::query()->exists())->toBeFalse();
     Exceptions::assertReportedCount(1);
     Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Queue is down');
 
@@ -358,7 +386,7 @@ test('a memory alert that cannot be sent is reported, leaves no row and is retri
     $this->travel(1)->minutes();
     alertsCollect($server, memory: 99);
 
-    Notification::assertSentTo($member, MemoryPressureNotification::class, fn(MemoryPressureNotification $notification): bool => $notification->percent === 97);
+    Notification::assertSentTo($member, MonitorAlertNotification::class, fn(MonitorAlertNotification $notification): bool => $notification->value === 96.0);
     expect(Activity::query()->where('description', 'memory_pressure')->count())->toBe(1);
 });
 
@@ -394,7 +422,7 @@ test('the memory line is 95%: at it counts, under it does not', function (int $f
     expect(Activity::query()->where('description', 'memory_pressure')->exists())->toBe($emailed);
 
     if ($emailed) {
-        Notification::assertSentTimes(MemoryPressureNotification::class, 1);
+        Notification::assertSentTimes(MonitorAlertNotification::class, 1);
     } else {
         Notification::assertNothingSent();
     }
@@ -433,9 +461,9 @@ test('memory and memory kill mails follow Server problems, not the disk or provi
     alertsCollect($server, memory: 98);
     alertsRead($server, alertsKill('coresmith-app-shop-web', 20));
 
-    Notification::assertSentTo([$wanting, $noDisk], MemoryPressureNotification::class);
+    Notification::assertSentTo([$wanting, $noDisk], MonitorAlertNotification::class);
     Notification::assertSentTo([$wanting, $noDisk], ApplicationOomKilledNotification::class);
-    Notification::assertNotSentTo($quiet, MemoryPressureNotification::class);
+    Notification::assertNotSentTo($quiet, MonitorAlertNotification::class);
     Notification::assertNotSentTo($quiet, ApplicationOomKilledNotification::class);
 });
 
@@ -573,9 +601,9 @@ test('a server whose team is gone still logs its memory alerts without emailing 
 });
 
 test('the memory lines of the fleet and of the email are the same 95%', function () {
-    expect(MetricsCollector::MEMORY_PRESSURE_PERCENT)->toBe(95)
-        ->and(MetricsCollector::MEMORY_PRESSURE_READINGS)->toBe(3)
-        ->and(FleetSnapshot::MEMORY_WARNING)->toBe(MetricsCollector::MEMORY_PRESSURE_PERCENT);
+    expect(MonitorKind::Memory->defaultThreshold())->toBe(95.0)
+        ->and(MonitorKind::Memory->defaultDuration())->toBe(4)
+        ->and((float) FleetSnapshot::MEMORY_WARNING)->toBe(MonitorKind::Memory->defaultThreshold());
 });
 
 test('each alert says what happened and what to do', function (string $alert, string $subject, array $lines, string $action) {
@@ -586,7 +614,11 @@ test('each alert says what happened and what to do', function (string $alert, st
     $notification = match ($alert) {
         'provisioning stopped' => new ProvisioningFailedNotification($server, 2, 'Base system'),
         'killed for memory' => new ApplicationOomKilledNotification($application, 'web', 512, CarbonImmutable::parse('2026-09-14 09:59:10')),
-        'memory' => new MemoryPressureNotification($server, 98),
+        'memory' => new MonitorAlertNotification($server, MonitorKind::Memory, 98.4, new MonitorLimit(MonitorKind::Memory, 95, 4, true, 'default')),
+        'processor' => new MonitorAlertNotification($server, MonitorKind::Cpu, 93.7, new MonitorLimit(MonitorKind::Cpu, 90, 10, true, 'team')),
+        'load' => new MonitorAlertNotification($server, MonitorKind::Load, 1.625, new MonitorLimit(MonitorKind::Load, 1.5, 1, true, 'server')),
+        'recovered' => new MonitorRecoveredNotification($server, MonitorKind::Memory, 12),
+        'recovered after hours' => new MonitorRecoveredNotification($server, MonitorKind::Disk, 125),
         'disk' => new DiskPressureNotification($server, 96, critical: true),
     };
 
@@ -612,7 +644,31 @@ test('each alert says what happened and what to do', function (string $alert, st
     'memory' => [
         'memory',
         'web-1 memory is at 98%',
-        ['Memory has stayed at 98% or more for three minutes. An app that asks for more is killed and started again.', 'Check which process is using it on the server.'],
+        ['Memory has stayed at 98% or more for 4 minutes. An app that asks for more is killed and started again.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
+        'Open web-1',
+    ],
+    'processor' => [
+        'processor',
+        'web-1 processor is 93% busy',
+        ['The processor has stayed 93% busy or more for 10 minutes, so apps on it may answer slowly.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
+        'Open web-1',
+    ],
+    'load' => [
+        'load',
+        'web-1 load is at 1.63 per core',
+        ['The load has stayed at 1.63 per core or more for a minute, so work is waiting its turn for the processor.', "Check which process is using it on the server. You'll get one more email when it's back to normal."],
+        'Open web-1',
+    ],
+    'recovered' => [
+        'recovered',
+        'web-1 memory is back to normal',
+        ['It was over its limit for 12 minutes.'],
+        'Open web-1',
+    ],
+    'recovered after hours' => [
+        'recovered after hours',
+        'web-1 disk space is back to normal',
+        ['It was over its limit for 2 hours 5 minutes.'],
         'Open web-1',
     ],
     'disk' => [
@@ -655,7 +711,8 @@ test('every new alert is a queued email', function (object $notification) {
 })->with([
     'provisioned' => fn() => new ServerProvisionedNotification(new Server, 372),
     'provisioning stopped' => fn() => new ProvisioningFailedNotification(new Server, 2, 'Base system'),
-    'memory' => fn() => new MemoryPressureNotification(new Server, 98),
+    'memory' => fn() => new MonitorAlertNotification(new Server, MonitorKind::Memory, 98, new MonitorLimit(MonitorKind::Memory, 95, 4, true, 'default')),
+    'recovered' => fn() => new MonitorRecoveredNotification(new Server, MonitorKind::Cpu, 12),
     'killed for memory' => fn() => new ApplicationOomKilledNotification(new Application, 'web', 512, CarbonImmutable::now()),
 ]);
 
@@ -714,7 +771,7 @@ test('memory takes its place in the fleet precedence', function (array $attribut
     'a changed host key comes first' => [['pending_host_key_fingerprint' => 'SHA256:new'], 98.0, false, 1, 'host_key', 'Host key changed'],
 ]);
 
-test('the feed describes memory, critical disk and a stopped provision', function (string $description, array $properties, string $sentence) {
+test('the feed describes each alert, a recovery and a stopped provision', function (string $description, array $properties, string $sentence) {
     $server = alertsServer();
 
     activity()->performedOn($server)->withProperties($properties)->log($description);
@@ -725,7 +782,13 @@ test('the feed describes memory, critical disk and a stopped provision', functio
         ->and($row['parts'][1])->toBe(['text' => 'web-1', 'mono' => true])
         ->and($row['href'])->toBe(route('servers.show', $server));
 })->with([
-    'sustained memory' => ['memory_pressure', ['percent' => 98], 'Memory warning, web-1 at 98% for three minutes'],
+    'sustained memory from before limits' => ['memory_pressure', ['percent' => 98], 'Memory warning, web-1 at 98% for three minutes'],
+    'sustained memory' => ['memory_pressure', ['percent' => 98, 'minutes' => 4], 'Memory warning, web-1 at 98% for 4 minutes'],
+    'a busy processor' => ['cpu_pressure', ['percent' => 93, 'minutes' => 10], 'Processor warning, web-1 at 93% for 10 minutes'],
+    'a heavy load' => ['load_pressure', ['load' => 1.62, 'minutes' => 15], 'Load warning, web-1 at 1.62 per core for 15 minutes'],
+    'a recovery' => ['monitor_recovered', ['kind' => 'memory', 'minutes' => 12], 'Memory back to normal on web-1 after 12 minutes'],
+    'a recovery after hours' => ['monitor_recovered', ['kind' => 'disk', 'minutes' => 125], 'Disk space back to normal on web-1 after 2 hours 5 minutes'],
+    'a one-minute processor recovery' => ['monitor_recovered', ['kind' => 'cpu', 'minutes' => 1], 'Processor back to normal on web-1 after a minute'],
     'critical disk' => ['disk_pressure', ['percent' => 96, 'level' => 'critical'], 'Disk at 96% on web-1, deploys are paused until space is freed'],
     'a disk warning with its level' => ['disk_pressure', ['percent' => 86, 'level' => 'warning'], 'Disk warning, web-1 at 86%, consider pruning old releases'],
     'a disk warning from before levels' => ['disk_pressure', ['percent' => 86], 'Disk warning, web-1 at 86%, consider pruning old releases'],
