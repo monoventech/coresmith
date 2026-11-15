@@ -10,6 +10,7 @@ namespace App\Services\Deployment;
 
 use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
+use App\Services\Php\PhpLimits;
 use App\Services\Process\AppSandbox;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
@@ -115,6 +116,7 @@ final class AppShell
             '-p UMask=' . AppAccount::UMASK,
             '-p NoNewPrivileges=yes',
             '-E ' . escapeshellarg('PATH=' . $this->path($versions, $application->type?->language()->pathDirectories($directory) ?? [])),
+            ...($application->type?->language()->usesFpm() ? ['-E ' . escapeshellarg('PHP_INI_SCAN_DIR=' . PhpLimits::scanDir($application))] : []),
             '--',
         ]);
     }

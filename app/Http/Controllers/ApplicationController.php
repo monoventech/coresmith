@@ -46,6 +46,7 @@ use App\Services\Panel\Formats;
 use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
+use App\Services\Php\PhpLimitsCard;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeDetector;
@@ -270,6 +271,7 @@ final class ApplicationController extends Controller
                 'href' => route('servers.applications.addresses.update', [$server, $application]),
             ],
             'cron' => $this->cron($server, $application, $cron),
+            'php' => PhpLimitsCard::describe($application),
             'can' => [
                 'update' => $user->can('update', $application),
                 'delete' => $user->can('delete', $application),

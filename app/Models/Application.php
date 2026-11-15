@@ -211,6 +211,8 @@ class Application extends Model
             'cron_runs' => 'array',
             'cron_written_at' => 'datetime',
             'cron_pending_since' => 'datetime',
+            'php_limits' => 'array',
+            'php_written_at' => 'datetime',
             'run_migrations' => 'boolean',
             'quick_deploy' => 'boolean',
             'last_request_at' => 'datetime',

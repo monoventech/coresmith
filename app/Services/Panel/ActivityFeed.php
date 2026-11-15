@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
+use App\Jobs\ApplyPhpLimits;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
 use App\Models\CloudProvider;
@@ -18,6 +19,7 @@ use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Php\PhpLimits;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\CertificateCheck;
 use App\Services\Teams\TeamAccess;
@@ -325,6 +327,8 @@ final class ActivityFeed
                 (bool) ($properties['on'] ?? false) => [$this->text('Auto deploy turned on for '), $this->mono($application?->name), $this->text(', it deploys the branch if the live release is behind')],
                 default => [$this->text('Auto deploy turned off for '), $this->mono($application?->name)],
             },
+            ApplyPhpLimits::CHANGED => [$this->text('PHP limits changed on '), $this->mono($application?->name), $this->text(': ' . PhpLimits::sentence((array) ($properties['to'] ?? [])))],
+            ApplyPhpLimits::FAILED => [$this->text("Couldn't apply the PHP limits on "), $this->mono($application?->name), $this->text(', ' . ($properties['error'] ?? 'the server did not respond'))],
             'processes_sync_failed' => [$this->text('Couldn\'t apply the process change on '), $this->mono($application?->name), $this->text(', ' . ($properties['error'] ?? 'the server did not respond'))],
             SmartToggles::START_FAILED => ($properties['toggle'] ?? null) === SmartToggles::INERTIA_SSR
                 ? [$this->text('Inertia SSR did not start on '), $this->mono($application?->name), $this->text(', pages render in the browser until the next deploy')]
