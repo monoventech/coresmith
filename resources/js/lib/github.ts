@@ -72,6 +72,7 @@ export type GitHubSettings = {
     can_register: boolean
     registration: GitHubRegistration | null
     elsewhere: string | null
+    organization: GitHubRegistration | null
     connections: GitHubConnection[]
     apps: GitHubRegisteredApp[]
     connect: GitHubConnect | null

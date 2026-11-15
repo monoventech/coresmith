@@ -20,6 +20,7 @@ use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryReader;
 use App\Services\Detection\StackDetector;
 use App\Services\Git\GitHub\RepositoryCatalog;
+use App\Services\Packages\PrivateSources;
 use App\Services\SafeName;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +75,8 @@ final class StackDetectionController extends Controller
             'commit' => $read->commit,
             ...$detected,
             'folders' => $read->folders,
+            'packages' => $server->team === null ? [] : app(PrivateSources::class)->missing($read->facts, $server->team),
+            'packages_href' => $server->team !== null && $request->user()->can('update', $server->team) ? route('source-providers.index') : null,
         ]);
     }
 

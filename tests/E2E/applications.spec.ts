@@ -386,10 +386,10 @@ test.describe('what the full app page adds on a wider screen', () => {
         const reach = page.getByTestId('domain-reach')
 
         await expect(reach).toContainText(
-            'atlas.monoven.io points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet.'
+            "atlas.monoven.io points at 203.0.113.7, which doesn't answer on ports 80 and 443 from the internet."
         )
         await expect(reach).toContainText(
-            "The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for atlas.monoven.io pointing at 2001:db8::7"
+            "Add an AAAA record pointing at 2001:db8::7, remove the A record and turn on Cloudflare's proxy for atlas.monoven.io"
         )
         await expect(reach.getByTestId('dns-record-note')).toHaveText("Best fix, with Cloudflare's proxy on")
         await expect(page.getByTestId('domain-reach-summary')).toContainText('Checked')
@@ -812,6 +812,26 @@ test.describe('adding an application', () => {
         await expect(framework).toHaveValue('adonisjs')
         await framework.selectOption('angular')
         await expect(framework).toHaveValue('angular')
+    })
+
+    test('Other server names the servers it covers, and static builds go under Static or SPA', async ({ page }) => {
+        await openAddApp(page)
+
+        const language = page.getByLabel('Language')
+        const framework = page.getByLabel('Framework')
+        const hint = page.getByTestId('server-hint')
+
+        await language.selectOption('js')
+        await expect(hint).toBeHidden()
+
+        await framework.selectOption({ label: 'Other server' })
+        await expect(framework).toHaveValue('')
+        await expect(hint).toHaveText('Express, Hono, Elysia or any server its start script runs.')
+
+        await framework.selectOption('adonisjs')
+        await expect(hint).toBeHidden()
+
+        await expect(language.getByRole('option', { name: 'Static or SPA' })).toHaveAttribute('value', 'static')
     })
 
     test('a framework picked by hand stays picked when the page refreshes itself', async ({ page }) => {

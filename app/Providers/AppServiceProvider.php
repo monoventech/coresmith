@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Enums\Edition;
+use App\Http\Middleware\StartSession;
 use App\Models\ApiToken;
 use App\Models\Server;
 use App\Services\Address\EnvironmentFile;
@@ -13,6 +14,7 @@ use App\Services\Dns\DnsResolver;
 use App\Services\Dns\NativeDnsResolver;
 use App\Services\Install\NativeProcessHandOff;
 use App\Services\Install\ProcessHandOff;
+use App\Services\Sessions\SessionManager;
 use App\Services\SSH\SSHConnectionManager;
 use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
@@ -20,6 +22,7 @@ use App\Services\Updates\UpdatePaths;
 use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +44,9 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(SSHConnectionManager::class);
+
+        $this->app->singleton('session', fn($app): SessionManager => new SessionManager($app));
+        $this->app->singleton(StartSession::class, fn($app): StartSession => new StartSession($app->make('session'), fn() => $app->make(CacheFactory::class)));
 
         $this->app->scoped(TeamContext::class);
         $this->app->scoped(TeamAccess::class);

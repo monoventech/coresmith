@@ -30,6 +30,17 @@ test('a step runs as the app in a transient unit with its environment file and r
     );
 });
 
+test("a step's own properties follow the app's environment file, so its variables win", function () {
+    $command = (new AppShell(new AsdfManager))->run(shellApp(), 'composer install', '/tmp', properties: ['EnvironmentFile=/run/coresmith-steps/coresmith-build-shop-20261114-201500.env', 'BindReadOnlyPaths=/run/coresmith-steps/coresmith-build-shop-20261114-201500/netrc:/home/coresmith-app-shop/.netrc']);
+
+    expect($command)->toContain(
+        " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
+        . " -p 'EnvironmentFile=/run/coresmith-steps/coresmith-build-shop-20261114-201500.env'"
+        . " -p 'BindReadOnlyPaths=/run/coresmith-steps/coresmith-build-shop-20261114-201500/netrc:/home/coresmith-app-shop/.netrc'"
+        . ' -p RuntimeMaxSec=600',
+    );
+});
+
 test('everything the app shell runs creates files that others cannot read', function () {
     $shell = new AppShell(new AsdfManager);
     $application = shellApp();

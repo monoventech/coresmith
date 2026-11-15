@@ -168,6 +168,37 @@ test.describe('Stack detection on Add an app', () => {
         expect(new URL(asked[0]).searchParams.get('repository_branch')).toBe('main')
     })
 
+    for (const theme of ['light', 'dark'] as const) {
+        test(`a repository that installs from private registries names them and links to where credentials go, in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+            await answer(page, [
+                {
+                    ...READY,
+                    packages: [
+                        { host: 'nova.laravel.com', source: 'Composer' },
+                        { host: 'npm.pkg.github.com', source: 'npm' }
+                    ],
+                    packages_href: '/settings/git'
+                }
+            ])
+
+            await openAddApp(page)
+            await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
+
+            const note = page.getByTestId('private-packages-note')
+
+            await expect(note).toContainText(
+                'This app installs packages from nova.laravel.com and npm.pkg.github.com, and Coresmith has no credentials for them. If those packages are private, add credentials to Private packages in Settings, Git before the first deploy.'
+            )
+            await expect(
+                note.getByRole('link', { name: 'add credentials to Private packages in Settings, Git' })
+            ).toHaveAttribute('href', '/settings/git')
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
+
     test('a Go module with several servers asks which package answers web requests, and lists every package main', async ({
         page
     }) => {

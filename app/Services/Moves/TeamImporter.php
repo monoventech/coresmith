@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Moves;
 
+use App\Enums\PackageSource;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
@@ -17,6 +18,7 @@ use App\Models\BackupDestination;
 use App\Models\CloudProvider;
 use App\Models\ManagedDatabase;
 use App\Models\MoveCode;
+use App\Models\PackageCredential;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\SourceProvider;
@@ -136,9 +138,14 @@ final class TeamImporter
         }
 
         $environments = [];
+        $projects = [];
         foreach ($this->records($payload, 'projects') as $record) {
             $project = new Project;
             $project->forceFill(['team_id' => $team->id, 'name' => (string) ($record['name'] ?? '') ?: 'Moved project'])->save();
+
+            if (is_string($record['ref'] ?? null) && $record['ref'] !== '') {
+                $projects[$record['ref']] = $project->id;
+            }
 
             foreach (array_values(array_filter((array) ($record['environments'] ?? []), 'is_array')) as $position => $environment) {
                 $made = $project->environments()->create(['name' => (string) ($environment['name'] ?? '') ?: 'Production', 'position' => (int) ($environment['position'] ?? $position)]);
@@ -171,6 +178,12 @@ final class TeamImporter
 
         foreach ($this->records($payload, 'databases') as $record) {
             (new ManagedDatabase)->forceFill(['team_id' => $team->id, 'server_id' => $servers[(string) $record['server']]->id, 'environment_id' => $environments[(string) ($record['environment'] ?? '')] ?? null, ...MoveColumns::pick($record, MoveColumns::DATABASES)])->save();
+        }
+
+        foreach ($this->records($payload, 'package_credentials') as $record) {
+            if (PackageSource::tryFrom((string) ($record['source'] ?? '')) !== null && is_string($record['secret'] ?? null) && $record['secret'] !== '') {
+                (new PackageCredential)->forceFill(['team_id' => $team->id, 'project_id' => $projects[(string) ($record['project'] ?? '')] ?? null, ...MoveColumns::pick($record, MoveColumns::PACKAGE_CREDENTIALS)])->save();
+            }
         }
 
         if (is_array($payload['backup_destination'] ?? null)) {

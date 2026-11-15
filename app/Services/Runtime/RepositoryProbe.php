@@ -24,6 +24,7 @@ final class RepositoryProbe
         'app.py', 'main.py', 'wsgi.py', 'asgi.py', 'server.py', 'application.py', 'run.py', 'api.py', 'tasks.py', 'worker.py', 'celery_app.py',
         'go.mod', 'go.work', 'conf/app.conf',
         '.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle/libs.versions.toml', '.yo-rc.json',
+        '.npmrc', '.yarnrc.yml', 'bunfig.toml',
     ];
 
     public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py', 'requirements/*.txt', 'etc/*.yaml', 'etc/*.yml', '*/pom.xml', '*/build.gradle', '*/build.gradle.kts'];

@@ -232,9 +232,47 @@ test('registration is not offered when the environment app is configured, or onc
             ->where('github.can_register', false)
             ->where('github.registration', null)
             ->where('github.elsewhere', null));
+})->with(['environment', 'its own app']);
+
+test('the public environment app installs anywhere, so it is never offered a second app for an organization', function () {
+    [, $user] = registrationOwner();
+    config(['services.github' => ['app_id' => '1041207', 'app_slug' => 'coresmith', 'client_id' => 'Iv1.env', 'client_secret' => 'env-secret', 'private_key' => "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----", 'webhook_secret' => null]]);
+
+    $this->actingAs($user)->get(route('source-providers.index'))
+        ->assertInertia(fn($page) => $page->where('github.organization', null));
 
     expect(session(GitHubAppRegistrar::SESSION_KEY, []))->toBe([]);
-})->with(['environment', 'its own app']);
+});
+
+test('a team whose own app is private is offered another one owned by an organization, and only those who manage see it', function (string $role, bool $offered) {
+    [$team, $user] = registrationOwner($role);
+    GitHubApp::factory()->for($team)->create(['owner_login' => 'oseughu', 'owner_type' => 'User']);
+
+    $this->actingAs($user)->get(route('source-providers.index'))
+        ->assertOk()
+        ->assertInertia(fn($page) => $offered
+            ? $page->has('github.organization.state')->where('github.organization.manifest', app(ManifestBuilder::class)->base())
+            : $page->where('github.organization', null));
+
+    expect(session(GitHubAppRegistrar::SESSION_KEY, []) !== [])->toBe($offered);
+})->with([
+    'owner' => ['owner', true],
+    'admin' => ['admin', true],
+    'developer' => ['developer', false],
+]);
+
+test("an organization's app is added beside the team's first one", function () {
+    config(['app.url' => 'https://panel.example.com']);
+    [$team, $user] = registrationOwner();
+    $first = GitHubApp::factory()->for($team)->create(['owner_login' => 'oseughu', 'owner_type' => 'User']);
+    $intent = registrationIntentFor($team, $user);
+    registrationFakeGitHub($intent['key']);
+
+    $this->actingAs($user)->get(registrationCallback($intent['state']))->assertRedirect();
+
+    expect($team->githubApps()->pluck('id')->sort()->values()->all())->toBe(collect([$first->id, $intent['key']])->sort()->values()->all())
+        ->and(GitHubApp::find($intent['key'])?->owner_type)->toBe('Organization');
+});
 
 test('another team\'s app does not stop this team registering its own', function () {
     [, $user] = registrationOwner();

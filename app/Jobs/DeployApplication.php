@@ -55,6 +55,8 @@ use App\Services\Git\GitHub\GitHubAppApi;
 use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\SuspensionCheck;
 use App\Services\Git\GitProviderFactory;
+use App\Services\Packages\RegistryAuthFailure;
+use App\Services\Packages\StepSecretsInstaller;
 use App\Services\Panel\Reverb;
 use App\Services\Panel\SmartToggles;
 use App\Services\Panel\SsrServer;
@@ -1179,9 +1181,14 @@ final class DeployApplication implements ShouldQueue
         $connection->execute("mkdir -p {$directory} && chmod 700 {$directory} && install -m 600 -o root -g root /dev/null " . escapeshellarg($script), sudo: true)->throw();
         $connection->uploadContent((string) $application->custom_blueprint, $script);
 
+        $unit = AppShell::blueprintUnit($application, $this->timestamp);
+        $packages = app(StepSecretsInstaller::class);
+        $properties = [];
+
         try {
+            $properties = $packages->prepare($connection, $application, $unit, $paths->appDirectory($release));
             $result = $connection->execute(
-                app(AppShell::class)->runScript($application, $script, $paths->appDirectory($release), $stack->versions(), unit: AppShell::blueprintUnit($application, $this->timestamp)),
+                app(AppShell::class)->runScript($application, $script, $paths->appDirectory($release), $stack->versions(), unit: $unit, properties: $properties),
                 sudo: true,
             );
 
@@ -1190,6 +1197,10 @@ final class DeployApplication implements ShouldQueue
             $result->throw();
         } finally {
             $connection->execute('rm -f ' . escapeshellarg($script), sudo: true);
+
+            if ($properties !== []) {
+                rescue(fn() => $packages->remove($connection, $unit), report: false);
+            }
         }
     }
 
@@ -1218,17 +1229,35 @@ final class DeployApplication implements ShouldQueue
     {
         $application = $this->deployment->application;
         $directory = (new ReleasePaths($application))->appDirectory($release);
-        $shell = app(AppShell::class);
         $unit = $phase === DeploymentPhases::MIGRATIONS
             ? AppShell::migrateUnit($application, $this->timestamp)
             : AppShell::buildUnit($application, $this->timestamp);
+        $packages = app(StepSecretsInstaller::class);
+        $properties = $phase === DeploymentPhases::MIGRATIONS ? [] : $packages->prepare($connection, $application, $unit, $directory);
+
+        try {
+            $this->runSteps($connection, $application, $stack, $steps, $phase, $retries, $directory, $unit, $properties);
+        } finally {
+            if ($properties !== []) {
+                rescue(fn() => $packages->remove($connection, $unit), report: false);
+            }
+        }
+    }
+
+    /**
+     * @param  list<string>  $steps
+     * @param  list<string>  $properties
+     */
+    private function runSteps(SSHConnection $connection, Application $application, Stack $stack, array $steps, string $phase, int $retries, string $directory, string $unit, array $properties): void
+    {
+        $shell = app(AppShell::class);
 
         foreach ($steps as $step) {
             for ($attempt = 1; ; $attempt++) {
                 $this->appendLog('$ ' . $step);
 
                 try {
-                    $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application)), sudo: true);
+                    $result = $connection->execute($shell->run($application, $step, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application), $properties), sudo: true);
                 } catch (SSHCommandTimedOut $e) {
                     rescue(fn() => $connection->execute('systemctl stop ' . escapeshellarg($unit . '.service') . ' || true', sudo: true), report: false);
 
@@ -1252,7 +1281,9 @@ final class DeployApplication implements ShouldQueue
                         $this->failureReason = DatabaseFailure::reason($result->output, $this->deployment->application->type) ?? $this->failureReason;
                     }
 
-                    $this->failureReason = $application->type->language()->explain($phase, $result->output, $stack) ?? $this->failureReason;
+                    $this->failureReason = app(RegistryAuthFailure::class)->reason($result->output, $application)
+                        ?? $application->type->language()->explain($phase, $result->output, $stack)
+                        ?? $this->failureReason;
 
                     $result->throw();
                 }
