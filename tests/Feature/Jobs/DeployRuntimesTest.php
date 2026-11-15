@@ -33,6 +33,11 @@ use Tests\Support\ProbeOutput;
 
 const STACK_RELEASE = '20260925120000';
 
+function deployRuntimesPhpIni(Application $application): string
+{
+    return " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith/php/{$application->slug}'";
+}
+
 function stackApp(array $attributes = []): Application
 {
     return Application::factory()->create([
@@ -112,7 +117,7 @@ test('when every runtime is installed the deploy finishes in one job and the app
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($application->fresh()->php_version)->toBe('8.4.20')
         ->and($application->fresh()->stack['runtimes']['php']['version'])->toBe('8.4.20')
-        ->and(implode("\n", $transport->commands()))->toContain("'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'composer install");
+        ->and(implode("\n", $transport->commands()))->toContain("'PATH=/opt/asdf-data/installs/php/8.4.20/bin:/usr/local/bin:/usr/bin:/bin'" . deployRuntimesPhpIni($application) . " -- /bin/bash -c 'composer install");
 });
 
 test('a rails deploy records which worker gems its lockfile locks on the deployment and the app', function () {
@@ -445,7 +450,7 @@ test('a resumed deploy skips the clone, confirms the runtimes and finishes', fun
         ->and($commands)->not->toContain(RepositoryProbe::DIRECTORY_VARIABLE)
         ->and($commands)->not->toContain('git clone')
         ->and($commands)->not->toContain(' archive ')
-        ->and($commands)->toContain("'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'composer install")
+        ->and($commands)->toContain("'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/usr/local/bin:/usr/bin:/bin'" . deployRuntimesPhpIni($application) . " -- /bin/bash -c 'composer install")
         ->and(Cache::lock('deploy:' . $application->id, 10)->get())->toBeTrue();
 });
 
@@ -494,7 +499,7 @@ test('a resumed deploy keeps the runtime that serves the app ahead of the one th
     stackDeploy($deployment->fresh(), $transport, $lock->owner());
 
     $commands = implode("\n", $transport->commands());
-    $path = "'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c ";
+    $path = "'PATH=/opt/asdf-data/installs/php/8.5.10/bin:/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin'" . deployRuntimesPhpIni($application) . ' -- /bin/bash -c ';
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($commands)->toContain($path . "'composer install")
@@ -850,7 +855,7 @@ test('a laravel app with a vite build installs and builds its assets in the depl
 
     $commands = implode("\n", $transport->commands());
 
-    expect($commands)->toContain("/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin' -- /bin/bash -c 'bun install --frozen-lockfile'")
+    expect($commands)->toContain("/opt/asdf-data/installs/bun/1.4.2/bin:/usr/local/bin:/usr/bin:/bin'" . deployRuntimesPhpIni($deployment->application) . " -- /bin/bash -c 'bun install --frozen-lockfile'")
         ->and($commands)->toContain('bun run build')
         ->and(strpos($commands, 'bun run build'))->toBeLessThan(strpos($commands, 'php artisan config:cache'));
 });

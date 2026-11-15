@@ -26,8 +26,18 @@ test('a step runs as the app in a transient unit with its environment file and r
         . " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
         . ' -p RuntimeMaxSec=600 -p PrivateTmp=yes -p UMask=0027 -p NoNewPrivileges=yes'
         . " -E 'PATH=/opt/asdf-data/installs/nodejs/24.15.0/bin:/usr/local/bin:/usr/bin:/bin'"
+        . " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith/php/shop'"
         . " -- /bin/bash -c 'npm ci && echo '\\''done'\\'''",
     );
+});
+
+test('deploy steps and cron jobs of a PHP app read its PHP limits, and other apps get none', function () {
+    $shell = new AppShell(new AsdfManager);
+    $js = Application::factory()->make(['slug' => 'web', 'system_user' => 'coresmith-app-web', 'type' => ApplicationType::Js, 'framework' => null]);
+
+    expect($shell->run(shellApp(), 'php artisan migrate --force', '/tmp'))->toContain(" -E 'PHP_INI_SCAN_DIR=:/etc/coresmith/php/shop'")
+        ->and($shell->scheduled(shellApp(), '/etc/coresmith/cron/shop/0.sh', '/tmp'))->toContain(" -E 'PHP_INI_SCAN_DIR=:/etc/coresmith/php/shop'")
+        ->and($shell->run($js, 'npm ci', '/tmp'))->not->toContain('PHP_INI_SCAN_DIR');
 });
 
 test("a step's own properties follow the app's environment file, so its variables win", function () {

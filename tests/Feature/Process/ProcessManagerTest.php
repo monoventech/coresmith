@@ -8,6 +8,7 @@ use App\Exceptions\UnsafeNameException;
 use App\Models\Application;
 use App\Models\Server;
 use App\Services\Deployment\AppAccount;
+use App\Services\Php\PhpLimits;
 use App\Services\Process\FpmPoolBuilder;
 use App\Services\Process\ProcessManager;
 use App\Services\Process\SystemdUnitBuilder;
@@ -239,6 +240,36 @@ test('a php app installs an fpm pool and unit', function () {
         ->and(implode("\n", $transport->commands()))->toContain('systemctl daemon-reload');
 });
 
+test('a php app gets its PHP limits file in its own folder when its processes are installed', function () {
+    $transport = new FakeSSHTransport;
+    $app = managedApp();
+
+    processManager()->install(processConnection($transport), $app);
+
+    expect($transport->uploads())->toHaveKey('/etc/coresmith/php/my-app/coresmith.ini')
+        ->and($transport->uploads()['/etc/coresmith/php/my-app/coresmith.ini'])->toBe(PhpLimits::for($app)->ini())
+        ->and($transport->commands())->toContain("mkdir -p '/etc/coresmith/php/my-app'")
+        ->and($app->fresh()->php_written_at)->not->toBeNull();
+});
+
+test('every PHP process of the app finds its limits file, and other stacks get none', function () {
+    $asdf = new AsdfManager;
+    $php = managedApp();
+    $line = 'Environment="PHP_INI_SCAN_DIR=:/etc/coresmith/php/my-app"';
+
+    expect((new FpmPoolBuilder($asdf))->unit($php))->toContain($line)
+        ->and((new SystemdUnitBuilder($asdf))->build($php, 'queue', 'php artisan queue:work'))->toContain($line)
+        ->and((new SystemdUnitBuilder($asdf))->build(rubyApp(['slug' => 'my-ruby-app']), 'web', 'bundle exec puma'))->not->toContain('PHP_INI_SCAN_DIR');
+});
+
+test('removing a php app\'s processes removes its PHP limits folder', function () {
+    $transport = new FakeSSHTransport;
+
+    processManager()->uninstall(processConnection($transport), managedApp());
+
+    expect($transport->commands())->toContain("rm -rf '/etc/coresmith/php/my-app'");
+});
+
 test('a js app installs a web unit rather than an fpm pool', function () {
     $transport = new FakeSSHTransport;
     $app = managedApp(['type' => ApplicationType::Js, 'js_runtime' => 'bun', 'bun_version' => '1.4.2']);
@@ -248,7 +279,8 @@ test('a js app installs a web unit rather than an fpm pool', function () {
     $uploads = $transport->uploads();
 
     expect($uploads)->toHaveKey('/etc/systemd/system/coresmith-app-my-app-web.service')
-        ->and($uploads)->not->toHaveKey('/etc/php-fpm.d/coresmith-app-my-app.conf');
+        ->and($uploads)->not->toHaveKey('/etc/php-fpm.d/coresmith-app-my-app.conf')
+        ->and($uploads)->not->toHaveKey('/etc/coresmith/php/my-app/coresmith.ini');
 });
 
 test('a worker command finds its binary through the unit PATH, so it follows the live release', function (string $stored, string $execStart) {
@@ -320,6 +352,7 @@ test('uninstalling disables and deletes each unit by its name, deletes the php-f
         "systemctl disable --now 'coresmith-app-my-app-queue' || true",
         "rm -f '/etc/systemd/system/coresmith-app-my-app-queue.service'",
         "rm -f '/etc/php-fpm.d/coresmith-app-my-app.conf'",
+        "rm -rf '/etc/coresmith/php/my-app'",
         'systemctl daemon-reload',
         "rm -f '/etc/logrotate.d/coresmith-app-my-app'",
     ])
