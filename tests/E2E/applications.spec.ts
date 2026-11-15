@@ -814,6 +814,26 @@ test.describe('adding an application', () => {
         await expect(framework).toHaveValue('angular')
     })
 
+    test('Other server names the servers it covers, and static builds go under Static or SPA', async ({ page }) => {
+        await openAddApp(page)
+
+        const language = page.getByLabel('Language')
+        const framework = page.getByLabel('Framework')
+        const hint = page.getByTestId('server-hint')
+
+        await language.selectOption('js')
+        await expect(hint).toBeHidden()
+
+        await framework.selectOption({ label: 'Other server' })
+        await expect(framework).toHaveValue('')
+        await expect(hint).toHaveText('Express, Hono, Elysia or any server its start script runs.')
+
+        await framework.selectOption('adonisjs')
+        await expect(hint).toBeHidden()
+
+        await expect(language.getByRole('option', { name: 'Static or SPA' })).toHaveAttribute('value', 'static')
+    })
+
     test('a framework picked by hand stays picked when the page refreshes itself', async ({ page }) => {
         await page.clock.install()
         await openAddApp(page)
