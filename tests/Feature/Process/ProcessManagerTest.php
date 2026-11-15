@@ -82,6 +82,13 @@ test('the pool confines php to the app directory and disables process functions'
         ->and($pool)->toContain('disable_functions] = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec,dl,putenv');
 });
 
+test('the pool ends a web request at the app\'s limit by the clock, even one waiting on the network', function (?array $limits, string $line) {
+    expect((new FpmPoolBuilder(new AsdfManager))->pool(managedApp(['php_limits' => $limits])))->toContain($line);
+})->with([
+    'the default minute' => [null, 'request_terminate_timeout = 60s'],
+    'five minutes' => [['uploads' => 64, 'memory' => 128, 'seconds' => 300, 'reload' => 'deploy'], 'request_terminate_timeout = 300s'],
+]);
+
 test('the pool sends the app\'s PHP errors to syslog under its own name', function () {
     $pool = (new FpmPoolBuilder(new AsdfManager))->pool(managedApp());
 

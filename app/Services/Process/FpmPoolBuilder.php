@@ -44,6 +44,7 @@ final class FpmPoolBuilder
         $chdir = (new CaddyRouteBuilder)->documentRoot($application);
         $installs = AsdfManager::INSTALL_DIR;
         $disabled = self::DISABLED_FUNCTIONS;
+        $seconds = PhpLimits::for($application)->seconds;
 
         return <<<CONFIG
         [global]
@@ -62,6 +63,7 @@ final class FpmPoolBuilder
         pm.max_children = {$maxChildren}
         pm.process_idle_timeout = 10s
         pm.max_requests = 500
+        request_terminate_timeout = {$seconds}s
 
         chdir = {$chdir}
         clear_env = no
