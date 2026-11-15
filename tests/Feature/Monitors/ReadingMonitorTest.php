@@ -234,7 +234,7 @@ test('an alert another worker opened first is left alone and mailed only by that
     $raced = false;
 
     DB::listen(function (QueryExecuted $query) use ($server, $key, &$raced): void {
-        if ($raced || !str_contains($query->sql, 'monitor_alerts') || !in_array($key, $query->bindings, true) || !str_starts_with(strtolower($query->sql), 'select')) {
+        if ($raced || !str_contains($query->sql, 'monitor_alerts') || !in_array($server->id, $query->bindings, true) || !str_starts_with(strtolower($query->sql), 'select')) {
             return;
         }
 

@@ -21,6 +21,7 @@ use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -41,15 +42,30 @@ final class ReadingMonitor
 
     public function evaluate(Server $server, ServerMetric $metric): void
     {
+        $limits = $this->limits->forAll($server, self::KINDS);
+        $alerts = MonitorAlert::query()
+            ->where('server_id', $server->getKey())
+            ->whereNull('application_id')
+            ->whereNotNull('open_key')
+            ->get()
+            ->keyBy(fn(MonitorAlert $alert): string => $alert->kind->value);
+        $longest = max(array_map(fn(MonitorLimit $limit): int => max($limit->duration, self::RECOVERY_MINUTES), $limits));
+        $readings = ServerMetric::query()
+            ->where('server_id', $server->getKey())
+            ->where('recorded_at', '>=', now()->subMinutes($longest))
+            ->get();
+
         foreach (self::KINDS as $kind) {
-            $this->check($server, $kind, $metric);
+            $this->check($server, $limits[$kind->value], $alerts->get($kind->value), $metric, $readings);
         }
     }
 
-    private function check(Server $server, MonitorKind $kind, ServerMetric $metric): void
+    /**
+     * @param  Collection<int, ServerMetric>  $readings
+     */
+    private function check(Server $server, MonitorLimit $limit, ?MonitorAlert $open, ServerMetric $metric, Collection $readings): void
     {
-        $limit = $this->limits->for($server, $kind);
-        $open = MonitorAlert::current($server, $kind);
+        $kind = $limit->kind;
 
         if (!$limit->enabled) {
             $open?->close();
@@ -57,7 +73,7 @@ final class ReadingMonitor
             return;
         }
 
-        $held = $this->values($server, $kind, $limit->duration, $metric);
+        $held = $this->values($server, $kind, $limit->duration, $metric, $readings);
 
         if ($held !== null && min($held) >= $limit->threshold) {
             $open === null ? $this->open($server, $kind, $limit, $held) : $this->hold($server, $open, $held);
@@ -69,7 +85,7 @@ final class ReadingMonitor
             return;
         }
 
-        $clear = $this->values($server, $kind, max($limit->duration, self::RECOVERY_MINUTES), $metric);
+        $clear = $this->values($server, $kind, max($limit->duration, self::RECOVERY_MINUTES), $metric, $readings);
 
         if ($clear !== null && max($clear) < $limit->threshold) {
             $this->recover($server, $open);
@@ -150,9 +166,10 @@ final class ReadingMonitor
     }
 
     /**
+     * @param  Collection<int, ServerMetric>  $readings
      * @return list<float>|null
      */
-    private function values(Server $server, MonitorKind $kind, int $minutes, ServerMetric $metric): ?array
+    private function values(Server $server, MonitorKind $kind, int $minutes, ServerMetric $metric, Collection $readings): ?array
     {
         $cores = (int) (((array) $server->meta)['cpu_cores'] ?? 0);
 
@@ -160,18 +177,14 @@ final class ReadingMonitor
             return null;
         }
 
-        $readings = $minutes === 0
-            ? collect([$metric])
-            : ServerMetric::query()
-                ->where('server_id', $server->getKey())
-                ->where('recorded_at', '>=', now()->subMinutes($minutes))
-                ->get();
+        $since = now()->subMinutes($minutes);
+        $window = $minutes === 0 ? collect([$metric]) : $readings->filter(fn(ServerMetric $reading): bool => $reading->recorded_at->gte($since));
 
-        if ($readings->count() < max(1, $minutes - 1)) {
+        if ($window->count() < max(1, $minutes - 1)) {
             return null;
         }
 
-        return $readings->map(fn(ServerMetric $reading): float => match ($kind) {
+        return $window->map(fn(ServerMetric $reading): float => match ($kind) {
             MonitorKind::Disk => (float) $reading->disk_percent,
             MonitorKind::Memory => (float) $reading->memory_percent,
             MonitorKind::Cpu => (float) $reading->cpu_percent,
