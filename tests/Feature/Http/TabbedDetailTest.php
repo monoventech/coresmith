@@ -346,9 +346,9 @@ test('the hardening tab says unknown addresses are closed once they are, and onl
         ->get(route('servers.hardening', $server))
         ->assertOk()
         ->assertInertia(fn($page) => $page
-            ->where('protections.rows.5.key', 'unknown_hosts')
-            ->where('protections.rows.5.state', $state)
-            ->where('protections.rows.5.detail', $detail));
+            ->where('protections.rows.6.key', 'unknown_hosts')
+            ->where('protections.rows.6.state', $state)
+            ->where('protections.rows.6.detail', $detail));
 })->with([
     'closed' => [['meta' => ['caddy_unknown_hosts' => 'closed']], 'on', "Requests for addresses you didn't add are closed without an answer."],
     'not yet' => [['meta' => []], 'pending', "Coresmith closes requests for addresses you didn't add within the hour."],
