@@ -61,7 +61,7 @@ final class SvelteKit extends JsPreset
     public function blockers(RepositoryFacts $facts): array
     {
         if ($facts->dependency('@sveltejs/kit') === null) {
-            return [new Blocker('framework', "@sveltejs/kit isn't in package.json, so this isn't a SvelteKit app.", 'Pick the framework the app uses, or API or other.')];
+            return [new Blocker('framework', "@sveltejs/kit isn't in package.json, so this isn't a SvelteKit app.", 'Pick the framework the app uses, or Other server.')];
         }
 
         $adapter = $this->frameworks->svelteAdapter($facts);

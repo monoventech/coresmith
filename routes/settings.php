@@ -8,6 +8,7 @@ use App\Http\Controllers\Settings\BillingController;
 use App\Http\Controllers\Settings\CloudProviderController;
 use App\Http\Controllers\Settings\GeneralSettingsController;
 use App\Http\Controllers\Settings\GitHubAppController;
+use App\Http\Controllers\Settings\MonitorController;
 use App\Http\Controllers\Settings\MoveCodeController;
 use App\Http\Controllers\Settings\NotificationSettingsController;
 use App\Http\Controllers\Settings\OffsiteBackupController;
@@ -100,6 +101,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/notifications', [NotificationSettingsController::class, 'edit'])->name('settings.notifications');
     Route::put('settings/notifications', [NotificationSettingsController::class, 'update'])->name('settings.notifications.update');
+    Route::put('settings/monitors/{kind}', [MonitorController::class, 'update'])->name('settings.monitors.update');
+    Route::put('settings/monitors/{kind}/servers/{server}', [MonitorController::class, 'updateServer'])->name('settings.monitors.servers.update');
+    Route::delete('settings/monitors/{kind}/servers/{server}', [MonitorController::class, 'destroyServer'])->name('settings.monitors.servers.destroy');
 
     Route::get('settings/billing', [BillingController::class, 'show'])->middleware('cloud')->name('settings.billing');
     Route::put('settings/billing/plan', [BillingController::class, 'update'])

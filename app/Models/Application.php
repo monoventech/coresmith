@@ -73,6 +73,8 @@ class Application extends Model
                 }
             }
         });
+
+        static::deleted(fn(self $application) => MonitorAlert::closeAllFor($application));
     }
 
     /**
@@ -219,6 +221,8 @@ class Application extends Model
             'polled_at' => 'datetime',
             'runtime_pins' => 'array',
             'stack' => 'array',
+            'answered_at' => 'datetime',
+            'failed_checks' => 'integer',
         ];
     }
 }

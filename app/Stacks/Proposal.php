@@ -15,11 +15,11 @@ final class Proposal
      * @param  array<string, string>  $unsettled
      * @param  array<string, ?string>  $fields
      * @param  array<string, list<string>>  $options
-     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}
+     * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>, server_package?: string}
      */
-    public static function make(?string $type, ?string $framework, ?string $runtime, ?string $web, array $sources, array $unsettled = [], array $fields = [], array $options = []): array
+    public static function make(?string $type, ?string $framework, ?string $runtime, ?string $web, array $sources, array $unsettled = [], array $fields = [], array $options = [], ?string $server = null): array
     {
-        return ['type' => $type, 'framework' => $framework, 'js_runtime' => $runtime, 'web' => $web, 'sources' => $sources, 'unsettled' => $unsettled, ...array_filter(['fields' => $fields, 'options' => $options])];
+        return ['type' => $type, 'framework' => $framework, 'js_runtime' => $runtime, 'web' => $web, 'sources' => $sources, 'unsettled' => $unsettled, ...array_filter(['fields' => $fields, 'options' => $options, 'server_package' => $server])];
     }
 
     /**

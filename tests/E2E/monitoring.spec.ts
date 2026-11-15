@@ -122,7 +122,7 @@ test.describe('monitoring', () => {
 
         await expect(alerts).toContainText('Server problems')
         await expect(alerts).toContainText(
-            'A server stops answering, runs out of memory, or a certificate is about to expire'
+            "A server stops answering or passes a monitor's limit, an app is killed for memory, or a certificate is about to expire"
         )
         await expect(alerts.getByRole('switch')).toBeChecked()
 

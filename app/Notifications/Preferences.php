@@ -37,7 +37,7 @@ final class Preferences
 
     public const LABELS = [
         self::DEPLOY_FAILED => 'Deploy failed',
-        self::DISK_PRESSURE => 'Disk above 80%',
+        self::DISK_PRESSURE => 'Disk warnings',
         self::SERVER_ALERTS => 'Server problems',
         self::PROVISIONING => 'Provisioning',
         self::TOGGLE_CHANGES => 'Toggle changes',
@@ -46,8 +46,8 @@ final class Preferences
 
     public const DESCRIPTIONS = [
         self::DEPLOY_FAILED => 'Email immediately when any phase fails',
-        self::DISK_PRESSURE => 'Server disk warnings, at most once a day',
-        self::SERVER_ALERTS => 'A server stops answering, runs out of memory, or a certificate is about to expire',
+        self::DISK_PRESSURE => "When a server's disk passes its limit, again at 95%, and when it's back to normal",
+        self::SERVER_ALERTS => "A server stops answering or passes a monitor's limit, an app is killed for memory, or a certificate is about to expire",
         self::PROVISIONING => "When a server is ready, provisioning stops partway, or its provider can't create, resize or destroy it",
         self::TOGGLE_CHANGES => 'When someone stops, starts or puts an app into maintenance',
         self::WEEKLY_DIGEST => 'Deploys, rollbacks and warnings, every Monday',

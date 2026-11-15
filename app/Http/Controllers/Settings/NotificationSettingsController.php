@@ -10,6 +10,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Notifications\Preferences;
+use App\Services\Monitors\MonitorSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -18,12 +19,14 @@ use Inertia\Response;
 
 final class NotificationSettingsController extends Controller
 {
-    public function edit(Request $request): Response
+    public function edit(Request $request, MonitorSettings $monitors): Response
     {
         $preferences = Preferences::for($request->user());
+        $team = $this->currentTeam();
 
         return Inertia::render('settings/Notifications', [
             'email' => $request->user()->email,
+            'monitors' => $team === null ? null : $monitors->forTeam($team, $request->user()),
             'toggles' => array_map(fn(string $key): array => [
                 'key' => $key,
                 'label' => Preferences::LABELS[$key],

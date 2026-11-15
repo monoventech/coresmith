@@ -95,7 +95,7 @@ enum Plan: string
     {
         return match ($this) {
             self::SelfHosted, self::Business => true,
-            self::Pro, self::Trial => in_array($feature, [PlanFeature::TeamRoles, PlanFeature::CustomDomain], true),
+            self::Pro, self::Trial => in_array($feature, [PlanFeature::TeamRoles, PlanFeature::CustomDomain, PlanFeature::Monitors], true),
             self::Starter => false,
         };
     }

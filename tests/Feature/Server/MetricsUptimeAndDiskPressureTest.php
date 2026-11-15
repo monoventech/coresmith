@@ -110,19 +110,24 @@ test('a disk below eighty percent raises nothing', function () {
     Notification::assertNothingSent();
 });
 
-test('disk pressure is raised at most once a day per server', function () {
+test('disk pressure is raised once while it lasts, and again once it has cleared', function () {
     Notification::fake();
     $server = Server::factory()->create(['status' => ServerStatus::Active, 'host_key_fingerprint' => null]);
     pressureMember($server->team);
 
     (new MetricsCollector)->collect(pressureConnection(pressureProbe(90), $server));
 
-    $this->travel(23)->hours();
+    $this->travel(25)->hours();
     (new MetricsCollector)->collect(pressureConnection(pressureProbe(91), $server));
 
     expect(Activity::query()->where('description', 'disk_pressure')->count())->toBe(1);
 
-    $this->travel(61)->minutes();
+    foreach (range(1, 6) as $minute) {
+        $this->travel(1)->minutes();
+        (new MetricsCollector)->collect(pressureConnection(pressureProbe(60), $server));
+    }
+
+    $this->travel(1)->minutes();
     (new MetricsCollector)->collect(pressureConnection(pressureProbe(92), $server));
 
     expect(Activity::query()->where('description', 'disk_pressure')->count())->toBe(2);

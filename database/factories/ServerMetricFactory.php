@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\MonitorKind;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Services\Panel\FleetSnapshot;
@@ -25,7 +26,7 @@ class ServerMetricFactory extends Factory
     {
         return [
             'server_id' => Server::factory(),
-            'cpu_percent' => fake()->randomFloat(2, 0, 100),
+            'cpu_percent' => fake()->randomFloat(2, 0, MonitorKind::Cpu->defaultThreshold() - 0.01),
             'memory_percent' => fake()->randomFloat(2, 0, FleetSnapshot::MEMORY_WARNING - 0.01),
             'disk_percent' => fake()->randomFloat(2, 0, FleetSnapshot::DISK_WARNING - 0.01),
             'load_1m' => fake()->randomFloat(2, 0, 8),

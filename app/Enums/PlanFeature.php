@@ -15,6 +15,7 @@ enum PlanFeature: string
     case SingleSignOn = 'single_sign_on';
     case OffsiteBackups = 'offsite_backups';
     case AuditLogExport = 'audit_log_export';
+    case Monitors = 'monitors';
 
     public function note(): string
     {
@@ -24,6 +25,7 @@ enum PlanFeature: string
             self::SingleSignOn => 'Single sign-on is part of Business.',
             self::OffsiteBackups => 'Database backups to S3 are part of Business.',
             self::AuditLogExport => 'Audit log export is part of Business.',
+            self::Monitors => 'Changing monitor limits is part of Pro and Business.',
         };
     }
 }

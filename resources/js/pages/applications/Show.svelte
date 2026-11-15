@@ -94,6 +94,12 @@
                 records: DnsRecord[]
                 checked: string | null
             }[]
+            uptime: {
+                percent: string
+                days: { date: string; state: 'full' | 'gaps' | 'down' | 'none'; title: string }[]
+                label: string
+                note: string
+            } | null
             domain_check_href: string
             dns_targets: DnsTarget[]
             repository: string | null
@@ -148,6 +154,12 @@
     const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)+$/i
 
     const certificateTones = { valid: 'success', expiring: 'warning', expired: 'destructive', none: 'warning' } as const
+    const uptimeTones = {
+        full: 'bg-success',
+        gaps: 'bg-warning',
+        down: 'bg-destructive',
+        none: 'bg-secondary'
+    } as const
 
     const cardAction = cn(buttonVariants({ variant: 'link' }), 'min-h-6 max-sm:min-h-11')
 
@@ -707,6 +719,22 @@
                         No domain yet. Add one and its certificate is requested for you.
                     </p>
                 {/each}
+                {#if application.uptime}
+                    <div class="mt-3 flex flex-col gap-2 border-t border-border pt-3" data-testid="app-uptime">
+                        <div class="flex flex-wrap items-baseline gap-2">
+                            <span class="font-display text-[26px] leading-none font-semibold"
+                                >{application.uptime.percent}</span
+                            >
+                            <span class="text-[12.5px] text-muted-foreground">answering over 30 days</span>
+                        </div>
+                        <div role="img" aria-label={application.uptime.label} class="flex gap-0.5">
+                            {#each application.uptime.days as day (day.date)}
+                                <span class="h-5.5 flex-1 rounded-xs {uptimeTones[day.state]}" title={day.title}></span>
+                            {/each}
+                        </div>
+                        <p class="m-0 text-[12px] text-muted-foreground">{application.uptime.note}</p>
+                    </div>
+                {/if}
                 {#if domains.length > 0}
                     <p class="m-0 mt-2 text-[12px] text-muted-foreground">Certificates renew themselves.</p>
                     <p class="m-0 mt-1 text-[12px] text-muted-foreground" data-testid="domain-reach-summary">
