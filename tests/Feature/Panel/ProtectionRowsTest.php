@@ -19,7 +19,7 @@ function protectionRows(array $meta = [], bool $ownMachine = false): array
 function protectionReadingMeta(array $overrides = []): array
 {
     return ['protections' => [
-        'ssh' => 'on', 'fail2ban' => 'on', 'kernel' => 'on', 'kernel_off' => [], 'patches' => 'on', 'controls' => 'on',
+        'ssh' => 'on', 'fail2ban' => 'on', 'kernel' => 'on', 'kernel_off' => [], 'patches' => 'on', 'controls' => 'on', 'http3' => 'on',
         'checked_at' => now()->subMinutes(5)->toIso8601String(),
         ...$overrides,
     ], 'caddy_unknown_hosts' => 'closed'];
@@ -31,7 +31,7 @@ test('a server that was never checked says so, and when Coresmith checks', funct
     $rows = collect($card['rows'])->keyBy('key');
 
     expect($card['checked'])->toBeNull()
-        ->and($rows->pluck('key')->all())->toBe(['ssh', 'fail2ban', 'kernel', 'patches', 'controls', 'unknown_hosts'])
+        ->and($rows->pluck('key')->all())->toBe(['ssh', 'fail2ban', 'kernel', 'patches', 'http3', 'controls', 'unknown_hosts'])
         ->and($rows['fail2ban']['state'])->toBe('pending')
         ->and($rows['fail2ban']['detail'])->toBe('Coresmith checks this within the hour.')
         ->and($rows['kernel']['state'])->toBe('pending')
@@ -44,7 +44,22 @@ test('a server whose protections all read as on says what each one does, with no
     expect(collect($rows)->pluck('state')->unique()->all())->toBe(['on'])
         ->and(collect($rows)->pluck('fix')->filter()->all())->toBe([])
         ->and($rows['fail2ban']['detail'])->toBe('An address that fails to sign in 5 times in 10 minutes is blocked for an hour.')
-        ->and($rows['patches']['detail'])->toBe('The server installs security updates every day.');
+        ->and($rows['patches']['detail'])->toBe('The server installs security updates every day.')
+        ->and($rows['http3'])->toMatchArray(['label' => 'Browsers can use HTTP/3', 'detail' => 'The firewall lets HTTP/3 through.']);
+});
+
+test('a firewall that blocks HTTP/3 says browsers fall back, and offers to open it', function () {
+    $rows = protectionRows(protectionReadingMeta(['http3' => 'off']));
+
+    expect($rows['http3'])->toMatchArray(['state' => 'off', 'detail' => 'The firewall blocks HTTP/3, so browsers try it first and fall back to HTTP/2.', 'fix' => 'Open it']);
+});
+
+test('opening HTTP/3 says so while it runs, and why when it failed', function () {
+    $busy = protectionRows([...protectionReadingMeta(['http3' => 'off']), 'protections_restoring' => ['http3' => now()->toIso8601String()]]);
+    $failed = protectionRows([...protectionReadingMeta(['http3' => 'off']), 'protections_errors' => ['http3' => 'ERROR: Could not load logging rules']]);
+
+    expect($busy['http3'])->toMatchArray(['state' => 'busy', 'detail' => 'Opening it…', 'fix' => null])
+        ->and($failed['http3'])->toMatchArray(['state' => 'off', 'detail' => "Coresmith couldn't open it: ERROR: Could not load logging rules", 'fix' => 'Try again']);
 });
 
 test('a protection that reads as off says so and offers to turn it back on', function () {

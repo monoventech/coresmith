@@ -214,20 +214,20 @@ function installFirewallRun(array $fakes): array
 test('a ufw firewall that is already on keeps its own ssh rules, and only the web ports are opened', function () {
     [$calls, $output] = installFirewallRun(['ufw' => "[ \"\$1\" = status ] && printf 'Status: active\\n\\n22/tcp ALLOW IN 192.168.0.0/24\\n'\nexit 0"]);
 
-    expect($calls)->toBe(['status', 'allow 80/tcp', 'allow 443/tcp'])
+    expect($calls)->toBe(['status', 'allow 80/tcp', 'allow 443/tcp', 'allow 443/udp'])
         ->and($output)->toContain('left its SSH rules as they were');
 });
 
 test('a ufw firewall that was off is turned on with ssh kept open, so the install locks nobody out', function () {
     [$calls] = installFirewallRun(['ufw' => "[ \"\$1\" = status ] && printf 'Status: inactive\\n'\nexit 0"]);
 
-    expect($calls)->toBe(['status', 'allow 2222/tcp', 'allow 80/tcp', 'allow 443/tcp', '--force enable']);
+    expect($calls)->toBe(['status', 'allow 2222/tcp', 'allow 80/tcp', 'allow 443/tcp', 'allow 443/udp', '--force enable']);
 });
 
 test('a running firewalld keeps its own ssh rules, and only the web services are opened', function () {
     [$calls, $output] = installFirewallRun(['firewall-cmd' => 'exit 0']);
 
-    expect($calls)->toBe(['--state', '--permanent --add-service=http', '--permanent --add-service=https', '--reload'])
+    expect($calls)->toBe(['--state', '--permanent --add-service=http', '--permanent --add-service=https', '--permanent --add-port=443/udp', '--reload'])
         ->and($output)->toContain('left its SSH rules as they were');
 });
 
@@ -235,7 +235,7 @@ test('a firewalld that is not running is left alone and the installer says what 
     [$calls, $output] = installFirewallRun(['firewall-cmd' => '[ "$1" = --state ] && exit 252' . "\nexit 0"]);
 
     expect($calls)->toBe(['--state'])
-        ->and($output)->toContain('Open 80 and 443, and keep 2222 open, before exposing this host.');
+        ->and($output)->toContain('No firewall is running. Before exposing this host, open 80 and 443 over TCP and 443 over UDP for HTTP/3, and keep 2222 open.');
 });
 
 test('caddy comes from its own repository, even where an ubuntu pro mirror ranks its older build higher', function () {
