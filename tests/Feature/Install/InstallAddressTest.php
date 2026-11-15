@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
-const INSTALL_ADDRESS_REFUSAL = 'beelink.coresmith.io points at 151.226.169.196, but nothing reaches this server on ports 80 and 443 from the internet. Forward TCP ports 80 and 443 on your router to 192.168.0.248, then check again. If your internet provider shares that address with other customers, this server needs an IPv6 address before anyone can reach it.';
+const INSTALL_ADDRESS_REFUSAL = 'beelink.coresmith.io points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, this server needs IPv6 instead.';
 
-const INSTALL_ADDRESS_NOTE = "Inside your own network, your router may not loop back to 151.226.169.196. If beelink.coresmith.io doesn't load there, add 192.168.0.248 beelink.coresmith.io to your local DNS or /etc/hosts.";
+const INSTALL_ADDRESS_NOTE = "If beelink.coresmith.io doesn't load inside your own network, add 192.168.0.248 beelink.coresmith.io to your local DNS or /etc/hosts.";
 
 function installAddressScript(): string
 {

@@ -30,7 +30,7 @@ const FAILED = {
 }
 
 const IPV6_ONLY_NOTE =
-    "coresmith.example.com has only an IPv6 address, so visitors on networks without IPv6 can't open it. The surest fix is to turn on Cloudflare's proxy for coresmith.example.com. Cloudflare answers those visitors over IPv4 and reaches this server over IPv6, which already works, so your router needs no changes. That needs coresmith.example.com's DNS on Cloudflare. Nothing on the internet reaches this server's IPv4 address, 203.0.113.7, on ports 80 and 443, so add an A record for it only if that address is yours and you can forward ports 80 and 443 to 192.168.0.248."
+    "coresmith.example.com has only an IPv6 address, so visitors without IPv6 can't open it. Turn on Cloudflare's proxy for coresmith.example.com to fix it. If you can forward ports 80 and 443 to 192.168.0.248, an A record pointing at 203.0.113.7 works too."
 
 const IPV6_ONLY = {
     host: 'coresmith.example.com',
@@ -64,7 +64,7 @@ const CHECK_WITH_RECORD = {
     host: 'shop.example.com',
     ok: false,
     problems: [
-        "shop.example.com doesn't point anywhere yet. Add an A record for shop.example.com pointing at 203.0.113.7, then check again."
+        "shop.example.com doesn't point anywhere yet. Add an A record pointing at 203.0.113.7, then check again."
     ],
     notes: [],
     records: [{ type: 'A', name: 'shop.example.com', value: '203.0.113.7' }],
@@ -103,7 +103,7 @@ test.describe("Coresmith's address", () => {
         })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people on networks without IPv6 can't open Coresmith. The surest fix is to turn on Cloudflare's proxy for coresmith.example.com, which answers them over IPv4 and reaches this server over IPv6. That needs its DNS on Cloudflare. Add an A record only if this server's IPv4 address is yours and you can forward ports 80 and 443 to it."
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. Turn on Cloudflare's proxy for it to fix that. If you can forward ports 80 and 443 to this server, an A record for its IPv4 address works too."
         )
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })

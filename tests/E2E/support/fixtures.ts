@@ -463,6 +463,17 @@ export async function withProps(page: Page, url: RegExp, change: (props: Record<
 export async function blockingViolations(page: Page): Promise<string[]> {
     await page.waitForLoadState('load')
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined)
+    await page.evaluate(() =>
+        Promise.race([
+            Promise.all(
+                document
+                    .getAnimations()
+                    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+                    .map((animation) => animation.finished.catch(() => undefined))
+            ),
+            new Promise((resolve) => setTimeout(resolve, 3_000))
+        ])
+    )
 
     const grain = await page.addStyleTag({ content: '.grain::after { content: none !important; }' })
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()

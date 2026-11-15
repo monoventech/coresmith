@@ -6,6 +6,7 @@ Apps in PHP, Ruby, Python, Go, Java, JavaScript and TypeScript, such as Laravel,
 
 - Add a server by running one command on it that gives Coresmith its own SSH key, or create one at a connected cloud provider. Coresmith then provisions it over SSH, hardens it with key-only SSH, fail2ban and a firewall, and checks those protections every hour.
 - Connect GitHub or your own Git host and push to deploy. Every deploy builds a new release beside the live one, health-checks it, then switches over in one step, and the previous release stays ready to roll back to.
+- Apps can install private packages, such as Laravel Nova or a GitHub Packages scope. Coresmith hands their credentials to installs and builds only, never to the running app.
 - HTTPS certificates, domains, environment variables, background processes, cron jobs, and MySQL, PostgreSQL and Redis databases are all set from the browser.
 
 ## Coresmith Cloud

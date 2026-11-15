@@ -940,7 +940,7 @@ final class E2ESeeder extends Seeder
         $atlas->forceFill(['domain_reach' => [
             $domain => [
                 'ready' => false,
-                'problems' => ["{$domain} points at 203.0.113.7, but nothing reaches this server on ports 80 and 443 from the internet. Either your router isn't forwarding those ports to 192.168.0.248, or your internet provider shares that address with other customers. The surest fix is IPv6 with Cloudflare's proxy: add an AAAA record for {$domain} pointing at 2001:db8::7, remove the A record, and turn the proxy on, so visitors without IPv6 reach it too. That needs {$domain}'s DNS on Cloudflare. If your router blocks incoming IPv6, allow ports 80 and 443 to 2001:db8::7 in its IPv6 firewall. Keep the A record instead only if 203.0.113.7 is yours and you can forward ports 80 and 443 to 192.168.0.248, then check again."],
+                'problems' => ["{$domain} points at 203.0.113.7, which doesn't answer on ports 80 and 443 from the internet. Add an AAAA record pointing at 2001:db8::7, remove the A record and turn on Cloudflare's proxy for {$domain}, so visitors without IPv6 reach it too. Keep the A record only if you can forward ports 80 and 443 to 192.168.0.248. Then check again."],
                 'notes' => [],
                 'records' => [['type' => 'AAAA', 'name' => $domain, 'value' => '2001:db8::7', 'note' => "Best fix, with Cloudflare's proxy on"]],
                 'checked_at' => now()->subMinutes(20)->toIso8601String(),

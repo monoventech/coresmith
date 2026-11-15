@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
+use App\Models\PackageCredential;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Detection\RepositoryReader;
 use App\Services\Runtime\RepositoryProbe;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\CloudBilling;
 use Tests\Support\FakeSSHTransport;
 
 afterEach(function () {
@@ -146,4 +149,24 @@ test('a folder is read on its own, and its messages name it', function () {
         ->assertOk()
         ->assertJsonPath('folders', ['apps/web'])
         ->assertJsonPath('unsettled.type', "There is no composer.json, Gemfile, requirements.txt, pyproject.toml, go.mod, package.json, deno.json or index.html in apps/web, so Coresmith can't tell what the app runs on.");
+});
+
+test('the form names private registries the team has no credentials for, with a way to add them for those who can', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('laravel-private-registries');
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/shop.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('packages', [['host' => 'nova.laravel.com', 'source' => 'Composer'], ['host' => 'npm.pkg.github.com', 'source' => 'npm']])
+        ->assertJsonPath('packages_href', route('source-providers.index'));
+
+    PackageCredential::factory()->for($server->team)->create(['target' => 'nova.laravel.com']);
+    $developer = CloudBilling::member($server->team, TeamRole::Developer);
+    app(TeamAccess::class)->grant($server->team, $developer, $server);
+    stackEndpointAnswer('laravel-private-registries');
+
+    stackEndpointGet($developer, $server, ['repository_url' => 'https://github.com/acme/shop.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('packages', [['host' => 'npm.pkg.github.com', 'source' => 'npm']])
+        ->assertJsonPath('packages_href', null);
 });
