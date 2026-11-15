@@ -60,8 +60,8 @@ test('an owner saves new PHP limits, which are kept, logged and applied without 
         ->assertRedirect()
         ->assertSessionHas('success', 'Saved. PHP on web-1 picks these up in a few seconds, without a deploy.');
 
-    expect($application->fresh()->php_limits)->toBe(['uploads' => 128, 'memory' => 256, 'seconds' => 120, 'reload' => 'timestamps'])
-        ->and(Activity::query()->where('description', 'php_limits_changed')->sole()->properties->toArray())->toBe([
+    expect($application->fresh()->php_limits)->toEqual(['uploads' => 128, 'memory' => 256, 'seconds' => 120, 'reload' => 'timestamps'])
+        ->and(Activity::query()->where('description', 'php_limits_changed')->sole()->properties->toArray())->toEqual([
             'from' => ['uploads' => 64, 'memory' => 128, 'seconds' => 60, 'reload' => 'deploy'],
             'to' => ['uploads' => 128, 'memory' => 256, 'seconds' => 120, 'reload' => 'timestamps'],
         ]);
