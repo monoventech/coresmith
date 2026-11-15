@@ -442,8 +442,11 @@ test('a memory kill and a new alert ping the team', function () {
     expect(fleetPings())->toBe([[$server->team_id, 'server', $server->id]]);
 
     $this->travel(10)->minutes();
-    fleetPingReading($server, 97, 2);
-    fleetPingReading($server, 97, 1);
+
+    foreach ([4, 3, 2, 1] as $minutesAgo) {
+        fleetPingReading($server, 97, $minutesAgo);
+    }
+
     fleetPingCollect($server, memory: 96);
 
     expect(fleetPings())->toHaveCount(2)

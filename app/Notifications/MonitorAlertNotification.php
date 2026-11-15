@@ -22,7 +22,7 @@ final class MonitorAlertNotification extends Notification implements ShouldQueue
 
     public bool $deleteWhenMissingModels = true;
 
-    public function __construct(public readonly Server $server, public readonly MonitorKind $kind, public readonly float $value, public readonly MonitorLimit $limit) {}
+    public function __construct(public readonly Server $server, public readonly MonitorKind $kind, public readonly float $value, public readonly MonitorLimit $limit, public readonly float $latest) {}
 
     /**
      * @return list<string>
@@ -36,13 +36,17 @@ final class MonitorAlertNotification extends Notification implements ShouldQueue
     {
         $name = $this->server->name;
         $minutes = $this->limit->duration === 1 ? 'a minute' : "{$this->limit->duration} minutes";
-        $percent = (int) floor($this->value);
+        $stayed = (int) floor($this->value);
+        $current = (int) floor($this->latest);
         $load = number_format($this->value, 2);
+        $currentLoad = number_format($this->latest, 2);
 
         [$subject, $line] = match ($this->kind) {
-            MonitorKind::Memory => ["{$name} memory is at {$percent}%", "Memory has stayed at {$percent}% or more for {$minutes}. An app that asks for more is killed and started again."],
-            MonitorKind::Load => ["{$name} load is at {$load} per core", "The load has stayed at {$load} per core or more for {$minutes}, so work is waiting its turn for the processor."],
-            default => ["{$name} processor is {$percent}% busy", "The processor has stayed {$percent}% busy or more for {$minutes}, so apps on it may answer slowly."],
+            MonitorKind::Memory => ["{$name} memory is at {$current}%", "Memory has stayed at {$stayed}% or more for {$minutes}. An app that asks for more is killed and started again."],
+            MonitorKind::Load => ["{$name} load is at {$currentLoad} per core", "The load has stayed at {$load} per core or more for {$minutes}, so work is waiting its turn for the processor."],
+            default => ["{$name} processor is {$current}% busy", $stayed >= 100
+                ? "The processor has been 100% busy for {$minutes}, so apps on it may answer slowly."
+                : "The processor has stayed {$stayed}% busy or more for {$minutes}, so apps on it may answer slowly."],
         };
 
         return (new MailMessage)

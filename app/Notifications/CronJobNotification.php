@@ -47,11 +47,11 @@ final class CronJobNotification extends Notification implements ShouldQueue
         $mail = $this->reason === 'failed'
             ? (new MailMessage)
                 ->subject("{$name}: {$this->job} failed")
-                ->line("It exited with code {$this->exit} at {$when}. What it printed is in the scheduler log on the app's page.")
+                ->line("It exited with code {$this->exit} on {$when}. What it printed is in the scheduler log on the app's page.")
                 ->line("You'll get one more email when it runs without an error.")
             : (new MailMessage)
                 ->subject("{$name}: {$this->job} didn't run")
-                ->line("It was due at {$when} and didn't start. Check that cron is running on {$server}.")
+                ->line("It was due on {$when} and didn't start. Check that cron is running on {$server}.")
                 ->line("You'll get one more email when it runs again.");
 
         return $mail->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
