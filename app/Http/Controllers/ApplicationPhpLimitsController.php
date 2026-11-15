@@ -48,6 +48,6 @@ final class ApplicationPhpLimitsController extends Controller
 
         ApplyPhpLimits::dispatch($application);
 
-        return back()->with('success', "Saved. PHP on {$server->name} picks these up in a few seconds, no deploy needed.");
+        return back()->with('success', "Saved. PHP on {$server->name} picks these up in a few seconds, without a deploy.");
     }
 }
