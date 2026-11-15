@@ -10,6 +10,7 @@ use App\Models\Server;
 use App\Models\ServerMonitor;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Teams\TeamAccess;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\CloudBilling;
@@ -198,6 +199,24 @@ test("another team's server, and the apps monitor, can't have limits for one ser
     "another team's server" => [fn(User $owner) => Server::factory()->create(), 'cpu'],
     'the apps monitor' => [fn(User $owner) => Server::factory()->create(['team_id' => $owner->current_team_id]), 'apps'],
 ]);
+
+test('a member who sees only some servers sees only their names and their limits', function () {
+    $team = Team::factory()->owned()->create();
+    $seen = Server::factory()->for($team)->create(['name' => 'seen-1']);
+    $hidden = Server::factory()->for($team)->create(['name' => 'hidden-1']);
+
+    foreach ([$seen, $hidden] as $server) {
+        ServerMonitor::query()->create(['team_id' => $team->id, 'server_id' => $server->id, 'kind' => MonitorKind::Cpu, 'threshold' => 95, 'duration' => 30]);
+    }
+
+    $member = monitorSettingsMember($team, TeamRole::Member);
+    app(TeamAccess::class)->sync($team, $member, false, [$seen->id], []);
+
+    $monitors = monitorSettingsProps($member);
+
+    expect(array_column($monitors['servers'], 'name'))->toBe(['seen-1'])
+        ->and(array_column(array_column($monitors['overrides'], 'server'), 'name'))->toBe(['seen-1']);
+});
 
 test('members cannot set or remove limits for one server', function () {
     $team = Team::factory()->owned()->create();

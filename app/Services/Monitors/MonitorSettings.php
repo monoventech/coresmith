@@ -16,6 +16,7 @@ use App\Models\ServerMonitor;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
+use App\Services\Teams\TeamAccess;
 
 final class MonitorSettings
 {
@@ -35,7 +36,7 @@ final class MonitorSettings
     {
         $plan = $this->allowsLimits($team);
         $rows = Monitor::query()->where('team_id', $team->getKey())->get()->keyBy(fn(Monitor $monitor): string => $monitor->kind->value);
-        $servers = $team->servers()->orderBy('name')->get(['id', 'name']);
+        $servers = app(TeamAccess::class)->servers($user, $team)->orderBy('name')->get(['id', 'name']);
         $names = $servers->pluck('name', 'id');
         $order = array_map(fn(MonitorKind $kind): string => $kind->value, MonitorKind::cases());
 
