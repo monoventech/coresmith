@@ -67,7 +67,11 @@ final class MetricsCollector
             'recorded_at' => now(),
         ]);
 
-        app(ReadingMonitor::class)->evaluate($server, $metric);
+        try {
+            app(ReadingMonitor::class)->evaluate($server, $metric);
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return $metric;
     }

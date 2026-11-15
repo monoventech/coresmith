@@ -26,6 +26,7 @@ use App\Notifications\ProvisioningFailedNotification;
 use App\Notifications\ServerProvisionedNotification;
 use App\Notifications\TeamNotifier;
 use App\Services\Monitors\MonitorLimit;
+use App\Services\Monitors\ReadingMonitor;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Server\MetricsCollector;
@@ -580,6 +581,25 @@ test('a failed alert never stops the rest of the collection', function () {
         ->and(Activity::query()->where('description', 'disk_pressure')->exists())->toBeFalse()
         ->and(Activity::query()->where('description', 'app_oom_killed')->count())->toBe(2);
     Exceptions::assertReportedCount(1);
+});
+
+test('monitors that fail are reported and never stop the rest of the collection', function () {
+    Exceptions::fake();
+    Notification::fake();
+    $server = alertsServer();
+    alertsMember($server->team);
+    alertsApplication($server, 'shop');
+    $server->forceFill(['connection_failures' => 2, 'last_connection_error' => 'The server took the connection but stopped answering. It may be overloaded or rebooting.'])->save();
+    app()->bind(ReadingMonitor::class, fn() => throw new RuntimeException('Monitors are down'));
+
+    alertsRun($server, (new FakeSSHTransport)
+        ->respondTo('top -bn1', alertsProbe(disk: 96))
+        ->respondTo('journalctl --since', alertsKill('coresmith-app-shop-web', 20)));
+
+    expect(ServerMetric::query()->where('server_id', $server->id)->count())->toBe(1)
+        ->and($server->fresh()->connection_failures)->toBe(0)
+        ->and(Activity::query()->where('description', 'app_oom_killed')->count())->toBe(1);
+    Exceptions::assertReported(fn(RuntimeException $e): bool => $e->getMessage() === 'Monitors are down');
 });
 
 test('a server whose team is gone still logs its memory alerts without emailing anyone', function () {
