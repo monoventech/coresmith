@@ -230,3 +230,14 @@ test('a job that fails again within an hour of recovering does not alert again',
 
     Notification::assertSentTimes(CronJobNotification::class, 2);
 });
+
+test('an app whose jobs Coresmith has not written since this release is not judged, so an upgrade cannot read them as failed or missed', function () {
+    $server = cronMonitorServer();
+    cronMonitorMember($server);
+    $application = cronMonitorState(cronMonitorApp($server, ['cron_written_at' => null]), ['started' => now()->subDays(2)->setTime(3, 0, 1)->getTimestamp(), 'seconds' => 1, 'exit' => 1]);
+
+    cronMonitorRun($server, $application);
+
+    Notification::assertNothingSent();
+    expect(MonitorAlert::query()->exists())->toBeFalse();
+});

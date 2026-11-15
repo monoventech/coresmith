@@ -42,7 +42,7 @@ final class CronMonitor
             ->whereNotNull('open_key')
             ->get()
             ->keyBy('job');
-        $watching = $this->limits->for($server, MonitorKind::Cron)->enabled && $this->crontab->runs($application);
+        $watching = $application->cron_written_at !== null && $this->limits->for($server, MonitorKind::Cron)->enabled && $this->crontab->runs($application);
 
         foreach ($open as $job => $alert) {
             if (!$watching || !$entries->has($job)) {
