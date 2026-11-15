@@ -18,6 +18,8 @@ final class FirewallConfigurator
 
     private const WEB_PORTS = [80, 443];
 
+    public const HTTP3_PORT = 443;
+
     public function configure(SSHConnection $connection): void
     {
         $server = $connection->server();
@@ -35,6 +37,8 @@ final class FirewallConfigurator
         foreach ($keepsSsh ? self::WEB_PORTS : $this->requiredPorts($server->ssh_port) as $port) {
             $connection->execute($firewall->allow($port), sudo: true)->throw();
         }
+
+        $connection->execute($firewall->allow(self::HTTP3_PORT, 'udp'), sudo: true)->throw();
 
         if (!$keepsSsh) {
             $connection->execute($firewall->enable(), sudo: true)->throw();

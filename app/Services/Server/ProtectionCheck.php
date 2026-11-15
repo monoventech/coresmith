@@ -23,10 +23,14 @@ final class ProtectionCheck
 
     private const YES = ['yes', 'true', '1', 'on'];
 
+    public const HTTP3_CHECK = "if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then ufw status 2>/dev/null | grep -qE '^443(/udp)?[[:space:]]+ALLOW' && echo udp-open || echo udp-closed; "
+        . "elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then { firewall-cmd --list-ports; firewall-cmd --list-services; } 2>/dev/null | tr ' ' '\\n' | grep -qxE '443/udp|http3' && echo udp-open || echo udp-closed; "
+        . 'else echo udp-open; fi';
+
     public function __construct(private readonly SecurityHardening $hardening) {}
 
     /**
-     * @return array{ssh: string|null, fail2ban: string, kernel: string, kernel_off: list<string>, patches: string, controls: string}
+     * @return array{ssh: string|null, fail2ban: string, kernel: string, kernel_off: list<string>, patches: string, controls: string, http3: string}
      */
     public function read(SSHConnection $connection): array
     {
@@ -69,6 +73,8 @@ final class ProtectionCheck
             $lines[] = 'sshd -T 2>/dev/null || true';
         }
 
+        $lines[] = "echo '== web'";
+        $lines[] = self::HTTP3_CHECK;
         $lines[] = "echo '== controls'";
         $lines[] = '[ -S ' . CaddyApiClient::ADMIN_SOCKET . ' ] && echo socket || echo no-socket';
         $lines[] = "[ -n \"$(ss -ltnH '( sport = :" . CaddyApiClient::ADMIN_PORT . " )' 2>/dev/null)\" ] && echo tcp || echo no-tcp";
@@ -77,7 +83,7 @@ final class ProtectionCheck
     }
 
     /**
-     * @return array{ssh: string|null, fail2ban: string, kernel: string, kernel_off: list<string>, patches: string, controls: string}
+     * @return array{ssh: string|null, fail2ban: string, kernel: string, kernel_off: list<string>, patches: string, controls: string, http3: string}
      */
     public function parse(Server $server, string $output): array
     {
@@ -96,6 +102,7 @@ final class ProtectionCheck
             'kernel_off' => $kernelOff,
             'patches' => $this->patches($server, $sections['patches'] ?? []) ? 'on' : 'off',
             'controls' => in_array('socket', $sections['controls'], true) && !in_array('tcp', $sections['controls'], true) ? 'on' : 'off',
+            'http3' => in_array('udp-closed', $sections['web'] ?? [], true) ? 'off' : 'on',
         ];
     }
 

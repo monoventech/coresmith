@@ -383,7 +383,7 @@ final class SecurityHardening
 
     public function restore(SSHConnection $connection, string $protection): void
     {
-        if ($protection !== 'kernel') {
+        if (!in_array($protection, ['kernel', 'http3'], true)) {
             $connection->execute(PackageManagerFactory::for($connection->server())->update(), sudo: true, timeout: SSHTransport::PACKAGE_SECONDS)->throw();
         }
 
@@ -391,6 +391,7 @@ final class SecurityHardening
             'fail2ban' => $this->installFail2ban($connection),
             'kernel' => $this->applySysctls($connection),
             'patches' => $this->configureAutomaticUpdates($connection),
+            'http3' => $connection->execute(FirewallManagerFactory::for($connection->server())->allow(FirewallConfigurator::HTTP3_PORT, 'udp'), sudo: true)->throw(),
         };
     }
 
