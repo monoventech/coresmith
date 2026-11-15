@@ -9,6 +9,8 @@
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
+    import PhpLimitsCard from '@/components/applications/PhpLimitsCard.svelte'
+    import type { PhpLimits } from '@/components/applications/PhpLimitsCard.svelte'
     import RepositoryCheckBanner from '@/components/applications/RepositoryCheckBanner.svelte'
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
@@ -59,6 +61,7 @@
         toggles = [],
         addresses,
         cron,
+        php = null,
         can,
         runtime_choice = null,
         held = null
@@ -146,6 +149,7 @@
             href: string
         }
         cron: CronCard
+        php: PhpLimits | null
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
         held: { current: string; newest: string; packages: string[]; command: string } | null
@@ -928,6 +932,19 @@
                     </div>
                 {/if}
             </div>
+
+            {#if php}
+                <PhpLimitsCard
+                    class="@3xl:col-span-2"
+                    {php}
+                    server={server.name}
+                    href={route('servers.applications.php-limits.update', {
+                        server: server.id,
+                        application: application.id
+                    })}
+                    canUpdate={can.update}
+                />
+            {/if}
 
             <CronJobsCard
                 class="@3xl:col-span-2"

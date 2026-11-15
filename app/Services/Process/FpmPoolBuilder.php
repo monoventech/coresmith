@@ -13,6 +13,7 @@ use App\Models\Application;
 use App\Services\Caddy\CaddyRouteBuilder;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Php\PhpLimits;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
 
@@ -43,6 +44,7 @@ final class FpmPoolBuilder
         $chdir = (new CaddyRouteBuilder)->documentRoot($application);
         $installs = AsdfManager::INSTALL_DIR;
         $disabled = self::DISABLED_FUNCTIONS;
+        $seconds = PhpLimits::for($application)->seconds;
 
         return <<<CONFIG
         [global]
@@ -61,6 +63,7 @@ final class FpmPoolBuilder
         pm.max_children = {$maxChildren}
         pm.process_idle_timeout = 10s
         pm.max_requests = 500
+        request_terminate_timeout = {$seconds}s
 
         chdir = {$chdir}
         clear_env = no
@@ -83,6 +86,7 @@ final class FpmPoolBuilder
         $base = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
         $envFile = (new ReleasePaths($application))->envFile();
+        $scanDir = PhpLimits::scanDir($application);
         $umask = AppAccount::UMASK;
         $sandbox = implode('', array_map(fn(string $property): string => $property . "\n", AppSandbox::properties($application->server)));
 
@@ -95,6 +99,7 @@ final class FpmPoolBuilder
         Type=simple
         User=root
         UMask={$umask}
+        Environment="PHP_INI_SCAN_DIR={$scanDir}"
         EnvironmentFile={$envFile}
         ExecStart={$binary} --nodaemonize --fpm-config {$pool}
         ExecReload=/bin/kill -USR2 \$MAINPID

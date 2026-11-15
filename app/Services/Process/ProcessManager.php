@@ -14,6 +14,7 @@ use App\Models\Application;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Php\PhpLimits;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
 use Illuminate\Support\Sleep;
@@ -62,6 +63,10 @@ final class ProcessManager
                 $this->fpm->unit($application),
                 SystemdUnitBuilder::UNIT_DIR . '/' . $this->fpm->unitName($application) . '.service',
             );
+            $ini = PhpLimits::directory($application) . '/' . PhpLimits::FILE;
+            $connection->execute('install -d -m 0755 ' . escapeshellarg(PhpLimits::DIRECTORY) . ' ' . escapeshellarg(PhpLimits::directory($application)), sudo: true)->throw();
+            $connection->uploadContent(PhpLimits::for($application)->ini(), $ini);
+            $connection->execute('chmod 0644 ' . escapeshellarg($ini), sudo: true)->throw();
         }
 
         $webCommand = $this->units->webCommand($application);
@@ -86,6 +91,10 @@ final class ProcessManager
         $connection->execute('systemctl daemon-reload', sudo: true)->throw();
 
         $this->rotation->write($connection, $application, $logged);
+
+        if ($application->type->language()->usesFpm()) {
+            $application->forceFill(['php_written_at' => now()])->save();
+        }
     }
 
     public function start(SSHConnection $connection, Application $application): void
@@ -115,6 +124,7 @@ final class ProcessManager
 
         if ($application->type->language()->usesFpm()) {
             $connection->execute('rm -f ' . escapeshellarg($this->fpm->poolPath($application)), sudo: true)->throw();
+            $connection->execute('rm -rf ' . escapeshellarg(PhpLimits::directory($application)), sudo: true)->throw();
         }
 
         $connection->execute('systemctl daemon-reload', sudo: true)->throw();

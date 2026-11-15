@@ -27,7 +27,9 @@ final class CaddyApiClient
 
     public const ADMIN_LISTEN = 'unix/' . self::ADMIN_SOCKET;
 
-    public const ROUTES_PATH = '/config/apps/http/servers/' . CaddyInstaller::SERVER . '/routes';
+    public const SERVER_PATH = '/config/apps/http/servers/' . CaddyInstaller::SERVER;
+
+    public const ROUTES_PATH = self::SERVER_PATH . '/routes';
 
     public const AFTER_CORESMITH_SITE = self::ROUTES_PATH . '/1';
 
@@ -105,6 +107,15 @@ final class CaddyApiClient
                 $this->request($connection, 'POST', self::ROUTES_PATH, CaddyInstaller::unknownHostsRoute(), retry: false);
             }
 
+            $this->persistConfig($connection);
+        });
+    }
+
+    public function openTimeouts(SSHConnection $connection): void
+    {
+        $this->changing($connection, function () use ($connection): void {
+            $this->request($connection, 'POST', self::SERVER_PATH . '/read_timeout', CaddyInstaller::READ_TIMEOUT, retry: false);
+            $this->delete($connection, self::SERVER_PATH . '/write_timeout');
             $this->persistConfig($connection);
         });
     }
@@ -323,17 +334,17 @@ final class CaddyApiClient
     }
 
     /**
-     * @param  array<string, mixed>|null  $payload
+     * @param  array<string, mixed>|string|null  $payload
      */
-    private function request(SSHConnection $connection, string $method, string $path, ?array $payload = null, ?bool $retry = null): void
+    private function request(SSHConnection $connection, string $method, string $path, array|string|null $payload = null, ?bool $retry = null): void
     {
         $this->run($connection, $this->curl($connection->server(), $method, $path, $payload), retry: $retry ?? in_array($method, self::IDEMPOTENT_METHODS, true));
     }
 
     /**
-     * @param  array<string, mixed>|null  $payload
+     * @param  array<string, mixed>|string|null  $payload
      */
-    private function curl(Server $server, string $method, string $path, ?array $payload = null): string
+    private function curl(Server $server, string $method, string $path, array|string|null $payload = null): string
     {
         $command = 'curl -fsS --max-time 30 -X ' . $method . ' ' . self::address($server->caddyAdminOnSocket(), $path);
 

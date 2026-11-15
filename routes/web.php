@@ -5,6 +5,7 @@ use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
 use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
+use App\Http\Controllers\ApplicationPhpLimitsController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationRuntimeController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
@@ -178,6 +179,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.env.update');
     Route::put('servers/{server}/applications/{application}/addresses', [ApplicationAddressController::class, 'update'])
         ->name('servers.applications.addresses.update');
+    Route::put('servers/{server}/applications/{application}/php-limits', [ApplicationPhpLimitsController::class, 'update'])
+        ->name('servers.applications.php-limits.update');
     Route::put('servers/{server}/applications/{application}/toggles/{toggle}', [ApplicationToggleController::class, 'update'])
         ->where('toggle', '[a-z_]+')
         ->name('servers.applications.toggles.update');

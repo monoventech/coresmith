@@ -14,6 +14,7 @@ use App\Models\Application;
 use App\Services\Deployment\AppAccount;
 use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\StackDefaults;
+use App\Services\Php\PhpLimits;
 use App\Services\Runtime\AsdfManager;
 use App\Services\SafeName;
 
@@ -48,7 +49,7 @@ final class SystemdUnitBuilder
         $appRoot = ReleasePaths::ROOT . '/' . $slug;
         $installs = AsdfManager::DATA_DIR;
         $listen = $process === 'web' ? $this->environment($application->type->language()->listenEnvironment($application)) : '';
-        $production = $this->environment(app(StackDefaults::class)->process($application));
+        $production = $this->environment([...app(StackDefaults::class)->process($application), ...($application->type->language()->usesFpm() ? ['PHP_INI_SCAN_DIR' => PhpLimits::scanDir($application)] : [])]);
         $command = $process === 'web' ? $command : $this->workerCommand($command);
         $umask = AppAccount::UMASK;
         $sandbox = implode('', array_map(fn(string $property): string => $property . "\n", AppSandbox::properties($application->server)));
