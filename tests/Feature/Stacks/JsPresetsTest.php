@@ -8,8 +8,11 @@ use App\Services\Detection\DetectedStack;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RepositoryFacts;
+use App\Stacks\JavaScriptDetection;
 use App\Stacks\JsPresets\JsPreset;
 use App\Stacks\JsPresets\JsPresets;
+use Illuminate\Support\Facades\File;
+use Symfony\Component\Finder\SplFileInfo;
 
 test('the JavaScript presets are tried in a fixed order', function () {
     expect(array_map(fn(JsPreset $preset): string => $preset->key(), app(JsPresets::class)->all()))
@@ -47,7 +50,7 @@ test('Add an app offers the server presets as JavaScript frameworks, by name', f
 
 test('a JavaScript framework is called by its preset name in detection and on the app page', function () {
     expect((new DetectedStack('js', 'nuxt', 'node', null))->label(app(Catalog::class)))->toBe('Nuxt')
-        ->and((new DetectedStack('js', '', 'node', null))->label(app(Catalog::class)))->toBe('API or other')
+        ->and((new DetectedStack('js', '', 'node', null))->label(app(Catalog::class)))->toBe('Other server')
         ->and(ApplicationPresenter::kind(new Application(['type' => ApplicationType::Js, 'framework' => 'next'])))->toBe('Next.js')
         ->and(ApplicationPresenter::kind(new Application(['type' => ApplicationType::Js, 'framework' => 'astro'])))->toBe('Astro');
 });
@@ -56,4 +59,20 @@ test('a framework whose build script does not build it is named with the right a
     $facts = new RepositoryFacts(['package.json' => (string) json_encode(['scripts' => ['build' => 'tsc'], 'dependencies' => ['astro' => '^5.0.0']])], complete: true);
 
     expect(ApplicationType::Js->language()->detect($facts)['unsettled']['framework'])->toBe("astro is in package.json, but the build script doesn't run astro build, so Coresmith can't tell this is an Astro app.");
+});
+
+test('a start-script server is called by the server package it uses, and an unlisted package by its own name', function () {
+    expect((new DetectedStack('js', '', 'node', null, serverPackage: 'express'))->label(app(Catalog::class)))->toBe('Express')
+        ->and((new DetectedStack('js', '', 'node', null, serverPackage: '@nestjs/core'))->label(app(Catalog::class)))->toBe('NestJS')
+        ->and((new DetectedStack('js', '', 'bun', null, serverPackage: 'elysia'))->label(app(Catalog::class)))->toBe('Elysia')
+        ->and((new DetectedStack('js', '', 'node', null, serverPackage: 'some-server'))->label(app(Catalog::class)))->toBe('some-server');
+});
+
+test('detection names the generic JavaScript entry Other server, as Add an app does', function () {
+    $code = collect(File::allFiles(app_path('Stacks')))->merge(File::allFiles(app_path('Services/Detection')))
+        ->map(fn(SplFileInfo $file): string => $file->getContents())
+        ->implode("\n");
+
+    expect($code)->not->toContain('API or other')
+        ->and(JavaScriptDetection::NO_SERVER)->toContain('Pick Other server');
 });

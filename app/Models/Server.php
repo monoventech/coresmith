@@ -32,6 +32,11 @@ class Server extends Model
 
     protected $hidden = ['ssh_private_key'];
 
+    protected static function booted(): void
+    {
+        static::deleted(fn(self $server) => MonitorAlert::closeAllFor($server));
+    }
+
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);

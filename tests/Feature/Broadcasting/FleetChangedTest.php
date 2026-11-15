@@ -458,7 +458,7 @@ test('a memory kill and a new alert ping the team', function () {
     ]);
 });
 
-test('a disk alert pings once a day, and again when it turns critical', function () {
+test('a disk alert pings when it opens and when it turns critical, not while it holds', function () {
     Event::fake([FleetChanged::class]);
     Notification::fake();
     $server = fleetPingServer();
@@ -526,7 +526,7 @@ test('an ordinary metric does not ping', function () {
     }
 
     expect(ServerMetric::query()->where('server_id', $server->id)->count())->toBe(4)
-        ->and(Activity::query()->whereIn('description', ['disk_pressure', 'memory_pressure', 'app_oom_killed'])->count())->toBe(0);
+        ->and(Activity::query()->whereIn('description', ['disk_pressure', 'memory_pressure', 'cpu_pressure', 'load_pressure', 'monitor_recovered', 'app_oom_killed'])->count())->toBe(0);
     Event::assertNotDispatched(FleetChanged::class);
 });
 
