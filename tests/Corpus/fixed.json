@@ -368,6 +368,18 @@
         "why": "Angular 20 with the application builder writing to dist."
     },
     {
+        "name": "angular-realworld",
+        "url": "https://github.com/realworld-apps/angular-realworld-example-app.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "ready",
+            "type": "static",
+            "framework": "",
+            "web_directory": "/dist/angular-conduit/browser"
+        },
+        "why": "Angular's RealWorld app, whose realworld folder is a git submodule its build needs."
+    },
+    {
         "name": "astrowind",
         "url": "https://github.com/arthelokyo/astrowind.git",
         "branch": "main",
