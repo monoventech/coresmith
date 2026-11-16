@@ -43,17 +43,7 @@ final class CaddyRouteBuilder
             'match' => [
                 ['host' => $this->domains($application)],
             ],
-            'handle' => [
-                [
-                    'handler' => 'subroute',
-                    'routes' => $this->offline($application)
-                        ? [$this->serveMaintenancePage($application)]
-                        : [
-                            $this->blockSensitivePaths(),
-                            ...$this->serveApplication($application),
-                        ],
-                ],
-            ],
+            'handle' => $this->handle($application),
             'terminal' => true,
         ];
     }
@@ -67,7 +57,25 @@ final class CaddyRouteBuilder
             '@id' => self::addressServerId($application, $kind),
             'listen' => [$listen],
             'automatic_https' => ['disable' => true],
-            'routes' => [['handle' => $this->build($application)['handle'], 'terminal' => true]],
+            'routes' => [['handle' => $this->handle($application), 'terminal' => true]],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function handle(Application $application): array
+    {
+        return [
+            [
+                'handler' => 'subroute',
+                'routes' => $this->offline($application)
+                    ? [$this->serveMaintenancePage($application)]
+                    : [
+                        $this->blockSensitivePaths(),
+                        ...$this->serveApplication($application),
+                    ],
+            ],
         ];
     }
 
