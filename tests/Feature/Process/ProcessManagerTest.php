@@ -291,6 +291,32 @@ test('a js app installs a web unit rather than an fpm pool', function () {
         ->and($uploads)->not->toHaveKey('/etc/coresmith-php/my-app/coresmith.ini');
 });
 
+test('an app with no web process retires a web unit left from a server stack it ran before, ahead of the reload', function (array $attributes) {
+    $transport = new FakeSSHTransport;
+
+    processManager()->install(processConnection($transport), managedApp($attributes));
+
+    $commands = $transport->commands();
+    $retire = array_key_first(array_filter($commands, fn(string $command): bool => str_contains($command, "systemctl disable --now 'coresmith-app-my-app-web'")));
+
+    expect($transport->uploads())->not->toHaveKey('/etc/systemd/system/coresmith-app-my-app-web.service')
+        ->and($retire)->not->toBeNull()
+        ->and($commands[$retire])->toContain("rm -f '/etc/systemd/system/coresmith-app-my-app-web.service'")
+        ->and($retire)->toBeLessThan(array_search('systemctl daemon-reload', $commands, true));
+})->with([
+    'react' => [['type' => ApplicationType::Js, 'framework' => 'react', 'php_version' => null, 'js_runtime' => 'node', 'node_version' => '24.11.1', 'web_directory' => '/dist']],
+    'static' => [['type' => ApplicationType::Static, 'php_version' => null]],
+    'php' => [[]],
+]);
+
+test('an app that runs a web process keeps its web unit', function () {
+    $transport = new FakeSSHTransport;
+
+    processManager()->install(processConnection($transport), managedApp(['type' => ApplicationType::Js, 'framework' => 'nextjs', 'php_version' => null, 'js_runtime' => 'node', 'node_version' => '24.11.1']));
+
+    expect(implode("\n", $transport->commands()))->not->toContain("systemctl disable --now 'coresmith-app-my-app-web'");
+});
+
 test('a worker command finds its binary through the unit PATH, so it follows the live release', function (string $stored, string $execStart) {
     $unit = (new SystemdUnitBuilder(new AsdfManager))->build(managedApp(), 'queue', $stored);
 

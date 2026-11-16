@@ -78,6 +78,9 @@ final class ProcessManager
                 $this->units->unitPath($application, 'web'),
             );
             $logged[] = 'web';
+        } else {
+            $path = escapeshellarg($this->units->unitPath($application, 'web'));
+            $connection->execute("test ! -f {$path} || { systemctl disable --now " . escapeshellarg($this->units->unitName($application, 'web')) . " || true; rm -f {$path}; }", sudo: true);
         }
 
         foreach ($this->workerProcesses($application) as $name => $command) {

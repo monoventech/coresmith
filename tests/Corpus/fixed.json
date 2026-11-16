@@ -385,11 +385,77 @@
         "branch": "main",
         "expect": {
             "verdict": "ready",
-            "type": "static",
-            "framework": "",
+            "type": "js",
+            "framework": "react",
+            "js_runtime": "node",
             "web_directory": "/dist"
         },
-        "why": "A Vite React single-page app."
+        "why": "React built with Vite, served from dist."
+    },
+    {
+        "name": "vite-vue",
+        "url": "https://github.com/gothinkster/vue-realworld-example-app.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "vue",
+            "js_runtime": "bun",
+            "web_directory": "/dist"
+        },
+        "why": "Vue 3 built with Vite on Bun, served from dist."
+    },
+    {
+        "name": "vite-svelte",
+        "url": "https://github.com/koval01/notcoinWeb.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "svelte",
+            "js_runtime": "node",
+            "web_directory": "/dist"
+        },
+        "why": "Svelte 4 built with Vite, with a svelte.config.js but no SvelteKit."
+    },
+    {
+        "name": "create-react-app",
+        "url": "https://github.com/soumyajit4419/Portfolio.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "react",
+            "js_runtime": "node",
+            "web_directory": "/build"
+        },
+        "why": "Create React App 5, served from build."
+    },
+    {
+        "name": "vue-cli",
+        "url": "https://github.com/maomao1996/Vue-mmPlayer.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "vue",
+            "js_runtime": "node",
+            "web_directory": "/dist"
+        },
+        "why": "Vue 2 on Vue CLI 5 with pnpm, served from dist."
+    },
+    {
+        "name": "svelte-rollup",
+        "url": "https://github.com/sveltejs/template.git",
+        "branch": "master",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "svelte",
+            "js_runtime": "node",
+            "web_directory": "/public"
+        },
+        "why": "Svelte's Rollup template, which builds into public."
     },
     {
         "name": "express-api",

@@ -99,6 +99,18 @@ final readonly class JsFrameworks
         return false;
     }
 
+    public function viteBuild(RepositoryFacts $facts, string $build): bool
+    {
+        $start = (string) ($facts->json('package.json')['scripts']['start'] ?? '');
+
+        return $facts->dependency('vite') !== null && str_contains($build, 'vite build') && (trim($start) === '' || preg_match('~^\s*vite(\s|$)~', $start) === 1);
+    }
+
+    public function viteOutput(RepositoryFacts $facts): ?string
+    {
+        return $this->config($facts, ['vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vite.config.mjs'], '~outDir\s*:~') ? null : '/dist';
+    }
+
     private function nitroBlock(string $config): ?string
     {
         if (preg_match('/\bnitro\s*:\s*\{/', $config, $matches, PREG_OFFSET_CAPTURE) !== 1) {

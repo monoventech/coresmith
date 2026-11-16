@@ -124,6 +124,23 @@ const JHIPSTER = {
     blockers: []
 }
 
+const REACT = {
+    id: 'r9wq8mz9xw4hpbn6tq8rjf3ylc5ds0gn',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'ready',
+    fields: { type: 'js', framework: 'react', js_runtime: 'node', web_directory: '/dist', version: '24.11.1' },
+    sources: {
+        type: 'From package.json',
+        js_runtime: 'From package-lock.json',
+        framework: 'react in package.json, built with vite',
+        web_directory: 'The build writes to dist',
+        runtime_version: 'Node.js 24.11.1, the newest Coresmith installs'
+    },
+    unsettled: {},
+    blockers: []
+}
+
 async function answer(page: Page, answers: object[]): Promise<string[]> {
     const asked: string[] = []
 
@@ -235,6 +252,21 @@ test.describe('Stack detection on Add an app', () => {
         await expect(
             page.getByRole('radiogroup', { name: 'Java version' }).getByRole('radio', { name: /From the repository/ })
         ).toHaveAccessibleName(/Java 21\.0\.13 from pom\.xml/)
+    })
+
+    test('a React app built with Vite is read as JavaScript and React, served from dist', async ({ page }) => {
+        await answer(page, [REACT])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/storefront.git')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Language')).toHaveValue('js')
+        await expect(page.getByLabel('Framework')).toHaveValue('react')
+        await expect(page.getByLabel('Runtime', { exact: true })).toHaveValue('node')
+        await expect(page.getByLabel('Web root')).toHaveValue('/dist')
+        await expect(page.getByText('react in package.json, built with vite')).toBeVisible()
+        await expect(page.getByText('The build writes to dist')).toBeVisible()
     })
 
     test('a field the files do not settle is left for the person, with the reason', async ({ page }) => {

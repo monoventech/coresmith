@@ -814,7 +814,7 @@ test.describe('adding an application', () => {
         await expect(framework).toHaveValue('angular')
     })
 
-    test('Other server names the servers it covers, and static builds go under Static or SPA', async ({ page }) => {
+    test('Other server names the servers it covers, and plain static sites go under Static', async ({ page }) => {
         await openAddApp(page)
 
         const language = page.getByLabel('Language')
@@ -831,7 +831,48 @@ test.describe('adding an application', () => {
         await framework.selectOption('adonisjs')
         await expect(hint).toBeHidden()
 
-        await expect(language.getByRole('option', { name: 'Static or SPA' })).toHaveAttribute('value', 'static')
+        await expect(language.getByRole('option', { name: 'Static', exact: true })).toHaveAttribute('value', 'static')
+    })
+
+    test('React, Vue and Svelte are JavaScript frameworks served from their build, so they ask for a web root', async ({
+        page
+    }) => {
+        await openAddApp(page)
+        await page.getByLabel('Language').selectOption('js')
+
+        const framework = page.getByLabel('Framework')
+        const webRoot = page.getByLabel('Web root')
+
+        await expect(webRoot).toHaveCount(0)
+
+        for (const [value, label] of [
+            ['react', 'React'],
+            ['vue', 'Vue'],
+            ['svelte', 'Svelte']
+        ]) {
+            await framework.selectOption({ label })
+            await expect(framework).toHaveValue(value)
+            await expect(webRoot).toHaveValue('/dist')
+        }
+
+        await framework.selectOption('nextjs')
+        await expect(webRoot).toHaveCount(0)
+    })
+
+    test('a React app added by hand keeps the web root it was given', async ({ page }) => {
+        const name = `react${Date.now().toString(36)}`
+
+        await openAddApp(page)
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
+        await page.getByLabel('Name', { exact: true }).fill(name)
+        await page.getByLabel('Language').selectOption('js')
+        await page.getByLabel('Framework').selectOption({ label: 'React' })
+        await page.getByLabel('Web root').fill('/build')
+        await page.getByRole('button', { name: 'Add the app' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
+        await expect(toast(page)).toContainText('App added.')
+        await expect(page.getByRole('main')).toContainText('React')
     })
 
     test('a framework picked by hand stays picked when the page refreshes itself', async ({ page }) => {

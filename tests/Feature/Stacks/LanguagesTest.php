@@ -44,7 +44,7 @@ test('only PHP apps run under PHP-FPM, and only JavaScript and Ruby apps run a w
 test('PHP apps are handed to PHP-FPM, static sites to the file server and the rest to their own port', function () {
     expect(array_map(fn(ApplicationType $type): Route => $type->language()->route(new Application(['type' => $type])), ApplicationType::cases()))
         ->toBe([Route::PhpFastcgi, Route::ReverseProxy, Route::ReverseProxy, Route::FileServer, Route::ReverseProxy, Route::ReverseProxy, Route::ReverseProxy])
-        ->and(array_map(fn(Route $route): bool => $route->servesFiles(), Route::cases()))->toBe([true, false, false, true]);
+        ->and(array_map(fn(Route $route): bool => $route->servesFiles(), Route::cases()))->toBe([true, false, false, true, true]);
 });
 
 test('Ruby and Python name the system packages their dependencies build against, and the others need none', function () {

@@ -33,7 +33,7 @@ final class Vite extends JsPreset
 
     public function claims(RepositoryFacts $facts, string $build): bool
     {
-        return $facts->dependency('vite') !== null && str_contains($build, 'vite build') && $this->viteOnly($facts);
+        return $this->frameworks->viteBuild($facts, $build);
     }
 
     public function propose(RepositoryFacts $facts, string $runtime, array $sources, ?string $output): array
@@ -48,13 +48,6 @@ final class Vite extends JsPreset
 
     public function staticOutput(RepositoryFacts $facts): ?string
     {
-        return $this->frameworks->config($facts, ['vite.config.ts', 'vite.config.js'], '~outDir\s*:~') ? null : '/dist';
-    }
-
-    private function viteOnly(RepositoryFacts $facts): bool
-    {
-        $start = (string) ($facts->json('package.json')['scripts']['start'] ?? '');
-
-        return trim($start) === '' || preg_match('~^\s*vite(\s|$)~', $start) === 1;
+        return $this->frameworks->viteOutput($facts);
     }
 }

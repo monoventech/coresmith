@@ -13,6 +13,7 @@ use App\Services\Detection\Blocker;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\JsTooling;
 use App\Services\Runtime\RepositoryFacts;
+use App\Stacks\JsPresets\JsPreset;
 use App\Stacks\JsPresets\JsPresets;
 
 final readonly class JavaScriptChecks
@@ -25,13 +26,15 @@ final readonly class JavaScriptChecks
     public function checks(Application $choice, string $framework, RepositoryFacts $facts, ?string $arch): array
     {
         $runtime = $choice->js_runtime ?: 'bun';
+        $preset = $this->presets->find($framework);
+        $files = $preset?->servesFiles() === true;
 
         if ($runtime === 'deno') {
             if (!$facts->has('deno.json') && !$facts->has('deno.jsonc') && !$facts->has('package.json')) {
                 return [new Blocker('js_runtime', 'There is no deno.json or package.json, so there is nothing for Deno to run.', 'Pick the runtime the repository uses.')];
             }
 
-            return $facts->denoTask('start') || $facts->exists('main.ts')
+            return $files || $facts->denoTask('start') || $facts->exists('main.ts')
                 ? []
                 : [new Blocker('repository', 'There is no start task in deno.json, and no main.ts to run instead.', 'Add a start task to deno.json, for example "start": "deno run --allow-net main.ts".')];
         }
@@ -44,13 +47,34 @@ final readonly class JavaScriptChecks
             )];
         }
 
-        $blockers = $this->presets->find($framework)?->blockers($facts) ?? $this->started($facts);
-        $port = $this->fixedPort($facts);
-        $blockers = $port === null ? $blockers : [...$blockers, $port];
+        if ($files) {
+            $blockers = $this->built($choice, $facts, $preset);
+        } else {
+            $blockers = $preset?->blockers($facts) ?? $this->started($facts);
+            $port = $this->fixedPort($facts);
+            $blockers = $port === null ? $blockers : [...$blockers, $port];
+        }
 
         return $facts->dependency('fibers') === null
             ? $blockers
             : [...$blockers, new Blocker('repository', 'package.json depends on fibers, which does not build on Node.js 16 or later, and Coresmith installs Node.js ' . $this->catalog->range('nodejs') . '.', 'Remove fibers from package.json. Its author retired it when Node.js 16 came out.')];
+    }
+
+    /**
+     * @return list<Blocker>
+     */
+    private function built(Application $choice, RepositoryFacts $facts, JsPreset $preset): array
+    {
+        if (!$facts->script('build')) {
+            return [new Blocker('repository', 'There is no build script in package.json, so there would be no files to serve.', 'Add a build script to package.json, for example "build": "vite build".')];
+        }
+
+        $web = trim((string) $choice->web_directory, '/');
+        $output = $preset->staticOutput($facts);
+
+        return $output !== null && $output !== '/' . $web
+            ? [new Blocker('web_directory', "The build writes to {$output}, so the web root /{$web} would be empty.", "Set the web root to {$output}.")]
+            : [];
     }
 
     private function fixedPort(RepositoryFacts $facts): ?Blocker
