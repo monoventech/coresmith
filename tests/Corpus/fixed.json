@@ -419,7 +419,7 @@
     },
     {
         "name": "vite-svelte",
-        "url": "https://github.com/koval01/notcoinWeb.git",
+        "url": "https://github.com/Libao-Jun/svelte-web.git",
         "branch": "master",
         "expect": {
             "verdict": "ready",
@@ -428,7 +428,7 @@
             "js_runtime": "node",
             "web_directory": "/dist"
         },
-        "why": "Svelte 4 built with Vite, with a svelte.config.js but no SvelteKit."
+        "why": "Svelte 4 built with Vite 5 and pnpm, without SvelteKit."
     },
     {
         "name": "create-react-app",
@@ -445,8 +445,8 @@
     },
     {
         "name": "vue-cli",
-        "url": "https://github.com/maomao1996/Vue-mmPlayer.git",
-        "branch": "master",
+        "url": "https://github.com/YooHyeok/vue3-composition.git",
+        "branch": "main",
         "expect": {
             "verdict": "ready",
             "type": "js",
@@ -454,7 +454,7 @@
             "js_runtime": "node",
             "web_directory": "/dist"
         },
-        "why": "Vue 2 on Vue CLI 5 with pnpm, served from dist."
+        "why": "Vue 3 on Vue CLI 5 with npm, served from dist."
     },
     {
         "name": "svelte-rollup",
