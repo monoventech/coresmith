@@ -86,9 +86,14 @@ test.describe('what each member sees', () => {
         const live = inProject(page, 'Storefront').getByRole('checkbox', { name: 'storefront', exact: true })
 
         await expect(live).toBeChecked()
+
+        const items = await inProject(page, 'Storefront').getByRole('checkbox').count()
+
         await live.click()
         await expect(live).not.toBeChecked()
-        await expect(dialog(page).getByRole('button', { name: / in Storefront$/ })).toHaveText(/1 of 2 shared/)
+        await expect(dialog(page).getByRole('button', { name: / in Storefront$/ })).toHaveText(
+            new RegExp(`${items - 1} of ${items} shared`)
+        )
         await dialog(page).getByRole('button', { name: 'Save' }).click()
 
         await expect(toast(page)).toContainText('Saved.')
