@@ -343,6 +343,7 @@
 </script>
 
 {#snippet row(kind: Kind, item: ShareableItem, project: SharedProject | null, prefix: string)}
+    {@const note = mine(item) ? 'Theirs' : item.developer ? `Added by ${item.developer.name}` : null}
     <div
         class="flex min-h-9 items-center gap-2.5 pl-6.5"
         data-testid={kind === 'applications' ? 'share-app' : 'share-database'}
@@ -354,19 +355,22 @@
             onCheckedChange={(on) => share(kind, item.id, on, project)}
             aria-invalid={failure ? true : undefined}
         />
-        <Label for="{prefix}-{item.id}" class="min-w-0 truncate font-mono text-[13px] font-normal">{item.name}</Label>
-        {#if item.tags && item.tags.length > 0}
-            <AppTags tags={item.tags} limit={2} class="shrink-0 flex-nowrap" chipClass="max-w-20" />
+        {#if kind === 'databases'}
+            <Label for="{prefix}-{item.id}" class="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-normal">
+                <span class="min-w-0 truncate font-mono">{item.name}</span>
+                <span class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground">Database</span>
+            </Label>
+        {:else}
+            <Label for="{prefix}-{item.id}" class="min-w-0 truncate font-mono text-[13px] font-normal"
+                >{item.name}</Label
+            >
+            {#if item.tags && item.tags.length > 0}
+                <AppTags tags={item.tags} limit={2} class="shrink-0 flex-nowrap" chipClass="max-w-20" />
+            {/if}
         {/if}
-        <span class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground"
-            >{mine(item)
-                ? 'Theirs'
-                : item.developer
-                  ? `Added by ${item.developer.name}`
-                  : kind === 'databases'
-                    ? 'Database'
-                    : ''}</span
-        >
+        {#if note}
+            <span class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground">{note}</span>
+        {/if}
     </div>
 {/snippet}
 

@@ -71,7 +71,11 @@ export type ExplorerProps = {
     can: { createProject: boolean; createServer: boolean }
 }
 
-export type Crumb = { label: string; href: string | null; mono: boolean }
+export type CrumbSwitch = { kind: 'server' | 'application' | 'project'; id: string }
+
+export type Crumb = { label: string; href: string | null; mono: boolean; switch: CrumbSwitch | null }
+
+export type AppDeploy = { name: string; href: string; from: string; running_href: string | null; blocked: boolean }
 
 export function statusDot(tone: string): string {
     switch (tone) {

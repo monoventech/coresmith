@@ -24,7 +24,7 @@ final class DeploymentCancellation
 {
     private const PAST_MIGRATIONS = '/^\[\d{2}:\d{2}:\d{2}\] (migrate|health|swap):/m';
 
-    private const BLUEPRINT = '/^\[\d{2}:\d{2}:\d{2}\] build: running the custom blueprint$/m';
+    private const BLUEPRINT = '/^\[\d{2}:\d{2}:\d{2}\] build: running (the custom blueprint|your deploy script)$/m';
 
     private const ASKED = '/^cancel: (.+ )?asked to stop the deploy$/m';
 

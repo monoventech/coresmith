@@ -36,7 +36,7 @@ test.describe('an admin who sees only what is shared', () => {
     test('an app in a project they were not given names the project without a link', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'atlas')
 
-        await expect(page.getByTestId('app-project')).toContainText('Atlas › Production')
+        await expect(page.getByTestId('app-project')).toHaveText('· Atlas')
         await expect(page.getByTestId('app-project').getByRole('link')).toHaveCount(0)
     })
 
@@ -58,7 +58,7 @@ test.describe('an admin who sees only what is shared', () => {
 
         await page.keyboard.press('ControlOrMeta+A')
         await page.keyboard.type('atlas')
-        await expect(palette(page).getByRole('option', { name: 'Open atlas on forge-01' })).toBeVisible()
+        await expect(palette(page).getByRole('option', { name: 'Open atlas production · on forge-01' })).toBeVisible()
         await expect(palette(page).getByRole('option', { name: /Open atlas-staging/ })).toHaveCount(0)
     })
 

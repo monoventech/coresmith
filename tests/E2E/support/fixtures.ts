@@ -28,8 +28,8 @@ export const asDeveloper = suite.extend({
     storageState: 'tests/E2E/.auth/developer.json'
 })
 
-export const asEnvironmentOnly = suite.extend({
-    storageState: 'tests/E2E/.auth/environment.json'
+export const asPartlyShared = suite.extend({
+    storageState: 'tests/E2E/.auth/partial.json'
 })
 
 export const asGuest = suite.extend({

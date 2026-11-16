@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
+use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationTagsController;
 use App\Jobs\ApplyPhpLimits;
 use App\Jobs\SyncApplicationCron;
@@ -323,6 +324,7 @@ final class ActivityFeed
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
             'application_filed' => [$this->mono($application?->name), $this->text($this->filing($properties))],
+            ApplicationDeployScriptController::CHANGED => [$this->text('Deploy script for '), $this->mono($application?->name), $this->text(($properties['custom'] ?? false) ? ' changed, the next deploy runs it' : " is back to Coresmith's default")],
             ApplicationTagsController::CHANGED => [$this->text('Tags on '), $this->mono($application?->name), $this->text(($properties['to'] ?? []) === [] ? ' cleared' : ' set to ' . implode(', ', array_map('strval', (array) $properties['to'])))],
             'toggle_changed' => match (true) {
                 ($properties['toggle'] ?? null) !== SmartToggles::AUTO_DEPLOY => [$this->text('Smart toggle ' . (($properties['on'] ?? false) ? 'enabled' : 'disabled') . ', ' . ($properties['label'] ?? 'a toggle') . ' on '), $this->mono($application?->name), $this->text(', no deployment needed')],

@@ -178,7 +178,7 @@ test('the browser seed files the monoven apps into projects with tags, and has a
     $storefront = $team->projects()->where('name', 'Storefront')->sole();
     $live = $team->applications()->where('name', 'storefront')->sole();
     $trial = $team->applications()->where('name', 'storefront-staging')->sole();
-    $member = User::query()->where('email', E2ESeeder::ENVIRONMENT_EMAIL)->sole();
+    $member = User::query()->where('email', E2ESeeder::PARTIAL_EMAIL)->sole();
     $access = app(TeamAccess::class);
 
     expect($team->projects()->orderBy('name')->pluck('name')->all())->toBe(['Atlas', 'Storefront'])
@@ -189,4 +189,21 @@ test('the browser seed files the monoven apps into projects with tags, and has a
         ->and($access->canSeeApplication($member, $trial))->toBeTrue()
         ->and($access->canSeeApplication($member, $live))->toBeFalse()
         ->and($team->applications()->whereIn('name', array_map(fn(string $code): string => "filed-{$code}", array_values(E2ESeeder::PROJECTS)))->count())->toBe(count(E2ESeeder::PROJECTS));
+});
+
+test('the browser seed shares Atlas with the developer with everything in it held back, so they see it empty', function () {
+    e2eSeedRun();
+
+    $team = Team::query()->where('slug', 'monoven')->sole();
+    $atlas = $team->projects()->where('name', 'Atlas')->sole();
+    $lena = User::query()->where('email', E2ESeeder::DEVELOPER_EMAIL)->sole();
+    $access = app(TeamAccess::class);
+    $summary = $access->summary($team, $lena);
+
+    expect($summary['projects'])->toBe([$atlas->id])
+        ->and($summary['servers'])->toBe([$team->servers()->where('name', 'forge-02')->value('id')])
+        ->and($summary['withheld_applications'])->toEqualCanonicalizing($atlas->applications()->pluck('id')->all())
+        ->and($summary['withheld_databases'])->toEqualCanonicalizing($atlas->databases()->pluck('id')->all())
+        ->and($access->applications($lena, $team)->pluck('name')->all())->toBe(['side-notes'])
+        ->and($access->canSeeProject($lena, $atlas))->toBeTrue();
 });

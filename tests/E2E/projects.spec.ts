@@ -1,16 +1,23 @@
 import type { Page } from '@playwright/test'
-import { dialog, expect, expectWayBack, goWayBack, nav, own, test, toast } from './support/fixtures'
+import {
+    blockingViolations,
+    dialog,
+    expect,
+    expectWayBack,
+    goWayBack,
+    nav,
+    own,
+    test,
+    toast,
+    useTheme
+} from './support/fixtures'
 
 function card(page: Page, name: string) {
     return page.getByTestId('project-card').filter({ has: page.getByRole('link', { name, exact: true }) })
 }
 
-function environment(page: Page, name: string) {
-    return page.getByTestId('environment').filter({ has: page.getByRole('heading', { level: 2, name, exact: true }) })
-}
-
-function appLink(page: Page, environmentName: string, name: string) {
-    return environment(page, environmentName).getByTestId('environment-app').getByRole('link', { name, exact: true })
+function appRow(page: Page, name: string) {
+    return page.getByTestId('project-app').filter({ has: page.getByRole('link', { name, exact: true }) })
 }
 
 function fleetViews(page: Page) {
@@ -24,10 +31,10 @@ test.describe('projects', () => {
         await page.waitForURL(/\/projects$/)
 
         await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your fleet')
-        await expect(card(page, 'Atlas')).toContainText(/2 environments · \d+ apps? · 1 database/)
-        await expect(card(page, 'Storefront').getByTestId('project-environment')).toHaveText([
-            /^Production \d+$/,
-            /^Staging \d+$/
+        await expect(card(page, 'Atlas')).toContainText(/\d+ apps? · 1 database/)
+        await expect(card(page, 'Storefront').getByTestId('project-card-app')).toHaveText([
+            'storefront production',
+            'storefront-staging staging'
         ])
         await expect(page.getByTestId('no-project')).toContainText('ledger')
         await expect(nav(page).getByRole('link', { name: 'Fleet', exact: true })).toHaveAttribute(
@@ -40,14 +47,23 @@ test.describe('projects', () => {
         await expect(page.getByTestId('server-card').first()).toBeVisible()
     })
 
-    test('a project page lists each environment with what is in it', async ({ page }) => {
+    test('a project page shows each app with its tags and last deploy, then deploys, servers and who can see it', async ({
+        page
+    }) => {
         await page.goto('/projects')
         await card(page, 'Storefront').getByRole('link', { name: 'Storefront', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
-        await expect(appLink(page, 'Production', 'storefront')).toBeVisible()
-        await expect(appLink(page, 'Staging', 'storefront-staging')).toBeVisible()
-        await expect(environment(page, 'Production')).toContainText('Recent deploys')
+        await expect(page.getByText('2 apps · on 2 servers')).toBeVisible()
+        await expect(appRow(page, 'storefront').getByTestId('app-tags')).toHaveText('production')
+        await expect(appRow(page, 'storefront-staging').getByTestId('app-tags')).toHaveText('staging')
+        await expect(appRow(page, 'storefront').getByTestId('last-deploy')).not.toHaveText('Not deployed yet')
+        await expect(appRow(page, 'storefront').getByRole('button', { name: 'Deploy storefront' })).toBeVisible()
+        await expect(page.getByTestId('project-deploys')).toContainText('Recent deploys')
+        await expect(page.getByTestId('project-servers').getByRole('link', { name: 'forge-01' })).toBeVisible()
+        await expect(
+            page.getByTestId('project-people').getByRole('listitem').filter({ hasText: 'Ines Duarte' })
+        ).toContainText('Shared in part')
         await expect(nav(page).getByRole('link', { name: 'Fleet', exact: true })).toHaveAttribute(
             'aria-current',
             'page'
@@ -61,10 +77,10 @@ test.describe('projects', () => {
     test('an app page names the project it is in', async ({ page }) => {
         await page.goto('/projects')
         await card(page, 'Atlas').getByRole('link', { name: 'Atlas', exact: true }).click()
-        await appLink(page, 'Production', 'atlas').click()
+        await appRow(page, 'atlas').getByRole('link', { name: 'atlas', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'atlas' })).toBeVisible()
-        await page.getByTestId('app-project').getByRole('link', { name: 'Atlas › Production' }).click()
+        await page.getByTestId('app-project').getByRole('link', { name: 'Atlas', exact: true }).click()
         await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible()
     })
 
@@ -79,26 +95,23 @@ test.describe('projects', () => {
 
         await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
         await expect(toast(page)).toContainText(`Created ${name}.`)
-        await expect(environment(page, 'Production')).toContainText('Nothing in Production yet.')
+        await expect(page.getByText(`Nothing in ${name} yet.`)).toBeVisible()
 
-        await page.getByRole('button', { name: 'Add environment' }).click()
-        await dialog(page).getByLabel('Environment name').fill('Preview')
-        await dialog(page).getByRole('button', { name: 'Add environment' }).click()
-        await expect(environment(page, 'Preview')).toBeVisible()
-
-        await environment(page, 'Production').getByRole('button', { name: 'Add apps or databases' }).click()
-        await expect(dialog(page)).toContainText('Anyone this environment is shared with will see what you add.')
+        await page.getByRole('button', { name: 'Add existing' }).click()
+        await expect(dialog(page)).toContainText(`Anyone ${name} is shared with will see what you add.`)
         await dialog(page).getByRole('checkbox', { name: app, exact: true }).click()
-        await dialog(page).getByRole('button', { name: 'Add to Production' }).click()
+        await dialog(page)
+            .getByRole('button', { name: `Add to ${name}` })
+            .click()
 
-        await expect(toast(page)).toContainText('Added to Production.')
-        await expect(appLink(page, 'Production', app)).toBeVisible()
+        await expect(toast(page)).toContainText(`Added to ${name}.`)
+        await expect(appRow(page, app)).toBeVisible()
 
-        await environment(page, 'Production')
-            .getByRole('button', { name: `Take ${app} out of Production` })
+        await appRow(page, app)
+            .getByRole('button', { name: `Take ${app} out of ${name}` })
             .click()
         await expect(toast(page)).toContainText(`Took ${app} out of ${name}.`)
-        await expect(environment(page, 'Production')).toContainText('Nothing in Production yet.')
+        await expect(page.getByText(`Nothing in ${name} yet.`)).toBeVisible()
 
         await page.getByRole('button', { name: 'Rename', exact: true }).click()
         await dialog(page).getByLabel('Project name').fill(`${name} app`)
@@ -123,6 +136,17 @@ test.describe('projects', () => {
 
         await expect(dialog(page)).toContainText("There's already a project called Storefront.")
     })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`the project page is accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await page.goto('/projects')
+            await card(page, 'Storefront').getByRole('link', { name: 'Storefront', exact: true }).click()
+            await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 })
 
 test.describe('a team without projects', () => {

@@ -80,7 +80,7 @@ final class E2ESeeder extends Seeder
 
     public const NARROWED_EMAIL = 'narrowed@coresmith.test';
 
-    public const ENVIRONMENT_EMAIL = 'environment@coresmith.test';
+    public const PARTIAL_EMAIL = 'partial@coresmith.test';
 
     public const DEVELOPER_EMAIL = 'developer@coresmith.test';
 
@@ -130,13 +130,14 @@ final class E2ESeeder extends Seeder
         app(TeamAccess::class)->grant($this->team, $narrowed, $tenant->applications['warehouse']);
         SourceProvider::factory()->githubApp(GitHubApp::factory()->create(['team_id' => $this->team->id, 'user_id' => $narrowed->id, 'name' => 'Coresmith for Noor Haddad']))->create(['team_id' => $this->team->id, 'user_id' => $narrowed->id, 'name' => 'noor-h']);
 
-        $environmentOnly = User::factory()->create(['name' => 'Ines Duarte', 'email' => self::ENVIRONMENT_EMAIL, 'password' => $password]);
-        $this->team->members()->attach($environmentOnly, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
-        app(TeamAccess::class)->sync($this->team, $environmentOnly, false, [], [], [$this->team->projects()->where('name', 'Storefront')->sole()->id], [], [$tenant->applications['storefront']->id]);
+        $partial = User::factory()->create(['name' => 'Ines Duarte', 'email' => self::PARTIAL_EMAIL, 'password' => $password]);
+        $this->team->members()->attach($partial, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
+        app(TeamAccess::class)->sync($this->team, $partial, false, [], [], [$this->team->projects()->where('name', 'Storefront')->sole()->id], [], [$tenant->applications['storefront']->id]);
 
         $developer = User::factory()->create(['name' => 'Lena Brandt', 'email' => self::DEVELOPER_EMAIL, 'password' => $password]);
         $this->team->members()->attach($developer, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
-        app(TeamAccess::class)->grant($this->team, $developer, $tenant->servers['forge-02']);
+        $atlas = $this->team->projects()->where('name', 'Atlas')->sole();
+        app(TeamAccess::class)->sync($this->team, $developer, false, [$tenant->servers['forge-02']->id], [], [$atlas->id], [], $atlas->applications()->pluck('id')->all(), $atlas->databases()->pluck('id')->all());
         $this->application('side-notes', 9620, ['created_by' => $developer->id, 'domain' => 'side-notes.lena.dev'], $tenant->servers['forge-02']);
         $this->server('lena-01', '198.51.100.44', ServerStatus::Active)->forceFill(['created_by' => $developer->id])->save();
         $lenaKey = (new KeyPairGenerator)->generate()->publicKey;

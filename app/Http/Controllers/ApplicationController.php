@@ -32,6 +32,7 @@ use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Cron\CronRunLine;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\DeployScript;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\StackDefaults;
 use App\Services\Detection\RepositoryAccess;
@@ -288,6 +289,11 @@ final class ApplicationController extends Controller
             ],
             'runtime_choice' => $user->can('update', $application) ? $this->runtimeChoice($server, $application) : null,
             'tag_suggestions' => $user->can('update', $application) ? AppTags::suggestions($user, $server->team) : [],
+            'deploy_script' => [
+                ...app(DeployScript::class)->present($application),
+                'update_href' => $user->can('update', $application) ? route('servers.applications.deploy-script.update', [$server, $application]) : null,
+                'reset_href' => $user->can('update', $application) ? route('servers.applications.deploy-script.destroy', [$server, $application]) : null,
+            ],
             'held' => $this->held($application, $live),
         ]);
     }

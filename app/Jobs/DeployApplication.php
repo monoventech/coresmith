@@ -38,6 +38,7 @@ use App\Services\Deployment\DeploymentCancellation;
 use App\Services\Deployment\DeploymentCommands;
 use App\Services\Deployment\DeploymentLog;
 use App\Services\Deployment\DeploymentPhases;
+use App\Services\Deployment\DeployScript;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\GitFailure;
 use App\Services\Deployment\LiveAnswer;
@@ -604,7 +605,8 @@ final class DeployApplication implements ShouldQueue
         if ($this->hasCustomBlueprint($application)) {
             $this->checkpoint();
             $this->pastCancelPoint = true;
-            $this->mark(DeploymentPhases::BUILD, 'running the custom blueprint');
+            $this->mark(DeploymentPhases::BUILD, 'running your deploy script');
+            $this->prepareForScript($connection, $release, $stack);
             $this->runBlueprint($connection, $release, $application, $stack);
         } else {
             $stopBuild = fn() => $this->stopBuild($connection, $application);
@@ -1263,7 +1265,18 @@ final class DeployApplication implements ShouldQueue
 
     private function hasCustomBlueprint(Application $application): bool
     {
-        return trim((string) $application->custom_blueprint) !== '';
+        return DeployScript::custom($application);
+    }
+
+    private function prepareForScript(SSHConnection $connection, string $release, Stack $stack): void
+    {
+        $tools = $this->deployment->application->type->language()->nativeTools();
+
+        if ($tools !== null) {
+            $this->installNativeTools($connection, $release, $tools);
+        }
+
+        $this->enableCorepackCommands($connection, $stack);
     }
 
     private function runBlueprint(SSHConnection $connection, string $release, Application $application, Stack $stack): void
@@ -1273,7 +1286,7 @@ final class DeployApplication implements ShouldQueue
         $directory = escapeshellarg(dirname($script));
 
         $connection->execute("mkdir -p {$directory} && chmod 700 {$directory} && install -m 600 -o root -g root /dev/null " . escapeshellarg($script), sudo: true)->throw();
-        $connection->uploadContent((string) $application->custom_blueprint, $script);
+        $connection->uploadContent(DeployScript::prepared((string) $application->custom_blueprint), $script);
 
         $unit = AppShell::blueprintUnit($application, $this->timestamp);
         $packages = app(StepSecretsInstaller::class);

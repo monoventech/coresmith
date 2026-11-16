@@ -14,11 +14,24 @@ use App\Services\Teams\TeamAccess;
 use Inertia\Testing\AssertableInertia;
 
 /**
- * @return array{label: string, href: ?string, mono: bool}
+ * @param  array{kind: string, id: string}|null  $switch
+ * @return array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}
  */
-function breadcrumb(string $label, ?string $href = null, bool $mono = false): array
+function breadcrumb(string $label, ?string $href = null, bool $mono = false, ?array $switch = null): array
 {
-    return ['label' => $label, 'href' => $href, 'mono' => $mono];
+    return ['label' => $label, 'href' => $href, 'mono' => $mono, 'switch' => $switch];
+}
+
+/**
+ * @return array{kind: string, id: string}
+ */
+function breadcrumbSwitch(Server|Application|Project $subject): array
+{
+    return ['kind' => match (true) {
+        $subject instanceof Server => 'server',
+        $subject instanceof Application => 'application',
+        default => 'project',
+    }, 'id' => $subject->getKey()];
 }
 
 /**
@@ -60,20 +73,20 @@ test('every page knows its trail', function (Closure $url, Closure $trail) {
 })->with([
     'the fleet' => [fn() => route('dashboard'), fn() => [breadcrumb('Fleet')]],
     'the projects' => [fn() => route('projects.index'), fn() => [breadcrumb('Fleet', route('dashboard')), breadcrumb('Projects')]],
-    'a project' => [fn($f) => route('projects.show', $f['storefront']), fn() => [breadcrumb('Projects', route('projects.index')), breadcrumb('Storefront')]],
+    'a project' => [fn($f) => route('projects.show', $f['storefront']), fn($f) => [breadcrumb('Projects', route('projects.index')), breadcrumb('Storefront', null, false, breadcrumbSwitch($f['storefront']))]],
     'provisioning a server' => [fn() => route('servers.create'), fn() => [breadcrumb('Fleet', route('dashboard')), breadcrumb('Provision a server')]],
-    'a server' => [fn($f) => route('servers.show', $f['web']), fn() => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', null, true)]],
-    'a server tab' => [fn($f) => route('servers.hardening', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Hardening')]],
-    "a server's activity" => [fn($f) => route('servers.activity', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Activity')]],
-    "a server's databases" => [fn($f) => route('servers.databases.index', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Databases')]],
-    'creating a database' => [fn($f) => route('servers.databases.create', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Databases', route('servers.databases.index', $f['web'])), breadcrumb('Create a database')]],
-    'adding an app' => [fn($f) => route('servers.applications.create', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Add an app')]],
-    'an app in a project' => [fn($f) => route('servers.applications.show', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop', null, true)]],
-    'an app outside projects' => [fn($f) => route('servers.applications.show', [$f['web'], $f['blog']]), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('blog', null, true)]],
-    "an app's releases" => [fn($f) => route('servers.applications.releases.index', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true), breadcrumb('Releases')]],
-    'a deploy' => [fn($f) => route('servers.applications.deployments.show', [$f['web'], $f['shop'], $f['deploy']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true), breadcrumb('Deploy'), breadcrumb('20261112-091400', null, true)]],
-    'a database in a project' => [fn($f) => route('servers.databases.show', [$f['web'], $f['shopDb']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop_db', null, true)]],
-    'a database outside projects' => [fn($f) => route('servers.databases.show', [$f['web'], $f['blogDb']]), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('blog_db', null, true)]],
+    'a server' => [fn($f) => route('servers.show', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', null, true, breadcrumbSwitch($f['web']))]],
+    'a server tab' => [fn($f) => route('servers.hardening', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Hardening')]],
+    "a server's activity" => [fn($f) => route('servers.activity', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Activity')]],
+    "a server's databases" => [fn($f) => route('servers.databases.index', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Databases')]],
+    'creating a database' => [fn($f) => route('servers.databases.create', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Databases', route('servers.databases.index', $f['web'])), breadcrumb('Create a database')]],
+    'adding an app' => [fn($f) => route('servers.applications.create', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Add an app')]],
+    'an app in a project' => [fn($f) => route('servers.applications.show', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront']), false, breadcrumbSwitch($f['storefront'])), breadcrumb('shop', null, true, breadcrumbSwitch($f['shop']))]],
+    'an app outside projects' => [fn($f) => route('servers.applications.show', [$f['web'], $f['blog']]), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('blog', null, true, breadcrumbSwitch($f['blog']))]],
+    "an app's releases" => [fn($f) => route('servers.applications.releases.index', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront']), false, breadcrumbSwitch($f['storefront'])), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true, breadcrumbSwitch($f['shop'])), breadcrumb('Releases')]],
+    'a deploy' => [fn($f) => route('servers.applications.deployments.show', [$f['web'], $f['shop'], $f['deploy']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront']), false, breadcrumbSwitch($f['storefront'])), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true, breadcrumbSwitch($f['shop'])), breadcrumb('Deploy'), breadcrumb('20261112-091400', null, true)]],
+    'a database in a project' => [fn($f) => route('servers.databases.show', [$f['web'], $f['shopDb']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront']), false, breadcrumbSwitch($f['storefront'])), breadcrumb('shop_db', null, true)]],
+    'a database outside projects' => [fn($f) => route('servers.databases.show', [$f['web'], $f['blogDb']]), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('blog_db', null, true)]],
     'deployments' => [fn() => route('deployments.index'), fn() => [breadcrumb('Deployments')]],
     'general settings' => [fn() => route('settings.general'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('General')]],
     'the team tab' => [fn() => route('teams.index'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('Team')]],
@@ -96,7 +109,7 @@ test('an app whose server the member cannot see names the server without linking
             breadcrumb('Monoven Ltd', route('dashboard')),
             breadcrumb('Fleet', route('dashboard')),
             breadcrumb('web', null, true),
-            breadcrumb('blog', null, true),
+            breadcrumb('blog', null, true, breadcrumbSwitch($fleet['blog'])),
         ]));
 });
 
@@ -111,8 +124,8 @@ test('an app in a project the member cannot open goes by its server instead', fu
         ->assertInertia(fn(AssertableInertia $page) => $page->where('crumbs', [
             breadcrumb('Monoven Ltd', route('dashboard')),
             breadcrumb('Fleet', route('dashboard')),
-            breadcrumb('web', route('servers.show', $fleet['web']), true),
-            breadcrumb('shop', null, true),
+            breadcrumb('web', route('servers.show', $fleet['web']), true, breadcrumbSwitch($fleet['web'])),
+            breadcrumb('shop', null, true, breadcrumbSwitch($fleet['shop'])),
         ]));
 });
 

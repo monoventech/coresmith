@@ -175,14 +175,14 @@ test('a failing build step that is not a cache still fails the deploy', function
     expect(releaseLogLines($deployment))->not->toContain('php artisan migrate --force failed, so Coresmith skipped it. The app runs without that cache. Fix the error above to bring it back.');
 });
 
-test('a custom blueprint is logged as the build phase with no dependency install or migration marker', function () {
+test('a deploy script of your own is logged as the build phase with no dependency install or migration marker', function () {
     $deployment = Deployment::factory()->for(releaseApp(['custom_blueprint' => "echo building\n"]))->create();
 
     releaseRun($deployment, releaseTransport());
 
     $log = (string) $deployment->fresh()->log;
 
-    expect($log)->toContain('[14:05:09] build: running the custom blueprint')
+    expect($log)->toContain('[14:05:09] build: running your deploy script')
         ->and($log)->not->toContain('] deps: installing dependencies')
         ->and($log)->not->toContain('] migrate:');
 });

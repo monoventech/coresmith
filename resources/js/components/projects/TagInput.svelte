@@ -132,7 +132,6 @@
             aria-invalid={message ? true : undefined}
             oninput={() => (problem = null)}
             {onkeydown}
-            onblur={flush}
         />
         {#if name && cleanTag(text) !== ''}
             <input type="hidden" name="{name}[]" value={cleanTag(text)} />

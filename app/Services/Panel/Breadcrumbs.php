@@ -46,7 +46,7 @@ final class Breadcrumbs
     public function __construct(private readonly TeamAccess $access) {}
 
     /**
-     * @return list<array{label: string, href: ?string, mono: bool}>
+     * @return list<array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}>
      */
     public function for(Request $request, ?Team $team, ?User $user): array
     {
@@ -73,7 +73,7 @@ final class Breadcrumbs
             isset(self::SETTINGS[$name]) => [$settings, self::crumb(self::SETTINGS[$name])],
             $name === 'settings.removal.show' => [$settings, self::crumb('General', route('settings.general')), self::crumb('Remove Coresmith')],
             isset(self::ACCOUNT[$name]) => [self::crumb('Your account', route('profile.edit')), self::crumb(self::ACCOUNT[$name])],
-            $name === 'projects.show' && $project instanceof Project => [self::crumb('Projects', route('projects.index')), self::crumb($project->name)],
+            $name === 'projects.show' && $project instanceof Project => [self::crumb('Projects', route('projects.index')), self::crumb($project->name, switch: self::switchTo($project))],
             $application instanceof Application => $this->application($user, $application, $name, $this->bound($route, Deployment::class), $fleet),
             $database instanceof ManagedDatabase => [...$this->place($user, $database, $fleet), self::crumb($database->name, null, true)],
             $server instanceof Server => $this->server($server, $name, $fleet),
@@ -99,16 +99,16 @@ final class Breadcrumbs
     }
 
     /**
-     * @param  array{label: string, href: ?string, mono: bool}  $fleet
-     * @return list<array{label: string, href: ?string, mono: bool}>
+     * @param  array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}  $fleet
+     * @return list<array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}>
      */
     private function server(Server $server, string $name, array $fleet): array
     {
         if ($name === 'servers.show') {
-            return [$fleet, self::crumb($server->name, null, true)];
+            return [$fleet, self::crumb($server->name, null, true, self::switchTo($server))];
         }
 
-        $trail = [$fleet, self::crumb($server->name, route('servers.show', $server), true)];
+        $trail = [$fleet, self::crumb($server->name, route('servers.show', $server), true, self::switchTo($server))];
 
         return match (true) {
             $name === 'servers.databases.create' => [...$trail, self::crumb('Databases', route('servers.databases.index', $server)), self::crumb('Create a database')],
@@ -118,18 +118,18 @@ final class Breadcrumbs
     }
 
     /**
-     * @param  array{label: string, href: ?string, mono: bool}  $fleet
-     * @return list<array{label: string, href: ?string, mono: bool}>
+     * @param  array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}  $fleet
+     * @return list<array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}>
      */
     private function application(User $user, Application $application, string $name, ?Deployment $deployment, array $fleet): array
     {
         $place = $this->place($user, $application, $fleet);
 
         if ($name === 'servers.applications.show') {
-            return [...$place, self::crumb($application->name, null, true)];
+            return [...$place, self::crumb($application->name, null, true, self::switchTo($application))];
         }
 
-        $trail = [...$place, self::crumb($application->name, route('servers.applications.show', [$application->server_id, $application->getKey()]), true)];
+        $trail = [...$place, self::crumb($application->name, route('servers.applications.show', [$application->server_id, $application->getKey()]), true, self::switchTo($application))];
         $release = $deployment instanceof Deployment ? Formats::release($deployment->release) : null;
 
         return match (true) {
@@ -140,27 +140,41 @@ final class Breadcrumbs
     }
 
     /**
-     * @param  array{label: string, href: ?string, mono: bool}  $fleet
-     * @return list<array{label: string, href: ?string, mono: bool}>
+     * @param  array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}  $fleet
+     * @return list<array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}>
      */
     private function place(User $user, Application|ManagedDatabase $subject, array $fleet): array
     {
         $project = $subject->project;
 
         if ($project instanceof Project && $this->access->canSeeProject($user, $project)) {
-            return [self::crumb($project->name, route('projects.show', $project))];
+            return [self::crumb($project->name, route('projects.show', $project), switch: self::switchTo($project))];
         }
 
         $server = $subject->server;
+        $visible = $server instanceof Server && $this->access->canSeeServer($user, $server);
 
-        return [$fleet, self::crumb((string) $server?->name, $server instanceof Server && $this->access->canSeeServer($user, $server) ? route('servers.show', $server) : null, true)];
+        return [$fleet, self::crumb((string) $server?->name, $visible ? route('servers.show', $server) : null, true, $visible ? self::switchTo($server) : null)];
     }
 
     /**
-     * @return array{label: string, href: ?string, mono: bool}
+     * @param  array{kind: string, id: string}|null  $switch
+     * @return array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}
      */
-    private static function crumb(string $label, ?string $href = null, bool $mono = false): array
+    private static function crumb(string $label, ?string $href = null, bool $mono = false, ?array $switch = null): array
     {
-        return ['label' => $label, 'href' => $href, 'mono' => $mono];
+        return ['label' => $label, 'href' => $href, 'mono' => $mono, 'switch' => $switch];
+    }
+
+    /**
+     * @return array{kind: string, id: string}
+     */
+    private static function switchTo(Server|Application|Project $subject): array
+    {
+        return ['kind' => match (true) {
+            $subject instanceof Server => 'server',
+            $subject instanceof Application => 'application',
+            default => 'project',
+        }, 'id' => (string) $subject->getKey()];
     }
 }

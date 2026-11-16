@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApplicationAddressController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
+use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPhpLimitsController;
@@ -180,6 +181,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.php-limits.update');
     Route::put('servers/{server}/applications/{application}/tags', [ApplicationTagsController::class, 'update'])
         ->name('servers.applications.tags.update');
+    Route::put('servers/{server}/applications/{application}/deploy-script', [ApplicationDeployScriptController::class, 'update'])
+        ->name('servers.applications.deploy-script.update');
+    Route::delete('servers/{server}/applications/{application}/deploy-script', [ApplicationDeployScriptController::class, 'destroy'])
+        ->name('servers.applications.deploy-script.destroy');
     Route::put('servers/{server}/applications/{application}/toggles/{toggle}', [ApplicationToggleController::class, 'update'])
         ->where('toggle', '[a-z_]+')
         ->name('servers.applications.toggles.update');

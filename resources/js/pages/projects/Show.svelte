@@ -72,6 +72,7 @@
     const empty = $derived(applications.length === 0 && databases.length === 0)
     const bringIn = $derived(can.fill && candidates.applications.length + candidates.databases.length > 0)
     const row = 'border-t border-border px-5.5 py-3 first:border-t-0 max-sm:px-4'
+    const dot = "before:mr-1.5 before:text-muted-foreground before:content-['·']"
 
     function deploy(href: string) {
         working = href
@@ -250,42 +251,53 @@
                                         suggestions={tag_suggestions}
                                     />
                                 </div>
-                                <p class="m-0 mt-1 pl-4.5 text-[12.5px] text-muted-foreground">
-                                    {application.kind}{' · '}{@render where(
-                                        application.server
-                                    )}{#if application.domain}{' · '}<a
-                                            href={application.domain.href}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="focus-ring inline-flex items-center gap-0.5 rounded-sm font-mono text-muted-foreground hover:text-foreground"
-                                            >{application.domain.label}<ArrowUpRight
-                                                class="size-3"
-                                                aria-hidden="true"
-                                            /><span class="sr-only"> (opens in a new tab)</span></a
+                                <p
+                                    class="m-0 mt-1 flex flex-wrap items-center gap-x-1.5 pl-4.5 text-[12.5px] text-muted-foreground"
+                                >
+                                    <span>{application.kind}</span>
+                                    <span class={dot}>{@render where(application.server)}</span>
+                                    {#if application.domain}
+                                        <span class={dot}
+                                            ><a
+                                                href={application.domain.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="focus-ring inline-flex items-center gap-0.5 rounded-sm font-mono text-muted-foreground hover:text-foreground"
+                                                >{application.domain.label}<ArrowUpRight
+                                                    class="size-3"
+                                                    aria-hidden="true"
+                                                /><span class="sr-only"> (opens in a new tab)</span></a
+                                            ></span
                                         >
                                     {/if}
                                 </p>
                                 <p
-                                    class="m-0 mt-1 pl-4.5 text-[12.5px] text-muted-foreground"
+                                    class="m-0 mt-1 flex flex-wrap items-center gap-x-1.5 pl-4.5 text-[12.5px] text-muted-foreground"
                                     data-testid="last-deploy"
                                 >
                                     {#if last}
-                                        {#if last.href}
-                                            <Link
-                                                href={last.href}
-                                                class={cn(
-                                                    'focus-ring rounded-sm font-medium',
-                                                    toneText(last.state.tone)
-                                                )}>{last.state.label}</Link
-                                            >
-                                        {:else}
-                                            <span class={cn('font-medium', toneText(last.state.tone))}
-                                                >{last.state.label}</span
-                                            >
+                                        <span>
+                                            {#if last.href}
+                                                <Link
+                                                    href={last.href}
+                                                    class={cn(
+                                                        'focus-ring rounded-sm font-medium',
+                                                        toneText(last.state.tone)
+                                                    )}>{last.state.label}</Link
+                                                >
+                                            {:else}
+                                                <span class={cn('font-medium', toneText(last.state.tone))}
+                                                    >{last.state.label}</span
+                                                >
+                                            {/if}
+                                            <span title={last.full}>{last.when}</span>
+                                        </span>
+                                        {#if last.commit}
+                                            <span class={cn(dot, 'min-w-0 text-foreground')}>{last.commit}</span>
                                         {/if}
-                                        <span title={last.full}>{last.when}</span>{#if last.commit}{' · '}<span
-                                                class="text-foreground">{last.commit}</span
-                                            >{/if}{#if last.by}{` · ${last.by}`}{/if}
+                                        {#if last.by}
+                                            <span class={dot}>{last.by}</span>
+                                        {/if}
                                     {:else}
                                         Not deployed yet
                                     {/if}
@@ -342,13 +354,16 @@
                                     class="focus-ring rounded-sm font-mono text-[14px] font-medium wrap-anywhere text-foreground"
                                     >{database.name}</Link
                                 >
-                                <p class="m-0 mt-0.5 text-[12.5px] text-muted-foreground">
-                                    {ENGINES[database.type] ?? database.type}{' · '}{@render where(
-                                        database.server
-                                    )}{#if database.offsite}{' · '}<span
-                                            class={cn('font-medium', toneText(database.offsite.tone))}
+                                <p
+                                    class="m-0 mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted-foreground"
+                                >
+                                    <span>{ENGINES[database.type] ?? database.type}</span>
+                                    <span class={dot}>{@render where(database.server)}</span>
+                                    {#if database.offsite}
+                                        <span class={cn(dot, 'font-medium', toneText(database.offsite.tone))}
                                             >{database.offsite.label}</span
-                                        >{/if}
+                                        >
+                                    {/if}
                                 </p>
                             </div>
                             {#if database.remove_href}

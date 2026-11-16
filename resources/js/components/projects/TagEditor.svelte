@@ -67,6 +67,7 @@
             href,
             { tags: body },
             {
+                async: true,
                 preserveScroll: true,
                 preserveState: true,
                 onError: (errors: Record<string, string>) => {
@@ -96,6 +97,7 @@
                         'focus-ring group/tags inline-flex min-h-6 max-w-full cursor-pointer items-center gap-1.5 rounded-sm bg-transparent p-0 text-left',
                         className
                     )}
+                    aria-busy={saving}
                     data-testid="tag-editor"
                 >
                     {#if shown.length > 0}

@@ -127,7 +127,7 @@ final class DeploymentController extends Controller
             CancelOutcome::Cancelled => back()->with('success', 'Cancelled before it started. Nothing changed.'),
             CancelOutcome::Requested, CancelOutcome::AlreadyRequested => back()->with('success', 'Cancelling. The current release keeps serving.'),
             CancelOutcome::TooLate => back()->with('error', 'Migrations have started, so this deploy finishes on its own. Roll back afterwards if you need to.'),
-            CancelOutcome::Blueprint => back()->with('error', "This app deploys with a custom blueprint, which can run migrations, so it can't be stopped partway."),
+            CancelOutcome::Blueprint => back()->with('error', "This app deploys with its own deploy script, which can run migrations, so it can't be stopped partway."),
             CancelOutcome::Finished => back()->with('error', 'This deploy has already finished.'),
         };
     }

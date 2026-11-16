@@ -9,6 +9,8 @@
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
+    import DeployScriptCard from '@/components/applications/DeployScriptCard.svelte'
+    import type { DeployScript } from '@/components/applications/DeployScriptCard.svelte'
     import PhpLimitsCard from '@/components/applications/PhpLimitsCard.svelte'
     import type { PhpLimits } from '@/components/applications/PhpLimitsCard.svelte'
     import RepositoryCheckBanner from '@/components/applications/RepositoryCheckBanner.svelte'
@@ -59,6 +61,7 @@
         server,
         place = null,
         tag_suggestions = [],
+        deploy_script,
         application,
         toggles = [],
         addresses,
@@ -156,6 +159,7 @@
         php: PhpLimits | null
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
         tag_suggestions: string[]
+        deploy_script: DeployScript
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
         held: { current: string; newest: string; packages: string[]; command: string } | null
     } = $props()
@@ -435,7 +439,7 @@
 
     onMount(() =>
         follow({
-            only: ['application', 'toggles', 'panel', ...('cron' in page.props ? ['cron'] : [])],
+            only: ['application', 'toggles', 'panel', 'app_deploy', ...('cron' in page.props ? ['cron'] : [])],
             paused: () => working || cronBusy || Object.values(busy).some(Boolean)
         })
     )
@@ -497,13 +501,13 @@
         {/if}
     </div>
     {#if application.running_href}
-        <Button href={application.running_href} class="max-sm:w-full">Watch deploy</Button>
+        <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
     {:else if can.deploy}
         <Button
             disabled={working || application.repository_check !== null}
             aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
             onclick={deploy}
-            class="max-sm:w-full">Deploy</Button
+            class="max-sm:w-full sm:hidden">Deploy</Button
         >
     {/if}
 </div>
@@ -947,6 +951,8 @@
                     </div>
                 {/if}
             </div>
+
+            <DeployScriptCard class="@3xl:col-span-2" script={deploy_script} name={application.name} />
 
             {#if php}
                 <PhpLimitsCard

@@ -24,11 +24,11 @@ setup('authenticate as an admin who sees only what is shared', async ({ browser 
     await context.close()
 })
 
-setup('authenticate as an admin who sees only one environment', async ({ browser }) => {
+setup('authenticate as an admin a project is shared with in part', async ({ browser }) => {
     const context = await browser.newContext()
     const page = await context.newPage()
 
-    await signIn(page, 'environment@coresmith.test', 'tests/E2E/.auth/environment.json')
+    await signIn(page, 'partial@coresmith.test', 'tests/E2E/.auth/partial.json')
 
     await context.close()
 })

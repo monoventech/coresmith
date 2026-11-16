@@ -221,9 +221,13 @@ test('a deploy past its migrations, a running blueprint or a finished deploy is 
         ['status' => DeploymentStatus::Running, 'log' => "[12:00:00] clone: fetching over https\n[12:00:42] swap: current → releases/20261020-120000"],
         'Migrations have started, so this deploy finishes on its own. Roll back afterwards if you need to.',
     ],
-    'running a custom blueprint' => [
+    'running its own deploy script' => [
+        ['status' => DeploymentStatus::Running, 'log' => "[12:00:00] clone: fetching over https\n[12:00:30] build: running your deploy script"],
+        "This app deploys with its own deploy script, which can run migrations, so it can't be stopped partway.",
+    ],
+    'running a deploy script started before the update' => [
         ['status' => DeploymentStatus::Running, 'log' => "[12:00:00] clone: fetching over https\n[12:00:30] build: running the custom blueprint"],
-        "This app deploys with a custom blueprint, which can run migrations, so it can't be stopped partway.",
+        "This app deploys with its own deploy script, which can run migrations, so it can't be stopped partway.",
     ],
     'deployed' => [['status' => DeploymentStatus::Succeeded], 'This deploy has already finished.'],
     'failed' => [['status' => DeploymentStatus::Failed], 'This deploy has already finished.'],
@@ -302,7 +306,8 @@ test('the deploy page offers a cancel until the migrations start', function (arr
     'cloning' => [['status' => DeploymentStatus::Running, 'log' => '[12:00:00] clone: fetching over https'], true],
     'building' => [['status' => DeploymentStatus::Running, 'log' => "[12:00:00] clone: fetching over https\n[12:00:30] build: building the release"], true],
     'running its migrations' => [['status' => DeploymentStatus::Running, 'log' => '[12:00:40] migrate: running migrations against release 20261020-120000'], false],
-    'running a custom blueprint' => [['status' => DeploymentStatus::Running, 'log' => '[12:00:30] build: running the custom blueprint'], false],
+    'running its own deploy script' => [['status' => DeploymentStatus::Running, 'log' => '[12:00:30] build: running your deploy script'], false],
+    'running a deploy script started before the update' => [['status' => DeploymentStatus::Running, 'log' => '[12:00:30] build: running the custom blueprint'], false],
     'deployed' => [['status' => DeploymentStatus::Succeeded], false],
     'cancelled' => [['status' => DeploymentStatus::Cancelled], false],
 ]);

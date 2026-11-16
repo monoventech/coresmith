@@ -350,9 +350,9 @@ test('a stopped app gets the new release without its processes being started', f
         ->and($deployment->fresh()->log)->toContain('starts when the app does');
 });
 
-test('a custom blueprint replaces the built in dependency, build and migrate phases', function () {
+test('a deploy script of your own replaces the built in dependency, build and migrate phases, and stops at its first failing command', function () {
     $deployment = Deployment::factory()->for(deployableApp([
-        'custom_blueprint' => "set -e\necho building\n",
+        'custom_blueprint' => "echo building\n",
     ]))->create();
     $transport = healthyDeployTransport();
 

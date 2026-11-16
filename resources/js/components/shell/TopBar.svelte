@@ -1,14 +1,24 @@
 <script lang="ts">
+    import CrumbSwitcher from '@/components/shell/CrumbSwitcher.svelte'
     import AttentionMenu from '@/components/shell/AttentionMenu.svelte'
+    import { Button } from '@/components/ui/button'
     import { explorerInline, showExplorer } from '@/lib/explorer.svelte'
-    import type { Crumb, ExplorerProps } from '@/lib/panel'
+    import type { AppDeploy, Crumb, ExplorerProps } from '@/lib/panel'
     import { cn } from '@/lib/utils'
-    import { Link, page } from '@inertiajs/svelte'
-    import { PanelLeftOpen, Slash } from '@lucide/svelte'
+    import { Link, page, router } from '@inertiajs/svelte'
+    import { CloudUpload, PanelLeftOpen, Slash } from '@lucide/svelte'
 
     const crumbs = $derived((page.props.crumbs ?? []) as Crumb[])
     const explorer = $derived(page.props.explorer as ExplorerProps | null)
+    const deploy = $derived((page.props.app_deploy ?? null) as AppDeploy | null)
     const inline = $derived(explorerInline())
+
+    let deploying = $state(false)
+
+    function start(target: AppDeploy) {
+        deploying = true
+        router.post(target.href, { from: target.from }, { onFinish: () => (deploying = false) })
+    }
 </script>
 
 <header class="hidden h-14 shrink-0 items-center gap-3 border-b border-border px-8 sm:flex" data-testid="top-bar">
@@ -28,7 +38,7 @@
             <ol class="m-0 flex min-w-0 list-none items-center gap-2 p-0 text-[13px]">
                 {#each crumbs as crumb, index (`${index}:${crumb.href ?? ''}:${crumb.label}`)}
                     {@const last = index === crumbs.length - 1}
-                    <li class="flex min-w-0 items-center gap-2">
+                    <li class="flex min-w-0 items-center gap-2" data-testid="crumb">
                         {#if index > 0}
                             <Slash class="size-3 shrink-0 text-muted-foreground/45" aria-hidden="true" />
                         {/if}
@@ -50,12 +60,35 @@
                                 )}>{crumb.label}</span
                             >
                         {/if}
+                        {#if crumb.switch}
+                            <CrumbSwitcher switcher={crumb.switch} />
+                        {/if}
                     </li>
                 {/each}
             </ol>
         </nav>
     {/if}
-    {#if explorer}
-        <AttentionMenu items={explorer.attention} />
-    {/if}
+    <div class="ml-auto flex shrink-0 items-center gap-2.5">
+        {#if deploy}
+            {#if deploy.running_href}
+                <Button href={deploy.running_href} variant="outline" size="sm" data-testid="top-bar-deploy"
+                    >Watch deploy</Button
+                >
+            {:else}
+                <Button
+                    size="sm"
+                    disabled={deploying || deploy.blocked}
+                    aria-describedby={deploy.blocked ? 'repository-check-heading' : undefined}
+                    onclick={() => start(deploy)}
+                    data-testid="top-bar-deploy"
+                >
+                    <CloudUpload class="size-4" aria-hidden="true" />
+                    Deploy
+                </Button>
+            {/if}
+        {/if}
+        {#if explorer}
+            <AttentionMenu items={explorer.attention} />
+        {/if}
+    </div>
 </header>
