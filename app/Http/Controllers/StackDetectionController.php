@@ -11,10 +11,12 @@ namespace App\Http\Controllers;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
+use App\Exceptions\SubmoduleRefused;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\User;
+use App\Services\Deployment\Submodules;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryReader;
@@ -77,7 +79,22 @@ final class StackDetectionController extends Controller
             'folders' => $read->folders,
             'packages' => $server->team === null ? [] : app(PrivateSources::class)->missing($read->facts, $server->team),
             'packages_href' => $server->team !== null && $request->user()->can('update', $server->team) ? route('source-providers.index') : null,
+            'submodules' => $this->submodules((string) $read->facts->file('.gitmodules'), $access instanceof RepositoryAccess ? $access->url : ''),
         ]);
+    }
+
+    /**
+     * @return list<array{path: string, source: string, refused: ?string}>
+     */
+    private function submodules(string $file, string $parent): array
+    {
+        return array_map(function (array $entry) use ($parent): array {
+            try {
+                return ['path' => $entry['path'], 'source' => Submodules::display(Submodules::resolve($entry['url'], $parent, $entry['path'])), 'refused' => null];
+            } catch (SubmoduleRefused $refused) {
+                return ['path' => $entry['path'], 'source' => $entry['url'], 'refused' => $refused->getMessage()];
+            }
+        }, Submodules::fromFile($file));
     }
 
     /**

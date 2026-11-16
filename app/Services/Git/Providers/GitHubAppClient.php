@@ -187,6 +187,23 @@ final class GitHubAppClient implements GitProvider
         ])['token'];
     }
 
+    /**
+     * @param  list<string>  $repositoryIds
+     */
+    public function cloneTokenFor(array $repositoryIds): string
+    {
+        foreach ($repositoryIds as $repositoryId) {
+            if (preg_match('/^[0-9]{1,18}$/D', $repositoryId) !== 1) {
+                throw new GitProviderException("\"{$repositoryId}\" is not a valid repository id.");
+            }
+        }
+
+        return $this->api->mintToken($this->app, $this->installation(), [
+            'repository_ids' => array_map(intval(...), $repositoryIds),
+            'permissions' => ['contents' => 'read'],
+        ])['token'];
+    }
+
     public function postDeployStatus(string $fullName, string $sha, string $state, string $targetUrl, string $description, string $context): void
     {
         $this->post("/repos/{$this->path($fullName)}/statuses/" . rawurlencode($sha), [

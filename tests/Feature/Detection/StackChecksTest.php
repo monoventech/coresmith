@@ -255,6 +255,40 @@ test('a static build is served from the folder it writes to', function () {
         ->and($blockers[0]->fix)->toContain('/dist');
 });
 
+test('a React, Vue or Svelte build is served from the folder it writes to', function () {
+    $blockers = stackChecksFor('vite-react', ['type' => ApplicationType::Js, 'framework' => 'react', 'js_runtime' => 'node', 'web_directory' => '/']);
+
+    expect($blockers[0]->field)->toBe('web_directory')
+        ->and($blockers[0]->fix)->toContain('/dist');
+});
+
+test('React, Vue and Svelte start nothing, so a start script with a fixed port or no start script at all is fine', function () {
+    $facts = new RepositoryFacts([
+        'package.json' => (string) json_encode(['scripts' => ['start' => 'PORT=3001 react-scripts start', 'build' => 'react-scripts build'], 'dependencies' => ['react' => '^19.1.1', 'react-scripts' => '5.0.1']]),
+        'package-lock.json' => '{}',
+    ], complete: true);
+
+    expect(stackChecksFor($facts, ['type' => ApplicationType::Js, 'framework' => 'react', 'js_runtime' => 'node', 'web_directory' => '/build']))->toBe([])
+        ->and(stackChecksFor('vite-svelte', ['type' => ApplicationType::Js, 'framework' => 'svelte', 'js_runtime' => 'node', 'web_directory' => '/dist']))->toBe([]);
+});
+
+test('React, Vue or Svelte picked for a repository without a build script is refused, since there would be no files to serve', function () {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['dependencies' => ['vue' => '^3.5.22']]), 'bun.lock' => ''], complete: true);
+    $blockers = stackChecksFor($facts, ['type' => ApplicationType::Js, 'framework' => 'vue', 'js_runtime' => 'bun', 'web_directory' => '/dist']);
+
+    expect($blockers)->toHaveCount(1)
+        ->and($blockers[0]->field)->toBe('repository')
+        ->and($blockers[0]->reason)->toBe('There is no build script in package.json, so there would be no files to serve.');
+});
+
+test('React, Vue or Svelte on Deno needs no start task', function () {
+    $facts = new RepositoryFacts([
+        'package.json' => (string) json_encode(['scripts' => ['build' => 'vite build'], 'dependencies' => ['react' => '^19.1.1'], 'devDependencies' => ['vite' => '^7.1.7']]),
+    ], ['deno.lock'], complete: true);
+
+    expect(stackChecksFor($facts, ['type' => ApplicationType::Js, 'framework' => 'react', 'js_runtime' => 'deno', 'web_directory' => '/dist']))->toBe([]);
+});
+
 test('a choice that differs from the proposal but can run is not refused', function (string $fixture, array $choice) {
     expect(stackChecksFor($fixture, $choice))->toBe([]);
 })->with([

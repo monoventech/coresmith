@@ -701,8 +701,9 @@ test('the add an app page offers the JavaScript frameworks the presets serve', f
     $this->actingAs($owner)->get(route('servers.applications.create', $server))
         ->assertInertia(fn($page) => $page
             ->component('applications/Create')
-            ->where('js_frameworks.0', ['value' => 'sveltekit', 'label' => 'SvelteKit'])
-            ->where('js_frameworks.3', ['value' => 'astro', 'label' => 'Astro']));
+            ->where('js_frameworks.0', ['value' => 'sveltekit', 'label' => 'SvelteKit', 'files' => false])
+            ->where('js_frameworks.3', ['value' => 'astro', 'label' => 'Astro', 'files' => false])
+            ->where('js_frameworks.6', ['value' => 'react', 'label' => 'React', 'files' => true]));
 });
 
 test('the add an app page offers Python with its frameworks and versions', function () {

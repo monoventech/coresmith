@@ -14,6 +14,7 @@ enum Route
     case ReverseProxy;
     case ReverseProxyHttp2;
     case FileServer;
+    case SinglePage;
 
     public function servesFiles(): bool
     {
