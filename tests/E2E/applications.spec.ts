@@ -722,7 +722,7 @@ test.describe('adding an application', () => {
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
         await expect(toast(page)).toContainText('App added.')
         await expect(page.getByTestId('app-project')).toContainText('Storefront')
-        await expect(page.getByTestId('app-tags-row').getByTestId('app-tags')).toHaveText(/^preview\s*eu$/)
+        await expect(page.getByTestId('app-tags-row').getByTestId('app-tags')).toHaveText(/^\s*preview\s*eu\s*$/)
     })
 
     test('a server with no room for another app says so and keeps the form as it was', async ({ page }) => {

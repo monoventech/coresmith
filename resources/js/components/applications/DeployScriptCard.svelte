@@ -86,8 +86,8 @@
     </div>
     <p class="mb-3 text-[12.5px] text-muted-foreground">
         Runs in the new release before it goes live. Coresmith checks out the commit and writes the environment file
-        first, then checks that the new release answers before switching traffic to it. The first command that fails
-        stops the deploy, and the current release keeps serving.
+        first. After the script, it checks the release has what the app needs to start, then switches traffic to it. The
+        first command that fails stops the deploy, and the current release keeps serving.
     </p>
     {#if lines.length > 0}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
