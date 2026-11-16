@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Panel\CommandPalette;
 use App\Services\Teams\TeamAccess;
 use Inertia\Testing\AssertableInertia;
@@ -32,15 +33,17 @@ test('with one server ready, Add an app goes straight to its form and keeps the 
         ->assertRedirect(route('servers.applications.create', [$web, 'project' => $project->id]));
 });
 
-test('with several servers ready, Add an app asks which one runs it, listing only ready servers the person can see', function () {
+test('with several servers ready, Add an app asks which one runs it, listing only ready servers the person can see and none being destroyed', function () {
     $team = Team::factory()->owned()->create();
     $web = Server::factory()->for($team)->create(['name' => 'web', 'status' => ServerStatus::Active]);
     $api = Server::factory()->for($team)->create(['name' => 'api', 'status' => ServerStatus::Active]);
     $hidden = Server::factory()->for($team)->create(['name' => 'vault', 'status' => ServerStatus::Active]);
     Server::factory()->for($team)->create(['name' => 'new-box', 'status' => ServerStatus::Pending]);
+    $leaving = Server::factory()->for($team)->create(['name' => 'leaving', 'status' => ServerStatus::Active]);
+    CloudTask::start($leaving, CloudTask::DESTROY, 'delete', ['requested' => true]);
     Application::factory()->for($team)->for($web)->create(['name' => 'shop']);
     $admin = addAppPerson($team, TeamRole::Admin, everything: false);
-    app(TeamAccess::class)->sync($team, $admin, false, [$web->id, $api->id], []);
+    app(TeamAccess::class)->sync($team, $admin, false, [$web->id, $api->id, $leaving->id], []);
 
     $this->actingAs($admin)->get(route('applications.new'))
         ->assertOk()

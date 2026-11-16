@@ -43,6 +43,7 @@ test.describe('adding an app', () => {
         await expect(main(page)).toContainText('Pick the server that runs it.')
         await expect(servers(page).getByRole('listitem').filter({ hasText: 'bench-01' })).toContainText(/\d+ apps/)
         await expect(servers(page)).not.toContainText('empty-server')
+        await expect(servers(page)).not.toContainText('destroying-server')
 
         await servers(page)
             .getByRole('link', { name: /bench-01/ })

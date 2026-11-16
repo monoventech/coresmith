@@ -32,6 +32,8 @@
 
     onMount(() => follow({ only: ['server', 'panel'], paused: () => working }))
 
+    const beingDestroyed = $derived(server.cloud?.task?.type === 'destroy' && server.cloud.task.state === 'running')
+
     const tabs = $derived([
         { label: 'Apps', href: server.tabs.apps },
         { label: 'Databases', href: server.tabs.databases },
@@ -109,7 +111,7 @@
     </div>
     {#if primary || server.can.update || server.can.delete}
         <div class="flex flex-wrap gap-2 max-sm:w-full">
-            {#if primary}
+            {#if primary && !beingDestroyed}
                 <Button href={primary.href} class="max-sm:w-full" data-testid="server-primary">{primary.label}</Button>
             {/if}
             {#if server.can.update}
