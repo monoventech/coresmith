@@ -1241,6 +1241,7 @@ test.describe('adding an application from GitHub', () => {
 
         const atlas = await option('atlas').boundingBox()
 
+        await page.mouse.move(0, 0)
         await page.mouse.move((atlas?.x ?? 0) + 40, (atlas?.y ?? 0) + (atlas?.height ?? 0) / 2)
         await scrollUnderPointer(page, 88)
         await page.keyboard.press('ArrowDown')
