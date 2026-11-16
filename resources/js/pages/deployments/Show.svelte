@@ -76,6 +76,7 @@
         storage: "Preparing the app's storage failed",
         deps: 'Installing dependencies failed',
         build: 'The build failed',
+        script: 'Your deploy script failed',
         migrate: 'The migration failed',
         health: 'The health check failed',
         swap: 'The deploy failed after the swap',
@@ -87,6 +88,7 @@
         storage: "the app's storage",
         deps: 'the dependencies',
         build: 'the build',
+        script: 'the deploy script',
         migrate: 'the migration',
         health: 'the health check'
     }

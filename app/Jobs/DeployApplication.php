@@ -605,7 +605,7 @@ final class DeployApplication implements ShouldQueue
         if ($this->hasCustomBlueprint($application)) {
             $this->checkpoint();
             $this->pastCancelPoint = true;
-            $this->mark(DeploymentPhases::BUILD, 'running your deploy script');
+            $this->mark(DeploymentPhases::SCRIPT, 'running your deploy script');
             $this->prepareForScript($connection, $release, $stack);
             $this->runBlueprint($connection, $release, $application, $stack);
         } else {
@@ -1301,7 +1301,11 @@ final class DeployApplication implements ShouldQueue
 
             $this->appendLog($result->output);
 
-            $result->throw();
+            if ($result->failed()) {
+                $this->failureReason = "It stopped with exit code {$result->exitCode}. Its output is in the log. Fix it under Deploy script on the app page, then deploy again.";
+
+                throw new DeploymentAborted("Your deploy script stopped with exit code {$result->exitCode}.");
+            }
         } finally {
             $connection->execute('rm -f ' . escapeshellarg($script), sudo: true);
 

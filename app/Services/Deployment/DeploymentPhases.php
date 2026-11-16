@@ -29,7 +29,11 @@ final class DeploymentPhases
 
     public const STORAGE = 'storage';
 
+    public const SCRIPT = 'script';
+
     public const ORDER = [self::CLONE, self::DEPENDENCIES, self::BUILD, self::MIGRATIONS, self::HEALTH, self::SWAP];
+
+    public const SCRIPT_ORDER = [self::CLONE, self::DEPENDENCIES, self::SCRIPT, self::HEALTH, self::SWAP];
 
     public const LABELS = [
         self::CLONE => 'Clone release',
@@ -38,7 +42,10 @@ final class DeploymentPhases
         self::MIGRATIONS => 'Run migrations',
         self::HEALTH => 'Health check',
         self::SWAP => 'Symlink swap',
+        self::SCRIPT => 'Deploy script',
     ];
+
+    private const SCRIPT_LABELS = [self::DEPENDENCIES => 'Install runtimes'];
 
     public const PROGRESS = [
         self::CLONE => 'cloning the release',
@@ -48,6 +55,7 @@ final class DeploymentPhases
         self::HEALTH => 'health check',
         self::SWAP => 'symlink swap',
         self::WATCH => 'watching the processes',
+        self::SCRIPT => 'running your deploy script',
     ];
 
     private const MARKER = '/^\[(\d{2}):(\d{2}):(\d{2})\] ([a-z]+):/';
@@ -61,13 +69,15 @@ final class DeploymentPhases
     {
         $log = (string) $deployment->log;
         $status = $deployment->status;
+        $order = $this->order($deployment, $log);
+        $labels = $order === self::SCRIPT_ORDER ? [...self::LABELS, ...self::SCRIPT_LABELS] : self::LABELS;
         $starts = $this->starts($log);
         $end = $this->end($log);
         $outlived = $this->outlivedTheRail($log);
 
         $lastIndex = -1;
 
-        foreach (self::ORDER as $index => $key) {
+        foreach ($order as $index => $key) {
             if (isset($starts[$key])) {
                 $lastIndex = $index;
             }
@@ -75,18 +85,35 @@ final class DeploymentPhases
 
         $phases = [];
 
-        foreach (self::ORDER as $index => $key) {
+        foreach ($order as $index => $key) {
             $state = $this->state($index, isset($starts[$key]), $lastIndex, $status, $outlived);
 
             $phases[] = [
                 'key' => $key,
-                'label' => self::LABELS[$key],
+                'label' => $labels[$key],
                 'state' => $state,
-                'duration' => $this->duration($key, $index, $state, $starts, $end),
+                'duration' => $this->duration($order, $key, $index, $state, $starts, $end),
             ];
         }
 
         return $phases;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function order(Deployment $deployment, string $log): array
+    {
+        if (preg_match('/^\[\d{2}:\d{2}:\d{2}\] script:/m', $log) === 1) {
+            return self::SCRIPT_ORDER;
+        }
+
+        $open = in_array($deployment->status, [DeploymentStatus::Pending, DeploymentStatus::Running], true);
+        $application = $deployment->application;
+
+        return $open && $application !== null && DeployScript::custom($application) && preg_match('/^\[\d{2}:\d{2}:\d{2}\] build:/m', $log) !== 1
+            ? self::SCRIPT_ORDER
+            : self::ORDER;
     }
 
     public function progress(Deployment $deployment): ?string
@@ -121,7 +148,7 @@ final class DeploymentPhases
             }
         }
 
-        return $last !== null && !in_array($last, self::ORDER, true) ? $last : null;
+        return $last !== null && !in_array($last, [...self::ORDER, self::SCRIPT], true) ? $last : null;
     }
 
     private function state(int $index, bool $started, int $lastIndex, DeploymentStatus $status, bool $outlived = false): string
@@ -154,9 +181,10 @@ final class DeploymentPhases
     }
 
     /**
+     * @param  list<string>  $order
      * @param  array<string, int>  $starts
      */
-    private function duration(string $key, int $index, string $state, array $starts, ?int $end): string
+    private function duration(array $order, string $key, int $index, string $state, array $starts, ?int $end): string
     {
         if ($state === 'skipped') {
             return '—';
@@ -172,7 +200,7 @@ final class DeploymentPhases
 
         $next = $end;
 
-        foreach (array_slice(self::ORDER, $index + 1) as $later) {
+        foreach (array_slice($order, $index + 1) as $later) {
             if (isset($starts[$later])) {
                 $next = $starts[$later];
                 break;
@@ -200,7 +228,7 @@ final class DeploymentPhases
         $starts = [];
 
         foreach (preg_split('/\r\n|\n|\r/', $log) ?: [] as $line) {
-            if (preg_match(self::MARKER, $line, $matches) === 1 && in_array($matches[4], self::ORDER, true) && !isset($starts[$matches[4]])) {
+            if (preg_match(self::MARKER, $line, $matches) === 1 && in_array($matches[4], [...self::ORDER, self::SCRIPT], true) && !isset($starts[$matches[4]])) {
                 $starts[$matches[4]] = (int) $matches[1] * 3600 + (int) $matches[2] * 60 + (int) $matches[3];
             }
         }

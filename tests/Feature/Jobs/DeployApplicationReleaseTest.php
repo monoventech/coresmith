@@ -182,7 +182,7 @@ test('a deploy script of your own is logged as the build phase with no dependenc
 
     $log = (string) $deployment->fresh()->log;
 
-    expect($log)->toContain('[14:05:09] build: running your deploy script')
+    expect($log)->toContain('[14:05:09] script: running your deploy script')
         ->and($log)->not->toContain('] deps: installing dependencies')
         ->and($log)->not->toContain('] migrate:');
 });
