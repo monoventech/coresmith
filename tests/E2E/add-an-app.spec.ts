@@ -137,7 +137,7 @@ asDeveloper.describe('adding an app as a developer', () => {
 
 asPartlyShared.describe('adding an app with no server to run it', () => {
     asPartlyShared('the page says why and offers to provision one', async ({ page }) => {
-        await page.goto('/apps/new')
+        await page.goto('/applications/new')
 
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
         await expect(main(page)).toContainText('No server can take an app yet.')

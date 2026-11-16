@@ -57,7 +57,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'overview'])->name('releases.index');
 
-    Route::get('apps/new', AddApplicationController::class)->name('applications.new');
+    Route::get('applications/new', AddApplicationController::class)->name('applications.new');
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
     Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
