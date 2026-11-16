@@ -273,6 +273,16 @@ final class CaddyRouteBuilder
                 ['handle' => [['handler' => 'file_server']]],
             ],
             Route::FileServer => [
+                [
+                    'match' => [['file' => ['try_files' => ['{http.request.uri.path}', '{http.request.uri.path}.html', '{http.request.uri.path}/index.html']]]],
+                    'handle' => [['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}'], ['handler' => 'file_server']],
+                    'terminal' => true,
+                ],
+                [
+                    'match' => [['file' => ['try_files' => ['/404.html']]]],
+                    'handle' => [['handler' => 'rewrite', 'uri' => '/404.html'], ['handler' => 'file_server', 'status_code' => 404]],
+                    'terminal' => true,
+                ],
                 ['handle' => [['handler' => 'file_server']]],
             ],
             Route::SinglePage => [
