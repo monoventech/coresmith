@@ -79,7 +79,7 @@ test.describe('this machine', () => {
         await expect(page.getByRole('button', { name: 'Use this machine' })).toBeEnabled()
     })
 
-    test('with no cloud account and this machine free, Add server starts on this machine, named after it, in Production', async ({
+    test('with no cloud account and this machine free, Add server starts on this machine, named after it', async ({
         page
     }) => {
         await rewriteInertia(page, '/servers/create', (props) => {
@@ -92,7 +92,6 @@ test.describe('this machine', () => {
 
         await expect(page.getByLabel('Provider')).toHaveValue('this-machine')
         await expect(page.getByLabel('Server name')).not.toHaveValue('')
-        await expect(page.getByLabel('Environment', { exact: true })).toHaveValue('')
         await expect(page.getByRole('button', { name: 'Use this machine' })).toBeEnabled()
 
         await page.getByLabel('Provider').selectOption('manual')

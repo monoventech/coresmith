@@ -9,6 +9,9 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
+use App\Http\Controllers\ApplicationDeployScriptController;
+use App\Http\Controllers\ApplicationSetupController;
+use App\Http\Controllers\ApplicationTagsController;
 use App\Jobs\ApplyPhpLimits;
 use App\Jobs\SyncApplicationCron;
 use App\Models\Application;
@@ -26,6 +29,7 @@ use App\Services\Teams\TeamAccess;
 use App\Services\Updates\UpdateStatus;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
 final class ActivityFeed
@@ -322,6 +326,9 @@ final class ActivityFeed
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
             'application_filed' => [$this->mono($application?->name), $this->text($this->filing($properties))],
+            ApplicationSetupController::CHANGED => [$this->text('Setup changed on '), $this->mono($application?->name), $this->text(': ' . Str::of(collect((array) ($properties['changed'] ?? []))->map(fn(mixed $field): string => ApplicationSetupController::LABELS[(string) $field] ?? (string) $field)->join(', ', ' and '))->value())],
+            ApplicationDeployScriptController::CHANGED => [$this->text('Deploy script for '), $this->mono($application?->name), $this->text(($properties['custom'] ?? false) ? ' changed, the next deploy runs it' : " is back to Coresmith's default")],
+            ApplicationTagsController::CHANGED => [$this->text('Tags on '), $this->mono($application?->name), $this->text(($properties['to'] ?? []) === [] ? ' cleared' : ' set to ' . implode(', ', array_map('strval', (array) $properties['to'])))],
             'toggle_changed' => match (true) {
                 ($properties['toggle'] ?? null) !== SmartToggles::AUTO_DEPLOY => [$this->text('Smart toggle ' . (($properties['on'] ?? false) ? 'enabled' : 'disabled') . ', ' . ($properties['label'] ?? 'a toggle') . ' on '), $this->mono($application?->name), $this->text(', no deployment needed')],
                 (bool) ($properties['on'] ?? false) => [$this->text('Auto deploy turned on for '), $this->mono($application?->name), $this->text(', it deploys the branch if the live release is behind')],
@@ -363,9 +370,11 @@ final class ActivityFeed
     {
         $project = $properties['project'] ?? null;
 
-        return is_string($project)
-            ? ' filed in ' . $project . ' › ' . (string) ($properties['environment'] ?? '')
-            : ' taken out of ' . (string) ($properties['from'] ?? 'its project');
+        if (!is_string($project)) {
+            return ' taken out of ' . (string) ($properties['from'] ?? 'its project');
+        }
+
+        return is_string($properties['environment'] ?? null) ? ' filed in ' . $project . ' › ' . $properties['environment'] : ' added to ' . $project;
     }
 
     private function took(mixed $seconds): string

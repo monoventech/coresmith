@@ -17,7 +17,7 @@ final class MoveColumns
     public const SERVERS = [
         'name', 'ip_address', 'ssh_port', 'ssh_user', 'ssh_private_key', 'ssh_public_key', 'host_key_fingerprint',
         'os_name', 'os_version', 'provisioning_phase', 'installed_runtimes', 'meta', 'audit_logging_enabled',
-        'environment', 'region', 'booted_at', 'provider_server_id', 'provider_size', 'provider_image',
+        'region', 'booted_at', 'provider_server_id', 'provider_size', 'provider_image',
         'provider_monthly_cost', 'provider_currency',
     ];
 

@@ -47,8 +47,16 @@ final class CommandPalette
             $commands[] = $this->openServer($server, $fleet);
         }
 
+        if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::CreateApplication)) {
+            $commands[] = ['label' => 'Add an app', 'icon' => 'plus', 'hint' => 'from a repository', 'href' => route('applications.new')];
+        }
+
         if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::CreateServer)) {
             $commands[] = ['label' => 'Provision a server', 'icon' => 'plus', 'hint' => 'about six minutes', 'href' => route('servers.create')];
+        }
+
+        if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::ManageProjects)) {
+            $commands[] = ['label' => 'Create a project', 'icon' => 'folder', 'hint' => 'group apps and databases', 'href' => route('projects.index', ['create' => 1])];
         }
 
         $rollback = $this->rollbackCommand();
@@ -72,7 +80,7 @@ final class CommandPalette
             $commands[] = [
                 'label' => 'Open ' . $application->name,
                 'icon' => 'layers',
-                'hint' => 'on ' . $application->server?->name,
+                'hint' => implode(' · ', [...$application->tags, 'on ' . $application->server?->name]),
                 'href' => route('servers.applications.show', [$application->server_id, $application]),
             ];
         }
@@ -92,7 +100,7 @@ final class CommandPalette
             'label' => 'Open ' . $server->name,
             'icon' => in_array($state['tone'], ['warning', 'destructive'], true) ? 'triangle-alert' : 'server',
             'hint' => $state['key'] === 'healthy'
-                ? implode(' · ', array_filter([$server->environment === null ? null : strtolower($server->environment), $count . ' ' . ($count === 1 ? 'app' : 'apps')]))
+                ? $count . ' ' . ($count === 1 ? 'app' : 'apps')
                 : strtolower($state['label']),
             'href' => route('servers.show', $server),
         ];
@@ -103,17 +111,12 @@ final class CommandPalette
      */
     private function openProject(Project $project): array
     {
-        $access = app(TeamAccess::class);
-        $environments = $access->environmentsOf($this->user, $project);
-        $applications = Application::query()->whereIn('environment_id', $environments->modelKeys())->count();
+        $applications = app(TeamAccess::class)->applications($this->user, $project->team)->where('project_id', $project->getKey())->count();
 
         return [
             'label' => 'Open ' . $project->name,
             'icon' => 'folder',
-            'hint' => implode(' · ', [
-                $environments->count() . ' ' . ($environments->count() === 1 ? 'environment' : 'environments'),
-                $applications . ' ' . ($applications === 1 ? 'app' : 'apps'),
-            ]),
+            'hint' => $applications . ' ' . ($applications === 1 ? 'app' : 'apps'),
             'href' => route('projects.show', $project),
         ];
     }

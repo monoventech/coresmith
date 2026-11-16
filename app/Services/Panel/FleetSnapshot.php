@@ -153,7 +153,6 @@ final class FleetSnapshot
         $disk = (int) ($meta['disk_gb'] ?? 0);
 
         return implode(' · ', array_values(array_filter([
-            $server->environment,
             $server->region,
             $long && $cores > 0 ? $cores . ' ' . ($cores === 1 ? 'core' : 'cores') : null,
             $memory === null ? null : $memory . ' RAM',
@@ -180,7 +179,6 @@ final class FleetSnapshot
         $count = $server->applications->count();
 
         return implode(' · ', array_values(array_filter([
-            $server->environment,
             $server->region,
             $count . ' ' . ($count === 1 ? 'app' : 'apps'),
         ])));

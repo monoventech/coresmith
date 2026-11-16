@@ -3,10 +3,17 @@
         everything: boolean
         servers: string[]
         applications: string[]
+        databases: string[]
         projects: string[]
-        environments: string[]
         withheld_applications?: string[]
         withheld_databases?: string[]
+    }
+
+    export type ShareableItem = {
+        id: string
+        name: string
+        tags?: string[]
+        developer: { id: string; name: string } | null
     }
 
     export interface Shareable {
@@ -14,10 +21,10 @@
             id: string
             name: string
             this_machine: boolean
-            applications: { id: string; name: string }[]
-            databases: { id: string; name: string }[]
+            applications: ShareableItem[]
+            databases: ShareableItem[]
         }[]
-        projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
+        projects: { id: string; name: string; applications: ShareableItem[]; databases: ShareableItem[] }[]
     }
 
     function count(total: number, one: string, many: string): string | null {
@@ -32,9 +39,9 @@
         const held = (access.withheld_applications?.length ?? 0) + (access.withheld_databases?.length ?? 0)
         const parts = [
             count(access.projects.length, 'project', 'projects'),
-            count(access.environments.length, 'environment', 'environments'),
             count(access.servers.length, 'server', 'servers'),
             count(access.applications.length, 'app', 'apps'),
+            count(access.databases?.length ?? 0, 'database', 'databases'),
             count(held, 'held back', 'held back')
         ].filter((part) => part !== null)
 
@@ -44,6 +51,7 @@
 
 <script lang="ts">
     import FieldError from '@/components/FieldError.svelte'
+    import AppTags from '@/components/projects/AppTags.svelte'
     import { Button } from '@/components/ui/button'
     import { Checkbox } from '@/components/ui/checkbox'
     import * as Dialog from '@/components/ui/dialog'
@@ -53,6 +61,11 @@
     import { router } from '@inertiajs/svelte'
     import { ChevronDown } from '@lucide/svelte'
     import { untrack } from 'svelte'
+
+    type Kind = 'applications' | 'databases'
+    type SharedServer = Shareable['servers'][number]
+    type SharedProject = Shareable['projects'][number]
+    type Spot = { item: ShareableItem; server: SharedServer | null; project: string | null }
 
     let {
         open = $bindable(false),
@@ -68,57 +81,43 @@
 
     let everything = $state(true)
     let servers = $state<string[]>([])
-    let applications = $state<string[]>([])
     let projects = $state<string[]>([])
-    let environments = $state<string[]>([])
-    let withheldApplications = $state<string[]>([])
-    let withheldDatabases = $state<string[]>([])
+    let direct = $state<Record<Kind, string[]>>({ applications: [], databases: [] })
+    let withheld = $state<Record<Kind, string[]>>({ applications: [], databases: [] })
     let expanded = $state<string[]>([])
-    let errors = $state<{
-        servers?: string
-        applications?: string
-        projects?: string
-        environments?: string
-        withheld_applications?: string
-        withheld_databases?: string
-    }>({})
+    let errors = $state<Record<string, string | undefined>>({})
     let saving = $state(false)
 
     const developer = $derived(member?.role === 'developer')
+    const nothing = $derived(shareable.servers.length === 0 && shareable.projects.length === 0)
+    const spots = $derived.by(() => {
+        const found: Record<Kind, Map<string, Spot>> = { applications: new Map(), databases: new Map() }
 
-    type SharedServer = Shareable['servers'][number]
-
-    function signsIn(server: SharedServer): boolean {
-        return member?.role === 'admin' && !server.this_machine
-    }
-
-    function narrows(server: SharedServer): boolean {
-        return servers.includes(server.id) && !developer && !signsIn(server)
-    }
-
-    function contents(server: SharedServer): string {
-        const showsDatabases = servers.includes(server.id) && !developer
-
-        return [
-            count(server.applications.length, 'app', 'apps'),
-            showsDatabases ? count(server.databases.length, 'database', 'databases') : null
-        ]
-            .filter((part) => part !== null)
-            .join(' · ')
-    }
-
-    function shareApp(application: string, on: boolean, server: SharedServer) {
-        if (narrows(server)) {
-            withheldApplications = tick(withheldApplications, application, !on)
-            applications = tick(applications, application, false)
-
-            return
+        for (const server of shareable.servers) {
+            for (const kind of ['applications', 'databases'] as const) {
+                for (const item of server[kind]) {
+                    found[kind].set(item.id, { item, server, project: found[kind].get(item.id)?.project ?? null })
+                }
+            }
         }
 
-        applications = tick(applications, application, on)
-    }
+        for (const project of shareable.projects) {
+            for (const kind of ['applications', 'databases'] as const) {
+                for (const item of project[kind]) {
+                    found[kind].set(item.id, {
+                        item,
+                        server: found[kind].get(item.id)?.server ?? null,
+                        project: project.id
+                    })
+                }
+            }
+        }
 
-    const nothing = $derived(shareable.servers.length === 0 && shareable.projects.length === 0)
+        return found
+    })
+    const keptByDevelopers = $derived(
+        [...spots.applications.values(), ...spots.databases.values()].some((spot) => kept(spot.item))
+    )
     const toggle =
         'focus-ring ml-auto inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md bg-transparent px-2 text-[12px] text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted'
 
@@ -129,32 +128,180 @@
     })
 
     function reset() {
-        everything = member?.role === 'developer' ? false : (member?.access?.everything ?? true)
+        everything = developer ? false : (member?.access?.everything ?? true)
         servers = [...(member?.access?.servers ?? [])]
-        applications = [...(member?.access?.applications ?? [])]
         projects = [...(member?.access?.projects ?? [])]
-        environments = [...(member?.access?.environments ?? [])]
-        withheldApplications = [...(member?.access?.withheld_applications ?? [])]
-        withheldDatabases = [...(member?.access?.withheld_databases ?? [])]
-        expanded = [
-            ...shareable.servers
-                .filter(
-                    (server) =>
-                        server.applications.some(
-                            (application) =>
-                                applications.includes(application.id) || withheldApplications.includes(application.id)
-                        ) || server.databases.some((database) => withheldDatabases.includes(database.id))
-                )
-                .map((server) => server.id),
-            ...shareable.projects
-                .filter((project) => project.environments.some((environment) => environments.includes(environment.id)))
-                .map((project) => project.id)
-        ]
+        direct = {
+            applications: [...(member?.access?.applications ?? [])],
+            databases: [...(member?.access?.databases ?? [])]
+        }
+        withheld = {
+            applications: [...(member?.access?.withheld_applications ?? [])],
+            databases: [...(member?.access?.withheld_databases ?? [])]
+        }
+        expanded = [...shareable.projects, ...shareable.servers]
+            .filter((container) => partly(container, containerChosen(container)))
+            .map((container) => container.id)
         errors = {}
     }
 
     function tick(list: string[], id: string, on: boolean): string[] {
         return on ? [...list.filter((each) => each !== id), id] : list.filter((each) => each !== id)
+    }
+
+    function signsIn(server: SharedServer): boolean {
+        return member?.role === 'admin' && !server.this_machine
+    }
+
+    function mine(item: ShareableItem): boolean {
+        return developer && item.developer?.id === member?.id
+    }
+
+    function kept(item: ShareableItem): boolean {
+        return item.developer !== null && item.developer.id !== member?.id
+    }
+
+    function locked(spot: Spot): boolean {
+        return spot.server !== null && servers.includes(spot.server.id) && signsIn(spot.server)
+    }
+
+    function covered(spot: Spot): boolean {
+        return (
+            (spot.server !== null && servers.includes(spot.server.id) && !developer) ||
+            (spot.project !== null && projects.includes(spot.project))
+        )
+    }
+
+    function spotOf(kind: Kind, id: string): Spot | undefined {
+        return spots[kind].get(id)
+    }
+
+    function shared(kind: Kind, id: string): boolean {
+        const spot = spotOf(kind, id)
+
+        if (!spot) {
+            return false
+        }
+
+        if (mine(spot.item)) {
+            return true
+        }
+
+        if (kept(spot.item)) {
+            return direct[kind].includes(id)
+        }
+
+        if (locked(spot)) {
+            return true
+        }
+
+        return covered(spot) ? !withheld[kind].includes(id) : direct[kind].includes(id)
+    }
+
+    function fixed(kind: Kind, id: string): boolean {
+        const spot = spotOf(kind, id)
+
+        return spot !== undefined && (mine(spot.item) || (!kept(spot.item) && locked(spot)))
+    }
+
+    function items(container: SharedServer | SharedProject): [Kind, ShareableItem][] {
+        return [
+            ...container.applications.map((item): [Kind, ShareableItem] => ['applications', item]),
+            ...container.databases.map((item): [Kind, ShareableItem] => ['databases', item])
+        ]
+    }
+
+    function containerChosen(container: SharedServer | SharedProject): boolean {
+        return 'this_machine' in container ? servers.includes(container.id) : projects.includes(container.id)
+    }
+
+    function partly(container: SharedServer | SharedProject, chosen: boolean): boolean {
+        const all = items(container)
+        const on = all.filter(([kind, item]) => shared(kind, item.id)).length
+
+        return chosen ? on < all.length : on > 0
+    }
+
+    function contents(container: SharedServer | SharedProject): string {
+        const all = items(container)
+        const on = all.filter(([kind, item]) => shared(kind, item.id)).length
+
+        if (all.length > 0 && partly(container, containerChosen(container))) {
+            return `${on} of ${all.length} shared`
+        }
+
+        return [
+            count(container.applications.length, 'app', 'apps'),
+            count(container.databases.length, 'database', 'databases')
+        ]
+            .filter((part) => part !== null)
+            .join(' · ')
+    }
+
+    function share(kind: Kind, id: string, on: boolean, project: SharedProject | null) {
+        const spot = spotOf(kind, id)
+
+        if (!spot || fixed(kind, id)) {
+            return
+        }
+
+        if (kept(spot.item)) {
+            direct = { ...direct, [kind]: tick(direct[kind], id, on) }
+
+            return
+        }
+
+        if (covered(spot)) {
+            withheld = { ...withheld, [kind]: tick(withheld[kind], id, !on) }
+            direct = { ...direct, [kind]: tick(direct[kind], id, false) }
+
+            return
+        }
+
+        if (on && project !== null) {
+            const hidden = items(project).filter(
+                ([each, item]) => !(each === kind && item.id === id) && !kept(item) && !shared(each, item.id)
+            )
+            const next = { applications: [...withheld.applications], databases: [...withheld.databases] }
+
+            for (const [each, item] of hidden) {
+                next[each] = tick(next[each], item.id, true)
+            }
+
+            next[kind] = tick(next[kind], id, false)
+            withheld = next
+            direct = { ...direct, [kind]: tick(direct[kind], id, false) }
+            projects = tick(projects, project.id, true)
+
+            return
+        }
+
+        direct = { ...direct, [kind]: tick(direct[kind], id, on) }
+    }
+
+    function choose(container: SharedServer | SharedProject, on: boolean) {
+        if ('this_machine' in container) {
+            servers = tick(servers, container.id, on)
+        } else {
+            projects = tick(projects, container.id, on)
+        }
+
+        if (on && !('this_machine' in container && developer)) {
+            withheld = {
+                applications: withheld.applications.filter(
+                    (id) => !container.applications.some((item) => item.id === id)
+                ),
+                databases: withheld.databases.filter((id) => !container.databases.some((item) => item.id === id))
+            }
+        }
+    }
+
+    function held(kind: Kind): string[] {
+        return withheld[kind].filter((id) => {
+            const spot = spotOf(kind, id)
+
+            return spot !== undefined && !kept(spot.item) && !mine(spot.item) && covered(spot) && !locked(spot)
+        })
     }
 
     function save(event: SubmitEvent) {
@@ -164,41 +311,68 @@
             return
         }
 
-        const narrowed = shareable.servers.filter(narrows)
-
         saving = true
         router.put(
             route('teams.members.access.update', [team.id, member.id]),
             {
                 everything,
                 servers,
-                applications,
                 projects,
-                environments,
-                withheld_applications: narrowed
-                    .flatMap((server) => server.applications.map((application) => application.id))
-                    .filter((id) => withheldApplications.includes(id)),
-                withheld_databases: narrowed
-                    .flatMap((server) => server.databases.map((database) => database.id))
-                    .filter((id) => withheldDatabases.includes(id))
+                applications: direct.applications.filter((id) => !held('applications').includes(id)),
+                databases: direct.databases.filter((id) => !held('databases').includes(id)),
+                withheld_applications: held('applications'),
+                withheld_databases: held('databases')
             },
             {
                 preserveScroll: true,
                 onSuccess: () => (open = false),
-                onError: (failed: Record<string, string>) =>
-                    (errors = {
-                        servers: failed.servers,
-                        applications: failed.applications,
-                        projects: failed.projects,
-                        environments: failed.environments,
-                        withheld_applications: failed.withheld_applications,
-                        withheld_databases: failed.withheld_databases
-                    }),
+                onError: (failed: Record<string, string>) => (errors = failed),
                 onFinish: () => (saving = false)
             }
         )
     }
+
+    const failure = $derived(
+        errors.projects ??
+            errors.servers ??
+            errors.applications ??
+            errors.databases ??
+            errors.withheld_applications ??
+            errors.withheld_databases
+    )
 </script>
+
+{#snippet row(kind: Kind, item: ShareableItem, project: SharedProject | null, prefix: string)}
+    {@const note = mine(item) ? 'Theirs' : item.developer ? `Added by ${item.developer.name}` : null}
+    <div
+        class="flex min-h-9 items-center gap-2.5 pl-6.5"
+        data-testid={kind === 'applications' ? 'share-app' : 'share-database'}
+    >
+        <Checkbox
+            id="{prefix}-{item.id}"
+            checked={shared(kind, item.id)}
+            disabled={fixed(kind, item.id)}
+            onCheckedChange={(on) => share(kind, item.id, on, project)}
+            aria-invalid={failure ? true : undefined}
+        />
+        {#if kind === 'databases'}
+            <Label for="{prefix}-{item.id}" class="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-normal">
+                <span class="min-w-0 truncate font-mono">{item.name}</span>
+                <span class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground">Database</span>
+            </Label>
+        {:else}
+            <Label for="{prefix}-{item.id}" class="min-w-0 truncate font-mono text-[13px] font-normal"
+                >{item.name}</Label
+            >
+            {#if item.tags && item.tags.length > 0}
+                <AppTags tags={item.tags} limit={2} class="shrink-0 flex-nowrap" chipClass="max-w-20" />
+            {/if}
+        {/if}
+        {#if note}
+            <span class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground">{note}</span>
+        {/if}
+    </div>
+{/snippet}
 
 <Dialog.Root bind:open>
     <Dialog.Content>
@@ -207,10 +381,10 @@
                 <Dialog.Title>What {member?.name} can see</Dialog.Title>
                 <Dialog.Description
                     >{everything
-                        ? `${member?.name} sees every project, server and app in ${team.name}, and anything added later.`
+                        ? `${member?.name} sees every project, server and app in ${team.name}, and anything added later${keptByDevelopers ? ', apart from what developers add for themselves' : ''}.`
                         : developer
-                          ? `${member?.name} sees what they add and what you tick. A project brings every environment in it. A server lets ${member?.name} add apps and databases to it and shows only the apps you tick under it.`
-                          : `${member?.name} sees only what you tick. A project brings every environment in it, and a server every app and database on it, apart from any you untick.`}</Dialog.Description
+                          ? `${member?.name} sees what they add and what you tick. A project brings everything in it apart from what you untick. A server lets ${member?.name} add apps and databases to it and shows only what you tick under it.`
+                          : `${member?.name} sees only what you tick. A project or a server brings everything in it apart from what you untick.`}</Dialog.Description
                 >
             </Dialog.Header>
             {#if developer}
@@ -234,30 +408,29 @@
                             <fieldset class="m-0 border-0 p-0">
                                 <legend class="type-label pt-1.5 text-muted-foreground">Projects</legend>
                                 {#each shareable.projects as project (project.id)}
-                                    {@const whole = projects.includes(project.id)}
                                     {@const shown = expanded.includes(project.id)}
+                                    {@const listed = contents(project)}
                                     <div class="flex min-h-10 items-center gap-2.5" data-testid="share-project">
                                         <Checkbox
                                             id="share-project-{project.id}"
-                                            checked={whole}
-                                            onCheckedChange={(on) => (projects = tick(projects, project.id, on))}
+                                            checked={projects.includes(project.id)}
+                                            onCheckedChange={(on) => choose(project, on)}
                                             aria-invalid={errors.projects ? true : undefined}
                                         />
                                         <Label
                                             for="share-project-{project.id}"
                                             class="min-w-0 truncate text-[13px] font-normal">{project.name}</Label
                                         >
-                                        {#if project.environments.length > 0}
-                                            {@const environmentCount = `${project.environments.length} ${project.environments.length === 1 ? 'environment' : 'environments'}`}
+                                        {#if listed !== ''}
                                             <button
                                                 type="button"
                                                 class={toggle}
                                                 aria-expanded={shown}
-                                                aria-controls="share-environments-{project.id}"
-                                                aria-label="{environmentCount} in {project.name}"
+                                                aria-controls="share-project-items-{project.id}"
+                                                aria-label="{listed} in {project.name}"
                                                 onclick={() => (expanded = tick(expanded, project.id, !shown))}
                                             >
-                                                {environmentCount}
+                                                {listed}
                                                 <ChevronDown
                                                     class={cn(
                                                         'size-3.5 transition-transform duration-(--dur-fast)',
@@ -269,29 +442,15 @@
                                     </div>
                                     {#if shown}
                                         <div
-                                            id="share-environments-{project.id}"
+                                            id="share-project-items-{project.id}"
                                             role="group"
-                                            aria-label="Environments in {project.name}"
+                                            aria-label="In {project.name}"
                                         >
-                                            {#each project.environments as environment (environment.id)}
-                                                <div
-                                                    class="flex min-h-9 items-center gap-2.5 pl-6.5"
-                                                    data-testid="share-environment"
-                                                >
-                                                    <Checkbox
-                                                        id="share-environment-{environment.id}"
-                                                        checked={whole || environments.includes(environment.id)}
-                                                        disabled={whole}
-                                                        onCheckedChange={(on) =>
-                                                            (environments = tick(environments, environment.id, on))}
-                                                        aria-invalid={errors.environments ? true : undefined}
-                                                    />
-                                                    <Label
-                                                        for="share-environment-{environment.id}"
-                                                        class="min-w-0 truncate text-[13px] font-normal"
-                                                        >{environment.name}</Label
-                                                    >
-                                                </div>
+                                            {#each project.applications as item (item.id)}
+                                                {@render row('applications', item, project, 'share-project-app')}
+                                            {/each}
+                                            {#each project.databases as item (item.id)}
+                                                {@render row('databases', item, project, 'share-project-database')}
                                             {/each}
                                         </div>
                                     {/if}
@@ -308,14 +467,12 @@
                                 {#each shareable.servers as server (server.id)}
                                     {@const whole = servers.includes(server.id)}
                                     {@const shown = expanded.includes(server.id)}
-                                    {@const locked = whole && signsIn(server)}
-                                    {@const holds = narrows(server)}
                                     {@const listed = contents(server)}
                                     <div class="flex min-h-10 items-center gap-2.5" data-testid="share-server">
                                         <Checkbox
                                             id="share-server-{server.id}"
                                             checked={whole}
-                                            onCheckedChange={(on) => (servers = tick(servers, server.id, on))}
+                                            onCheckedChange={(on) => choose(server, on)}
                                             aria-invalid={errors.servers ? true : undefined}
                                         />
                                         <Label
@@ -343,14 +500,8 @@
                                         {/if}
                                     </div>
                                     {#if shown}
-                                        <div
-                                            id="share-apps-{server.id}"
-                                            role="group"
-                                            aria-label="{whole && !developer
-                                                ? 'Apps and databases'
-                                                : 'Apps'} on {server.name}"
-                                        >
-                                            {#if locked}
+                                        <div id="share-apps-{server.id}" role="group" aria-label="On {server.name}">
+                                            {#if whole && signsIn(server)}
                                                 <p
                                                     class="m-0 pt-1 pb-2 pl-6.5 text-[12px] leading-normal text-muted-foreground"
                                                     data-testid="share-signs-in"
@@ -360,78 +511,19 @@
                                                     untick {server.name} and tick them.
                                                 </p>
                                             {/if}
-                                            {#each server.applications as application (application.id)}
-                                                <div
-                                                    class="flex min-h-9 items-center gap-2.5 pl-6.5"
-                                                    data-testid="share-app"
-                                                >
-                                                    <Checkbox
-                                                        id="share-app-{application.id}"
-                                                        checked={locked ||
-                                                            (holds
-                                                                ? !withheldApplications.includes(application.id)
-                                                                : applications.includes(application.id))}
-                                                        disabled={locked}
-                                                        onCheckedChange={(on) => shareApp(application.id, on, server)}
-                                                        aria-invalid={errors.applications ||
-                                                        errors.withheld_applications
-                                                            ? true
-                                                            : undefined}
-                                                    />
-                                                    <Label
-                                                        for="share-app-{application.id}"
-                                                        class="min-w-0 truncate font-mono text-[13px] font-normal"
-                                                        >{application.name}</Label
-                                                    >
-                                                </div>
+                                            {#each server.applications as item (item.id)}
+                                                {@render row('applications', item, null, 'share-app')}
                                             {/each}
-                                            {#if whole && !developer}
-                                                {#each server.databases as database (database.id)}
-                                                    <div
-                                                        class="flex min-h-9 items-center gap-2.5 pl-6.5"
-                                                        data-testid="share-database"
-                                                    >
-                                                        <Checkbox
-                                                            id="share-database-{database.id}"
-                                                            checked={locked || !withheldDatabases.includes(database.id)}
-                                                            disabled={locked}
-                                                            onCheckedChange={(on) =>
-                                                                (withheldDatabases = tick(
-                                                                    withheldDatabases,
-                                                                    database.id,
-                                                                    !on
-                                                                ))}
-                                                            aria-invalid={errors.withheld_databases ? true : undefined}
-                                                        />
-                                                        <Label
-                                                            for="share-database-{database.id}"
-                                                            class="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-normal"
-                                                        >
-                                                            <span class="min-w-0 truncate font-mono"
-                                                                >{database.name}</span
-                                                            >
-                                                            <span
-                                                                class="ml-auto shrink-0 pr-2 text-[12px] text-muted-foreground"
-                                                                >Database</span
-                                                            >
-                                                        </Label>
-                                                    </div>
-                                                {/each}
-                                            {/if}
+                                            {#each server.databases as item (item.id)}
+                                                {@render row('databases', item, null, 'share-database')}
+                                            {/each}
                                         </div>
                                     {/if}
                                 {/each}
                             </fieldset>
                         {/if}
                     </div>
-                    <FieldError
-                        message={errors.projects ??
-                            errors.environments ??
-                            errors.servers ??
-                            errors.applications ??
-                            errors.withheld_applications ??
-                            errors.withheld_databases}
-                    />
+                    <FieldError message={failure} />
                 {/if}
             {/if}
             <Dialog.Footer>

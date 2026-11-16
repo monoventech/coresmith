@@ -15,8 +15,16 @@ function member(page: Page, email: string) {
     return page.getByTestId('member-row').filter({ hasText: email })
 }
 
+function onServer(page: Page, server: string) {
+    return dialog(page).getByRole('group', { name: `On ${server}`, exact: true })
+}
+
+function inProject(page: Page, project: string) {
+    return dialog(page).getByRole('group', { name: `In ${project}`, exact: true })
+}
+
 test.describe('what each member sees', () => {
-    test('an owner narrows a member, ticks a server and an app, holds back one app on the server, and the row says so', async ({
+    test('an owner narrows a member, ticks a server and an app, holds back one app on the server, then shares a project without one of its apps', async ({
         page
     }, testInfo) => {
         const email = `${own(testInfo, 'narrow')}@coresmith.test`
@@ -35,7 +43,7 @@ test.describe('what each member sees', () => {
         await expect(everything).toBeChecked()
         await everything.click()
         await expect(dialog(page)).toContainText(
-            `${name} sees only what you tick. A project brings every environment in it, and a server every app and database on it, apart from any you untick.`
+            `${name} sees only what you tick. A project or a server brings everything in it apart from what you untick.`
         )
 
         await dialog(page).getByRole('checkbox', { name: 'forge-02', exact: true }).click()
@@ -43,7 +51,7 @@ test.describe('what each member sees', () => {
             .getByRole('button', { name: / on forge-02$/ })
             .click()
 
-        const held = dialog(page).getByRole('checkbox', { name: 'atlas-staging', exact: true })
+        const held = onServer(page, 'forge-02').getByRole('checkbox', { name: 'atlas-staging', exact: true })
 
         await expect(held).toBeChecked()
         await expect(held).toBeEnabled()
@@ -52,7 +60,7 @@ test.describe('what each member sees', () => {
         await dialog(page)
             .getByRole('button', { name: / on anvil-01$/ })
             .click()
-        await dialog(page).getByRole('checkbox', { name: 'warehouse', exact: true }).click()
+        await onServer(page, 'anvil-01').getByRole('checkbox', { name: 'warehouse', exact: true }).click()
         await dialog(page).getByRole('button', { name: 'Save' }).click()
 
         await expect(toast(page)).toContainText('Saved.')
@@ -66,16 +74,31 @@ test.describe('what each member sees', () => {
             .getByRole('button', { name: `Access for ${name}` })
             .click()
         await expect(dialog(page).getByRole('checkbox', { name: 'forge-02', exact: true })).toBeChecked()
-        await expect(dialog(page).getByRole('checkbox', { name: 'atlas-staging', exact: true })).not.toBeChecked()
-        await dialog(page)
-            .getByRole('button', { name: /environments? in Storefront$/ })
-            .click()
-        await dialog(page).getByRole('checkbox', { name: 'Staging', exact: true }).click()
+        await expect(
+            onServer(page, 'forge-02').getByRole('checkbox', { name: 'atlas-staging', exact: true })
+        ).not.toBeChecked()
+        await expect(dialog(page).getByRole('button', { name: / in Storefront$/ })).toHaveAttribute(
+            'aria-expanded',
+            'true'
+        )
+        await dialog(page).getByRole('checkbox', { name: 'Storefront', exact: true }).click()
+
+        const live = inProject(page, 'Storefront').getByRole('checkbox', { name: 'storefront', exact: true })
+
+        await expect(live).toBeChecked()
+
+        const items = await inProject(page, 'Storefront').getByRole('checkbox').count()
+
+        await live.click()
+        await expect(live).not.toBeChecked()
+        await expect(dialog(page).getByRole('button', { name: / in Storefront$/ })).toHaveText(
+            new RegExp(`${items - 1} of ${items} shared`)
+        )
         await dialog(page).getByRole('button', { name: 'Save' }).click()
 
         await expect(toast(page)).toContainText('Saved.')
         await expect(member(page, email).getByTestId('member-access')).toHaveText(
-            '1 environment, 1 server, 1 app, 1 held back'
+            '1 project, 1 server, 1 app, 2 held back'
         )
     })
 
@@ -91,7 +114,7 @@ test.describe('what each member sees', () => {
             .getByRole('button', { name: / on forge-01$/ })
             .click()
 
-        const apps = dialog(page).getByRole('group', { name: 'Apps and databases on forge-01' }).getByRole('checkbox')
+        const apps = onServer(page, 'forge-01').getByRole('checkbox')
 
         await expect(apps.first()).toBeChecked()
         await expect(apps.first()).toBeDisabled()
@@ -107,20 +130,23 @@ test.describe('what each member sees', () => {
         await member(page, 'developer@coresmith.test').getByRole('button', { name: 'Access for Lena Brandt' }).click()
 
         await expect(dialog(page)).toContainText(
-            'Lena Brandt sees what they add and what you tick. A project brings every environment in it. A server lets Lena Brandt add apps and databases to it and shows only the apps you tick under it.'
+            'Lena Brandt sees what they add and what you tick. A project brings everything in it apart from what you untick. A server lets Lena Brandt add apps and databases to it and shows only what you tick under it.'
         )
         await expect(dialog(page).getByRole('switch', { name: /^Everything in / })).toHaveCount(0)
         await expect(dialog(page).getByRole('checkbox', { name: 'forge-02', exact: true })).toBeChecked()
+        await expect(dialog(page).getByRole('checkbox', { name: 'Atlas', exact: true })).toBeChecked()
+        await expect(dialog(page).getByRole('button', { name: / in Atlas$/ })).toHaveText(/0 of \d+ shared/)
 
-        await dialog(page)
-            .getByRole('button', { name: / on forge-02$/ })
-            .click()
-
-        const staging = dialog(page).getByRole('checkbox', { name: 'atlas-staging', exact: true })
+        const staging = onServer(page, 'forge-02').getByRole('checkbox', { name: 'atlas-staging', exact: true })
 
         await expect(staging).not.toBeChecked()
         await expect(staging).toBeEnabled()
-        await expect(dialog(page).getByTestId('share-database')).toHaveCount(0)
+        await expect(
+            onServer(page, 'forge-02').getByRole('checkbox', { name: 'side-notes', exact: true })
+        ).toBeDisabled()
+        await expect(
+            onServer(page, 'forge-02').getByTestId('share-app').filter({ hasText: 'side-notes' })
+        ).toContainText('Theirs')
     })
 
     test('an app and a database with the same name on a shared server stay apart', async ({ page }) => {
@@ -134,11 +160,13 @@ test.describe('what each member sees', () => {
             .getByRole('button', { name: / on anvil-01$/ })
             .click()
 
-        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse', exact: true })).toHaveCount(1)
-        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse Database', exact: true })).toHaveCount(1)
-        await dialog(page).getByRole('checkbox', { name: 'warehouse Database', exact: true }).click()
-        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse', exact: true })).toBeChecked()
-        await expect(dialog(page).getByRole('checkbox', { name: 'warehouse Database', exact: true })).not.toBeChecked()
+        const anvil = onServer(page, 'anvil-01')
+
+        await expect(anvil.getByRole('checkbox', { name: 'warehouse', exact: true })).toHaveCount(1)
+        await expect(anvil.getByRole('checkbox', { name: 'warehouse Database', exact: true })).toHaveCount(1)
+        await anvil.getByRole('checkbox', { name: 'warehouse Database', exact: true }).click()
+        await expect(anvil.getByRole('checkbox', { name: 'warehouse', exact: true })).toBeChecked()
+        await expect(anvil.getByRole('checkbox', { name: 'warehouse Database', exact: true })).not.toBeChecked()
     })
 
     for (const theme of ['light', 'dark'] as const) {

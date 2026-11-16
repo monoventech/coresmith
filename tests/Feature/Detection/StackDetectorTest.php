@@ -42,6 +42,8 @@ test('each repository gets the stack its files settle', function (string $fixtur
     'sveltekit on adapter-auto' => ['sveltekit-auto', 'blocked', 'js', 'sveltekit', 'node', null],
     'sveltekit on adapter-vercel, realworld' => ['sveltekit-realworld', 'blocked', 'js', 'sveltekit', 'node', null],
     'sveltekit on adapter-static' => ['sveltekit-static', 'ready', 'static', '', null, '/build'],
+    'sveltekit 3 with adapter-static set in vite.config.js' => ['sveltekit3-static', 'ready', 'static', '', null, '/build'],
+    'sveltekit 3 with adapter-static writing to dist from vite.config.ts' => ['sveltekit3-static-dist', 'ready', 'static', '', null, '/dist'],
     'next.js' => ['next-app', 'ready', 'js', 'nextjs', 'node', null],
     'next.js static export' => ['next-export', 'ready', 'static', '', null, '/out'],
     'next.js without a start script' => ['next-no-start', 'blocked', 'js', 'nextjs', 'node', null],

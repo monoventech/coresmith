@@ -21,15 +21,41 @@ final readonly class JsFrameworks
         'vercel', 'vercel-edge', 'vercel-static', 'vercel_edge', 'winterjs',
     ];
 
+    public const SVELTE_CONFIGS = ['svelte.config.js', 'svelte.config.ts', 'vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vite.config.mjs'];
+
     public function svelteAdapter(RepositoryFacts $facts): ?string
     {
-        foreach (['svelte.config.js', 'svelte.config.ts'] as $file) {
+        return $this->svelteAdapterIn($facts)[0] ?? null;
+    }
+
+    /**
+     * @return array{string, string}|null
+     */
+    public function svelteAdapterIn(RepositoryFacts $facts): ?array
+    {
+        foreach (self::SVELTE_CONFIGS as $file) {
             if (preg_match('~(?:from|require\()\s*[\'"](@sveltejs/adapter-[a-z0-9-]+|svelte-adapter-bun)[\'"]~', (string) $facts->file($file), $matches) === 1) {
-                return $matches[1];
+                return [$matches[1], $file];
             }
         }
 
         return null;
+    }
+
+    public function sveltePages(RepositoryFacts $facts): string|false|null
+    {
+        $file = $this->svelteAdapterIn($facts)[1] ?? null;
+        $config = $file === null ? '' : (string) $facts->file($file);
+
+        if (preg_match('~\bpages\s*:~', $config) !== 1) {
+            return null;
+        }
+
+        if (preg_match('~\bpages\s*:\s*[\'"`]\.?/?([A-Za-z0-9_][A-Za-z0-9_./-]*?)/?[\'"`]~', $config, $matches) !== 1 || str_contains($matches[1], '..')) {
+            return false;
+        }
+
+        return '/' . $matches[1];
     }
 
     public function nextExport(RepositoryFacts $facts): bool

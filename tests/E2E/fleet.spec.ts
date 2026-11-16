@@ -96,7 +96,7 @@ test.describe('the fleet', () => {
         await expect(card(page, 'outpost-01')).toContainText('Disk 84%')
         await expect(card(page, 'rekeyed-server')).toContainText('Host key changed')
         await expect(card(page, 'empty-server')).toContainText('Not connected')
-        await expect(card(page, 'empty-server')).toContainText('Staging · ams3 · 0 apps')
+        await expect(card(page, 'empty-server')).toContainText('ams3 · 0 apps')
         await expect(card(page, 'audit-server')).toContainText('Not provisioned')
     })
 

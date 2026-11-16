@@ -19,7 +19,7 @@ final class PackageCredentials
      */
     public function forApplication(Application $application): array
     {
-        $project = $application->environment?->project_id;
+        $project = $application->project_id;
 
         $credentials = PackageCredential::query()
             ->where('team_id', $application->team_id)

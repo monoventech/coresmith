@@ -9,7 +9,6 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\ServerStatus;
-use App\Http\Controllers\ServerController;
 use App\Jobs\RebootServer;
 use App\Models\Application;
 use App\Models\Server;
@@ -53,8 +52,6 @@ final class ServerPresenter
         return [
             'id' => $server->getKey(),
             'name' => $server->name,
-            'environment' => $server->environment,
-            'environments' => ServerController::ENVIRONMENTS,
             'region' => $server->region,
             'state' => $state,
             'meta' => $fleet->meta($server, long: true),

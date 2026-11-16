@@ -9,6 +9,10 @@
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
+    import DeployScriptCard from '@/components/applications/DeployScriptCard.svelte'
+    import SetupCard from '@/components/applications/SetupCard.svelte'
+    import type { AppSetup } from '@/components/applications/SetupCard.svelte'
+    import type { DeployScript } from '@/components/applications/DeployScriptCard.svelte'
     import PhpLimitsCard from '@/components/applications/PhpLimitsCard.svelte'
     import type { PhpLimits } from '@/components/applications/PhpLimitsCard.svelte'
     import RepositoryCheckBanner from '@/components/applications/RepositoryCheckBanner.svelte'
@@ -17,6 +21,7 @@
     import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
+    import TagEditor from '@/components/projects/TagEditor.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button, buttonVariants } from '@/components/ui/button'
@@ -57,6 +62,9 @@
     let {
         server,
         place = null,
+        tag_suggestions = [],
+        deploy_script,
+        setup,
         application,
         toggles = [],
         addresses,
@@ -71,6 +79,8 @@
         application: {
             id: string
             name: string
+            tags: string[]
+            tags_href: string | null
             state: EntityState
             kind: string
             runtime: string
@@ -151,6 +161,9 @@
         cron: CronCard
         php: PhpLimits | null
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
+        tag_suggestions: string[]
+        deploy_script: DeployScript
+        setup: AppSetup
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
         held: { current: string; newest: string; packages: string[]; command: string } | null
     } = $props()
@@ -430,7 +443,7 @@
 
     onMount(() =>
         follow({
-            only: ['application', 'toggles', 'panel', ...('cron' in page.props ? ['cron'] : [])],
+            only: ['application', 'toggles', 'panel', 'app_deploy', ...('cron' in page.props ? ['cron'] : [])],
             paused: () => working || cronBusy || Object.values(busy).some(Boolean)
         })
     )
@@ -480,15 +493,25 @@
                     >· <span class="font-mono text-[12px]">{application.domain}</span></span
                 >{/if}
         </p>
+        {#if application.tags.length > 0 || application.tags_href}
+            <div class="mt-2" data-testid="app-tags-row">
+                <TagEditor
+                    name={application.name}
+                    tags={application.tags}
+                    href={application.tags_href}
+                    suggestions={tag_suggestions}
+                />
+            </div>
+        {/if}
     </div>
     {#if application.running_href}
-        <Button href={application.running_href} class="max-sm:w-full">Watch deploy</Button>
+        <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
     {:else if can.deploy}
         <Button
             disabled={working || application.repository_check !== null}
             aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
             onclick={deploy}
-            class="max-sm:w-full">Deploy</Button
+            class="max-sm:w-full sm:hidden">Deploy</Button
         >
     {/if}
 </div>
@@ -550,6 +573,11 @@
             href={application.latest_deployment.href}
             class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7 max-sm:h-11!">Read the log</Link
         >
+        {#if setup.href}
+            <Link href={setup.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:h-11!"
+                >Edit setup</Link
+            >
+        {/if}
     </div>
 {/if}
 
@@ -932,6 +960,10 @@
                     </div>
                 {/if}
             </div>
+
+            <SetupCard class="@3xl:col-span-2" {setup} />
+
+            <DeployScriptCard class="@3xl:col-span-2" script={deploy_script} name={application.name} />
 
             {#if php}
                 <PhpLimitsCard

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { blockingViolations, expect, gotoServer, REPOSITORY_READS, test, useTheme } from './support/fixtures'
+import { blockingViolations, expect, gotoServer, main, REPOSITORY_READS, test, useTheme } from './support/fixtures'
 
 const COMMIT = '9f3c2e1a4b5c6d7e8f9012345678901234567890'
 
@@ -154,7 +154,7 @@ async function answer(page: Page, answers: object[]): Promise<string[]> {
 
 async function openAddApp(page: Page) {
     await gotoServer(page, 'bench-01')
-    await page.getByRole('link', { name: 'Add an app' }).click()
+    await main(page).getByRole('link', { name: 'Add an app' }).click()
     await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
     await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
 }

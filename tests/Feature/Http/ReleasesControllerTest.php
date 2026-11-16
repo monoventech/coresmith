@@ -6,7 +6,6 @@ use App\Enums\DeploymentStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
-use App\Models\Environment;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
@@ -67,13 +66,13 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-13 14:05:09'));
 });
 
-function releasesRow(Application $application, ?string $environment, ?Deployment $live = null, array $query = []): array
+function releasesRow(Application $application, ?Deployment $live = null, array $query = []): array
 {
     return [
         'id' => $application->id,
         'name' => $application->name,
         'server' => 'web-1',
-        'environment' => $environment,
+        'tags' => $application->tags,
         'href' => releasesUrl($application, $query),
         'release' => $application->current_release === null ? null : 'releases/' . Formats::release($application->current_release),
         'tag' => $live?->tag,
@@ -85,13 +84,10 @@ function releasesRow(Application $application, ?string $environment, ?Deployment
 test('the releases link lists every app the person can see, grouped by project, each with its live release', function () {
     $team = Team::factory()->create();
     $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
-    $production = Environment::factory()->for($project)->create(['name' => 'Production', 'position' => 0]);
-    $staging = Environment::factory()->for($project)->create(['name' => 'Staging', 'position' => 1]);
     $other = Project::factory()->for($team)->create(['name' => 'Analytics']);
-    $reports = Environment::factory()->for($other)->create(['name' => 'Production', 'position' => 0]);
-    $shop = releasesApp($team, ['name' => 'shop', 'environment_id' => $production->id, 'current_release' => '20260913120000']);
-    $preview = releasesApp($team, ['name' => 'shop-preview', 'environment_id' => $staging->id]);
-    $metrics = releasesApp($team, ['name' => 'metrics', 'environment_id' => $reports->id, 'current_release' => '20260913100000']);
+    $shop = releasesApp($team, ['name' => 'shop', 'project_id' => $project->id, 'tags' => ['production'], 'current_release' => '20260913120000']);
+    $preview = releasesApp($team, ['name' => 'shop-preview', 'project_id' => $project->id, 'tags' => ['staging']]);
+    $metrics = releasesApp($team, ['name' => 'metrics', 'project_id' => $other->id, 'current_release' => '20260913100000']);
     $blog = releasesApp($team, ['name' => 'blog', 'current_release' => '20260913130000']);
     releasesApp(Team::factory()->create(), ['name' => 'theirs']);
     $shopLive = releasesShipped($shop, '20260913120000', hoursAgo: 2, attributes: ['tag' => 'v1.2.0']);
@@ -105,17 +101,16 @@ test('the releases link lists every app the person can see, grouped by project, 
         ->assertInertia(fn($page) => $page
             ->component('releases/Overview')
             ->where('groups', [
-                ['name' => 'Analytics', 'apps' => [releasesRow($metrics, 'Production', $metricsLive)]],
-                ['name' => 'Storefront', 'apps' => [releasesRow($shop, 'Production', $shopLive), releasesRow($preview, 'Staging')]],
-                ['name' => null, 'apps' => [releasesRow($blog, null, $blogLive)]],
+                ['name' => 'Analytics', 'apps' => [releasesRow($metrics, $metricsLive)]],
+                ['name' => 'Storefront', 'apps' => [releasesRow($shop, $shopLive), releasesRow($preview)]],
+                ['name' => null, 'apps' => [releasesRow($blog, $blogLive)]],
             ]));
 });
 
 test('a project chosen on the releases list keeps only its apps, and a narrowed member sees only what is shared', function () {
     $team = Team::factory()->create();
     $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
-    $production = Environment::factory()->for($project)->create(['name' => 'Production']);
-    $shop = releasesApp($team, ['name' => 'shop', 'environment_id' => $production->id]);
+    $shop = releasesApp($team, ['name' => 'shop', 'project_id' => $project->id, 'tags' => ['production']]);
     $blog = releasesApp($team, ['name' => 'blog']);
     $member = releasesMember($team);
     $narrowed = releasesMember($team, TeamRole::Admin);
@@ -124,11 +119,11 @@ test('a project chosen on the releases list keeps only its apps, and a narrowed 
 
     $this->actingAs($member)
         ->get(route('releases.index', ['project' => $project->id]))
-        ->assertInertia(fn($page) => $page->where('groups', [['name' => 'Storefront', 'apps' => [releasesRow($shop, 'Production', query: ['project' => $project->id])]]])->where('scope', (string) $project->id));
+        ->assertInertia(fn($page) => $page->where('groups', [['name' => 'Storefront', 'apps' => [releasesRow($shop, query: ['project' => $project->id])]]])->where('scope', (string) $project->id));
 
     $this->actingAs($narrowed->fresh())
         ->get(route('releases.index'))
-        ->assertInertia(fn($page) => $page->where('groups', [['name' => null, 'apps' => [releasesRow($blog, null)]]]));
+        ->assertInertia(fn($page) => $page->where('groups', [['name' => null, 'apps' => [releasesRow($blog)]]]));
 });
 
 test('with no apps the releases list is empty', function (bool $hasTeam) {
@@ -352,8 +347,8 @@ test('the page links the application and lists the team applications to switch b
             ->where('application.deploy_href', route('servers.applications.deploy', [$application->server_id, $application]))
             ->where('application.rollback_href', route('servers.applications.rollback', [$application->server_id, $application]))
             ->where('applications', [
-                ['id' => $blog->id, 'name' => 'Blog', 'server' => 'web-1', 'project' => null, 'href' => releasesUrl($blog), 'current' => false],
-                ['id' => $application->id, 'name' => 'Shop', 'server' => 'web-1', 'project' => null, 'href' => releasesUrl($application), 'current' => true],
+                ['id' => $blog->id, 'name' => 'Blog', 'server' => 'web-1', 'project' => null, 'tags' => [], 'href' => releasesUrl($blog), 'current' => false],
+                ['id' => $application->id, 'name' => 'Shop', 'server' => 'web-1', 'project' => null, 'tags' => [], 'href' => releasesUrl($application), 'current' => true],
             ])
             ->where('overview_href', route('releases.index'))
             ->where('rollback', '20260912090000')

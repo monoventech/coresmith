@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\TeamRole;
 use App\Models\AccessGrant;
 use App\Models\Application;
+use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
@@ -131,12 +132,12 @@ test('the team page shows owners what each member sees and everything there is t
 
     $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
         ->where('can.shareAccess', true)
-        ->where('members', fn($members): bool => collect($members)->firstWhere('id', $member->id)['access'] === ['everything' => false, 'servers' => [$web->id], 'applications' => [], 'projects' => [], 'environments' => [], 'withheld_applications' => [], 'withheld_databases' => []]
+        ->where('members', fn($members): bool => collect($members)->firstWhere('id', $member->id)['access'] === ['everything' => false, 'servers' => [$web->id], 'applications' => [], 'databases' => [], 'projects' => [], 'withheld_applications' => [], 'withheld_databases' => []]
             && collect($members)->firstWhere('id', $owner->id)['access'] === null)
         ->where('shareable', ['servers' => [
-            ['id' => $cache->id, 'name' => 'cache', 'this_machine' => false, 'applications' => [['id' => $api->id, 'name' => 'api']], 'databases' => []],
+            ['id' => $cache->id, 'name' => 'cache', 'this_machine' => false, 'applications' => [['id' => $api->id, 'name' => 'api', 'tags' => [], 'developer' => null]], 'databases' => []],
             ['id' => $db->id, 'name' => 'db', 'this_machine' => false, 'applications' => [], 'databases' => []],
-            ['id' => $web->id, 'name' => 'web', 'this_machine' => false, 'applications' => [['id' => $shop->id, 'name' => 'shop']], 'databases' => []],
+            ['id' => $web->id, 'name' => 'web', 'this_machine' => false, 'applications' => [['id' => $shop->id, 'name' => 'shop', 'tags' => [], 'developer' => null]], 'databases' => []],
         ], 'projects' => []]));
 });
 
@@ -201,7 +202,7 @@ test('an invitation to only what I share narrows the member when they accept', f
 
     $this->actingAs($newcomer)->post(route('invitations.accept', memberAccessInviteToken('newcomer@example.test')))->assertRedirect();
 
-    expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [], 'withheld_applications' => [], 'withheld_databases' => []]);
+    expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'databases' => [], 'projects' => [], 'withheld_applications' => [], 'withheld_databases' => []]);
 });
 
 test('an invitation from an owner who picks nothing sees everything', function () {
@@ -230,43 +231,75 @@ test("an admin's invitee starts with what the admin sees, whatever the form says
     expect(TeamInvitation::query()->sole()->sees_everything)->toBe($adminSeesEverything);
 })->with(['an admin who sees everything' => [true], 'a narrowed admin' => [false]]);
 
-test('the team page offers each project and its environments to share', function () {
-    ['team' => $team, 'owner' => $owner] = memberAccessTeam();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    [$production, $staging] = $project->environments()->get()->all();
+test('the team page offers each project with its apps and databases to share', function () {
+    ['team' => $team, 'owner' => $owner, 'web' => $web, 'shop' => $shop] = memberAccessTeam();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $shop->update(['project_id' => $project->id, 'tags' => ['production']]);
+    $database = ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'project_id' => $project->id]);
 
     $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
-        ->where('shareable.projects', [['id' => $project->id, 'name' => 'Storefront', 'environments' => [
-            ['id' => $production->id, 'name' => 'Production'],
-            ['id' => $staging->id, 'name' => 'Staging'],
-        ]]]));
+        ->where('shareable.projects', [[
+            'id' => $project->id,
+            'name' => 'Storefront',
+            'applications' => [['id' => $shop->id, 'name' => 'shop', 'tags' => ['production'], 'developer' => null]],
+            'databases' => [['id' => $database->id, 'name' => 'shop_db', 'developer' => null]],
+        ]]));
 });
 
-test('an owner shares one environment of a project with a member', function () {
-    ['team' => $team, 'owner' => $owner, 'member' => $member] = memberAccessTeam();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    $staging = $project->environments()->where('name', 'Staging')->sole();
+test('apps and databases a developer added say who added them, since no project or server share reaches them', function () {
+    ['team' => $team, 'owner' => $owner, 'web' => $web] = memberAccessTeam();
+    $dana = memberAccessPerson($team, TeamRole::Developer, false, 'Dana Dev');
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $app = Application::factory()->for($team)->for($web)->create(['name' => 'dana-app', 'project_id' => $project->id, 'created_by' => $dana->id]);
+    $database = ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'dana_db', 'project_id' => $project->id, 'created_by' => $dana->id]);
+    $byOwner = Application::factory()->for($team)->for($web)->create(['name' => 'owner-app', 'project_id' => $project->id, 'created_by' => $owner->id]);
+    $dana = ['id' => $dana->id, 'name' => 'Dana Dev'];
 
-    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$staging->id], 'withheld_applications' => [], 'withheld_databases' => []])
+    $this->actingAs($owner)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
+        ->where('shareable.projects.0.applications', [
+            ['id' => $app->id, 'name' => 'dana-app', 'tags' => [], 'developer' => $dana],
+            ['id' => $byOwner->id, 'name' => 'owner-app', 'tags' => [], 'developer' => null],
+        ])
+        ->where('shareable.projects.0.databases', [['id' => $database->id, 'name' => 'dana_db', 'developer' => $dana]])
+        ->where('shareable.servers', fn($servers): bool => collect($servers)->firstWhere('name', 'web')['databases'] === [['id' => $database->id, 'name' => 'dana_db', 'developer' => $dana]]));
+});
+
+test('an owner shares a project with a member, holding back what they untick', function () {
+    ['team' => $team, 'owner' => $owner, 'member' => $member, 'shop' => $shop] = memberAccessTeam();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $shop->update(['project_id' => $project->id]);
+
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$project->id], 'withheld_applications' => [$shop->id], 'withheld_databases' => []])
         ->assertSessionHasNoErrors()
         ->assertSessionHas('success', 'Saved.');
 
-    expect(app(TeamAccess::class)->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id], 'withheld_applications' => [], 'withheld_databases' => []])
-        ->and(Activity::query()->where('description', 'member_access_changed')->sole()->properties['environments'])->toBe([$staging->id]);
+    expect(app(TeamAccess::class)->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'databases' => [], 'projects' => [$project->id], 'withheld_applications' => [$shop->id], 'withheld_databases' => []])
+        ->and(Activity::query()->where('description', 'member_access_changed')->sole()->properties['projects'])->toBe([$project->id]);
 
     memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$project->id]])->assertSessionHasNoErrors();
 
-    expect(app(TeamAccess::class)->summary($team, $member)['projects'])->toBe([$project->id]);
+    expect(app(TeamAccess::class)->summary($team, $member)['withheld_applications'])->toBe([]);
 });
 
-test('a project or environment from another team is refused', function () {
+test('an owner shares a database on its own', function () {
+    ['team' => $team, 'owner' => $owner, 'member' => $member, 'web' => $web] = memberAccessTeam();
+    $database = ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db']);
+
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'databases' => [$database->id]])->assertSessionHasNoErrors();
+
+    expect(app(TeamAccess::class)->summary($team, $member)['databases'])->toBe([$database->id])
+        ->and(app(TeamAccess::class)->canSeeDatabase($member, $database))->toBeTrue();
+});
+
+test('a project or database from another team is refused', function () {
     ['team' => $team, 'owner' => $owner, 'member' => $member] = memberAccessTeam();
-    $theirs = Project::factory()->withEnvironments(['Production'])->create();
+    $theirs = Project::factory()->create();
+    $theirDatabase = ManagedDatabase::factory()->create();
 
     memberAccessSave($owner, $team, $member, ['everything' => false, 'projects' => [$theirs->id]])
         ->assertSessionHasErrors(['projects' => "One of those projects isn't in Acme any more. Reload the page and choose again."]);
-    memberAccessSave($owner, $team, $member, ['everything' => false, 'environments' => [$theirs->environments()->sole()->id], 'withheld_applications' => [], 'withheld_databases' => []])
-        ->assertSessionHasErrors(['environments' => "One of those environments isn't in Acme any more. Reload the page and choose again."]);
+    memberAccessSave($owner, $team, $member, ['everything' => false, 'databases' => [$theirDatabase->id]])
+        ->assertSessionHasErrors(['databases' => "One of those databases isn't in Acme any more. Reload the page and choose again."]);
 
     expect(app(TeamAccess::class)->seesEverything($member, $team))->toBeTrue();
 });

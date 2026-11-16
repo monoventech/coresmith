@@ -30,8 +30,7 @@
         application = null,
         create_application_href = null,
         cloud = null,
-        catalog,
-        environments = []
+        catalog
     }: {
         steps: { label: string; done: boolean }[]
         current: number
@@ -52,7 +51,6 @@
         create_application_href: string | null
         cloud: CloudChoices | null
         catalog?: CloudCatalog | null
-        environments: string[]
     } = $props()
 
     let deploying = $state(false)
@@ -352,7 +350,7 @@
                                                 {/if}
                                             </div>
                                         {:else if catalog}
-                                            <CloudServerFields {catalog} {environments} {errors} bind:picks />
+                                            <CloudServerFields {catalog} {errors} bind:picks />
                                         {/if}
                                     </Deferred>
                                 {/key}

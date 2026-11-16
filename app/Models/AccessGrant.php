@@ -30,11 +30,6 @@ final class AccessGrant extends Model
         return $this->belongsTo(Project::class);
     }
 
-    public function environment(): BelongsTo
-    {
-        return $this->belongsTo(Environment::class);
-    }
-
     public function database(): BelongsTo
     {
         return $this->belongsTo(ManagedDatabase::class, 'database_id');

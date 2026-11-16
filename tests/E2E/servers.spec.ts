@@ -26,7 +26,7 @@ test.describe('a server', () => {
         await expectWayBack(page, 'Fleet')
         await expect(page.getByRole('main')).toContainText('Healthy')
         await expect(page.getByRole('main')).toContainText(
-            'Production · fra1 · 4 cores · 8 GB RAM · 160 GB disk · Ubuntu 24.04.3 LTS · 203.0.113.14'
+            'fra1 · 4 cores · 8 GB RAM · 160 GB disk · Ubuntu 24.04.3 LTS · 203.0.113.14'
         )
     })
 
@@ -157,29 +157,6 @@ test.describe('a server', () => {
         await page.getByRole('button', { name: 'Reboot server' }).click()
 
         await expect(toast(page)).toContainText('A deploy is running on forge-02.')
-    })
-
-    test('renaming sets and clears the environment the fleet shows', async ({ page }, testInfo) => {
-        const name = own(testInfo, 'label')
-
-        await gotoServer(page, name)
-        await expect(page.getByText(/^ams3 · /)).toBeVisible()
-
-        await page.getByRole('button', { name: 'Rename' }).click()
-        await expect(dialog(page).getByLabel('Environment')).toHaveValue('')
-        await dialog(page).getByLabel('Environment').selectOption('Staging')
-        await dialog(page).getByRole('button', { name: 'Save' }).click()
-
-        await expect(toast(page)).toContainText('Saved.')
-        await expect(page.getByText(/^Staging · ams3 · /)).toBeVisible()
-
-        await page.getByRole('button', { name: 'Rename' }).click()
-        await expect(dialog(page).getByLabel('Environment')).toHaveValue('Staging')
-        await dialog(page).getByLabel('Environment').selectOption({ label: 'No environment' })
-        await dialog(page).getByRole('button', { name: 'Save' }).click()
-
-        await expect(dialog(page)).toHaveCount(0)
-        await expect(page.getByText(/^ams3 · /)).toBeVisible()
     })
 
     test('a server can be renamed', async ({ page }, testInfo) => {

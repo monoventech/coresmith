@@ -115,7 +115,7 @@
         </p>
     </div>
     {#if application && can.deploy}
-        <Button disabled={working} onclick={deploy}>Deploy</Button>
+        <Button disabled={working} onclick={deploy} class="sm:hidden">Deploy</Button>
     {/if}
 </div>
 

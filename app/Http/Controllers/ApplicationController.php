@@ -15,7 +15,6 @@ use App\Enums\DeploymentStatus;
 use App\Enums\MonitorKind;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
-use App\Enums\SourceProviderType;
 use App\Exceptions\PortExhaustedException;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
@@ -28,10 +27,10 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\MonitorAlert;
 use App\Models\Server;
-use App\Models\SourceProvider;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Cron\CronRunLine;
 use App\Services\Deployment\CrontabBuilder;
+use App\Services\Deployment\DeployScript;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\StackDefaults;
 use App\Services\Detection\RepositoryAccess;
@@ -39,6 +38,7 @@ use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
 use App\Services\Monitors\AppUptime;
 use App\Services\Network\ServerAddresses;
+use App\Services\Panel\AddAppForm;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\DeploymentPresenter;
@@ -47,6 +47,7 @@ use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
 use App\Services\Php\PhpLimitsCard;
+use App\Services\Projects\AppTags;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeDetector;
@@ -56,10 +57,6 @@ use App\Services\Server\PortAllocator;
 use App\Services\SlugGenerator;
 use App\Services\SSH\HostKeyFingerprint;
 use App\Services\Teams\TeamAccess;
-use App\Stacks\GoFrameworks;
-use App\Stacks\JavaFrameworks;
-use App\Stacks\JsPresets\JsPresets;
-use App\Stacks\PythonPresets\PythonPresets;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -73,42 +70,18 @@ final class ApplicationController extends Controller
 {
     public const SECRET_KEYS = '/(PASSWORD|SECRET|TOKEN|KEY|DSN|PRIVATE)/i';
 
-    public function create(Request $request, Server $server, Catalog $catalog, RuntimeLifecycle $lifecycle, ProjectPresenter $projects): Response
+    public function create(Request $request, Server $server, ProjectPresenter $projects, AddAppForm $form): Response
     {
         $this->authorize('view', $server);
         $this->authorize('create', Application::class);
 
+        $choices = $projects->choices($request->user(), $server->team);
+
         return Inertia::render('applications/Create', [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targets($server->public_addresses)],
-            'projects' => $projects->choices($request->user(), $server->team),
-            'js_frameworks' => app(JsPresets::class)->choices(),
-            'python_frameworks' => app(PythonPresets::class)->choices(),
-            'go_frameworks' => GoFrameworks::options(),
-            'java_frameworks' => JavaFrameworks::options(),
-            'runtimes' => collect(Catalog::RUNTIMES)->mapWithKeys(fn(string $runtime): array => [$runtime => [
-                'label' => $catalog->label($runtime),
-                'recommended' => $catalog->recommendedLine($runtime),
-                'sources' => RuntimeDetector::SOURCES[$runtime],
-                'options' => $lifecycle->options($runtime),
-            ]])->all(),
-            'github' => [
-                'connections' => SourceProvider::query()
-                    ->where('team_id', $server->team_id)
-                    ->where('type', SourceProviderType::GitHubApp->value)
-                    ->orderBy('name')
-                    ->orderBy('id')
-                    ->get()
-                    ->filter(fn(SourceProvider $provider): bool => $provider->connected() && $provider->usableBy($request->user(), $server->team))
-                    ->map(fn(SourceProvider $provider): array => [
-                        'id' => $provider->id,
-                        'account' => $provider->name,
-                        'repositories_href' => route('source-providers.repositories', $provider),
-                        'manage_url' => $provider->manageUrl(),
-                    ])
-                    ->values()
-                    ->all(),
-                'settings_href' => route('source-providers.index'),
-            ],
+            ...$form->props($request->user(), $server),
+            'projects' => $choices,
+            'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
+            'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
         ]);
     }
 
@@ -202,6 +175,8 @@ final class ApplicationController extends Controller
             'application' => [
                 'id' => $application->id,
                 'name' => $application->name,
+                'tags' => $application->tags,
+                'tags_href' => $user->can('update', $application) ? route('servers.applications.tags.update', [$server, $application]) : null,
                 'state' => $running === null ? ApplicationPresenter::state($application) : ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
                 'kind' => ApplicationPresenter::kind($application),
                 'runtime' => ApplicationPresenter::runtime($application),
@@ -280,6 +255,23 @@ final class ApplicationController extends Controller
                 'viewLogs' => $user->can('viewLogs', $application),
             ],
             'runtime_choice' => $user->can('update', $application) ? $this->runtimeChoice($server, $application) : null,
+            'tag_suggestions' => $user->can('update', $application) ? AppTags::suggestions($user, $server->team) : [],
+            'setup' => [
+                'href' => $user->can('update', $application) ? route('servers.applications.setup.edit', [$server, $application]) : null,
+                'rows' => array_values(array_filter([
+                    ['label' => 'Repository', 'value' => Repository::display((string) $application->repository_url)],
+                    ['label' => 'Branch', 'value' => (string) $application->repository_branch],
+                    ['label' => 'Folder', 'value' => $application->directory ?? '/'],
+                    $application->type->language()->route($application)->servesFiles() ? ['label' => 'Web root', 'value' => $application->web_directory ?? '/'] : null,
+                    $application->type === ApplicationType::Go ? ['label' => 'Main package', 'value' => $application->main_package ?? '.'] : null,
+                    ['label' => 'Size', 'value' => ucfirst((string) $application->app_size)],
+                ])),
+            ],
+            'deploy_script' => [
+                ...app(DeployScript::class)->present($application),
+                'update_href' => $user->can('update', $application) ? route('servers.applications.deploy-script.update', [$server, $application]) : null,
+                'reset_href' => $user->can('update', $application) ? route('servers.applications.deploy-script.destroy', [$server, $application]) : null,
+            ],
             'held' => $this->held($application, $live),
         ]);
     }

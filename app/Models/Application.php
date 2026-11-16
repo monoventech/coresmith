@@ -21,6 +21,7 @@ use App\Services\Git\Repository;
 use App\Services\SafeName;
 use App\Services\Server\PortAllocator;
 use Database\Factories\ApplicationFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -124,9 +125,20 @@ class Application extends Model
         return $this->belongsTo(Team::class);
     }
 
-    public function environment(): BelongsTo
+    public function project(): BelongsTo
     {
-        return $this->belongsTo(Environment::class);
+        return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * @return Attribute<list<string>, list<string>>
+     */
+    protected function tags(): Attribute
+    {
+        return Attribute::make(
+            get: fn(?string $value): array => array_values(array_filter((array) json_decode((string) $value, true), 'is_string')),
+            set: fn(array $tags): array => ['tags' => $tags === [] ? null : json_encode(array_values($tags))],
+        );
     }
 
     public function deployments(): HasMany

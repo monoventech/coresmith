@@ -12,7 +12,7 @@ use App\Enums\Ability;
 use App\Enums\DatabaseType;
 use App\Enums\PrivilegeLevel;
 use App\Models\Server;
-use App\Rules\FillableEnvironment;
+use App\Rules\FillableProject;
 use App\Services\Database\CoresmithDatabase;
 use App\Services\SafeName;
 use Illuminate\Foundation\Http\FormRequest;
@@ -42,7 +42,7 @@ final class StoreDatabaseRequest extends FormRequest
             'privilege_level' => ['required_unless:type,redis', 'nullable', Rule::enum(PrivilegeLevel::class)],
             'extensions' => ['nullable', 'array'],
             'extensions.*' => ['string', 'regex:/^[a-zA-Z0-9_-]{1,63}$/D'],
-            'environment_id' => ['nullable', 'string', new FillableEnvironment($this->route('server')?->team, $this->user())],
+            'project_id' => ['nullable', 'string', new FillableProject($this->route('server')?->team, $this->user())],
         ];
     }
 

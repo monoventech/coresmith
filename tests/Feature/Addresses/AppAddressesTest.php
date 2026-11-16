@@ -40,6 +40,21 @@ test('an address without a domain is a plain HTTP server of its own that serves 
         ->and(CaddyRouteBuilder::addressServerId($application, 'tailnet'))->toBe('coresmith-app-notes-tailnet');
 });
 
+test('an app with no domain at all gets its address server, which is what the address is for', function (ApplicationType $type, array $attributes) {
+    $application = Application::factory()->make(['slug' => 'site', 'type' => $type, 'base_port' => 8000, 'domain' => null, 'additional_domains' => null, ...$attributes]);
+    $builder = new CaddyRouteBuilder;
+
+    $server = $builder->addressServer($application, ':20000', 'preview');
+    $handlers = collect($server['routes'][0]['handle'][0]['routes'])->flatMap(fn(array $route): array => array_column($route['handle'], 'handler'))->unique()->values()->all();
+
+    expect($server['listen'])->toBe([':20000'])
+        ->and($server['routes'][0]['terminal'])->toBeTrue()
+        ->and($handlers)->toContain($type === ApplicationType::Js ? 'reverse_proxy' : 'file_server');
+})->with([
+    'a static site' => [ApplicationType::Static, ['web_directory' => '/dist']],
+    'a JavaScript server' => [ApplicationType::Js, ['framework' => 'sveltekit']],
+]);
+
 function appAddressesConnection(FakeSSHTransport $transport): SSHConnection
 {
     $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);

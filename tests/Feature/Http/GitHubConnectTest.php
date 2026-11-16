@@ -188,7 +188,7 @@ function githubConnectRevoked(string $clientId = 'Iv1.client'): Closure
 
 function githubConnectStoredAnywhere(string $needle): bool
 {
-    foreach (array_column(Schema::getTables(), 'name') as $table) {
+    foreach (array_column(Schema::getTables(Schema::getCurrentSchemaListing()), 'name') as $table) {
         foreach (DB::table($table)->get() as $row) {
             if (str_contains((string) json_encode($row, JSON_INVALID_UTF8_SUBSTITUTE), $needle)) {
                 return true;

@@ -78,6 +78,7 @@ test.describe('a developer', () => {
         await dialog(page).getByRole('button', { name: 'Create project' }).click()
         await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
         await expect(toast(page)).toContainText(`Created ${name}.`)
+        await expect(page.getByText(`Nothing in ${name} yet.`)).toBeVisible()
 
         await page.getByRole('button', { name: 'Rename', exact: true }).click()
         await dialog(page).getByLabel('Project name').fill(`${name} notes`)
@@ -90,6 +91,35 @@ test.describe('a developer', () => {
             .click()
         await page.waitForURL(/\/projects$/)
         await expect(toast(page)).toContainText(`Deleted ${name} notes.`)
+    })
+
+    test('sees Atlas shared with everything in it held back, brings its own app in and takes it out again', async ({
+        page
+    }) => {
+        await page.goto('/projects')
+        await page.getByTestId('project-card').getByRole('link', { name: 'Atlas', exact: true }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible()
+        await expect(page.getByText('Nothing in Atlas is shared with you yet.')).toBeVisible()
+        await expect(page.getByText('Apps you add to it show here.')).toBeVisible()
+
+        await page.getByRole('button', { name: 'Add existing' }).click()
+        await expect(dialog(page)).toContainText(
+            'The same people can see them as before. Nothing moves between servers.'
+        )
+        await dialog(page).getByRole('checkbox', { name: 'side-notes', exact: true }).click()
+        await dialog(page).getByRole('button', { name: 'Add to Atlas' }).click()
+
+        await expect(toast(page)).toContainText('Added to Atlas.')
+
+        const row = page
+            .getByTestId('project-app')
+            .filter({ has: page.getByRole('link', { name: 'side-notes', exact: true }) })
+
+        await expect(row).toBeVisible()
+        await row.getByRole('button', { name: 'Take side-notes out of Atlas' }).click()
+        await expect(toast(page)).toContainText('Took side-notes out of Atlas.')
+        await expect(page.getByText('Nothing in Atlas is shared with you yet.')).toBeVisible()
     })
 
     test('sees the team settings but cannot change them', async ({ page }) => {

@@ -11,7 +11,6 @@ namespace App\Http\Controllers;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\BackupDestination;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
@@ -74,7 +73,7 @@ final class TeamController extends Controller
                 'is_you' => $member->id === $user->id,
                 'access' => $shares && $member->pivot->role !== TeamRole::Owner->value ? $access->summary($team, $member) : null,
             ]),
-            'shareable' => $shares ? $this->shareable($team) : null,
+            'shareable' => $shares ? $this->shareable($team, $user, $access) : null,
             'invitations' => $this->invitations($request, $team, $user, $manages),
             'invite_links' => app(TeamInvitations::class)->offersLinks(),
             'roles' => array_map(
@@ -109,25 +108,30 @@ final class TeamController extends Controller
     }
 
     /**
-     * @return array{servers: list<array{id: string, name: string, this_machine: bool, applications: list<array{id: string, name: string}>, databases: list<array{id: string, name: string}>}>, projects: list<array{id: string, name: string, environments: list<array{id: string, name: string}>}>}
+     * @return array{servers: list<array{id: string, name: string, this_machine: bool, applications: list<array{id: string, name: string, tags: list<string>}>, databases: list<array{id: string, name: string}>}>, projects: list<array{id: string, name: string, applications: list<array{id: string, name: string, tags: list<string>}>, databases: list<array{id: string, name: string}>}>}
      */
-    private function shareable(Team $team): array
+    private function shareable(Team $team, User $viewer, TeamAccess $access): array
     {
-        $applications = $team->applications()->orderBy('name')->get(['id', 'name', 'server_id'])->groupBy('server_id');
-        $databases = $team->databases()->orderBy('name')->get(['id', 'name', 'server_id'])->groupBy('server_id');
+        $applications = $access->applications($viewer, $team)->orderBy('name')->get(['id', 'name', 'server_id', 'project_id', 'tags', 'created_by']);
+        $databases = $access->databases($viewer, $team)->orderBy('name')->get(['id', 'name', 'server_id', 'project_id', 'created_by']);
+        $developers = $team->members()->wherePivot('role', TeamRole::Developer->value)->get(['users.id', 'users.name'])->keyBy('id');
+        $developer = fn(Application|ManagedDatabase $each): ?array => ($by = $developers->get((string) $each->created_by)) === null ? null : ['id' => $by->id, 'name' => $by->name];
+        $app = fn(Application $application): array => ['id' => $application->id, 'name' => $application->name, 'tags' => $application->tags, 'developer' => $developer($application)];
+        $database = fn(ManagedDatabase $each): array => ['id' => $each->id, 'name' => $each->name, 'developer' => $developer($each)];
 
         return [
-            'servers' => $team->servers()->orderBy('name')->get(['id', 'name', 'runs_coresmith'])->map(fn(Server $server): array => [
+            'servers' => $access->servers($viewer, $team)->orderBy('name')->get(['id', 'name', 'runs_coresmith'])->map(fn(Server $server): array => [
                 'id' => $server->id,
                 'name' => $server->name,
                 'this_machine' => (bool) $server->runs_coresmith,
-                'applications' => $applications->get($server->id, collect())->map(fn(Application $application): array => ['id' => $application->id, 'name' => $application->name])->values()->all(),
-                'databases' => $databases->get($server->id, collect())->map(fn(ManagedDatabase $database): array => ['id' => $database->id, 'name' => $database->name])->values()->all(),
+                'applications' => $applications->where('server_id', $server->id)->map($app)->values()->all(),
+                'databases' => $databases->where('server_id', $server->id)->map($database)->values()->all(),
             ])->values()->all(),
-            'projects' => $team->projects()->with('environments')->orderBy('name')->get()->map(fn(Project $project): array => [
+            'projects' => $access->projects($viewer, $team)->orderBy('name')->get()->map(fn(Project $project): array => [
                 'id' => $project->id,
                 'name' => $project->name,
-                'environments' => $project->environments->map(fn(Environment $environment): array => ['id' => $environment->id, 'name' => $environment->name])->values()->all(),
+                'applications' => $applications->where('project_id', $project->id)->map($app)->values()->all(),
+                'databases' => $databases->where('project_id', $project->id)->map($database)->values()->all(),
             ])->values()->all(),
         ];
     }

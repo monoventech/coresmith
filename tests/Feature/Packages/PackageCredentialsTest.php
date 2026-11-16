@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Models\Application;
-use App\Models\Environment;
 use App\Models\PackageCredential;
 use App\Models\Project;
 use App\Models\Server;
@@ -13,9 +12,8 @@ use App\Services\Packages\PackageCredentials;
 function packageCredentialsApp(Team $team, ?Project $project = null): Application
 {
     $server = Server::factory()->for($team)->create();
-    $environment = $project === null ? null : Environment::factory()->for($project)->create();
 
-    return Application::factory()->for($server)->for($team)->create(['environment_id' => $environment?->id]);
+    return Application::factory()->for($server)->for($team)->create(['project_id' => $project?->id]);
 }
 
 test('an app outside projects gets only the team-wide entries', function () {

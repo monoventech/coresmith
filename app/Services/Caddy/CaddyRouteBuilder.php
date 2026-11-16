@@ -43,17 +43,7 @@ final class CaddyRouteBuilder
             'match' => [
                 ['host' => $this->domains($application)],
             ],
-            'handle' => [
-                [
-                    'handler' => 'subroute',
-                    'routes' => $this->offline($application)
-                        ? [$this->serveMaintenancePage($application)]
-                        : [
-                            $this->blockSensitivePaths(),
-                            ...$this->serveApplication($application),
-                        ],
-                ],
-            ],
+            'handle' => $this->handle($application),
             'terminal' => true,
         ];
     }
@@ -67,7 +57,25 @@ final class CaddyRouteBuilder
             '@id' => self::addressServerId($application, $kind),
             'listen' => [$listen],
             'automatic_https' => ['disable' => true],
-            'routes' => [['handle' => $this->build($application)['handle'], 'terminal' => true]],
+            'routes' => [['handle' => $this->handle($application), 'terminal' => true]],
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function handle(Application $application): array
+    {
+        return [
+            [
+                'handler' => 'subroute',
+                'routes' => $this->offline($application)
+                    ? [$this->serveMaintenancePage($application)]
+                    : [
+                        $this->blockSensitivePaths(),
+                        ...$this->serveApplication($application),
+                    ],
+            ],
         ];
     }
 
@@ -273,6 +281,16 @@ final class CaddyRouteBuilder
                 ['handle' => [['handler' => 'file_server']]],
             ],
             Route::FileServer => [
+                [
+                    'match' => [['file' => ['try_files' => ['{http.request.uri.path}', '{http.request.uri.path}.html', '{http.request.uri.path}/index.html']]]],
+                    'handle' => [['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}'], ['handler' => 'file_server']],
+                    'terminal' => true,
+                ],
+                [
+                    'match' => [['file' => ['try_files' => ['/404.html']]]],
+                    'handle' => [['handler' => 'rewrite', 'uri' => '/404.html'], ['handler' => 'file_server', 'status_code' => 404]],
+                    'terminal' => true,
+                ],
                 ['handle' => [['handler' => 'file_server']]],
             ],
             Route::SinglePage => [

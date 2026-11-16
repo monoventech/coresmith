@@ -41,7 +41,7 @@ final class ProjectController extends Controller
                 'applications' => $servers->sum(fn(Server $server): int => $server->applications->count()) + $fleet->sharedApplications()->count(),
             ],
             'projects' => $access->projects($user, $team)->orderBy('name')->get()->map(fn(Project $project): array => $presenter->card($project, $user))->values(),
-            'unfiled' => $access->applications($user, $team)->whereNull('environment_id')->with('server')->orderBy('name')->get()->map(fn(Application $application): array => [
+            'unfiled' => $access->applications($user, $team)->whereNull('project_id')->with('server')->orderBy('name')->get()->map(fn(Application $application): array => [
                 'id' => $application->getKey(),
                 'name' => $application->name,
                 'server' => $application->server?->name,
