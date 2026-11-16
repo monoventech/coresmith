@@ -12,7 +12,7 @@ use App\Services\Runtime\RepositoryFacts;
 
 final readonly class JsPresets
 {
-    private const ORDER = [SvelteKit::class, NextJs::class, Nuxt::class, Astro::class, AdonisJs::class, Angular::class, CreateReactApp::class, Vite::class];
+    private const ORDER = [SvelteKit::class, NextJs::class, Nuxt::class, Astro::class, AdonisJs::class, Angular::class, React::class, Vue::class, Svelte::class, Vite::class];
 
     /**
      * @return list<JsPreset>
@@ -36,11 +36,11 @@ final readonly class JsPresets
     }
 
     /**
-     * @return list<array{value: string, label: string}>
+     * @return list<array{value: string, label: string, files: bool}>
      */
     public function choices(): array
     {
-        return array_values(array_map(fn(JsPreset $preset): array => ['value' => $preset->key(), 'label' => $preset->label()], array_filter($this->all(), fn(JsPreset $preset): bool => $preset->serves())));
+        return array_values(array_map(fn(JsPreset $preset): array => ['value' => $preset->key(), 'label' => $preset->label(), 'files' => $preset->servesFiles()], array_filter($this->all(), fn(JsPreset $preset): bool => $preset->serves())));
     }
 
     public function staticOutput(RepositoryFacts $facts): ?string

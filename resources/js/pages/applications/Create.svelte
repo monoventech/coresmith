@@ -45,7 +45,7 @@
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
         projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
-        js_frameworks: { value: string; label: string }[]
+        js_frameworks: { value: string; label: string; files: boolean }[]
         python_frameworks: { value: string; label: string }[]
         go_frameworks: { value: string; label: string }[]
         java_frameworks: { value: string; label: string }[]
@@ -99,7 +99,12 @@
     let typeSelect = $state<HTMLSelectElement | null>(null)
     let frameworkSelect = $state<HTMLSelectElement | null>(null)
     let jsRuntime = $state('bun')
-    let webDirectory = $state('/public')
+    let webDirectory = $state<string | null>(null)
+    const filesFramework = $derived(
+        type === 'js' && js_frameworks.some((choice) => choice.value === framework && choice.files)
+    )
+    const servesFiles = $derived(SERVES_FILES.includes(type) || filesFramework)
+    const webRoot = $derived(webDirectory ?? (filesFramework ? '/dist' : '/public'))
     let mainPackage = $state('')
     let mainPackages = $state<string[]>([])
     const picker = $derived(pickerRuntime(type, jsRuntime))
@@ -439,7 +444,7 @@
                                     { value: 'python', label: 'Python' },
                                     { value: 'go', label: 'Go' },
                                     { value: 'java', label: 'Java' },
-                                    { value: 'static', label: 'Static or SPA' }
+                                    { value: 'static', label: 'Static' }
                                 ]}
                                 aria-invalid={errors.type ? true : undefined}
                             />
@@ -538,14 +543,17 @@
                             <FieldError message={errors.main_package} />
                         </div>
                     {/if}
-                    {#if SERVES_FILES.includes(type)}
+                    {#if servesFiles}
                         <div>
                             <Label for="web_directory" class="mb-1.5">Web root</Label>
                             <Input
                                 id="web_directory"
                                 name="web_directory"
-                                bind:value={webDirectory}
-                                oninput={() => touch('web_directory')}
+                                value={webRoot}
+                                oninput={(event) => {
+                                    webDirectory = event.currentTarget.value
+                                    touch('web_directory')
+                                }}
                                 required
                                 class="font-mono text-[13px]"
                                 aria-invalid={errors.web_directory ? true : undefined}

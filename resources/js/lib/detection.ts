@@ -38,6 +38,7 @@ export type DetectionRead = {
     options?: Record<string, string[]>
     packages?: { host: string; source: string }[]
     packages_href?: string | null
+    submodules?: { path: string; source: string; refused: string | null }[]
 }
 
 export type Detection =

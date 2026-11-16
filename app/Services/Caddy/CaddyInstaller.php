@@ -23,6 +23,8 @@ final class CaddyInstaller
 
     public const SERVER = 'coresmith';
 
+    public const READ_TIMEOUT = '300s';
+
     public const UNKNOWN_HOSTS_ROUTE = 'coresmith-unknown';
 
     public const SERVICE_DROP_IN = '/etc/systemd/system/caddy.service.d/coresmith.conf';
@@ -233,9 +235,8 @@ final class CaddyInstaller
                         self::SERVER => [
                             'listen' => [':443'],
                             'routes' => $routes,
-                            'read_timeout' => '10s',
+                            'read_timeout' => self::READ_TIMEOUT,
                             'read_header_timeout' => '5s',
-                            'write_timeout' => '30s',
                             'idle_timeout' => '120s',
                             'max_header_bytes' => 65536,
                             'tls_connection_policies' => [['protocol_min' => 'tls1.2']],

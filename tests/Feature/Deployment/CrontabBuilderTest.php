@@ -70,6 +70,7 @@ function cronRun(int $index): string
         . " -p 'EnvironmentFile=/etc/coresmith/env/shop.env'"
         . ' -p KillMode=process -p UMask=0027 -p NoNewPrivileges=yes'
         . " -E 'PATH=/opt/asdf-data/installs/php/8.5.5/bin:/usr/local/bin:/usr/bin:/bin'"
+        . " -E 'PHP_INI_SCAN_DIR=:/etc/coresmith-php/shop'"
         . " -- /bin/bash -s < '/etc/coresmith/cron/shop/{$index}.sh'";
 }
 
@@ -648,7 +649,7 @@ test('run records stay while an app is stopped or detached, and go with its fold
 
     expect($transport->commands())->toBe([cronRemoval()])
         ->and(cronRemoval())->not->toContain('/var/lib/coresmith/cron')
-        ->and(RemovedApplicationFolders::command($application))->toBe("rm -rf '/var/coresmith/apps/shop' '/var/lib/coresmith/cron/shop'");
+        ->and(RemovedApplicationFolders::command($application))->toStartWith("rm -rf '/var/coresmith/apps/shop' '/var/lib/coresmith/cron/shop' && ");
 });
 
 test('a job id Coresmith did not make is refused before it reaches a path', function () {

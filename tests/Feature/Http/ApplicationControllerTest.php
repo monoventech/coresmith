@@ -93,6 +93,22 @@ test('a PHP app or a static site still needs a web root', function (string $type
     expect(Application::count())->toBe(0);
 })->with(['php', 'static']);
 
+test('a React, Vue or Svelte app needs a web root, since its build is served as files', function (string $framework) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $admin = appTeamMember($team, TeamRole::Admin);
+
+    $this->actingAs($admin)
+        ->post(route('servers.applications.store', $server), collect(payload(['type' => 'js', 'framework' => $framework, 'js_runtime' => 'node']))->except('web_directory')->all())
+        ->assertSessionHasErrors('web_directory');
+
+    $this->actingAs($admin)
+        ->post(route('servers.applications.store', $server), payload(['type' => 'js', 'framework' => $framework, 'js_runtime' => 'node', 'web_directory' => '/dist']))
+        ->assertSessionHasNoErrors();
+
+    expect(Application::firstWhere('name', 'My Svelte App')->web_directory)->toBe('/dist');
+})->with(['react', 'vue', 'svelte']);
+
 test('a second app on the same server gets the next port block', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();

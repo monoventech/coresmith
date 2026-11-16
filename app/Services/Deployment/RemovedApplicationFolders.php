@@ -74,6 +74,14 @@ final class RemovedApplicationFolders
 
     public static function command(Application $application): string
     {
-        return 'rm -rf ' . escapeshellarg((new ReleasePaths($application))->base()) . ' ' . escapeshellarg(CrontabBuilder::RECORDS . '/' . SafeName::assertSlug($application->slug));
+        $folders = 'rm -rf ' . escapeshellarg((new ReleasePaths($application))->base()) . ' ' . escapeshellarg(CrontabBuilder::RECORDS . '/' . SafeName::assertSlug($application->slug));
+
+        if ($application->system_user === null) {
+            return $folders;
+        }
+
+        $user = escapeshellarg(SafeName::assertSystemUser($application->system_user));
+
+        return "{$folders} && if id -u {$user} >/dev/null 2>&1; then pkill -KILL -u {$user}; userdel {$user}; fi && rm -rf " . escapeshellarg(AppAccount::home($application));
     }
 }

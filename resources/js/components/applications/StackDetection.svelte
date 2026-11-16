@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { Detection } from '@/lib/detection'
-    import { KeyRound, TriangleAlert } from '@lucide/svelte'
+    import { FolderGit, KeyRound, TriangleAlert } from '@lucide/svelte'
 
     let { detection, reading, server }: { detection: Detection | null; reading: boolean; server: string } = $props()
 
@@ -8,6 +8,8 @@
         detection?.state === 'read' ? (detection.packages ?? []).map((found) => found.host) : []
     )
     const packagesHref = $derived(detection?.state === 'read' ? (detection.packages_href ?? null) : null)
+    const submodules = $derived(detection?.state === 'read' ? (detection.submodules ?? []) : [])
+    const fetched = $derived(submodules.filter((module) => module.refused === null))
 
     const blocked = $derived(
         detection?.state === 'read' && detection.verdict === 'blocked'
@@ -86,6 +88,27 @@
                     deploy.
                 {/if}
             </p>
+        </div>
+    {/if}
+
+    {#if !reading && submodules.length > 0}
+        <div class="mt-2.5 flex gap-3 rounded-lg border border-border px-3.5 py-3" data-testid="submodules-note">
+            <FolderGit class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div class="flex min-w-0 flex-col gap-1.5 text-[13px]">
+                {#if fetched.length > 0}
+                    <p class="m-0">
+                        Each deploy fetches this repository's submodules at the commits it pins: {#each fetched as module, index (module.path)}{#if index > 0}{index ===
+                                fetched.length - 1
+                                    ? ' and '
+                                    : ', '}{/if}<span class="font-mono text-[12px] wrap-anywhere">{module.path}</span>
+                            from <span class="font-mono text-[12px] wrap-anywhere">{module.source}</span>{/each}. A
+                        private one is fetched only when Coresmith's GitHub app can read it.
+                    </p>
+                {/if}
+                {#each submodules.filter((module) => module.refused !== null) as module (module.path)}
+                    <p class="m-0 text-warning-strong">{module.refused}</p>
+                {/each}
+            </div>
         </div>
     {/if}
 </div>

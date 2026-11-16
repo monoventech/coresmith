@@ -212,6 +212,7 @@ final class E2ESeeder extends Seeder
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
             $this->application("busy-{$code}", 9200 + $index * 10);
+            $this->application("php-{$code}", 9300 + $index * 10, ['app_size' => 'medium']);
             $held = $this->application("held-{$code}", 9500 + $index * 10, ['current_release' => '20261112-091400', ...MonovenTenant::stack(['php' => ['8.4.20', 'composer.json', '^8.2']], ['name' => 'laravel', 'major' => 13])]);
             Deployment::factory()->for($held)->create([
                 'release' => '20261112-091400',

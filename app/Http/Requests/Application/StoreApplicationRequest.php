@@ -343,6 +343,6 @@ final class StoreApplicationRequest extends FormRequest
     {
         $type = ApplicationType::tryFrom((string) $this->input('type'));
 
-        return $type === null || $type->language()->route(new Application(['type' => $type]))->servesFiles();
+        return $type === null || $type->language()->route(new Application(['type' => $type, 'framework' => (string) $this->input('framework')]))->servesFiles();
     }
 }

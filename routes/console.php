@@ -2,6 +2,7 @@
 
 use App\Enums\Edition;
 use App\Enums\ServerStatus;
+use App\Jobs\ApplyPhpLimits;
 use App\Jobs\CheckAppsAnswering;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckGitHubWebhooks;
@@ -13,6 +14,7 @@ use App\Jobs\DetectStaleDeployments;
 use App\Jobs\HardenSsh;
 use App\Jobs\IdleAppSleeper;
 use App\Jobs\MoveCaddyAdminToSocket;
+use App\Jobs\OpenCaddyTimeouts;
 use App\Jobs\PollRepositories;
 use App\Jobs\PruneRemovedApplications;
 use App\Jobs\ReadServerAddresses;
@@ -46,6 +48,8 @@ Schedule::call(function (): void {
         ->whereHas('applications')
         ->each(fn(Server $server) => CheckAppsAnswering::dispatch($server));
 })->everyFiveMinutes()->name('coresmith:check-apps')->withoutOverlapping();
+
+Schedule::call(fn() => ApplyPhpLimits::catchUp())->everyFiveMinutes()->name('coresmith:write-php-limits')->withoutOverlapping();
 
 Schedule::call(function (): void {
     Server::query()
@@ -90,6 +94,18 @@ Schedule::call(function (): void {
             }
         });
 })->hourly()->name('coresmith:close-unknown-hosts')->withoutOverlapping();
+
+Schedule::call(function (): void {
+    Server::query()
+        ->where('status', ServerStatus::Active->value)
+        ->whereNull('unreachable_since')
+        ->whereNull('pending_host_key_fingerprint')
+        ->each(function (Server $server): void {
+            if ((((array) $server->meta)['caddy_timeouts'] ?? null) !== OpenCaddyTimeouts::OPEN) {
+                OpenCaddyTimeouts::dispatch($server);
+            }
+        });
+})->hourly()->name('coresmith:open-caddy-timeouts')->withoutOverlapping();
 
 Schedule::call(function (): void {
     Server::query()

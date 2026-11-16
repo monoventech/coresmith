@@ -124,6 +124,23 @@ const JHIPSTER = {
     blockers: []
 }
 
+const REACT = {
+    id: 'r9wq8mz9xw4hpbn6tq8rjf3ylc5ds0gn',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'ready',
+    fields: { type: 'js', framework: 'react', js_runtime: 'node', web_directory: '/dist', version: '24.11.1' },
+    sources: {
+        type: 'From package.json',
+        js_runtime: 'From package-lock.json',
+        framework: 'react in package.json, built with vite',
+        web_directory: 'The build writes to dist',
+        runtime_version: 'Node.js 24.11.1, the newest Coresmith installs'
+    },
+    unsettled: {},
+    blockers: []
+}
+
 async function answer(page: Page, answers: object[]): Promise<string[]> {
     const asked: string[] = []
 
@@ -197,6 +214,40 @@ test.describe('Stack detection on Add an app', () => {
             ).toHaveAttribute('href', '/settings/git')
             expect(await blockingViolations(page)).toEqual([])
         })
+
+        test(`a repository with submodules lists them with where each comes from, and the one a deploy cannot fetch, in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+            await answer(page, [
+                {
+                    ...READY,
+                    submodules: [
+                        { path: 'realworld', source: 'github.com/realworld-apps/realworld', refused: null },
+                        { path: 'theme', source: 'github.com/acme/theme', refused: null },
+                        {
+                            path: 'evil',
+                            source: 'file:///var/coresmith/apps/other/repo',
+                            refused:
+                                "The submodule at evil points at file:///var/coresmith/apps/other/repo, which Coresmith can't fetch. Change its url in .gitmodules to an https address."
+                        }
+                    ]
+                }
+            ])
+
+            await openAddApp(page)
+            await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/site.git')
+
+            const note = page.getByTestId('submodules-note')
+
+            await expect(note).toContainText(
+                "Each deploy fetches this repository's submodules at the commits it pins: realworld from github.com/realworld-apps/realworld and theme from github.com/acme/theme. A private one is fetched only when Coresmith's GitHub app can read it."
+            )
+            await expect(note).toContainText(
+                "The submodule at evil points at file:///var/coresmith/apps/other/repo, which Coresmith can't fetch. Change its url in .gitmodules to an https address."
+            )
+            expect(await blockingViolations(page)).toEqual([])
+        })
     }
 
     test('a Go module with several servers asks which package answers web requests, and lists every package main', async ({
@@ -235,6 +286,21 @@ test.describe('Stack detection on Add an app', () => {
         await expect(
             page.getByRole('radiogroup', { name: 'Java version' }).getByRole('radio', { name: /From the repository/ })
         ).toHaveAccessibleName(/Java 21\.0\.13 from pom\.xml/)
+    })
+
+    test('a React app built with Vite is read as JavaScript and React, served from dist', async ({ page }) => {
+        await answer(page, [REACT])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/storefront.git')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Language')).toHaveValue('js')
+        await expect(page.getByLabel('Framework')).toHaveValue('react')
+        await expect(page.getByLabel('Runtime', { exact: true })).toHaveValue('node')
+        await expect(page.getByLabel('Web root')).toHaveValue('/dist')
+        await expect(page.getByText('react in package.json, built with vite')).toBeVisible()
+        await expect(page.getByText('The build writes to dist')).toBeVisible()
     })
 
     test('a field the files do not settle is left for the person, with the reason', async ({ page }) => {
