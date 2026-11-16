@@ -50,12 +50,11 @@ test('the fleet, its counts and the attention count show only what a narrowed me
             ->where('panel.attention', 0));
 });
 
-test('the fleet counts only the apps of the environment a member was given', function () {
+test('the fleet counts only the apps of the project a member was given', function () {
     ['team' => $team, 'shop' => $shop, 'member' => $member] = narrowedListsSetup();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create();
-    $production = $project->environments()->where('name', 'Production')->sole();
-    $shop->forceFill(['environment_id' => $production->id])->save();
-    app(TeamAccess::class)->grant($team, $member, $production);
+    $project = Project::factory()->for($team)->create();
+    $shop->forceFill(['project_id' => $project->id])->save();
+    app(TeamAccess::class)->grant($team, $member, $project);
 
     $this->actingAs($member)
         ->get(route('dashboard'))

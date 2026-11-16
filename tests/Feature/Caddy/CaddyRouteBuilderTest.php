@@ -77,6 +77,20 @@ test('a static app is served by the file server only', function () {
         ->and($handlers->firstWhere('handler', 'reverse_proxy'))->toBeNull();
 });
 
+test('a static site answers clean addresses from page.html or page/index.html, and missing pages with its own 404.html', function () {
+    $route = (new CaddyRouteBuilder)->build(phpApp(['type' => ApplicationType::Static, 'web_directory' => '/dist']));
+    $subroutes = collect($route['handle'][0]['routes']);
+    $pages = $subroutes->first(fn(array $subroute): bool => ($subroute['match'][0]['file']['try_files'] ?? null) === ['{http.request.uri.path}', '{http.request.uri.path}.html', '{http.request.uri.path}/index.html']);
+    $missing = $subroutes->first(fn(array $subroute): bool => ($subroute['match'][0]['file']['try_files'] ?? null) === ['/404.html']);
+
+    expect($pages['handle'])->toBe([['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}'], ['handler' => 'file_server']])
+        ->and($pages['terminal'])->toBeTrue()
+        ->and($missing['handle'])->toBe([['handler' => 'rewrite', 'uri' => '/404.html'], ['handler' => 'file_server', 'status_code' => 404]])
+        ->and($missing['terminal'])->toBeTrue()
+        ->and($subroutes->search($pages))->toBeLessThan($subroutes->search($missing))
+        ->and($subroutes->last()['handle'])->toBe([['handler' => 'file_server']]);
+});
+
 function defaultHeader(string $name, string $value): array
 {
     return ['handler' => 'headers', 'response' => ['require' => ['headers' => [$name => null]], 'set' => [$name => [$value]]]];

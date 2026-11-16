@@ -30,17 +30,17 @@ final readonly class ReleasesOverview
         }
 
         $applications = $scope->apply($this->access->applications($user, $team))
-            ->with(['server', 'environment.project'])
+            ->with(['server', 'project'])
             ->orderBy('name')
             ->get();
         $live = $this->liveDeployments($applications);
 
         return $applications
-            ->groupBy(fn(Application $application): string => (string) $application->environment?->project?->getKey())
+            ->groupBy(fn(Application $application): string => (string) $application->project_id)
             ->map(fn(Collection $apps): array => [
-                'name' => $apps->first()?->environment?->project?->name,
+                'name' => $apps->first()?->project?->name,
                 'apps' => $apps
-                    ->sortBy([fn(Application $a, Application $b): int => ($a->environment->position ?? 0) <=> ($b->environment->position ?? 0), fn(Application $a, Application $b): int => strcmp((string) $a->environment_id, (string) $b->environment_id), fn(Application $a, Application $b): int => strcasecmp($a->name, $b->name)])
+                    ->sortBy([fn(Application $a, Application $b): int => strcasecmp($a->name, $b->name), fn(Application $a, Application $b): int => strcasecmp(implode(' ', $a->tags), implode(' ', $b->tags))])
                     ->map(fn(Application $application): array => $this->row($application, $live->get($application->getKey()), $scope->query()))
                     ->values()
                     ->all(),
@@ -84,7 +84,7 @@ final readonly class ReleasesOverview
             'id' => $application->getKey(),
             'name' => $application->name,
             'server' => $application->server?->name,
-            'environment' => $application->environment?->name,
+            'tags' => $application->tags,
             'href' => route('servers.applications.releases.index', [$application->server_id, $application, ...$query]),
             'release' => $application->current_release === null ? null : 'releases/' . Formats::release($application->current_release),
             'tag' => $live?->tag,

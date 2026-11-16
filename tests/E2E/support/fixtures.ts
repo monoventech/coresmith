@@ -28,8 +28,8 @@ export const asDeveloper = suite.extend({
     storageState: 'tests/E2E/.auth/developer.json'
 })
 
-export const asEnvironmentOnly = suite.extend({
-    storageState: 'tests/E2E/.auth/environment.json'
+export const asPartlyShared = suite.extend({
+    storageState: 'tests/E2E/.auth/partial.json'
 })
 
 export const asGuest = suite.extend({
@@ -501,18 +501,19 @@ export async function noSidewaysScroll(page: Page) {
 export const MONOVEN = 'https://monoven.com/'
 
 export async function opensMonovenInNewTab(page: Page, scope: Locator) {
-    const badge = scope.getByRole('link', { name: 'Made by Monoven' })
+    const mark = scope.getByRole('link', { name: 'Made by Monoven' })
     const context = page.context()
     const before = page.url()
 
     await context.route(`${MONOVEN}**`, (route) =>
         route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Monoven</title>' })
     )
-    await expect(badge).toBeVisible()
-    expect((await badge.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(112)
+    await expect(mark).toBeVisible()
+    await expect(mark).toContainText('Made by Monoven')
+    await expect(mark.locator('svg')).toHaveCount(0)
 
     const opened = context.waitForEvent('page')
-    await badge.click()
+    await mark.click()
     const tab = await opened
 
     await expect(tab).toHaveURL(MONOVEN)

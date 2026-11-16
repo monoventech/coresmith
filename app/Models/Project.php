@@ -26,7 +26,8 @@ final class Project extends Model
     protected static function booted(): void
     {
         self::deleting(function (Project $project): void {
-            $project->environments()->get()->each(fn(Environment $environment) => $environment->release());
+            Application::withTrashed()->where('project_id', $project->getKey())->update(['project_id' => null]);
+            ManagedDatabase::withTrashed()->where('project_id', $project->getKey())->update(['project_id' => null]);
             AccessGrant::query()->where('project_id', $project->getKey())->delete();
         });
     }
@@ -36,8 +37,13 @@ final class Project extends Model
         return $this->belongsTo(Team::class);
     }
 
-    public function environments(): HasMany
+    public function applications(): HasMany
     {
-        return $this->hasMany(Environment::class)->orderBy('position')->orderBy('id');
+        return $this->hasMany(Application::class);
+    }
+
+    public function databases(): HasMany
+    {
+        return $this->hasMany(ManagedDatabase::class);
     }
 }

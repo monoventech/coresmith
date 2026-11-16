@@ -10,7 +10,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\TeamRole;
 use App\Jobs\SyncAuthorizedKeys;
-use App\Models\Environment;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Teams\TeamAccess;
@@ -37,7 +36,7 @@ final class TeamMemberAccessController extends Controller
             'servers' => ['sometimes', 'array', $this->within($team->servers(), "One of those servers isn't in {$team->name} any more. Reload the page and choose again.")],
             'applications' => ['sometimes', 'array', $this->within($team->applications(), "One of those apps isn't in {$team->name} any more. Reload the page and choose again.")],
             'projects' => ['sometimes', 'array', $this->within($team->projects(), "One of those projects isn't in {$team->name} any more. Reload the page and choose again.")],
-            'environments' => ['sometimes', 'array', $this->within(Environment::query()->whereIn('project_id', $team->projects()->select('id')), "One of those environments isn't in {$team->name} any more. Reload the page and choose again.")],
+            'databases' => ['sometimes', 'array', $this->within($team->databases(), "One of those databases isn't in {$team->name} any more. Reload the page and choose again.")],
             'withheld_applications' => ['sometimes', 'array', $this->within($team->applications(), "One of those apps isn't in {$team->name} any more. Reload the page and choose again.")],
             'withheld_databases' => ['sometimes', 'array', $this->within($team->databases(), "One of those databases isn't in {$team->name} any more. Reload the page and choose again.")],
         ]);
@@ -50,15 +49,15 @@ final class TeamMemberAccessController extends Controller
         $servers = array_values(array_unique($validated['servers'] ?? []));
         $applications = array_values(array_unique($validated['applications'] ?? []));
         $projects = array_values(array_unique($validated['projects'] ?? []));
-        $environments = array_values(array_unique($validated['environments'] ?? []));
+        $databases = array_values(array_unique($validated['databases'] ?? []));
         $withheldApplications = array_values(array_unique($validated['withheld_applications'] ?? []));
         $withheldDatabases = array_values(array_unique($validated['withheld_databases'] ?? []));
 
         if ($role === TeamRole::Admin) {
-            $this->refuseSignedIn($team, $user, $servers, array_values(array_diff($withheldApplications, $applications)), $withheldDatabases);
+            $this->refuseSignedIn($team, $user, $servers, array_values(array_diff($withheldApplications, $applications)), array_values(array_diff($withheldDatabases, $databases)));
         }
 
-        $access->sync($team, $user, $everything, $servers, $applications, $projects, $environments, $withheldApplications, $withheldDatabases);
+        $access->sync($team, $user, $everything, $servers, $applications, $projects, $databases, $withheldApplications, $withheldDatabases);
 
         activity()->performedOn($team)->causedBy($request->user())->withProperties([
             'email' => $user->email,
@@ -66,7 +65,7 @@ final class TeamMemberAccessController extends Controller
             'servers' => $servers,
             'applications' => $applications,
             'projects' => $projects,
-            'environments' => $environments,
+            'databases' => $databases,
             'withheld_applications' => $withheldApplications,
             'withheld_databases' => $withheldDatabases,
         ])->log('member_access_changed');

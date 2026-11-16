@@ -193,11 +193,11 @@ test('a database from another server is not found for deletion', function () {
     expect($database->fresh()->trashed())->toBeFalse();
 });
 
-test('deleting a database seen only through its environment goes back to the fleet', function () {
+test('deleting a database seen only through its project goes back to the fleet', function () {
     databaseDeletionTransport();
     [$server, $database, $admin] = databaseDeletionSetup();
-    $staging = Project::factory()->for($database->team)->withEnvironments(['Staging'])->create()->environments()->sole();
-    $database->update(['environment_id' => $staging->id]);
+    $staging = Project::factory()->for($database->team)->create();
+    $database->update(['project_id' => $staging->id]);
     $database->team->members()->updateExistingPivot($admin->id, ['sees_everything' => false]);
     app(TeamAccess::class)->grant($database->team, $admin, $staging);
 

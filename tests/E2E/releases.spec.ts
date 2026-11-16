@@ -44,7 +44,7 @@ function manyApps(count: number) {
                 id: `app-${number}`,
                 name: `service-${String(number).padStart(2, '0')}-with-a-long-name`,
                 server: `worker-${(number % 7) + 1}`,
-                environment: index % 2 === 0 ? 'Production' : 'Staging',
+                tags: index % 2 === 0 ? ['production'] : ['staging'],
                 href: '/releases',
                 release: index % 3 === 0 ? null : `releases/20261114-${String(number).padStart(6, '0')}`,
                 tag: index % 4 === 0 ? `v1.${number}.0` : null,
@@ -138,7 +138,11 @@ test.describe('releases', () => {
 
         await page.getByRole('button', { name: 'Switch app' }).click()
         await page.getByRole('combobox', { name: 'Search apps' }).fill('ledger')
-        await page.getByTestId('app-switcher').getByRole('option', { name: /^ledger\b/ }).first().click()
+        await page
+            .getByTestId('app-switcher')
+            .getByRole('option', { name: /^ledger\b/ })
+            .first()
+            .click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Releases · ledger' })).toBeVisible()
     })

@@ -57,7 +57,7 @@ export type CloudCatalog = {
     defaults: { region: string | null; size: string | null; image: string | null }
 }
 
-export type CloudPicks = { region?: string; size?: string; image?: string; environment?: string }
+export type CloudPicks = { region?: string; size?: string; image?: string }
 
 export type CloudStep = { key: string; name: string; desc: string; state: 'done' | 'running' | 'failed' | 'pending' }
 

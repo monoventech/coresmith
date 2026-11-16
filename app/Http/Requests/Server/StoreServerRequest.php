@@ -10,7 +10,6 @@ namespace App\Http\Requests\Server;
 
 use App\Enums\Ability;
 use App\Enums\Edition;
-use App\Http\Controllers\ServerController;
 use App\Models\Team;
 use App\Services\Network\OwnAddress;
 use App\Services\SafeName;
@@ -36,7 +35,6 @@ final class StoreServerRequest extends FormRequest
         return [
             'team_id' => ['required', 'string', Rule::exists('teams', 'id')],
             'name' => ['required', 'string', 'max:255'],
-            'environment' => ['nullable', Rule::in(ServerController::ENVIRONMENTS)],
             'region' => ['nullable', 'string', 'max:32', 'regex:/^[A-Za-z0-9 ._()-]+$/'],
             'ip_address' => ['required', 'ip'],
             'ssh_port' => ['required', 'integer', 'min:1', 'max:65535'],
@@ -67,7 +65,6 @@ final class StoreServerRequest extends FormRequest
         return [
             'ssh_user.regex' => 'That isn\'t a Linux username. Try root or deploy.',
             'ip_address.ip' => 'That doesn\'t look like an IP address. Try 203.0.113.40.',
-            'environment.in' => ServerController::PICK_ENVIRONMENT,
         ];
     }
 

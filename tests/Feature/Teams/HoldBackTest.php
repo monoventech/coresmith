@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Enums\TeamRole;
 use App\Models\AccessGrant;
 use App\Models\Application;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
@@ -97,16 +96,16 @@ test('apps and databases added to a shared server later still come with it', fun
     expect(app(TeamAccess::class)->canSeeApplication($deployer, $notes))->toBeTrue();
 });
 
-test('an app shared on its own, or through its environment, stays visible though it is held back under its server', function () {
+test('an app shared on its own stays visible though it is held back, and a hold back covers every share that would bring the app', function () {
     ['team' => $team, 'owner' => $owner, 'web' => $web, 'shop' => $shop, 'blog' => $blog] = holdBackFleet();
     $project = Project::factory()->for($team)->create(['name' => 'storefront']);
-    $production = Environment::factory()->for($project)->create(['name' => 'production']);
-    $shop->forceFill(['environment_id' => $production->id])->save();
+    $shop->forceFill(['project_id' => $project->id])->save();
     $deployer = holdBackPerson($team, TeamRole::Member);
 
-    holdBackSave($owner, $team, $deployer, ['servers' => [$web->id], 'applications' => [$blog->id], 'environments' => [$production->id], 'withheld_applications' => [$blog->id, $shop->id]])->assertSessionHasNoErrors();
+    holdBackSave($owner, $team, $deployer, ['servers' => [$web->id], 'applications' => [$blog->id], 'projects' => [$project->id], 'withheld_applications' => [$blog->id, $shop->id]])->assertSessionHasNoErrors();
 
-    expect(app(TeamAccess::class)->applicationsOn($deployer, $web)->orderBy('name')->pluck('name')->all())->toBe(['blog', 'shop'])
+    expect(app(TeamAccess::class)->applicationsOn($deployer, $web)->orderBy('name')->pluck('name')->all())->toBe(['blog'])
+        ->and(app(TeamAccess::class)->canSeeProject($deployer, $project))->toBeTrue()
         ->and(AccessGrant::query()->where('user_id', $deployer->id)->where('withheld', true)->pluck('application_id')->all())->toBe([$shop->id]);
 });
 
@@ -191,7 +190,7 @@ test('the Team page offers each server with its apps and databases by name, and 
         ->where('shareable.servers.0.this_machine', true)
         ->where('shareable.servers.1.name', 'web')
         ->where('shareable.servers.1.this_machine', false)
-        ->where('shareable.servers.1.applications', [['id' => Application::query()->where('name', 'blog')->value('id'), 'name' => 'blog'], ['id' => Application::query()->where('name', 'shop')->value('id'), 'name' => 'shop']])
-        ->where('shareable.servers.1.databases', [['id' => $cache->id, 'name' => 'cache'], ['id' => $ledger->id, 'name' => 'ledger']])
+        ->where('shareable.servers.1.applications', [['id' => Application::query()->where('name', 'blog')->value('id'), 'name' => 'blog', 'tags' => [], 'developer' => null], ['id' => Application::query()->where('name', 'shop')->value('id'), 'name' => 'shop', 'tags' => [], 'developer' => null]])
+        ->where('shareable.servers.1.databases', [['id' => $cache->id, 'name' => 'cache', 'developer' => null], ['id' => $ledger->id, 'name' => 'ledger', 'developer' => null]])
         ->etc());
 });

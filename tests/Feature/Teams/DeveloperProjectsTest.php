@@ -54,10 +54,8 @@ test('a project a developer creates records it as the one who added it, and it m
         ->and(developerProjectsAccess()->seesWholeProject($developer, $project))->toBeTrue();
 
     $this->actingAs($developer)->put(route('projects.update', $project), ['name' => 'Side quest'])->assertSessionHasNoErrors();
-    $this->actingAs($developer)->post(route('projects.environments.store', $project), ['name' => 'Staging'])->assertSessionHasNoErrors();
 
-    expect($project->fresh()->name)->toBe('Side quest')
-        ->and($project->environments()->pluck('name')->all())->toContain('Staging');
+    expect($project->fresh()->name)->toBe('Side quest');
 
     $this->actingAs($developer)->delete(route('projects.destroy', $project))->assertSessionHasNoErrors();
 
@@ -75,17 +73,18 @@ test('a developer keeps seeing the projects it created when an owner takes the s
         ->and(developerProjectsAccess()->projects($developer, $project->team)->pluck('name')->all())->toBe(['Side project']);
 });
 
-test('a developer cannot rename, add to or delete a project shared with it whole', function () {
-    ['team' => $team, 'owner' => $owner, 'developer' => $developer] = developerProjectsSetup();
-    $project = Project::factory()->for($team)->withEnvironments(['Production'])->create(['name' => 'Storefront', 'created_by' => $owner->id]);
+test('a developer cannot rename or delete a project shared with it, but adds its own apps to it', function () {
+    ['team' => $team, 'owner' => $owner, 'developer' => $developer, 'server' => $server] = developerProjectsSetup();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront', 'created_by' => $owner->id]);
+    $mine = Application::factory()->for($team)->for($server)->create(['name' => 'notes', 'created_by' => $developer->id]);
     developerProjectsAccess()->grant($team, $developer, $project);
 
     $this->actingAs($developer)->put(route('projects.update', $project), ['name' => 'Mine now'])->assertForbidden();
-    $this->actingAs($developer)->post(route('projects.environments.store', $project), ['name' => 'Staging'])->assertForbidden();
     $this->actingAs($developer)->delete(route('projects.destroy', $project))->assertForbidden();
+    $this->actingAs($developer)->post(route('projects.contents.store', $project), ['applications' => [$mine->id]])->assertSessionHasNoErrors();
 
     expect($project->fresh()->name)->toBe('Storefront')
-        ->and($project->environments()->count())->toBe(1);
+        ->and($mine->fresh()->project_id)->toBe($project->id);
 });
 
 test("another developer never sees a developer's project unless it is shared", function () {
@@ -100,32 +99,30 @@ test("another developer never sees a developer's project unless it is shared", f
 test('a developer files only the apps and databases it added', function () {
     ['team' => $team, 'owner' => $owner, 'developer' => $developer, 'server' => $server] = developerProjectsSetup();
     $project = developerProjectsCreate($developer, 'Side project');
-    $environment = $project->environments()->sole();
     $mine = Application::factory()->for($team)->for($server)->create(['name' => 'notes', 'created_by' => $developer->id]);
     $mineDb = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'notes_db', 'created_by' => $developer->id]);
     $theirs = Application::factory()->for($team)->for($server)->create(['name' => 'miagraph', 'created_by' => $owner->id]);
     developerProjectsAccess()->grant($team, $developer, $theirs);
 
-    $this->actingAs($developer)->post(route('projects.environments.contents.store', [$project, $environment]), ['applications' => [$theirs->id]])
+    $this->actingAs($developer)->post(route('projects.contents.store', $project), ['applications' => [$theirs->id]])
         ->assertSessionHasErrors(['applications' => 'You can only move apps you added. Reload the page and choose again.']);
-    $this->actingAs($developer)->post(route('projects.environments.contents.store', [$project, $environment]), ['applications' => [$mine->id], 'databases' => [$mineDb->id]])
+    $this->actingAs($developer)->post(route('projects.contents.store', $project), ['applications' => [$mine->id], 'databases' => [$mineDb->id]])
         ->assertSessionHasNoErrors();
 
-    expect($theirs->fresh()->environment_id)->toBeNull()
-        ->and($mine->fresh()->environment_id)->toBe($environment->id)
-        ->and($mineDb->fresh()->environment_id)->toBe($environment->id);
+    expect($theirs->fresh()->project_id)->toBeNull()
+        ->and($mine->fresh()->project_id)->toBe($project->id)
+        ->and($mineDb->fresh()->project_id)->toBe($project->id);
 });
 
 test('a developer cannot take an app it did not add out of a project', function () {
     ['team' => $team, 'owner' => $owner, 'developer' => $developer, 'server' => $server] = developerProjectsSetup();
-    $project = Project::factory()->for($team)->withEnvironments(['Production'])->create(['name' => 'Storefront', 'created_by' => $owner->id]);
-    $environment = $project->environments()->sole();
-    $theirs = Application::factory()->for($team)->for($server)->create(['name' => 'miagraph', 'created_by' => $owner->id, 'environment_id' => $environment->id]);
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront', 'created_by' => $owner->id]);
+    $theirs = Application::factory()->for($team)->for($server)->create(['name' => 'miagraph', 'created_by' => $owner->id, 'project_id' => $project->id]);
     developerProjectsAccess()->grant($team, $developer, $project);
 
-    $this->actingAs($developer)->delete(route('projects.environments.applications.destroy', [$project, $environment, $theirs]))->assertForbidden();
+    $this->actingAs($developer)->delete(route('projects.applications.destroy', [$project, $theirs]))->assertForbidden();
 
-    expect($theirs->fresh()->environment_id)->toBe($environment->id);
+    expect($theirs->fresh()->project_id)->toBe($project->id);
 });
 
 test('the add list in a project offers a developer only what it added', function () {

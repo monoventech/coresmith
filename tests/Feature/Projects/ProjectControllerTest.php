@@ -29,7 +29,7 @@ function projectControllerPerson(Team $team, TeamRole $role, bool $everything = 
     return $user->fresh();
 }
 
-test('an owner creates a project that starts in Production', function () {
+test('an owner creates a project, empty and ready for apps', function () {
     [$team, $owner] = projectControllerTeam();
 
     $response = $this->actingAs($owner)->post(route('projects.store'), ['name' => '  Storefront ']);
@@ -40,14 +40,14 @@ test('an owner creates a project that starts in Production', function () {
 
     expect($project->name)->toBe('Storefront')
         ->and($project->team_id)->toBe($team->id)
-        ->and($project->environments()->pluck('name')->all())->toBe(['Production'])
+        ->and($project->applications()->count())->toBe(0)
         ->and(Activity::query()->where('description', 'project_created')->sole()->properties->all())->toBe(['project' => 'Storefront']);
 });
 
 test('project names are unique in a team whatever their case', function () {
     [$team, $owner] = projectControllerTeam();
-    Project::factory()->for($team)->withEnvironments()->create(['name' => 'Storefront']);
-    Project::factory()->withEnvironments()->create(['name' => 'Blog']);
+    Project::factory()->for($team)->create(['name' => 'Storefront']);
+    Project::factory()->create(['name' => 'Blog']);
 
     $this->actingAs($owner)->post(route('projects.store'), ['name' => 'storefront'])
         ->assertSessionHasErrors(['name' => "There's already a project called Storefront."]);
@@ -80,8 +80,8 @@ test('deployers cannot create projects', function () {
 
 test('renaming a project keeps names unique and says Saved.', function () {
     [$team, $owner] = projectControllerTeam();
-    $storefront = Project::factory()->for($team)->withEnvironments()->create(['name' => 'Storefront']);
-    Project::factory()->for($team)->withEnvironments()->create(['name' => 'Blog']);
+    $storefront = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    Project::factory()->for($team)->create(['name' => 'Blog']);
 
     $this->actingAs($owner)->put(route('projects.update', $storefront), ['name' => 'BLOG'])
         ->assertSessionHasErrors(['name' => "There's already a project called Blog."]);
@@ -95,24 +95,25 @@ test('renaming a project keeps names unique and says Saved.', function () {
 
 test('deleting a project leaves its apps running in no project', function () {
     [$team, $owner] = projectControllerTeam();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['environment_id' => $project->environments()->first()->id]);
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $application = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['project_id' => $project->id]);
 
     $this->actingAs($owner)->delete(route('projects.destroy', $project))
         ->assertRedirect(route('projects.index'))
         ->assertSessionHas('success', 'Deleted Storefront. What was in it keeps running, under No project.');
 
     expect(Project::query()->count())->toBe(0)
-        ->and($application->fresh()->environment_id)->toBeNull()
+        ->and($application->fresh()->project_id)->toBeNull()
         ->and(Activity::query()->where('description', 'project_deleted')->sole()->properties->all())->toBe(['project' => 'Storefront']);
 });
 
-test('an environment-only member cannot rename or delete the project, and others never find it', function () {
+test('a member the project is shared with in part cannot rename or delete it, and others never find it', function () {
     [$team] = projectControllerTeam();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $shop = Application::factory()->for($team)->for(Server::factory()->for($team))->create(['project_id' => $project->id]);
     $admin = projectControllerPerson($team, TeamRole::Admin, everything: false);
     $stranger = projectControllerPerson($team, TeamRole::Admin, everything: false);
-    app(TeamAccess::class)->grant($team, $admin, $project->environments()->where('name', 'Staging')->sole());
+    app(TeamAccess::class)->sync($team, $admin, false, [], [], [$project->id], [], [$shop->id]);
 
     $this->actingAs($admin)->put(route('projects.update', $project), ['name' => 'Mine'])->assertForbidden();
     $this->actingAs($admin)->delete(route('projects.destroy', $project))->assertForbidden();

@@ -10,6 +10,7 @@
     const failed = $derived(provisioning.status === 'failed')
 
     let copied = $state<'command' | 'key' | null>(null)
+    let copiedOnce = $state(false)
     let blocked = $state(false)
 
     async function copy(what: 'command' | 'key') {
@@ -19,6 +20,7 @@
             )
             blocked = false
             copied = what
+            copiedOnce = true
             setTimeout(() => (copied = null), 2000)
         } catch {
             copied = null
@@ -108,7 +110,7 @@
             </Form>
         {/if}
         {#if !provisioning.connected && !server.this_machine}
-            <Button variant="outline" size="sm" onclick={() => copy('command')}
+            <Button variant={copiedOnce ? 'outline' : 'default'} size="sm" onclick={() => copy('command')}
                 >{copied === 'command' ? 'Copied' : 'Copy the command'}</Button
             >
             <Button variant="outline" size="sm" onclick={() => copy('key')}
@@ -123,8 +125,13 @@
                     options={{ preserveScroll: true }}
                 >
                     {#snippet children({ processing })}
-                        <Button type="submit" variant="outline" size="sm" disabled={processing}
-                            >{processing ? 'Testing…' : 'Test connection'}</Button
+                        <Button
+                            type="submit"
+                            variant={copiedOnce || provisioning.connected || server.this_machine
+                                ? 'default'
+                                : 'outline'}
+                            size="sm"
+                            disabled={processing}>{processing ? 'Testing…' : 'Test connection'}</Button
                         >
                     {/snippet}
                 </Form>

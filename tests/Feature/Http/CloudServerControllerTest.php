@@ -63,7 +63,6 @@ function cloudServerPayload(CloudProvider $account, array $overrides = []): arra
         'region' => 'fsn1',
         'size' => 'cx22',
         'image' => 'ubuntu-24.04',
-        'environment' => 'Production',
         ...$overrides,
     ];
 }
@@ -92,7 +91,6 @@ test('an admin provisions a server through a connected account', function () {
         ->and($server->provider_image)->toBe('ubuntu-24.04')
         ->and((string) $server->provider_monthly_cost)->toBe('3.79')
         ->and($server->provider_currency)->toBe('EUR')
-        ->and($server->environment)->toBe('Production')
         ->and($task->type)->toBe(CloudTask::CREATE)
         ->and($task->step)->toBe('create')
         ->and($task->by)->toBe($user->id)

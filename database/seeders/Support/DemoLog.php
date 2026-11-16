@@ -48,6 +48,18 @@ final class DemoLog
         ]);
     }
 
+    public static function scriptFailed(Application $application, string $release, string $branch, string $sha, string $author, CarbonImmutable $started): string
+    {
+        return implode("\n", [
+            ...self::preamble($application, $release, $branch, $sha, $author, null, $started),
+            self::at($started, 9) . ' deps: runtimes installed, carrying on',
+            self::at($started, 10) . ' script: running your deploy script',
+            'Checking the release',
+            'Your deploy script stopped with exit code 2.',
+            self::at($started, 14) . ' deploy failed. the current release is untouched.',
+        ]);
+    }
+
     public static function running(Application $application, string $release, string $branch, string $sha, string $author, CarbonImmutable $started): string
     {
         return implode("\n", [

@@ -51,10 +51,6 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 final class ServerController extends Controller
 {
-    public const ENVIRONMENTS = ['Production', 'Staging', 'Development'];
-
-    public const PICK_ENVIRONMENT = 'Pick Production, Staging, Development or No environment.';
-
     public function create(Request $request, CloudPresenter $cloud, TeamContext $context, PlanGate $plans, ThisMachine $machine): Response
     {
         $this->authorize('create', Server::class);
@@ -67,7 +63,6 @@ final class ServerController extends Controller
             'teams' => $request->user()->teams()->get()
                 ->map(fn(Team $choice): array => ['id' => $choice->id, 'name' => $choice->name, 'limit' => $plans->serverLimitNote($choice, $request->user())])->values(),
             'current' => $team->getKey(),
-            'environments' => self::ENVIRONMENTS,
             'phases' => ServerPresenter::PROVISIONING_PHASES,
             'thisMachine' => $request->user()->managesInstance() ? [
                 'installed' => $machine->installed(),

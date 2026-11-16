@@ -114,7 +114,6 @@ test('servers are listed oldest first with their applications in name order', fu
 test('the meta line summarises where a server runs and how long it has been up', function () {
     $team = Team::factory()->create();
     $server = fleetServer($team, [
-        'environment' => 'Production',
         'region' => 'fra1',
         'meta' => ['memory_mb' => 8192],
         'os_name' => 'ubuntu',
@@ -127,15 +126,14 @@ test('the meta line summarises where a server runs and how long it has been up',
     $fleet = new FleetSnapshot($team);
     $loaded = $fleet->servers()->first();
 
-    expect($fleet->meta($loaded))->toBe('Production · fra1 · 8 GB RAM · 2 apps · up 3 days')
-        ->and($fleet->meta($loaded, long: true))->toBe('Production · fra1 · 8 GB RAM · Ubuntu 24.04 · 203.0.113.10 · up 3 days')
-        ->and($fleet->compactMeta($loaded))->toBe('Production · fra1 · 2 apps');
+    expect($fleet->meta($loaded))->toBe('fra1 · 8 GB RAM · 2 apps · up 3 days')
+        ->and($fleet->meta($loaded, long: true))->toBe('fra1 · 8 GB RAM · Ubuntu 24.04 · 203.0.113.10 · up 3 days')
+        ->and($fleet->compactMeta($loaded))->toBe('fra1 · 2 apps');
 });
 
 test("the server page's meta line names each figure: cores, RAM, disk and the system's own name", function () {
     $team = Team::factory()->create();
     $server = fleetServer($team, [
-        'environment' => 'Production',
         'region' => null,
         'meta' => ['cpu_cores' => 16, 'cpu_physical_cores' => 8, 'memory_mb' => 27833, 'disk_gb' => 913, 'os_pretty' => 'Ubuntu 24.04.5 LTS'],
         'os_name' => 'ubuntu',
@@ -147,13 +145,13 @@ test("the server page's meta line names each figure: cores, RAM, disk and the sy
     $fleet = new FleetSnapshot($team);
     $loaded = $fleet->servers()->first();
 
-    expect($fleet->meta($loaded, long: true))->toBe("Production · 8 cores · 27 GB RAM · 913\u{00A0}GB disk · Ubuntu 24.04.5 LTS · 127.0.0.1 · up 5 days")
-        ->and($fleet->meta($loaded))->toBe('Production · 27 GB RAM · 0 apps · up 5 days');
+    expect($fleet->meta($loaded, long: true))->toBe("8 cores · 27 GB RAM · 913\u{00A0}GB disk · Ubuntu 24.04.5 LTS · 127.0.0.1 · up 5 days")
+        ->and($fleet->meta($loaded))->toBe('27 GB RAM · 0 apps · up 5 days');
 });
 
 test('the meta line drops what it does not know and counts a single app', function () {
     $team = Team::factory()->create();
-    $server = fleetServer($team, ['environment' => null, 'region' => null, 'meta' => null, 'booted_at' => null]);
+    $server = fleetServer($team, ['region' => null, 'meta' => null, 'booted_at' => null]);
     Application::factory()->for($team)->for($server)->create();
 
     $fleet = new FleetSnapshot($team);
@@ -164,7 +162,7 @@ test('the meta line drops what it does not know and counts a single app', functi
 
 test('a server card carries its state, rounded readings, links and applications', function () {
     $team = Team::factory()->create();
-    $server = fleetServer($team, ['name' => 'web-1', 'environment' => 'Staging']);
+    $server = fleetServer($team, ['name' => 'web-1']);
     $application = Application::factory()->for($team)->for($server)->create(['name' => 'Shop', 'framework' => 'laravel']);
     fleetMetric($server, 61.5, attributes: ['cpu_percent' => 20.4, 'memory_percent' => 55.5]);
 
@@ -174,8 +172,8 @@ test('a server card carries its state, rounded readings, links and applications'
         'id' => $server->id,
         'name' => 'web-1',
         'state' => ['key' => 'healthy', 'label' => 'Healthy', 'tone' => 'success'],
-        'meta' => 'Staging · 1 app',
-        'compact_meta' => 'Staging · 1 app',
+        'meta' => '1 app',
+        'compact_meta' => '1 app',
         'cpu' => 20,
         'memory' => 56,
         'disk' => 62,

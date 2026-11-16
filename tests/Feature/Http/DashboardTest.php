@@ -220,6 +220,18 @@ test('a member is not offered the connect-a-server action', function () {
         ->assertInertia(fn($page) => $page->where('can.createServer', false));
 });
 
+test('the fleet offers Add an app to people who can add apps', function (TeamRole $role, bool $offered) {
+    $team = Team::factory()->create();
+
+    $this->actingAs(dashboardUser($team, $role))
+        ->get(route('dashboard'))
+        ->assertInertia(fn($page) => $page->where('can.createApplication', $offered));
+})->with([
+    'an admin' => [TeamRole::Admin, true],
+    'a developer' => [TeamRole::Developer, true],
+    'a deployer' => [TeamRole::Member, false],
+]);
+
 test('a user with no team gets an empty dashboard rather than an error', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('dashboard'))

@@ -2,7 +2,12 @@
     import type { Detection } from '@/lib/detection'
     import { FolderGit, KeyRound, TriangleAlert } from '@lucide/svelte'
 
-    let { detection, reading, server }: { detection: Detection | null; reading: boolean; server: string } = $props()
+    let {
+        detection,
+        reading,
+        server,
+        editing = false
+    }: { detection: Detection | null; reading: boolean; server: string; editing?: boolean } = $props()
 
     const privateHosts = $derived(
         detection?.state === 'read' ? (detection.packages ?? []).map((found) => found.host) : []
@@ -55,17 +60,22 @@
         </p>
     {:else if detection?.state === 'failed'}
         <p class="m-0 text-[12.5px] text-muted-foreground">
-            {detection.failure} You can add the app now, and Coresmith checks the repository before the first deploy.
+            {detection.failure}
+            {editing
+                ? 'You can still save. If your change needs a check, the app page asks for one before the next deploy.'
+                : 'You can add the app now, and Coresmith checks the repository before the first deploy.'}
         </p>
     {:else if detection?.state === 'needs_key'}
         <p class="m-0 text-[12.5px] text-muted-foreground">
-            Coresmith reads git@ repositories with this app's deploy key, which it makes when you add the app. Add the
-            key to the repository, then check it on the app page before the first deploy.
+            {editing
+                ? "This form can't read git@ repositories, since Coresmith reads them with the app's deploy key. If your change needs a check, the app page asks for one before the next deploy."
+                : "Coresmith reads git@ repositories with this app's deploy key, which it makes when you add the app. Add the key to the repository, then check it on the app page before the first deploy."}
         </p>
     {:else if detection?.state === 'server_not_ready'}
         <p class="m-0 text-[12.5px] text-muted-foreground">
-            Coresmith reads the repository once {detection.server} is ready. You can add the app now and check it before the
-            first deploy.
+            Coresmith reads the repository once {detection.server} is ready. {editing
+                ? 'You can save now, and the app page asks for a check before the next deploy if your change needs one.'
+                : 'You can add the app now and check it before the first deploy.'}
         </p>
     {/if}
 

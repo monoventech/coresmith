@@ -27,7 +27,14 @@ export type PanelProps = {
 
 export type StatusTone = { key: string; label: string; tone: string }
 
-export type ExplorerApp = { id: string; name: string; href: string; state: StatusTone; server: string | null }
+export type ExplorerApp = {
+    id: string
+    name: string
+    tags: string[]
+    href: string
+    state: StatusTone
+    server: string | null
+}
 
 export type ExplorerDatabase = { id: string; name: string; href: string; engine: string }
 
@@ -36,7 +43,8 @@ export type ExplorerProject = {
     name: string
     href: string
     deploying: boolean
-    environments: { id: string; name: string; apps: ExplorerApp[]; databases: ExplorerDatabase[] }[]
+    apps: ExplorerApp[]
+    databases: ExplorerDatabase[]
 }
 
 export type ExplorerServer = { id: string; name: string; href: string; state: StatusTone; note: string }
@@ -60,10 +68,14 @@ export type ExplorerProps = {
     servers: ExplorerServer[]
     running: ExplorerRunning | null
     attention: AttentionItem[]
-    can: { createProject: boolean; createServer: boolean }
+    can: { createProject: boolean; createServer: boolean; createApplication: boolean }
 }
 
-export type Crumb = { label: string; href: string | null; mono: boolean }
+export type CrumbSwitch = { kind: 'server' | 'application' | 'project'; id: string }
+
+export type Crumb = { label: string; href: string | null; mono: boolean; switch: CrumbSwitch | null }
+
+export type AppDeploy = { name: string; href: string; from: string; running_href: string | null; blocked: boolean }
 
 export function statusDot(tone: string): string {
     switch (tone) {

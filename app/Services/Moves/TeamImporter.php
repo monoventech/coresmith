@@ -25,6 +25,7 @@ use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\WebhookEndpoint;
+use App\Services\Projects\AppTags;
 use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamSlug;
 use Illuminate\Support\Facades\DB;
@@ -147,11 +148,12 @@ final class TeamImporter
                 $projects[$record['ref']] = $project->id;
             }
 
-            foreach (array_values(array_filter((array) ($record['environments'] ?? []), 'is_array')) as $position => $environment) {
-                $made = $project->environments()->create(['name' => (string) ($environment['name'] ?? '') ?: 'Production', 'position' => (int) ($environment['position'] ?? $position)]);
+            $older = array_values(array_filter((array) ($record['environments'] ?? []), 'is_array'));
+            $untouched = count($older) === 1 && ($older[0]['name'] ?? null) === 'Production';
 
+            foreach ($older as $environment) {
                 if (is_string($environment['ref'] ?? null) && $environment['ref'] !== '') {
-                    $environments[$environment['ref']] = $made->id;
+                    $environments[$environment['ref']] = ['project' => $project->id, 'tag' => $untouched ? null : (string) ($environment['name'] ?? '')];
                 }
             }
         }
@@ -163,7 +165,8 @@ final class TeamImporter
                 'team_id' => $team->id,
                 'server_id' => $servers[(string) $record['server']]->id,
                 'source_provider_id' => $providers[(string) ($record['source_provider'] ?? '')] ?? null,
-                'environment_id' => $environments[(string) ($record['environment'] ?? '')] ?? null,
+                'project_id' => $projects[(string) ($record['project'] ?? '')] ?? $environments[(string) ($record['environment'] ?? '')]['project'] ?? null,
+                'tags' => array_slice(AppTags::normalize(is_array($record['tags'] ?? null) ? $record['tags'] : [$environments[(string) ($record['environment'] ?? '')]['tag'] ?? null]), 0, AppTags::MAX),
                 ...MoveColumns::pick($record, MoveColumns::APPLICATIONS),
                 'last_request_at' => now(),
             ])->save();
@@ -177,7 +180,7 @@ final class TeamImporter
         }
 
         foreach ($this->records($payload, 'databases') as $record) {
-            (new ManagedDatabase)->forceFill(['team_id' => $team->id, 'server_id' => $servers[(string) $record['server']]->id, 'environment_id' => $environments[(string) ($record['environment'] ?? '')] ?? null, ...MoveColumns::pick($record, MoveColumns::DATABASES)])->save();
+            (new ManagedDatabase)->forceFill(['team_id' => $team->id, 'server_id' => $servers[(string) $record['server']]->id, 'project_id' => $projects[(string) ($record['project'] ?? '')] ?? $environments[(string) ($record['environment'] ?? '')]['project'] ?? null, ...MoveColumns::pick($record, MoveColumns::DATABASES)])->save();
         }
 
         foreach ($this->records($payload, 'package_credentials') as $record) {

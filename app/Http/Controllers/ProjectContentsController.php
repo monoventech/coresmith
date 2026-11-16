@@ -10,7 +10,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\TeamRole;
 use App\Models\Application;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\User;
@@ -21,11 +20,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
-final class EnvironmentContentsController extends Controller
+final class ProjectContentsController extends Controller
 {
-    public function store(Request $request, Project $project, Environment $environment, Projects $projects, TeamAccess $access): RedirectResponse
+    public function store(Request $request, Project $project, Projects $projects, TeamAccess $access): RedirectResponse
     {
-        $this->authorize('fill', $environment);
+        $this->authorize('fill', $project);
 
         $validated = $request->validate([
             'applications' => ['sometimes', 'array'],
@@ -44,15 +43,15 @@ final class EnvironmentContentsController extends Controller
             $this->added($databases, $user, 'databases', 'databases');
         }
 
-        $projects->file($environment, $applications, $databases, $user);
+        $projects->file($project, $applications, $databases, $user);
 
-        return back()->with('success', "Added to {$environment->name}.");
+        return back()->with('success', "Added to {$project->name}.");
     }
 
-    public function destroyApplication(Request $request, Project $project, Environment $environment, Application $application, Projects $projects, TeamAccess $access): RedirectResponse
+    public function destroyApplication(Request $request, Project $project, Application $application, Projects $projects, TeamAccess $access): RedirectResponse
     {
-        $this->authorize('fill', $environment);
-        abort_unless($access->canSeeApplication($request->user(), $application), 404);
+        $this->authorize('fill', $project);
+        abort_unless($application->project_id === $project->getKey() && $access->canSeeApplication($request->user(), $application), 404);
         abort_if($request->user()->roleIn($project->team) === TeamRole::Developer && !$application->addedBy($request->user()), 403);
 
         $projects->unfile($application, $request->user());
@@ -60,10 +59,10 @@ final class EnvironmentContentsController extends Controller
         return back()->with('success', "Took {$application->name} out of {$project->name}.");
     }
 
-    public function destroyDatabase(Request $request, Project $project, Environment $environment, ManagedDatabase $database, Projects $projects, TeamAccess $access): RedirectResponse
+    public function destroyDatabase(Request $request, Project $project, ManagedDatabase $database, Projects $projects, TeamAccess $access): RedirectResponse
     {
-        $this->authorize('fill', $environment);
-        abort_unless($access->canSeeDatabase($request->user(), $database), 404);
+        $this->authorize('fill', $project);
+        abort_unless($database->project_id === $project->getKey() && $access->canSeeDatabase($request->user(), $database), 404);
         abort_if($request->user()->roleIn($project->team) === TeamRole::Developer && !$database->addedBy($request->user()), 403);
 
         $projects->unfile($database, $request->user());

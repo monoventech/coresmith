@@ -1,12 +1,12 @@
 import type { Page } from '@playwright/test'
-import { expect, asEnvironmentOnly as test } from './support/fixtures'
+import { expect, asPartlyShared as test } from './support/fixtures'
 
 function palette(page: Page) {
     return page.getByRole('dialog', { name: 'Command palette' })
 }
 
-test.describe('an admin who sees only Storefront staging', () => {
-    test('the fleet lists the app shared through the environment, and the projects tab only that environment', async ({
+test.describe('an admin Storefront is shared with, holding back its production app', () => {
+    test('the fleet lists the shared app, and the projects tab shows Storefront with only that app', async ({
         page
     }) => {
         await page.goto('/dashboard')
@@ -16,20 +16,34 @@ test.describe('an admin who sees only Storefront staging', () => {
 
         await page.goto('/projects')
         await expect(page.getByTestId('project-card')).toHaveCount(1)
-        await expect(page.getByTestId('project-environment')).toHaveText([/^Staging \d+$/])
+        await expect(
+            page.getByTestId('project-card-app').filter({ hasText: /^\s*storefront-staging staging\s*$/ })
+        ).toHaveCount(1)
+        await expect(
+            page.getByTestId('project-card-app').filter({ hasText: /^\s*storefront production\s*$/ })
+        ).toHaveCount(0)
         await expect(page.getByTestId('no-project')).toHaveCount(0)
     })
 
-    test('the project page shows only staging, and the server behind it is not found', async ({ page }) => {
+    test('the project page shows only what is shared, offers no rename, and the server behind it is not found', async ({
+        page
+    }) => {
         await page.goto('/projects')
         await page.getByTestId('project-card').getByRole('link', { name: 'Storefront', exact: true }).click()
 
-        await expect(page.getByTestId('environment')).toHaveCount(1)
-        await expect(page.getByRole('heading', { level: 2, name: 'Staging' })).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Add environment' })).toHaveCount(0)
-        await expect(page.getByRole('button', { name: 'Add apps or databases' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
+        await expect(
+            page
+                .getByTestId('project-app')
+                .filter({ has: page.getByRole('link', { name: 'storefront-staging', exact: true }) })
+        ).toHaveCount(1)
+        await expect(
+            page.getByTestId('project-app').filter({ has: page.getByRole('link', { name: 'storefront', exact: true }) })
+        ).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Rename', exact: true })).toHaveCount(0)
+        await expect(page.getByTestId('project-people')).toHaveCount(0)
 
-        await page.getByTestId('environment-app').getByRole('link', { name: 'storefront-staging', exact: true }).click()
+        await page.getByTestId('project-app').getByRole('link', { name: 'storefront-staging', exact: true }).click()
         await expect(page.getByRole('heading', { level: 1, name: 'storefront-staging' })).toBeVisible()
 
         const server = /\/servers\/([A-Za-z0-9]+)\/applications\//.exec(page.url())?.[1]

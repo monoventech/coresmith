@@ -20,12 +20,11 @@
     } = $props()
 
     function go(event: Event) {
-        const value = (event.currentTarget as HTMLSelectElement).value
-        const [project, environment] = value.split(':')
+        const project = (event.currentTarget as HTMLSelectElement).value
 
         router.get(
             href ?? page.url.split('?')[0],
-            { ...keep, ...(project ? { project } : {}), ...(environment ? { environment } : {}) },
+            { ...keep, ...(project ? { project } : {}) },
             { preserveScroll: true }
         )
     }

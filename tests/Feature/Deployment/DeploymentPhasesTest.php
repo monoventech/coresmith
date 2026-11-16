@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\DeploymentStatus;
+use App\Models\Application;
 use App\Models\Deployment;
 use App\Services\Deployment\DeploymentPhases;
 
@@ -350,4 +351,38 @@ test('a deploy still inside the process watch says so, rather than falling back 
 
     expect((new DeploymentPhases)->progress($deployment))->toBe('watching the processes')
         ->and(phasesStates($deployment)['swap'])->toBe('done');
+});
+
+test('a deploy that runs its own script lists the script in place of the install, build and migration steps', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Failed, [
+        '[12:00:00] clone: fetching over https',
+        '[12:00:05] deps: runtimes installed, carrying on',
+        '[12:00:06] script: running your deploy script',
+        'about to fail',
+        '[12:00:09] deploy failed. the current release is untouched.',
+    ]);
+    $phases = (new DeploymentPhases)->states($deployment);
+
+    expect(array_column($phases, 'key'))->toBe(['clone', 'deps', 'script', 'health', 'swap'])
+        ->and(array_column($phases, 'label'))->toBe(['Clone release', 'Install runtimes', 'Deploy script', 'Health check', 'Symlink swap'])
+        ->and(phasesStates($deployment))->toBe(['clone' => 'done', 'deps' => 'done', 'script' => 'failed', 'health' => 'skipped', 'swap' => 'skipped'])
+        ->and(phasesDurations($deployment)['script'])->toBe('3s');
+});
+
+test('a running deploy script reads as running the deploy script', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Running, ['[12:00:00] clone: fetching over https', '[12:00:06] script: running your deploy script']);
+
+    expect((new DeploymentPhases)->progress($deployment))->toBe('running your deploy script');
+});
+
+test('a queued deploy of an app with its own script lists the script before it starts', function () {
+    $deployment = Deployment::factory()->for(Application::factory()->create(['custom_blueprint' => "echo hi\n"]))->create(['status' => DeploymentStatus::Pending, 'log' => null]);
+
+    expect(array_column((new DeploymentPhases)->states($deployment), 'key'))->toBe(['clone', 'deps', 'script', 'health', 'swap']);
+});
+
+test('a deploy that ran a script before the script had its own step keeps the steps it logged', function () {
+    $deployment = phasesDeployment(DeploymentStatus::Succeeded, ['[12:00:00] clone: fetching over https', '[12:00:06] build: running the custom blueprint', '[12:00:20] health: checking the release before it goes live', '[12:00:21] swap: current → releases/20261020-120000']);
+
+    expect(array_column((new DeploymentPhases)->states($deployment), 'key'))->toBe(['clone', 'deps', 'build', 'migrate', 'health', 'swap']);
 });

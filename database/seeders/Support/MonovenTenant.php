@@ -164,18 +164,17 @@ final class MonovenTenant
     private function servers(): void
     {
         $specs = [
-            'forge-01' => ['Production', 'fra1', '203.0.113.14', 8192, 214, [34, 14, 0], [61, 6, 2], [42, 1, 4]],
-            'forge-02' => ['Staging', 'fra1', '203.0.113.87', 4096, 61, [62, 20, 1], [55, 8, 3], [39, 1, 1]],
-            'anvil-01' => ['Production', 'nyc3', '198.51.100.3', 16384, 380, [12, 5, 2], [44, 4, 0], [58, 1, 3]],
-            'outpost-01' => ['Production', 'sgp1', '192.0.2.9', 2048, 129, [22, 8, 1], [37, 5, 2], [84, 0.4, 0]],
+            'forge-01' => ['fra1', '203.0.113.14', 8192, 214, [34, 14, 0], [61, 6, 2], [42, 1, 4]],
+            'forge-02' => ['fra1', '203.0.113.87', 4096, 61, [62, 20, 1], [55, 8, 3], [39, 1, 1]],
+            'anvil-01' => ['nyc3', '198.51.100.3', 16384, 380, [12, 5, 2], [44, 4, 0], [58, 1, 3]],
+            'outpost-01' => ['sgp1', '192.0.2.9', 2048, 129, [22, 8, 1], [37, 5, 2], [84, 0.4, 0]],
         ];
 
         $order = 0;
 
-        foreach ($specs as $name => [$environment, $region, $ip, $memory, $uptime, $cpu, $mem, $disk]) {
+        foreach ($specs as $name => [$region, $ip, $memory, $uptime, $cpu, $mem, $disk]) {
             $server = Server::factory()->for($this->team)->create([
                 'name' => $name,
-                'environment' => $environment,
                 'region' => $region,
                 'ip_address' => $ip,
                 'status' => ServerStatus::Active,
@@ -320,14 +319,13 @@ final class MonovenTenant
     private function projects(): void
     {
         foreach (['Atlas' => ['atlas', 'atlas-staging'], 'Storefront' => ['storefront', 'storefront-staging']] as $name => [$production, $staging]) {
-            $project = Project::factory()->for($this->team)->withEnvironments(['Production', 'Staging'])->create(['name' => $name]);
-            [$live, $trial] = $project->environments()->get()->all();
+            $project = Project::factory()->for($this->team)->create(['name' => $name]);
 
-            $this->applications[$production]->update(['environment_id' => $live->id]);
-            $this->applications[$staging]->update(['environment_id' => $trial->id]);
+            $this->applications[$production]->update(['project_id' => $project->id, 'tags' => ['production']]);
+            $this->applications[$staging]->update(['project_id' => $project->id, 'tags' => ['staging']]);
 
             if ($name === 'Atlas') {
-                ManagedDatabase::query()->where('team_id', $this->team->id)->where('name', 'atlas_production')->update(['environment_id' => $live->id]);
+                ManagedDatabase::query()->where('team_id', $this->team->id)->where('name', 'atlas_production')->update(['project_id' => $project->id]);
             }
         }
     }

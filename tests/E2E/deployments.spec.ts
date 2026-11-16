@@ -68,24 +68,19 @@ async function streamDeploys(page: Page) {
 }
 
 test.describe('the deployments list', () => {
-    test('deploys filter by project and environment', async ({ page }) => {
+    test('deploys filter by project', async ({ page }) => {
         await page.goto('/deployments')
-        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront › Staging' })
+        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront' })
 
-        await page.waitForURL((url) => url.searchParams.has('project') && url.searchParams.has('environment'))
+        await page.waitForURL((url) => url.searchParams.has('project'))
         await expect(rows(page).first()).toBeVisible()
-        await expect(rows(page).filter({ hasNotText: 'storefront-staging' })).toHaveCount(0)
-        await expect(page.getByLabel('Project', { exact: true })).toHaveValue(/:/)
+        await expect(rows(page).filter({ hasNotText: 'storefront' })).toHaveCount(0)
+        await expect(page.getByLabel('Project', { exact: true })).toHaveValue(/^[0-9a-z]{26}$/)
 
         await filters(page)
             .getByRole('link', { name: /^Deployed/ })
             .click()
-        await page.waitForURL(
-            (url) =>
-                url.searchParams.get('status') === 'deployed' &&
-                url.searchParams.has('project') &&
-                url.searchParams.has('environment')
-        )
+        await page.waitForURL((url) => url.searchParams.get('status') === 'deployed' && url.searchParams.has('project'))
     })
 
     test('every deploy across the fleet is listed with the running one pinned on top', async ({ page }) => {

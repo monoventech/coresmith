@@ -356,7 +356,7 @@ test('a custom blueprint that fails after a cancel was asked is a failure, becau
         ->onCommand('/etc/coresmith/blueprints/cancel-me.sh', cancelAsk($deployment, cancelPerson()))
         ->respondTo("/bin/bash -s < '/etc/coresmith/blueprints/cancel-me.sh'", "Terminated\n", 143);
 
-    expect(fn() => cancelRun($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => cancelRun($deployment, $transport))->toThrow(DeploymentAborted::class, 'Your deploy script stopped with exit code 143.');
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Failed);
 });

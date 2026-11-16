@@ -32,7 +32,7 @@ function toggleRow(page: Page, key: string) {
 
 async function openAddApp(page: Page) {
     await gotoServer(page, 'bench-01')
-    await page.getByRole('link', { name: 'Add an app' }).click()
+    await main(page).getByRole('link', { name: 'Add an app' }).click()
     await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
 }
 
@@ -669,7 +669,7 @@ test.describe('adding an application', () => {
     }) => {
         await captureClipboard(page)
         await gotoServer(page, 'forge-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         const targets = page.getByTestId('domain-targets')
 
@@ -695,7 +695,7 @@ test.describe('adding an application', () => {
     test('the server offers to add an app', async ({ page }) => {
         await gotoServer(page, 'bench-01')
 
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
         await expect(page.getByRole('main')).toContainText('What a deploy does')
@@ -708,24 +708,26 @@ test.describe('adding an application', () => {
         const name = `e2e${Date.now().toString(36)}`
 
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
         await page.getByLabel('Name', { exact: true }).fill(name)
         await page.getByLabel('Language').selectOption('js')
         await expect(page.getByLabel('Framework')).toHaveValue('sveltekit')
         await page.getByLabel('Domain').fill(`${name}.bench.monoven.io`)
-        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront › Staging' })
+        await page.getByLabel('Project', { exact: true }).selectOption({ label: 'Storefront' })
+        await page.getByRole('textbox', { name: 'Tags' }).pressSequentially('preview, eu')
         await page.getByRole('button', { name: 'Add the app' }).click()
 
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
         await expect(toast(page)).toContainText('App added.')
-        await expect(page.getByTestId('app-project')).toContainText('Storefront › Staging')
+        await expect(page.getByTestId('app-project')).toContainText('Storefront')
+        await expect(page.getByTestId('app-tags-row').getByTestId('app-tags')).toHaveText(/^\s*preview\s*eu\s*$/)
     })
 
     test('a server with no room for another app says so and keeps the form as it was', async ({ page }) => {
         await gotoServer(page, 'full-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
         await page.getByLabel('Name', { exact: true }).fill('one-too-many')
@@ -741,7 +743,7 @@ test.describe('adding an application', () => {
 
     test('a malformed domain is refused next to the field', async ({ page }) => {
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         await page.getByLabel('Name', { exact: true }).fill('bad-domain')
         await page.getByLabel('Domain').fill('evil.com, other.com')
@@ -754,7 +756,7 @@ test.describe('adding an application', () => {
         page
     }) => {
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         const picker = page.getByRole('radiogroup', { name: 'PHP version' })
 
@@ -770,7 +772,7 @@ test.describe('adding an application', () => {
         page
     }) => {
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         const picker = page.getByRole('radiogroup', { name: 'PHP version' })
 
@@ -787,7 +789,7 @@ test.describe('adding an application', () => {
         const name = `eol${Date.now().toString(36)}`
 
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
         await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
         await page.getByLabel('Name', { exact: true }).fill(name)
         await page
@@ -1000,7 +1002,7 @@ test.describe('adding an application', () => {
 
     test('a ruby app starts at medium, and a size picked by hand is kept', async ({ page }) => {
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
 
         const language = page.getByLabel('Language')
         const size = page.getByLabel('Size', { exact: true })
@@ -1024,7 +1026,7 @@ test.describe('adding an application', () => {
 
     test('the version list follows the javascript runtime', async ({ page }) => {
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
         await page.getByLabel('Language').selectOption('js')
         await page.getByLabel('Runtime').selectOption('node')
 
@@ -1041,7 +1043,7 @@ test.describe('adding an application', () => {
         }) => {
             await useTheme(page, theme)
             await gotoServer(page, 'bench-01')
-            await page.getByRole('link', { name: 'Add an app' }).click()
+            await main(page).getByRole('link', { name: 'Add an app' }).click()
             await page
                 .getByRole('radiogroup', { name: 'PHP version' })
                 .getByRole('radio', { name: /^8\.1\.34/ })
@@ -1088,6 +1090,36 @@ test.describe('adding an application from GitHub', () => {
         await expect(branch).toHaveValue('trunk')
         await expect(branch).toHaveAttribute('list', 'repository-branches')
         await expect.poll(() => branchSuggestions(page)).toEqual(['trunk', 'release/2.0'])
+    })
+
+    test('the name follows the repository until a name is typed by hand', async ({ page }) => {
+        await serveCatalog(page)
+        await openAddApp(page)
+
+        const name = page.getByLabel('Name', { exact: true })
+
+        await repositories(page)
+            .getByRole('option', { name: /monoventech\/ledger/ })
+            .click()
+        await expect(name).toHaveValue('ledger')
+        await repositories(page)
+            .getByRole('option', { name: /monoventech\/relay/ })
+            .click()
+        await expect(name).toHaveValue('relay')
+
+        await name.fill('payments')
+        await repositories(page)
+            .getByRole('option', { name: /monoventech\/atlas/ })
+            .click()
+        await expect(name).toHaveValue('payments')
+    })
+
+    test('a Git URL names the app after its repository', async ({ page }) => {
+        await openAddApp(page)
+        await page.getByLabel('Source', { exact: true }).selectOption({ label: 'A Git URL' })
+        await page.getByRole('textbox', { name: 'Repository', exact: true }).fill('git@github.com:acme/shop-api.git')
+
+        await expect(page.getByLabel('Name', { exact: true })).toHaveValue('shop-api')
     })
 
     test('a branch typed by hand is kept when a repository is picked', async ({ page }) => {
@@ -1516,7 +1548,7 @@ test.describe('adding an application from GitHub', () => {
                 await page.goto('/stray/dashboard')
                 await page.getByTestId('server-card').getByRole('link', { name: 'stray-01', exact: true }).click()
                 await expect(page.getByRole('heading', { level: 1, name: 'stray-01' })).toBeVisible()
-                await page.getByRole('link', { name: 'Add an app' }).click()
+                await main(page).getByRole('link', { name: 'Add an app' }).click()
                 await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
 
                 await page.getByLabel('Name', { exact: true }).fill('harbor')
@@ -1549,7 +1581,7 @@ test.describe('adding an application from GitHub', () => {
                 await page.goto('/acme/dashboard')
                 await page.getByTestId('server-card').getByRole('link', { name: 'acme-web', exact: true }).click()
                 await expect(page.getByRole('heading', { level: 1, name: 'acme-web' })).toBeVisible()
-                await page.getByRole('link', { name: 'Add an app' }).click()
+                await main(page).getByRole('link', { name: 'Add an app' }).click()
                 await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
 
                 await expect(page.getByLabel('Source', { exact: true })).toHaveCount(0)

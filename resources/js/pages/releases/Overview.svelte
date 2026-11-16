@@ -6,6 +6,7 @@
     import { Search } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
+    import AppTags from '@/components/projects/AppTags.svelte'
     import ProjectScopeSelect from '@/components/projects/ProjectScopeSelect.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
@@ -15,7 +16,7 @@
         id: string
         name: string
         server: string | null
-        environment: string | null
+        tags: string[]
         href: string
         release: string | null
         tag: string | null
@@ -48,7 +49,7 @@
                   .map((group) => ({
                       ...group,
                       apps: group.apps.filter((app) =>
-                          [app.name, app.server, app.environment, group.name].some((field) =>
+                          [app.name, app.server, ...app.tags, group.name].some((field) =>
                               field?.toLowerCase().includes(needle)
                           )
                       )
@@ -101,7 +102,7 @@
         <div class="mt-5">
             <EmptyState
                 title="No app matches “{query.trim()}”."
-                description="Search looks at app names, servers, environments and projects."
+                description="Search looks at app names, tags, servers and projects."
             >
                 {#snippet action()}
                     <Button variant="outline" onclick={() => (query = '')}>Clear the search</Button>
@@ -126,17 +127,14 @@
                         data-testid="releases-app"
                     >
                         <span class="block min-w-0">
-                            <span class="block truncate font-mono text-[13px] font-medium">{app.name}</span>
-                            {#if app.environment}
-                                <span
-                                    class="mt-0.5 block truncate text-[11.5px] text-muted-foreground max-[900px]:hidden"
-                                    >{app.environment}</span
-                                >
-                            {/if}
-                            {#if app.environment || app.server}
+                            <span class="flex min-w-0 items-center gap-2">
+                                <span class="min-w-0 truncate font-mono text-[13px] font-medium">{app.name}</span>
+                                <AppTags tags={app.tags} limit={2} class="shrink-0 flex-nowrap" chipClass="max-w-24" />
+                            </span>
+                            {#if app.server}
                                 <span
                                     class="mt-0.5 hidden truncate text-[11.5px] text-muted-foreground max-[900px]:block"
-                                    >{[app.environment, app.server].filter(Boolean).join(' · ')}</span
+                                    >{app.server}</span
                                 >
                             {/if}
                         </span>

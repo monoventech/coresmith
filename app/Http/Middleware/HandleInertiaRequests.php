@@ -14,6 +14,7 @@ use App\Services\Panel\ExplorerPresenter;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Panel\Realtime;
 use App\Services\Panel\SetupProgress;
+use App\Services\Panel\TopBarDeploy;
 use App\Services\Teams\TeamContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -65,6 +66,7 @@ class HandleInertiaRequests extends Middleware
             'panel' => fn(): ?array => $this->panel($request),
             'explorer' => fn(): ?array => $this->explorer($request),
             'crumbs' => fn(): array => $this->crumbs($request),
+            'app_deploy' => fn(): ?array => app(TopBarDeploy::class)->for($request, $request->user()),
             'billing' => fn(): ?array => $this->billing($request),
             'palette' => Inertia::optional(fn(): array => $request->user() === null
                 ? []
@@ -115,7 +117,7 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * @return list<array{label: string, href: ?string, mono: bool}>
+     * @return list<array{label: string, href: ?string, mono: bool, switch: array{kind: string, id: string}|null}>
      */
     private function crumbs(Request $request): array
     {

@@ -38,7 +38,12 @@
 
 <AppHead title={server.name} />
 
-<ServerHeaderView {server} />
+<ServerHeaderView
+    {server}
+    primary={applications.length > 0 && server.active && server.can.createApplication
+        ? { label: 'Add an app', href: route('servers.applications.create', server.id) }
+        : null}
+/>
 
 {#if server.move}
     <ServerMovePanel move={server.move} server={server.id} />
@@ -106,11 +111,6 @@
                     >What Coresmith runs here</Link
                 >
             </p>
-            {#if server.can.createApplication}
-                <Button size="sm" variant="outline" href={route('servers.applications.create', server.id)}
-                    >Add an app</Button
-                >
-            {/if}
         </div>
     </div>
 {/if}

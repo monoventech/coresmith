@@ -92,7 +92,7 @@ test('a developer changes and removes only the apps it added', function () {
 
 test('a developer removes and restores only the databases it added', function () {
     ['team' => $team, 'developer' => $developer, 'mineDb' => $mineDb, 'theirsDb' => $theirsDb] = developerOwnershipSetup();
-    $theirsDb->forceFill(['environment_id' => null])->save();
+    $theirsDb->forceFill(['project_id' => null])->save();
 
     expect([$developer->can('delete', $mineDb), $developer->can('restore', $mineDb), $developer->can('backup', $mineDb)])->toBe([true, true, true])
         ->and([$developer->can('delete', $theirsDb), $developer->can('restore', $theirsDb)])->toBe([false, false]);

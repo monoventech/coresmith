@@ -11,13 +11,12 @@ namespace App\Services\Teams;
 use App\Enums\TeamRole;
 use App\Models\AccessGrant;
 use App\Models\Application;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
@@ -26,18 +25,23 @@ final class TeamAccess
     /** @var array<string, array{member: bool, everything: bool}> */
     private array $memberships = [];
 
-    /** @var array<string, array{servers: list<string>, applications: list<string>, projects: list<string>, environments: list<string>}> */
+    /** @var array<string, array{servers: list<string>, applications: list<string>, databases: list<string>, projects: list<string>, withheld_applications: list<string>, withheld_databases: list<string>}> */
     private array $grants = [];
-
-    /** @var array<string, list<string>> */
-    private array $environments = [];
 
     /** @var array<string, list<string>> */
     private array $reached = [];
 
+    /** @var array<string, list<string>> */
+    private array $developers = [];
+
     public function seesEverything(User $user, Team $team): bool
     {
         return $this->membership($user, $team)['everything'];
+    }
+
+    public function seesAllOf(User $user, Team $team): bool
+    {
+        return $this->membership($user, $team)['owner'] || ($this->seesEverything($user, $team) && $this->developerIds($user, $team) === []);
     }
 
     public function servers(User $user, Team $team): HasMany
@@ -65,50 +69,26 @@ final class TeamAccess
     {
         $applications = $team->applications();
 
-        if ($this->seesEverything($user, $team)) {
+        if ($this->seesAllOf($user, $team)) {
             return $applications;
         }
 
         $granted = $this->granted($user, $team);
-        $environments = $this->environmentIds($user, $team);
 
-        if ($this->membership($user, $team)['developer']) {
-            $applications->where(fn($query) => $query->whereIn('id', $granted['applications'])->orWhereIn('environment_id', $environments)->orWhere('created_by', $user->getKey()));
-
-            return $applications;
-        }
-
-        $applications->where(fn($query) => $query
-            ->where(fn($shared) => $shared->whereIn('server_id', $granted['servers'])->whereNotIn('id', $granted['withheld_applications']))
-            ->orWhereIn('id', $granted['applications'])
-            ->orWhereIn('environment_id', $environments));
-
-        return $applications;
+        return $applications->where(fn($query) => $this->reach($query, $user, $team, $granted['applications'], $granted['withheld_applications']));
     }
 
     public function databases(User $user, Team $team): HasMany
     {
         $databases = $team->databases();
 
-        if ($this->seesEverything($user, $team)) {
+        if ($this->seesAllOf($user, $team)) {
             return $databases;
         }
 
-        $servers = $this->granted($user, $team)['servers'];
-        $environments = $this->environmentIds($user, $team);
+        $granted = $this->granted($user, $team);
 
-        if ($this->membership($user, $team)['developer']) {
-            $databases->where(fn($query) => $query->whereIn('environment_id', $environments)->orWhere('created_by', $user->getKey()));
-
-            return $databases;
-        }
-
-        $withheld = $this->granted($user, $team)['withheld_databases'];
-        $databases->where(fn($query) => $query
-            ->where(fn($shared) => $shared->whereIn('server_id', $servers)->whereNotIn('id', $withheld))
-            ->orWhereIn('environment_id', $environments));
-
-        return $databases;
+        return $databases->where(fn($query) => $this->reach($query, $user, $team, $granted['databases'], $granted['withheld_databases']));
     }
 
     public function projects(User $user, Team $team): HasMany
@@ -129,7 +109,7 @@ final class TeamAccess
         $applications = $server->applications();
         $team = $server->team;
 
-        if ($team === null || $this->seesEverything($user, $team)) {
+        if ($team === null || $this->seesAllOf($user, $team)) {
             return $applications;
         }
 
@@ -141,7 +121,7 @@ final class TeamAccess
         $databases = $server->databases();
         $team = $server->team;
 
-        if ($team === null || $this->seesEverything($user, $team)) {
+        if ($team === null || $this->seesAllOf($user, $team)) {
             return $databases;
         }
 
@@ -169,17 +149,9 @@ final class TeamAccess
             return false;
         }
 
-        if ($this->seesEverything($user, $team)) {
-            return true;
-        }
-
         $granted = $this->granted($user, $team);
-        $developer = $this->membership($user, $team)['developer'];
 
-        return in_array($application->getKey(), $granted['applications'], true)
-            || (!$developer && in_array($application->server_id, $granted['servers'], true) && !in_array($application->getKey(), $granted['withheld_applications'], true))
-            || in_array($application->environment_id, $this->environmentIds($user, $team), true)
-            || ($developer && $application->addedBy($user));
+        return $this->reaches($application, $user, $team, $granted['applications'], $granted['withheld_applications']);
     }
 
     public function canSeeDatabase(User $user, ManagedDatabase $database): bool
@@ -190,13 +162,9 @@ final class TeamAccess
             return false;
         }
 
-        $developer = $this->membership($user, $team)['developer'];
         $granted = $this->granted($user, $team);
 
-        return $this->seesEverything($user, $team)
-            || (!$developer && in_array($database->server_id, $granted['servers'], true) && !in_array($database->getKey(), $granted['withheld_databases'], true))
-            || in_array($database->environment_id, $this->environmentIds($user, $team), true)
-            || ($developer && $database->addedBy($user));
+        return $this->reaches($database, $user, $team, $granted['databases'], $granted['withheld_databases']);
     }
 
     public function canSeeProject(User $user, Project $project): bool
@@ -218,36 +186,15 @@ final class TeamAccess
             return false;
         }
 
-        return $this->seesEverything($user, $team)
-            || in_array($project->getKey(), $this->granted($user, $team)['projects'], true)
-            || in_array($project->getKey(), $this->ownProjectIds($user, $team), true);
-    }
-
-    public function canSeeEnvironment(User $user, Environment $environment): bool
-    {
-        $team = $environment->project?->team;
-
-        if ($team === null || !$this->membership($user, $team)['member']) {
-            return false;
+        if ($this->seesEverything($user, $team) || in_array($project->getKey(), $this->ownProjectIds($user, $team), true)) {
+            return true;
         }
 
-        return $this->seesEverything($user, $team) || in_array($environment->getKey(), $this->environmentIds($user, $team), true);
-    }
+        $granted = $this->granted($user, $team);
 
-    /**
-     * @return Collection<int, Environment>
-     */
-    public function environmentsOf(User $user, Project $project): Collection
-    {
-        if ($this->seesWholeProject($user, $project)) {
-            return $project->environments()->get();
-        }
-
-        if (!$this->canSeeProject($user, $project)) {
-            return new Collection;
-        }
-
-        return $project->environments()->whereIn('id', $this->granted($user, $project->team)['environments'])->get();
+        return in_array($project->getKey(), $granted['projects'], true)
+            && !$project->applications()->whereIn('id', $granted['withheld_applications'])->exists()
+            && !$project->databases()->whereIn('id', $granted['withheld_databases'])->exists();
     }
 
     public function hidesServer(User $user, Server $server): bool
@@ -270,15 +217,15 @@ final class TeamAccess
         return $project->team !== null && $this->membership($user, $project->team)['member'] && !$this->canSeeProject($user, $project);
     }
 
-    public function grant(Team $team, User $user, Server|Application|Project|Environment $subject): void
+    public function grant(Team $team, User $user, Server|Application|ManagedDatabase|Project $subject): void
     {
         AccessGrant::query()->firstOrCreate([
             'team_id' => $team->getKey(),
             'user_id' => $user->getKey(),
             'server_id' => $subject instanceof Server ? $subject->getKey() : null,
             'application_id' => $subject instanceof Application ? $subject->getKey() : null,
+            'database_id' => $subject instanceof ManagedDatabase ? $subject->getKey() : null,
             'project_id' => $subject instanceof Project ? $subject->getKey() : null,
-            'environment_id' => $subject instanceof Environment ? $subject->getKey() : null,
         ]);
 
         $this->forget($user, $team);
@@ -288,21 +235,24 @@ final class TeamAccess
      * @param  list<string>  $serverIds
      * @param  list<string>  $applicationIds
      * @param  list<string>  $projectIds
-     * @param  list<string>  $environmentIds
+     * @param  list<string>  $databaseIds
      * @param  list<string>  $withheldApplicationIds
      * @param  list<string>  $withheldDatabaseIds
      */
-    public function sync(Team $team, User $user, bool $everything, array $serverIds, array $applicationIds, array $projectIds = [], array $environmentIds = [], array $withheldApplicationIds = [], array $withheldDatabaseIds = []): void
+    public function sync(Team $team, User $user, bool $everything, array $serverIds, array $applicationIds, array $projectIds = [], array $databaseIds = [], array $withheldApplicationIds = [], array $withheldDatabaseIds = []): void
     {
         $chosen = [
             'server_id' => $team->servers()->whereIn('id', $serverIds)->pluck('id')->all(),
             'application_id' => $team->applications()->whereIn('id', $applicationIds)->pluck('id')->all(),
+            'database_id' => $team->databases()->whereIn('id', $databaseIds)->pluck('id')->all(),
             'project_id' => $team->projects()->whereIn('id', $projectIds)->pluck('id')->all(),
-            'environment_id' => Environment::query()->whereIn('id', $environmentIds)->whereIn('project_id', $team->projects()->select('id'))->pluck('id')->all(),
         ];
-        $withheld = $this->membership($user, $team)['developer'] ? [] : [
-            'application_id' => $team->applications()->whereIn('id', $withheldApplicationIds)->whereIn('server_id', $chosen['server_id'])->whereNotIn('id', $chosen['application_id'])->pluck('id')->all(),
-            'database_id' => $team->databases()->whereIn('id', $withheldDatabaseIds)->whereIn('server_id', $chosen['server_id'])->pluck('id')->all(),
+        $under = fn($query) => $query->where(fn($shared) => $shared
+            ->when(!$this->membership($user, $team)['developer'], fn($servers) => $servers->whereIn('server_id', $chosen['server_id']))
+            ->orWhereIn('project_id', $chosen['project_id']));
+        $withheld = [
+            'application_id' => $team->applications()->whereIn('id', $withheldApplicationIds)->where($under)->whereNotIn('id', $chosen['application_id'])->pluck('id')->all(),
+            'database_id' => $team->databases()->whereIn('id', $withheldDatabaseIds)->where($under)->whereNotIn('id', $chosen['database_id'])->pluck('id')->all(),
         ];
 
         DB::transaction(function () use ($team, $user, $everything, $chosen, $withheld): void {
@@ -329,7 +279,7 @@ final class TeamAccess
     }
 
     /**
-     * @return array{everything: bool, servers: list<string>, applications: list<string>, projects: list<string>, environments: list<string>, withheld_applications: list<string>, withheld_databases: list<string>}
+     * @return array{everything: bool, servers: list<string>, applications: list<string>, databases: list<string>, projects: list<string>, withheld_applications: list<string>, withheld_databases: list<string>}
      */
     public function summary(Team $team, User $member): array
     {
@@ -337,7 +287,7 @@ final class TeamAccess
     }
 
     /**
-     * @return array{member: bool, everything: bool, developer: bool}
+     * @return array{member: bool, owner: bool, everything: bool, developer: bool}
      */
     private function membership(User $user, Team $team): array
     {
@@ -348,6 +298,7 @@ final class TeamAccess
 
             $this->memberships[$key] = [
                 'member' => $row !== null,
+                'owner' => $row !== null && $row->role === TeamRole::Owner->value,
                 'everything' => $row !== null && ($row->role === TeamRole::Owner->value || ($row->role !== TeamRole::Developer->value && (bool) $row->sees_everything)),
                 'developer' => $row !== null && $row->role === TeamRole::Developer->value,
             ];
@@ -357,7 +308,7 @@ final class TeamAccess
     }
 
     /**
-     * @return array{servers: list<string>, applications: list<string>, projects: list<string>, environments: list<string>, withheld_applications: list<string>, withheld_databases: list<string>}
+     * @return array{servers: list<string>, applications: list<string>, databases: list<string>, projects: list<string>, withheld_applications: list<string>, withheld_databases: list<string>}
      */
     private function granted(User $user, Team $team): array
     {
@@ -374,25 +325,11 @@ final class TeamAccess
         return $this->grants[$key] ??= [
             'servers' => $grants('server', 'server_id'),
             'applications' => $grants('application', 'application_id'),
+            'databases' => $grants('database', 'database_id'),
             'projects' => $grants('project', 'project_id'),
-            'environments' => $grants('environment', 'environment_id'),
             'withheld_applications' => $grants('application', 'application_id', true),
             'withheld_databases' => $grants('database', 'database_id', true),
         ];
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function environmentIds(User $user, Team $team): array
-    {
-        $key = $team->getKey() . ':' . $user->getKey();
-        $granted = $this->granted($user, $team);
-
-        return $this->environments[$key] ??= array_values(array_unique([
-            ...$granted['environments'],
-            ...Environment::query()->whereIn('project_id', [...$granted['projects'], ...$this->ownProjectIds($user, $team)])->pluck('id')->all(),
-        ]));
     }
 
     /**
@@ -406,7 +343,6 @@ final class TeamAccess
         return $this->reached[$key] ??= array_values(array_unique([
             ...$granted['projects'],
             ...$this->ownProjectIds($user, $team),
-            ...Environment::query()->whereIn('id', $granted['environments'])->pluck('project_id')->all(),
         ]));
     }
 
@@ -422,10 +358,73 @@ final class TeamAccess
         return array_values(Project::query()->where('team_id', $team->getKey())->where('created_by', $user->getKey())->pluck('id')->all());
     }
 
+    /**
+     * @param  list<string>  $granted
+     * @param  list<string>  $withheld
+     */
+    private function reach(Builder $query, User $user, Team $team, array $granted, array $withheld): void
+    {
+        $developer = $this->membership($user, $team)['developer'];
+        $everything = $this->seesEverything($user, $team);
+        $servers = $developer ? [] : $this->granted($user, $team)['servers'];
+        $projects = $this->projectIds($user, $team);
+        $others = $this->developerIds($user, $team);
+
+        $query->whereIn('id', $granted)
+            ->when($developer, fn(Builder $own) => $own->orWhere('created_by', $user->getKey()))
+            ->orWhere(fn(Builder $open) => $open
+                ->where(fn(Builder $theirs) => $theirs->whereNull('created_by')->orWhereNotIn('created_by', $others))
+                ->when(!$everything, fn(Builder $shared) => $shared
+                    ->whereNotIn('id', $withheld)
+                    ->where(fn(Builder $under) => $under->whereIn('server_id', $servers)->orWhereIn('project_id', $projects))));
+    }
+
+    /**
+     * @param  list<string>  $granted
+     * @param  list<string>  $withheld
+     */
+    private function reaches(Application|ManagedDatabase $subject, User $user, Team $team, array $granted, array $withheld): bool
+    {
+        $membership = $this->membership($user, $team);
+
+        if ($membership['owner'] || in_array($subject->getKey(), $granted, true) || ($membership['developer'] && $subject->addedBy($user))) {
+            return true;
+        }
+
+        $creator = $subject->getAttribute('created_by');
+
+        if ($creator !== null && in_array($creator, $this->developerIds($user, $team), true)) {
+            return false;
+        }
+
+        if ($membership['everything']) {
+            return true;
+        }
+
+        return !in_array($subject->getKey(), $withheld, true)
+            && ((!$membership['developer'] && in_array($subject->getAttribute('server_id'), $this->granted($user, $team)['servers'], true))
+                || in_array($subject->getAttribute('project_id'), $this->projectIds($user, $team), true));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function developerIds(User $user, Team $team): array
+    {
+        $key = $team->getKey() . ':' . $user->getKey();
+
+        return $this->developers[$key] ??= array_values(DB::table('team_user')
+            ->where('team_id', $team->getKey())
+            ->where('role', TeamRole::Developer->value)
+            ->where('user_id', '!=', $user->getKey())
+            ->pluck('user_id')
+            ->all());
+    }
+
     private function forget(User $user, Team $team): void
     {
         $key = $team->getKey() . ':' . $user->getKey();
 
-        unset($this->memberships[$key], $this->grants[$key], $this->environments[$key], $this->reached[$key]);
+        unset($this->memberships[$key], $this->grants[$key], $this->reached[$key], $this->developers[$key]);
     }
 }

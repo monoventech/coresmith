@@ -70,11 +70,12 @@ final class ReleasesController extends Controller
                 'rollback_href' => route('servers.applications.rollback', [$server, $application]),
                 'rolled_back' => $rolledBack ? Formats::release($current) : null,
             ],
-            'applications' => ($team === null ? collect() : $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->with(['server', 'environment.project'])->orderBy('name')->get())->map(fn(Application $each): array => [
+            'applications' => ($team === null ? collect() : $scope->apply(app(TeamAccess::class)->applications($request->user(), $team))->with(['server', 'project'])->orderBy('name')->get())->map(fn(Application $each): array => [
                 'id' => $each->id,
                 'name' => $each->name,
                 'server' => $each->server?->name,
-                'project' => $each->environment?->project?->name,
+                'project' => $each->project?->name,
+                'tags' => $each->tags,
                 'href' => route('servers.applications.releases.index', [$each->server_id, $each, ...$scope->query()]),
                 'current' => $each->id === $application->id,
             ])->values(),

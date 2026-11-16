@@ -17,7 +17,7 @@ use App\Exceptions\GitProviderException;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
-use App\Rules\FillableEnvironment;
+use App\Rules\FillableProject;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryRead;
 use App\Services\Detection\StackChecks;
@@ -25,6 +25,7 @@ use App\Services\Git\GitHub\GitHubApps;
 use App\Services\Git\GitHub\LinkProof;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Git\RefusalReason;
+use App\Services\Projects\AppTags;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
 use App\Services\SafeName;
@@ -33,7 +34,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-final class StoreApplicationRequest extends FormRequest
+class StoreApplicationRequest extends FormRequest
 {
     private const CONNECTION_UNAVAILABLE = "That GitHub connection isn't available. Pick another one, or connect GitHub again in Git settings.";
 
@@ -46,7 +47,7 @@ final class StoreApplicationRequest extends FormRequest
     private ?SourceProvider $connection = null;
 
     /** @var array<string, mixed>|null */
-    private ?array $repository = null;
+    protected ?array $repository = null;
 
     private ?RepositoryRead $checked = null;
 
@@ -62,6 +63,13 @@ final class StoreApplicationRequest extends FormRequest
     /**
      * @return array<string, mixed>
      */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('tags')) {
+            $this->merge(['tags' => AppTags::normalize($this->input('tags'))]);
+        }
+    }
+
     public function rules(): array
     {
         $server = $this->route('server');
@@ -83,7 +91,8 @@ final class StoreApplicationRequest extends FormRequest
             'main_package' => [Rule::excludeIf(fn(): bool => $this->input('type') !== ApplicationType::Go->value), 'required', 'string', 'max:200', 'regex:' . GoTooling::PACKAGE],
             'app_size' => ['required', Rule::in(['small', 'medium', 'large', 'custom'])],
             'run_migrations' => ['boolean'],
-            'environment_id' => ['nullable', 'string', new FillableEnvironment($server?->team, $this->user())],
+            'project_id' => ['nullable', 'string', new FillableProject($server?->team, $this->user())],
+            ...AppTags::rules(),
             'detection' => ['nullable', 'string', 'max:64'],
         ];
     }
@@ -94,6 +103,7 @@ final class StoreApplicationRequest extends FormRequest
     public function messages(): array
     {
         return [
+            ...AppTags::messages(),
             'domain.regex' => 'Enter a valid domain name, for example app.example.com.',
             'repository_branch.regex' => 'That is not a branch name Git accepts. Use something like main or release/2.0.',
             'directory.regex' => 'Use a folder inside the repository, like / or apps/web.',
@@ -250,7 +260,7 @@ final class StoreApplicationRequest extends FormRequest
         return is_string($url) && $url !== '' ? $url : null;
     }
 
-    private function resolveRepository(Validator $validator): void
+    protected function resolveRepository(Validator $validator): void
     {
         if ($validator->errors()->hasAny(['source_provider_id', 'repository_id'])) {
             return;
@@ -339,7 +349,7 @@ final class StoreApplicationRequest extends FormRequest
         return $runtime === null ? [] : array_column(app(Catalog::class)->lines($runtime), 'line');
     }
 
-    private function servesFiles(): bool
+    protected function servesFiles(): bool
     {
         $type = ApplicationType::tryFrom((string) $this->input('type'));
 
