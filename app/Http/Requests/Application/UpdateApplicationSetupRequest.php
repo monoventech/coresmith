@@ -64,7 +64,7 @@ final class UpdateApplicationSetupRequest extends StoreApplicationRequest
             return;
         }
 
-        $this->repository = ['id' => (string) $application->repository_id, 'full_name' => SetupSource::fullName((string) $application->repository_url)];
+        $this->repository = ['id' => (string) $application->repository_id, 'full_name' => (string) $application->repositoryFullName()];
     }
 
     private function application(): ?Application

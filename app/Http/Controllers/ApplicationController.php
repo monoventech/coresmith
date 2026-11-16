@@ -16,7 +16,6 @@ use App\Enums\MonitorKind;
 use App\Enums\PowerState;
 use App\Enums\ServerStatus;
 use App\Exceptions\PortExhaustedException;
-use App\Http\Requests\Application\SetupSource;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
 use App\Jobs\CheckCertificates;
@@ -260,7 +259,7 @@ final class ApplicationController extends Controller
             'setup' => [
                 'href' => $user->can('update', $application) ? route('servers.applications.setup.edit', [$server, $application]) : null,
                 'rows' => array_values(array_filter([
-                    ['label' => 'Repository', 'value' => SetupSource::display((string) $application->repository_url)],
+                    ['label' => 'Repository', 'value' => Repository::display((string) $application->repository_url)],
                     ['label' => 'Branch', 'value' => (string) $application->repository_branch],
                     ['label' => 'Folder', 'value' => $application->directory ?? '/'],
                     $application->type->language()->route($application)->servesFiles() ? ['label' => 'Web root', 'value' => $application->web_directory ?? '/'] : null,

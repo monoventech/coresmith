@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Application\SetupSource;
 use App\Http\Requests\Application\UpdateApplicationSetupRequest;
 use App\Models\Application;
 use App\Models\Server;
@@ -120,7 +119,7 @@ final class ApplicationSetupController extends Controller
 
         return [
             'kind' => 'github',
-            'full_name' => SetupSource::fullName((string) $application->repository_url),
+            'full_name' => (string) $application->repositoryFullName(),
             'account' => (string) SourceProvider::query()->whereKey($application->source_provider_id)->value('name'),
             'connection_id' => (string) $application->source_provider_id,
             'repository_id' => (string) $application->repository_id,

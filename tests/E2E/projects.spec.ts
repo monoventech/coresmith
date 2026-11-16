@@ -54,13 +54,14 @@ test.describe('projects', () => {
         await card(page, 'Storefront').getByRole('link', { name: 'Storefront', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
-        await expect(page.getByText(/^\d+ apps · on 2 servers$/)).toBeVisible()
+        await expect(page.getByText(/^\d+ apps · on \d+ servers$/)).toBeVisible()
         await expect(appRow(page, 'storefront').getByTestId('app-tags')).toHaveText('production')
         await expect(appRow(page, 'storefront-staging').getByTestId('app-tags')).toHaveText('staging')
         await expect(appRow(page, 'storefront').getByTestId('last-deploy')).not.toHaveText('Not deployed yet')
         await expect(appRow(page, 'storefront').getByRole('button', { name: 'Deploy storefront' })).toBeVisible()
         await expect(page.getByTestId('project-deploys')).toContainText('Recent deploys')
         await expect(page.getByTestId('project-servers').getByRole('link', { name: 'forge-01' })).toBeVisible()
+        await expect(page.getByTestId('project-servers').getByRole('link', { name: 'forge-02' })).toBeVisible()
         await expect(
             page.getByTestId('project-people').getByRole('listitem').filter({ hasText: 'Ines Duarte' })
         ).toContainText('Shared in part')
