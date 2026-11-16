@@ -2,7 +2,7 @@
     import AppHead from '@/components/AppHead.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
-    import Wordmark from '@/components/panel/Wordmark.svelte'
+    import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
 
     type Status = {
         stage: string | null
@@ -73,7 +73,7 @@
 
 <div class="panel grain relative flex min-h-dvh flex-col bg-background font-sans text-foreground">
     <header class="relative z-10 mx-auto flex w-full max-w-300 items-center px-10 py-5.5 max-sm:px-5">
-        <Wordmark />
+        <CoresmithLogo class="h-6.5 w-auto text-foreground" />
     </header>
 
     <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-12 pb-12 max-sm:px-5 max-sm:pt-6">
