@@ -59,6 +59,8 @@
             href: string
             releases_href: string
             deploy_href: string
+            setup_href: string | null
+            script_href: string | null
             current_release: string | null
         }
         deployment: Deployment
@@ -75,6 +77,7 @@
         storage: "Preparing the app's storage failed",
         deps: 'Installing dependencies failed',
         build: 'The build failed',
+        script: 'Your deploy script failed',
         migrate: 'The migration failed',
         health: 'The health check failed',
         swap: 'The deploy failed after the swap',
@@ -86,6 +89,7 @@
         storage: "the app's storage",
         deps: 'the dependencies',
         build: 'the build',
+        script: 'the deploy script',
         migrate: 'the migration',
         health: 'the health check'
     }
@@ -108,6 +112,13 @@
     const stopping = $derived(live.cancel_requested || cancelling)
     const liveFailure = $derived(
         live.failed_worker ? `${live.failed_worker} did not start` : live.start_failed ? FAILURES.watch : FAILURES.swap
+    )
+    const fix = $derived(
+        (live.failed_step ?? live.failed_phase) === 'script' && application.script_href
+            ? { label: 'Edit script', href: application.script_href }
+            : application.setup_href
+              ? { label: 'Edit setup', href: application.setup_href }
+              : null
     )
 
     const elapsed = $derived.by(() => {
@@ -283,6 +294,9 @@
             {#if live.reached_users}
                 <Button variant="outline" href={application.releases_href}>Roll back</Button>
             {/if}
+            {#if fix}
+                <Button variant="outline" href={fix.href}>{fix.label}</Button>
+            {/if}
             <Button disabled={retrying} onclick={retry}>Retry deploy</Button>
         </div>
     {/if}
@@ -442,6 +456,9 @@
         <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden"
             >Roll back</Button
         >
+    {/if}
+    {#if fix}
+        <Button variant="outline" size="lg" href={fix.href} class="mt-2.5 w-full sm:hidden">{fix.label}</Button>
     {/if}
     <Button size="lg" disabled={retrying} onclick={retry} class="mt-2.5 w-full sm:hidden">Retry deploy</Button>
 {:else if live.status === 'cancelled' && can.deploy}

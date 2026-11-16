@@ -6,52 +6,43 @@ use App\Enums\Ability;
 use App\Enums\TeamRole;
 use App\Models\AccessGrant;
 use App\Models\Application;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 
-test('a project keeps its environments in order', function () {
-    $project = Project::factory()->withEnvironments(['Production', 'Staging', 'Preview'])->create();
+test('a project groups the apps and databases filed in it', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $project = Project::factory()->for($team)->create();
+    $shop = Application::factory()->for($team)->for($server)->create(['project_id' => $project->id]);
+    Application::factory()->for($team)->for($server)->create();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['project_id' => $project->id]);
 
-    expect($project->environments()->pluck('name')->all())->toBe(['Production', 'Staging', 'Preview'])
+    expect($project->applications()->pluck('id')->all())->toBe([$shop->id])
+        ->and($project->databases()->pluck('id')->all())->toBe([$database->id])
+        ->and($shop->project->is($project))->toBeTrue()
         ->and($project->team->projects()->sole()->is($project))->toBeTrue();
 });
 
-test('deleting an environment leaves its apps and databases in no project', function () {
+test('deleting a project leaves what was in it in no project, removed apps included, and drops only its own grants', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create();
-    $staging = $project->environments()->where('name', 'Staging')->sole();
-    $application = Application::factory()->for($team)->for($server)->create(['environment_id' => $staging->id]);
-    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['environment_id' => $staging->id]);
-    AccessGrant::query()->create(['team_id' => $team->id, 'user_id' => User::factory()->create()->id, 'environment_id' => $staging->id]);
-
-    $staging->delete();
-
-    expect($application->fresh()->environment_id)->toBeNull()
-        ->and($database->fresh()->environment_id)->toBeNull()
-        ->and(AccessGrant::query()->count())->toBe(0)
-        ->and($project->environments()->pluck('name')->all())->toBe(['Production']);
-});
-
-test('deleting a project removes its environments and the grants on them', function () {
-    $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create();
-    [$production, $staging] = $project->environments()->get()->all();
-    $application = Application::factory()->for($team)->for($server)->create(['environment_id' => $production->id]);
+    $project = Project::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['project_id' => $project->id]);
+    $removed = Application::factory()->for($team)->for($server)->create(['project_id' => $project->id]);
+    $removed->delete();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['project_id' => $project->id]);
     $user = User::factory()->create();
     AccessGrant::query()->create(['team_id' => $team->id, 'user_id' => $user->id, 'project_id' => $project->id]);
-    AccessGrant::query()->create(['team_id' => $team->id, 'user_id' => $user->id, 'environment_id' => $staging->id]);
     AccessGrant::query()->create(['team_id' => $team->id, 'user_id' => $user->id, 'server_id' => $server->id]);
 
     $project->delete();
 
-    expect(Environment::query()->count())->toBe(0)
-        ->and($application->fresh()->environment_id)->toBeNull()
+    expect($application->fresh()->project_id)->toBeNull()
+        ->and(Application::withTrashed()->find($removed->id)->project_id)->toBeNull()
+        ->and($database->fresh()->project_id)->toBeNull()
         ->and(AccessGrant::query()->pluck('server_id')->all())->toBe([$server->id]);
 });
 

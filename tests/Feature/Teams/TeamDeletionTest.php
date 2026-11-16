@@ -262,7 +262,7 @@ test('deleting a team leaves its id in no table but the trial history', function
 
     teamDeletionAsk($owner)->assertRedirect('/start');
 
-    $tables = collect(Schema::getTables())->pluck('name')->filter(fn(string $table): bool => Schema::hasColumn($table, 'team_id'))->values();
+    $tables = collect(Schema::getTables(Schema::getCurrentSchemaListing()))->pluck('name')->filter(fn(string $table): bool => Schema::hasColumn($table, 'team_id'))->values();
     $holding = $tables->reject(fn(string $table): bool => $table === 'trial_history')
         ->filter(fn(string $table): bool => DB::table($table)->where('team_id', $team->id)->exists())
         ->values()

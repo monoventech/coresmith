@@ -14,7 +14,9 @@ use App\Jobs\DeployApplication;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Project;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeployGuard;
 use App\Services\Deployment\DeploymentCancellation;
@@ -31,7 +33,7 @@ use Inertia\Response;
 
 final class DeploymentController extends Controller
 {
-    public const ORIGINS = ['fleet', 'deployments', 'app', 'releases', 'setup'];
+    public const ORIGINS = ['fleet', 'deployments', 'app', 'releases', 'setup', 'project'];
 
     public function deploy(Request $request, Server $server, Application $application, DeployGuard $guard): RedirectResponse
     {
@@ -75,13 +77,15 @@ final class DeploymentController extends Controller
                 'href' => route('servers.applications.show', [$server, $application]),
                 'releases_href' => route('servers.applications.releases.index', [$server, $application]),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
+                'setup_href' => $request->user()->can('update', $application) ? route('servers.applications.setup.edit', [$server, $application]) : null,
+                'script_href' => $request->user()->can('update', $application) ? route('servers.applications.show', [$server, $application, 'script' => 'edit']) : null,
                 'current_release' => Formats::release($application->current_release),
             ],
             'deployment_links' => [
                 'cancel' => route('servers.applications.deployments.cancel', [$server, $application, $deployment]),
             ],
             'deployment' => self::present($deployment, $phases),
-            'back' => $this->back((string) $request->query('from'), $server, $application),
+            'back' => $this->back((string) $request->query('from'), $server, $application, $request->user()),
             'streaming' => Realtime::available(),
             'can' => ['deploy' => $request->user()->can('deploy', $application)],
         ]);
@@ -125,7 +129,7 @@ final class DeploymentController extends Controller
             CancelOutcome::Cancelled => back()->with('success', 'Cancelled before it started. Nothing changed.'),
             CancelOutcome::Requested, CancelOutcome::AlreadyRequested => back()->with('success', 'Cancelling. The current release keeps serving.'),
             CancelOutcome::TooLate => back()->with('error', 'Migrations have started, so this deploy finishes on its own. Roll back afterwards if you need to.'),
-            CancelOutcome::Blueprint => back()->with('error', "This app deploys with a custom blueprint, which can run migrations, so it can't be stopped partway."),
+            CancelOutcome::Blueprint => back()->with('error', "This app deploys with its own deploy script, which can run migrations, so it can't be stopped partway."),
             CancelOutcome::Finished => back()->with('error', 'This deploy has already finished.'),
         };
     }
@@ -168,10 +172,14 @@ final class DeploymentController extends Controller
     /**
      * @return array{label: string, href: string}
      */
-    private function back(string $from, Server $server, Application $application): array
+    private function back(string $from, Server $server, Application $application, User $viewer): array
     {
+        $project = $application->project;
+        $app = ['label' => $application->name, 'href' => route('servers.applications.show', [$server, $application])];
+
         return match ($from) {
-            'app' => ['label' => $application->name, 'href' => route('servers.applications.show', [$server, $application])],
+            'app' => $app,
+            'project' => $project instanceof Project && app(TeamAccess::class)->canSeeProject($viewer, $project) ? ['label' => $project->name, 'href' => route('projects.show', $project)] : $app,
             'deployments' => ['label' => 'Deployments', 'href' => route('deployments.index')],
             'releases' => ['label' => 'Releases', 'href' => route('servers.applications.releases.index', [$server, $application])],
             default => ['label' => 'Fleet', 'href' => route('dashboard')],

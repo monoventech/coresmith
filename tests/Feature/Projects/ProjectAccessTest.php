@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Enums\TeamRole;
 use App\Models\Application;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Models\Server;
@@ -23,26 +22,23 @@ function projectAccessMember(Team $team): User
 }
 
 /**
- * @return array{web: Server, db: Server, storefront: Project, production: Environment, staging: Environment, shop: Application, shopStaging: Application, blog: Application, shopDb: ManagedDatabase, stagingDb: ManagedDatabase, blogDb: ManagedDatabase}
+ * @return array{web: Server, db: Server, storefront: Project, shop: Application, shopStaging: Application, blog: Application, shopDb: ManagedDatabase, stagingDb: ManagedDatabase, blogDb: ManagedDatabase}
  */
 function projectAccessFleet(Team $team): array
 {
     $web = Server::factory()->for($team)->create(['name' => 'web']);
     $db = Server::factory()->for($team)->create(['name' => 'db']);
-    $storefront = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    [$production, $staging] = $storefront->environments()->get()->all();
+    $storefront = Project::factory()->for($team)->create(['name' => 'Storefront']);
 
     return [
         'web' => $web,
         'db' => $db,
         'storefront' => $storefront,
-        'production' => $production,
-        'staging' => $staging,
-        'shop' => Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'environment_id' => $production->id]),
-        'shopStaging' => Application::factory()->for($team)->for($db)->create(['name' => 'shop-staging', 'environment_id' => $staging->id]),
+        'shop' => Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'project_id' => $storefront->id, 'tags' => ['production']]),
+        'shopStaging' => Application::factory()->for($team)->for($db)->create(['name' => 'shop-staging', 'project_id' => $storefront->id, 'tags' => ['staging']]),
         'blog' => Application::factory()->for($team)->for($web)->create(['name' => 'blog']),
-        'shopDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'environment_id' => $production->id]),
-        'stagingDb' => ManagedDatabase::factory()->for($team)->for($db)->create(['name' => 'staging_db', 'environment_id' => $staging->id]),
+        'shopDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'project_id' => $storefront->id]),
+        'stagingDb' => ManagedDatabase::factory()->for($team)->for($db)->create(['name' => 'staging_db', 'project_id' => $storefront->id]),
         'blogDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'blog_db']),
     ];
 }
@@ -55,7 +51,7 @@ function projectAccessNames(HasMany $relation): array
     return $relation->orderBy('name')->pluck('name')->all();
 }
 
-test("a whole project shows every environment's apps, including ones filed later", function () {
+test('a project share shows every app and database in it, including ones added later', function () {
     $team = Team::factory()->create();
     $fleet = projectAccessFleet($team);
     $member = projectAccessMember($team);
@@ -66,37 +62,31 @@ test("a whole project shows every environment's apps, including ones filed later
     expect(projectAccessNames($access->applications($member, $team)))->toBe(['shop', 'shop-staging'])
         ->and(projectAccessNames($access->databases($member, $team)))->toBe(['shop_db', 'staging_db'])
         ->and($access->canSeeProject($member, $fleet['storefront']))->toBeTrue()
-        ->and($access->seesWholeProject($member, $fleet['storefront']))->toBeTrue()
-        ->and($access->environmentsOf($member, $fleet['storefront'])->pluck('name')->all())->toBe(['Production', 'Staging']);
+        ->and($access->seesWholeProject($member, $fleet['storefront']))->toBeTrue();
 
-    $preview = $fleet['storefront']->environments()->create(['name' => 'Preview', 'position' => 2]);
-    $fleet['blog']->update(['environment_id' => $preview->id]);
+    $fleet['blog']->update(['project_id' => $fleet['storefront']->id]);
     app()->forgetScopedInstances();
 
     $later = app(TeamAccess::class);
 
     expect(projectAccessNames($later->applications($member, $team)))->toBe(['blog', 'shop', 'shop-staging'])
-        ->and($later->canSeeApplication($member, $fleet['blog']->fresh()))->toBeTrue()
-        ->and($later->canSeeEnvironment($member, $preview))->toBeTrue();
+        ->and($later->canSeeApplication($member, $fleet['blog']->fresh()))->toBeTrue();
 });
 
-test('one environment shows its apps and databases and nothing from the others', function () {
+test('a project share holds back the apps and databases left unticked', function () {
     $team = Team::factory()->create();
     $fleet = projectAccessFleet($team);
     $member = projectAccessMember($team);
     $access = app(TeamAccess::class);
 
-    $access->grant($team, $member, $fleet['staging']);
+    $access->sync($team, $member, false, [], [], [$fleet['storefront']->id], [], [$fleet['shop']->id], [$fleet['shopDb']->id]);
 
     expect(projectAccessNames($access->applications($member, $team)))->toBe(['shop-staging'])
         ->and(projectAccessNames($access->databases($member, $team)))->toBe(['staging_db'])
         ->and($access->canSeeApplication($member, $fleet['shop']))->toBeFalse()
-        ->and($access->canSeeDatabase($member, $fleet['stagingDb']))->toBeTrue()
         ->and($access->hidesDatabase($member, $fleet['shopDb']))->toBeTrue()
         ->and($access->canSeeProject($member, $fleet['storefront']))->toBeTrue()
         ->and($access->seesWholeProject($member, $fleet['storefront']))->toBeFalse()
-        ->and($access->canSeeEnvironment($member, $fleet['production']))->toBeFalse()
-        ->and($access->environmentsOf($member, $fleet['storefront'])->pluck('name')->all())->toBe(['Staging'])
         ->and(projectAccessNames($access->projects($member, $team)))->toBe(['Storefront']);
 });
 
@@ -127,24 +117,25 @@ test('members who see nothing of a project are kept out of it', function () {
         ->and($access->hidesProject(User::factory()->create(), $fleet['storefront']))->toBeFalse();
 });
 
-test('sync keeps project and environment grants and drops ones from another team', function () {
+test('sync keeps project and database grants and drops ones from another team', function () {
     $team = Team::factory()->create();
     $fleet = projectAccessFleet($team);
     $member = projectAccessMember($team);
-    $elsewhere = Project::factory()->withEnvironments(['Production'])->create();
+    $elsewhere = Project::factory()->create();
+    $theirs = ManagedDatabase::factory()->create();
     $access = app(TeamAccess::class);
 
-    $access->sync($team, $member, false, [], [], [$fleet['storefront']->id, $elsewhere->id], [$fleet['staging']->id, $elsewhere->environments()->sole()->id]);
+    $access->sync($team, $member, false, [], [], [$fleet['storefront']->id, $elsewhere->id], [$fleet['blogDb']->id, $theirs->id]);
 
     expect($access->summary($team, $member))->toBe([
         'everything' => false,
         'servers' => [],
         'applications' => [],
+        'databases' => [$fleet['blogDb']->id],
         'projects' => [$fleet['storefront']->id],
-        'environments' => [$fleet['staging']->id],
         'withheld_applications' => [],
         'withheld_databases' => [],
-    ]);
+    ])->and(projectAccessNames($access->databases($member, $team)))->toBe(['blog_db', 'shop_db', 'staging_db']);
 });
 
 test('an owner sees every project in full', function () {
@@ -159,11 +150,11 @@ test('an owner sees every project in full', function () {
         ->and(projectAccessNames($access->databases($owner, $team)))->toBe(['blog_db', 'shop_db', 'staging_db']);
 });
 
-test('checking many projects reached through environments looks the projects up once', function () {
+test('checking many shared projects asks the database once', function () {
     $team = Team::factory()->create();
     $member = projectAccessMember($team);
-    $projects = collect(['One', 'Two', 'Three'])->map(fn(string $name): Project => Project::factory()->for($team)->withEnvironments(['Staging'])->create(['name' => $name]));
-    $projects->each(fn(Project $project) => app(TeamAccess::class)->grant($team, $member, $project->environments()->sole()));
+    $projects = collect(['One', 'Two', 'Three'])->map(fn(string $name): Project => Project::factory()->for($team)->create(['name' => $name]));
+    $projects->each(fn(Project $project) => app(TeamAccess::class)->grant($team, $member, $project));
     app()->forgetScopedInstances();
     $access = app(TeamAccess::class);
     $access->canSeeProject($member, $projects->first());
@@ -171,7 +162,6 @@ test('checking many projects reached through environments looks the projects up 
 
     DB::enableQueryLog();
     $seen = $projects->every(fn(Project $project): bool => $access->canSeeProject($member, $project));
-    $lookups = collect(DB::getQueryLog())->filter(fn(array $query): bool => str_contains($query['query'], 'environments'))->count();
 
-    expect($seen)->toBeTrue()->and($lookups)->toBe(0);
+    expect($seen)->toBeTrue()->and(DB::getQueryLog())->toBe([]);
 });

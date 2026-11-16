@@ -26,6 +26,14 @@ final readonly class Repository
         return preg_replace('/\.git$/', '', $matches[1]);
     }
 
+    public static function display(string $url): string
+    {
+        $address = (string) preg_replace('#^[a-z+]+://#i', '', trim($url));
+        $address = (string) preg_replace('/^[^@\/]+@([^:]+):/', '$1/', $address);
+
+        return (string) preg_replace('/\.git$/', '', rtrim($address, '/'));
+    }
+
     /**
      * @return array{full_name: string, ssh_url: string, default_branch: string, private: bool}
      */

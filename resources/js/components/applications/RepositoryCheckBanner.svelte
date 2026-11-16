@@ -17,7 +17,9 @@
               ? "This repository can't deploy as is."
               : outcome === 'proposal'
                 ? "This app's stack can't run this repository."
-                : "Coresmith hasn't read this repository yet, so the first deploy waits for a check."
+                : outcome === 'changed'
+                  ? 'The setup changed since Coresmith last read this repository, so the next deploy waits for a check.'
+                  : "Coresmith hasn't read this repository yet, so the first deploy waits for a check."
     )
 
     function run() {
@@ -70,7 +72,7 @@
                 disabled={checking}
                 onclick={run}
                 class="max-sm:min-h-11 max-sm:flex-1"
-                >{outcome === null ? 'Check the repository' : 'Check again'}</Button
+                >{outcome === null || outcome === 'changed' ? 'Check the repository' : 'Check again'}</Button
             >
         </div>
     {/if}

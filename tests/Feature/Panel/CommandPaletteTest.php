@@ -75,24 +75,26 @@ test('billing on cloud shows what the team pays when stripe has said', function 
     expect(collect(paletteCommands(User::query()->findOrFail($team->owner_id), $team->fresh()))->firstWhere('label', 'Billing')['hint'])->toBe('Pro · $15 / month');
 });
 
-test('a healthy server is opened with its environment and app count', function () {
+test('a healthy server is opened with its app count', function () {
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => ServerStatus::Active, 'environment' => 'Production']);
+    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => ServerStatus::Active]);
     Application::factory()->for($team)->for($server)->count(2)->create();
 
     $open = collect(paletteCommands(paletteMember($team, TeamRole::Member), $team))->firstWhere('label', 'Open web-1');
 
-    expect($open)->toBe(['label' => 'Open web-1', 'icon' => 'server', 'hint' => 'production · 2 apps', 'href' => route('servers.show', $server)]);
+    expect($open)->toBe(['label' => 'Open web-1', 'icon' => 'server', 'hint' => '2 apps', 'href' => route('servers.show', $server)]);
 });
 
-test('a healthy server without an environment just counts its apps', function () {
+test('an app is opened with its tags and server, so two apps of one name can be told apart', function () {
     $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => ServerStatus::Active, 'environment' => null]);
-    Application::factory()->for($team)->for($server)->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => ServerStatus::Active]);
+    $live = Application::factory()->for($team)->for($server)->create(['name' => 'shop', 'tags' => ['production', 'eu']]);
+    $trial = Application::factory()->for($team)->for($server)->create(['name' => 'shop', 'tags' => ['staging']]);
 
-    $open = collect(paletteCommands(paletteMember($team, TeamRole::Member), $team))->firstWhere('label', 'Open web-1');
+    $opens = collect(paletteCommands(paletteMember($team, TeamRole::Member), $team))->where('label', 'Open shop')->values();
 
-    expect($open['hint'])->toBe('1 app');
+    expect($opens->pluck('hint')->sort()->values()->all())->toBe(['production · eu · on web-1', 'staging · on web-1'])
+        ->and($opens->pluck('href')->sort()->values()->all())->toBe(collect([route('servers.applications.show', [$server, $live]), route('servers.applications.show', [$server, $trial])])->sort()->values()->all());
 });
 
 test('a server with a problem is opened with a warning and the problem as its hint', function (array $attributes, string $icon, string $hint) {

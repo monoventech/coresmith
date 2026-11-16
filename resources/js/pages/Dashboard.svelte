@@ -50,7 +50,7 @@
         shared: { id: string; name: string; server: string | null; href: string }[]
         narrowed: boolean
         activity: ActivityItem[]
-        can: { createServer: boolean }
+        can: { createServer: boolean; createApplication: boolean }
     } = $props()
 
     const explorer = $derived(page.props.explorer as ExplorerProps | null)
@@ -89,8 +89,19 @@
 <div data-screen="fleet">
     <FleetHeader {counts}>
         {#snippet action()}
-            {#if can.createServer && servers.length > 0}
-                <Button href={route('servers.create')} class="max-sm:hidden">Provision a server</Button>
+            {#if servers.length > 0 && (can.createApplication || can.createServer)}
+                <div class="flex flex-wrap gap-2 max-sm:w-full" data-testid="fleet-actions">
+                    {#if can.createApplication}
+                        <Button href={route('applications.new')} class="max-sm:w-full">Add an app</Button>
+                    {/if}
+                    {#if can.createServer}
+                        <Button
+                            href={route('servers.create')}
+                            variant={can.createApplication ? 'outline' : 'default'}
+                            class="max-sm:hidden">Provision a server</Button
+                        >
+                    {/if}
+                </div>
             {/if}
         {/snippet}
     </FleetHeader>

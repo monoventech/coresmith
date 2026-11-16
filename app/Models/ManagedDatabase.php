@@ -46,9 +46,9 @@ class ManagedDatabase extends Model
         return $this->belongsTo(Team::class);
     }
 
-    public function environment(): BelongsTo
+    public function project(): BelongsTo
     {
-        return $this->belongsTo(Environment::class);
+        return $this->belongsTo(Project::class);
     }
 
     public function onSharedRedis(): bool

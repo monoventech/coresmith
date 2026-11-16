@@ -6,7 +6,6 @@ use App\Enums\DeploymentStatus;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
-use App\Models\Environment;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
@@ -16,23 +15,22 @@ use App\Services\Teams\TeamAccess;
 use Inertia\Testing\AssertableInertia;
 
 /**
- * @return array{team: Team, owner: User, web: Server, project: Project, production: Environment, staging: Environment, shop: Application, shopStaging: Application, blog: Application}
+ * @return array{team: Team, owner: User, web: Server, project: Project, shop: Application, shopStaging: Application, blog: Application}
  */
 function projectFiltersFleet(): array
 {
     $team = Team::factory()->owned()->create();
     $web = Server::factory()->for($team)->create(['name' => 'web']);
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    [$production, $staging] = $project->environments()->get()->all();
-    $shop = Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'environment_id' => $production->id]);
-    $shopStaging = Application::factory()->for($team)->for($web)->create(['name' => 'shop-staging', 'environment_id' => $staging->id]);
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $shop = Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'project_id' => $project->id, 'tags' => ['production']]);
+    $shopStaging = Application::factory()->for($team)->for($web)->create(['name' => 'shop-staging', 'project_id' => $project->id, 'tags' => ['staging']]);
     $blog = Application::factory()->for($team)->for($web)->create(['name' => 'blog']);
 
     foreach ([$shop, $shopStaging, $blog] as $index => $application) {
         Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => '2026111110000' . $index, 'created_at' => now()->subMinutes(10 - $index), 'finished_at' => now()->subMinutes(9 - $index)]);
     }
 
-    return ['team' => $team, 'owner' => $team->owner->fresh(), 'web' => $web, 'project' => $project, 'production' => $production, 'staging' => $staging, 'shop' => $shop, 'shopStaging' => $shopStaging, 'blog' => $blog];
+    return ['team' => $team, 'owner' => $team->owner->fresh(), 'web' => $web, 'project' => $project, 'shop' => $shop, 'shopStaging' => $shopStaging, 'blog' => $blog];
 }
 
 /**
@@ -43,7 +41,7 @@ function projectFiltersNames(mixed $rows, string $key): array
     return collect($rows)->pluck($key)->sort()->values()->all();
 }
 
-test('deploys filter by project and environment, and the status chips keep the filter', function () {
+test('deploys filter by project, and the status chips keep the filter', function () {
     $fleet = projectFiltersFleet();
     $id = $fleet['project']->id;
 
@@ -55,10 +53,10 @@ test('deploys filter by project and environment, and the status chips keep the f
             ->where('filters.2.href', route('deployments.index', ['status' => 'deployed', 'project' => $id]))
             ->where('filters.0.count', 2));
 
-    $this->actingAs($fleet['owner'])->get(route('deployments.index', ['project' => $id, 'environment' => $fleet['staging']->id]))
+    $this->actingAs($fleet['owner'])->get(route('deployments.index', ['project' => $id, 'environment' => 'anything']))
         ->assertInertia(fn(AssertableInertia $page) => $page
-            ->where('deployments', fn($rows): bool => projectFiltersNames($rows, 'application') === ['shop-staging'])
-            ->where('scope', $id . ':' . $fleet['staging']->id));
+            ->where('deployments', fn($rows): bool => projectFiltersNames($rows, 'application') === ['shop', 'shop-staging'])
+            ->where('scope', $id));
 
     $this->actingAs($fleet['owner'])->get(route('deployments.index', ['project' => 'none']))
         ->assertInertia(fn(AssertableInertia $page) => $page
@@ -73,8 +71,6 @@ test('deploys filter by project and environment, and the status chips keep the f
                 ['value' => '', 'label' => 'All projects'],
                 ['value' => 'none', 'label' => 'No project'],
                 ['value' => $id, 'label' => 'Storefront'],
-                ['value' => $id . ':' . $fleet['production']->id, 'label' => 'Storefront › Production'],
-                ['value' => $id . ':' . $fleet['staging']->id, 'label' => 'Storefront › Staging'],
             ]));
 });
 
@@ -112,7 +108,7 @@ test('search finds the projects a member can see', function () {
     expect(collect((new CommandPalette($fleet['owner'], $fleet['team']))->commands())->firstWhere('label', 'Open Storefront'))->toBe([
         'label' => 'Open Storefront',
         'icon' => 'folder',
-        'hint' => '2 environments · 2 apps',
+        'hint' => '2 apps',
         'href' => route('projects.show', $fleet['project']),
     ])->and(collect((new CommandPalette($member, $fleet['team']))->commands())->firstWhere('label', 'Open Storefront'))->toBeNull();
 });

@@ -1,14 +1,18 @@
 <?php
 
+use App\Http\Controllers\AddApplicationController;
 use App\Http\Controllers\ApplicationAddressController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
+use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
 use App\Http\Controllers\ApplicationPhpLimitsController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationRuntimeController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
+use App\Http\Controllers\ApplicationSetupController;
+use App\Http\Controllers\ApplicationTagsController;
 use App\Http\Controllers\ApplicationToggleController;
 use App\Http\Controllers\CloudServerController;
 use App\Http\Controllers\CurrentTeamController;
@@ -19,13 +23,12 @@ use App\Http\Controllers\DatabaseRestoreController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentsController;
 use App\Http\Controllers\EnvController;
-use App\Http\Controllers\EnvironmentContentsController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallationController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\NoTeamController;
+use App\Http\Controllers\ProjectContentsController;
 use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\ProjectEnvironmentController;
 use App\Http\Controllers\ReleasesController;
 use App\Http\Controllers\RepositoryCheckController;
 use App\Http\Controllers\ServerController;
@@ -54,18 +57,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'overview'])->name('releases.index');
 
+    Route::get('applications/new', AddApplicationController::class)->name('applications.new');
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
     Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
     Route::put('projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
     Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
+    Route::post('projects/{project}/contents', [ProjectContentsController::class, 'store'])->name('projects.contents.store');
     Route::scopeBindings()->group(function () {
-        Route::post('projects/{project}/environments', [ProjectEnvironmentController::class, 'store'])->name('projects.environments.store');
-        Route::put('projects/{project}/environments/{environment}', [ProjectEnvironmentController::class, 'update'])->name('projects.environments.update');
-        Route::delete('projects/{project}/environments/{environment}', [ProjectEnvironmentController::class, 'destroy'])->name('projects.environments.destroy');
-        Route::post('projects/{project}/environments/{environment}/contents', [EnvironmentContentsController::class, 'store'])->name('projects.environments.contents.store');
-        Route::delete('projects/{project}/environments/{environment}/applications/{application}', [EnvironmentContentsController::class, 'destroyApplication'])->name('projects.environments.applications.destroy');
-        Route::delete('projects/{project}/environments/{environment}/databases/{database}', [EnvironmentContentsController::class, 'destroyDatabase'])->name('projects.environments.databases.destroy');
+        Route::delete('projects/{project}/applications/{application}', [ProjectContentsController::class, 'destroyApplication'])->name('projects.applications.destroy');
+        Route::delete('projects/{project}/databases/{database}', [ProjectContentsController::class, 'destroyDatabase'])->name('projects.databases.destroy');
     });
     Route::get('setup', [SetupController::class, 'show'])->name('setup.show');
     Route::get('start', [NoTeamController::class, 'show'])->middleware('cloud')->name('start.show');
@@ -181,6 +182,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.addresses.update');
     Route::put('servers/{server}/applications/{application}/php-limits', [ApplicationPhpLimitsController::class, 'update'])
         ->name('servers.applications.php-limits.update');
+    Route::put('servers/{server}/applications/{application}/tags', [ApplicationTagsController::class, 'update'])
+        ->name('servers.applications.tags.update');
+    Route::get('servers/{server}/applications/{application}/setup', [ApplicationSetupController::class, 'edit'])
+        ->name('servers.applications.setup.edit');
+    Route::put('servers/{server}/applications/{application}/setup', [ApplicationSetupController::class, 'update'])
+        ->name('servers.applications.setup.update');
+    Route::put('servers/{server}/applications/{application}/deploy-script', [ApplicationDeployScriptController::class, 'update'])
+        ->name('servers.applications.deploy-script.update');
+    Route::delete('servers/{server}/applications/{application}/deploy-script', [ApplicationDeployScriptController::class, 'destroy'])
+        ->name('servers.applications.deploy-script.destroy');
     Route::put('servers/{server}/applications/{application}/toggles/{toggle}', [ApplicationToggleController::class, 'update'])
         ->where('toggle', '[a-z_]+')
         ->name('servers.applications.toggles.update');

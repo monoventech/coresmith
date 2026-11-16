@@ -45,13 +45,12 @@ final class CloudServerController extends Controller
         $label = $account->type->label();
         $price = $size->priceIn($region);
 
-        $server = $plans->creatingServer($team, $request->user(), function () use ($team, $name, $request, $region, $account, $size, $image, $price, $keys): Server {
+        $server = $plans->creatingServer($team, $request->user(), function () use ($team, $name, $region, $account, $size, $image, $price, $keys): Server {
             $pair = $keys->generate('coresmith@' . $name);
 
             return Server::query()->create([
                 'team_id' => $team->getKey(),
                 'name' => $name,
-                'environment' => $request->validated('environment'),
                 'region' => $region,
                 'ip_address' => null,
                 'ssh_port' => 22,

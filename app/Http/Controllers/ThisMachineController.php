@@ -44,7 +44,6 @@ final class ThisMachineController extends Controller
                 return Server::create([
                     'team_id' => $team->getKey(),
                     'name' => $request->validated('name'),
-                    'environment' => $request->validated('environment'),
                     'ip_address' => '127.0.0.1',
                     'ssh_port' => 22,
                     'ssh_user' => 'root',

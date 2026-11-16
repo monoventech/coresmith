@@ -1,5 +1,15 @@
 import type { Locator, Page } from '@playwright/test'
-import { asEnvironmentOnly, asNarrowed, expect, gotoServer, nav, streamFleet, test } from './support/fixtures'
+import {
+    asNarrowed,
+    asPartlyShared,
+    blockingViolations,
+    expect,
+    gotoServer,
+    nav,
+    streamFleet,
+    test,
+    useTheme
+} from './support/fixtures'
 
 function explorer(page: Page): Locator {
     return page.getByRole('complementary', { name: 'Explorer' })
@@ -56,17 +66,18 @@ test.describe('the explorer', () => {
         'The rail and explorer start at 640px; phones use the bottom tabs and the fleet lists'
     )
 
-    test('it lists projects with their environments, the other apps and the servers', async ({ page }) => {
+    test('it lists projects with their apps and tags, the other apps and the servers', async ({ page }) => {
         await page.goto('/dashboard')
 
         const atlas = explorer(page).getByTestId('explorer-project').filter({ hasText: 'Atlas' })
 
         await expect(atlas.getByRole('link', { name: 'Atlas', exact: true })).toBeVisible()
-        await expect(atlas.getByText('Production', { exact: true })).toBeVisible()
-        await expect(atlas.getByText('Staging', { exact: true })).toBeVisible()
-        await expect(atlas.getByRole('link', { name: /^atlas,/ })).toBeVisible()
+        await expect(atlas.getByRole('link', { name: /^atlas, production,/ })).toBeVisible()
+        await expect(atlas.getByRole('link', { name: /^atlas-staging, staging,/ })).toBeVisible()
         await expect(atlas.getByRole('link', { name: /^atlas_production,/ })).toBeVisible()
-        await expect(atlas.getByRole('link', { name: /^atlas-staging,/ })).toBeVisible()
+        await expect(atlas.getByRole('link', { name: /^atlas, production,/ }).getByTestId('app-tags')).toHaveText(
+            'production'
+        )
 
         const others = explorer(page).getByTestId('explorer-apps')
 
@@ -96,7 +107,7 @@ test.describe('the explorer', () => {
     test('folding a project is remembered across a reload', async ({ page }) => {
         await page.goto('/dashboard')
 
-        const fold = explorer(page).getByRole('button', { name: 'Atlas environments' })
+        const fold = explorer(page).getByRole('button', { name: "What's in Atlas" })
 
         await expect(fold).toHaveAttribute('aria-expanded', 'true')
         await fold.click()
@@ -104,7 +115,7 @@ test.describe('the explorer', () => {
         await expect(explorer(page).getByRole('link', { name: /^atlas,/ })).toBeHidden()
 
         await page.reload()
-        await expect(explorer(page).getByRole('button', { name: 'Atlas environments' })).toHaveAttribute(
+        await expect(explorer(page).getByRole('button', { name: "What's in Atlas" })).toHaveAttribute(
             'aria-expanded',
             'false'
         )
@@ -218,13 +229,58 @@ test.describe('the breadcrumb trail', () => {
             .click()
         await page.waitForURL(/\/applications\/[^/]+$/)
 
-        await expect(trail(page).getByRole('listitem')).toHaveText(['Monoven Ltd', 'Atlas', 'Production', 'atlas'])
+        await expect(trail(page).getByRole('listitem')).toHaveText(['Monoven Ltd', 'Atlas', 'atlas'])
         await expect(trail(page).getByText('atlas', { exact: true })).toHaveAttribute('aria-current', 'page')
 
         await trail(page).getByRole('link', { name: 'Atlas', exact: true }).click()
         await page.waitForURL(/\/projects\/[^/]+$/)
         await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible()
     })
+
+    test('the arrows beside a crumb switch to another app, then another server', async ({ page }) => {
+        await page.goto('/dashboard')
+        await explorer(page)
+            .getByRole('link', { name: /^atlas,/ })
+            .click()
+        await page.waitForURL(/\/applications\/[^/]+$/)
+
+        await trail(page).getByRole('button', { name: 'Switch to another app' }).click()
+
+        const panel = page.getByTestId('crumb-switcher-panel')
+
+        await expect(panel.getByRole('option', { name: /^atlas\s*production/ })).toHaveAttribute('data-checked', 'true')
+        await page.keyboard.type('ledger')
+        await page.keyboard.press('Enter')
+        await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
+        await expect(trail(page).getByRole('listitem')).toHaveText(['Monoven Ltd', 'Fleet', 'forge-01', 'ledger'])
+
+        await trail(page).getByRole('button', { name: 'Switch to another server' }).click()
+        await page.keyboard.type('forge-02')
+        await page.keyboard.press('Enter')
+        await expect(page.getByRole('heading', { level: 1, name: 'forge-02' })).toBeVisible()
+    })
+
+    test('the arrows beside a project crumb switch projects', async ({ page }) => {
+        await page.goto('/projects')
+        await page.getByTestId('project-card').getByRole('link', { name: 'Atlas', exact: true }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible()
+
+        await trail(page).getByRole('button', { name: 'Switch to another project' }).click()
+        await page.keyboard.type('Storefront')
+        await page.keyboard.press('Enter')
+        await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
+    })
+
+    for (const theme of ['light', 'dark'] as const) {
+        test(`an open crumb switcher is accessible in ${theme}`, async ({ page }) => {
+            await useTheme(page, theme)
+            await gotoServer(page, 'forge-01')
+            await trail(page).getByRole('button', { name: 'Switch to another server' }).click()
+            await expect(page.getByTestId('crumb-switcher-panel')).toBeVisible()
+
+            expect(await blockingViolations(page)).toEqual([])
+        })
+    }
 
     test('a rename made elsewhere reaches it on the next live refresh', async ({ page }) => {
         let renamed = false
@@ -299,18 +355,18 @@ asNarrowed.describe('the explorer of a narrowed member', () => {
     })
 })
 
-asEnvironmentOnly.describe('the explorer of an environment-only member', () => {
-    asEnvironmentOnly.skip(({ isMobile }) => isMobile, 'The explorer starts at 640px')
+asPartlyShared.describe('the explorer of a member a project is shared with in part', () => {
+    asPartlyShared.skip(({ isMobile }) => isMobile, 'The explorer starts at 640px')
 
-    asEnvironmentOnly('it shows that environment alone', async ({ page }) => {
+    asPartlyShared('it shows the project with only the app shared from it', async ({ page }) => {
         await page.goto('/dashboard')
 
         const project = explorer(page).getByTestId('explorer-project')
 
         await expect(project).toHaveCount(1)
         await expect(project.getByRole('link', { name: 'Storefront', exact: true })).toBeVisible()
-        await expect(project.getByText('Staging', { exact: true })).toBeVisible()
-        await expect(project.getByText('Production', { exact: true })).toHaveCount(0)
+        await expect(project.getByRole('link', { name: /^storefront-staging, staging,/ })).toBeVisible()
+        await expect(project.getByRole('link', { name: /^storefront, production,/ })).toHaveCount(0)
         await expect(explorer(page).getByTestId('explorer-servers')).toHaveCount(0)
     })
 })

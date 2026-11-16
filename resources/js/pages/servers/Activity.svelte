@@ -25,7 +25,12 @@
 
 <AppHead title="{server.name} activity" />
 
-<ServerHeaderView {server} />
+<ServerHeaderView
+    {server}
+    primary={server.active && server.can.createApplication
+        ? { label: 'Add an app', href: route('servers.applications.create', server.id) }
+        : null}
+/>
 
 <nav class="mb-4 flex flex-wrap gap-2" aria-label="Show">
     {#each filters as chip (chip.key)}

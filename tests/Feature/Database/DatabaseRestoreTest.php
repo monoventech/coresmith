@@ -247,9 +247,9 @@ test('a restore that finished today is shown, and an old one is not', function (
 test("a narrowed member can't stop an app they can't see while restoring", function () {
     Queue::fake();
     $database = databaseRestoreFixture();
-    $staging = Project::factory()->for($database->team)->withEnvironments(['Staging'])->create()->environments()->sole();
-    $database->update(['environment_id' => $staging->id]);
-    $seen = Application::factory()->for($database->team)->for($database->server)->create(['name' => 'shop-staging', 'environment_id' => $staging->id]);
+    $staging = Project::factory()->for($database->team)->create();
+    $database->update(['project_id' => $staging->id]);
+    $seen = Application::factory()->for($database->team)->for($database->server)->create(['name' => 'shop-staging', 'project_id' => $staging->id]);
     $hidden = Application::factory()->for($database->team)->for($database->server)->create(['name' => 'billing']);
     $admin = databaseRestoreMember($database->team, TeamRole::Admin, seesEverything: false);
     app(TeamAccess::class)->grant($database->team, $admin, $staging);

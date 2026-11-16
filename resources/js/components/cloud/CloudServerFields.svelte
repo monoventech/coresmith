@@ -9,12 +9,10 @@
 
     let {
         catalog,
-        environments,
         errors,
         picks = $bindable({})
     }: {
         catalog: CloudCatalog
-        environments: string[]
         errors: Record<string, string | undefined>
         picks?: CloudPicks
     } = $props()
@@ -104,17 +102,6 @@
             aria-invalid={errors.image ? true : undefined}
         />
         <FieldError message={errors.image} />
-    </div>
-    <div>
-        <Label for="environment" class="mb-1.5">Environment</Label>
-        <NativeSelect
-            id="environment"
-            name="environment"
-            options={[{ value: '', label: 'No environment' }, ...environments]}
-            value={picks.environment ?? ''}
-            onchange={(event) => pick('environment', event)}
-        />
-        <FieldError message={errors.environment} />
     </div>
 </div>
 <div class="-mt-1 flex flex-col gap-1 text-[12px] text-muted-foreground">

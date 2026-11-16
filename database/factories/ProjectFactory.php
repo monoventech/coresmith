@@ -27,16 +27,4 @@ class ProjectFactory extends Factory
             'name' => ucfirst(fake()->unique()->word()),
         ];
     }
-
-    /**
-     * @param  list<string>  $names
-     */
-    public function withEnvironments(array $names = ['Production']): static
-    {
-        return $this->afterCreating(function (Project $project) use ($names): void {
-            foreach ($names as $position => $name) {
-                $project->environments()->create(['name' => $name, 'position' => $position]);
-            }
-        });
-    }
 }

@@ -49,13 +49,13 @@ final class SvelteKit extends JsPreset
 
     public function propose(RepositoryFacts $facts, string $runtime, array $sources, ?string $output): array
     {
-        $adapter = $this->frameworks->svelteAdapter($facts);
+        [$adapter, $file] = $this->frameworks->svelteAdapterIn($facts) ?? [null, 'svelte.config.js'];
 
         if ($adapter === '@sveltejs/adapter-static') {
-            return Proposal::staticBuild($output, ['type' => 'From @sveltejs/adapter-static in svelte.config.js'], 'Coresmith couldn\'t tell where adapter-static writes, because svelte.config.js sets its own pages folder. Set the web root to that folder.');
+            return Proposal::staticBuild($output, ['type' => "From @sveltejs/adapter-static in {$file}"], "Coresmith couldn't tell where adapter-static writes, because {$file} sets its own pages folder. Set the web root to that folder.");
         }
 
-        return Proposal::make('js', 'sveltekit', $runtime, null, [...$sources, 'framework' => $adapter === null ? '@sveltejs/kit in package.json' : "@sveltejs/kit with {$adapter}"], $adapter === null ? ['framework' => "Coresmith couldn't tell which adapter svelte.config.js uses. SvelteKit needs @sveltejs/adapter-node to run on a server."] : []);
+        return Proposal::make('js', 'sveltekit', $runtime, null, [...$sources, 'framework' => $adapter === null ? '@sveltejs/kit in package.json' : "@sveltejs/kit with {$adapter}"], $adapter === null ? ['framework' => "Coresmith couldn't tell which adapter svelte.config.js or vite.config uses. SvelteKit needs @sveltejs/adapter-node to run on a server."] : []);
     }
 
     public function blockers(RepositoryFacts $facts): array
@@ -64,12 +64,13 @@ final class SvelteKit extends JsPreset
             return [new Blocker('framework', "@sveltejs/kit isn't in package.json, so this isn't a SvelteKit app.", 'Pick the framework the app uses, or Other server.')];
         }
 
-        $adapter = $this->frameworks->svelteAdapter($facts);
+        [$adapter, $file] = $this->frameworks->svelteAdapterIn($facts) ?? [null, 'svelte.config.js'];
+        $pages = $this->frameworks->sveltePages($facts);
 
         return match (true) {
             $adapter === null, in_array($adapter, JsFrameworks::SERVER_ADAPTERS, true) => [],
-            $adapter === '@sveltejs/adapter-static' => [new Blocker('type', 'svelte.config.js uses @sveltejs/adapter-static, so the build is static files, not a server.', 'Pick Static site with the web root /build.')],
-            default => [new Blocker('framework', "svelte.config.js uses {$adapter}, which builds the app for that hosting platform's own servers.", 'Install @sveltejs/adapter-node, use it in svelte.config.js, then commit both.')],
+            $adapter === '@sveltejs/adapter-static' => [new Blocker('type', "{$file} uses @sveltejs/adapter-static, so the build is static files, not a server.", 'Pick Static site with the web root ' . (is_string($pages) ? $pages : '/build') . '.')],
+            default => [new Blocker('framework', "{$file} uses {$adapter}, which builds the app for that hosting platform's own servers.", "Install @sveltejs/adapter-node, use it in {$file}, then commit both.")],
         };
     }
 
@@ -90,6 +91,12 @@ final class SvelteKit extends JsPreset
 
     public function staticOutput(RepositoryFacts $facts): ?string
     {
-        return $this->frameworks->svelteAdapter($facts) === '@sveltejs/adapter-static' && !$this->frameworks->config($facts, ['svelte.config.js', 'svelte.config.ts'], '~pages\s*:~') ? '/build' : null;
+        if ($this->frameworks->svelteAdapter($facts) !== '@sveltejs/adapter-static') {
+            return null;
+        }
+
+        $pages = $this->frameworks->sveltePages($facts);
+
+        return $pages === null ? '/build' : ($pages === false ? null : $pages);
     }
 }

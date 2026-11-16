@@ -132,7 +132,12 @@
 
 <AppHead title="{server.name} hardening" />
 
-<ServerHeaderView {server} />
+<ServerHeaderView
+    {server}
+    primary={server.active && server.can.createApplication
+        ? { label: 'Add an app', href: route('servers.applications.create', server.id) }
+        : null}
+/>
 
 <div class="rounded-xl border border-border bg-card px-5.5 py-5" data-testid="protections">
     <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

@@ -350,9 +350,9 @@ test('a stopped app gets the new release without its processes being started', f
         ->and($deployment->fresh()->log)->toContain('starts when the app does');
 });
 
-test('a custom blueprint replaces the built in dependency, build and migrate phases', function () {
+test('a deploy script of your own replaces the built in dependency, build and migrate phases, and stops at its first failing command', function () {
     $deployment = Deployment::factory()->for(deployableApp([
-        'custom_blueprint' => "set -e\necho building\n",
+        'custom_blueprint' => "echo building\n",
     ]))->create();
     $transport = healthyDeployTransport();
 
@@ -381,9 +381,15 @@ test('a failing custom blueprint never reaches the symlink swap', function () {
     $deployment = Deployment::factory()->for(deployableApp(['custom_blueprint' => "exit 1\n"]))->create();
     $transport = healthyDeployTransport()->respondTo("/bin/bash -s < '/etc/coresmith/blueprints/my-app.sh'", "build failed\n", 1);
 
-    expect(fn() => deploy($deployment, $transport))->toThrow(SSHCommandFailedException::class);
+    expect(fn() => deploy($deployment, $transport))->toThrow(DeploymentAborted::class, 'Your deploy script stopped with exit code 1.');
 
-    expect(implode("\n", $transport->commands()))->not->toContain('current.tmp');
+    $deployment->refresh();
+
+    expect(implode("\n", $transport->commands()))->not->toContain('current.tmp')
+        ->and((string) $deployment->log)->toContain("build failed\n")
+        ->and((string) $deployment->log)->toContain('Your deploy script stopped with exit code 1.')
+        ->and((string) $deployment->log)->not->toContain('SSH command failed')
+        ->and($deployment->failure_reason)->toBe('It stopped with exit code 1. Its output is in the log. Fix it under Deploy script on the app page, then deploy again.');
 });
 
 test('a private repository is cloned with its own deploy key', function () {

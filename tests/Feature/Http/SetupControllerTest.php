@@ -6,7 +6,6 @@ use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
-use App\Http\Controllers\ServerController;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Application;
 use App\Models\CloudProvider;
@@ -359,7 +358,7 @@ test("the first server step offers the team's provider accounts and loads the ca
         ->assertInertia(fn($page) => $page
             ->where('step', 1)
             ->where('cloud.selected', 'account:' . $account->id)
-            ->where('environments', ServerController::ENVIRONMENTS)
+            ->missing('environments')
             ->missing('catalog')
             ->loadDeferredProps(fn($reload) => $reload->has('catalog.sizes', 2)));
 

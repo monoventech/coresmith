@@ -196,7 +196,30 @@ test('the preview says what moves and what needs reconnecting', function () {
     ]);
 });
 
-test('a move carries projects, their environments and what is filed in them', function () {
+test('a move carries projects, what is in them and each app\'s tags', function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['projects'] = [['ref' => 'p1', 'name' => 'Storefront']];
+    $payload['applications'][0]['project'] = 'p1';
+    $payload['applications'][0]['tags'] = ['production'];
+    $payload['applications'][1]['project'] = 'p1';
+    $payload['applications'][1]['tags'] = ['staging', 'eu'];
+    $payload['databases'][0]['project'] = 'p1';
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+    $project = $team->projects()->sole();
+    $site = $team->applications()->where('name', 'site')->sole();
+    $api = $team->applications()->where('name', 'api')->sole();
+    $docs = $team->applications()->where('name', 'docs')->sole();
+
+    expect($project->name)->toBe('Storefront')
+        ->and([$site->project_id, $site->tags])->toBe([$project->id, ['production']])
+        ->and([$api->project_id, $api->tags])->toBe([$project->id, ['staging', 'eu']])
+        ->and([$docs->project_id, $docs->tags])->toBe([null, []])
+        ->and($team->databases()->sole()->project_id)->toBe($project->id);
+});
+
+test('a move file from when projects held environments keeps the projects and names the environments as tags', function () {
     $owner = User::factory()->create();
     $payload = teamImporterPayload();
     $payload['projects'] = [['ref' => 'p1', 'name' => 'Storefront', 'environments' => [
@@ -208,16 +231,24 @@ test('a move carries projects, their environments and what is filed in them', fu
     $payload['databases'][0]['environment'] = 'e2';
 
     $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
-
     $project = $team->projects()->sole();
-    [$production, $staging] = $project->environments()->get()->all();
 
-    expect($project->name)->toBe('Storefront')
-        ->and([$production->name, $staging->name])->toBe(['Production', 'Staging'])
-        ->and($team->applications()->where('name', 'site')->sole()->environment_id)->toBe($production->id)
-        ->and($team->applications()->where('name', 'api')->sole()->environment_id)->toBe($staging->id)
-        ->and($team->applications()->where('name', 'docs')->sole()->environment_id)->toBeNull()
-        ->and($team->databases()->sole()->environment_id)->toBe($staging->id);
+    expect([$team->applications()->where('name', 'site')->sole()->project_id, $team->applications()->where('name', 'site')->sole()->tags])->toBe([$project->id, ['Production']])
+        ->and([$team->applications()->where('name', 'api')->sole()->project_id, $team->applications()->where('name', 'api')->sole()->tags])->toBe([$project->id, ['Staging']])
+        ->and($team->applications()->where('name', 'docs')->sole()->project_id)->toBeNull()
+        ->and($team->databases()->sole()->project_id)->toBe($project->id);
+});
+
+test('an older move file whose project only had its first Production adds no tags', function () {
+    $owner = User::factory()->create();
+    $payload = teamImporterPayload();
+    $payload['projects'] = [['ref' => 'p1', 'name' => 'Side quests', 'environments' => [['ref' => 'e1', 'name' => 'Production', 'position' => 0]]]];
+    $payload['applications'][0]['environment'] = 'e1';
+
+    $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
+    $site = $team->applications()->where('name', 'site')->sole();
+
+    expect([$site->project_id, $site->tags])->toBe([$team->projects()->sole()->id, []]);
 });
 
 test('a move file from before projects still imports, with everything in no project', function () {
@@ -226,19 +257,19 @@ test('a move file from before projects still imports, with everything in no proj
     $team = app(TeamImporter::class)->import(teamImporterPayload(), teamImporterCode($owner), $owner);
 
     expect($team->projects()->count())->toBe(0)
-        ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0);
+        ->and($team->applications()->whereNotNull('project_id')->count())->toBe(0);
 });
 
-test('an environment without a reference in the move file never collects apps that had none', function () {
+test('an environment without a reference in an older move file never collects apps that had none', function () {
     $owner = User::factory()->create();
     $payload = teamImporterPayload();
     $payload['projects'] = [['ref' => 'p1', 'name' => 'Storefront', 'environments' => [['name' => 'Production', 'position' => 0]]]];
 
     $team = app(TeamImporter::class)->import($payload, teamImporterCode($owner), $owner);
 
-    expect($team->projects()->sole()->environments()->sole()->name)->toBe('Production')
-        ->and($team->applications()->whereNotNull('environment_id')->count())->toBe(0)
-        ->and($team->databases()->whereNotNull('environment_id')->count())->toBe(0);
+    expect($team->projects()->sole()->name)->toBe('Storefront')
+        ->and($team->applications()->whereNotNull('project_id')->count())->toBe(0)
+        ->and($team->databases()->whereNotNull('project_id')->count())->toBe(0);
 });
 
 test('package credentials arrive sealed and keep their project', function () {

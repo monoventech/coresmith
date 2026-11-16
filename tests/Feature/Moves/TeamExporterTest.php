@@ -152,21 +152,20 @@ test('a running deploy stops the export', function () {
     expect(teamExporterRefusal($team))->toBe('site is deploying. Wait for it to finish, then download the move file.');
 });
 
-test('the export carries projects, their environments and what is filed in them', function () {
+test('the export carries projects, and each app\'s project and tags', function () {
     $team = teamExporterTeam();
-    $project = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    [$production, $staging] = $project->environments()->get()->all();
-    $team->applications()->where('name', 'site')->update(['environment_id' => $staging->id]);
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $team->applications()->where('name', 'site')->sole()->update(['project_id' => $project->id, 'tags' => ['staging', 'eu']]);
 
     $payload = app(TeamExporter::class)->payload($team, $team->owner);
+    $site = collect($payload['applications'])->firstWhere('name', 'site');
+    $docs = collect($payload['applications'])->firstWhere('name', 'docs');
 
-    expect($payload['projects'])->toBe([['ref' => $project->id, 'name' => 'Storefront', 'environments' => [
-        ['ref' => $production->id, 'name' => 'Production', 'position' => 0],
-        ['ref' => $staging->id, 'name' => 'Staging', 'position' => 1],
-    ]]])
-        ->and(collect($payload['applications'])->firstWhere('name', 'site')['environment'])->toBe($staging->id)
-        ->and(collect($payload['applications'])->firstWhere('name', 'docs')['environment'])->toBeNull()
-        ->and($payload['databases'][0]['environment'])->toBeNull();
+    expect($payload['projects'])->toBe([['ref' => $project->id, 'name' => 'Storefront']])
+        ->and([$site['project'], $site['tags']])->toBe([$project->id, ['staging', 'eu']])
+        ->and([$docs['project'], $docs['tags']])->toBe([null, []])
+        ->and($payload['databases'][0]['project'])->toBeNull()
+        ->and(array_key_exists('environment', $site))->toBeFalse();
 });
 
 test('package credentials move with their project and their secret', function () {

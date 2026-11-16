@@ -31,6 +31,15 @@ test('a url that is not a recognisable repository has no slug', function (string
     'spaces in the path' => 'https://github.com/monoven/core smith',
 ]);
 
+test('a repository url reads as its host and path on the setup card', function (string $url, string $expected) {
+    expect(Repository::display($url))->toBe($expected);
+})->with([
+    'https with .git' => ['https://github.com/acme/shop.git', 'github.com/acme/shop'],
+    'ssh' => ['git@github.com:acme/shop.git', 'github.com/acme/shop'],
+    'self hosted over ssh' => ['git@git.example.com:ops/deploy-tools.git', 'git.example.com/ops/deploy-tools'],
+    'gitlab subgroups with a trailing slash' => ['https://gitlab.com/acme/platform/shop/', 'gitlab.com/acme/platform/shop'],
+]);
+
 test('a public key fingerprint matches what ssh-keygen prints', function () {
     $publicKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID1mMDNsL9LCfDTYhnoHpWmxAPDE+kQmRCK3NHkfGfMp deploy@coresmith';
 
