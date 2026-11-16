@@ -54,7 +54,7 @@ test('the tags on an app change from its page, cleaned and saved, and the change
     $activity = Activity::query()->where('description', ApplicationTagsController::CHANGED)->sole();
 
     expect($shop->fresh()->tags)->toBe(['Staging', 'eu'])
-        ->and($activity->properties->all())->toBe(['from' => [], 'to' => ['Staging', 'eu']])
+        ->and($activity->properties->all())->toEqual(['from' => [], 'to' => ['Staging', 'eu']])
         ->and(collect(app(ActivityFeed::class)->forServer($server, viewer: $owner))->map(fn(array $entry): string => collect($entry['parts'])->pluck('text')->implode(''))->implode("\n"))->toContain('Tags on shop set to Staging, eu');
 });
 
@@ -69,7 +69,7 @@ test('saving the same tags changes nothing and records nothing, and clearing the
     $this->actingAs($owner)->put(route('servers.applications.tags.update', [$server, $shop]), ['tags' => []])->assertSessionHas('success', 'Saved.');
 
     expect($shop->fresh()->tags)->toBe([])
-        ->and(Activity::query()->where('description', ApplicationTagsController::CHANGED)->sole()->properties->all())->toBe(['from' => ['production'], 'to' => []]);
+        ->and(Activity::query()->where('description', ApplicationTagsController::CHANGED)->sole()->properties->all())->toEqual(['from' => ['production'], 'to' => []]);
 });
 
 test('tags are refused when there are too many, one is too long or one starts oddly', function () {
