@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.18 (2026-11-16)
+
+### Changed
+- React, Vue and Svelte as JavaScript frameworks, git submodules in deploys, removed apps free their disk, and the Made by Monoven badge (#103)
+- PHP limits per app, and Caddy no longer cuts long requests and slow uploads (#102)
+
 ## v0.8.17 (2026-11-15)
 
 ### Changed
