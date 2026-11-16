@@ -99,14 +99,24 @@ return new class extends Migration
 
         foreach ($environments as $environment) {
             $untouched = $counts->get($environment->project_id) === 1 && $environment->name === 'Production';
+            $tag = $untouched ? null : $this->tag($environment->name);
 
             DB::table('applications')->where('environment_id', $environment->id)->update([
                 'project_id' => $environment->project_id,
-                ...($untouched ? [] : ['tags' => json_encode([$environment->name])]),
+                ...($tag === null ? [] : ['tags' => json_encode([$tag])]),
             ]);
 
             DB::table('databases')->where('environment_id', $environment->id)->update(['project_id' => $environment->project_id]);
         }
+    }
+
+    private function tag(string $name): ?string
+    {
+        $tag = trim((string) preg_replace('/[^\pL\pN ._-]+/u', ' ', $name));
+        $tag = (string) preg_replace('/^[^\pL\pN]+/u', '', $tag);
+        $tag = rtrim(mb_substr(trim((string) preg_replace('/\s+/u', ' ', $tag)), 0, 24));
+
+        return $tag === '' ? null : $tag;
     }
 
     /**

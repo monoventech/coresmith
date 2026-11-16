@@ -116,6 +116,25 @@ test('apps take their environment\'s name as a tag, unless their project only ev
         ->and(Application::find($journal->id)->tags)->toBe(['Live']);
 });
 
+test('an environment name a tag could not hold becomes the nearest tag that can', function (string $name, array $tags) {
+    $team = Team::factory()->create();
+    $web = Server::factory()->for($team)->create();
+    $project = Project::factory()->for($team)->create();
+    withoutEnvironmentsEnvironment($project, 'Production');
+    $application = Application::factory()->for($team)->for($web)->create();
+    withoutEnvironmentsFile($application, withoutEnvironmentsEnvironment($project, $name, 1));
+
+    withoutEnvironmentsMigration()->up();
+
+    expect(Application::find($application->id)->tags)->toBe($tags);
+})->with([
+    'brackets' => ['Staging (EU)', ['Staging EU']],
+    'a leading symbol' => ['#qa', ['qa']],
+    'a slash' => ['pre-prod/eu', ['pre-prod eu']],
+    'longer than a tag' => ['Customer acceptance testing env', ['Customer acceptance test']],
+    'nothing a tag can keep' => ['!!!', []],
+]);
+
 test('a member who had every environment of a project now has the project', function () {
     $storefront = withoutEnvironmentsStorefront();
     $member = withoutEnvironmentsMember($storefront['team']);
