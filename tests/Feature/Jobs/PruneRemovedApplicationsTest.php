@@ -73,6 +73,19 @@ test('an app removed more than 7 days ago also loses its Linux user and home, so
         ->and(strpos($command, 'userdel'))->toBeGreaterThan(strpos($command, "rm -rf '/var/coresmith/apps/old-app'"));
 });
 
+test('apps pruned before users and homes were removed are picked again, so the next prune takes their users and homes too', function () {
+    $server = Server::factory()->create();
+    $application = removedAppsApp($server, 'cleared-app', 30);
+    $application->forceFill(['system_user' => 'coresmith-app-cleared-app', 'folder_removed_at' => now()->subDays(20)])->saveQuietly();
+    $live = removedAppsApp($server, 'live-app', null);
+    $live->forceFill(['folder_removed_at' => now()->subDays(20)])->saveQuietly();
+
+    (require database_path('migrations/2026_11_16_120000_prune_removed_apps_users_and_homes.php'))->up();
+
+    expect(collect(removedAppsRun($server)->commands())->contains(fn(string $command): bool => str_contains($command, "userdel 'coresmith-app-cleared-app'")))->toBeTrue()
+        ->and($live->fresh()->folder_removed_at)->not->toBeNull();
+});
+
 test('an app removed exactly 7 days ago keeps its folder', function () {
     $server = Server::factory()->create();
     $application = Application::factory()->for($server)->create(['slug' => 'recent-app', 'team_id' => $server->team_id]);
