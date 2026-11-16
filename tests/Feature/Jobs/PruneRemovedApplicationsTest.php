@@ -61,6 +61,18 @@ test('an app removed more than 7 days ago has its folder removed, once', functio
     expect(removedAppsRun($server)->commands())->toBe([]);
 });
 
+test('an app removed more than 7 days ago also loses its Linux user and home, so its caches stop taking disk', function () {
+    $server = Server::factory()->create();
+    $application = removedAppsApp($server, 'old-app', 8);
+    $application->forceFill(['system_user' => 'coresmith-app-old-app'])->saveQuietly();
+
+    $command = collect(removedAppsRun($server)->commands())->first(fn(string $command): bool => str_contains($command, "rm -rf '/var/coresmith/apps/old-app'")) ?? '';
+
+    expect($command)->toContain("if id -u 'coresmith-app-old-app' >/dev/null 2>&1; then pkill -KILL -u 'coresmith-app-old-app'; userdel 'coresmith-app-old-app'; fi")
+        ->and($command)->toContain("rm -rf '/home/coresmith-app-old-app'")
+        ->and(strpos($command, 'userdel'))->toBeGreaterThan(strpos($command, "rm -rf '/var/coresmith/apps/old-app'"));
+});
+
 test('an app removed exactly 7 days ago keeps its folder', function () {
     $server = Server::factory()->create();
     $application = Application::factory()->for($server)->create(['slug' => 'recent-app', 'team_id' => $server->team_id]);

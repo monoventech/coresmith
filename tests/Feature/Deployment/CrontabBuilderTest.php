@@ -649,7 +649,7 @@ test('run records stay while an app is stopped or detached, and go with its fold
 
     expect($transport->commands())->toBe([cronRemoval()])
         ->and(cronRemoval())->not->toContain('/var/lib/coresmith/cron')
-        ->and(RemovedApplicationFolders::command($application))->toBe("rm -rf '/var/coresmith/apps/shop' '/var/lib/coresmith/cron/shop'");
+        ->and(RemovedApplicationFolders::command($application))->toStartWith("rm -rf '/var/coresmith/apps/shop' '/var/lib/coresmith/cron/shop' && ");
 });
 
 test('a job id Coresmith did not make is refused before it reaches a path', function () {
