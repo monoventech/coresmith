@@ -16,7 +16,7 @@ use Symfony\Component\Finder\SplFileInfo;
 
 test('the JavaScript presets are tried in a fixed order', function () {
     expect(array_map(fn(JsPreset $preset): string => $preset->key(), app(JsPresets::class)->all()))
-        ->toBe(['sveltekit', 'nextjs', 'nuxt', 'astro', 'adonisjs', 'angular', 'react-scripts', 'vite']);
+        ->toBe(['sveltekit', 'nextjs', 'nuxt', 'astro', 'adonisjs', 'angular', 'react', 'vue', 'svelte', 'vite']);
 });
 
 test('a server preset is found by the framework an app stores, in any case, and next finds Next.js, while static-only presets are never an app\'s framework', function () {
@@ -26,6 +26,9 @@ test('a server preset is found by the framework an app stores, in any case, and 
         ->and($presets->find('SvelteKit')?->key())->toBe('sveltekit')
         ->and($presets->find(''))->toBeNull()
         ->and($presets->find('express'))->toBeNull()
+        ->and($presets->find('React')?->key())->toBe('react')
+        ->and($presets->find('vue')?->key())->toBe('vue')
+        ->and($presets->find('svelte')?->key())->toBe('svelte')
         ->and($presets->find('vite'))->toBeNull()
         ->and($presets->find('react-scripts'))->toBeNull();
 });
@@ -33,26 +36,36 @@ test('a server preset is found by the framework an app stores, in any case, and 
 test('only server presets name the file they start from, and only SvelteKit adds to the environment', function () {
     $presets = app(JsPresets::class)->all();
 
-    expect(array_map(fn(JsPreset $preset): ?string => $preset->entry(), $presets))->toBe(['build/index.js', null, '.output/server/index.mjs', 'dist/server/entry.mjs', 'build/bin/server.js', null, null, null])
-        ->and(array_map(fn(JsPreset $preset): array => array_keys($preset->environment()), $presets))->toBe([['PROTOCOL_HEADER', 'HOST_HEADER', 'ADDRESS_HEADER'], [], [], [], ['LOG_LEVEL', 'SESSION_DRIVER'], [], [], []]);
+    expect(array_map(fn(JsPreset $preset): ?string => $preset->entry(), $presets))->toBe(['build/index.js', null, '.output/server/index.mjs', 'dist/server/entry.mjs', 'build/bin/server.js', null, null, null, null, null])
+        ->and(array_map(fn(JsPreset $preset): array => array_keys($preset->environment()), $presets))->toBe([['PROTOCOL_HEADER', 'HOST_HEADER', 'ADDRESS_HEADER'], [], [], [], ['LOG_LEVEL', 'SESSION_DRIVER'], [], [], [], [], []]);
 });
 
-test('Add an app offers the server presets as JavaScript frameworks, by name', function () {
+test('Add an app offers the presets as JavaScript frameworks, by name, saying which ones are served as files', function () {
     expect(app(JsPresets::class)->choices())->toBe([
-        ['value' => 'sveltekit', 'label' => 'SvelteKit'],
-        ['value' => 'nextjs', 'label' => 'Next.js'],
-        ['value' => 'nuxt', 'label' => 'Nuxt'],
-        ['value' => 'astro', 'label' => 'Astro'],
-        ['value' => 'adonisjs', 'label' => 'AdonisJS'],
-        ['value' => 'angular', 'label' => 'Angular'],
+        ['value' => 'sveltekit', 'label' => 'SvelteKit', 'files' => false],
+        ['value' => 'nextjs', 'label' => 'Next.js', 'files' => false],
+        ['value' => 'nuxt', 'label' => 'Nuxt', 'files' => false],
+        ['value' => 'astro', 'label' => 'Astro', 'files' => false],
+        ['value' => 'adonisjs', 'label' => 'AdonisJS', 'files' => false],
+        ['value' => 'angular', 'label' => 'Angular', 'files' => false],
+        ['value' => 'react', 'label' => 'React', 'files' => true],
+        ['value' => 'vue', 'label' => 'Vue', 'files' => true],
+        ['value' => 'svelte', 'label' => 'Svelte', 'files' => true],
     ]);
+});
+
+test('React, Vue and Svelte build to files Coresmith serves, so they run no process of their own', function () {
+    expect(array_map(fn(JsPreset $preset): bool => $preset->servesFiles(), app(JsPresets::class)->all()))
+        ->toBe([false, false, false, false, false, false, true, true, true, false]);
 });
 
 test('a JavaScript framework is called by its preset name in detection and on the app page', function () {
     expect((new DetectedStack('js', 'nuxt', 'node', null))->label(app(Catalog::class)))->toBe('Nuxt')
         ->and((new DetectedStack('js', '', 'node', null))->label(app(Catalog::class)))->toBe('Other server')
         ->and(ApplicationPresenter::kind(new Application(['type' => ApplicationType::Js, 'framework' => 'next'])))->toBe('Next.js')
-        ->and(ApplicationPresenter::kind(new Application(['type' => ApplicationType::Js, 'framework' => 'astro'])))->toBe('Astro');
+        ->and(ApplicationPresenter::kind(new Application(['type' => ApplicationType::Js, 'framework' => 'astro'])))->toBe('Astro')
+        ->and(ApplicationPresenter::kind(new Application(['type' => ApplicationType::Js, 'framework' => 'react'])))->toBe('React')
+        ->and((new DetectedStack('js', 'vue', 'bun', '/dist'))->label(app(Catalog::class)))->toBe('Vue');
 });
 
 test('a framework whose build script does not build it is named with the right article', function () {

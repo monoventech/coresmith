@@ -45,11 +45,20 @@ final readonly class JavaScript implements Language
             return ['deno.json, deno.jsonc or package.json' => implode(' || ', array_map(fn(string $file): string => 'test -f ' . escapeshellarg($base . '/' . $file), ['deno.json', 'deno.jsonc', 'package.json']))];
         }
 
-        return ['package.json' => 'test -f ' . escapeshellarg($base . '/package.json')];
+        $checks = ['package.json' => 'test -f ' . escapeshellarg($base . '/package.json')];
+        $web = trim((string) $application->web_directory, '/');
+
+        return $this->servesFiles($application)
+            ? [...$checks, ($web === '' ? 'the release root' : $web . '/') => 'test -d ' . escapeshellarg($paths->webRoot($release))]
+            : $checks;
     }
 
     public function webCommand(Application $application): ?string
     {
+        if ($this->servesFiles($application)) {
+            return null;
+        }
+
         $data = ((array) $application->stack)['tooling'] ?? null;
         $tooling = JsTooling::fromArray(is_array($data) ? $data : null);
         $start = $tooling?->start ?? false;
@@ -71,7 +80,7 @@ final readonly class JavaScript implements Language
 
     public function route(Application $application): Route
     {
-        return Route::ReverseProxy;
+        return $this->servesFiles($application) ? Route::SinglePage : Route::ReverseProxy;
     }
 
     public function storageSeed(): StorageSeed
@@ -144,6 +153,11 @@ final readonly class JavaScript implements Language
     public function explain(string $phase, string $output, Stack $stack): ?string
     {
         return null;
+    }
+
+    private function servesFiles(Application $application): bool
+    {
+        return $this->presets->find((string) $application->framework)?->servesFiles() === true;
     }
 
     private function entry(Application $application, ?JsTooling $tooling): string

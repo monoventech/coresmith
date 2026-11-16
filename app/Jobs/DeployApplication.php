@@ -24,6 +24,7 @@ use App\Exceptions\GitProviderException;
 use App\Exceptions\ProcessDidNotStart;
 use App\Exceptions\SSHCommandFailedException;
 use App\Exceptions\SSHCommandTimedOut;
+use App\Exceptions\SubmoduleRefused;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\SourceProvider;
@@ -46,6 +47,7 @@ use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\RepositoryCache;
 use App\Services\Deployment\SharedStorage;
 use App\Services\Deployment\StackDefaults;
+use App\Services\Deployment\Submodules;
 use App\Services\Detection\Blocker;
 use App\Services\Detection\StackChecks;
 use App\Services\Git\CloneToken;
@@ -689,7 +691,7 @@ final class DeployApplication implements ShouldQueue
         $connection->execute('systemctl stop ' . AppShell::buildUnit($application, $this->timestamp) . '.service || true', sudo: true);
     }
 
-    private function git(SSHConnection $connection, string $command, string $step, ?Closure $beforeRetry = null): void
+    private function git(SSHConnection $connection, string $command, string $step, ?Closure $beforeRetry = null, ?Closure $explain = null): void
     {
         $application = $this->deployment->application;
         $attempts = self::GIT_RETRIES + 1;
@@ -705,9 +707,9 @@ final class DeployApplication implements ShouldQueue
             $failure = GitFailure::from($result->output, $application, $this->cloneAdvice);
 
             if (!$failure->retryable || $attempt >= $attempts) {
-                $this->failureReason = $failure->reason;
+                $this->failureReason = $explain === null ? $failure->reason : $explain($result->output);
 
-                throw new DeploymentAborted($failure->reason);
+                throw new DeploymentAborted($this->failureReason);
             }
 
             $this->appendLog("{$step} failed (attempt {$attempt} of {$attempts}), retrying in " . self::RETRY_SECONDS . ' seconds');
@@ -817,9 +819,101 @@ final class DeployApplication implements ShouldQueue
 
         $connection->execute('install -d -m 750 ' . $release, sudo: true)->throw();
         $this->git($connection, "set -o pipefail; git --git-dir={$repo} archive {$branch} | tar -x -C {$release}", 'checkout');
+        $this->fetchSubmodules($connection, $application, $github, $repo, $repo, $branch, $release, (string) $application->repository_url);
         $connection->execute($account->claimRelease($application, $release), sudo: true)->throw();
 
         $this->prepareShared($connection, $paths, $release, $application);
+    }
+
+    private function fetchSubmodules(SSHConnection $connection, Application $application, ?SourceProvider $github, string $repo, string $gitDir, string $tree, string $root, string $parent, string $prefix = '', int $depth = 1): void
+    {
+        if ($depth > Submodules::DEPTH) {
+            return;
+        }
+
+        $file = escapeshellarg($root . '/.gitmodules');
+        $entries = Submodules::entries($connection->execute("test -f {$file} && git config -f {$file} --list || true", sudo: true)->output);
+
+        if ($entries === []) {
+            return;
+        }
+
+        try {
+            $paths = array_map(fn(array $entry): string => Submodules::safePath($entry['path']), $entries);
+            $pins = Submodules::pins($connection->execute("git --git-dir={$gitDir} ls-tree {$tree} -- " . implode(' ', array_map(escapeshellarg(...), $paths)), sudo: true)->output);
+            $fetches = [];
+
+            foreach ($entries as $entry) {
+                if (isset($pins[$entry['path']])) {
+                    $fetches[] = ['path' => $entry['path'], 'sha' => $pins[$entry['path']], 'url' => Submodules::resolve($entry['url'], $parent, $prefix . $entry['path'])];
+                }
+            }
+        } catch (SubmoduleRefused $refused) {
+            $this->failureReason = $refused->getMessage();
+
+            throw new DeploymentAborted($refused->getMessage());
+        }
+
+        $readable = $github === null ? [] : $this->readableSubmodules($github, array_column($fetches, 'url'));
+        $token = $readable === [] ? null : rescue(fn(): string => app(GitProviderFactory::class)->github($github)->cloneTokenFor(array_values(array_unique($readable))), null, report: true);
+        $tokens = app(CloneToken::class);
+
+        try {
+            if ($token !== null) {
+                $this->installCloneToken($connection, app(DeployKeyManager::class), $tokens, $application, $token);
+            }
+
+            foreach ($fetches as $fetch) {
+                $wrap = $token !== null && isset($readable[$fetch['url']]) ? fn(string $arguments): string => $tokens->wrap($application, $arguments) : null;
+                $this->fetchSubmodule($connection, Submodules::cache($repo, $fetch['url']), $root . '/' . $fetch['path'], $prefix . $fetch['path'], $fetch['url'], $fetch['sha'], $wrap, $github !== null);
+            }
+        } finally {
+            if ($token !== null) {
+                $this->revokeCloneToken($token);
+                $connection->execute($tokens->removeCommand($application), sudo: true);
+            }
+        }
+
+        foreach ($fetches as $fetch) {
+            $this->fetchSubmodules($connection, $application, $github, $repo, Submodules::cache($repo, $fetch['url']), $fetch['sha'], $root . '/' . $fetch['path'], $fetch['url'], $prefix . $fetch['path'] . '/', $depth + 1);
+        }
+    }
+
+    /**
+     * @param  list<string>  $urls
+     * @return array<string, string>
+     */
+    private function readableSubmodules(SourceProvider $github, array $urls): array
+    {
+        $names = array_filter(array_map(fn(string $url): ?string => Submodules::githubName($url), array_combine($urls, $urls)));
+
+        if ($names === []) {
+            return [];
+        }
+
+        $repositories = rescue(fn(): array => app(GitProviderFactory::class)->github($github)->installationRepositories()['repositories'], [], report: true);
+        $ids = array_column(array_map(fn(array $repository): array => ['name' => strtolower($repository['full_name']), 'id' => $repository['id']], $repositories), 'id', 'name');
+
+        return array_filter(array_map(fn(string $name): ?string => $ids[$name] ?? null, $names));
+    }
+
+    private function fetchSubmodule(SSHConnection $connection, string $cache, string $folder, string $path, string $url, string $sha, ?Closure $wrap, bool $github): void
+    {
+        $flags = '-c protocol.allow=never -c protocol.https.allow=always';
+        $git = fn(string $arguments): string => $wrap === null ? "GIT_TERMINAL_PROMPT=0 git -c credential.helper= {$flags} {$arguments}" : $wrap("{$flags} {$arguments}");
+        $name = Submodules::githubName($url);
+        $explain = fn(string $output): string => match (true) {
+            Str::contains($output, ['could not read Username', 'terminal prompts disabled', 'Authentication failed', 'Repository not found', 'remote: Not Found']) => $github && $name !== null
+                ? "Coresmith couldn't read the submodule at {$path} from {$url}. Give Coresmith's GitHub app access to {$name}, or make it public."
+                : "Coresmith couldn't fetch the submodule at {$path} from {$url}. Without Coresmith's GitHub app, submodules are fetched without a login, so a private one can't be read. Make it public, or copy its files into the repository.",
+            Str::contains($output, ['not our ref', 'unadvertised object', "couldn't find remote ref", 'not a valid object name', 'bad object']) => "The submodule at {$path} is pinned to commit " . substr($sha, 0, 7) . ", which {$url} no longer has. Point the submodule at a commit that exists, push, then deploy again.",
+            default => "Coresmith couldn't fetch the submodule at {$path} from {$url}. Git's output is in the log.",
+        };
+
+        $this->git($connection, "test -d {$cache} || " . $git('clone --bare --quiet -- ' . escapeshellarg($url) . " {$cache}"), 'submodule', fn() => $connection->execute('rm -rf ' . $cache, sudo: true), $explain);
+        $this->git($connection, $git("--git-dir={$cache} cat-file -e {$sha}^{commit}") . ' 2>/dev/null || ' . $git("--git-dir={$cache} fetch --quiet origin {$sha}"), 'submodule', null, $explain);
+        $this->git($connection, 'set -o pipefail; mkdir -p ' . escapeshellarg($folder) . ' && ' . $git("--git-dir={$cache} archive {$sha}") . ' | tar -x -C ' . escapeshellarg($folder), 'submodule', null, $explain);
+        $this->appendLog("submodules: {$path} at " . substr($sha, 0, 7) . ' from ' . Submodules::display($url));
     }
 
     private function prepareShared(SSHConnection $connection, ReleasePaths $paths, string $release, Application $application): void

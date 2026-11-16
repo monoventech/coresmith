@@ -39,7 +39,7 @@ asGuest.describe('signing in', () => {
         await expect(page.getByRole('link', { name: 'Coresmith home' })).toBeVisible()
         await expect(page.getByLabel('Email address')).toBeVisible()
         await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
-        await expect(page.getByText('Made by Monoven')).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Made by Monoven' })).toBeVisible()
     })
 
     asGuest('the sign in page loads without a console error', async ({ page }) => {

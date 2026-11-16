@@ -19,12 +19,12 @@ final class RepositoryProbe
     public const FILES = [
         '.tool-versions', 'composer.json', 'package.json', '.nvmrc', '.node-version', '.ruby-version', 'Gemfile', 'Gemfile.lock', '.dvmrc', 'deno.json', 'deno.jsonc',
         'svelte.config.js', 'svelte.config.ts', 'next.config.js', 'next.config.mjs', 'next.config.ts', 'nuxt.config.ts', 'nuxt.config.js',
-        'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'pnpm-workspace.yaml', 'angular.json',
+        'astro.config.mjs', 'astro.config.ts', 'astro.config.js', 'vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vite.config.mjs', 'vue.config.js', 'pnpm-workspace.yaml', 'angular.json',
         '.python-version', 'runtime.txt', 'pyproject.toml', 'requirements.txt', 'Pipfile', 'Procfile', 'manage.py',
         'app.py', 'main.py', 'wsgi.py', 'asgi.py', 'server.py', 'application.py', 'run.py', 'api.py', 'tasks.py', 'worker.py', 'celery_app.py',
         'go.mod', 'go.work', 'conf/app.conf',
         '.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle/libs.versions.toml', '.yo-rc.json',
-        '.npmrc', '.yarnrc.yml', 'bunfig.toml',
+        '.npmrc', '.yarnrc.yml', 'bunfig.toml', '.gitmodules',
     ];
 
     public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py', 'requirements/*.txt', 'etc/*.yaml', 'etc/*.yml', '*/pom.xml', '*/build.gradle', '*/build.gradle.kts'];

@@ -32,6 +32,11 @@ abstract class JsPreset
         return false;
     }
 
+    public function servesFiles(): bool
+    {
+        return false;
+    }
+
     /**
      * @return list<string>
      */

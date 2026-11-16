@@ -275,6 +275,13 @@ final class CaddyRouteBuilder
             Route::FileServer => [
                 ['handle' => [['handler' => 'file_server']]],
             ],
+            Route::SinglePage => [
+                [
+                    'match' => [['file' => ['try_files' => ['{http.request.uri.path}', '{http.request.uri.path}/', '/index.html']]]],
+                    'handle' => [['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}']],
+                ],
+                ['handle' => [['handler' => 'file_server']]],
+            ],
             Route::ReverseProxy => [
                 ['handle' => [[
                     'handler' => 'reverse_proxy',
