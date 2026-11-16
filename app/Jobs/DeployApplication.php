@@ -913,7 +913,7 @@ final class DeployApplication implements ShouldQueue
         $this->git($connection, "test -d {$cache} || " . $git('clone --bare --quiet -- ' . escapeshellarg($url) . " {$cache}"), 'submodule', fn() => $connection->execute('rm -rf ' . $cache, sudo: true), $explain);
         $this->git($connection, $git("--git-dir={$cache} cat-file -e {$sha}^{commit}") . ' 2>/dev/null || ' . $git("--git-dir={$cache} fetch --quiet origin {$sha}"), 'submodule', null, $explain);
         $this->git($connection, 'set -o pipefail; mkdir -p ' . escapeshellarg($folder) . ' && ' . $git("--git-dir={$cache} archive {$sha}") . ' | tar -x -C ' . escapeshellarg($folder), 'submodule', null, $explain);
-        $this->appendLog("submodules: {$path} at " . substr($sha, 0, 7) . ' from ' . preg_replace('~^https://|\.git$~', '', $url));
+        $this->appendLog("submodules: {$path} at " . substr($sha, 0, 7) . ' from ' . Submodules::display($url));
     }
 
     private function prepareShared(SSHConnection $connection, ReleasePaths $paths, string $release, Application $application): void

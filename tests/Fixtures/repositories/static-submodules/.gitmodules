@@ -1,0 +1,10 @@
+[submodule "realworld"]
+	path = realworld
+	url = https://github.com/realworld-apps/realworld.git
+	ignore = dirty
+[submodule "theme"]
+	path = theme
+	url = ../theme.git
+[submodule "evil"]
+	path = evil
+	url = file:///var/coresmith/apps/other/repo

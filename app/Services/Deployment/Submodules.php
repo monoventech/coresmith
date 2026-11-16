@@ -41,6 +41,32 @@ final class Submodules
     }
 
     /**
+     * @return list<array{name: string, path: string, url: string}>
+     */
+    public static function fromFile(string $contents): array
+    {
+        $listed = [];
+        $name = null;
+
+        foreach (preg_split('/\r\n|\n|\r/', $contents) ?: [] as $line) {
+            if (preg_match('/^\s*\[submodule\s+"([^"]+)"\s*\]\s*$/', $line, $section) === 1) {
+                $name = $section[1];
+            } elseif (preg_match('/^\s*\[/', $line) === 1) {
+                $name = null;
+            } elseif ($name !== null && preg_match('/^\s*(path|url)\s*=\s*(.*?)\s*$/', $line, $setting) === 1) {
+                $listed[] = "submodule.{$name}.{$setting[1]}={$setting[2]}";
+            }
+        }
+
+        return self::entries(implode("\n", $listed));
+    }
+
+    public static function display(string $url): string
+    {
+        return (string) preg_replace('~^https://|\.git$~', '', $url);
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function pins(string $tree): array

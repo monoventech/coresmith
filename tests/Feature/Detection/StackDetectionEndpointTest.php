@@ -170,3 +170,25 @@ test('the form names private registries the team has no credentials for, with a 
         ->assertJsonPath('packages', [['host' => 'npm.pkg.github.com', 'source' => 'npm']])
         ->assertJsonPath('packages_href', null);
 });
+
+test('detection lists the repository\'s submodules with where each comes from, and says which ones a deploy could not fetch', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('static-submodules');
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/site.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('submodules', [
+            ['path' => 'realworld', 'source' => 'github.com/realworld-apps/realworld', 'refused' => null],
+            ['path' => 'theme', 'source' => 'github.com/acme/theme', 'refused' => null],
+            ['path' => 'evil', 'source' => 'file:///var/coresmith/apps/other/repo', 'refused' => "The submodule at evil points at file:///var/coresmith/apps/other/repo, which Coresmith can't fetch. Change its url in .gitmodules to an https address."],
+        ]);
+});
+
+test('a repository without submodules lists none', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('laravel-13');
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/laravel/laravel.git', 'repository_branch' => '13.x'])
+        ->assertOk()
+        ->assertJsonPath('submodules', []);
+});

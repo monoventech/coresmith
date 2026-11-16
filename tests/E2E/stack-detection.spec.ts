@@ -214,6 +214,40 @@ test.describe('Stack detection on Add an app', () => {
             ).toHaveAttribute('href', '/settings/git')
             expect(await blockingViolations(page)).toEqual([])
         })
+
+        test(`a repository with submodules lists them with where each comes from, and the one a deploy cannot fetch, in ${theme}`, async ({
+            page
+        }) => {
+            await useTheme(page, theme)
+            await answer(page, [
+                {
+                    ...READY,
+                    submodules: [
+                        { path: 'realworld', source: 'github.com/realworld-apps/realworld', refused: null },
+                        { path: 'theme', source: 'github.com/acme/theme', refused: null },
+                        {
+                            path: 'evil',
+                            source: 'file:///var/coresmith/apps/other/repo',
+                            refused:
+                                "The submodule at evil points at file:///var/coresmith/apps/other/repo, which Coresmith can't fetch. Change its url in .gitmodules to an https address."
+                        }
+                    ]
+                }
+            ])
+
+            await openAddApp(page)
+            await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/site.git')
+
+            const note = page.getByTestId('submodules-note')
+
+            await expect(note).toContainText(
+                "Each deploy fetches this repository's submodules at the commits it pins: realworld from github.com/realworld-apps/realworld and theme from github.com/acme/theme. A private one is fetched only when Coresmith's GitHub app can read it."
+            )
+            await expect(note).toContainText(
+                "The submodule at evil points at file:///var/coresmith/apps/other/repo, which Coresmith can't fetch. Change its url in .gitmodules to an https address."
+            )
+            expect(await blockingViolations(page)).toEqual([])
+        })
     }
 
     test('a Go module with several servers asks which package answers web requests, and lists every package main', async ({

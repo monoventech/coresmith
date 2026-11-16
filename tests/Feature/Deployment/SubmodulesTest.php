@@ -82,3 +82,12 @@ test('each submodule url gets its own cache folder beside the app\'s repository'
         ->and($cache)->toBe(Submodules::cache('/var/coresmith/apps/shop/repo', 'https://github.com/realworld-apps/realworld.git'))
         ->and($cache)->not->toBe(Submodules::cache('/var/coresmith/apps/shop/repo', 'https://github.com/acme/theme.git'));
 });
+
+test('the submodules a repository commits are read from its .gitmodules as written, keeping only path and url', function () {
+    $file = "[submodule \"realworld\"]\n\tpath = realworld\n    url = https://github.com/realworld-apps/realworld.git\n    ignore = dirty\n# a comment\n[submodule \"theme.v2\"]\npath=resources/theme files\nurl = ../theme.git\n; another\n[core]\n\tpath = not-a-submodule\n";
+
+    expect(Submodules::fromFile($file))->toBe([
+        ['name' => 'realworld', 'path' => 'realworld', 'url' => 'https://github.com/realworld-apps/realworld.git'],
+        ['name' => 'theme.v2', 'path' => 'resources/theme files', 'url' => '../theme.git'],
+    ]);
+});
