@@ -10,7 +10,8 @@
     import BackLink from '@/components/BackLink.svelte'
     import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
-    import EnvironmentSelect from '@/components/projects/EnvironmentSelect.svelte'
+    import ProjectSelect from '@/components/projects/ProjectSelect.svelte'
+    import TagInput from '@/components/projects/TagInput.svelte'
     import TextLink from '@/components/TextLink.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
@@ -23,6 +24,7 @@
     import type { GitHubPick, GitHubSource } from '@/lib/github'
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { pickerRuntime } from '@/lib/runtimes'
+    import { firstTagError } from '@/lib/tags'
     import { Form } from '@inertiajs/svelte'
     import { onDestroy, untrack } from 'svelte'
 
@@ -31,6 +33,8 @@
         runtimes,
         github,
         projects = [],
+        project = null,
+        tag_suggestions = [],
         js_frameworks = [],
         python_frameworks = [],
         go_frameworks = [],
@@ -44,7 +48,9 @@
         }
         runtimes: Record<string, RuntimeChoices>
         github: { connections: GitHubSource[]; settings_href: string }
-        projects: { id: string; name: string; environments: { id: string; name: string }[] }[]
+        projects: { id: string; name: string }[]
+        project: string | null
+        tag_suggestions: string[]
         js_frameworks: { value: string; label: string; files: boolean }[]
         python_frameworks: { value: string; label: string }[]
         go_frameworks: { value: string; label: string }[]
@@ -608,7 +614,21 @@
                             {/if}
                         </div>
                     </div>
-                    <EnvironmentSelect {projects} error={errors.environment_id} />
+                    <ProjectSelect {projects} value={project} error={errors.project_id} />
+                    <div>
+                        <Label for="tags" class="mb-1.5">Tags</Label>
+                        <TagInput
+                            id="tags"
+                            name="tags"
+                            suggestions={tag_suggestions}
+                            error={firstTagError(errors)}
+                            describedby="tags-hint"
+                        />
+                        <p id="tags-hint" class="m-0 mt-1.5 text-[12px] text-muted-foreground">
+                            Short labels such as production or a client's name, so apps with the same name are easy to
+                            tell apart. Press Enter after each one, up to 5.
+                        </p>
+                    </div>
                     <Button type="submit" class="w-full" disabled={processing || refused}>Add the app</Button>
                 </div>
             {/snippet}

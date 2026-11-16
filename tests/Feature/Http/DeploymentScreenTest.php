@@ -9,10 +9,12 @@ use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\CloudProvider;
 use App\Models\Deployment;
+use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\SQLiteConnection;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
@@ -80,7 +82,7 @@ test('the deploy screen remembers every known origin', function (string $from) {
         ->post(route('servers.applications.deploy', [$application->server_id, $application]), ['from' => $from]);
 
     $response->assertRedirect(screenUrl(Deployment::query()->sole(), ['from' => $from]));
-})->with(['fleet', 'deployments', 'app', 'releases', 'setup']);
+})->with(['fleet', 'deployments', 'app', 'releases', 'setup', 'project']);
 
 test('a missing or unknown origin sends the deploy screen back to the fleet', function (array $payload) {
     Queue::fake();
@@ -293,6 +295,27 @@ test('the back link follows where the deploy was started from', function (?strin
     'nowhere' => [null, 'Fleet', 'fleet'],
     'somewhere unknown' => ['elsewhere', 'Fleet', 'fleet'],
 ]);
+
+test('a deploy started from a project goes back to it, or to the app when the person cannot see a project for it', function () {
+    $team = Team::factory()->create();
+    $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $application = screenApp($team, ['project_id' => $project->id]);
+    $deployment = Deployment::factory()->for($application)->create();
+    $appPage = ['label' => 'Shop', 'href' => route('servers.applications.show', [$application->server_id, $application])];
+    $outsider = screenMember($team, TeamRole::Admin);
+    $team->members()->updateExistingPivot($outsider->id, ['sees_everything' => false]);
+    app(TeamAccess::class)->grant($team, $outsider->fresh(), $application);
+
+    $this->actingAs(screenMember($team))->get(screenUrl($deployment, ['from' => 'project']))
+        ->assertInertia(fn($page) => $page->where('back', ['label' => 'Storefront', 'href' => route('projects.show', $project)]));
+    $this->actingAs($outsider->fresh())->get(screenUrl($deployment, ['from' => 'project']))
+        ->assertInertia(fn($page) => $page->where('back', $appPage));
+
+    $application->update(['project_id' => null]);
+
+    $this->actingAs(screenMember($team))->get(screenUrl($deployment, ['from' => 'project']))
+        ->assertInertia(fn($page) => $page->where('back', $appPage));
+});
 
 test('live streaming is only offered when a broadcaster is configured', function (string $broadcaster, bool $streaming) {
     config(['broadcasting.default' => $broadcaster]);

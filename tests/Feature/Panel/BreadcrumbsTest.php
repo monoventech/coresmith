@@ -27,16 +27,15 @@ function breadcrumb(string $label, ?string $href = null, bool $mono = false): ar
 function breadcrumbsFleet(Team $team): array
 {
     $web = Server::factory()->for($team)->create(['name' => 'web']);
-    $storefront = Project::factory()->for($team)->withEnvironments(['Production'])->create(['name' => 'Storefront']);
-    $production = $storefront->environments()->first();
-    $shop = Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'environment_id' => $production->id]);
+    $storefront = Project::factory()->for($team)->create(['name' => 'Storefront']);
+    $shop = Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'project_id' => $storefront->id]);
 
     return [
         'web' => $web,
         'storefront' => $storefront,
         'shop' => $shop,
         'blog' => Application::factory()->for($team)->for($web)->create(['name' => 'blog']),
-        'shopDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'environment_id' => $production->id]),
+        'shopDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'project_id' => $storefront->id]),
         'blogDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'blog_db']),
         'deploy' => Deployment::factory()->for($shop, 'application')->succeeded()->create(['release' => '20261112091400']),
     ];
@@ -69,11 +68,11 @@ test('every page knows its trail', function (Closure $url, Closure $trail) {
     "a server's databases" => [fn($f) => route('servers.databases.index', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Databases')]],
     'creating a database' => [fn($f) => route('servers.databases.create', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Databases', route('servers.databases.index', $f['web'])), breadcrumb('Create a database')]],
     'adding an app' => [fn($f) => route('servers.applications.create', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('Add an app')]],
-    'an app in a project' => [fn($f) => route('servers.applications.show', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('Production'), breadcrumb('shop', null, true)]],
+    'an app in a project' => [fn($f) => route('servers.applications.show', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop', null, true)]],
     'an app outside projects' => [fn($f) => route('servers.applications.show', [$f['web'], $f['blog']]), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('blog', null, true)]],
-    "an app's releases" => [fn($f) => route('servers.applications.releases.index', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('Production'), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true), breadcrumb('Releases')]],
-    'a deploy' => [fn($f) => route('servers.applications.deployments.show', [$f['web'], $f['shop'], $f['deploy']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('Production'), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true), breadcrumb('Deploy'), breadcrumb('20261112-091400', null, true)]],
-    'a database in a project' => [fn($f) => route('servers.databases.show', [$f['web'], $f['shopDb']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('Production'), breadcrumb('shop_db', null, true)]],
+    "an app's releases" => [fn($f) => route('servers.applications.releases.index', [$f['web'], $f['shop']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true), breadcrumb('Releases')]],
+    'a deploy' => [fn($f) => route('servers.applications.deployments.show', [$f['web'], $f['shop'], $f['deploy']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop', route('servers.applications.show', [$f['web'], $f['shop']]), true), breadcrumb('Deploy'), breadcrumb('20261112-091400', null, true)]],
+    'a database in a project' => [fn($f) => route('servers.databases.show', [$f['web'], $f['shopDb']]), fn($f) => [breadcrumb('Storefront', route('projects.show', $f['storefront'])), breadcrumb('shop_db', null, true)]],
     'a database outside projects' => [fn($f) => route('servers.databases.show', [$f['web'], $f['blogDb']]), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true), breadcrumb('blog_db', null, true)]],
     'deployments' => [fn() => route('deployments.index'), fn() => [breadcrumb('Deployments')]],
     'general settings' => [fn() => route('settings.general'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('General')]],

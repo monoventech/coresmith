@@ -17,6 +17,7 @@
     import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
+    import TagEditor from '@/components/projects/TagEditor.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button, buttonVariants } from '@/components/ui/button'
@@ -57,6 +58,7 @@
     let {
         server,
         place = null,
+        tag_suggestions = [],
         application,
         toggles = [],
         addresses,
@@ -71,6 +73,8 @@
         application: {
             id: string
             name: string
+            tags: string[]
+            tags_href: string | null
             state: EntityState
             kind: string
             runtime: string
@@ -151,6 +155,7 @@
         cron: CronCard
         php: PhpLimits | null
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
+        tag_suggestions: string[]
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
         held: { current: string; newest: string; packages: string[]; command: string } | null
     } = $props()
@@ -480,6 +485,16 @@
                     >· <span class="font-mono text-[12px]">{application.domain}</span></span
                 >{/if}
         </p>
+        {#if application.tags.length > 0 || application.tags_href}
+            <div class="mt-2" data-testid="app-tags-row">
+                <TagEditor
+                    name={application.name}
+                    tags={application.tags}
+                    href={application.tags_href}
+                    suggestions={tag_suggestions}
+                />
+            </div>
+        {/if}
     </div>
     {#if application.running_href}
         <Button href={application.running_href} class="max-sm:w-full">Watch deploy</Button>

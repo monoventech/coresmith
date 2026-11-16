@@ -132,7 +132,7 @@ final class E2ESeeder extends Seeder
 
         $environmentOnly = User::factory()->create(['name' => 'Ines Duarte', 'email' => self::ENVIRONMENT_EMAIL, 'password' => $password]);
         $this->team->members()->attach($environmentOnly, ['role' => TeamRole::Admin->value, 'sees_everything' => false]);
-        app(TeamAccess::class)->grant($this->team, $environmentOnly, $this->team->projects()->where('name', 'Storefront')->sole()->environments()->where('name', 'Staging')->sole());
+        app(TeamAccess::class)->sync($this->team, $environmentOnly, false, [], [], [$this->team->projects()->where('name', 'Storefront')->sole()->id], [], [$tenant->applications['storefront']->id]);
 
         $developer = User::factory()->create(['name' => 'Lena Brandt', 'email' => self::DEVELOPER_EMAIL, 'password' => $password]);
         $this->team->members()->attach($developer, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
@@ -207,7 +207,6 @@ final class E2ESeeder extends Seeder
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
-            $this->server("label-{$code}", '198.51.100.' . (110 + $index), ServerStatus::Active)->forceFill(['environment' => null])->save();
             $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();
             $this->rekeyed("rekeyed-{$code}", '203.0.113.' . (20 + $index));
             $this->rekeyed("dismiss-{$code}", '203.0.113.' . (40 + $index));
@@ -300,7 +299,6 @@ final class E2ESeeder extends Seeder
         foreach (array_values(self::PROJECTS) as $index => $code) {
             Server::factory()->fromProvider($hetzner)->create([
                 'name' => "destroy-{$code}",
-                'environment' => 'Production',
                 'ip_address' => '203.0.113.' . (140 + $index),
                 'status' => ServerStatus::Active,
                 'provider_server_id' => "48{$index}0",
@@ -313,7 +311,6 @@ final class E2ESeeder extends Seeder
 
         $protected = Server::factory()->fromProvider($hetzner)->create([
             'name' => 'destroy-failed',
-            'environment' => 'Production',
             'ip_address' => '203.0.113.139',
             'status' => ServerStatus::Active,
             'provider_server_id' => '4799',
@@ -333,7 +330,6 @@ final class E2ESeeder extends Seeder
         foreach (array_values(self::PROJECTS) as $index => $code) {
             Server::factory()->fromProvider($hetzner)->create([
                 'name' => "resize-{$code}",
-                'environment' => 'Production',
                 'ip_address' => '203.0.113.' . (150 + $index),
                 'status' => ServerStatus::Active,
                 'provider_server_id' => "49{$index}0",
@@ -346,7 +342,6 @@ final class E2ESeeder extends Seeder
 
         $stuck = Server::factory()->fromProvider($hetzner)->create([
             'name' => 'resize-failed',
-            'environment' => 'Production',
             'ip_address' => '203.0.113.159',
             'status' => ServerStatus::Active,
             'provider_server_id' => '4998',
@@ -370,7 +365,6 @@ final class E2ESeeder extends Seeder
     {
         $server = Server::factory()->fromProvider($account)->create([
             'name' => $name,
-            'environment' => 'Production',
             'ip_address' => $ip,
             'status' => ServerStatus::Active,
             'provider_server_id' => $instance,
@@ -388,7 +382,6 @@ final class E2ESeeder extends Seeder
     {
         return Server::factory()->fromProvider($account)->creating()->create([
             'name' => $name,
-            'environment' => 'Production',
             'ip_address' => $ip,
             'provider_server_id' => $instance,
             'provider_monthly_cost' => '3.79',
@@ -584,7 +577,6 @@ final class E2ESeeder extends Seeder
 
         Server::factory()->for($stray)->create([
             'name' => 'stray-01',
-            'environment' => 'Production',
             'region' => 'lon1',
             'ip_address' => '198.51.100.92',
             'status' => ServerStatus::Active,
@@ -636,7 +628,6 @@ final class E2ESeeder extends Seeder
 
         $acmeWeb = Server::factory()->for($acme)->create([
             'name' => 'acme-web',
-            'environment' => 'Production',
             'region' => 'lon1',
             'ip_address' => '198.51.100.90',
             'status' => ServerStatus::Active,
@@ -693,7 +684,6 @@ final class E2ESeeder extends Seeder
         TeamSsoConnection::factory()->for($northwind)->enabled()->create(['issuer' => 'https://idp.northwind.invalid', 'client_id' => 'coresmith-e2e', 'email_domain' => 'northwind.test']);
         Server::factory()->for($northwind)->create([
             'name' => 'northwind-web',
-            'environment' => 'Production',
             'region' => 'fra1',
             'ip_address' => '198.51.100.91',
             'status' => ServerStatus::Active,
@@ -739,7 +729,7 @@ final class E2ESeeder extends Seeder
         $kiln->members()->attach($owner, ['role' => TeamRole::Owner->value]);
         SourceProvider::factory()->for($kiln)->create(['name' => 'kiln-works', 'access_token' => 'ghs_kiln_never_sent']);
         $kilnCloud = CloudProvider::factory()->for($kiln)->create(['name' => 'Hetzner Cloud', 'api_token' => 'kiln-e2e-never-sent']);
-        $kiln01 = Server::factory()->fromProvider($kilnCloud)->creating()->create(['name' => 'kiln-01', 'environment' => 'Production', 'host_key_fingerprint' => null]);
+        $kiln01 = Server::factory()->fromProvider($kilnCloud)->creating()->create(['name' => 'kiln-01', 'host_key_fingerprint' => null]);
         CloudTask::start($kiln01, CloudTask::CREATE, 'create', ['image_label' => 'Ubuntu 24.04', 'region_label' => 'Falkenstein (fsn1)']);
         CloudTask::advance($kiln01, 'ssh');
 
@@ -819,7 +809,7 @@ final class E2ESeeder extends Seeder
                 'ref' => 's1', 'cloud_provider' => null, 'name' => "arrivals-{$code}-01", 'ip_address' => '192.0.2.' . (200 + $index), 'ssh_port' => 22, 'ssh_user' => 'root',
                 'ssh_private_key' => $key->privateKey, 'ssh_public_key' => $key->publicKey, 'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', "arrivals-{$code}", true)), 0, 43),
                 'os_name' => 'ubuntu', 'os_version' => '24.04', 'provisioning_phase' => 8, 'installed_runtimes' => [], 'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 80],
-                'audit_logging_enabled' => false, 'environment' => 'Production', 'region' => 'fsn1',
+                'audit_logging_enabled' => false, 'region' => 'fsn1',
             ]],
             'source_providers' => [['ref' => 'gh', 'type' => SourceProviderType::GitHubApp->value, 'name' => 'Arrivals on GitHub', 'custom_host' => null]],
             'applications' => [[
@@ -840,7 +830,6 @@ final class E2ESeeder extends Seeder
     {
         return Server::factory()->for($this->team)->create([
             'name' => $name,
-            'environment' => 'Staging',
             'region' => 'ams3',
             'ip_address' => $ip,
             'status' => $status,

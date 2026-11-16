@@ -47,6 +47,7 @@ use App\Services\Panel\ProjectPresenter;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Panel\SmartToggles;
 use App\Services\Php\PhpLimitsCard;
+use App\Services\Projects\AppTags;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeDetector;
@@ -78,9 +79,13 @@ final class ApplicationController extends Controller
         $this->authorize('view', $server);
         $this->authorize('create', Application::class);
 
+        $choices = $projects->choices($request->user(), $server->team);
+
         return Inertia::render('applications/Create', [
             'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targets($server->public_addresses)],
-            'projects' => $projects->choices($request->user(), $server->team),
+            'projects' => $choices,
+            'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
+            'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
             'js_frameworks' => app(JsPresets::class)->choices(),
             'python_frameworks' => app(PythonPresets::class)->choices(),
             'go_frameworks' => GoFrameworks::options(),
@@ -202,6 +207,8 @@ final class ApplicationController extends Controller
             'application' => [
                 'id' => $application->id,
                 'name' => $application->name,
+                'tags' => $application->tags,
+                'tags_href' => $user->can('update', $application) ? route('servers.applications.tags.update', [$server, $application]) : null,
                 'state' => $running === null ? ApplicationPresenter::state($application) : ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'],
                 'kind' => ApplicationPresenter::kind($application),
                 'runtime' => ApplicationPresenter::runtime($application),
@@ -280,6 +287,7 @@ final class ApplicationController extends Controller
                 'viewLogs' => $user->can('viewLogs', $application),
             ],
             'runtime_choice' => $user->can('update', $application) ? $this->runtimeChoice($server, $application) : null,
+            'tag_suggestions' => $user->can('update', $application) ? AppTags::suggestions($user, $server->team) : [],
             'held' => $this->held($application, $live),
         ]);
     }

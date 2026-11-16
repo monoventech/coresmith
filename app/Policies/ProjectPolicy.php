@@ -30,6 +30,17 @@ final class ProjectPolicy
         return $user->hasTeamAbility($team, Ability::ManageProjects);
     }
 
+    public function fill(User $user, Project $project): Response
+    {
+        $access = app(TeamAccess::class);
+
+        if ($access->hidesProject($user, $project) || !$access->canSeeProject($user, $project)) {
+            return Response::denyAsNotFound();
+        }
+
+        return $user->hasTeamAbility($project->team, Ability::ManageProjects) ? Response::allow() : Response::denyWithStatus(403);
+    }
+
     public function manage(User $user, Project $project): Response
     {
         $access = app(TeamAccess::class);

@@ -20,7 +20,6 @@
     let {
         teams = [],
         current = null,
-        environments = [],
         phases = [],
         cloud,
         catalog,
@@ -28,7 +27,6 @@
     }: {
         teams: { id: string; name: string; limit: string | null }[]
         current?: string | null
-        environments: string[]
         phases: { name: string; desc: string }[]
         cloud: CloudChoices
         catalog?: CloudCatalog | null
@@ -38,7 +36,6 @@
     let picked = $state<string | null>(null)
     let team = $state<string | null>(null)
 
-    const environmentOptions = $derived([{ value: '', label: 'No environment' }, ...environments])
     const chosenTeam = $derived(team ?? current ?? teams[0]?.id ?? null)
     const note = $derived(teams.find((row) => row.id === chosenTeam)?.limit ?? null)
     const providerNote = $derived(teams.find((row) => row.id === (current ?? teams[0]?.id))?.limit ?? null)
@@ -176,17 +173,6 @@
                                 Run your apps on the machine Coresmith runs on. Coresmith gets root here with a key that
                                 only works from this machine, then checks and provisions it like any server.
                             </p>
-                            <div>
-                                <Label for="environment" class="mb-1.5">Environment</Label>
-                                <NativeSelect
-                                    id="environment"
-                                    name="environment"
-                                    options={environmentOptions}
-                                    value=""
-                                    aria-invalid={errors.environment ? true : undefined}
-                                />
-                                <FieldError message={errors.environment} />
-                            </div>
                             {@render teamField(errors.team_id)}
                             <Button type="submit" class="w-full" disabled={processing}>Use this machine</Button>
                         {/if}
@@ -235,7 +221,7 @@
                                             {/if}
                                         </div>
                                     {:else if catalog}
-                                        <CloudServerFields {catalog} {environments} {errors} bind:picks />
+                                        <CloudServerFields {catalog} {errors} bind:picks />
                                         {#if providerNote}
                                             {@render limitBanner(providerNote)}
                                         {/if}
@@ -321,17 +307,6 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <Label for="environment" class="mb-1.5">Environment</Label>
-                                <NativeSelect
-                                    id="environment"
-                                    name="environment"
-                                    options={environmentOptions}
-                                    value=""
-                                    aria-invalid={errors.environment ? true : undefined}
-                                />
-                                <FieldError message={errors.environment} />
-                            </div>
                             <div>
                                 <Label for="region" class="mb-1.5">Region</Label>
                                 <Input

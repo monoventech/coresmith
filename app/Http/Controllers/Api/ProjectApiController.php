@@ -8,7 +8,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
-use App\Models\Environment;
+use App\Models\Application;
+use App\Models\ManagedDatabase;
 use App\Models\Project;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\JsonResponse;
@@ -47,8 +48,12 @@ final class ProjectApiController extends ApiController
         return [
             'id' => $project->id,
             'name' => $project->name,
-            'environments' => app(TeamAccess::class)->environmentsOf($request->user(), $project)
-                ->map(fn(Environment $environment): array => ['id' => $environment->id, 'name' => $environment->name])
+            'applications' => app(TeamAccess::class)->applications($request->user(), $project->team)->where('project_id', $project->id)->orderBy('name')->get(['id', 'name'])
+                ->map(fn(Application $application): array => ['id' => $application->id, 'name' => $application->name])
+                ->values()
+                ->all(),
+            'databases' => app(TeamAccess::class)->databases($request->user(), $project->team)->where('project_id', $project->id)->orderBy('name')->get(['id', 'name'])
+                ->map(fn(ManagedDatabase $database): array => ['id' => $database->id, 'name' => $database->name])
                 ->values()
                 ->all(),
             'created_at' => $project->created_at?->toIso8601String(),

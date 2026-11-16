@@ -27,7 +27,14 @@ export type PanelProps = {
 
 export type StatusTone = { key: string; label: string; tone: string }
 
-export type ExplorerApp = { id: string; name: string; href: string; state: StatusTone; server: string | null }
+export type ExplorerApp = {
+    id: string
+    name: string
+    tags: string[]
+    href: string
+    state: StatusTone
+    server: string | null
+}
 
 export type ExplorerDatabase = { id: string; name: string; href: string; engine: string }
 
@@ -36,7 +43,8 @@ export type ExplorerProject = {
     name: string
     href: string
     deploying: boolean
-    environments: { id: string; name: string; apps: ExplorerApp[]; databases: ExplorerDatabase[] }[]
+    apps: ExplorerApp[]
+    databases: ExplorerDatabase[]
 }
 
 export type ExplorerServer = { id: string; name: string; href: string; state: StatusTone; note: string }

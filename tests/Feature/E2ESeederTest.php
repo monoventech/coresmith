@@ -171,20 +171,22 @@ test('the browser seed gives every browser an owner with a move file to import a
     }
 });
 
-test('the browser seed files the monoven apps into projects and has a member who sees only one environment', function () {
+test('the browser seed files the monoven apps into projects with tags, and has a member who sees Storefront without its production app', function () {
     e2eSeedRun();
 
     $team = Team::query()->where('slug', 'monoven')->sole();
     $storefront = $team->projects()->where('name', 'Storefront')->sole();
-    $staging = $storefront->environments()->where('name', 'Staging')->sole();
+    $live = $team->applications()->where('name', 'storefront')->sole();
+    $trial = $team->applications()->where('name', 'storefront-staging')->sole();
     $member = User::query()->where('email', E2ESeeder::ENVIRONMENT_EMAIL)->sole();
     $access = app(TeamAccess::class);
 
     expect($team->projects()->orderBy('name')->pluck('name')->all())->toBe(['Atlas', 'Storefront'])
-        ->and($storefront->environments()->pluck('name')->all())->toBe(['Production', 'Staging'])
-        ->and($team->applications()->where('name', 'storefront-staging')->sole()->environment_id)->toBe($staging->id)
-        ->and($team->databases()->where('name', 'atlas_production')->sole()->environment?->name)->toBe('Production')
-        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'projects' => [], 'environments' => [$staging->id], 'withheld_applications' => [], 'withheld_databases' => []])
-        ->and($team->applications()->whereIn('name', array_map(fn(string $code): string => "filed-{$code}", array_values(E2ESeeder::PROJECTS)))->count())->toBe(count(E2ESeeder::PROJECTS))
-        ->and($team->servers()->whereIn('name', array_map(fn(string $code): string => "label-{$code}", array_values(E2ESeeder::PROJECTS)))->whereNull('environment')->count())->toBe(count(E2ESeeder::PROJECTS));
+        ->and([$live->project_id, $live->tags])->toBe([$storefront->id, ['production']])
+        ->and([$trial->project_id, $trial->tags])->toBe([$storefront->id, ['staging']])
+        ->and($team->databases()->where('name', 'atlas_production')->sole()->project?->name)->toBe('Atlas')
+        ->and($access->summary($team, $member))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'databases' => [], 'projects' => [$storefront->id], 'withheld_applications' => [$live->id], 'withheld_databases' => []])
+        ->and($access->canSeeApplication($member, $trial))->toBeTrue()
+        ->and($access->canSeeApplication($member, $live))->toBeFalse()
+        ->and($team->applications()->whereIn('name', array_map(fn(string $code): string => "filed-{$code}", array_values(E2ESeeder::PROJECTS)))->count())->toBe(count(E2ESeeder::PROJECTS));
 });

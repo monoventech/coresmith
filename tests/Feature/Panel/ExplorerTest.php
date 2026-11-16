@@ -31,20 +31,17 @@ function explorerFleet(Team $team): array
 {
     $web = Server::factory()->for($team)->create(['name' => 'web', 'created_at' => now()->subMinutes(2)]);
     $db = Server::factory()->for($team)->create(['name' => 'db', 'created_at' => now()->subMinute()]);
-    $storefront = Project::factory()->for($team)->withEnvironments(['Production', 'Staging'])->create(['name' => 'Storefront']);
-    [$production, $staging] = $storefront->environments()->get()->all();
+    $storefront = Project::factory()->for($team)->create(['name' => 'Storefront']);
 
     return [
         'web' => $web,
         'db' => $db,
         'storefront' => $storefront,
-        'production' => $production,
-        'staging' => $staging,
-        'shop' => Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'environment_id' => $production->id]),
-        'shopStaging' => Application::factory()->for($team)->for($db)->create(['name' => 'shop-staging', 'environment_id' => $staging->id]),
+        'shop' => Application::factory()->for($team)->for($web)->create(['name' => 'shop', 'project_id' => $storefront->id, 'tags' => ['production']]),
+        'shopStaging' => Application::factory()->for($team)->for($db)->create(['name' => 'shop-staging', 'project_id' => $storefront->id, 'tags' => ['staging']]),
         'blog' => Application::factory()->for($team)->for($web)->create(['name' => 'blog']),
-        'shopDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'environment_id' => $production->id]),
-        'stagingDb' => ManagedDatabase::factory()->for($team)->for($db)->create(['name' => 'staging_db', 'environment_id' => $staging->id]),
+        'shopDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'shop_db', 'project_id' => $storefront->id]),
+        'stagingDb' => ManagedDatabase::factory()->for($team)->for($db)->create(['name' => 'staging_db', 'project_id' => $storefront->id]),
         'blogDb' => ManagedDatabase::factory()->for($team)->for($web)->create(['name' => 'blog_db']),
     ];
 }
@@ -59,7 +56,7 @@ function explorerFor(User $user, Team $team): array
     return app(ExplorerPresenter::class)->present($user, $team);
 }
 
-test('the owner sees every project with its environments, the other apps and every server', function () {
+test('the owner sees every project with its apps and databases, the other apps and every server', function () {
     $team = Team::factory()->owned()->create(['name' => 'Monoven Ltd']);
     $fleet = explorerFleet($team);
 
@@ -69,12 +66,10 @@ test('the owner sees every project with its environments, the other apps and eve
     expect($explorer['team'])->toBe(['name' => 'Monoven Ltd', 'detail' => 'Owner · 1 person'])
         ->and($explorer['projects'])->toHaveCount(1)
         ->and($storefront)->toMatchArray(['name' => 'Storefront', 'href' => route('projects.show', $fleet['storefront']), 'deploying' => false])
-        ->and(collect($storefront['environments'])->pluck('name')->all())->toBe(['Production', 'Staging'])
-        ->and(collect($storefront['environments'][0]['apps'])->pluck('name')->all())->toBe(['shop'])
-        ->and(collect($storefront['environments'][0]['databases'])->pluck('name')->all())->toBe(['shop_db'])
-        ->and(collect($storefront['environments'][1]['apps'])->pluck('name')->all())->toBe(['shop-staging'])
-        ->and($storefront['environments'][0]['apps'][0])->toMatchArray(['server' => 'web', 'href' => route('servers.applications.show', [$fleet['web'], $fleet['shop']])])
-        ->and($storefront['environments'][0]['databases'][0]['href'])->toBe(route('servers.databases.show', [$fleet['web'], $fleet['shopDb']]))
+        ->and(collect($storefront['apps'])->map(fn(array $app): array => [$app['name'], $app['tags']])->all())->toBe([['shop', ['production']], ['shop-staging', ['staging']]])
+        ->and(collect($storefront['databases'])->pluck('name')->all())->toBe(['shop_db', 'staging_db'])
+        ->and($storefront['apps'][0])->toMatchArray(['server' => 'web', 'href' => route('servers.applications.show', [$fleet['web'], $fleet['shop']])])
+        ->and($storefront['databases'][0]['href'])->toBe(route('servers.databases.show', [$fleet['web'], $fleet['shopDb']]))
         ->and(collect($explorer['unfiled'])->pluck('name')->all())->toBe(['blog'])
         ->and(collect($explorer['servers'])->pluck('name')->all())->toBe(['web', 'db'])
         ->and($explorer['servers'][0]['href'])->toBe(route('servers.show', $fleet['web']))
@@ -82,18 +77,17 @@ test('the owner sees every project with its environments, the other apps and eve
         ->and($explorer['can'])->toBe(['createProject' => true, 'createServer' => true]);
 });
 
-test('an environment-only member sees that environment alone and no servers', function () {
+test('a member a project is shared with in part sees what is shared and no servers', function () {
     $team = Team::factory()->owned()->create();
     $fleet = explorerFleet($team);
     $member = explorerMember($team);
-    app(TeamAccess::class)->grant($team, $member, $fleet['staging']);
+    app(TeamAccess::class)->sync($team, $member, false, [], [], [$fleet['storefront']->id], [], [$fleet['shop']->id], [$fleet['shopDb']->id]);
 
     $explorer = explorerFor($member, $team);
 
     expect(collect($explorer['projects'])->pluck('name')->all())->toBe(['Storefront'])
-        ->and(collect($explorer['projects'][0]['environments'])->pluck('name')->all())->toBe(['Staging'])
-        ->and(collect($explorer['projects'][0]['environments'][0]['apps'])->pluck('name')->all())->toBe(['shop-staging'])
-        ->and(collect($explorer['projects'][0]['environments'][0]['databases'])->pluck('name')->all())->toBe(['staging_db'])
+        ->and(collect($explorer['projects'][0]['apps'])->pluck('name')->all())->toBe(['shop-staging'])
+        ->and(collect($explorer['projects'][0]['databases'])->pluck('name')->all())->toBe(['staging_db'])
         ->and($explorer['unfiled'])->toBe([])
         ->and($explorer['servers'])->toBe([]);
 });
@@ -111,13 +105,21 @@ test('a member narrowed to a server sees it and its apps, with apps of projects 
         ->and(collect($explorer['servers'])->pluck('name')->all())->toBe(['web']);
 });
 
-test('a project with no environment the member can see is left out', function () {
+test('a project nobody shared with the member is left out, and one shared with everything held back shows empty', function () {
     $team = Team::factory()->owned()->create();
-    explorerFleet($team);
-    Project::factory()->for($team)->withEnvironments(['Production'])->create(['name' => 'Atlas']);
+    $fleet = explorerFleet($team);
+    Project::factory()->for($team)->create(['name' => 'Atlas']);
     $member = explorerMember($team);
 
     expect(explorerFor($member, $team)['projects'])->toBe([]);
+
+    app(TeamAccess::class)->sync($team, $member, false, [], [], [$fleet['storefront']->id], [], [$fleet['shop']->id, $fleet['shopStaging']->id], [$fleet['shopDb']->id, $fleet['stagingDb']->id]);
+
+    $explorer = explorerFor($member, $team);
+
+    expect(collect($explorer['projects'])->pluck('name')->all())->toBe(['Storefront'])
+        ->and($explorer['projects'][0]['apps'])->toBe([])
+        ->and($explorer['projects'][0]['databases'])->toBe([]);
 });
 
 test('a running deploy shows its app, server, phase states and link', function () {
@@ -160,11 +162,10 @@ test('the explorer costs the same queries for one app as for five', function () 
     $queries = function (int $apps): int {
         $team = Team::factory()->owned()->create();
         $server = Server::factory()->for($team)->create();
-        $project = Project::factory()->for($team)->withEnvironments(['Production'])->create();
-        $environment = $project->environments()->first();
-        Application::factory()->count($apps)->for($team)->for($server)->create(['environment_id' => $environment->id]);
+        $project = Project::factory()->for($team)->create();
+        Application::factory()->count($apps)->for($team)->for($server)->create(['project_id' => $project->id]);
         Application::factory()->count($apps)->for($team)->for($server)->create();
-        ManagedDatabase::factory()->count($apps)->for($team)->for($server)->create(['environment_id' => $environment->id]);
+        ManagedDatabase::factory()->count($apps)->for($team)->for($server)->create(['project_id' => $project->id]);
 
         app()->forgetScopedInstances();
         DB::flushQueryLog();

@@ -63,7 +63,6 @@ final class SetupController extends Controller
 
                 return $selected === null ? null : $cloud->catalog($selected);
             })] : []),
-            'environments' => ServerController::ENVIRONMENTS,
             'server' => $server instanceof Server ? [
                 ...$servers->header($server, $user),
                 'href' => route('servers.show', $server),

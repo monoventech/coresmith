@@ -145,14 +145,10 @@ final class Breadcrumbs
      */
     private function place(User $user, Application|ManagedDatabase $subject, array $fleet): array
     {
-        $environment = $subject->environment;
-        $project = $environment?->project;
+        $project = $subject->project;
 
-        if ($project instanceof Project && $this->access->canSeeEnvironment($user, $environment)) {
-            return [
-                self::crumb($project->name, $this->access->canSeeProject($user, $project) ? route('projects.show', $project) : null),
-                self::crumb($environment->name),
-            ];
+        if ($project instanceof Project && $this->access->canSeeProject($user, $project)) {
+            return [self::crumb($project->name, route('projects.show', $project))];
         }
 
         $server = $subject->server;

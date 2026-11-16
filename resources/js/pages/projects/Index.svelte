@@ -6,6 +6,8 @@
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import FleetHeader from '@/components/fleet/FleetHeader.svelte'
+    import StateDot from '@/components/StateDot.svelte'
+    import AppTags from '@/components/projects/AppTags.svelte'
     import ProjectNameDialog from '@/components/projects/ProjectNameDialog.svelte'
     import { Button } from '@/components/ui/button'
     import type { ProjectCard } from '@/lib/projects'
@@ -47,7 +49,7 @@
         <EmptyState
             class="mb-7 max-sm:mb-4"
             title="No projects yet."
-            description="Group apps by what they're for. A project holds environments such as Production and Staging, and can be shared on its own."
+            description="Group apps and databases by what they're for, such as a product or a client, then share the whole group at once."
         >
             {#snippet action()}
                 {#if can.create}
@@ -71,20 +73,25 @@
                         {project.name}
                     </Link>
                     <p class="m-0 mt-1 text-[12.5px] text-muted-foreground">{project.meta}</p>
-                    <ul
-                        class="m-0 mt-3.5 flex list-none flex-wrap gap-1.5 p-0"
-                        aria-label="Environments in {project.name}"
-                    >
-                        {#each project.environments as environment (environment.id)}
-                            <li
-                                class="rounded-md border border-border px-2 py-0.5 text-[12px] text-muted-foreground"
-                                data-testid="project-environment"
-                            >
-                                <span class="text-foreground">{environment.name}</span>
-                                <span class="font-mono">{environment.apps}</span>
-                            </li>
-                        {/each}
-                    </ul>
+                    {#if project.apps.length > 0}
+                        <ul class="m-0 mt-3 flex list-none flex-col gap-1 p-0" aria-label="Apps in {project.name}">
+                            {#each project.apps.slice(0, 4) as app (app.id)}
+                                <li
+                                    class="flex min-w-0 items-center gap-2 text-[12.5px]"
+                                    data-testid="project-card-app"
+                                >
+                                    <StateDot tone={app.state.tone} size="sm" />
+                                    <span class="min-w-0 truncate font-mono text-foreground">{app.name}</span>
+                                    <AppTags tags={app.tags} limit={2} class="flex-nowrap" />
+                                </li>
+                            {/each}
+                            {#if project.apps.length > 4}
+                                <li class="pl-3.5 text-[12px] text-muted-foreground">
+                                    and {project.apps.length - 4} more
+                                </li>
+                            {/if}
+                        </ul>
+                    {/if}
                     <p class="m-0 mt-4 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
                         {#if project.latest}
                             Last deploy <span class="font-mono text-foreground">{project.latest.application}</span>, {project
@@ -128,7 +135,7 @@
     <ProjectNameDialog
         bind:open={creating}
         title="Create a project"
-        description="It starts with a Production environment. Add more, such as Staging, once it exists."
+        description="Add apps and databases to it once it exists."
         label="Project name"
         submit="Create project"
         href={route('projects.store')}

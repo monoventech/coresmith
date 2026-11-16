@@ -1,5 +1,6 @@
 <script lang="ts">
-    import type { ExplorerApp, ExplorerProject, ExplorerProps } from '@/lib/panel'
+    import AppTags from '@/components/projects/AppTags.svelte'
+    import type { ExplorerProject, ExplorerProps } from '@/lib/panel'
     import { statusDot } from '@/lib/panel'
     import { cn } from '@/lib/utils'
     import { Link } from '@inertiajs/svelte'
@@ -9,29 +10,25 @@
 
     let open = $state(false)
 
-    function standing(apps: ExplorerApp[]): { tone: string; word: string } | null {
+    function summary(project: ExplorerProject): { tone: string; text: string } | null {
+        const apps = project.apps
+
         if (apps.length === 0) {
-            return null
+            const count = project.databases.length
+
+            return count === 0 ? null : { tone: 'default', text: `${count} ${count === 1 ? 'database' : 'databases'}` }
         }
 
         const notable =
-            apps.find((app) => app.state.tone === 'accent') ?? apps.find((app) => app.state.tone === 'destructive')
+            apps.find((app) => app.state.tone === 'accent') ??
+            apps.find((app) => app.state.tone === 'destructive') ??
+            apps.find((app) => app.state.key !== 'live')
 
         if (notable) {
-            return { tone: notable.state.tone, word: notable.state.label.toLowerCase() }
+            return { tone: notable.state.tone, text: `${notable.name} ${notable.state.label.toLowerCase()}` }
         }
 
-        return apps.every((app) => app.state.key === 'live')
-            ? { tone: 'success', word: 'live' }
-            : { tone: apps[0].state.tone, word: apps[0].state.label.toLowerCase() }
-    }
-
-    function summary(project: ExplorerProject): { name: string; tone: string; word: string }[] {
-        return project.environments.flatMap((environment) => {
-            const state = standing(environment.apps)
-
-            return state === null ? [] : [{ name: environment.name, ...state }]
-        })
+        return { tone: 'success', text: apps.length === 1 ? '1 app, live' : `${apps.length} apps, all live` }
     }
 </script>
 
@@ -41,6 +38,7 @@
     </h2>
     <ul class="m-0 flex list-none flex-col overflow-hidden rounded-xl border border-border bg-card p-0">
         {#each explorer.projects as project (project.id)}
+            {@const state = summary(project)}
             <li class="border-t border-border first:border-t-0">
                 <Link
                     href={project.href}
@@ -49,18 +47,15 @@
                     <Folder class="size-4.25 shrink-0 text-muted-foreground" />
                     <span class="flex min-w-0 flex-1 flex-col leading-snug">
                         <span class="truncate text-[14.5px] font-medium">{project.name}</span>
-                        <span class="flex flex-wrap items-center gap-x-2.5 text-[12px] text-muted-foreground">
-                            {#each summary(project) as environment (environment.name)}
-                                <span class="flex items-center gap-1.5">
-                                    <span
-                                        class={cn('size-1.5 shrink-0 rounded-full', statusDot(environment.tone))}
-                                        aria-hidden="true"
-                                    ></span>
-                                    {environment.name}
-                                    {environment.word}
-                                </span>
-                            {/each}
-                        </span>
+                        {#if state}
+                            <span class="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+                                <span
+                                    class={cn('size-1.5 shrink-0 rounded-full', statusDot(state.tone))}
+                                    aria-hidden="true"
+                                ></span>
+                                <span class="min-w-0 truncate">{state.text}</span>
+                            </span>
+                        {/if}
                     </span>
                     <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
                 </Link>
@@ -91,7 +86,7 @@
                             <li class="border-t border-border first:border-t-0">
                                 <Link
                                     href={app.href}
-                                    aria-label="{app.name}, {app.state.label}"
+                                    aria-label={[app.name, ...app.tags, app.state.label].join(', ')}
                                     class="focus-ring flex min-h-11 items-center gap-2.5 px-3.5 py-2 text-foreground no-underline"
                                 >
                                     <span
@@ -99,7 +94,14 @@
                                         aria-hidden="true"
                                     ></span>
                                     <span class="min-w-0 flex-1 truncate font-mono text-[13px]">{app.name}</span>
-                                    {#if app.server}
+                                    {#if app.tags.length > 0}
+                                        <AppTags
+                                            tags={app.tags}
+                                            limit={2}
+                                            class="shrink-0 flex-nowrap"
+                                            chipClass="max-w-20"
+                                        />
+                                    {:else if app.server}
                                         <span
                                             class="shrink-0 font-mono text-[11.5px] text-muted-foreground"
                                             aria-hidden="true">{app.server}</span

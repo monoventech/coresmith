@@ -14,7 +14,9 @@ use App\Jobs\DeployApplication;
 use App\Jobs\RollbackApplication;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\Project;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Deployment\DeployGuard;
 use App\Services\Deployment\DeploymentCancellation;
@@ -31,7 +33,7 @@ use Inertia\Response;
 
 final class DeploymentController extends Controller
 {
-    public const ORIGINS = ['fleet', 'deployments', 'app', 'releases', 'setup'];
+    public const ORIGINS = ['fleet', 'deployments', 'app', 'releases', 'setup', 'project'];
 
     public function deploy(Request $request, Server $server, Application $application, DeployGuard $guard): RedirectResponse
     {
@@ -81,7 +83,7 @@ final class DeploymentController extends Controller
                 'cancel' => route('servers.applications.deployments.cancel', [$server, $application, $deployment]),
             ],
             'deployment' => self::present($deployment, $phases),
-            'back' => $this->back((string) $request->query('from'), $server, $application),
+            'back' => $this->back((string) $request->query('from'), $server, $application, $request->user()),
             'streaming' => Realtime::available(),
             'can' => ['deploy' => $request->user()->can('deploy', $application)],
         ]);
@@ -168,10 +170,14 @@ final class DeploymentController extends Controller
     /**
      * @return array{label: string, href: string}
      */
-    private function back(string $from, Server $server, Application $application): array
+    private function back(string $from, Server $server, Application $application, User $viewer): array
     {
+        $project = $application->project;
+        $app = ['label' => $application->name, 'href' => route('servers.applications.show', [$server, $application])];
+
         return match ($from) {
-            'app' => ['label' => $application->name, 'href' => route('servers.applications.show', [$server, $application])],
+            'app' => $app,
+            'project' => $project instanceof Project && app(TeamAccess::class)->canSeeProject($viewer, $project) ? ['label' => $project->name, 'href' => route('projects.show', $project)] : $app,
             'deployments' => ['label' => 'Deployments', 'href' => route('deployments.index')],
             'releases' => ['label' => 'Releases', 'href' => route('servers.applications.releases.index', [$server, $application])],
             default => ['label' => 'Fleet', 'href' => route('dashboard')],

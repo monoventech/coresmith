@@ -49,7 +49,7 @@
     }
 
     function apps(project: ExplorerProject): string {
-        const count = project.environments.reduce((total, environment) => total + environment.apps.length, 0)
+        const count = project.apps.length
 
         return `${count} ${count === 1 ? 'app' : 'apps'}`
     }
@@ -150,7 +150,7 @@
                             <button
                                 type="button"
                                 class="focus-ring inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-muted"
-                                aria-label="{project.name} environments"
+                                aria-label="What's in {project.name}"
                                 aria-expanded={open}
                                 aria-controls="explorer-project-{project.id}"
                                 onclick={() => toggleProject(project.id)}
@@ -180,34 +180,35 @@
                         </div>
                         {#if open}
                             <div id="explorer-project-{project.id}" class="flex flex-col gap-px">
-                                {#each project.environments as environment (environment.id)}
-                                    <div class="flex h-5.5 items-center pl-9.5 text-[11.5px] text-muted-foreground">
-                                        {environment.name}
-                                    </div>
-                                    {#each environment.apps as app (app.id)}
-                                        <ExplorerRow
-                                            href={app.href}
-                                            name={app.name}
-                                            detail={app.state.label}
-                                            tone={app.state.tone}
-                                            aside={app.server}
-                                            asideClass="font-mono"
-                                            indent
-                                            current={current(app.href)}
-                                        />
-                                    {/each}
-                                    {#each environment.databases as database (database.id)}
-                                        <ExplorerRow
-                                            href={database.href}
-                                            name={database.name}
-                                            detail={ENGINES[database.engine] ?? database.engine}
-                                            aside={ENGINES[database.engine] ?? database.engine}
-                                            database
-                                            indent
-                                            current={current(database.href)}
-                                        />
-                                    {/each}
+                                {#each project.apps as app (app.id)}
+                                    <ExplorerRow
+                                        href={app.href}
+                                        name={app.name}
+                                        detail={app.state.label}
+                                        tone={app.state.tone}
+                                        tags={app.tags}
+                                        aside={app.server}
+                                        asideClass="font-mono"
+                                        indent
+                                        current={current(app.href)}
+                                    />
                                 {/each}
+                                {#each project.databases as database (database.id)}
+                                    <ExplorerRow
+                                        href={database.href}
+                                        name={database.name}
+                                        detail={ENGINES[database.engine] ?? database.engine}
+                                        aside={ENGINES[database.engine] ?? database.engine}
+                                        database
+                                        indent
+                                        current={current(database.href)}
+                                    />
+                                {/each}
+                                {#if project.apps.length === 0 && project.databases.length === 0}
+                                    <p class="m-0 flex h-7 items-center pl-9.5 text-[12px] text-muted-foreground">
+                                        Nothing here yet
+                                    </p>
+                                {/if}
                             </div>
                         {/if}
                     </div>
@@ -233,6 +234,7 @@
                         name={app.name}
                         detail={app.state.label}
                         tone={app.state.tone}
+                        tags={app.tags}
                         aside={app.server}
                         asideClass="font-mono"
                         current={current(app.href)}

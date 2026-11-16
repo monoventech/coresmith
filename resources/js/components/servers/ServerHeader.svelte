@@ -12,7 +12,6 @@
     import FieldError from '@/components/FieldError.svelte'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
-    import { NativeSelect } from '@/components/ui/native-select'
     import { follow } from '@/lib/live.svelte'
     import type { ServerHeader } from '@/lib/servers'
     import { router } from '@inertiajs/svelte'
@@ -27,8 +26,7 @@
     let rebooting = $state(false)
     let resizing = $state(false)
     let name = $state('')
-    let environment = $state('')
-    let renameErrors = $state<{ name?: string; environment?: string }>({})
+    let renameErrors = $state<{ name?: string }>({})
     let working = $state(false)
 
     onMount(() => follow({ only: ['server', 'panel'], paused: () => working }))
@@ -52,7 +50,6 @@
 
     function openRename() {
         name = server.name
-        environment = server.environment ?? ''
         renameErrors = {}
         renaming = true
     }
@@ -62,12 +59,11 @@
         working = true
         router.put(
             route('servers.update', server.id),
-            { name, environment },
+            { name },
             {
                 preserveScroll: true,
                 onSuccess: () => (renaming = false),
-                onError: (errors: Record<string, string>) =>
-                    (renameErrors = { name: errors.name, environment: errors.environment }),
+                onError: (errors: Record<string, string>) => (renameErrors = { name: errors.name }),
                 onFinish: () => (working = false)
             }
         )
@@ -215,9 +211,7 @@
         <form onsubmit={saveName}>
             <Dialog.Header>
                 <Dialog.Title>Rename server</Dialog.Title>
-                <Dialog.Description
-                    >The name and environment are only for Coresmith. Nothing on the server changes.</Dialog.Description
-                >
+                <Dialog.Description>The name is only for Coresmith. Nothing on the server changes.</Dialog.Description>
             </Dialog.Header>
             <div class="mt-4 flex flex-col gap-3.5">
                 <div>
@@ -230,16 +224,6 @@
                         aria-invalid={renameErrors.name ? true : undefined}
                     />
                     <FieldError message={renameErrors.name} />
-                </div>
-                <div>
-                    <Label for="server-environment" class="mb-1.5">Environment</Label>
-                    <NativeSelect
-                        id="server-environment"
-                        bind:value={environment}
-                        options={[{ value: '', label: 'No environment' }, ...server.environments]}
-                        aria-invalid={renameErrors.environment ? true : undefined}
-                    />
-                    <FieldError message={renameErrors.environment} />
                 </div>
             </div>
             <Dialog.Footer>

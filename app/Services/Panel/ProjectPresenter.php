@@ -9,21 +9,25 @@ declare(strict_types=1);
 namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
+use App\Enums\MonitorKind;
+use App\Enums\PowerState;
 use App\Enums\TeamRole;
 use App\Models\Application;
 use App\Models\Deployment;
-use App\Models\Environment;
 use App\Models\ManagedDatabase;
+use App\Models\MonitorAlert;
 use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Projects\AppTags;
 use App\Services\Teams\TeamAccess;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
 
 final class ProjectPresenter
 {
-    public const DEPLOYS = 3;
+    public const DEPLOYS = 10;
 
     public function __construct(private readonly TeamAccess $access) {}
 
@@ -32,19 +36,20 @@ final class ProjectPresenter
      */
     public function card(Project $project, User $viewer): array
     {
-        $environments = $this->access->environmentsOf($viewer, $project);
-        $applications = Application::query()->whereIn('environment_id', $environments->modelKeys())->get(['id', 'environment_id']);
+        $applications = $this->applications($project, $viewer);
+        $databases = $this->databases($project, $viewer)->count();
         $latest = Deployment::query()->whereIn('application_id', $applications->modelKeys())->with('application')->latest('created_at')->first();
 
         return [
             'id' => $project->getKey(),
             'name' => $project->name,
             'href' => route('projects.show', $project),
-            'meta' => self::meta($environments->count(), $applications->count(), ManagedDatabase::query()->whereIn('environment_id', $environments->modelKeys())->count()),
-            'environments' => $environments->map(fn(Environment $environment): array => [
-                'id' => $environment->getKey(),
-                'name' => $environment->name,
-                'apps' => $applications->where('environment_id', $environment->getKey())->count(),
+            'meta' => self::counts($applications->count(), $databases),
+            'apps' => $applications->map(fn(Application $application): array => [
+                'id' => $application->getKey(),
+                'name' => $application->name,
+                'tags' => $application->tags,
+                'state' => ApplicationPresenter::state($application),
             ])->values()->all(),
             'latest' => $latest?->application === null ? null : [
                 'application' => $latest->application->name,
@@ -59,65 +64,79 @@ final class ProjectPresenter
      */
     public function page(Project $project, User $viewer): array
     {
-        $environments = $this->access->environmentsOf($viewer, $project);
-        $applications = Application::query()->whereIn('environment_id', $environments->modelKeys())->with('server')->orderBy('name')->get();
-        $databases = ManagedDatabase::query()->whereIn('environment_id', $environments->modelKeys())->with('server')->orderBy('name')->get();
-        $running = Deployment::query()->whereIn('application_id', $applications->modelKeys())->where('status', DeploymentStatus::Running->value)->pluck('application_id')->all();
-        $fills = $environments->mapWithKeys(fn(Environment $environment): array => [$environment->getKey() => Gate::forUser($viewer)->allows('fill', $environment)]);
+        $team = $project->team;
+        $applications = $this->applications($project, $viewer)->load('server');
+        $databases = $this->databases($project, $viewer)->load('server');
+        $last = $this->lastDeploys($applications);
+        $servers = Server::query()->whereIn('id', [...$applications->pluck('server_id'), ...$databases->pluck('server_id')])->orderBy('name')->get();
+        $fleet = new FleetSnapshot($team, $viewer);
+        $fill = Gate::forUser($viewer)->allows('fill', $project);
+        $developer = $viewer->roleIn($team) === TeamRole::Developer;
+        $attention = $this->attention($applications, $databases, $servers, $last, $fleet, $viewer);
+        $shares = Gate::forUser($viewer)->allows('shareAccess', $team);
 
         return [
             'project' => [
                 'id' => $project->getKey(),
                 'name' => $project->name,
-                'meta' => self::meta($environments->count(), $applications->count(), $databases->count()),
+                'meta' => implode(' · ', array_filter([
+                    self::counts($applications->count(), $databases->count()),
+                    $servers->isEmpty() ? null : 'on ' . $servers->count() . ' ' . ($servers->count() === 1 ? 'server' : 'servers'),
+                ])),
+                'healthy' => $applications->isNotEmpty() && $attention === [],
             ],
-            'environments' => $environments->map(function (Environment $environment) use ($project, $viewer, $applications, $databases, $running, $fills): array {
-                $here = $applications->where('environment_id', $environment->getKey())->values();
-                $stored = $databases->where('environment_id', $environment->getKey())->values();
-                $fill = (bool) $fills->get($environment->getKey());
-
-                return [
-                    'id' => $environment->getKey(),
-                    'name' => $environment->name,
-                    'meta' => self::counts($here->count(), $stored->count()),
-                    'applications' => $here->map(fn(Application $application): array => [
-                        'id' => $application->getKey(),
-                        'name' => $application->name,
-                        'kind' => ApplicationPresenter::kind($application),
-                        'state' => in_array($application->getKey(), $running, true) ? ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'] : ApplicationPresenter::state($application),
-                        'href' => route('servers.applications.show', [$application->server_id, $application]),
-                        'server' => $this->where($viewer, $application->server),
-                        'remove_href' => $fill ? route('projects.environments.applications.destroy', [$project, $environment, $application]) : null,
-                    ])->all(),
-                    'databases' => $stored->map(fn(ManagedDatabase $database): array => [
-                        'id' => $database->getKey(),
-                        'name' => $database->name,
-                        'type' => $database->type->value,
-                        'href' => route('servers.databases.show', [$database->server_id, $database]),
-                        'server' => $this->where($viewer, $database->server),
-                        'remove_href' => $fill ? route('projects.environments.databases.destroy', [$project, $environment, $database]) : null,
-                    ])->all(),
-                    'deploys' => Deployment::query()
-                        ->whereIn('application_id', $here->modelKeys())
-                        ->with('application.server')
-                        ->latest('created_at')
-                        ->limit(self::DEPLOYS)
-                        ->get()
-                        ->map(fn(Deployment $deployment): array => DeploymentPresenter::row($deployment))
-                        ->all(),
-                    'can' => ['fill' => $fill],
-                    'fill_href' => route('projects.environments.contents.store', [$project, $environment]),
-                    'rename_href' => route('projects.environments.update', [$project, $environment]),
-                    'delete_href' => route('projects.environments.destroy', [$project, $environment]),
-                ];
-            })->values()->all(),
-            'can' => ['manage' => Gate::forUser($viewer)->allows('manage', $project)],
-            'candidates' => $fills->contains(true) ? $this->candidates($project, $viewer) : ['applications' => [], 'databases' => []],
+            'attention' => $attention,
+            'applications' => $applications->map(fn(Application $application): array => [
+                'id' => $application->getKey(),
+                'name' => $application->name,
+                'tags' => $application->tags,
+                'kind' => ApplicationPresenter::kind($application),
+                'state' => $last->get($application->getKey())?->status === DeploymentStatus::Running ? ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'] : ApplicationPresenter::state($application),
+                'href' => route('servers.applications.show', [$application->server_id, $application]),
+                'server' => $this->where($viewer, $application->server),
+                'domain' => $application->domain === null || $application->domain === '' ? null : ['label' => $application->domain, 'href' => 'https://' . $application->domain],
+                'last_deploy' => $this->lastDeploy($last->get($application->getKey())),
+                'deploy_href' => Gate::forUser($viewer)->allows('deploy', $application) ? route('servers.applications.deploy', [$application->server_id, $application]) : null,
+                'tags_href' => Gate::forUser($viewer)->allows('update', $application) ? route('servers.applications.tags.update', [$application->server_id, $application]) : null,
+                'remove_href' => $fill && (!$developer || $application->addedBy($viewer)) ? route('projects.applications.destroy', [$project, $application]) : null,
+            ])->values()->all(),
+            'databases' => $databases->map(fn(ManagedDatabase $database): array => [
+                'id' => $database->getKey(),
+                'name' => $database->name,
+                'type' => $database->type->value,
+                'href' => route('servers.databases.show', [$database->server_id, $database]),
+                'server' => $this->where($viewer, $database->server),
+                'offsite' => $database->last_offsite_error !== null
+                    ? ['label' => 'Offsite backup failing', 'tone' => 'destructive']
+                    : ($database->last_offsite_at === null ? null : ['label' => 'Backed up offsite ' . Formats::when($database->last_offsite_at), 'tone' => 'success']),
+                'remove_href' => $fill && (!$developer || $database->addedBy($viewer)) ? route('projects.databases.destroy', [$project, $database]) : null,
+            ])->values()->all(),
+            'deploys' => Deployment::query()
+                ->whereIn('application_id', $applications->modelKeys())
+                ->with('application.server')
+                ->latest('created_at')
+                ->limit(self::DEPLOYS)
+                ->get()
+                ->map(fn(Deployment $deployment): array => DeploymentPresenter::row($deployment))
+                ->all(),
+            'deploys_href' => route('deployments.index', ['project' => $project->getKey()]),
+            'servers' => $servers->map(fn(Server $server): array => $this->server($fleet, $viewer, $server))->values()->all(),
+            'people' => $shares ? $this->people($project) : null,
+            'access_href' => $shares ? route('teams.index') : null,
+            'add' => $fill && $viewer->can('create', Application::class) ? $this->addTargets($project, $viewer) : [],
+            'can' => [
+                'manage' => Gate::forUser($viewer)->allows('manage', $project),
+                'fill' => $fill,
+            ],
+            'shared_part' => !$this->access->seesWholeProject($viewer, $project),
+            'adds_stay_private' => $developer,
+            'candidates' => $fill ? $this->candidates($project, $viewer) : ['applications' => [], 'databases' => []],
+            'tag_suggestions' => AppTags::suggestions($viewer, $team),
         ];
     }
 
     /**
-     * @return list<array{id: string, name: string, environments: list<array{id: string, name: string}>}>
+     * @return list<array{id: string, name: string}>
      */
     public function choices(User $viewer, ?Team $team): array
     {
@@ -126,16 +145,8 @@ final class ProjectPresenter
         }
 
         return $this->access->projects($viewer, $team)->orderBy('name')->get()
-            ->map(fn(Project $project): array => [
-                'id' => $project->getKey(),
-                'name' => $project->name,
-                'environments' => $this->access->environmentsOf($viewer, $project)
-                    ->filter(fn(Environment $environment): bool => Gate::forUser($viewer)->allows('fill', $environment))
-                    ->map(fn(Environment $environment): array => ['id' => $environment->getKey(), 'name' => $environment->name])
-                    ->values()
-                    ->all(),
-            ])
-            ->filter(fn(array $project): bool => $project['environments'] !== [])
+            ->filter(fn(Project $project): bool => Gate::forUser($viewer)->allows('fill', $project))
+            ->map(fn(Project $project): array => ['id' => $project->getKey(), 'name' => $project->name])
             ->values()
             ->all();
     }
@@ -145,21 +156,16 @@ final class ProjectPresenter
      */
     public function place(User $viewer, Application|ManagedDatabase $subject): ?array
     {
-        $project = $subject->environment?->project;
+        $project = $subject->project;
 
         if (!$project instanceof Project) {
             return null;
         }
 
         return [
-            'label' => $project->name . ' › ' . $subject->environment->name,
+            'label' => $project->name,
             'href' => $this->access->canSeeProject($viewer, $project) ? route('projects.show', $project) : null,
         ];
-    }
-
-    public static function meta(int $environments, int $applications, int $databases): string
-    {
-        return implode(' · ', [$environments . ' ' . ($environments === 1 ? 'environment' : 'environments'), self::counts($applications, $databases)]);
     }
 
     public static function counts(int $applications, int $databases): string
@@ -168,6 +174,164 @@ final class ProjectPresenter
             $applications . ' ' . ($applications === 1 ? 'app' : 'apps'),
             $databases > 0 ? $databases . ' ' . ($databases === 1 ? 'database' : 'databases') : null,
         ]));
+    }
+
+    /**
+     * @return Collection<int, Application>
+     */
+    private function applications(Project $project, User $viewer): Collection
+    {
+        return $this->access->applications($viewer, $project->team)->where('project_id', $project->getKey())->orderBy('name')->get();
+    }
+
+    /**
+     * @return Collection<int, ManagedDatabase>
+     */
+    private function databases(Project $project, User $viewer): Collection
+    {
+        return $this->access->databases($viewer, $project->team)->where('project_id', $project->getKey())->orderBy('name')->get();
+    }
+
+    /**
+     * @param  Collection<int, Application>  $applications
+     * @return Collection<string, Deployment>
+     */
+    private function lastDeploys(Collection $applications): Collection
+    {
+        if ($applications->isEmpty()) {
+            return new Collection;
+        }
+
+        return Deployment::query()
+            ->whereIn('id', Deployment::query()->selectRaw('max(id)')->whereIn('application_id', $applications->modelKeys())->groupBy('application_id'))
+            ->with('triggeredBy')
+            ->get()
+            ->keyBy('application_id');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function lastDeploy(?Deployment $deployment): ?array
+    {
+        if (!$deployment instanceof Deployment) {
+            return null;
+        }
+
+        $subject = trim(strtok((string) $deployment->commit_message, "\n") ?: '');
+
+        return [
+            'state' => DeploymentPresenter::state($deployment),
+            'when' => Formats::when($deployment->started_at ?? $deployment->created_at),
+            'full' => Formats::absolute($deployment->started_at ?? $deployment->created_at),
+            'commit' => $subject === '' ? null : $subject,
+            'by' => $deployment->triggeredBy?->name ?? ($deployment->commit_author === null || $deployment->commit_author === '' ? null : $deployment->commit_author),
+            'href' => $deployment->application === null ? null : route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment]),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Application>  $applications
+     * @param  Collection<int, ManagedDatabase>  $databases
+     * @param  Collection<int, Server>  $servers
+     * @param  Collection<string, Deployment>  $last
+     * @return list<array{severity: string, subject: string, summary: string, href: string|null}>
+     */
+    private function attention(Collection $applications, Collection $databases, Collection $servers, Collection $last, FleetSnapshot $fleet, User $viewer): array
+    {
+        $items = [];
+        $down = MonitorAlert::query()->where('kind', MonitorKind::Apps)->whereNotNull('open_key')->whereIn('application_id', $applications->modelKeys())->pluck('application_id')->all();
+
+        foreach ($servers as $server) {
+            if (!$this->access->canSeeServer($viewer, $server)) {
+                continue;
+            }
+
+            $state = $fleet->state($server);
+
+            if (in_array($state['key'], ['host_key', 'failed', 'disconnected', 'unreachable', 'creation_failed', 'destroy_failed'], true)) {
+                $items[] = ['severity' => 'critical', 'subject' => $server->name, 'summary' => strtolower($state['label']), 'href' => route('servers.show', $server)];
+            }
+        }
+
+        foreach ($applications as $application) {
+            $deployment = $last->get($application->getKey());
+            $page = route('servers.applications.show', [$application->server_id, $application]);
+
+            if (in_array($application->getKey(), $down, true)) {
+                $items[] = ['severity' => 'critical', 'subject' => $application->name, 'summary' => "isn't answering", 'href' => $page];
+            } elseif ($deployment?->status === DeploymentStatus::Failed) {
+                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'last deploy failed', 'href' => route('servers.applications.deployments.show', [$application->server_id, $application, $deployment])];
+            } elseif ($application->power_state === PowerState::Stopped) {
+                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => $page];
+            }
+        }
+
+        foreach ($databases as $database) {
+            if ($database->last_offsite_error !== null) {
+                $items[] = ['severity' => 'warning', 'subject' => $database->name, 'summary' => 'offsite backup failing', 'href' => route('servers.databases.show', [$database->server_id, $database])];
+            }
+        }
+
+        usort($items, static fn(array $a, array $b): int => ($a['severity'] === 'critical' ? 0 : 1) <=> ($b['severity'] === 'critical' ? 0 : 1));
+
+        return $items;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function server(FleetSnapshot $fleet, User $viewer, Server $server): array
+    {
+        if (!$this->access->canSeeServer($viewer, $server)) {
+            return ['id' => $server->getKey(), 'name' => $server->name, 'href' => null, 'state' => null, 'cpu' => null, 'memory' => null, 'disk' => null];
+        }
+
+        $metric = $fleet->latestMetric($server);
+
+        return [
+            'id' => $server->getKey(),
+            'name' => $server->name,
+            'href' => route('servers.show', $server),
+            'state' => $fleet->state($server),
+            'cpu' => $metric === null ? null : (int) round((float) $metric->cpu_percent),
+            'memory' => $metric === null ? null : (int) round((float) $metric->memory_percent),
+            'disk' => $metric === null ? null : (int) round((float) $metric->disk_percent),
+        ];
+    }
+
+    /**
+     * @return list<array{name: string, role: string, reach: string}>
+     */
+    private function people(Project $project): array
+    {
+        $team = $project->team;
+
+        return $team->members()->orderBy('name')->get()
+            ->filter(fn(User $member): bool => $this->access->canSeeProject($member, $project))
+            ->map(fn(User $member): array => [
+                'name' => $member->name,
+                'role' => (string) TeamRole::tryFrom((string) $member->pivot->role)?->label(),
+                'reach' => match (true) {
+                    $this->access->seesEverything($member, $team) => 'Sees everything',
+                    $project->addedBy($member) => 'Created it',
+                    $this->access->seesWholeProject($member, $project) => 'Shared with them',
+                    default => 'Shared in part',
+                },
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array{name: string, href: string}>
+     */
+    private function addTargets(Project $project, User $viewer): array
+    {
+        return $this->access->servers($viewer, $project->team)->orderBy('name')->get()
+            ->map(fn(Server $server): array => ['name' => $server->name, 'href' => route('servers.applications.create', [$server, 'project' => $project->getKey()])])
+            ->values()
+            ->all();
     }
 
     /**
@@ -182,22 +346,22 @@ final class ProjectPresenter
     }
 
     /**
-     * @return array{applications: list<array{id: string, name: string, environment_id: string|null, where: string}>, databases: list<array{id: string, name: string, environment_id: string|null, where: string}>}
+     * @return array{applications: list<array{id: string, name: string, where: string}>, databases: list<array{id: string, name: string, where: string}>}
      */
     private function candidates(Project $project, User $viewer): array
     {
         $place = fn(Application|ManagedDatabase $each): array => [
             'id' => $each->getKey(),
             'name' => $each->name,
-            'environment_id' => $each->environment_id,
-            'where' => $each->environment === null ? 'No project' : $each->environment->project->name . ' › ' . $each->environment->name,
+            'where' => $each->project?->name ?? 'No project',
         ];
 
         $own = $viewer->roleIn($project->team) === TeamRole::Developer ? $viewer->getKey() : null;
+        $outside = fn($query) => $query->where(fn($elsewhere) => $elsewhere->whereNull('project_id')->orWhere('project_id', '!=', $project->getKey()));
 
         return [
-            'applications' => $this->access->applications($viewer, $project->team)->when($own !== null, fn($query) => $query->where('created_by', $own))->with('environment.project')->orderBy('name')->get()->map($place)->values()->all(),
-            'databases' => $this->access->databases($viewer, $project->team)->when($own !== null, fn($query) => $query->where('created_by', $own))->with('environment.project')->orderBy('name')->get()->map($place)->values()->all(),
+            'applications' => $this->access->applications($viewer, $project->team)->where($outside)->when($own !== null, fn($query) => $query->where('created_by', $own))->with('project')->orderBy('name')->get()->map($place)->values()->all(),
+            'databases' => $this->access->databases($viewer, $project->team)->where($outside)->when($own !== null, fn($query) => $query->where('created_by', $own))->with('project')->orderBy('name')->get()->map($place)->values()->all(),
         ];
     }
 }
