@@ -3,8 +3,6 @@
     <img alt="Coresmith" src=".github/assets/coresmith-lockup-on-light.png" width="280">
 </picture>
 
-# Coresmith
-
 Server management without the complexity. Coresmith sets up your own Linux servers and deploys your apps straight onto them from the browser, without Docker.
 
 Apps in PHP, Ruby, Python, Go, Java, JavaScript and TypeScript, such as Laravel, Rails, Django, Spring Boot and Next.js, can all share one server with static sites.
