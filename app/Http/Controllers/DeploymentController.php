@@ -77,6 +77,7 @@ final class DeploymentController extends Controller
                 'href' => route('servers.applications.show', [$server, $application]),
                 'releases_href' => route('servers.applications.releases.index', [$server, $application]),
                 'deploy_href' => route('servers.applications.deploy', [$server, $application]),
+                'setup_href' => $request->user()->can('update', $application) ? route('servers.applications.setup.edit', [$server, $application]) : null,
                 'current_release' => Formats::release($application->current_release),
             ],
             'deployment_links' => [

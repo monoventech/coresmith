@@ -18,7 +18,8 @@
     import { OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onMount } from 'svelte'
 
-    let { server }: { server: ServerHeader } = $props()
+    let { server, primary = null }: { server: ServerHeader; primary?: { label: string; href: string } | null } =
+        $props()
 
     let renaming = $state(false)
     let detaching = $state(false)
@@ -106,8 +107,11 @@
             </p>
         {/if}
     </div>
-    {#if server.can.update || server.can.delete}
-        <div class="flex flex-wrap gap-2">
+    {#if primary || server.can.update || server.can.delete}
+        <div class="flex flex-wrap gap-2 max-sm:w-full">
+            {#if primary}
+                <Button href={primary.href} class="max-sm:w-full" data-testid="server-primary">{primary.label}</Button>
+            {/if}
             {#if server.can.update}
                 <Button variant="ghost" onclick={openRename}>Rename</Button>
                 {#if server.active && server.cloud?.task?.state !== 'running'}

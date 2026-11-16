@@ -16,7 +16,12 @@ test.describe('an admin Storefront is shared with, holding back its production a
 
         await page.goto('/projects')
         await expect(page.getByTestId('project-card')).toHaveCount(1)
-        await expect(page.getByTestId('project-card-app')).toHaveText(['storefront-staging staging'])
+        await expect(
+            page.getByTestId('project-card-app').filter({ hasText: /^\s*storefront-staging staging\s*$/ })
+        ).toHaveCount(1)
+        await expect(
+            page.getByTestId('project-card-app').filter({ hasText: /^\s*storefront production\s*$/ })
+        ).toHaveCount(0)
         await expect(page.getByTestId('no-project')).toHaveCount(0)
     })
 
@@ -27,7 +32,14 @@ test.describe('an admin Storefront is shared with, holding back its production a
         await page.getByTestId('project-card').getByRole('link', { name: 'Storefront', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
-        await expect(page.getByTestId('project-app')).toHaveCount(1)
+        await expect(
+            page
+                .getByTestId('project-app')
+                .filter({ has: page.getByRole('link', { name: 'storefront-staging', exact: true }) })
+        ).toHaveCount(1)
+        await expect(
+            page.getByTestId('project-app').filter({ has: page.getByRole('link', { name: 'storefront', exact: true }) })
+        ).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Rename', exact: true })).toHaveCount(0)
         await expect(page.getByTestId('project-people')).toHaveCount(0)
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AddApplicationController;
 use App\Http\Controllers\ApplicationAddressController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\ApplicationPhpLimitsController;
 use App\Http\Controllers\ApplicationPowerController;
 use App\Http\Controllers\ApplicationRuntimeController;
 use App\Http\Controllers\ApplicationSchedulerLogController;
+use App\Http\Controllers\ApplicationSetupController;
 use App\Http\Controllers\ApplicationTagsController;
 use App\Http\Controllers\ApplicationToggleController;
 use App\Http\Controllers\CloudServerController;
@@ -55,6 +57,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('deployments', [DeploymentsController::class, 'index'])->name('deployments.index');
     Route::get('releases', [ReleasesController::class, 'overview'])->name('releases.index');
 
+    Route::get('apps/new', AddApplicationController::class)->name('applications.new');
     Route::get('projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
     Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
@@ -181,6 +184,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.php-limits.update');
     Route::put('servers/{server}/applications/{application}/tags', [ApplicationTagsController::class, 'update'])
         ->name('servers.applications.tags.update');
+    Route::get('servers/{server}/applications/{application}/setup', [ApplicationSetupController::class, 'edit'])
+        ->name('servers.applications.setup.edit');
+    Route::put('servers/{server}/applications/{application}/setup', [ApplicationSetupController::class, 'update'])
+        ->name('servers.applications.setup.update');
     Route::put('servers/{server}/applications/{application}/deploy-script', [ApplicationDeployScriptController::class, 'update'])
         ->name('servers.applications.deploy-script.update');
     Route::delete('servers/{server}/applications/{application}/deploy-script', [ApplicationDeployScriptController::class, 'destroy'])

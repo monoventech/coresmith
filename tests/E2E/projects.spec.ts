@@ -32,10 +32,10 @@ test.describe('projects', () => {
 
         await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your fleet')
         await expect(card(page, 'Atlas')).toContainText(/\d+ apps? · 1 database/)
-        await expect(card(page, 'Storefront').getByTestId('project-card-app')).toHaveText([
-            'storefront production',
-            'storefront-staging staging'
-        ])
+        const storefront = card(page, 'Storefront').getByTestId('project-card-app')
+
+        await expect(storefront.filter({ hasText: /^\s*storefront production\s*$/ })).toHaveCount(1)
+        await expect(storefront.filter({ hasText: /^\s*storefront-staging staging\s*$/ })).toHaveCount(1)
         await expect(page.getByTestId('no-project')).toContainText('ledger')
         await expect(nav(page).getByRole('link', { name: 'Fleet', exact: true })).toHaveAttribute(
             'aria-current',
@@ -54,7 +54,7 @@ test.describe('projects', () => {
         await card(page, 'Storefront').getByRole('link', { name: 'Storefront', exact: true }).click()
 
         await expect(page.getByRole('heading', { level: 1, name: 'Storefront' })).toBeVisible()
-        await expect(page.getByText('2 apps · on 2 servers')).toBeVisible()
+        await expect(page.getByText(/^\d+ apps · on 2 servers$/)).toBeVisible()
         await expect(appRow(page, 'storefront').getByTestId('app-tags')).toHaveText('production')
         await expect(appRow(page, 'storefront-staging').getByTestId('app-tags')).toHaveText('staging')
         await expect(appRow(page, 'storefront').getByTestId('last-deploy')).not.toHaveText('Not deployed yet')

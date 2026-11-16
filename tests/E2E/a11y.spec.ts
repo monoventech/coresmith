@@ -10,6 +10,7 @@ import {
     gotoDatabase,
     gotoServer,
     gotoServerTab,
+    main,
     openSecurity,
     openSetupWith,
     own,
@@ -149,7 +150,7 @@ const PAGES: [string, Visit][] = [
         'Add an app',
         async (page) => {
             await gotoServer(page, 'bench-01')
-            await page.getByRole('link', { name: 'Add an app' }).click()
+            await main(page).getByRole('link', { name: 'Add an app' }).click()
             await page.getByRole('radiogroup', { name: 'PHP version' }).waitFor()
         }
     ],
@@ -157,7 +158,7 @@ const PAGES: [string, Visit][] = [
         'Add an app from GitHub',
         async (page) => {
             await gotoServer(page, 'bench-01')
-            await page.getByRole('link', { name: 'Add an app' }).click()
+            await main(page).getByRole('link', { name: 'Add an app' }).click()
             await page.getByRole('listbox', { name: /repositories/i }).waitFor()
         }
     ],
@@ -165,7 +166,7 @@ const PAGES: [string, Visit][] = [
         'Add an app with a repository picked',
         async (page) => {
             await gotoServer(page, 'bench-01')
-            await page.getByRole('link', { name: 'Add an app' }).click()
+            await main(page).getByRole('link', { name: 'Add an app' }).click()
             await page.getByRole('option', { name: /monoventech\/relay/ }).click()
             await page.getByRole('option', { name: /monoventech\/relay/, selected: true }).waitFor()
         }
@@ -180,7 +181,7 @@ const PAGES: [string, Visit][] = [
                 })
             )
             await gotoServer(page, 'bench-01')
-            await page.getByRole('link', { name: 'Add an app' }).click()
+            await main(page).getByRole('link', { name: 'Add an app' }).click()
             await page.getByRole('button', { name: 'Try again' }).waitFor()
         }
     ],
@@ -191,7 +192,7 @@ const PAGES: [string, Visit][] = [
                 route.fulfill({ status: 200, json: { repositories: [], total: 0, truncated: false } })
             )
             await gotoServer(page, 'bench-01')
-            await page.getByRole('link', { name: 'Add an app' }).click()
+            await main(page).getByRole('link', { name: 'Add an app' }).click()
             await page.getByRole('link', { name: 'Manage repositories' }).waitFor()
         }
     ],

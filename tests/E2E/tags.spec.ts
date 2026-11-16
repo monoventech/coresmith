@@ -1,5 +1,15 @@
 import type { Page } from '@playwright/test'
-import { blockingViolations, expect, gotoApplication, gotoServer, own, test, toast, useTheme } from './support/fixtures'
+import {
+    blockingViolations,
+    expect,
+    gotoApplication,
+    gotoServer,
+    main,
+    own,
+    test,
+    toast,
+    useTheme
+} from './support/fixtures'
 
 function editor(page: Page) {
     return page.getByTestId('tag-editor-panel')
@@ -89,7 +99,7 @@ test.describe('tags on an app', () => {
 
     test('Add an app takes tags split by commas and offers the ones already in use', async ({ page }) => {
         await gotoServer(page, 'bench-01')
-        await page.getByRole('link', { name: 'Add an app' }).click()
+        await main(page).getByRole('link', { name: 'Add an app' }).click()
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
 
         const input = page.getByRole('textbox', { name: 'Tags' })

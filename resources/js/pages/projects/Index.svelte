@@ -2,7 +2,8 @@
     // Copyright 2026 Monoven Ltd. All rights reserved.
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
-    import { Link } from '@inertiajs/svelte'
+    import { Link, page } from '@inertiajs/svelte'
+    import { untrack } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import FleetHeader from '@/components/fleet/FleetHeader.svelte'
@@ -27,6 +28,16 @@
     } = $props()
 
     let creating = $state(false)
+
+    $effect(() => {
+        const url = new URL(page.url, window.location.origin)
+
+        if (can.create && url.searchParams.has('create')) {
+            untrack(() => (creating = true))
+            url.searchParams.delete('create')
+            window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+        }
+    })
 </script>
 
 <AppHead title="Projects" />

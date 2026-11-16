@@ -59,7 +59,12 @@
 
 <AppHead title="{server.name} databases" />
 
-<ServerHeaderView {server} />
+<ServerHeaderView
+    {server}
+    primary={databases.length > 0 && can.create && server.active
+        ? { label: 'Create a database', href: route('servers.databases.create', server.id) }
+        : null}
+/>
 
 {#if shared_redis}
     <div class="tint-warning mb-4 rounded-xl border px-5.5 py-4" data-testid="shared-redis">
@@ -147,11 +152,6 @@
                     ? 'Each has credentials of its own, except Redis databases on the shared Redis, which every app on this server can reach.'
                     : 'Each one has its own credentials, never shared between apps.'}
             </p>
-            {#if can.create && server.active}
-                <Button size="sm" variant="outline" href={route('servers.databases.create', server.id)}
-                    >Create a database</Button
-                >
-            {/if}
         </div>
     </div>
 {/if}

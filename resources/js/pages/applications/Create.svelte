@@ -26,7 +26,7 @@
     import { pickerRuntime } from '@/lib/runtimes'
     import { firstTagError } from '@/lib/tags'
     import { Form } from '@inertiajs/svelte'
-    import { onDestroy, untrack } from 'svelte'
+    import { onDestroy, onMount, untrack } from 'svelte'
 
     let {
         server,
@@ -38,7 +38,8 @@
         js_frameworks = [],
         python_frameworks = [],
         go_frameworks = [],
-        java_frameworks = []
+        java_frameworks = [],
+        setup = null
     }: {
         server: {
             id: string
@@ -55,7 +56,28 @@
         python_frameworks: { value: string; label: string }[]
         go_frameworks: { value: string; label: string }[]
         java_frameworks: { value: string; label: string }[]
+        setup?: Setup | null
     } = $props()
+
+    type Setup = {
+        action: string
+        back: string
+        application: {
+            name: string
+            source:
+                | { kind: 'url'; url: string }
+                | { kind: 'github'; full_name: string; account: string; connection_id: string; repository_id: string }
+            branch: string
+            directory: string
+            type: string
+            framework: string | null
+            js_runtime: string | null
+            web_directory: string | null
+            main_package: string | null
+            app_size: string
+            runtime_version: string | null
+        }
+    }
 
     const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
         php: [
@@ -105,7 +127,7 @@
     let typeSelect = $state<HTMLSelectElement | null>(null)
     let frameworkSelect = $state<HTMLSelectElement | null>(null)
     let jsRuntime = $state('bun')
-    let webDirectory = $state<string | null>(null)
+    let webDirectory = $state<string | null>(untrack(() => setup?.application.web_directory ?? null))
     const filesFramework = $derived(
         type === 'js' && js_frameworks.some((choice) => choice.value === framework && choice.files)
     )
@@ -114,7 +136,7 @@
     let mainPackage = $state('')
     let mainPackages = $state<string[]>([])
     const picker = $derived(pickerRuntime(type, jsRuntime))
-    let pickedSize = $state<string | null>(null)
+    let pickedSize = $state<string | null>(untrack(() => setup?.application.app_size ?? null))
     let domainName = $state('')
     const size = $derived(pickedSize ?? (type === 'ruby' || type === 'java' ? 'medium' : 'small'))
     let chosenSource = $state<string | null>(null)
@@ -127,6 +149,8 @@
     const connection = $derived(github.connections.find((candidate) => candidate.id === source) ?? null)
     let branch = $state(DEFAULT_BRANCH)
     let branchEdited = $state(false)
+    let name = $state('')
+    let nameEdited = $state(false)
     let branches = $state<string[]>([])
     let repositoryUrl = $state('')
     let pickedRepository = $state<GitHubPick | null>(null)
@@ -138,11 +162,37 @@
     let controller: AbortController | null = null
     let timer: ReturnType<typeof setTimeout> | undefined
 
+    const editing = untrack(() => setup)
+    const linked = editing?.application.source.kind === 'github' ? editing.application.source : null
+
+    if (editing) {
+        const current = editing.application
+
+        type = current.type
+        framework = current.framework ?? ''
+        jsRuntime = current.js_runtime ?? 'bun'
+        mainPackage = current.main_package ?? ''
+        branch = current.branch
+        branchEdited = true
+        folder = current.directory
+        name = current.name
+        nameEdited = true
+        chosenSource = GIT_URL
+        repositoryUrl = current.source.kind === 'url' ? current.source.url : ''
+        touched = Object.fromEntries(STACK_FIELDS.map((field) => [field, true]))
+    }
+
     const read = $derived(detection?.state === 'read' ? detection : null)
     const changedStack = $derived(STACK_FIELDS.some((field) => touched[field]))
     const refused = $derived(
         (read?.verdict === 'blocked' && !changedStack) || (detection?.state === 'failed' && detection.definitive)
     )
+
+    onMount(() => {
+        if (editing) {
+            detectSoon(0)
+        }
+    })
 
     onDestroy(() => {
         clearTimeout(timer)
@@ -180,10 +230,25 @@
         branches = pick.branches
         pickedRepository = pick
 
+        if (!nameEdited) {
+            name = repositoryName(pick.full_name)
+        }
+
         if (repositoryChanged) {
             leaveFolder()
             detectSoon(0)
         }
+    }
+
+    function repositoryName(address: string): string {
+        return (
+            address
+                .trim()
+                .replace(/\/+$/, '')
+                .replace(/\.git$/, '')
+                .split(/[/:]/)
+                .pop() ?? ''
+        )
     }
 
     function leaveFolder() {
@@ -210,6 +275,15 @@
         }
 
         const directory = folder === '/' ? {} : { directory: folder }
+
+        if (linked) {
+            return {
+                source_provider_id: linked.connection_id,
+                repository_id: linked.repository_id,
+                repository_branch: branch,
+                ...directory
+            }
+        }
 
         if (connection && pickedRepository) {
             return {
@@ -302,6 +376,13 @@
     function touch(field: string) {
         touched = { ...touched, [field]: true }
     }
+
+    function useRead() {
+        if (read) {
+            touched = {}
+            fill(read.fields, read.unsettled)
+        }
+    }
 </script>
 
 {#snippet note(field: string)}
@@ -314,35 +395,31 @@
     {/if}
 {/snippet}
 
-<AppHead title="Add an app" />
+<AppHead title={editing ? `Edit setup · ${editing.application.name}` : 'Add an app'} />
 
-<BackLink href={server.href} label={server.name} />
+<BackLink href={editing ? editing.back : server.href} label={editing ? editing.application.name : server.name} />
 
-<h1 class="type-h1 m-0 mb-1.5">Add an app</h1>
+<h1 class="type-h1 m-0 mb-1.5">{editing ? 'Edit setup' : 'Add an app'}</h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
-    It runs on <span class="font-mono text-[13px]">{server.name}</span>, walled off from the other apps there.
+    {#if editing}
+        <span class="font-mono text-[13px]">{editing.application.name}</span> on
+        <span class="font-mono text-[13px]">{server.name}</span>. Changes apply on the next deploy.
+    {:else}
+        It runs on <span class="font-mono text-[13px]">{server.name}</span>, walled off from the other apps there.
+    {/if}
 </p>
 
 <div class="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
     <div class="rounded-xl border border-border bg-card p-6">
-        <Form method="post" action={route('servers.applications.store', server.id)}>
+        <Form
+            method={editing ? 'put' : 'post'}
+            action={editing ? editing.action : route('servers.applications.store', server.id)}
+        >
             {#snippet children({ errors, processing })}
                 <input type="hidden" name="directory" value={folder} />
                 <input type="hidden" name="detection" value={detectionId(detection)} />
                 <div class="flex flex-col gap-4">
-                    <div>
-                        <Label for="name" class="mb-1.5">Name</Label>
-                        <Input
-                            id="name"
-                            name="name"
-                            required
-                            placeholder="atlas"
-                            autocomplete="off"
-                            aria-invalid={errors.name ? true : undefined}
-                        />
-                        <FieldError message={errors.name} />
-                    </div>
-                    {#if github.connections.length > 0}
+                    {#if !editing && github.connections.length > 0}
                         <div>
                             <Label for="source" class="mb-1.5">Source</Label>
                             <NativeSelect
@@ -360,7 +437,15 @@
                             <FieldError message={errors.source_provider_id} />
                         </div>
                     {/if}
-                    {#if connection}
+                    {#if linked}
+                        <div data-testid="setup-repository">
+                            <p class="m-0 mb-1.5 text-[14px] font-medium">Repository</p>
+                            <p class="m-0 font-mono text-[13px] wrap-anywhere">{linked.full_name}</p>
+                            <p class="m-0 mt-1 text-[12px] text-muted-foreground">
+                                From GitHub on {linked.account}. To deploy a different repository, add it as a new app.
+                            </p>
+                        </div>
+                    {:else if connection && !editing}
                         {#key connection.id}
                             <RepositoryPicker {connection} error={errors.repository_id} onpick={picked} />
                         {/key}
@@ -372,6 +457,10 @@
                                 name="repository_url"
                                 bind:value={repositoryUrl}
                                 oninput={() => {
+                                    if (!nameEdited) {
+                                        name = repositoryName(repositoryUrl)
+                                    }
+
                                     leaveFolder()
                                     detectSoon()
                                 }}
@@ -432,7 +521,30 @@
                             <FieldError message={errors.directory} />
                         </div>
                     {/if}
-                    <StackDetection {detection} {reading} server={server.name} />
+                    {#if !editing}
+                        <div>
+                            <Label for="name" class="mb-1.5">Name</Label>
+                            <Input
+                                id="name"
+                                name="name"
+                                bind:value={name}
+                                oninput={() => (nameEdited = true)}
+                                required
+                                placeholder="atlas"
+                                autocomplete="off"
+                                aria-invalid={errors.name ? true : undefined}
+                            />
+                            <FieldError message={errors.name} />
+                        </div>
+                    {/if}
+                    <StackDetection {detection} {reading} server={server.name} editing={editing !== null} />
+                    {#if editing && read}
+                        <div>
+                            <Button type="button" variant="outline" size="sm" onclick={useRead}
+                                >Use what Coresmith read</Button
+                            >
+                        </div>
+                    {/if}
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <Label for="type" class="mb-1.5">Language</Label>
@@ -505,6 +617,7 @@
                         {#key picker}
                             <RuntimeVersionPicker
                                 runtime={runtimes[picker]}
+                                value={editing?.application.runtime_version ?? null}
                                 error={errors.runtime_version}
                                 detected={read?.sources.runtime_version ?? null}
                             />
@@ -569,18 +682,20 @@
                         </div>
                     {/if}
                     <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                        <div>
-                            <Label for="domain" class="mb-1.5">Domain</Label>
-                            <Input
-                                id="domain"
-                                name="domain"
-                                bind:value={domainName}
-                                placeholder="app.example.com"
-                                autocomplete="off"
-                                aria-invalid={errors.domain ? true : undefined}
-                            />
-                            <FieldError message={errors.domain} />
-                        </div>
+                        {#if !editing}
+                            <div>
+                                <Label for="domain" class="mb-1.5">Domain</Label>
+                                <Input
+                                    id="domain"
+                                    name="domain"
+                                    bind:value={domainName}
+                                    placeholder="app.example.com"
+                                    autocomplete="off"
+                                    aria-invalid={errors.domain ? true : undefined}
+                                />
+                                <FieldError message={errors.domain} />
+                            </div>
+                        {/if}
                         <div class="max-sm:order-2">
                             <Label for="app_size" class="mb-1.5">Size</Label>
                             <NativeSelect
@@ -594,42 +709,49 @@
                                 ]}
                             />
                         </div>
-                        <div class="col-span-full max-sm:order-1">
-                            {#if server.dns_targets.length > 0}
-                                <p class="m-0 mb-1 text-[12px] text-muted-foreground">
-                                    Point the domain at this server with {server.dns_targets.length === 1
-                                        ? 'this record'
-                                        : 'these records'}. The certificate is issued on the first visit.
-                                </p>
-                                <DnsRecords
-                                    records={namedTargets(server.dns_targets, domainName)}
-                                    testid="domain-targets"
-                                />
-                            {:else}
-                                <p class="m-0 text-[12px] text-muted-foreground">
-                                    Point the domain at the server first: an A record for its IPv4 address, or an AAAA
-                                    record for IPv6. Once the app is live, Coresmith checks the domain from outside and
-                                    shows the record it needs. The certificate is issued on the first visit.
-                                </p>
-                            {/if}
+                        {#if !editing}
+                            <div class="col-span-full max-sm:order-1">
+                                {#if server.dns_targets.length > 0}
+                                    <p class="m-0 mb-1 text-[12px] text-muted-foreground">
+                                        Point the domain at this server with {server.dns_targets.length === 1
+                                            ? 'this record'
+                                            : 'these records'}. The certificate is issued on the first visit.
+                                    </p>
+                                    <DnsRecords
+                                        records={namedTargets(server.dns_targets, domainName)}
+                                        testid="domain-targets"
+                                    />
+                                {:else}
+                                    <p class="m-0 text-[12px] text-muted-foreground">
+                                        Point the domain at the server first: an A record for its IPv4 address, or an
+                                        AAAA record for IPv6. Once the app is live, Coresmith checks the domain from
+                                        outside and shows the record it needs. The certificate is issued on the first
+                                        visit.
+                                    </p>
+                                {/if}
+                            </div>
+                        {/if}
+                    </div>
+                    {#if !editing}
+                        <ProjectSelect {projects} value={project} error={errors.project_id} />
+                        <div>
+                            <Label for="tags" class="mb-1.5">Tags</Label>
+                            <TagInput
+                                id="tags"
+                                name="tags"
+                                suggestions={tag_suggestions}
+                                error={firstTagError(errors)}
+                                describedby="tags-hint"
+                            />
+                            <p id="tags-hint" class="m-0 mt-1.5 text-[12px] text-muted-foreground">
+                                Short labels such as production or a client's name, so apps with the same name are easy
+                                to tell apart. Press Enter after each one, up to 5.
+                            </p>
                         </div>
-                    </div>
-                    <ProjectSelect {projects} value={project} error={errors.project_id} />
-                    <div>
-                        <Label for="tags" class="mb-1.5">Tags</Label>
-                        <TagInput
-                            id="tags"
-                            name="tags"
-                            suggestions={tag_suggestions}
-                            error={firstTagError(errors)}
-                            describedby="tags-hint"
-                        />
-                        <p id="tags-hint" class="m-0 mt-1.5 text-[12px] text-muted-foreground">
-                            Short labels such as production or a client's name, so apps with the same name are easy to
-                            tell apart. Press Enter after each one, up to 5.
-                        </p>
-                    </div>
-                    <Button type="submit" class="w-full" disabled={processing || refused}>Add the app</Button>
+                    {/if}
+                    <Button type="submit" class="w-full" disabled={processing || refused}
+                        >{editing ? 'Save setup' : 'Add the app'}</Button
+                    >
                 </div>
             {/snippet}
         </Form>

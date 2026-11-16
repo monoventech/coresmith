@@ -74,7 +74,7 @@ test('the owner sees every project with its apps and databases, the other apps a
         ->and(collect($explorer['servers'])->pluck('name')->all())->toBe(['web', 'db'])
         ->and($explorer['servers'][0]['href'])->toBe(route('servers.show', $fleet['web']))
         ->and($explorer['running'])->toBeNull()
-        ->and($explorer['can'])->toBe(['createProject' => true, 'createServer' => true]);
+        ->and($explorer['can'])->toBe(['createProject' => true, 'createServer' => true, 'createApplication' => true]);
 });
 
 test('a member a project is shared with in part sees what is shared and no servers', function () {
@@ -155,7 +155,7 @@ test('what a member may create follows their role', function () {
     explorerFleet($team);
     $member = explorerMember($team, TeamRole::Member, everything: true);
 
-    expect(explorerFor($member, $team)['can'])->toBe(['createProject' => false, 'createServer' => false]);
+    expect(explorerFor($member, $team)['can'])->toBe(['createProject' => false, 'createServer' => false, 'createApplication' => false]);
 });
 
 test('the explorer costs the same queries for one app as for five', function () {

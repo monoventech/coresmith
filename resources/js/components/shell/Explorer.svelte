@@ -136,10 +136,10 @@
                     >
                     {#if explorer.can.createProject}
                         <Link
-                            href={route('projects.index')}
+                            href={route('projects.index', { create: 1 })}
                             class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                            aria-label="Add a project"
-                            title="Add a project"><Plus class="size-3.5" /></Link
+                            aria-label="Create a project"
+                            title="Create a project"><Plus class="size-3.5" /></Link
                         >
                     {/if}
                 </div>
@@ -223,11 +223,20 @@
                 aria-labelledby="explorer-apps-label"
                 data-testid="explorer-apps"
             >
-                <span
-                    id="explorer-apps-label"
-                    class="flex h-7 items-center px-2 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground"
-                    >Apps</span
-                >
+                <div class="flex h-7 items-center justify-between px-2">
+                    <span
+                        id="explorer-apps-label"
+                        class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Apps</span
+                    >
+                    {#if explorer.can.createApplication}
+                        <Link
+                            href={route('applications.new')}
+                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            aria-label="Add an app"
+                            title="Add an app"><Plus class="size-3.5" /></Link
+                        >
+                    {/if}
+                </div>
                 {#each explorer.unfiled as app (app.id)}
                     <ExplorerRow
                         href={app.href}

@@ -59,6 +59,7 @@
             href: string
             releases_href: string
             deploy_href: string
+            setup_href: string | null
             current_release: string | null
         }
         deployment: Deployment
@@ -283,6 +284,9 @@
             {#if live.reached_users}
                 <Button variant="outline" href={application.releases_href}>Roll back</Button>
             {/if}
+            {#if application.setup_href}
+                <Button variant="outline" href={application.setup_href}>Edit setup</Button>
+            {/if}
             <Button disabled={retrying} onclick={retry}>Retry deploy</Button>
         </div>
     {/if}
@@ -441,6 +445,11 @@
     {#if live.reached_users}
         <Button variant="outline" size="lg" href={application.releases_href} class="mt-3.5 w-full sm:hidden"
             >Roll back</Button
+        >
+    {/if}
+    {#if application.setup_href}
+        <Button variant="outline" size="lg" href={application.setup_href} class="mt-2.5 w-full sm:hidden"
+            >Edit setup</Button
         >
     {/if}
     <Button size="lg" disabled={retrying} onclick={retry} class="mt-2.5 w-full sm:hidden">Retry deploy</Button>

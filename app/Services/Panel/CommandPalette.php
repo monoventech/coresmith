@@ -47,8 +47,16 @@ final class CommandPalette
             $commands[] = $this->openServer($server, $fleet);
         }
 
+        if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::CreateApplication)) {
+            $commands[] = ['label' => 'Add an app', 'icon' => 'plus', 'hint' => 'from a repository', 'href' => route('applications.new')];
+        }
+
         if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::CreateServer)) {
             $commands[] = ['label' => 'Provision a server', 'icon' => 'plus', 'hint' => 'about six minutes', 'href' => route('servers.create')];
+        }
+
+        if ($this->team !== null && $this->user->hasTeamAbility($this->team, Ability::ManageProjects)) {
+            $commands[] = ['label' => 'Create a project', 'icon' => 'folder', 'hint' => 'group apps and databases', 'href' => route('projects.index', ['create' => 1])];
         }
 
         $rollback = $this->rollbackCommand();

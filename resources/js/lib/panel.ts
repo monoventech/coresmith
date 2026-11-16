@@ -68,7 +68,7 @@ export type ExplorerProps = {
     servers: ExplorerServer[]
     running: ExplorerRunning | null
     attention: AttentionItem[]
-    can: { createProject: boolean; createServer: boolean }
+    can: { createProject: boolean; createServer: boolean; createApplication: boolean }
 }
 
 export type CrumbSwitch = { kind: 'server' | 'application' | 'project'; id: string }

@@ -34,7 +34,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-final class StoreApplicationRequest extends FormRequest
+class StoreApplicationRequest extends FormRequest
 {
     private const CONNECTION_UNAVAILABLE = "That GitHub connection isn't available. Pick another one, or connect GitHub again in Git settings.";
 
@@ -47,7 +47,7 @@ final class StoreApplicationRequest extends FormRequest
     private ?SourceProvider $connection = null;
 
     /** @var array<string, mixed>|null */
-    private ?array $repository = null;
+    protected ?array $repository = null;
 
     private ?RepositoryRead $checked = null;
 
@@ -260,7 +260,7 @@ final class StoreApplicationRequest extends FormRequest
         return is_string($url) && $url !== '' ? $url : null;
     }
 
-    private function resolveRepository(Validator $validator): void
+    protected function resolveRepository(Validator $validator): void
     {
         if ($validator->errors()->hasAny(['source_provider_id', 'repository_id'])) {
             return;
@@ -349,7 +349,7 @@ final class StoreApplicationRequest extends FormRequest
         return $runtime === null ? [] : array_column(app(Catalog::class)->lines($runtime), 'line');
     }
 
-    private function servesFiles(): bool
+    protected function servesFiles(): bool
     {
         $type = ApplicationType::tryFrom((string) $this->input('type'));
 

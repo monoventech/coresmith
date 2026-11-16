@@ -59,6 +59,7 @@ final class ExplorerPresenter
             'can' => [
                 'createProject' => $user->hasTeamAbility($team, Ability::ManageProjects),
                 'createServer' => $user->hasTeamAbility($team, Ability::CreateServer),
+                'createApplication' => $user->hasTeamAbility($team, Ability::CreateApplication),
             ],
         ];
     }

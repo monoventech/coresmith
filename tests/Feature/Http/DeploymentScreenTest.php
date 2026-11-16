@@ -317,6 +317,17 @@ test('a deploy started from a project goes back to it, or to the app when the pe
         ->assertInertia(fn($page) => $page->where('back', $appPage));
 });
 
+test('a deploy offers a way to fix the setup to people who can change the app', function () {
+    $team = Team::factory()->create();
+    $application = screenApp($team);
+    $deployment = Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed]);
+
+    $this->actingAs(screenMember($team, TeamRole::Admin))->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page->where('application.setup_href', route('servers.applications.setup.edit', [$application->server_id, $application])));
+    $this->actingAs(screenMember($team))->get(screenUrl($deployment))
+        ->assertInertia(fn($page) => $page->where('application.setup_href', null));
+});
+
 test('live streaming is only offered when a broadcaster is configured', function (string $broadcaster, bool $streaming) {
     config(['broadcasting.default' => $broadcaster]);
     $team = Team::factory()->create();

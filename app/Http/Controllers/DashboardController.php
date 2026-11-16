@@ -41,7 +41,7 @@ final class DashboardController extends Controller
                 'tiles' => [],
                 'servers' => [],
                 'activity' => [],
-                'can' => ['createServer' => false],
+                'can' => ['createServer' => false, 'createApplication' => false],
             ]);
         }
 
@@ -103,7 +103,10 @@ final class DashboardController extends Controller
             ])->values(),
             'narrowed' => !app(TeamAccess::class)->seesEverything($user, $team),
             'activity' => $feed->forTeam($team, viewer: $user),
-            'can' => ['createServer' => $user->hasTeamAbility($team, Ability::CreateServer)],
+            'can' => [
+                'createServer' => $user->hasTeamAbility($team, Ability::CreateServer),
+                'createApplication' => $user->hasTeamAbility($team, Ability::CreateApplication),
+            ],
         ]);
     }
 

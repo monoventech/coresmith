@@ -41,7 +41,7 @@ final class Breadcrumbs
         'servers.under-the-hood' => 'What Coresmith runs here',
     ];
 
-    private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases'];
+    private const APPLICATION_PAGES = ['servers.applications.releases.index' => 'Releases', 'servers.applications.setup.edit' => 'Edit setup'];
 
     public function __construct(private readonly TeamAccess $access) {}
 
@@ -67,6 +67,7 @@ final class Breadcrumbs
             $name === 'dashboard' => [self::crumb('Fleet')],
             $name === 'projects.index' => [$fleet, self::crumb('Projects')],
             $name === 'servers.create' => [$fleet, self::crumb('Provision a server')],
+            $name === 'applications.new' => [$fleet, self::crumb('Add an app')],
             $name === 'deployments.index' => [self::crumb('Deployments')],
             $name === 'releases.index' => [self::crumb('Releases')],
             $name === 'setup.show' => [self::crumb('Finish setup')],

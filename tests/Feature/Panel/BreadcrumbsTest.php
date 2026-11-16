@@ -75,6 +75,7 @@ test('every page knows its trail', function (Closure $url, Closure $trail) {
     'the projects' => [fn() => route('projects.index'), fn() => [breadcrumb('Fleet', route('dashboard')), breadcrumb('Projects')]],
     'a project' => [fn($f) => route('projects.show', $f['storefront']), fn($f) => [breadcrumb('Projects', route('projects.index')), breadcrumb('Storefront', null, false, breadcrumbSwitch($f['storefront']))]],
     'provisioning a server' => [fn() => route('servers.create'), fn() => [breadcrumb('Fleet', route('dashboard')), breadcrumb('Provision a server')]],
+    'adding an app from anywhere' => [fn() => route('applications.new'), fn() => [breadcrumb('Fleet', route('dashboard')), breadcrumb('Add an app')]],
     'a server' => [fn($f) => route('servers.show', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', null, true, breadcrumbSwitch($f['web']))]],
     'a server tab' => [fn($f) => route('servers.hardening', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Hardening')]],
     "a server's activity" => [fn($f) => route('servers.activity', $f['web']), fn($f) => [breadcrumb('Fleet', route('dashboard')), breadcrumb('web', route('servers.show', $f['web']), true, breadcrumbSwitch($f['web'])), breadcrumb('Activity')]],

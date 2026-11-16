@@ -10,6 +10,8 @@
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
     import DeployScriptCard from '@/components/applications/DeployScriptCard.svelte'
+    import SetupCard from '@/components/applications/SetupCard.svelte'
+    import type { AppSetup } from '@/components/applications/SetupCard.svelte'
     import type { DeployScript } from '@/components/applications/DeployScriptCard.svelte'
     import PhpLimitsCard from '@/components/applications/PhpLimitsCard.svelte'
     import type { PhpLimits } from '@/components/applications/PhpLimitsCard.svelte'
@@ -62,6 +64,7 @@
         place = null,
         tag_suggestions = [],
         deploy_script,
+        setup,
         application,
         toggles = [],
         addresses,
@@ -160,6 +163,7 @@
         can: { update: boolean; delete: boolean; deploy: boolean; manageEnvironment: boolean; viewLogs: boolean }
         tag_suggestions: string[]
         deploy_script: DeployScript
+        setup: AppSetup
         runtime_choice: (RuntimeChoices & { pin: string | null; href: string }) | null
         held: { current: string; newest: string; packages: string[]; command: string } | null
     } = $props()
@@ -569,6 +573,11 @@
             href={application.latest_deployment.href}
             class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:ml-7 max-sm:h-11!">Read the log</Link
         >
+        {#if setup.href}
+            <Link href={setup.href} class="focus-ring quick-action h-8! px-3! text-[12.5px]! max-sm:h-11!"
+                >Edit setup</Link
+            >
+        {/if}
     </div>
 {/if}
 
@@ -951,6 +960,8 @@
                     </div>
                 {/if}
             </div>
+
+            <SetupCard class="@3xl:col-span-2" {setup} />
 
             <DeployScriptCard class="@3xl:col-span-2" script={deploy_script} name={application.name} />
 
