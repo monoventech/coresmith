@@ -317,15 +317,17 @@ test('a deploy started from a project goes back to it, or to the app when the pe
         ->assertInertia(fn($page) => $page->where('back', $appPage));
 });
 
-test('a deploy offers a way to fix the setup to people who can change the app', function () {
+test('a deploy offers a way to fix the setup and the deploy script to people who can change the app', function () {
     $team = Team::factory()->create();
     $application = screenApp($team);
     $deployment = Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed]);
 
     $this->actingAs(screenMember($team, TeamRole::Admin))->get(screenUrl($deployment))
-        ->assertInertia(fn($page) => $page->where('application.setup_href', route('servers.applications.setup.edit', [$application->server_id, $application])));
+        ->assertInertia(fn($page) => $page
+            ->where('application.setup_href', route('servers.applications.setup.edit', [$application->server_id, $application]))
+            ->where('application.script_href', route('servers.applications.show', [$application->server_id, $application, 'script' => 'edit'])));
     $this->actingAs(screenMember($team))->get(screenUrl($deployment))
-        ->assertInertia(fn($page) => $page->where('application.setup_href', null));
+        ->assertInertia(fn($page) => $page->where('application.setup_href', null)->where('application.script_href', null));
 });
 
 test('live streaming is only offered when a broadcaster is configured', function (string $broadcaster, bool $streaming) {

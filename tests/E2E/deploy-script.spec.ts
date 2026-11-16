@@ -5,6 +5,7 @@ import {
     expect,
     gotoApplication,
     isMobile,
+    main,
     own,
     test,
     toast,
@@ -71,4 +72,26 @@ test.describe('the deploy script', () => {
             expect(await blockingViolations(page)).toEqual([])
         })
     }
+})
+
+test.describe('a deploy whose own script failed', () => {
+    test('shows the Deploy script step that failed and offers Edit script, which opens the script', async ({
+        page
+    }) => {
+        await gotoApplication(page, 'bench-01', 'scripted')
+        await page.getByTestId('failed-banner').getByRole('link', { name: 'Read the log' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Deploying scripted' })).toBeVisible()
+        await expect(page.getByTestId('failure-reason')).toContainText(
+            'Your deploy script failed, so nothing changed. It stopped with exit code 2.'
+        )
+        await expect(main(page).getByRole('link', { name: 'Edit setup' })).toHaveCount(0)
+
+        await main(page).getByRole('link', { name: 'Edit script' }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'scripted', exact: true })).toBeVisible()
+        await expect(dialog(page).getByRole('heading', { name: 'Deploy script for scripted' })).toBeVisible()
+        await expect(dialog(page).getByLabel('Script')).toHaveValue('bun install --frozen-lockfile\nbun run check\n')
+        await expect(page).not.toHaveURL(/script=edit/)
+    })
 })

@@ -19,7 +19,8 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Label } from '@/components/ui/label'
     import { cn } from '@/lib/utils'
-    import { router } from '@inertiajs/svelte'
+    import { page, router } from '@inertiajs/svelte'
+    import { untrack } from 'svelte'
 
     const PREVIEW = 12
 
@@ -43,6 +44,16 @@
         error = undefined
         open = true
     }
+
+    $effect(() => {
+        const url = new URL(page.url, window.location.origin)
+
+        if (script.update_href && url.searchParams.get('script') === 'edit') {
+            untrack(edit)
+            url.searchParams.delete('script')
+            window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+        }
+    })
 
     function save(event: SubmitEvent) {
         event.preventDefault()

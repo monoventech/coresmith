@@ -189,6 +189,7 @@ final class E2ESeeder extends Seeder
             ...MonovenTenant::stack(['nodejs' => ['20.20.2', '.nvmrc', '20']], null, new JsTooling('npm', true, false, true)),
         ]);
         $this->succeeded($legacy, 3 * 24 * 60, 'v2.3.0');
+        $this->scriptFailedLatest($this->application('scripted', 9930, ['custom_blueprint' => "bun install --frozen-lockfile\nbun run check\n"]));
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             User::factory()->create(['name' => 'Invitee ' . $code, 'email' => "invitee-{$code}@coresmith.test", 'password' => $password]);
@@ -1188,6 +1189,28 @@ final class E2ESeeder extends Seeder
             'log' => DemoLog::failed($application, $release, 'main', 'c47ab90', 'Priya Nair', $started),
             'started_at' => $started,
             'finished_at' => $started->addSeconds(108),
+            'created_at' => $started,
+        ]);
+    }
+
+    private function scriptFailedLatest(Application $application): void
+    {
+        $this->succeeded($application, 2 * 24 * 60, 'v0.9.0');
+
+        $started = CarbonImmutable::now()->subMinutes(30);
+        $release = $started->format('Ymd-His');
+
+        Deployment::factory()->for($application)->create([
+            'release' => $release,
+            'branch' => 'main',
+            'commit_hash' => 'd52e81a' . substr(hash('sha1', $application->name), 0, 33),
+            'commit_message' => 'Check the types before every deploy',
+            'commit_author' => 'Priya Nair',
+            'status' => DeploymentStatus::Failed,
+            'log' => DemoLog::scriptFailed($application, $release, 'main', 'd52e81a', 'Priya Nair', $started),
+            'failure_reason' => 'It stopped with exit code 2. Its output is in the log. Fix it under Deploy script on the app page, then deploy again.',
+            'started_at' => $started,
+            'finished_at' => $started->addSeconds(14),
             'created_at' => $started,
         ]);
     }
