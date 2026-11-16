@@ -50,7 +50,7 @@ test.describe('the rail', () => {
         await page.goto('/dashboard')
 
         await expect(nav(page).getByRole('link', { name: 'Coresmith', exact: true })).toBeVisible()
-        await expect(main(page).getByText('Made by Monoven')).toBeVisible()
+        await expect(main(page).getByRole('link', { name: 'Made by Monoven' })).toBeVisible()
     })
 
     test('it starts dark, flips the theme and keeps it across a reload', async ({ page }) => {
