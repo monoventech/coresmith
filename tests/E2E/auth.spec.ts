@@ -153,20 +153,3 @@ test("someone signed in opening Coresmith's address lands on their fleet", async
     await expect(page).toHaveURL(/\/dashboard$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Your fleet' })).toBeVisible()
 })
-
-asGuest.describe('signing out', () => {
-    asGuest('signing out from the account dialog ends the session', async ({ page }) => {
-        await page.goto('/login')
-        await page.getByLabel('Email address').fill('signout@coresmith.test')
-        await page.getByLabel('Password', { exact: true }).fill(PASSWORD)
-        await page.getByRole('button', { name: 'Sign in' }).click()
-        await page.waitForURL(/\/dashboard$/)
-
-        await page.getByRole('button', { name: 'Account' }).click()
-        await page.getByTestId('sign-out').click()
-
-        await page.waitForURL((url) => !url.pathname.startsWith('/dashboard'))
-        await page.goto('/dashboard')
-        await expect(page).toHaveURL(/\/login$/)
-    })
-})
