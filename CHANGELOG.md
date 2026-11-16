@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.19 (2026-11-16)
+
+### Changed
+- Projects without environments, tags, Add an app from anywhere, Edit setup, your own deploy script, breadcrumb switchers, and static sites with clean addresses (#105)
+
 ## v0.8.18 (2026-11-16)
 
 ### Changed
