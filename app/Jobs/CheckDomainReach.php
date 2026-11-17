@@ -11,6 +11,7 @@ namespace App\Jobs;
 use App\Events\FleetChanged;
 use App\Models\Application;
 use App\Services\Address\AppDomainReach;
+use App\Services\Address\DomainTwins;
 use App\Services\Address\ReachReport;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -59,7 +60,7 @@ final class CheckDomainReach implements ShouldBeUnique, ShouldQueue
             $server = $application->server->name ?? 'its server';
             $readings = [];
 
-            foreach ($application->allDomains() as $domain) {
+            foreach ([...$application->allDomains(), ...array_keys(app(DomainTwins::class)->for($application))] as $domain) {
                 $readings[$domain] = [
                     'ready' => null,
                     'problems' => [],

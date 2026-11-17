@@ -240,7 +240,7 @@ final class CaddyApiClient
     {
         return CaddyInstaller::appPolicy(
             CaddyRouteBuilder::routeId($application),
-            $this->builder->domains($application),
+            $this->builder->hosts($application),
             CaddyInstaller::issuers(InstanceSetting::get('notification_email')),
         );
     }

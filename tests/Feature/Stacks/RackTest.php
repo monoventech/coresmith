@@ -52,7 +52,7 @@ test('a Rack app installs with Bundler, builds and migrates nothing, and runs on
         ->and($commands->build(rackApp(), $stack))->toBe([])
         ->and($commands->migrations(rackApp(), $stack))->toBe([])
         ->and(ApplicationType::Ruby->language()->webCommand(rackApp()))->toBe('/opt/asdf-data/installs/ruby/3.4.7/bin/bundle exec puma -b tcp://127.0.0.1:4200')
-        ->and(ApplicationType::Ruby->language()->processEnvironment(rackApp()))->toBe(['RAILS_ENV' => 'production', 'RACK_ENV' => 'production'])
+        ->and(ApplicationType::Ruby->language()->processEnvironment(rackApp()))->toBe(['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'WEB_CONCURRENCY' => '0'])
         ->and(ApplicationType::Ruby->language()->initialEnvironment('rack'))->toBe([]);
 });
 

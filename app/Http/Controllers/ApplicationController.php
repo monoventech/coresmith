@@ -28,6 +28,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\MonitorAlert;
 use App\Models\Server;
+use App\Services\Address\DomainTwins;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Cron\CronRunLine;
 use App\Services\Deployment\CrontabBuilder;
@@ -143,6 +144,8 @@ final class ApplicationController extends Controller
             ReservePortBlock::dispatch($application);
         }
 
+        app(DomainTwins::class)->owners($application->allDomains(), $application)->each(fn(Application $other) => SyncApplicationRoute::dispatch($other));
+
         return to_route('servers.applications.show', [$server, $application])
             ->with('success', "App added. Deploy it when you're ready.");
     }
@@ -183,6 +186,7 @@ final class ApplicationController extends Controller
                 'runtime' => ApplicationPresenter::runtime($application),
                 'domain' => $application->domain,
                 'additional_domains' => array_values((array) $application->additional_domains),
+                'redirects' => array_map(fn(string $domain, string $to): array => ['domain' => $domain, 'to' => $to], array_keys($twins = app(DomainTwins::class)->for($application)), $twins),
                 'certificates' => $certificates->forApplication($application),
                 'domain_reach' => $this->domainReach($application),
                 'uptime' => app(AppUptime::class)->for($application),
@@ -369,10 +373,8 @@ final class ApplicationController extends Controller
             activity()->performedOn($application)->withProperties(['domain' => $domain])->log('domain_added');
         }
 
-        if ($domains !== $before && $application->current_release !== null) {
-            $route = new SyncApplicationRoute($application, unroute: $domains === []);
-
-            array_diff($domains, $before) === [] ? dispatch($route) : Bus::chain([$route, new CheckDomainReach($application)])->dispatch();
+        if ($domains !== $before) {
+            $this->route($application, $before, $domains);
         }
 
         return ($application->wasChanged('handle') ? app(BackAfterRename::class)->to($request, 'application', $application) : back())->with('success', 'Saved.');
@@ -396,7 +398,7 @@ final class ApplicationController extends Controller
                 'records' => array_values(array_filter((array) ($reading['records'] ?? []), fn(mixed $record): bool => is_array($record) && is_string($record['type'] ?? null) && is_string($record['name'] ?? null) && is_string($record['value'] ?? null))),
                 'checked' => is_string($reading['checked_at'] ?? null) ? Formats::when(Carbon::parse($reading['checked_at'])) : null,
             ];
-        }, $application->allDomains());
+        }, [...$application->allDomains(), ...array_keys(app(DomainTwins::class)->for($application))]);
     }
 
     public function destroy(Server $server, Application $application): RedirectResponse
@@ -408,9 +410,38 @@ final class ApplicationController extends Controller
 
         $application->delete();
 
-        DetachApplication::dispatch($application);
+        $freed = app(DomainTwins::class)->owners($application->allDomains(), $application);
+        $here = fn(Application $other): bool => $other->server_id === $application->server_id;
+
+        Bus::chain([new DetachApplication($application), ...$freed->filter($here)->map(fn(Application $other): SyncApplicationRoute => new SyncApplicationRoute($other))->values()->all()])->dispatch();
+        $freed->reject($here)->each(fn(Application $other) => SyncApplicationRoute::dispatch($other));
 
         return to_route('servers.show', $server)->with('success', "Removed. {$application->name} was stopped and detached.");
+    }
+
+    /**
+     * @param  list<string>  $before
+     * @param  list<string>  $after
+     */
+    private function route(Application $application, array $before, array $after): void
+    {
+        $twins = app(DomainTwins::class);
+        $taking = $twins->owners(array_values(array_diff($after, $before)), $application);
+        $freeing = $twins->owners(array_values(array_diff($before, $after)), $application);
+        $here = fn(Application $other): bool => $other->server_id === $application->server_id;
+        $sync = fn(Application $other): SyncApplicationRoute => new SyncApplicationRoute($other);
+        $own = $application->current_release === null ? [] : [
+            new SyncApplicationRoute($application, unroute: $after === []),
+            ...(array_diff($after, $before) === [] ? [] : [new CheckDomainReach($application)]),
+        ];
+
+        $chain = [...$taking->filter($here)->map($sync)->values()->all(), ...$own, ...$freeing->filter($here)->map($sync)->values()->all()];
+
+        if ($chain !== []) {
+            Bus::chain($chain)->dispatch();
+        }
+
+        $taking->merge($freeing)->reject($here)->each(fn(Application $other) => SyncApplicationRoute::dispatch($other));
     }
 
     private function assertBelongsTo(Server $server, Application $application): void

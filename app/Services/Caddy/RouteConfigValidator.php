@@ -10,6 +10,7 @@ namespace App\Services\Caddy;
 
 use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
+use App\Services\Address\DomainTwins;
 use App\Services\Server\PortAllocator;
 
 final class RouteConfigValidator
@@ -38,6 +39,8 @@ final class RouteConfigValidator
         if ($allowed === []) {
             throw InvalidRouteConfigException::missingDomain();
         }
+
+        $allowed = [...$allowed, ...array_keys(app(DomainTwins::class)->for($application))];
 
         foreach ($this->collect($config, 'host') as $hosts) {
             foreach ((array) $hosts as $host) {

@@ -163,6 +163,7 @@ final class E2ESeeder extends Seeder
             'domain' => 'certs.monoven.io',
             'additional_domains' => ['soon.monoven.io', 'gone.monoven.io', 'dark.monoven.io'],
         ]));
+        $this->wwwRedirect($this->application('apex-shop', 9950, ['domain' => 'apex-shop.invalid']));
         $this->crashedAfterSwap($this->application('crashy', 8030));
         $this->didNotStart($this->rails('dev-mode', 8300, "RAILS_ENV=development\nSECRET_KEY_BASE=" . bin2hex(random_bytes(16))));
         $this->rollbackDidNotStart($this->rails('failed-rollback', 8310));
@@ -1034,6 +1035,31 @@ final class E2ESeeder extends Seeder
             'gone.monoven.io' => ['expires_at' => $now->subDays(2)->toIso8601String(), 'checked_at' => $checked],
             'dark.monoven.io' => ['expires_at' => null, 'checked_at' => $checked],
         ]], $now->addYear());
+    }
+
+    private function wwwRedirect(Application $application): void
+    {
+        $now = CarbonImmutable::now();
+        $checked = $now->toIso8601String();
+
+        Cache::put(CertificateCheck::cacheKey($application), ['domains' => [
+            'apex-shop.invalid' => ['expires_at' => $now->addDays(60)->toIso8601String(), 'checked_at' => $checked],
+            'www.apex-shop.invalid' => ['expires_at' => null, 'checked_at' => $checked],
+        ]], $now->addYear());
+
+        $application->forceFill(['domain_reach' => [
+            'apex-shop.invalid' => ['ready' => true, 'problems' => [], 'notes' => [], 'records' => [], 'checked_at' => $checked],
+            'www.apex-shop.invalid' => [
+                'ready' => false,
+                'problems' => [],
+                'notes' => [
+                    'www.apex-shop.invalid sends visitors to apex-shop.invalid once it points at this server.',
+                    "www.apex-shop.invalid doesn't point anywhere yet. Add an A record pointing at 203.0.113.10, then check again.",
+                ],
+                'records' => [['type' => 'A', 'name' => 'www.apex-shop.invalid', 'value' => '203.0.113.10', 'note' => null]],
+                'checked_at' => $checked,
+            ],
+        ]])->save();
     }
 
     /**
