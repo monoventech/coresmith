@@ -426,3 +426,48 @@ test('a failure after the swap reads as a failed swap phase with its duration', 
 
     expect($swap)->toMatchArray(['state' => 'failed', 'duration' => '0s']);
 });
+
+test("a route cache the app can't load is removed, says why, and the deploy goes on", function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $error = "In Macroable.php line 89:\n  Method Illuminate\\Database\\Eloquent\\Collection::__set_state does not exist.\n";
+    $transport = releaseTransport()->respondTo('artisan --version', $error, 1);
+
+    releaseRun($deployment, $transport);
+
+    $lines = releaseLogLines($deployment);
+    $check = array_search('$ php artisan --version', $lines, true);
+
+    expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
+        ->and($check)->not->toBeFalse()
+        ->and(array_slice($lines, $check + 1, 4))->toBe([
+            'In Macroable.php line 89:',
+            '  Method Illuminate\Database\Eloquent\Collection::__set_state does not exist.',
+            '$ rm -f bootstrap/cache/routes-v7.php',
+            "php artisan route:cache saved routes the app can't load, so Coresmith removed that cache. The app runs without it. This happens when a route holds data, such as query results passed to Route::inertia or Route::view. Load that data in a controller to bring the cache back.",
+        ])
+        ->and(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'rm -f bootstrap/cache/routes-v7.php')))->toBeTrue()
+        ->and($lines)->toContain('$ php artisan view:cache')
+        ->and($lines)->toContain('$ php artisan migrate --force');
+});
+
+test('a route cache that loads is kept, and the check stays out of the log', function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $transport = releaseTransport();
+
+    releaseRun($deployment, $transport);
+
+    $commands = collect($transport->commands());
+
+    expect($commands->contains(fn(string $command): bool => str_contains($command, 'artisan --version')))->toBeTrue()
+        ->and($commands->contains(fn(string $command): bool => str_contains($command, 'routes-v7.php')))->toBeFalse()
+        ->and(releaseLogLines($deployment))->not->toContain('$ php artisan --version');
+});
+
+test('a route cache that failed to build is not checked, since nothing was written', function () {
+    $deployment = Deployment::factory()->for(releaseApp())->create();
+    $transport = releaseTransport()->respondTo('artisan route:cache', "Unable to prepare route [login] for serialization.\n", 1);
+
+    releaseRun($deployment, $transport);
+
+    expect(collect($transport->commands())->contains(fn(string $command): bool => str_contains($command, 'artisan --version')))->toBeFalse();
+});
