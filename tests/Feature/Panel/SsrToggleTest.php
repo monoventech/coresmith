@@ -70,11 +70,11 @@ function ssrPut(Application $application, bool $on): TestResponse
 {
     $user = User::factory()->create();
     $application->team->members()->attach($user, ['role' => TeamRole::Admin->value]);
-    $show = route('servers.applications.show', [$application->server_id, $application]);
+    $show = route('servers.applications.show', [$application->server, $application]);
 
     return test()->actingAs($user->fresh())
         ->from($show)
-        ->put(route('servers.applications.toggles.update', [$application->server_id, $application, SmartToggles::INERTIA_SSR]), ['on' => $on]);
+        ->put(route('servers.applications.toggles.update', [$application->server, $application, SmartToggles::INERTIA_SSR]), ['on' => $on]);
 }
 
 function ssrTransport(bool $adapter = true, bool $script = true): FakeSSHTransport

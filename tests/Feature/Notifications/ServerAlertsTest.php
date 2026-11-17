@@ -154,7 +154,7 @@ test('a finished provision emails the team', function () {
     expect($mail->subject)->toBe('web-1 is ready')
         ->and($mail->introLines)->toBe(['Provisioned and hardened in 6m 12s. All eight phases passed.', 'Add an app to deploy to it.'])
         ->and($mail->actionText)->toBe('Open web-1')
-        ->and($mail->actionUrl)->toBe(route('servers.show', $server));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $server->team->slug . '/servers/web-1');
 });
 
 test('a provision that stopped emails the team', function () {
@@ -655,7 +655,7 @@ test('each alert says what happened and what to do', function (string $alert, st
     expect($mail->subject)->toBe($subject)
         ->and($mail->introLines)->toBe($lines)
         ->and($mail->actionText)->toBe($action)
-        ->and($mail->actionUrl)->toBe($alert === 'killed for memory' ? route('servers.applications.show', [$server, $application]) : route('servers.show', $server));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $server->team->slug . '/servers/web-1' . ($alert === 'killed for memory' ? '/applications/shop' : ''));
 })->with([
     'provisioning stopped' => [
         'provisioning stopped',

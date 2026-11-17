@@ -47,7 +47,7 @@
 <ServerHeaderView
     {server}
     primary={applications.length > 0 && server.active && server.can.createApplication
-        ? { label: 'Add an app', href: route('servers.applications.create', server.id) }
+        ? { label: 'Add an app', href: route('servers.applications.create', server.key) }
         : null}
 />
 
@@ -64,7 +64,7 @@
     >
         {#snippet action()}
             {#if server.can.createApplication}
-                <Button href={route('servers.applications.create', server.id)}>Add an app</Button>
+                <Button href={route('servers.applications.create', server.key)}>Add an app</Button>
             {/if}
         {/snippet}
     </EmptyState>
@@ -112,7 +112,7 @@
                 This server runs {stackText}, each app walled off from the others with its own environment and database
                 credentials.
                 <Link
-                    href={route('servers.under-the-hood', server.id)}
+                    href={route('servers.under-the-hood', server.key)}
                     class="whitespace-nowrap text-foreground underline underline-offset-2"
                     >What Coresmith runs here</Link
                 >

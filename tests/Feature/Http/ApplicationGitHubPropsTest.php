@@ -61,7 +61,7 @@ test('a linked app shows how it clones and no deploy key', function (array $attr
     $team = Team::factory()->create();
     $application = githubPropsApp($team, githubPropsConnection($team), $attributes);
 
-    $response = $this->actingAs(githubPropsMember($team))->get(route('servers.applications.show', [$application->server_id, $application]));
+    $response = $this->actingAs(githubPropsMember($team))->get(route('servers.applications.show', [$application->server, $application]));
 
     $response->assertOk()->assertInertia(fn($page) => $page
         ->component('applications/Show')
@@ -89,7 +89,7 @@ test('a linked app whose connection was removed or suspended names the problem',
     $break($connection);
 
     $this->actingAs(githubPropsMember($team))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertOk()
         ->assertInertia(fn($page) => $page
             ->where('application.github', [
@@ -115,7 +115,7 @@ test('a removed connection keeps the app on its deploy key when it was added by 
     $connection->disconnect();
 
     $this->actingAs(githubPropsMember($team))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page
             ->where('application.github.usable', false)
             ->where('application.github.problem', 'removed')
@@ -128,7 +128,7 @@ test('an unlinked app has no github block', function (array $attributes, bool $k
     $application = githubPropsApp($team, null, $attributes);
 
     $this->actingAs(githubPropsMember($team))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertOk()
         ->assertInertia(fn($page) => $page
             ->where('application.github', null)
@@ -144,7 +144,7 @@ test('an app linked to another kind of git provider has no github block', functi
     $application = githubPropsApp($team, null, ['source_provider_id' => $gitlab->id]);
 
     $this->actingAs(githubPropsMember($team))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page->where('application.github', null));
 });
 
@@ -156,6 +156,6 @@ test('the way to git settings carries the team address', function () {
     $connection->disconnect();
 
     $this->actingAs(githubPropsMember($team))
-        ->get('/monoven/servers/' . $application->server_id . '/applications/' . $application->id)
+        ->get('/monoven' . route('servers.applications.show', [$application->server, $application], false))
         ->assertInertia(fn($page) => $page->where('application.github.settings_href', 'http://localhost/monoven/settings/git'));
 });

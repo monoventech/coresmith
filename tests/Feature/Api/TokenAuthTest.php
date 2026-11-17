@@ -330,3 +330,19 @@ test('an API deploy waits while the server is being resized', function () {
 
     Queue::assertNothingPushed();
 });
+
+test("a server's name in an address finds the token's team's server, even when another of the person's teams has one by that name", function () {
+    $team = Team::factory()->create();
+    $other = Team::factory()->create();
+    $user = apiUser($team, TeamRole::Owner);
+    $other->members()->attach($user, ['role' => TeamRole::Owner->value]);
+    $user->forceFill(['current_team_id' => $other->id])->save();
+
+    $ours = Server::factory()->for($team)->create(['name' => 'web']);
+    Server::factory()->for($other)->create(['name' => 'web']);
+
+    $this->withHeaders(asToken(tokenFor($user, $team, [Ability::ViewServer])))
+        ->getJson('/api/v1/servers/web')
+        ->assertOk()
+        ->assertJsonPath('data.id', $ours->id);
+});

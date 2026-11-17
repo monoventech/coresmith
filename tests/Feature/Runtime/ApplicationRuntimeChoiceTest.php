@@ -27,7 +27,7 @@ function runtimeChoiceApp(TeamRole $role = TeamRole::Owner): array
 
 function runtimeChoiceRoute(Application $application): string
 {
-    return route('servers.applications.runtime', [$application->server_id, $application]);
+    return route('servers.applications.runtime', [$application->server, $application]);
 }
 
 test('an owner sets the app to a php version and the next deploy uses it', function () {
@@ -88,7 +88,7 @@ test('the app page offers the version choice and says when the lock holds php ba
     ]);
 
     $this->actingAs($user)
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn(AssertableInertia $page) => $page
             ->where('runtime_choice.label', 'PHP')
             ->where('runtime_choice.pin', '8.4')
@@ -104,6 +104,6 @@ test('a deployer sees the held note but no version choice', function () {
     [$user, $application] = runtimeChoiceApp(TeamRole::Member);
 
     $this->actingAs($user)
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('runtime_choice', null)->where('held', null));
 });

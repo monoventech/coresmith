@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\HasHandle;
+use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Models\Concerns\RecordsWhoAdded;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -19,7 +21,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 final class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
-    use HasFactory, HasUlids, RecordsWhoAdded;
+    use HasFactory, HasHandle, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded {
+        HasHandle::resolveRouteBindingQuery insteadof HasUlids;
+    }
 
     protected $fillable = ['team_id', 'name', 'created_by'];
 
@@ -45,5 +49,10 @@ final class Project extends Model
     public function databases(): HasMany
     {
         return $this->hasMany(ManagedDatabase::class);
+    }
+
+    protected function handleFallback(): string
+    {
+        return 'project';
     }
 }

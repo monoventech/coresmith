@@ -74,4 +74,9 @@ class Deployment extends Model
             'stale_after' => 'datetime',
         ];
     }
+
+    public function getRouteKey(): mixed
+    {
+        return $this->release ?? $this->getKey();
+    }
 }

@@ -11,6 +11,7 @@ namespace App\Notifications;
 use App\Enums\AppSize;
 use App\Models\Application;
 use App\Services\Panel\Formats;
+use App\Services\Teams\TeamLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,6 +48,6 @@ final class ApplicationOomKilledNotification extends Notification implements Sho
             ->subject("{$application->name} was killed for memory")
             ->line("The {$this->process} process on {$application->server?->name} went over its {$this->limitMb} MB memory limit at " . Formats::absolute($this->at) . ', and it was started again.')
             ->line("If it keeps happening, the app needs more memory than the {$size} size gives it.")
-            ->action('Open ' . $application->name, route('servers.applications.show', [$application->server_id, $application]));
+            ->action('Open ' . $application->name, app(TeamLinks::class)->application($application));
     }
 }

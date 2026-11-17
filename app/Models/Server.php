@@ -10,6 +10,7 @@ namespace App\Models;
 
 use App\Casts\Vaulted;
 use App\Enums\ServerStatus;
+use App\Models\Concerns\HasHandle;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Models\Concerns\RecordsWhoAdded;
 use App\Services\Runtime\AsdfManager;
@@ -26,7 +27,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Server extends Model
 {
     /** @use HasFactory<ServerFactory> */
-    use HasFactory, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes;
+    use HasFactory, HasHandle, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes {
+        HasHandle::resolveRouteBindingQuery insteadof HasUlids;
+    }
 
     protected $guarded = ['id'];
 
@@ -158,5 +161,10 @@ class Server extends Model
             'provider_monthly_cost' => 'decimal:2',
             'public_addresses' => 'array',
         ];
+    }
+
+    protected function handleFallback(): string
+    {
+        return 'server';
     }
 }

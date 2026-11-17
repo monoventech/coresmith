@@ -15,6 +15,7 @@ use App\Exceptions\ServerConnectionFailed;
 use App\Exceptions\ThisMachineRefused;
 use App\Http\Requests\Server\StoreServerRequest;
 use App\Http\Requests\Server\UpdateServerRequest;
+use App\Http\Responses\BackAfterRename;
 use App\Jobs\AuditServer;
 use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
@@ -167,7 +168,7 @@ final class ServerController extends Controller
             activity()->performedOn($server)->log('server_renamed');
         }
 
-        return back()->with('success', 'Saved.');
+        return ($server->wasChanged('handle') ? app(BackAfterRename::class)->to($request, 'server', $server) : back())->with('success', 'Saved.');
     }
 
     public function destroy(Server $server, ThisMachine $machine, CoresmithKey $keys): RedirectResponse

@@ -170,6 +170,7 @@ test('a server card carries its state, rounded readings, links and applications'
 
     expect($fleet->card($fleet->servers()->first()))->toBe([
         'id' => $server->id,
+        'key' => 'web-1',
         'name' => 'web-1',
         'state' => ['key' => 'healthy', 'label' => 'Healthy', 'tone' => 'success'],
         'meta' => '1 app',
@@ -206,7 +207,7 @@ test('a server card without readings has no numbers and links to a running deplo
     expect($card['cpu'])->toBeNull()
         ->and($card['memory'])->toBeNull()
         ->and($card['disk'])->toBeNull()
-        ->and($card['watch_href'])->toBe(route('servers.applications.deployments.show', [$server, $running->application_id, $running]));
+        ->and($card['watch_href'])->toBe(route('servers.applications.deployments.show', [$server, $running->application, $running]));
 });
 
 test('only the teams own running deployments are running, newest first', function () {

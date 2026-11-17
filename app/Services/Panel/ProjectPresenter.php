@@ -21,6 +21,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Projects\AppTags;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -54,7 +55,7 @@ final class ProjectPresenter
             'latest' => $latest?->application === null ? null : [
                 'application' => $latest->application->name,
                 'when' => Formats::when($latest->started_at ?? $latest->created_at),
-                'href' => route('servers.applications.deployments.show', [$latest->application->server_id, $latest->application, $latest]),
+                'href' => route('servers.applications.deployments.show', [app(RouteKeys::class)->server($latest->application->server_id), $latest->application, $latest]),
             ],
         ];
     }
@@ -92,19 +93,19 @@ final class ProjectPresenter
                 'tags' => $application->tags,
                 'kind' => ApplicationPresenter::kind($application),
                 'state' => $last->get($application->getKey())?->status === DeploymentStatus::Running ? ['key' => 'deploying', 'label' => 'Deploying', 'tone' => 'accent'] : ApplicationPresenter::state($application),
-                'href' => route('servers.applications.show', [$application->server_id, $application]),
+                'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
                 'server' => $this->where($viewer, $application->server),
                 'domain' => $application->domain === null || $application->domain === '' ? null : ['label' => $application->domain, 'href' => 'https://' . $application->domain],
                 'last_deploy' => $this->lastDeploy($last->get($application->getKey())),
-                'deploy_href' => Gate::forUser($viewer)->allows('deploy', $application) ? route('servers.applications.deploy', [$application->server_id, $application]) : null,
-                'tags_href' => Gate::forUser($viewer)->allows('update', $application) ? route('servers.applications.tags.update', [$application->server_id, $application]) : null,
+                'deploy_href' => Gate::forUser($viewer)->allows('deploy', $application) ? route('servers.applications.deploy', [app(RouteKeys::class)->server($application->server_id), $application]) : null,
+                'tags_href' => Gate::forUser($viewer)->allows('update', $application) ? route('servers.applications.tags.update', [app(RouteKeys::class)->server($application->server_id), $application]) : null,
                 'remove_href' => $fill && (!$developer || $application->addedBy($viewer)) ? route('projects.applications.destroy', [$project, $application]) : null,
             ])->values()->all(),
             'databases' => $databases->map(fn(ManagedDatabase $database): array => [
                 'id' => $database->getKey(),
                 'name' => $database->name,
                 'type' => $database->type->value,
-                'href' => route('servers.databases.show', [$database->server_id, $database]),
+                'href' => route('servers.databases.show', [app(RouteKeys::class)->server($database->server_id), $database]),
                 'server' => $this->where($viewer, $database->server),
                 'offsite' => $database->last_offsite_error !== null
                     ? ['label' => 'Offsite backup failing', 'tone' => 'destructive']
@@ -226,7 +227,7 @@ final class ProjectPresenter
             'full' => Formats::absolute($deployment->started_at ?? $deployment->created_at),
             'commit' => $subject === '' ? null : $subject,
             'by' => $deployment->triggeredBy?->name ?? ($deployment->commit_author === null || $deployment->commit_author === '' ? null : $deployment->commit_author),
-            'href' => $deployment->application === null ? null : route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment]),
+            'href' => $deployment->application === null ? null : route('servers.applications.deployments.show', [app(RouteKeys::class)->server($deployment->application->server_id), $deployment->application, $deployment]),
         ];
     }
 
@@ -256,12 +257,12 @@ final class ProjectPresenter
 
         foreach ($applications as $application) {
             $deployment = $last->get($application->getKey());
-            $page = route('servers.applications.show', [$application->server_id, $application]);
+            $page = route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]);
 
             if (in_array($application->getKey(), $down, true)) {
                 $items[] = ['severity' => 'critical', 'subject' => $application->name, 'summary' => "isn't answering", 'href' => $page];
             } elseif ($deployment?->status === DeploymentStatus::Failed) {
-                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'last deploy failed', 'href' => route('servers.applications.deployments.show', [$application->server_id, $application, $deployment])];
+                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'last deploy failed', 'href' => route('servers.applications.deployments.show', [app(RouteKeys::class)->server($application->server_id), $application, $deployment])];
             } elseif ($application->power_state === PowerState::Stopped) {
                 $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => $page];
             }
@@ -269,7 +270,7 @@ final class ProjectPresenter
 
         foreach ($databases as $database) {
             if ($database->last_offsite_error !== null) {
-                $items[] = ['severity' => 'warning', 'subject' => $database->name, 'summary' => 'offsite backup failing', 'href' => route('servers.databases.show', [$database->server_id, $database])];
+                $items[] = ['severity' => 'warning', 'subject' => $database->name, 'summary' => 'offsite backup failing', 'href' => route('servers.databases.show', [app(RouteKeys::class)->server($database->server_id), $database])];
             }
         }
 

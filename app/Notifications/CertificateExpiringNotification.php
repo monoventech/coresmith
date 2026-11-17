@@ -10,6 +10,7 @@ namespace App\Notifications;
 
 use App\Models\Application;
 use App\Services\Server\CertificateCheck;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -43,6 +44,6 @@ final class CertificateExpiringNotification extends Notification implements Shou
             ->subject("The certificate for {$this->domain} " . CertificateCheck::expiry($this->days))
             ->line('Coresmith renews certificates on ' . $server?->name . ' well before they expire, so this one could not be renewed.')
             ->line("Check that {$this->domain} still points at {$server?->ip_address} and that ports 80 and 443 are open.")
-            ->action('Open ' . $this->application->name, route('servers.applications.show', [$this->application->server_id, $this->application]));
+            ->action('Open ' . $this->application->name, app(TeamLinks::class)->application($this->application));
     }
 }

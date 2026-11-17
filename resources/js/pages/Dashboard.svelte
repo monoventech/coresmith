@@ -242,8 +242,9 @@
                         {:else if ['pending', 'provisioning', 'failed', 'creating', 'creation_failed'].includes(server.state.key)}
                             <Link href={server.href} class="focus-ring quick-action">Continue setup</Link>
                         {:else if server.applications.length === 0}
-                            <Link href={route('servers.applications.create', server.id)} class="focus-ring quick-action"
-                                >Add an app</Link
+                            <Link
+                                href={route('servers.applications.create', server.key)}
+                                class="focus-ring quick-action">Add an app</Link
                             >
                         {:else}
                             <button

@@ -10,6 +10,7 @@ namespace App\Notifications;
 
 use App\Models\Server;
 use App\Services\Panel\Formats;
+use App\Services\Teams\TeamLinks;
 use Carbon\CarbonInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -52,6 +53,6 @@ final class ServerUnreachableNotification extends Notification implements Should
         return $mail
             ->line($this->reason)
             ->line('Its apps may still be serving. Coresmith checks every minute and emails again when it answers.')
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->action('Open ' . $this->server->name, app(TeamLinks::class)->server($this->server));
     }
 }

@@ -10,6 +10,7 @@ namespace App\Notifications;
 
 use App\Models\Server;
 use App\Services\Panel\Formats;
+use App\Services\Teams\TeamLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,6 +42,6 @@ final class ServerProvisionedNotification extends Notification implements Should
             ->subject("{$this->server->name} is ready")
             ->line("Provisioned and hardened in {$took}. All eight phases passed.")
             ->line('Add an app to deploy to it.')
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->action('Open ' . $this->server->name, app(TeamLinks::class)->server($this->server));
     }
 }

@@ -35,7 +35,7 @@ function phpCardPage(Application $application): TestResponse
     $viewer = User::factory()->create();
     $application->team->members()->attach($viewer, ['role' => TeamRole::Member->value]);
 
-    return test()->actingAs($viewer->fresh())->get(route('servers.applications.show', [$application->server_id, $application]));
+    return test()->actingAs($viewer->fresh())->get(route('servers.applications.show', [$application->server, $application]));
 }
 
 test('the app page shows a PHP app its limits and the choices its size allows', function () {

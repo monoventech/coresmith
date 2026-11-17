@@ -116,7 +116,7 @@ test('another teams server cannot be rebooted or pruned', function (string $rout
 
     $this->actingAs(housekeepingMember(Team::factory()->create(), TeamRole::Owner))
         ->post(route($route, $server))
-        ->assertForbidden();
+        ->assertNotFound();
 
     Queue::assertNothingPushed();
 })->with(['servers.reboot', 'servers.prune-releases']);

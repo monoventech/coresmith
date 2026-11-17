@@ -231,7 +231,7 @@ export async function useTheme(page: Page, theme: 'light' | 'dark') {
 export async function gotoServer(page: Page, name: string) {
     await page.goto('/dashboard')
     await page.getByTestId('server-card').getByRole('link', { name, exact: true }).click()
-    await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+    await page.waitForURL(/\/servers\/[\w.-]+$/)
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
@@ -261,14 +261,14 @@ export function databaseRow(page: Page, name: string): Locator {
 export async function gotoApplication(page: Page, server: string, name: string) {
     await gotoServer(page, server)
     await applicationRow(page, name).click()
-    await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+    await page.waitForURL(/\/applications\/[\w.-]+$/)
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
 }
 
 export async function gotoDatabase(page: Page, server: string, name: string) {
     await gotoServerTab(page, server, 'Databases')
     await databaseRow(page, name).click()
-    await page.waitForURL(/\/databases\/[A-Za-z0-9]+$/)
+    await page.waitForURL(/\/databases\/[\w.-]+$/)
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
 }
 

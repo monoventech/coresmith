@@ -78,7 +78,7 @@ test.describe('an admin who sees only what is shared', () => {
     test("an unshared server's address answers with the not-found page", async ({ page }) => {
         await openShared(page, 'warehouse')
 
-        const server = /\/servers\/([A-Za-z0-9]+)\/applications\//.exec(page.url())?.[1]
+        const server = /\/servers\/([\w.-]+)\/applications\//.exec(page.url())?.[1]
 
         expect(server).toBeTruthy()
         expect((await page.goto(`/servers/${server}`))?.status()).toBe(404)
