@@ -21,6 +21,7 @@ use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Server\CertificateCheck;
 use App\Services\Server\CertificateProbe;
+use App\Services\Server\CertificateRetry;
 use App\Services\SSH\SSHConnectionManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
@@ -28,6 +29,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\FakeSSHTransport;
 
@@ -179,7 +181,7 @@ test('each domain gets a state the page can show', function (?int $days, string 
     'five days' => [5, 'expiring', 5, 'Expires in 5 days', 'This should have renewed by now. Check a.example.com still points at 203.0.113.9.'],
     'one day' => [1, 'expiring', 1, 'Expires tomorrow', 'This should have renewed by now. Check a.example.com still points at 203.0.113.9.'],
     'expired' => [-1, 'expired', -1, 'Expired', 'This should have renewed by now. Check a.example.com still points at 203.0.113.9.'],
-    'none' => [null, 'none', null, 'No certificate', 'There\'s no certificate for this name yet. Point its DNS at 203.0.113.9 and one is requested.'],
+    'none' => [null, 'none', null, 'No certificate', 'There\'s no certificate for this name yet. Point the name at this server, then press Check again and Coresmith asks for one.'],
 ]);
 
 test('the title says when the certificate was checked, as of now', function () {
@@ -484,4 +486,91 @@ test('a connection that drops between batches keeps what the finished batches fo
     expect(certificateProbes($transport))->toHaveCount(2)
         ->and(array_keys($result['domains']))->toBe(['d1.example.com'])
         ->and($result['domains']['d1.example.com']['state'])->toBe('valid');
+});
+
+function certificateLoads(FakeSSHTransport $transport): array
+{
+    return array_values(array_filter($transport->commands(), fn(string $command): bool => str_contains($command, '/load')));
+}
+
+function certificateMissing(): FakeSSHTransport
+{
+    return (new FakeSSHTransport)->respondTo('@@cert', certificateOutput(['@@cert a.example.com none']));
+}
+
+test('a name that points here and still has no certificate two minutes on makes caddy ask again, and is read once more', function () {
+    $application = certificateApp(['domain_reach' => ['a.example.com' => ['ready' => true]]]);
+    certificateRun($application->server, certificateMissing());
+
+    $this->travel(3)->minutes();
+    $transport = (new FakeSSHTransport)->respondToSequence('@@cert', [
+        [certificateOutput(['@@cert a.example.com none'])],
+        [certificateOutput(['@@cert a.example.com ' . certificateNotAfter(90)])],
+    ]);
+    certificateRun($application->server, $transport);
+
+    $loads = certificateLoads($transport);
+
+    expect($loads)->toHaveCount(1)
+        ->and($loads[0])->toContain('/config/')
+        ->and($loads[0])->toContain('Cache-Control: must-revalidate')
+        ->and($loads[0])->toContain('grep -q')
+        ->and(certificateProbes($transport))->toHaveCount(2)
+        ->and(app(CertificateCheck::class)->forApplication($application)['domains']['a.example.com']['state'])->toBe('valid');
+
+    Sleep::assertSequence([Sleep::for(CertificateRetry::WAIT_SECONDS)->seconds()]);
+});
+
+test('a name is not asked for again before two minutes, or when it does not point here', function (array $reach, int $minutes) {
+    $application = certificateApp(['domain_reach' => $reach]);
+    certificateRun($application->server, certificateMissing());
+
+    $this->travel($minutes)->minutes();
+    $transport = certificateMissing();
+    certificateRun($application->server, $transport);
+
+    expect(certificateLoads($transport))->toBe([])
+        ->and(certificateProbes($transport))->toHaveCount(1);
+})->with([
+    'missing for a minute' => [['a.example.com' => ['ready' => true]], 1],
+    'not pointing here' => [['a.example.com' => ['ready' => false]], 3],
+    'never checked from outside' => [[], 3],
+]);
+
+test('caddy is asked again at most every ten minutes on a server', function () {
+    $application = certificateApp(['domain_reach' => ['a.example.com' => ['ready' => true]]]);
+    certificateRun($application->server, certificateMissing());
+
+    $runs = [];
+
+    foreach ([3, 5, 6] as $minutes) {
+        $this->travel($minutes)->minutes();
+        $runs[] = $transport = certificateMissing();
+        certificateRun($application->server, $transport);
+    }
+
+    expect(array_map(fn(FakeSSHTransport $transport): int => count(certificateLoads($transport)), $runs))->toBe([1, 0, 1]);
+});
+
+test('a retry caddy refuses is reported, and the check keeps what it found', function () {
+    $application = certificateApp(['domain_reach' => ['a.example.com' => ['ready' => true]]]);
+    certificateRun($application->server, certificateMissing());
+
+    $this->travel(3)->minutes();
+    $transport = certificateMissing()->respondTo('/load', 'curl: (22) The requested URL returned error: 400', 22);
+    certificateRun($application->server, $transport);
+
+    expect(certificateLoads($transport))->toHaveCount(1)
+        ->and(certificateProbes($transport))->toHaveCount(1)
+        ->and(app(CertificateCheck::class)->forApplication($application)['domains']['a.example.com']['state'])->toBe('none');
+});
+
+test('a name found without a certificate before this check kept its time counts as missing since it was checked', function () {
+    $application = certificateApp(['domain_reach' => ['a.example.com' => ['ready' => true]]]);
+    Cache::put(CertificateCheck::cacheKey($application), ['domains' => ['a.example.com' => ['expires_at' => null, 'checked_at' => now()->subMinutes(5)->toIso8601String()]]], now()->addDay());
+    $transport = certificateMissing();
+
+    certificateRun($application->server, $transport);
+
+    expect(certificateLoads($transport))->toHaveCount(1);
 });
