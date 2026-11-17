@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.20 (2026-11-17)
+
+### Changed
+- The logo in emails and error pages, renaming apps, and the tool that builds a static site (#111)
+- test: the sign-out test keeps a full trace when it fails and checks no remember-me cookie is set, so the rare Firefox failure where a signed-out browser came back signed in can be traced (#110)
+- Update README.md (#109)
+- Update README.md (#108)
+- The official Coresmith logo, favicon, app icons and share card from the brand kit (#107)
+
 ## v0.8.19 (2026-11-16)
 
 ### Changed
