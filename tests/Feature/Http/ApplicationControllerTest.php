@@ -778,3 +778,16 @@ test('environment text the server could not read is refused with the line and wh
 
     expect($application->fresh()->env_variables)->toBe("APP_ENV=production\n");
 });
+
+test("adding an app on another app's www name reroutes that app at once, so it lets go before the new app's first deploy", function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $apex = Application::factory()->for($team)->for($server)->create(['domain' => 'example.com', 'additional_domains' => [], 'current_release' => '20261117-120000']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), payload(['name' => 'www', 'domain' => 'www.example.com']))
+        ->assertRedirect();
+
+    Queue::assertPushed(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => $job->application->is($apex));
+});

@@ -49,6 +49,7 @@ const PAGES: [string, Visit][] = [
     ['Server with a changed host key', (page) => gotoServer(page, 'rekeyed-server')],
     ['Unreachable server', (page) => gotoServer(page, 'down-01')],
     ['Certificates', (page) => gotoApplication(page, 'bench-01', 'certs-app')],
+    ['Application with a www redirect', (page) => gotoApplication(page, 'bench-01', 'apex-shop')],
     ['Realtime toggles', (page) => gotoApplication(page, 'bench-01', 'realtime-chr')],
     ['Application with cron jobs', (page) => gotoApplication(page, 'bench-01', 'cron-jobs')],
     [

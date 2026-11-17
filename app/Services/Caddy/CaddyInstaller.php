@@ -147,10 +147,12 @@ final class CaddyInstaller
         ));
         $issuers = self::issuers($email);
         $policies = [];
+        $claimed = array_merge(...array_map(fn(array $policy): array => array_values((array) ($policy['subjects'] ?? [])), $site->sitePolicies()));
 
         foreach ($apps as $route) {
             $id = $route instanceof stdClass ? ($route->{'@id'} ?? null) : null;
-            $hosts = $route instanceof stdClass ? CoresmithSite::hosts($route) : [];
+            $hosts = array_values(array_diff($route instanceof stdClass ? CoresmithSite::hosts($route) : [], $claimed));
+            $claimed = [...$claimed, ...$hosts];
 
             if (is_string($id) && $hosts !== []) {
                 $policies[] = self::appPolicy($id, $hosts, $issuers);

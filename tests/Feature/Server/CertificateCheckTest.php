@@ -574,3 +574,9 @@ test('a name found without a certificate before this check kept its time counts 
 
     expect(certificateLoads($transport))->toHaveCount(1);
 });
+
+test('the certificate check covers the www name Coresmith adds to an apex domain, and never a wildcard', function () {
+    $application = Application::factory()->create(['domain' => 'example.com', 'additional_domains' => ['app.example.com', '*.example.org']]);
+
+    expect(CertificateCheck::domains($application))->toBe(['example.com', 'app.example.com', 'www.example.com']);
+});

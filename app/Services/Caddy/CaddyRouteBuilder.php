@@ -11,6 +11,7 @@ namespace App\Services\Caddy;
 use App\Enums\PowerState;
 use App\Exceptions\InvalidRouteConfigException;
 use App\Models\Application;
+use App\Services\Address\DomainTwins;
 use App\Services\Panel\Reverb;
 use App\Services\SafeName;
 use App\Stacks\Route;
@@ -38,14 +39,38 @@ final class CaddyRouteBuilder
      */
     public function build(Application $application): array
     {
+        $twins = $this->twins($application);
+
         return [
             '@id' => self::routeId($application),
             'match' => [
-                ['host' => $this->domains($application)],
+                ['host' => [...$this->domains($application), ...array_keys($twins)]],
             ],
-            'handle' => $this->handle($application),
+            'handle' => $this->handle($application, $twins),
             'terminal' => true,
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function hosts(Application $application): array
+    {
+        return [...$this->domains($application), ...array_keys($this->twins($application))];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function twins(Application $application): array
+    {
+        $twins = app(DomainTwins::class)->for($application);
+
+        foreach (array_keys($twins) as $twin) {
+            SafeName::assertDomain($twin);
+        }
+
+        return $twins;
     }
 
     /**
@@ -62,21 +87,48 @@ final class CaddyRouteBuilder
     }
 
     /**
+     * @param  array<string, string>  $twins
      * @return list<array<string, mixed>>
      */
-    private function handle(Application $application): array
+    private function handle(Application $application, array $twins = []): array
     {
         return [
             [
                 'handler' => 'subroute',
-                'routes' => $this->offline($application)
-                    ? [$this->serveMaintenancePage($application)]
-                    : [
-                        $this->blockSensitivePaths(),
-                        ...$this->serveApplication($application),
-                    ],
+                'routes' => [
+                    ...$this->redirectTwins($twins),
+                    ...($this->offline($application)
+                        ? [$this->serveMaintenancePage($application)]
+                        : [
+                            $this->blockSensitivePaths(),
+                            ...$this->serveApplication($application),
+                        ]),
+                ],
             ],
         ];
+    }
+
+    /**
+     * @param  array<string, string>  $twins
+     * @return list<array<string, mixed>>
+     */
+    private function redirectTwins(array $twins): array
+    {
+        $routes = [];
+
+        foreach ($twins as $twin => $target) {
+            $routes[] = [
+                'match' => [['host' => [$twin]]],
+                'handle' => [[
+                    'handler' => 'static_response',
+                    'status_code' => 308,
+                    'headers' => ['Location' => ['https://' . $target . '{http.request.uri}']],
+                ]],
+                'terminal' => true,
+            ];
+        }
+
+        return $routes;
     }
 
     public static function addressServerId(Application $application, string $kind): string

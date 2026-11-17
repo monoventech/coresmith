@@ -86,6 +86,7 @@
             runtime: string
             domain: string | null
             additional_domains: string[]
+            redirects: { domain: string; to: string }[]
             certificates: {
                 checked_at: string
                 domains: Record<
@@ -203,11 +204,24 @@
     const domains = $derived([...(application.domain ? [application.domain] : []), ...application.additional_domains])
     let checkingReach = $state(false)
     const reachChecked = $derived(application.domain_reach.filter((reading) => reading.checked !== null))
+    const redirectNames = $derived(new Set(application.redirects.map((redirect) => redirect.domain)))
     const advice = $derived(
         application.domain_reach.filter(
-            (reading) => reading.problems.length > 0 || reading.notes.length > 0 || reading.records.length > 0
+            (reading) =>
+                (reading.problems.length > 0 || reading.notes.length > 0 || reading.records.length > 0) &&
+                !(
+                    redirectNames.has(reading.domain) &&
+                    application.certificates?.domains[reading.domain]?.state === 'valid'
+                )
         )
     )
+
+    function redirectTone(domain: string) {
+        const certificate = application.certificates?.domains[domain]
+        const pointed = application.domain_reach.find((reading) => reading.domain === domain)?.ready === true
+
+        return certificate?.state === 'none' && !pointed ? 'default' : certificateTones[certificate?.state ?? 'none']
+    }
     const reachWhen = $derived(reachChecked[0]?.checked === 'now' ? 'just now' : (reachChecked[0]?.checked ?? ''))
     const reachSummary = $derived(
         reachChecked.length === 0
@@ -780,6 +794,25 @@
                     <p class="m-0 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
                         No domain yet. Add one and its certificate is requested for you.
                     </p>
+                {/each}
+                {#each application.redirects as redirect (redirect.domain)}
+                    {@const certificate = application.certificates?.domains[redirect.domain]}
+                    <div
+                        class="flex min-h-10 items-center gap-2.5 border-t border-border text-[13px]"
+                        data-testid="domain-redirect-row"
+                    >
+                        <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={redirect.domain}
+                            >{redirect.domain}</span
+                        >
+                        {#if certificate}
+                            <Badge variant={redirectTone(redirect.domain)} title={certificate.title}
+                                >{certificate.label}</Badge
+                            >
+                        {/if}
+                        <span class="text-[12px] text-muted-foreground" title="Sends visitors to {redirect.to}"
+                            >redirect<span class="sr-only"> to {redirect.to}</span></span
+                        >
+                    </div>
                 {/each}
                 {#if application.uptime}
                     <div class="mt-3 flex flex-col gap-2 border-t border-border pt-3" data-testid="app-uptime">
