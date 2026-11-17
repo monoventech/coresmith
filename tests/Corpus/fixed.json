@@ -647,16 +647,16 @@
         "why": "Echo listening on a fixed 127.0.0.1:8585, which Coresmith refuses with the line to change."
     },
     {
-        "name": "fiber-heroku",
+        "name": "fiber-aws-eb",
         "url": "https://github.com/gofiber/recipes.git",
         "branch": "master",
-        "folder": "heroku",
+        "folder": "aws-eb",
         "expect": {
             "verdict": "ready",
             "type": "go",
             "framework": "fiber"
         },
-        "why": "A Fiber recipe in a folder of the recipes repository, its own module named main, reading PORT."
+        "why": "A Fiber recipe in a folder of the recipes repository, reading PORT, beside an Elastic Beanstalk Procfile."
     },
     {
         "name": "cloud-run-helloworld",

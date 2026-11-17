@@ -233,6 +233,38 @@ test.describe('an application', () => {
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
     })
 
+    test("the browser's back button leaves a deploy whose address changed while it was open", async ({
+        page
+    }, testInfo) => {
+        const name = own(testInfo, 'scratch')
+        let moved = false
+
+        await page.route(/\/deployments\//, async (route) => {
+            if (moved || route.request().headers()['x-inertia-partial-data'] === undefined) {
+                await route.continue()
+
+                return
+            }
+
+            moved = true
+
+            const response = await route.fetch()
+            const body = (await response.json()) as { url: string }
+
+            await route.fulfill({ response, json: { ...body, url: `${body.url}&release=named` } })
+        })
+
+        await gotoApplication(page, 'bench-01', name)
+        await page.getByRole('button', { name: 'Deploy', exact: true }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: `Deploying ${name}` })).toBeVisible()
+        await expect(page).toHaveURL(/release=named$/, { timeout: 15_000 })
+
+        await page.goBack()
+
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
+    })
+
     test('on a phone the app page keeps deploy, the toggles and the current release', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'The compact app page only renders below 640px')
 
