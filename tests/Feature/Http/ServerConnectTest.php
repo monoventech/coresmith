@@ -159,3 +159,17 @@ test('no server card offers a password sign-in, whatever state the server is in'
         ->get(route('servers.show', $server))
         ->assertInertia(fn(AssertableInertia $page) => $page->missing('server.provisioning.password_sign_in'));
 })->with([ServerStatus::Pending, ServerStatus::Failed]);
+
+test('an address and SSH port the team already has is refused, however the address is written, but a detached server can come back', function () {
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->create(['name' => 'web-1', 'ip_address' => '2001:db8::0001', 'ssh_port' => 22]);
+    Server::factory()->for($team)->create(['name' => 'old-1', 'ip_address' => '203.0.113.20', 'ssh_port' => 22])->delete();
+    Server::factory()->create(['ip_address' => '203.0.113.30', 'ssh_port' => 22]);
+    $member = connectMember($team);
+    $add = fn(string $ip, int $port) => $this->actingAs($member)->post(route('servers.store'), ['team_id' => $team->id, 'name' => 'web-2', 'ip_address' => $ip, 'ssh_port' => $port, 'ssh_user' => 'root']);
+
+    $add('2001:db8::1', 22)->assertSessionHasErrors(['ip_address' => 'web-1 already uses this address and SSH port. Open it from the fleet instead.']);
+    $add('2001:db8::1', 2222)->assertSessionHasNoErrors();
+    $add('203.0.113.20', 22)->assertSessionHasNoErrors();
+    $add('203.0.113.30', 22)->assertSessionHasNoErrors();
+});

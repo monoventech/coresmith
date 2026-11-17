@@ -55,6 +55,19 @@ class Server extends Model
         return $this->cloud_provider_id !== null;
     }
 
+    public function hasAddress(string $ip): bool
+    {
+        return self::normalAddress((string) $this->ip_address) === self::normalAddress($ip);
+    }
+
+    private static function normalAddress(string $ip): string
+    {
+        $ip = trim($ip, '[] ');
+        $packed = filter_var($ip, FILTER_VALIDATE_IP) === false ? false : inet_pton($ip);
+
+        return $packed === false ? strtolower($ip) : (string) inet_ntop($packed);
+    }
+
     public function sshAddress(): ?string
     {
         if ($this->ip_address === null) {
