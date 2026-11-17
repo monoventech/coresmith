@@ -10,6 +10,7 @@ namespace App\Http\Requests\Application;
 
 use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Rules\DomainAvailable;
 use App\Services\SafeName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,6 +20,17 @@ final class UpdateApplicationRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()->can('update', $this->route('application'));
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('domain')) {
+            $this->merge(['domain' => DomainAvailable::normalize($this->input('domain'))]);
+        }
+
+        if (is_array($this->input('additional_domains'))) {
+            $this->merge(['additional_domains' => array_map(DomainAvailable::normalize(...), $this->input('additional_domains'))]);
+        }
     }
 
     /**
@@ -31,9 +43,9 @@ final class UpdateApplicationRequest extends FormRequest
             'type' => ['sometimes', 'required', Rule::enum(ApplicationType::class)],
             'js_runtime' => ['sometimes', 'nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['sometimes', 'nullable', 'string', 'max:64'],
-            'domain' => ['sometimes', 'nullable', 'string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
+            'domain' => ['sometimes', 'nullable', 'string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN, new DomainAvailable($this->route('application'))],
             'additional_domains' => ['sometimes', 'nullable', 'array'],
-            'additional_domains.*' => ['string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN],
+            'additional_domains.*' => ['string', 'max:253', 'regex:' . SafeName::DOMAIN_PATTERN, new DomainAvailable($this->route('application'))],
             'repository_url' => ['sometimes', 'nullable', 'string', 'max:2048', 'regex:' . SafeName::GIT_URL_PATTERN],
             'repository_branch' => ['sometimes', 'required', 'string', 'max:255', 'regex:' . SafeName::BRANCH_PATTERN],
             'directory' => ['sometimes', 'required', 'string', 'max:255', 'regex:' . SafeName::RELATIVE_PATH_PATTERN],
