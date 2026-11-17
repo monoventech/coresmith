@@ -34,7 +34,7 @@ test.describe('plan limits on coresmith cloud', () => {
         await page.getByLabel('IP address').fill('203.0.113.77')
         await page.getByRole('button', { name: 'Add server' }).click()
 
-        await page.waitForURL(new RegExp(`/${own(testInfo, 'vault')}/servers/[A-Za-z0-9]+$`))
+        await page.waitForURL(new RegExp(`/${own(testInfo, 'vault')}/servers/[\\w.-]+$`))
         await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
         await expect(toast(page)).toContainText('Server added.')
     })

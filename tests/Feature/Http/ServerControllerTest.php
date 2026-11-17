@@ -70,7 +70,7 @@ test('another teams server cannot be viewed', function () {
     $user = teamMember(Team::factory()->create(), TeamRole::Owner);
     $server = Server::factory()->for(Team::factory()->create())->create();
 
-    $this->actingAs($user)->get(route('servers.show', $server))->assertForbidden();
+    $this->actingAs($user)->get(route('servers.show', $server))->assertNotFound();
 });
 
 test('a member of the owning team can view the server', function () {
@@ -395,7 +395,7 @@ test('provisioning another teams server is refused and queues nothing', function
     $outsider = teamMember(Team::factory()->create(), TeamRole::Owner);
     $server = Server::factory()->for(Team::factory()->create())->create();
 
-    $this->actingAs($outsider)->post(route('servers.provision', $server))->assertForbidden();
+    $this->actingAs($outsider)->post(route('servers.provision', $server))->assertNotFound();
 
     Queue::assertNothingPushed();
 });
@@ -549,7 +549,7 @@ test('applying a fix on another teams server is refused and queues nothing', fun
     $outsider = teamMember(Team::factory()->create(), TeamRole::Owner);
     $server = checkedServer(Team::factory()->create(), [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
 
-    $this->actingAs($outsider)->post(route('servers.audit.fix', [$server, 'stop-nginx']))->assertForbidden();
+    $this->actingAs($outsider)->post(route('servers.audit.fix', [$server, 'stop-nginx']))->assertNotFound();
 
     Queue::assertNothingPushed();
 });

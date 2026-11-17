@@ -492,7 +492,7 @@ test.describe('what the full app page adds on a wider screen', () => {
     }) => {
         const domains = ['atlas.monoven.io', 'www.atlas.monoven.io', 'shop.atlas.monoven.io']
 
-        await withProps(page, /\/applications\/[A-Za-z0-9]+$/, (props) => {
+        await withProps(page, /\/applications\/[\w.-]+$/, (props) => {
             const application = props.application as Record<string, unknown>
 
             application.additional_domains = domains.slice(1)

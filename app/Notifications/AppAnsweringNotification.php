@@ -10,6 +10,7 @@ namespace App\Notifications;
 
 use App\Models\Application;
 use App\Services\Panel\Formats;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -39,6 +40,6 @@ final class AppAnsweringNotification extends Notification implements ShouldQueue
         return (new MailMessage)
             ->subject("{$name} is answering again")
             ->line("It was failing checks for about {$lasted}.")
-            ->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
+            ->action('Open ' . $name, app(TeamLinks::class)->application($this->application));
     }
 }

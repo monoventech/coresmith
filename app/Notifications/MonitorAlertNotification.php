@@ -11,6 +11,7 @@ namespace App\Notifications;
 use App\Enums\MonitorKind;
 use App\Models\Server;
 use App\Services\Monitors\MonitorLimit;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -53,6 +54,6 @@ final class MonitorAlertNotification extends Notification implements ShouldQueue
             ->subject($subject)
             ->line($line)
             ->line("Check which process is using it on the server. You'll get one more email when it's back to normal.")
-            ->action('Open ' . $name, route('servers.show', $this->server));
+            ->action('Open ' . $name, app(TeamLinks::class)->server($this->server));
     }
 }

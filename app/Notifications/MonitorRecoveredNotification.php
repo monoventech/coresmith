@@ -11,6 +11,7 @@ namespace App\Notifications;
 use App\Enums\MonitorKind;
 use App\Models\Server;
 use App\Services\Panel\Formats;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -49,6 +50,6 @@ final class MonitorRecoveredNotification extends Notification implements ShouldQ
         return (new MailMessage)
             ->subject("{$this->server->name} {$thing} is back to normal")
             ->line("It was over its limit for {$lasted}.")
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->action('Open ' . $this->server->name, app(TeamLinks::class)->server($this->server));
     }
 }

@@ -112,7 +112,7 @@ test.describe('live pages', () => {
 
         await gotoServer(page, 'forge-01')
         await fleet.subscribed()
-        await page.route(/\/servers\/[A-Za-z0-9]+$/, (route) =>
+        await page.route(/\/servers\/[\w.-]+$/, (route) =>
             route.request().headers()['x-inertia-partial-data'] === undefined
                 ? route.fallback()
                 : route.fulfill({

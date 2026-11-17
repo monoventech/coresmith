@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Server;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -40,6 +41,6 @@ final class ProvisioningFailedNotification extends Notification implements Shoul
             ->subject("Provisioning stopped on {$this->server->name}")
             ->line("Phase {$this->phase} of 8, {$this->phaseName}, failed, so {$this->server->name} is not ready yet.")
             ->line('Fix what the log shows, then retry from that phase on the server page.')
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->action('Open ' . $this->server->name, app(TeamLinks::class)->server($this->server));
     }
 }

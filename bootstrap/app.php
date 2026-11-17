@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\PlanRefusal;
+use App\Http\Middleware\CanonicalAddress;
 use App\Http\Middleware\CloudflareVisitorAddress;
 use App\Http\Middleware\ContentSecurityPolicy;
 use App\Http\Middleware\EnforcePlan;
@@ -57,6 +58,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             EnsureTeamContext::class,
+            CanonicalAddress::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

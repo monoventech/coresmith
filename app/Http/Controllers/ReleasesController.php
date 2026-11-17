@@ -17,6 +17,7 @@ use App\Services\Panel\Formats;
 use App\Services\Panel\ReleasesOverview;
 use App\Services\Panel\RollbackHistory;
 use App\Services\Projects\ProjectScope;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -76,7 +77,7 @@ final class ReleasesController extends Controller
                 'server' => $each->server?->name,
                 'project' => $each->project?->name,
                 'tags' => $each->tags,
-                'href' => route('servers.applications.releases.index', [$each->server_id, $each, ...$scope->query()]),
+                'href' => route('servers.applications.releases.index', [app(RouteKeys::class)->server($each->server_id), $each, ...$scope->query()]),
                 'current' => $each->id === $application->id,
             ])->values(),
             'overview_href' => route('releases.index', $scope->query()),

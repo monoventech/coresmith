@@ -13,6 +13,7 @@ use App\Models\Deployment;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Projects\ProjectScope;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Collection;
 
@@ -85,7 +86,7 @@ final readonly class ReleasesOverview
             'name' => $application->name,
             'server' => $application->server?->name,
             'tags' => $application->tags,
-            'href' => route('servers.applications.releases.index', [$application->server_id, $application, ...$query]),
+            'href' => route('servers.applications.releases.index', [app(RouteKeys::class)->server($application->server_id), $application, ...$query]),
             'release' => $application->current_release === null ? null : 'releases/' . Formats::release($application->current_release),
             'tag' => $live?->tag,
             'when' => Formats::when($live?->finished_at),

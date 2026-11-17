@@ -13,6 +13,7 @@ use App\Models\Server;
 use App\Models\User;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Support\Collection;
 
@@ -52,7 +53,7 @@ final readonly class ServerRuntimes
                 'applications' => array_map(fn(Application $application): array => [
                     'id' => $application->id,
                     'name' => $application->name,
-                    'href' => route('servers.applications.show', [$application->server_id, $application]),
+                    'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
                     'pinned' => $this->exactPin($application, $group['runtime']),
                     'deployable' => $user->can('deploy', $application),
                 ], $group['applications']),

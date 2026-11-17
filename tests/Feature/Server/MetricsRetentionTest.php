@@ -233,5 +233,5 @@ test('another teams metrics are not reachable', function () {
 
     $this->actingAs(metricsUser(Team::factory()->create(), TeamRole::Owner))
         ->get(route('servers.show', $server))
-        ->assertForbidden();
+        ->assertNotFound();
 });

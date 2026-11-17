@@ -182,12 +182,12 @@ test.describe('page scrolling', () => {
         expect(scrolled).toBeGreaterThan(0)
 
         await row.click()
-        await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+        await page.waitForURL(/\/applications\/[\w.-]+$/)
         await expect(page.getByRole('heading', { level: 1, name: 'legacy-api', exact: true })).toBeVisible()
         await expect(main(page)).toHaveJSProperty('scrollTop', 0)
 
         await page.goBack()
-        await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+        await page.waitForURL(/\/servers\/[\w.-]+$/)
         await expect(main(page)).toHaveJSProperty('scrollTop', scrolled)
     })
 })

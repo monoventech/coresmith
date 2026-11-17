@@ -40,7 +40,7 @@ function schedulerLogMember(Team $team, TeamRole $role): User
 
 function schedulerLogUrl(Application $application): string
 {
-    return route('servers.applications.cron-jobs.log', [$application->server_id, $application]);
+    return route('servers.applications.cron-jobs.log', [$application->server, $application]);
 }
 
 function schedulerLogRead(Application $application, FakeSSHTransport $transport): void
@@ -202,7 +202,7 @@ test('deployers can read the output, another team cannot, and another server is 
 
     Queue::fake();
 
-    $this->actingAs(schedulerLogMember(Team::factory()->create(), TeamRole::Owner))->get(schedulerLogUrl($application))->assertForbidden();
+    $this->actingAs(schedulerLogMember(Team::factory()->create(), TeamRole::Owner))->get(schedulerLogUrl($application))->assertNotFound();
     $this->actingAs(schedulerLogMember($team, TeamRole::Owner))
         ->get(route('servers.applications.cron-jobs.log', [Server::factory()->for($team)->create(), $application]))
         ->assertNotFound();

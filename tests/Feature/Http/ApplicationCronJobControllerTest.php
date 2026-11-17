@@ -39,23 +39,23 @@ function cronRouteApp(Team $team, array $attributes = []): Application
 
 function cronRouteStore(Application $application): string
 {
-    return route('servers.applications.cron-jobs.store', [$application->server_id, $application]);
+    return route('servers.applications.cron-jobs.store', [$application->server, $application]);
 }
 
 function cronRouteJob(Application $application, array $entry): string
 {
-    return route('servers.applications.cron-jobs.update', [$application->server_id, $application, CronJobs::id($entry)]);
+    return route('servers.applications.cron-jobs.update', [$application->server, $application, CronJobs::id($entry)]);
 }
 
 function cronRouteSync(Application $application): string
 {
-    return route('servers.applications.cron-jobs.sync', [$application->server_id, $application]);
+    return route('servers.applications.cron-jobs.sync', [$application->server, $application]);
 }
 
 test('an admin adds a cron job and it goes to the server with no deploy', function () {
     $team = Team::factory()->create();
     $application = cronRouteApp($team);
-    $show = route('servers.applications.show', [$application->server_id, $application]);
+    $show = route('servers.applications.show', [$application->server, $application]);
 
     $this->actingAs(cronRouteMember($team, TeamRole::Admin))
         ->from($show)

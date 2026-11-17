@@ -121,7 +121,7 @@ function commitStatusStates(): array
 
 function commitStatusPage(Application $application, Deployment $deployment): string
 {
-    return "https://panel.example.com/servers/{$application->server_id}/applications/{$application->id}/deployments/{$deployment->id}";
+    return "https://panel.example.com/{$application->team->slug}/servers/{$application->server->handle}/applications/{$application->handle}/deployments/{$deployment->getRouteKey()}";
 }
 
 test('a linked deploy posts pending then success with its own context and a link to its page', function () {

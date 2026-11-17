@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Application;
+use App\Services\Teams\TeamLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -54,6 +55,6 @@ final class CronJobNotification extends Notification implements ShouldQueue
                 ->line("It was due on {$when} and didn't start. Check that cron is running on {$server}.")
                 ->line("You'll get one more email when it runs again.");
 
-        return $mail->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
+        return $mail->action('Open ' . $name, app(TeamLinks::class)->application($this->application));
     }
 }

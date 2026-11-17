@@ -38,14 +38,14 @@ function toggleRouteApp(Team $team, array $attributes = []): Application
 
 function toggleRouteUrl(Application $application, string $toggle): string
 {
-    return route('servers.applications.toggles.update', [$application->server_id, $application, $toggle]);
+    return route('servers.applications.toggles.update', [$application->server, $application, $toggle]);
 }
 
 test('an admin can turn the queue worker on without a deployment', function () {
     Queue::fake();
     $team = Team::factory()->create();
     $application = toggleRouteApp($team);
-    $show = route('servers.applications.show', [$application->server_id, $application]);
+    $show = route('servers.applications.show', [$application->server, $application]);
 
     $this->actingAs(toggleRouteMember($team, TeamRole::Admin))
         ->from($show)
@@ -108,7 +108,7 @@ test('another team cannot change a toggle', function () {
 
     $this->actingAs(toggleRouteMember(Team::factory()->create(), TeamRole::Owner))
         ->put(toggleRouteUrl($application, 'maintenance_mode'), ['on' => true])
-        ->assertForbidden();
+        ->assertNotFound();
 
     Queue::assertNothingPushed();
 });

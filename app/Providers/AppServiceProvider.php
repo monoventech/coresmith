@@ -5,6 +5,10 @@ namespace App\Providers;
 use App\Enums\Edition;
 use App\Http\Middleware\StartSession;
 use App\Models\ApiToken;
+use App\Models\Application;
+use App\Models\Deployment;
+use App\Models\ManagedDatabase;
+use App\Models\Project;
 use App\Models\Server;
 use App\Services\Address\EnvironmentFile;
 use App\Services\Cloud\Contracts\CloudApiFactory;
@@ -16,6 +20,7 @@ use App\Services\Install\NativeProcessHandOff;
 use App\Services\Install\ProcessHandOff;
 use App\Services\Sessions\SessionManager;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamContext;
 use App\Services\Updates\UpdatePaths;
@@ -23,11 +28,16 @@ use App\Services\VaultEncryptor;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Sanctum\Sanctum;
 
@@ -38,6 +48,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->scoped(RouteKeys::class);
+
         $this->app->singleton(
             VaultEncryptor::class,
             fn(): VaultEncryptor => new VaultEncryptor(config('coresmith.vault_key')),
@@ -71,6 +83,8 @@ class AppServiceProvider extends ServiceProvider
         Edition::current();
 
         Sanctum::usePersonalAccessTokenModel(ApiToken::class);
+
+        $this->bindReadableKeys();
 
         $this->configureDefaults();
 
@@ -121,5 +135,48 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
                 : null,
         );
+    }
+
+    private function bindReadableKeys(): void
+    {
+        Route::bind('database', function (string $value, ?LaravelRoute $route = null): ManagedDatabase {
+            $server = $this->parent($route, 'server', Server::class);
+            $project = $this->parent($route, 'project', Project::class);
+
+            return ManagedDatabase::query()
+                ->when($server ?? $project, fn(Builder $query, Server|Project $parent) => $query
+                    ->where($parent instanceof Server ? 'server_id' : 'project_id', $parent->getKey())
+                    ->where(fn(Builder $match) => $match->where('name', $value)->orWhere('id', Str::lower($value))))
+                ->unless($server ?? $project, fn(Builder $query) => $query->whereKey(Str::lower($value)))
+                ->firstOrFail();
+        });
+
+        Route::bind('deployment', function (string $value, ?LaravelRoute $route = null): Deployment {
+            $application = $this->parent($route, 'application', Application::class);
+
+            return Deployment::query()
+                ->when($application, fn(Builder $query, Application $owner) => $query
+                    ->where('application_id', $owner->getKey())
+                    ->where(fn(Builder $match) => $match->where('release', $value)->orWhere('id', Str::lower($value))))
+                ->unless($application, fn(Builder $query) => $query->whereKey(Str::lower($value)))
+                ->firstOrFail();
+        });
+    }
+
+    /**
+     * @template TModel of Model
+     *
+     * @param  class-string<TModel>  $class
+     * @return TModel|null
+     */
+    private function parent(?LaravelRoute $route, string $name, string $class): ?Model
+    {
+        $parent = $route?->parameter($name);
+
+        if ($parent instanceof $class || !is_string($parent)) {
+            return $parent instanceof $class ? $parent : null;
+        }
+
+        return (new $class)->resolveRouteBinding($parent);
     }
 }

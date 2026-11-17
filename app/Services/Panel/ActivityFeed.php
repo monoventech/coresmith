@@ -25,6 +25,7 @@ use App\Models\User;
 use App\Services\Php\PhpLimits;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\CertificateCheck;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use App\Services\Updates\UpdateStatus;
 use Carbon\CarbonInterface;
@@ -206,7 +207,7 @@ final class ActivityFeed
     private function deployment(Deployment $deployment, Application $application): array
     {
         $release = Formats::release($deployment->release);
-        $href = route('servers.applications.deployments.show', [$application->server_id, $application->getKey(), $deployment]);
+        $href = route('servers.applications.deployments.show', [app(RouteKeys::class)->server($application->server_id), $application, $deployment]);
 
         return match ($deployment->status) {
             DeploymentStatus::Succeeded => $this->row($deployment->finished_at ?? $deployment->started_at, [
@@ -256,7 +257,7 @@ final class ActivityFeed
         $database = $databases->get($activity->subject_id);
 
         $serverHref = $server !== null && !$server->trashed() ? route('servers.show', $server) : null;
-        $applicationHref = $application !== null && !$application->trashed() ? route('servers.applications.show', [$application->server_id, $application]) : null;
+        $applicationHref = $application !== null && !$application->trashed() ? route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]) : null;
 
         $parts = match ($activity->description) {
             'server_added' => [$this->mono($server?->name), $this->text(' added to Coresmith, waiting for its key')],
