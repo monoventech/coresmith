@@ -37,7 +37,7 @@ test('every phase is listed in deploy order with its label', function () {
             'Build assets',
             'Run migrations',
             'Health check',
-            'Symlink swap',
+            'Go live',
         ]);
 });
 
@@ -364,7 +364,7 @@ test('a deploy that runs its own script lists the script in place of the install
     $phases = (new DeploymentPhases)->states($deployment);
 
     expect(array_column($phases, 'key'))->toBe(['clone', 'deps', 'script', 'health', 'swap'])
-        ->and(array_column($phases, 'label'))->toBe(['Clone release', 'Install runtimes', 'Deploy script', 'Health check', 'Symlink swap'])
+        ->and(array_column($phases, 'label'))->toBe(['Clone release', 'Install runtimes', 'Deploy script', 'Health check', 'Go live'])
         ->and(phasesStates($deployment))->toBe(['clone' => 'done', 'deps' => 'done', 'script' => 'failed', 'health' => 'skipped', 'swap' => 'skipped'])
         ->and(phasesDurations($deployment)['script'])->toBe('3s');
 });

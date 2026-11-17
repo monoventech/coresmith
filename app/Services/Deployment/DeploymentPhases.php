@@ -41,7 +41,7 @@ final class DeploymentPhases
         self::BUILD => 'Build assets',
         self::MIGRATIONS => 'Run migrations',
         self::HEALTH => 'Health check',
-        self::SWAP => 'Symlink swap',
+        self::SWAP => 'Go live',
         self::SCRIPT => 'Deploy script',
     ];
 
@@ -53,7 +53,7 @@ final class DeploymentPhases
         self::BUILD => 'building assets',
         self::MIGRATIONS => 'running migrations',
         self::HEALTH => 'health check',
-        self::SWAP => 'symlink swap',
+        self::SWAP => 'going live',
         self::WATCH => 'watching the processes',
         self::SCRIPT => 'running your deploy script',
     ];

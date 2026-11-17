@@ -197,7 +197,7 @@ test.describe('a deploy', () => {
 
         await expect(page.getByTestId('deployment-status')).toContainText('Failed')
         await expect(page.getByTestId('failure-banner')).toContainText('The build failed, so nothing changed.')
-        await expect(page.getByTestId('failure-banner')).toContainText('users never saw an error page')
+        await expect(page.getByTestId('failure-banner')).toContainText('visitors saw no error page')
         await expect(page.getByTestId('phase-rail').locator('[data-phase="build"]')).toHaveAttribute(
             'data-state',
             'failed'
@@ -350,10 +350,9 @@ test.describe('cancelling a deploy', () => {
         const strip = page.getByTestId('cancelled-strip')
         const build = page.getByTestId('phase-rail').locator('[data-phase="build"]')
 
-        await expect(strip).toContainText(
-            'Maya Lindqvist cancelled this deploy, so nothing changed. The symlink still points at '
-        )
-        await expect(strip).toContainText(', users never saw a difference.')
+        await expect(strip).toContainText('Maya Lindqvist cancelled this deploy, so nothing changed.')
+        await expect(strip).toContainText(' is still live, so visitors saw no change.')
+        await expect(strip).not.toContainText('symlink')
         await expect(build).toHaveAttribute('data-state', 'cancelled')
         await expect(build).toContainText('cancelled')
         await expect(build.getByLabel('Cancelled')).toBeVisible()
@@ -390,10 +389,10 @@ test.describe('a deploy that failed with a known reason', () => {
 
         await expect(reason).toContainText('The processes did not start.')
         await expect(reason).toContainText("The web process didn't start (activating).")
-        await expect(reason).not.toContainText('The deploy failed after the swap.')
+        await expect(reason).not.toContainText('The deploy failed after going live.')
         await expect(rail.locator('[data-phase="swap"]')).toHaveAttribute('data-state', 'done')
         await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
-        await expect(rail).toContainText('the swap went through')
+        await expect(rail).toContainText('this release went live')
         await expect(page.getByTestId('deployment-log')).toContainText('watch: starting coresmith-app-dev-mode-web')
     })
 
@@ -408,7 +407,7 @@ test.describe('a deploy that failed with a known reason', () => {
         await expect(reason).toContainText("The sidekiq process didn't start (activating).")
         await expect(reason).not.toContainText('The processes did not start.')
         await expect(rail.locator('[data-phase][data-state="failed"]')).toHaveCount(0)
-        await expect(rail).toContainText('the swap went through')
+        await expect(rail).toContainText('this release went live')
     })
 
     test('a clone that failed names the branch it could not find', async ({ page }) => {
