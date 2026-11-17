@@ -6,7 +6,7 @@
     import AppHead from '@/components/AppHead.svelte'
     import { Button } from '@/components/ui/button'
 
-    type Copy = { head: string; title: string; mark: string; description: string }
+    type Copy = { head: string; title: string; description: string }
 
     let { status, expired = false }: { status: 403 | 404 | 500; expired?: boolean } = $props()
 
@@ -14,20 +14,17 @@
         403: {
             head: 'No access',
             title: 'No access to this page',
-            mark: 'access',
             description: "Your role doesn't cover it. Ask one of your team's owners or admins if you need it."
         },
         404: {
             head: 'Page not found',
             title: 'Page not found',
-            mark: 'found',
             description:
                 'Check the address for a typo. If a link in Coresmith brought you here, what it pointed to may have been removed.'
         },
         500: {
             head: "Page didn't load",
             title: "This page didn't load",
-            mark: 'load',
             description: 'Coresmith ran into an error. Try again in a moment.'
         }
     }
@@ -35,14 +32,13 @@
     const EXPIRED: Copy = {
         head: 'Link expired',
         title: 'This link has expired',
-        mark: 'expired',
         description: 'It may be too old, or it got cut short when it was copied. Ask for a new one.'
     }
 
     const copy = $derived(expired ? EXPIRED : PAGES[status])
 
     $effect(() => {
-        setLayoutProps({ title: copy.title, mark: copy.mark, description: copy.description })
+        setLayoutProps({ title: copy.title, description: copy.description })
     })
 </script>
 

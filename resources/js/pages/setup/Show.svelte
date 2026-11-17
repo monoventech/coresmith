@@ -6,7 +6,6 @@
     import CloudServerFields from '@/components/cloud/CloudServerFields.svelte'
     import CloudSteps from '@/components/cloud/CloudSteps.svelte'
     import FieldError from '@/components/FieldError.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
     import GitHubRegistration from '@/components/settings/GitHubRegistration.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -145,7 +144,7 @@
     {/if}
 {/snippet}
 
-<h1 class="type-h1 m-0 mb-1.5">Set up <MarkerUnderline>Coresmith</MarkerUnderline></h1>
+<h1 class="type-h1 m-0 mb-1.5">Set up Coresmith</h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
     {complete
         ? 'Every step is done. The Setup link has gone, and this page stays here for reference.'

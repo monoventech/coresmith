@@ -8,7 +8,6 @@
     import { onDestroy, onMount, tick } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import PhaseIcon from '@/components/PhaseIcon.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
@@ -261,9 +260,7 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3 max-sm:gap-2.5">
             <h1 class="type-h1 m-0 max-sm:text-[24px]">
-                Deploying <MarkerUnderline markClass="max-sm:hidden"
-                    ><span class="font-mono font-medium">{application.name}</span></MarkerUnderline
-                >
+                Deploying <span class="font-mono font-medium">{application.name}</span>
             </h1>
             <Badge variant={live.state.tone} dot pulse={live.state.live} data-testid="deployment-status"
                 >{live.status === 'failed' ? 'Failed' : live.state.label}</Badge
