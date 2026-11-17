@@ -1,8 +1,10 @@
-import { dialog, expect, gotoApplication, main, own, test, toast } from './support/fixtures'
+import { dialog, expect, gotoApplication, isMobile, main, own, test, toast } from './support/fixtures'
 
 test.use({ reducedMotion: 'reduce' })
 
 test('an app is renamed from its page, and nothing on the server changes', async ({ page }, testInfo) => {
+    test.skip(isMobile(testInfo), "Phones keep the prototype's compact app page, which leaves out Rename")
+
     const app = own(testInfo, 'named')
     const renamed = `${app}-renamed`
 

@@ -541,7 +541,7 @@
                 >
             {/if}
             {#if can.update}
-                <Button variant="ghost" onclick={openRename}>Rename</Button>
+                <Button variant="ghost" class="max-sm:hidden" onclick={openRename}>Rename</Button>
             {/if}
         </div>
     {/if}
