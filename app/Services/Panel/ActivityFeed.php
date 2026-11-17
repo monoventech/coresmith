@@ -357,6 +357,8 @@ final class ActivityFeed
             'port_block_moved' => [$this->mono($application?->name), $this->text(' moved to ports ' . (int) ($properties['to'] ?? 0) . '–' . ((int) ($properties['to'] ?? 0) + 9) . ', ' . ($properties['process'] ?? 'another process') . ' already listens on ' . (int) ($properties['port'] ?? 0))],
             'webhook_signature_rejected' => [$this->text((int) ($properties['count'] ?? 1) > 1 ? ((int) $properties['count']) . ' webhooks with a bad signature were rejected' : 'A webhook with a bad signature was rejected')],
             'database_created' => [$this->text('Database '), $this->mono($database?->name), $this->text(' created')],
+            'database_creation_failed' => [$this->text("Couldn't create "), $this->mono($database?->name)],
+            'database_connected' => [$this->mono($application?->name), $this->text(' connected to '), $this->mono((string) ($properties['database'] ?? ''))],
             'database_backed_up' => [$this->text('Backup taken of '), $this->mono($database?->name)],
             'database_deleted' => [$this->text('Database '), $this->mono($database?->name), $this->text(' deleted')],
             'database_filed' => [$this->text('Database '), $this->mono($database?->name), $this->text($this->filing($properties))],
