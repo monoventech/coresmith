@@ -31,6 +31,12 @@ class ManagedDatabase extends Model
 
     public const SHARED_REDIS_PORT = 6379;
 
+    public const READY = 'active';
+
+    public const CREATING = 'creating';
+
+    public const FAILED = 'failed';
+
     protected $table = 'databases';
 
     protected $guarded = ['id'];

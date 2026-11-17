@@ -4,6 +4,7 @@
 
 <script lang="ts">
     import { Form, Link, page, router } from '@inertiajs/svelte'
+    import { OctagonAlert } from '@lucide/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import BackLink from '@/components/BackLink.svelte'
     import BackupsCard from '@/components/databases/BackupsCard.svelte'
@@ -14,6 +15,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
+    import { databaseState } from '@/lib/databases'
     import type { BackupList, BackupRow, RestoreApp, RestoreState } from '@/lib/databases'
 
     let {
@@ -37,13 +39,14 @@
             host: string
             port: number
             status: string
+            creation_error: string | null
             privilege_level: string
             is_external: boolean
             has_password: boolean
             password_shown: boolean
             shared_redis: boolean
         }
-        can: { viewCredentials: boolean; backup: boolean; delete: boolean; restore: boolean }
+        can: { viewCredentials: boolean; backup: boolean; delete: boolean; restore: boolean; retry: boolean }
         offsite?: { sent: string | null; error: string | null } | null
         backups?: BackupList | null
         restore?: RestoreState | null
@@ -63,6 +66,27 @@
     let polls = $state(0)
 
     const LISTING_POLLS = 15
+    const state = $derived(databaseState(database.status))
+    const creating = $derived(database.status === 'creating')
+
+    $effect(() => {
+        if (!creating) {
+            return
+        }
+
+        const timer = setInterval(() => router.reload({ only: ['database', 'can'] }), 3000)
+
+        return () => clearInterval(timer)
+    })
+
+    function retry() {
+        working = true
+        router.post(
+            route('servers.databases.retry', [server.id, database.id]),
+            {},
+            { preserveScroll: true, onFinish: () => (working = false) }
+        )
+    }
     const takesBackups = $derived(database.type !== 'redis')
     const running = $derived(restore?.state === 'running')
 
@@ -145,15 +169,20 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="type-h1 m-0 font-mono font-medium">{database.name}</h1>
-            <Badge variant={database.status === 'active' ? 'success' : 'default'} dot
-                >{database.status === 'active' ? 'Ready' : database.status}</Badge
+            <Badge
+                variant={state.tone === 'success'
+                    ? 'success'
+                    : state.tone === 'destructive'
+                      ? 'destructive'
+                      : 'default'}
+                dot>{state.label}</Badge
             >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">
             {ENGINES[database.type] ?? database.type} · on {server.name} · {database.is_external
                 ? 'existing server'
                 : 'localhost only'}{#if place}<span data-testid="database-project"
-                    >{' · '}{#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
+                    >&nbsp;· {#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
                             >{place.label}</Link
                         >{:else}{place.label}{/if}</span
                 >{/if}
@@ -170,6 +199,31 @@
         <Button variant="outline" disabled={running} onclick={backup}>Back up now</Button>
     {/if}
 </div>
+
+{#if database.status === 'failed'}
+    <div
+        class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:items-start max-sm:px-3.5"
+        data-testid="database-not-created"
+    >
+        <OctagonAlert class="size-4.5 shrink-0 text-destructive max-sm:size-4" />
+        <span class="min-w-0 flex-1 text-[13.5px] max-sm:basis-[calc(100%-1.75rem)] max-sm:text-[12.5px]">
+            <span class="font-semibold">Coresmith couldn't create {database.name} on {server.name}.</span>
+            {database.creation_error ?? 'Check the server is online, then try again.'}
+        </span>
+        {#if can.retry}
+            <button
+                type="button"
+                class="focus-ring quick-action h-8! px-3! text-[12.5px]! disabled:cursor-not-allowed disabled:opacity-50 max-sm:ml-7 max-sm:h-11!"
+                disabled={working}
+                onclick={retry}>Try again</button
+            >
+        {/if}
+    </div>
+{:else if creating}
+    <p class="type-body-sm mb-4 text-muted-foreground" data-testid="database-creating">
+        Coresmith is creating it on {server.name}. This page updates when it's ready.
+    </p>
+{/if}
 
 {#if offsite?.error}
     <p class="tint-warning mb-4 rounded-xl border px-4.5 py-3 text-[13.5px]" data-testid="offsite-status">

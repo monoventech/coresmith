@@ -11,6 +11,7 @@ use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Database\AppDatabaseChoice;
 use App\Services\Database\ExpectedDatabases;
 use App\Services\Deployment\EnvironmentFile;
 use Illuminate\Support\Facades\Queue;
@@ -188,4 +189,17 @@ test('the banner action is refused to deployers, for other servers and for choic
         ->assertSessionHas('error', "That database isn't on beelink. Pick another one.");
 
     expect($application->fresh()->databases)->toHaveCount(0);
+});
+
+test('a database Coresmith could not create is neither offered nor taken as proof the engine runs here', function () {
+    $server = expectedServer();
+    $stuck = ManagedDatabase::factory()->postgres()->for($server)->for($server->team)->create(['name' => 'shop', 'db_password' => null, 'status' => ManagedDatabase::FAILED]);
+    $owner = expectedMember($server);
+
+    $banner = expectedBanners(expectedApp($server), $owner)[0];
+
+    expect($banner['lead'])->toBe("Coresmith hasn't set up PostgreSQL on beelink.")
+        ->and($banner['existing'])->toBe([])
+        ->and(app(AppDatabaseChoice::class)->problems($server, $owner, 'existing:' . $stuck->getKey(), null))
+        ->toBe(['database' => "That database isn't on beelink. Pick another one."]);
 });

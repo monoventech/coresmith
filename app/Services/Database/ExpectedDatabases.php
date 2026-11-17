@@ -57,7 +57,7 @@ final readonly class ExpectedDatabases
                 continue;
             }
 
-            $problem = $this->problem($server, $expected, ManagedDatabase::query()->where('server_id', $server->getKey())->where('type', $expected['type']->value)->get());
+            $problem = $this->problem($server, $expected, ManagedDatabase::query()->where('server_id', $server->getKey())->where('type', $expected['type']->value)->where('status', '!=', ManagedDatabase::FAILED)->get());
 
             if ($problem !== null) {
                 $missing[] = [...$expected, 'problem' => $problem];
@@ -85,7 +85,7 @@ final readonly class ExpectedDatabases
             $redis = $missing['type'] === DatabaseType::Redis;
             $engine = self::ENGINES[$missing['type']->value];
             $field = $redis ? 'redis' : 'database';
-            $existing = !$manages ? [] : ManagedDatabase::query()->where('server_id', $server->getKey())->where('type', $missing['type']->value)->orderBy('name')->get()
+            $existing = !$manages ? [] : ManagedDatabase::query()->where('server_id', $server->getKey())->where('type', $missing['type']->value)->where('status', '!=', ManagedDatabase::FAILED)->orderBy('name')->get()
                 ->filter(fn(ManagedDatabase $database): bool => $user->can('viewCredentials', $database))
                 ->map(fn(ManagedDatabase $database): array => ['value' => 'existing:' . $database->getKey(), 'label' => (string) $database->name])
                 ->values()->all();

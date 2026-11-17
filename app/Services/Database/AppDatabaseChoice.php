@@ -115,6 +115,7 @@ final readonly class AppDatabaseChoice
         return ManagedDatabase::query()
             ->whereKey($id)
             ->where('server_id', $server->getKey())
+            ->where('status', '!=', ManagedDatabase::FAILED)
             ->whereIn('type', array_map(fn(DatabaseType $type): string => $type->value, $types))
             ->first();
     }

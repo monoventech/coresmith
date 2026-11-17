@@ -26,7 +26,7 @@ final readonly class DatabaseCreator
      */
     public function create(Server $server, array $attributes): ManagedDatabase
     {
-        $attributes = [...$attributes, 'server_id' => $server->getKey(), 'team_id' => $server->team_id];
+        $attributes = [...$attributes, 'server_id' => $server->getKey(), 'team_id' => $server->team_id, 'status' => ManagedDatabase::CREATING];
         $type = $attributes['type'] instanceof DatabaseType ? $attributes['type'] : DatabaseType::from((string) $attributes['type']);
 
         $database = $type === DatabaseType::Redis

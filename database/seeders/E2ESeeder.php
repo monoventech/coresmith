@@ -191,6 +191,8 @@ final class E2ESeeder extends Seeder
         ]);
         $this->succeeded($legacy, 3 * 24 * 60, 'v2.3.0');
         $this->scriptFailedLatest($this->application('scripted', 9930, ['custom_blueprint' => "bun install --frozen-lockfile\nbun run check\n"]));
+        ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => 'fresh_db', 'db_user' => 'fresh_db', 'db_password' => null, 'status' => ManagedDatabase::CREATING]);
+        ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => 'broken_db', 'db_user' => 'broken_db', 'db_password' => null, 'status' => ManagedDatabase::FAILED]);
         $this->application('forge-copy', 9970, ['env_variables' => "APP_ENV=production\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=forge\nDB_USERNAME=forge\nDB_PASSWORD=copied-from-forge"]);
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
@@ -215,6 +217,7 @@ final class E2ESeeder extends Seeder
 
             ManagedDatabase::factory()->redis()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
+            ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "stuck_{$code}", 'db_user' => "stuck_{$code}", 'db_password' => null, 'status' => ManagedDatabase::FAILED]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
             $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();

@@ -89,7 +89,7 @@ final class ApplicationController extends Controller
             'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
             'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
             'databases' => [
-                'choices' => ManagedDatabase::query()->where('server_id', $server->getKey())->orderBy('name')->get()
+                'choices' => ManagedDatabase::query()->where('server_id', $server->getKey())->where('status', '!=', ManagedDatabase::FAILED)->orderBy('name')->get()
                     ->filter(fn(ManagedDatabase $database): bool => $request->user()->can('viewCredentials', $database))
                     ->map(fn(ManagedDatabase $database): array => ['value' => 'existing:' . $database->getKey(), 'name' => (string) $database->name, 'type' => (string) $database->type?->value])
                     ->values(),
@@ -223,7 +223,7 @@ final class ApplicationController extends Controller
                 'environment' => $this->environmentPreview((string) $application->env_variables, $canManageEnvironment),
                 'databases' => $application->databases()->orderBy('name')->get()
                     ->filter(fn(ManagedDatabase $database): bool => $request->user()->can('view', $database))
-                    ->map(fn(ManagedDatabase $database): array => ['name' => (string) $database->name, 'href' => route('servers.databases.show', [$server, $database])])
+                    ->map(fn(ManagedDatabase $database): array => ['name' => (string) $database->name, 'href' => route('servers.databases.show', [$server, $database]), 'status' => (string) $database->status])
                     ->values()->all(),
                 'expected_databases' => app(ExpectedDatabases::class)->banners($application, $request->user()),
                 'databases_href' => route('servers.applications.databases.store', [$server, $application]),

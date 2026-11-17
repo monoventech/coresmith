@@ -139,7 +139,7 @@
                 settings_href: string
             } | null
             environment: { key: string; value: string; secret: boolean }[]
-            databases: { name: string; href: string }[]
+            databases: { name: string; href: string; status: string }[]
             expected_databases: ExpectedDatabase[]
             databases_href: string
             env: string | null
@@ -1037,8 +1037,12 @@
                                 href={database.href}
                                 class="focus-ring rounded-sm font-mono text-primary-strong underline-offset-4 hover:underline"
                                 >{database.name}</Link
-                            >{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings here
-                        when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
+                            >{database.status === 'creating'
+                                ? ' (being created)'
+                                : database.status === 'failed'
+                                  ? ' (not created)'
+                                  : ''}{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings
+                        here when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
                     </p>
                 {/if}
                 {#if can.manageEnvironment}

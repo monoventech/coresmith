@@ -129,7 +129,7 @@ test('the app page links the databases the app is connected to', function () {
 
     $this->actingAs($owner->fresh())->get(route('servers.applications.show', [$server, $application]))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('application.databases', [
-            ['name' => 'cache', 'href' => route('servers.databases.show', [$server, $cache])],
-            ['name' => 'shop', 'href' => route('servers.databases.show', [$server, $database])],
+            ['name' => 'cache', 'href' => route('servers.databases.show', [$server, $cache]), 'status' => 'active'],
+            ['name' => 'shop', 'href' => route('servers.databases.show', [$server, $database]), 'status' => 'active'],
         ]));
 });

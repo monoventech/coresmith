@@ -222,6 +222,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update'])->withTrashed(['index']);
     Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
         ->name('servers.databases.backup');
+    Route::post('servers/{server}/databases/{database}/retry', [DatabaseController::class, 'retry'])
+        ->name('servers.databases.retry');
     Route::post('servers/{server}/databases/{database}/restore', [DatabaseRestoreController::class, 'store'])
         ->middleware('throttle:6,1,database-restore')
         ->name('servers.databases.restore');
