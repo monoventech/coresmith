@@ -11,11 +11,13 @@ namespace App\Jobs;
 use App\Enums\ServerStatus;
 use App\Models\Server;
 use App\Services\Server\CertificateCheck;
+use App\Services\Server\CertificateRetry;
 use App\Services\Server\ServerReachability;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 final class CheckCertificates implements ShouldBeUnique, ShouldQueue
@@ -40,7 +42,7 @@ final class CheckCertificates implements ShouldBeUnique, ShouldQueue
         return (string) $this->server->getKey();
     }
 
-    public function handle(SSHConnectionManager $connections, CertificateCheck $check): void
+    public function handle(SSHConnectionManager $connections, CertificateCheck $check, CertificateRetry $retry): void
     {
         $server = $this->server->fresh();
 
@@ -49,7 +51,13 @@ final class CheckCertificates implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $check->run($connections->for($server));
+            $connection = $connections->for($server);
+            $waiting = $retry->pointedHere($server, $check->run($connection));
+
+            if ($waiting !== [] && $retry->ask($connection)) {
+                Sleep::for(CertificateRetry::WAIT_SECONDS)->seconds();
+                $check->run($connection, $waiting);
+            }
         } catch (Throwable $e) {
             if (!ServerReachability::isConnectionFailure($e)) {
                 throw $e;

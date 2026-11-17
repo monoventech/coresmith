@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TeamRole;
 use App\Events\DeploymentSucceeded;
+use App\Jobs\CheckCertificates;
 use App\Jobs\CheckDomainReach;
 use App\Jobs\SyncApplicationRoute;
 use App\Listeners\CheckNewDomainsAfterDeploy;
@@ -16,6 +17,7 @@ use App\Services\Network\AddressResolver;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
 use Tests\Support\FakeSSHTransport;
 
@@ -293,4 +295,21 @@ test("the Add a domain dialog shows the server's addresses from its last reading
     'IPv4 open, with IPv6' => [['ipv4' => '203.0.113.7', 'ipv4_open' => true, 'ipv6' => [appReachIpv6()], 'checked_at' => '2026-11-13T12:00:00+00:00'], [['type' => 'A', 'value' => '203.0.113.7', 'closed' => false], ['type' => 'AAAA', 'value' => appReachIpv6(), 'closed' => false]]],
     'IPv4 closed, with IPv6' => [['ipv4' => '203.0.113.7', 'ipv4_open' => false, 'ipv6' => [appReachIpv6()], 'checked_at' => '2026-11-13T12:00:00+00:00'], [['type' => 'AAAA', 'value' => appReachIpv6(), 'closed' => false], ['type' => 'A', 'value' => '203.0.113.7', 'closed' => true]]],
     'no reading yet' => [null, []],
+]);
+
+test('a check that finds a domain ready also checks its certificate, and one that finds none ready does not', function (array $records, bool $queued) {
+    Queue::fake();
+    $application = appReachApp();
+    appReachDns($records);
+    appReachSsh(appReachServerOutput(ipv4Open: false), json_encode(['address' => appReachIpv6(), 'http' => ['reachable' => true, 'status' => 308], 'https' => ['reachable' => true, 'status' => 200]]) . "\n200");
+
+    app()->call([new CheckDomainReach($application), 'handle']);
+
+    expect($application->fresh()->domain_reach['notes.example.net']['ready'])->toBe($queued);
+    $queued
+        ? Queue::assertPushed(CheckCertificates::class, fn(CheckCertificates $job): bool => $job->server->is($application->server))
+        : Queue::assertNotPushed(CheckCertificates::class);
+})->with([
+    'ready' => [[appReachIpv6()], true],
+    'not pointing anywhere' => [[], false],
 ]);

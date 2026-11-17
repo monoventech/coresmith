@@ -100,6 +100,18 @@ final class CaddyApiClient
         });
     }
 
+    public function retryCertificates(SSHConnection $connection): void
+    {
+        $socket = $connection->server()->caddyAdminOnSocket();
+        $read = 'curl -fsS --max-time 30 ' . self::address($socket, '/config/') . ' -o "$f"';
+        $load = 'curl -fsS --max-time 60 -X POST ' . self::address($socket, '/load')
+            . ' -H ' . escapeshellarg('Content-Type: application/json')
+            . ' -H ' . escapeshellarg('Cache-Control: must-revalidate')
+            . ' --data-binary @"$f"';
+
+        $this->changing($connection, fn() => $this->script($connection, 'f=$(mktemp) && ' . $read . ' && grep -q \'"apps"\' "$f" && ' . $load . '; s=$?; rm -f "$f"; exit $s'));
+    }
+
     public function closeUnknownHosts(SSHConnection $connection): void
     {
         $this->changing($connection, function () use ($connection): void {
