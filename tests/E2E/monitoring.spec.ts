@@ -84,7 +84,7 @@ test.describe('monitoring', () => {
         await expect(badge('dark.monoven.io')).toHaveText('No certificate')
         await expect(badge('dark.monoven.io')).toHaveAttribute(
             'title',
-            "There's no certificate for this name yet. Point its DNS at 198.51.100.40 and one is requested."
+            "There's no certificate for this name yet. Point the name at this server, then press Check again and Coresmith asks for one."
         )
     })
 

@@ -72,5 +72,9 @@ final class CheckDomainReach implements ShouldBeUnique, ShouldQueue
 
         $application->forceFill(['domain_reach' => $readings])->save();
         FleetChanged::forApplication($application);
+
+        if ($application->server !== null && in_array(true, array_column($readings, 'ready'), true)) {
+            CheckCertificates::dispatch($application->server);
+        }
     }
 }
