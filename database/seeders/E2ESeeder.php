@@ -206,6 +206,9 @@ final class E2ESeeder extends Seeder
             $this->application("filed-{$code}", 9400 + $index * 10);
             $this->application("setup-{$code}", 9650 + $index * 10);
             $this->application("named-{$code}", 9550 + $index * 10);
+            $runtimes = $this->server("runtimes-{$code}", '198.51.100.' . (70 + $index), ServerStatus::Active);
+            $this->application("rt-{$code}", 8000, MonovenTenant::stack(['php' => ['8.4.1', 'composer.json', '^8.4']], ['name' => 'laravel', 'major' => 13]), $runtimes);
+            $this->application("rt-pin-{$code}", 8010, MonovenTenant::stack(['php' => ['8.4.1', '.tool-versions', '8.4.1']], ['name' => 'laravel', 'major' => 13]), $runtimes);
 
             ManagedDatabase::factory()->redis()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
