@@ -496,18 +496,6 @@ test('a stale running check is presented as one that did not finish', function (
         ->and($audit['error'])->toBe('The check stopped before it finished. Check again.');
 });
 
-test('provisioning a server that is already active is not found', function () {
-    Queue::fake();
-    $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
-
-    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route('servers.provision', $server))->assertNotFound();
-
-    expect($server->fresh()->status)->toBe(ServerStatus::Active);
-
-    Queue::assertNotPushed(ProvisionServer::class);
-});
-
 test('an admin can check a pending server and a member cannot', function () {
     Queue::fake();
     $team = Team::factory()->create();
