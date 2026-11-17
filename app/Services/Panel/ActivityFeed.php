@@ -295,7 +295,9 @@ final class ActivityFeed
             'ssh_host_key_rejected' => [$this->text('Host key change dismissed on '), $this->mono($server?->name)],
             'apparmor_profiles_in_complain_mode' => [$this->text('AppArmor has ' . (int) ($properties['profiles_in_complain_mode'] ?? 0) . ' profiles in complain mode on '), $this->mono($server?->name)],
             'application_created' => [$this->mono($application?->name), $this->text(' created on ' . $application?->server?->name)],
-            'application_renamed' => [$this->text('Application renamed to '), $this->mono($application?->name)],
+            'application_renamed' => is_string($properties['from'] ?? null) && is_string($properties['to'] ?? null)
+                ? [$this->mono($properties['from']), $this->text(' renamed to '), $this->mono($properties['to'])]
+                : [$this->text('App renamed to '), $this->mono($application?->name)],
             'application_removed' => [$this->mono($application?->name), $this->text(' stopped and detached from ' . $application?->server?->name)],
             'deployment_cancelled' => [$this->text('Deploy cancelled, '), $this->mono($application?->name), $this->text($this->cancelledBy($properties['by'] ?? null) . ', nothing changed')],
             'application_rolled_back' => [$this->mono($application?->name), $this->text(' rolled back to ' . Formats::release($properties['to'] ?? null) . ', no rebuild')],

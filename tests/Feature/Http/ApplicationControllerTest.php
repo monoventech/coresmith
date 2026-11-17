@@ -541,23 +541,63 @@ test('saving settings that leave the domains as they were does not touch the rou
     Queue::assertNotPushed(SyncApplicationRoute::class);
 });
 
-test('a name sent to the update endpoint is ignored, so the app keeps its name, slug and linux user', function () {
+test('renaming an app changes only its name, so its slug and linux user stay, and the activity names both', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();
     $application = Application::factory()->for($team)->for($server)->create(['name' => 'Before']);
 
     $this->actingAs(appTeamMember($team, TeamRole::Admin))
-        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'After', 'repository_branch' => 'release'])
+        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'After'])
         ->assertRedirect()
-        ->assertSessionHasNoErrors();
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved.');
 
     $fresh = $application->fresh();
 
-    expect($fresh->name)->toBe('Before')
+    expect($fresh->name)->toBe('After')
         ->and($fresh->slug)->toBe($application->slug)
         ->and($fresh->system_user)->toBe($application->system_user)
-        ->and($fresh->repository_branch)->toBe('release')
+        ->and(Activity::query()->where('description', 'application_renamed')->sole()->properties->all())->toEqual(['from' => 'Before', 'to' => 'After']);
+});
+
+test('saving an app under the name it already has logs no rename', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['name' => 'Same']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'Same', 'repository_branch' => 'release'])
+        ->assertSessionHasNoErrors();
+
+    expect($application->fresh()->repository_branch)->toBe('release')
         ->and(Activity::query()->where('description', 'application_renamed')->exists())->toBeFalse();
+});
+
+test('an app needs a name of at most 255 characters', function (string $name) {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['name' => 'Kept']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->put(route('servers.applications.update', [$server, $application]), ['name' => $name])
+        ->assertSessionHasErrors('name');
+
+    expect($application->fresh()->name)->toBe('Kept');
+})->with([
+    'empty' => [''],
+    'too long' => [str_repeat('a', 256)],
+]);
+
+test('someone who may not change the app cannot rename it', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create(['name' => 'Kept']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->put(route('servers.applications.update', [$server, $application]), ['name' => 'Taken'])
+        ->assertForbidden();
+
+    expect($application->fresh()->name)->toBe('Kept');
 });
 
 test('a partial update still validates the fields it does send', function () {

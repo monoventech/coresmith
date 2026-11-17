@@ -39,6 +39,7 @@ export type DetectionRead = {
     packages?: { host: string; source: string }[]
     packages_href?: string | null
     submodules?: { path: string; source: string; refused: string | null }[]
+    builds_with?: { tool: string; lockfile: string | null } | null
 }
 
 export type Detection =

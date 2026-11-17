@@ -1,9 +1,11 @@
-<picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/coresmith-lockup-on-dark.png">
-    <img alt="Coresmith" src=".github/assets/coresmith-lockup-on-light.png" width="280">
-</picture>
+<p>
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/coresmith-lockup-on-dark.png">
+        <img alt="Coresmith" src=".github/assets/coresmith-lockup-on-light.png" width="280">
+    </picture>
+</p>
 
-<div></div>
+<br>
 
 Server management without the complexity. Coresmith sets up your own Linux servers and deploys your apps straight onto them from the browser, without Docker.
 

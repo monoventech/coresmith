@@ -27,6 +27,7 @@ final class UpdateApplicationRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
             'type' => ['sometimes', 'required', Rule::enum(ApplicationType::class)],
             'js_runtime' => ['sometimes', 'nullable', Rule::in(['bun', 'node', 'deno'])],
             'framework' => ['sometimes', 'nullable', 'string', 'max:64'],

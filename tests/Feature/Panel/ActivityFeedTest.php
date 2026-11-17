@@ -85,6 +85,8 @@ test('application events are described in plain words and link to the applicatio
         ->and($row['href'])->toBe(route('servers.applications.show', [$server, $application]));
 })->with([
     'created' => ['application_created', [], 'shop created on web-1'],
+    'renamed' => ['application_renamed', ['from' => 'shop-old', 'to' => 'shop'], 'shop-old renamed to shop'],
+    'renamed before both names were kept' => ['application_renamed', [], 'App renamed to shop'],
     'rolled back' => ['application_rolled_back', ['from' => '20260913140000', 'to' => '20260912090000'], 'shop rolled back to 20260912-090000, no rebuild'],
     'stopped' => ['application_stopped', [], 'shop stopped, visitors see the maintenance page'],
     'started' => ['application_started', [], 'shop started again'],
