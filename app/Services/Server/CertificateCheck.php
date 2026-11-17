@@ -13,6 +13,7 @@ use App\Models\Application;
 use App\Notifications\CertificateExpiringNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
+use App\Services\Address\DomainTwins;
 use App\Services\Panel\Formats;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
@@ -58,7 +59,7 @@ final class CertificateCheck
     public static function domains(Application $application): array
     {
         return array_values(array_filter(
-            $application->allDomains(),
+            [...$application->allDomains(), ...array_keys(app(DomainTwins::class)->for($application))],
             fn(string $domain): bool => !str_starts_with($domain, '*.') && SafeName::isDomain($domain),
         ));
     }

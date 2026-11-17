@@ -68,7 +68,7 @@ test('each language names the environment its app starts with, runs with and lis
         ->and(array_map(fn(ApplicationType $type): array => $type->language()->processEnvironment($application($type)), ApplicationType::cases()))->toBe([
             [],
             ['NODE_ENV' => 'production'],
-            ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1'],
+            ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'WEB_CONCURRENCY' => '0', 'RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1'],
             [],
             ['PYTHONUNBUFFERED' => '1', 'WEB_CONCURRENCY' => '2'],
             [],

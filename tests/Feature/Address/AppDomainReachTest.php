@@ -6,6 +6,7 @@ use App\Enums\TeamRole;
 use App\Events\DeploymentSucceeded;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckDomainReach;
+use App\Jobs\DetachApplication;
 use App\Jobs\SyncApplicationRoute;
 use App\Listeners\CheckNewDomainsAfterDeploy;
 use App\Models\Application;
@@ -313,3 +314,103 @@ test('a check that finds a domain ready also checks its certificate, and one tha
     'ready' => [[appReachIpv6()], true],
     'not pointing anywhere' => [[], false],
 ]);
+
+function appReachTwin(Application $apex, array $attributes, ?Server $server = null): Application
+{
+    return Application::factory()->for($apex->team)->for($server ?? $apex->server)->create(['additional_domains' => [], 'current_release' => '20261117-120000', ...$attributes]);
+}
+
+test("a www name that doesn't point here yet reads as a note, with the record that would make it work", function () {
+    $application = appReachApp(['domain' => 'example.com']);
+    appReachDns([]);
+    appReachSsh(appReachServerOutput(ipv4Open: true));
+
+    $reports = app(AppDomainReach::class)->check($application);
+
+    expect(array_keys($reports))->toBe(['example.com', 'www.example.com'])
+        ->and($reports['example.com']->problems)->toBe(["example.com doesn't point anywhere yet. Add an A record pointing at 203.0.113.7, then check again."])
+        ->and($reports['www.example.com']->ready)->toBeFalse()
+        ->and($reports['www.example.com']->problems)->toBe([])
+        ->and($reports['www.example.com']->notes)->toBe([
+            'www.example.com sends visitors to example.com once it points at this server.',
+            "www.example.com doesn't point anywhere yet. Add an A record pointing at 203.0.113.7, then check again.",
+        ])
+        ->and(array_column($reports['www.example.com']->records, 'name'))->toBe(['www.example.com']);
+});
+
+test('a www name that already points here reads like any other domain', function () {
+    $application = appReachApp(['domain' => 'example.com']);
+    appReachDns([appReachIpv6()]);
+    appReachSsh(appReachServerOutput(ipv4Open: false), json_encode(['address' => appReachIpv6(), 'http' => ['reachable' => true, 'status' => 308], 'https' => ['reachable' => true, 'status' => 200]]) . "\n200");
+
+    $report = app(AppDomainReach::class)->check($application)['www.example.com'];
+
+    expect($report->ready)->toBeTrue()
+        ->and($report->problems)->toBe([])
+        ->and($report->notes)->not->toContain('www.example.com sends visitors to example.com once it points at this server.');
+});
+
+test('the app page lists the www name Coresmith adds, where it sends visitors, and its reading', function () {
+    $note = 'www.example.com sends visitors to example.com once it points at this server.';
+    $application = appReachApp(['domain' => 'example.com', 'domain_reach' => ['www.example.com' => ['ready' => false, 'problems' => [], 'notes' => [$note], 'records' => [], 'checked_at' => now()->toIso8601String()]]]);
+    $owner = appReachMember($application, TeamRole::Owner);
+
+    $this->actingAs($owner)->get(route('servers.applications.show', [$application->server, $application]))
+        ->assertOk()
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('application.redirects', [['domain' => 'www.example.com', 'to' => 'example.com']])
+            ->where('application.domain_reach.1.domain', 'www.example.com')
+            ->where('application.domain_reach.1.notes', [$note]));
+});
+
+test("taking another app's www name on the same server reroutes that app first, so Caddy never sees the name twice", function () {
+    Bus::fake();
+    $apex = appReachApp(['domain' => 'example.com', 'current_release' => '20261117-120000']);
+    $taker = appReachTwin($apex, ['domain' => 'shop.example.org']);
+
+    $this->actingAs(appReachMember($taker, TeamRole::Owner))->put(route('servers.applications.update', [$taker->server, $taker]), ['additional_domains' => ['www.example.com']])
+        ->assertSessionHasNoErrors();
+
+    Bus::assertChained([
+        fn(SyncApplicationRoute $job): bool => $job->application->is($apex),
+        fn(SyncApplicationRoute $job): bool => $job->application->is($taker),
+        CheckDomainReach::class,
+    ]);
+});
+
+test("letting go of another app's www name on the same server reroutes that app after this one", function () {
+    Bus::fake();
+    $apex = appReachApp(['domain' => 'example.com', 'current_release' => '20261117-120000']);
+    $holder = appReachTwin($apex, ['domain' => 'shop.example.org', 'additional_domains' => ['www.example.com']]);
+
+    $this->actingAs(appReachMember($holder, TeamRole::Owner))->put(route('servers.applications.update', [$holder->server, $holder]), ['additional_domains' => []])
+        ->assertSessionHasNoErrors();
+
+    Bus::assertChained([
+        fn(SyncApplicationRoute $job): bool => $job->application->is($holder),
+        fn(SyncApplicationRoute $job): bool => $job->application->is($apex),
+    ]);
+});
+
+test("a team app on another server whose www name is taken is rerouted on its own, so its server can't hold this change up", function () {
+    Bus::fake();
+    $apex = appReachApp(['domain' => 'example.com', 'current_release' => '20261117-120000']);
+    $taker = appReachTwin($apex, ['domain' => 'shop.example.org'], Server::factory()->for($apex->team)->create(['host_key_fingerprint' => null]));
+
+    $this->actingAs(appReachMember($taker, TeamRole::Owner))->put(route('servers.applications.update', [$taker->server, $taker]), ['additional_domains' => ['www.example.com']])
+        ->assertSessionHasNoErrors();
+
+    Bus::assertChained([fn(SyncApplicationRoute $job): bool => $job->application->is($taker), CheckDomainReach::class]);
+    Bus::assertDispatched(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => $job->application->is($apex) && $job->chained === []);
+});
+
+test('removing an app gives its www name back to the app that owns the other half, once its route is gone', function () {
+    Bus::fake();
+    $apex = appReachApp(['domain' => 'example.com', 'current_release' => '20261117-120000']);
+    $holder = appReachTwin($apex, ['domain' => 'www.example.com']);
+
+    $this->actingAs(appReachMember($holder, TeamRole::Owner))->delete(route('servers.applications.destroy', [$holder->server, $holder]))
+        ->assertRedirect();
+
+    Bus::assertChained([DetachApplication::class, fn(SyncApplicationRoute $job): bool => $job->application->is($apex)]);
+});
