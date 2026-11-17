@@ -1,7 +1,6 @@
 <script module lang="ts">
     export const layout = {
         title: 'Confirm your password',
-        mark: 'password',
         description: 'This part of Coresmith changes security settings, so it asks once more.'
     }
 </script>

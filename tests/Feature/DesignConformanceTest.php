@@ -63,31 +63,24 @@ test('no page reaches for a raw control that the design system already provides'
     );
 });
 
-test('a view carries at most one hand tell', function () {
+test('no heading carries the hand-drawn marker underline', function () {
     $offenders = [];
 
     foreach (svelteSources() as $path => $source) {
-        $marks = substr_count($source, '<MarkerUnderline');
-
-        if ($marks > 1) {
-            $offenders[$path] = $marks;
+        if (str_contains($source, 'MarkerUnderline')) {
+            $offenders[] = $path;
         }
     }
 
-    expect($offenders)->toBe([], 'MONOVEN_DESIGN §7: the marker stroke is used once per view. Offenders: ' . json_encode($offenders));
+    expect($offenders)->toBe([], 'Headings in Coresmith carry no hand-drawn underline. Offenders: ' . implode(', ', $offenders));
 });
 
-test('every full bleed page carries the hand tell and the Monoven mark', function () {
+test('every full bleed page carries the Monoven mark', function () {
     $missing = [];
 
     foreach (fullBleedPages() as $path => $source) {
-        $tells = [];
-
-        str_contains($source, 'MarkerUnderline') || $tells[] = 'no hand tell';
-        str_contains($source, 'MonovenMark') || $tells[] = 'no Monoven mark';
-
-        if ($tells !== []) {
-            $missing[$path] = implode(' and ', $tells);
+        if (!str_contains($source, 'MonovenMark')) {
+            $missing[] = $path;
         }
     }
 
