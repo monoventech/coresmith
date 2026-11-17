@@ -216,11 +216,11 @@
         )
     )
 
-    function redirectTone(domain: string) {
-        const certificate = application.certificates?.domains[domain]
-        const pointed = application.domain_reach.find((reading) => reading.domain === domain)?.ready === true
-
-        return certificate?.state === 'none' && !pointed ? 'default' : certificateTones[certificate?.state ?? 'none']
+    function waitingForDns(domain: string) {
+        return (
+            application.certificates?.domains[domain]?.state === 'none' &&
+            application.domain_reach.find((reading) => reading.domain === domain)?.ready !== true
+        )
     }
     const reachWhen = $derived(reachChecked[0]?.checked === 'now' ? 'just now' : (reachChecked[0]?.checked ?? ''))
     const reachSummary = $derived(
@@ -804,8 +804,8 @@
                         <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={redirect.domain}
                             >{redirect.domain}</span
                         >
-                        {#if certificate}
-                            <Badge variant={redirectTone(redirect.domain)} title={certificate.title}
+                        {#if certificate && !waitingForDns(redirect.domain)}
+                            <Badge variant={certificateTones[certificate.state]} title={certificate.title}
                                 >{certificate.label}</Badge
                             >
                         {/if}

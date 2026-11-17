@@ -23,8 +23,12 @@ test.describe('www redirects', () => {
             'Sends visitors to apex-shop.invalid'
         )
         await expect(redirect.getByText('to apex-shop.invalid')).toBeAttached()
-        await expect(redirect.locator('[data-slot="badge"]')).toHaveText('No certificate')
-        await expect(redirect.locator('[data-slot="badge"]')).not.toHaveClass(/badge-warning/)
+        await expect(redirect.locator('[data-slot="badge"]')).toHaveCount(0)
+        expect(
+            await redirect
+                .getByText('www.apex-shop.invalid', { exact: true })
+                .evaluate((name) => name.scrollWidth <= name.clientWidth)
+        ).toBe(true)
         await expect(
             page
                 .getByTestId('domain-advice')
