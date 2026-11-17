@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.20 (2026-11-17)
+
+### Changed
+- The official Coresmith logo, favicon, app icons and share card from the brand kit (#107)
+- The logo in emails and error pages, renaming apps, and the tool that builds a static site (#111)
+
 ## v0.8.19 (2026-11-16)
 
 ### Changed

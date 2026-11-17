@@ -1,5 +1,6 @@
 <script lang="ts">
     import MonovenMark from '@/components/MonovenMark.svelte'
+    import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
     import AccountDialog from '@/components/panel/AccountDialog.svelte'
     import BillingBanner from '@/components/panel/BillingBanner.svelte'
     import CommandPalette from '@/components/panel/CommandPalette.svelte'
@@ -15,7 +16,7 @@
     import type { ExplorerProps, PanelProps } from '@/lib/panel'
     import { appPath } from '@/lib/panel'
     import { page, router } from '@inertiajs/svelte'
-    import { ChevronsUpDown, Hammer, Search } from '@lucide/svelte'
+    import { ChevronsUpDown, Search } from '@lucide/svelte'
     import type { Snippet } from 'svelte'
     import { onMount, untrack } from 'svelte'
 
@@ -90,12 +91,7 @@
             <div class="mx-auto flex min-h-full max-w-302 flex-col px-4.5 pt-3 pb-24 sm:px-10 sm:pt-8 sm:pb-8">
                 {#if !detail}
                     <div class="mt-2 mb-0.5 flex items-center gap-2 sm:hidden">
-                        <span
-                            class="tint-primary inline-flex size-8.5 shrink-0 items-center justify-center rounded-lg border text-primary"
-                            aria-hidden="true"
-                        >
-                            <Hammer class="size-4.5" />
-                        </span>
+                        <CoresmithLogo variant="mark" label={null} class="size-6.5 shrink-0 text-foreground" />
                         {#if explorer}
                             <button
                                 type="button"

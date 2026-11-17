@@ -15,6 +15,7 @@ use App\Http\Middleware\RequireSetupToken;
 use App\Http\Middleware\ResolveTeamUrl;
 use App\Http\Middleware\StartSession;
 use App\Http\Middleware\ThrottleSignups;
+use App\Http\Responses\ErrorPage;
 use App\Http\Responses\RefusedForm;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -66,6 +67,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->dontFlash(['api_token']);
         $exceptions->dontReport([PlanRefusal::class]);
-        $exceptions->respond(new RefusedForm);
+        $exceptions->respond(new ErrorPage(new RefusedForm));
         Integration::handles($exceptions);
     })->create();

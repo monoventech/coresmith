@@ -567,6 +567,13 @@
                                 aria-invalid={errors.type ? true : undefined}
                             />
                             {@render note('type')}
+                            {#if type === 'static' && read?.builds_with}
+                                <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground" data-testid="build-tool">
+                                    {read.builds_with.lockfile
+                                        ? `Builds with ${read.builds_with.tool}, from ${read.builds_with.lockfile}.`
+                                        : `Builds with ${read.builds_with.tool}, since the repository has no lockfile. To build with Bun, commit its bun.lock.`}
+                                </p>
+                            {/if}
                             <FieldError message={errors.type} />
                         </div>
                         <div>

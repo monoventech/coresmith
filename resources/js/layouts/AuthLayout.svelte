@@ -2,7 +2,7 @@
     import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
     import Toast from '@/components/panel/Toast.svelte'
-    import Wordmark from '@/components/panel/Wordmark.svelte'
+    import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
     import { Link } from '@inertiajs/svelte'
     import type { Snippet } from 'svelte'
 
@@ -31,7 +31,7 @@
             class="focus-ring rounded-md text-foreground no-underline"
             aria-label="Coresmith home"
         >
-            <Wordmark />
+            <CoresmithLogo label={null} class="h-6.5 w-auto" />
         </Link>
     </header>
 

@@ -1,11 +1,12 @@
 <script lang="ts">
+    import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
     import { getInitials } from '@/lib/initials'
     import type { ExplorerProps, PanelProps, Section } from '@/lib/panel'
     import { appPath, sectionFor } from '@/lib/panel'
     import { themeState } from '@/lib/theme.svelte'
     import { cn } from '@/lib/utils'
     import { Link, page } from '@inertiajs/svelte'
-    import { Hammer, Layers, LayoutGrid, ListChecks, Moon, Rocket, Settings, Sun } from '@lucide/svelte'
+    import { Layers, LayoutGrid, ListChecks, Moon, Rocket, Settings, Sun } from '@lucide/svelte'
 
     let { onAccount }: { onAccount: () => void } = $props()
 
@@ -58,9 +59,9 @@
         href={route('dashboard')}
         aria-label="Coresmith"
         title="Coresmith"
-        class="focus-ring tint-primary mb-3.5 inline-flex size-10 shrink-0 items-center justify-center rounded-lg border text-primary no-underline"
+        class="focus-ring mb-3.5 inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-foreground no-underline"
     >
-        <Hammer class="size-5" />
+        <CoresmithLogo variant="mark" label={null} class="size-6" />
     </Link>
 
     {#each items as item (item.id)}

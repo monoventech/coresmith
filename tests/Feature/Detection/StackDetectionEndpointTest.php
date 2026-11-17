@@ -71,6 +71,21 @@ test('the version shown is the one the deploy would pick from what the server al
         ->assertJsonPath('fields.version', '8.4.11');
 });
 
+test('a repository with a build names the tool its lockfile picks, so the form can say what builds a static site', function (string $fixture, ?array $expected) {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer($fixture);
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/site.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('builds_with', $expected);
+})->with([
+    'bun' => ['vite-outdir', ['tool' => 'Bun', 'lockfile' => 'bun.lock']],
+    'npm' => ['sveltekit-static', ['tool' => 'npm', 'lockfile' => 'package-lock.json']],
+    'pnpm' => ['astro-paper', ['tool' => 'pnpm', 'lockfile' => 'pnpm-lock.yaml']],
+    'no lockfile' => ['vite-no-lockfile', ['tool' => 'npm', 'lockfile' => null]],
+    'nothing to build' => ['static-html', null],
+]);
+
 test('a git@ url is never read before the app exists', function () {
     [$owner, $server] = stackEndpointServer();
     $transport = stackEndpointAnswer('laravel-13');
