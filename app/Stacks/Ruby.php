@@ -87,6 +87,7 @@ final readonly class Ruby implements Language
         return [
             'RAILS_ENV' => 'production',
             'RACK_ENV' => 'production',
+            'WEB_CONCURRENCY' => '0',
             ...(in_array(strtolower((string) $application->framework), ['sinatra', 'rack'], true) ? [] : ['RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1']),
         ];
     }
