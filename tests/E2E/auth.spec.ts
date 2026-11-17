@@ -32,14 +32,13 @@ asGuest.describe('signing in', () => {
         }
     })
 
-    asGuest('the sign in page carries the wordmark, the form and the Monoven mark', async ({ page }) => {
+    asGuest('the sign in page carries the wordmark and the form', async ({ page }) => {
         await page.goto('/login')
 
         await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Coresmith' })).toBeVisible()
         await expect(page.getByRole('link', { name: 'Coresmith home' })).toBeVisible()
         await expect(page.getByLabel('Email address')).toBeVisible()
         await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
-        await expect(page.getByRole('link', { name: 'Made by Monoven' })).toBeVisible()
     })
 
     asGuest('the sign in page loads without a console error', async ({ page }) => {

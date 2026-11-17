@@ -1,6 +1,17 @@
 import type { Locator, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { asMember, backToMonoven, dialog, expect, gotoSettings, own, pageData, test, toast } from './support/fixtures'
+import {
+    asMember,
+    backToMonoven,
+    dialog,
+    expect,
+    gotoSettings,
+    own,
+    pageData,
+    test,
+    toast,
+    withProps
+} from './support/fixtures'
 
 function member(page: Page, email: string) {
     return page.getByTestId('member-row').filter({ hasText: email })
@@ -22,6 +33,30 @@ async function offerOwner(select: Locator) {
 }
 
 test.describe('the team', () => {
+    test('the team is renamed from its card, and the tab title names the installation', async ({ page }) => {
+        await withProps(page, /\/settings\/team$/, (props) => {
+            props.appName = 'Beelink'
+        })
+        await gotoSettings(page, 'Team')
+
+        await expect(page).toHaveTitle('Team - Beelink')
+
+        await page.getByTestId('team-card').getByRole('button', { name: 'Rename' }).click()
+
+        const name = dialog(page).getByLabel('Team name')
+
+        await expect(name).toHaveValue('Monoven Ltd')
+        await name.fill('   ')
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+        await expect(dialog(page)).toContainText('Give the team a name.')
+
+        await name.fill('Monoven Ltd')
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+
+        await expect(toast(page)).toContainText('Saved.')
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
     test('everyone is listed with their role and whether they use two-factor', async ({ page }) => {
         await gotoSettings(page, 'Team')
 
