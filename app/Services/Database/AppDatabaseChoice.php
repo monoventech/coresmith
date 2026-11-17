@@ -85,7 +85,7 @@ final readonly class AppDatabaseChoice
             return null;
         }
 
-        $name = $this->creator->freeName($application->slug);
+        $name = $this->creator->freeName($application->server, $application->slug);
 
         return $this->creator->create($application->server, [
             'type' => DatabaseType::from(substr($choice, 4)),
@@ -103,7 +103,7 @@ final readonly class AppDatabaseChoice
         }
 
         return $choice === 'new'
-            ? $this->creator->create($application->server, ['type' => DatabaseType::Redis, 'name' => $this->creator->freeName($application->slug . '_redis'), 'project_id' => $application->project_id])
+            ? $this->creator->create($application->server, ['type' => DatabaseType::Redis, 'name' => $this->creator->freeName($application->server, $application->slug . '_redis'), 'project_id' => $application->project_id])
             : null;
     }
 

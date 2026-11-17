@@ -8,6 +8,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Database\DatabaseCreator;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\RedisPorts;
 use App\Services\SSH\SSHConnection;
@@ -170,3 +171,17 @@ test('a Redis database on the shared instance still has no password to change', 
 
     app(DatabaseManager::class)->changePassword((new SSHConnection($server, new FakeSSHTransport))->connect(), $shared, 'N3wR3disPassw0rd');
 })->throws(LogicException::class);
+
+test("a database name only has to be free in the team, so another team's names never block one", function () {
+    Queue::fake();
+    $server = redisDatabaseServer();
+    $admin = redisDatabaseAdmin($server->team);
+    ManagedDatabase::factory()->redis()->create(['name' => 'cache']);
+
+    $this->actingAs($admin)->post(route('servers.databases.store', $server), ['type' => 'redis', 'name' => 'cache'])->assertSessionHasNoErrors();
+    $this->actingAs($admin)->post(route('servers.databases.store', $server), ['type' => 'redis', 'name' => 'cache'])->assertSessionHasErrors('name');
+
+    expect(ManagedDatabase::query()->where('name', 'cache')->count())->toBe(2)
+        ->and(app(DatabaseCreator::class)->freeName($server, 'cache'))->toBe('cache_2')
+        ->and(app(DatabaseCreator::class)->freeName(redisDatabaseServer(), 'cache'))->toBe('cache');
+});

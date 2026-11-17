@@ -43,13 +43,13 @@ final readonly class DatabaseCreator
         return $database;
     }
 
-    public function freeName(string $base): string
+    public function freeName(Server $server, string $base): string
     {
         $base = substr(trim((string) preg_replace('/[^a-z0-9_]+/', '_', strtolower($base)), '_'), 0, 48) ?: 'app';
         $base = ctype_digit($base[0]) ? 'app_' . $base : $base;
         $name = $base;
 
-        for ($suffix = 2; ManagedDatabase::withTrashed()->where('name', $name)->exists(); $suffix++) {
+        for ($suffix = 2; ManagedDatabase::withTrashed()->where('team_id', $server->team_id)->where('name', $name)->exists(); $suffix++) {
             $name = $base . '_' . $suffix;
         }
 
