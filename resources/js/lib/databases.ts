@@ -27,3 +27,12 @@ export function restoreStep(step: string | null, database: string): string {
             return 'Waiting to start.'
     }
 }
+
+export type ExpectedDatabase = {
+    key: string
+    lead: string
+    detail: string
+    field: 'database' | 'redis'
+    create: { value: string; label: string } | null
+    existing: { value: string; label: string }[]
+}

@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\Ability;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\AppSize;
@@ -26,15 +27,18 @@ use App\Jobs\ReservePortBlock;
 use App\Jobs\SyncApplicationRoute;
 use App\Models\Application;
 use App\Models\Deployment;
+use App\Models\ManagedDatabase;
 use App\Models\MonitorAlert;
 use App\Models\Server;
 use App\Services\Address\DomainTwins;
 use App\Services\Billing\SubscriptionCheck;
 use App\Services\Cron\CronRunLine;
+use App\Services\Database\AppDatabaseChoice;
+use App\Services\Database\ExpectedDatabases;
 use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeployScript;
 use App\Services\Deployment\EnvironmentFile;
-use App\Services\Deployment\StackDefaults;
+use App\Services\Deployment\StartingEnvironment;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
@@ -84,6 +88,13 @@ final class ApplicationController extends Controller
             'projects' => $choices,
             'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
             'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
+            'databases' => [
+                'choices' => ManagedDatabase::query()->where('server_id', $server->getKey())->orderBy('name')->get()
+                    ->filter(fn(ManagedDatabase $database): bool => $request->user()->can('viewCredentials', $database))
+                    ->map(fn(ManagedDatabase $database): array => ['value' => 'existing:' . $database->getKey(), 'name' => (string) $database->name, 'type' => (string) $database->type?->value])
+                    ->values(),
+                'can_create' => $server->status === ServerStatus::Active && $request->user()->hasTeamAbility($server->team, Ability::CreateDatabase),
+            ],
         ]);
     }
 
@@ -105,7 +116,7 @@ final class ApplicationController extends Controller
         $connection = $request->githubConnection();
         $repository = $request->githubRepository();
         $checked = $request->checkedRead();
-        $initial = app(StackDefaults::class)->initial(ApplicationType::tryFrom($request->string('type')->value()), $request->input('framework'));
+        $initial = app(StartingEnvironment::class)->variables($checked?->facts, ApplicationType::tryFrom($request->string('type')->value()), $request->input('framework'), $request->validated('domain'));
 
         try {
             $port = $ports->allocate($server);
@@ -114,7 +125,7 @@ final class ApplicationController extends Controller
         }
 
         $application = Application::create([
-            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id', 'detection']),
+            ...$request->safe()->except(['runtime_version', 'acknowledge_eol', 'source_provider_id', 'repository_id', 'detection', 'database', 'redis']),
             ...($connection === null || $repository === null ? [] : [
                 'repository_url' => 'https://github.com/' . $repository['full_name'] . '.git',
                 'repository_provider' => 'github',
@@ -134,6 +145,8 @@ final class ApplicationController extends Controller
         ]);
 
         activity()->performedOn($application)->log('application_created');
+
+        app(AppDatabaseChoice::class)->apply($application, $request->validated('database'), $request->validated('redis'));
         $access->grant($server->team, $request->user(), $application);
 
         if ($line !== null && $request->isEndOfLife((string) $runtime, $line)) {
@@ -208,6 +221,12 @@ final class ApplicationController extends Controller
                 ],
                 'github' => $github,
                 'environment' => $this->environmentPreview((string) $application->env_variables, $canManageEnvironment),
+                'databases' => $application->databases()->orderBy('name')->get()
+                    ->filter(fn(ManagedDatabase $database): bool => $request->user()->can('view', $database))
+                    ->map(fn(ManagedDatabase $database): array => ['name' => (string) $database->name, 'href' => route('servers.databases.show', [$server, $database])])
+                    ->values()->all(),
+                'expected_databases' => app(ExpectedDatabases::class)->banners($application, $request->user()),
+                'databases_href' => route('servers.applications.databases.store', [$server, $application]),
                 'env' => $canManageEnvironment ? (string) $application->env_variables : null,
                 'latest_deployment' => $latest === null ? null : [
                     ...DeploymentPresenter::row($latest->setRelation('application', $application->setRelation('server', $server))),

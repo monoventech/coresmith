@@ -207,3 +207,21 @@ test('a repository without submodules lists none', function () {
         ->assertOk()
         ->assertJsonPath('submodules', []);
 });
+
+test('detection names the env example and the database and Redis it asks for, so the form can pick them', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('laravel-env-example');
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/shop.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('environment', ['example' => '.env.example', 'database' => 'postgresql', 'redis' => true]);
+});
+
+test('a repository without an env example suggests no database', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('laravel-13');
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/laravel/laravel.git', 'repository_branch' => '13.x'])
+        ->assertOk()
+        ->assertJsonPath('environment', ['example' => null, 'database' => null, 'redis' => false]);
+});

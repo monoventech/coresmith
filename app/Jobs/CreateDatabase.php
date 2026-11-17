@@ -10,6 +10,7 @@ namespace App\Jobs;
 
 use App\Enums\DatabaseType;
 use App\Models\ManagedDatabase;
+use App\Services\Database\DatabaseConnections;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\RedisPorts;
 use App\Services\SSH\SSHConnectionManager;
@@ -28,7 +29,7 @@ final class CreateDatabase implements ShouldQueue
 
     public int $timeout = 1260;
 
-    public function __construct(private readonly ManagedDatabase $database)
+    public function __construct(public readonly ManagedDatabase $database)
     {
         $this->onQueue('server-tasks');
     }
@@ -51,6 +52,7 @@ final class CreateDatabase implements ShouldQueue
                 $databases->create($connection, $this->database, $password);
 
                 $this->database->forceFill(['db_password' => $password, 'credentials_shown_at' => null, 'is_external' => $external])->save();
+                app(DatabaseConnections::class)->refresh($this->database);
             } finally {
                 $connections->disconnect($server);
             }

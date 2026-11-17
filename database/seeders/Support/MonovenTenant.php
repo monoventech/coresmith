@@ -309,7 +309,7 @@ final class MonovenTenant
 
     private function databases(): void
     {
-        ManagedDatabase::factory()->postgres()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'atlas_production', 'db_user' => 'atlas_app']);
+        $this->applications['atlas']->databases()->attach(ManagedDatabase::factory()->postgres()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'atlas_production', 'db_user' => 'atlas_app']));
         ManagedDatabase::factory()->postgres()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'ledger_production', 'db_user' => 'ledger_app']);
         ManagedDatabase::factory()->for($this->team)->for($this->servers['anvil-01'])->create(['name' => 'warehouse', 'db_user' => 'warehouse_app']);
         ManagedDatabase::factory()->for($this->team)->for($this->servers['forge-01'])->create(['name' => 'legacy_reports', 'db_user' => 'reports_app', 'is_external' => true]);

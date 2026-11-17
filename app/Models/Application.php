@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -126,6 +127,11 @@ class Application extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function databases(): BelongsToMany
+    {
+        return $this->belongsToMany(ManagedDatabase::class, 'application_database', 'application_id', 'database_id')->withTimestamps();
     }
 
     public function project(): BelongsTo

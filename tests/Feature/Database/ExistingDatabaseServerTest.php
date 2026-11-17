@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\DatabaseType;
 use App\Exceptions\ExistingDatabaseServerRefused;
 use App\Jobs\CreateDatabase;
+use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Services\Database\DatabaseManager;
@@ -132,6 +133,25 @@ test('a password the job sets has not been shown yet, even when an earlier one h
     }
 
     expect($database->fresh()->credentials_shown_at)->toBeNull();
+});
+
+test('the password the job sets reaches the apps connected while the database was being created', function () {
+    $server = Server::factory()->create(['host_key_fingerprint' => null, 'os_name' => 'ubuntu']);
+    $database = ManagedDatabase::factory()->for($server)->for($server->team)->create(['name' => 'reports', 'db_user' => 'reports_app', 'db_password' => null]);
+    $application = Application::factory()->for($server->team)->for($server)->create(['framework' => 'laravel', 'env_variables' => "DB_PASSWORD=\n"]);
+    $application->databases()->attach($database);
+    SSHConnectionManager::createTransportUsing(fn(): FakeSSHTransport => (new FakeSSHTransport)->respondTo('systemctl is-active --quiet', '', 3));
+
+    try {
+        app()->call([new CreateDatabase($database), 'handle']);
+    } finally {
+        SSHConnectionManager::createTransportUsing(null);
+    }
+
+    $password = (string) $database->fresh()->db_password;
+
+    expect($password)->toHaveLength(32)
+        ->and($application->fresh()->env_variables)->toContain('DB_PASSWORD="' . $password . '"');
 });
 
 test('a Redis already running on the server is left alone, since every Redis database gets an instance of its own beside it', function () {

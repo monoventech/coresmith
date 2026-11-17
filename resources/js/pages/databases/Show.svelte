@@ -24,6 +24,7 @@
         offsite = null,
         backups = null,
         restore = null,
+        connected = [],
         apps = []
     }: {
         server: { id: string; name: string; href: string | null }
@@ -46,6 +47,7 @@
         offsite?: { sent: string | null; error: string | null } | null
         backups?: BackupList | null
         restore?: RestoreState | null
+        connected?: { name: string; href: string }[]
         apps?: RestoreApp[]
     } = $props()
 
@@ -82,6 +84,9 @@
         return () => clearInterval(timer)
     })
 
+    const connectedNames = $derived(
+        new Intl.ListFormat('en-GB', { style: 'long', type: 'conjunction' }).format(connected.map((app) => app.name))
+    )
     const password = $derived(database.has_password ? (page.flash?.databasePassword ?? null) : null)
     const redis = $derived(database.type === 'redis')
     const dsn = $derived(
@@ -147,8 +152,8 @@
         <p class="type-body-sm mt-1.5 text-muted-foreground">
             {ENGINES[database.type] ?? database.type} · on {server.name} · {database.is_external
                 ? 'existing server'
-                : 'localhost only'}{#if place}<span data-testid="database-project">
-                    · {#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
+                : 'localhost only'}{#if place}<span data-testid="database-project"
+                    >{' · '}{#if place.href}<Link href={place.href} class="focus-ring rounded-sm text-muted-foreground"
                             >{place.label}</Link
                         >{:else}{place.label}{/if}</span
                 >{/if}
@@ -247,6 +252,25 @@
                 {#if !redis}<div>privileges {database.privilege_level}</div>{/if}
                 <div>{database.is_external ? 'reachable as its server allows' : 'reachable from localhost'}</div>
             </div>
+            {#if connected.length > 0}
+                <div class="mt-4 border-t border-border pt-3.5" data-testid="connected-apps">
+                    <h4 class="type-caption m-0 mb-1 text-muted-foreground">Connected apps</h4>
+                    <ul class="m-0 flex list-none flex-wrap gap-x-4 p-0">
+                        {#each connected as app (app.href)}
+                            <li>
+                                <Link
+                                    href={app.href}
+                                    class="focus-ring inline-flex min-h-7 items-center rounded-sm font-mono text-[12.5px] text-primary-strong underline-offset-4 hover:underline"
+                                    >{app.name}</Link
+                                >
+                            </li>
+                        {/each}
+                    </ul>
+                    <p class="mt-1.5 text-[12px] text-muted-foreground">
+                        Their variables hold its password, so anyone who can edit their variables can read it.
+                    </p>
+                </div>
+            {/if}
         </div>
         {#if takesBackups}
             <BackupsCard
@@ -286,8 +310,10 @@
             <Dialog.Title>Give {database.name} a Redis of its own?</Dialog.Title>
             <Dialog.Description
                 >Coresmith starts a Redis on a free port with its own password and shows the password once. What's in
-                the shared Redis stays there: queued jobs, sessions and cached values don't move. Apps keep using the
-                shared Redis until you give them the new port and password and deploy.</Dialog.Description
+                the shared Redis stays there: queued jobs, sessions and cached values don't move. {connected.length ===
+                0
+                    ? 'Apps keep using the shared Redis until you give them the new port and password and deploy.'
+                    : `Coresmith gives the new port and password to ${connectedNames}, which ${connected.length === 1 ? 'keeps' : 'keep'} using the shared Redis until you deploy ${connected.length === 1 ? 'it' : 'them'}.`}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>
@@ -302,7 +328,9 @@
         <Dialog.Header>
             <Dialog.Title>Rotate the password of {database.name}?</Dialog.Title>
             <Dialog.Description
-                >Apps using the current password lose access until you give them the new one and deploy.</Dialog.Description
+                >{connected.length === 0
+                    ? 'Apps using the current password lose access until you give them the new one and deploy.'
+                    : `Coresmith gives the new password to ${connectedNames}, which can't reach the database until you deploy ${connected.length === 1 ? 'it' : 'them'}.`}</Dialog.Description
             >
         </Dialog.Header>
         <Dialog.Footer>
