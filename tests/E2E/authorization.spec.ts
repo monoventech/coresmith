@@ -21,6 +21,8 @@ asMember.describe('what a member may do', () => {
         const response = await page.goto('/servers/create')
 
         expect(response?.status()).toBe(403)
+        await expect(page.getByRole('heading', { level: 1, name: 'No access to this page' })).toBeVisible()
+        await expect(page.getByTestId('error-status')).toHaveText('Error 403')
     })
 
     asMember('a member is not offered the server controls', async ({ page }) => {

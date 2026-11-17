@@ -27,6 +27,7 @@
     import { Button, buttonVariants } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
+    import { Label } from '@/components/ui/label'
     import { Textarea } from '@/components/ui/textarea'
     import type { CronCard, CronSend } from '@/lib/cron'
     import type { DnsRecord, DnsTarget } from '@/lib/dns'
@@ -181,11 +182,13 @@
     const cardAction = cn(buttonVariants({ variant: 'link' }), 'min-h-6 max-sm:min-h-11')
 
     let busy = $state<Record<string, boolean>>({})
-    let dialog = $state<'env' | 'domain' | 'remove' | 'runtime' | null>(null)
+    let dialog = $state<'env' | 'domain' | 'remove' | 'runtime' | 'rename' | null>(null)
     let envText = $state('')
     let envError = $state<string | null>(null)
     let domainInput = $state('')
     let domainError = $state<string | null>(null)
+    let nameInput = $state('')
+    let nameError = $state<string | null>(null)
     let working = $state(false)
     let copied = $state(false)
     let log = $state<{ lines: LogLine[]; error: string | null; loading: boolean }>({
@@ -356,6 +359,27 @@
         )
     }
 
+    function openRename() {
+        nameInput = application.name
+        nameError = null
+        dialog = 'rename'
+    }
+
+    function saveName(event: SubmitEvent) {
+        event.preventDefault()
+        working = true
+        router.put(
+            route('servers.applications.update', [server.id, application.id]),
+            { name: nameInput },
+            {
+                preserveScroll: true,
+                onSuccess: () => (dialog = null),
+                onError: (errors) => (nameError = errors.name ?? Object.values(errors)[0] ?? null),
+                onFinish: () => (working = false)
+            }
+        )
+    }
+
     function checkReach() {
         router.post(
             application.domain_check_href,
@@ -504,15 +528,22 @@
             </div>
         {/if}
     </div>
-    {#if application.running_href}
-        <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
-    {:else if can.deploy}
-        <Button
-            disabled={working || application.repository_check !== null}
-            aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
-            onclick={deploy}
-            class="max-sm:w-full sm:hidden">Deploy</Button
-        >
+    {#if application.running_href || can.deploy || can.update}
+        <div class="flex flex-wrap gap-2 max-sm:w-full">
+            {#if application.running_href}
+                <Button href={application.running_href} class="max-sm:w-full sm:hidden">Watch deploy</Button>
+            {:else if can.deploy}
+                <Button
+                    disabled={working || application.repository_check !== null}
+                    aria-describedby={application.repository_check ? 'repository-check-heading' : undefined}
+                    onclick={deploy}
+                    class="max-sm:w-full sm:hidden">Deploy</Button
+                >
+            {/if}
+            {#if can.update}
+                <Button variant="ghost" onclick={openRename}>Rename</Button>
+            {/if}
+        </div>
     {/if}
 </div>
 
@@ -1084,6 +1115,34 @@
             <Dialog.Footer>
                 <Button variant="ghost" type="button" onclick={() => (dialog = null)}>Cancel</Button>
                 <Button type="submit" disabled={working}>Add domain</Button>
+            </Dialog.Footer>
+        </form>
+    </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root open={dialog === 'rename'} onOpenChange={(open) => !open && (dialog = null)}>
+    <Dialog.Content>
+        <form onsubmit={saveName}>
+            <Dialog.Header>
+                <Dialog.Title>Rename app</Dialog.Title>
+                <Dialog.Description>The name is only for Coresmith. Nothing on the server changes.</Dialog.Description>
+            </Dialog.Header>
+            <div class="mt-4">
+                <Label for="app-name" class="mb-1.5">App name</Label>
+                <Input
+                    id="app-name"
+                    bind:value={nameInput}
+                    oninput={() => (nameError = null)}
+                    required
+                    maxlength={255}
+                    autocomplete="off"
+                    aria-invalid={nameError ? true : undefined}
+                />
+                <FieldError message={nameError} />
+            </div>
+            <Dialog.Footer>
+                <Button variant="ghost" type="button" onclick={() => (dialog = null)}>Cancel</Button>
+                <Button type="submit" disabled={working}>Save</Button>
             </Dialog.Footer>
         </form>
     </Dialog.Content>
