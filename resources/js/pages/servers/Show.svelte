@@ -7,6 +7,8 @@
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import ProvisioningPanel from '@/components/servers/ProvisioningPanel.svelte'
+    import RuntimesCard from '@/components/servers/RuntimesCard.svelte'
+    import type { Runtimes } from '@/components/servers/RuntimesCard.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import ServerMovePanel from '@/components/servers/ServerMovePanel.svelte'
     import StateDot from '@/components/StateDot.svelte'
@@ -27,7 +29,11 @@
         href: string
     }
 
-    let { server, applications = [] }: { server: ServerHeader; applications: AppRow[] } = $props()
+    let {
+        server,
+        applications = [],
+        runtimes
+    }: { server: ServerHeader; applications: AppRow[]; runtimes: Runtimes } = $props()
 
     const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
@@ -113,4 +119,7 @@
             </p>
         </div>
     </div>
+    {#if runtimes.rows.length > 0}
+        <RuntimesCard server={server.name} {runtimes} />
+    {/if}
 {/if}

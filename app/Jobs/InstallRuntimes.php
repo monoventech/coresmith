@@ -21,7 +21,7 @@ use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\SharedStorage;
 use App\Services\Runtime\AsdfManager;
 use App\Services\Runtime\Catalog;
-use App\Services\Runtime\RuntimeBinaries;
+use App\Services\Server\RuntimeInstaller;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Cache\Lock;
@@ -40,7 +40,7 @@ final class InstallRuntimes implements ShouldQueue
 
     public bool $deleteWhenMissingModels = true;
 
-    public const TIMEOUT = 2700;
+    public const TIMEOUT = RuntimeInstaller::SECONDS;
 
     public const HANDOFF_MARGIN_SECONDS = 120;
 
@@ -71,7 +71,7 @@ final class InstallRuntimes implements ShouldQueue
         return self::TIMEOUT + DeployApplication::TIMEOUT + self::HANDOFF_MARGIN_SECONDS;
     }
 
-    public function handle(SSHConnectionManager $connections, AsdfManager $asdf, RuntimeBinaries $binaries, DeploymentLog $log, Catalog $catalog): void
+    public function handle(SSHConnectionManager $connections, RuntimeInstaller $installer, DeploymentLog $log, Catalog $catalog): void
     {
         if ($this->deployment->status !== DeploymentStatus::Running) {
             return;
@@ -85,7 +85,7 @@ final class InstallRuntimes implements ShouldQueue
         try {
             foreach ($this->runtimes as ['runtime' => $runtime, 'version' => $version]) {
                 $this->installing = $catalog->label($runtime) . ' ' . $version;
-                $this->install($connection, $server, $asdf, $binaries, $log, $runtime, $version);
+                $this->install($connection, $server, $installer, $log, $runtime, $version);
 
                 if (DeploymentCancellation::requested($this->deployment)) {
                     $this->stopOnRequest($connection, $log);
@@ -136,7 +136,7 @@ final class InstallRuntimes implements ShouldQueue
         return $first === null ? null : app(Catalog::class)->label($first['runtime']) . ' ' . $first['version'];
     }
 
-    private function install(SSHConnection $connection, Server $server, AsdfManager $asdf, RuntimeBinaries $binaries, DeploymentLog $log, string $runtime, string $version): void
+    private function install(SSHConnection $connection, Server $server, RuntimeInstaller $installer, DeploymentLog $log, string $runtime, string $version): void
     {
         $how = in_array($runtime, ['php', 'ruby'], true)
             ? 'compiling it, usually 5–15 minutes the first time'
@@ -144,35 +144,9 @@ final class InstallRuntimes implements ShouldQueue
 
         $log->append($this->deployment, $log->stamp() . " deps: installing {$this->installing}, {$how}");
 
-        Cache::lock('runtime-install:' . $server->getKey() . ':' . $runtime . ':' . $version, self::TIMEOUT)
-            ->block(self::TIMEOUT - 60, function () use ($connection, $server, $asdf, $binaries, $log, $runtime, $version): void {
-                if ($asdf->isInstalled($connection, $runtime, $version) && !$binaries->runtimeInstalled($connection, $runtime, $version)) {
-                    $log->append($this->deployment, "{$this->installing} was left partly installed, so it is removed and installed again");
-                    $asdf->uninstall($connection, $runtime, $version);
-                }
-
-                $asdf->install($connection, $server, $runtime, $version);
-
-                foreach ($binaries->ensure($connection, $runtime, $version) as $note) {
-                    $log->append($this->deployment, $note);
-                }
-            });
-
-        $this->record($server, $runtime, $version);
+        $installer->install($connection, $server, $runtime, $version, fn(string $note) => $log->append($this->deployment, $note));
 
         $log->append($this->deployment, "{$this->installing} is installed");
-    }
-
-    private function record(Server $server, string $runtime, string $version): void
-    {
-        $server->refresh();
-
-        $installed = (array) $server->installed_runtimes;
-        $versions = array_values(array_unique([...array_map('strval', (array) ($installed[$runtime] ?? [])), $version]));
-        usort($versions, 'version_compare');
-        $installed[$runtime] = $versions;
-
-        $server->forceFill(['installed_runtimes' => $installed])->save();
     }
 
     private function stopOnRequest(SSHConnection $connection, DeploymentLog $log): void

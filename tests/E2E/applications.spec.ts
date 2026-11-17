@@ -1028,7 +1028,7 @@ test.describe('adding an application', () => {
         await gotoServer(page, 'bench-01')
         await main(page).getByRole('link', { name: 'Add an app' }).click()
         await page.getByLabel('Language').selectOption('js')
-        await page.getByLabel('Runtime').selectOption('node')
+        await page.getByLabel('Runtime', { exact: true }).selectOption('node')
 
         await expect(
             page
