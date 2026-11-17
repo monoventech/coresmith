@@ -81,6 +81,7 @@ use App\Services\Server\PortBlockGuard;
 use App\Services\SSH\Contracts\SSHTransport;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
+use App\Services\SSH\SSHResult;
 use App\Stacks\Php;
 use Closure;
 use Illuminate\Cache\Lock;
@@ -1378,6 +1379,10 @@ final class DeployApplication implements ShouldQueue
                 $this->appendLog($result->output);
 
                 if ($result->successful()) {
+                    if ($step === Php::ROUTE_CACHE) {
+                        $this->keepLoadableRoutes($connection, $application, $stack, $directory, $unit, $properties);
+                    }
+
                     break;
                 }
 
@@ -1403,6 +1408,25 @@ final class DeployApplication implements ShouldQueue
                 Sleep::for(self::RETRY_SECONDS)->seconds();
             }
         }
+    }
+
+    /**
+     * @param  list<string>  $properties
+     */
+    private function keepLoadableRoutes(SSHConnection $connection, Application $application, Stack $stack, string $directory, string $unit, array $properties): void
+    {
+        $run = fn(string $command): SSHResult => $connection->execute(app(AppShell::class)->run($application, $command, $directory, $stack->versions(), SSHTransport::COMMAND_SECONDS + self::UNIT_GRACE_SECONDS, $unit, app(StackDefaults::class)->build($application), $properties), sudo: true);
+        $check = $run(Php::ROUTE_CACHE_CHECK);
+
+        if ($check->successful()) {
+            return;
+        }
+
+        $this->appendLog('$ ' . Php::ROUTE_CACHE_CHECK);
+        $this->appendLog($check->output);
+        $this->appendLog('$ ' . Php::ROUTE_CACHE_CLEAR);
+        $run(Php::ROUTE_CACHE_CLEAR)->throw();
+        $this->appendLog(Php::ROUTE_CACHE_UNLOADABLE);
     }
 
     private function looksLikeNetwork(string $output): bool
