@@ -354,8 +354,13 @@ final class ApplicationController extends Controller
         $this->assertBelongsTo($server, $application);
 
         $before = $application->allDomains();
+        $name = $application->name;
 
         $application->update($request->validated());
+
+        if ($application->name !== $name) {
+            activity()->performedOn($application)->withProperties(['from' => $name, 'to' => $application->name])->log('application_renamed');
+        }
 
         $domains = $application->allDomains();
 

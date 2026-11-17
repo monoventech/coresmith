@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApplicationType;
 use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Exceptions\GitProviderException;
@@ -23,12 +24,16 @@ use App\Services\Detection\RepositoryReader;
 use App\Services\Detection\StackDetector;
 use App\Services\Git\GitHub\RepositoryCatalog;
 use App\Services\Packages\PrivateSources;
+use App\Services\Runtime\JsTooling;
+use App\Services\Runtime\RepositoryFacts;
 use App\Services\SafeName;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 final class StackDetectionController extends Controller
 {
+    private const TOOLS = ['bun' => 'Bun', 'npm' => 'npm', 'pnpm' => 'pnpm', 'yarn' => 'Yarn', 'deno' => 'Deno'];
+
     public function show(Request $request, Server $server, RepositoryReader $reader, StackDetector $detector, DetectionStore $store): JsonResponse
     {
         $this->authorize('view', $server);
@@ -80,7 +85,18 @@ final class StackDetectionController extends Controller
             'packages' => $server->team === null ? [] : app(PrivateSources::class)->missing($read->facts, $server->team),
             'packages_href' => $server->team !== null && $request->user()->can('update', $server->team) ? route('source-providers.index') : null,
             'submodules' => $this->submodules((string) $read->facts->file('.gitmodules'), $access instanceof RepositoryAccess ? $access->url : ''),
+            'builds_with' => $this->buildsWith($read->facts),
         ]);
+    }
+
+    /**
+     * @return array{tool: string, lockfile: ?string}|null
+     */
+    private function buildsWith(RepositoryFacts $facts): ?array
+    {
+        $tooling = JsTooling::for(new Application(['type' => ApplicationType::Static]), $facts);
+
+        return $tooling === null || !$tooling->build ? null : ['tool' => self::TOOLS[$tooling->manager] ?? $tooling->manager, 'lockfile' => JsTooling::lockfileFor($facts)];
     }
 
     /**

@@ -205,6 +205,7 @@ final class E2ESeeder extends Seeder
             $this->application("doomed-{$code}", 8120 + $index * 30);
             $this->application("filed-{$code}", 9400 + $index * 10);
             $this->application("setup-{$code}", 9650 + $index * 10);
+            $this->application("named-{$code}", 9550 + $index * 10);
 
             ManagedDatabase::factory()->redis()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);

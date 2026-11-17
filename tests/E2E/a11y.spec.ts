@@ -42,6 +42,7 @@ const PAGES: [string, Visit][] = [
         }
     ],
     ['Deployments', direct('/deployments')],
+    ['Page not found', direct('/no-such-page')],
     ['Releases', direct('/releases')],
     ['Server apps', (page) => gotoServer(page, 'forge-01')],
     ['Server with a disk warning', (page) => gotoServer(page, 'outpost-01')],
@@ -465,7 +466,8 @@ const GUEST_PAGES: [string, string][] = [
     ['Single sign-on', '/sso'],
     ['Forgot password', '/forgot-password'],
     ['Invitation', `/invitations/${WAITING_INVITATION}`],
-    ['Invitation that has expired', `/invitations/${EXPIRED_INVITATION}`]
+    ['Invitation that has expired', `/invitations/${EXPIRED_INVITATION}`],
+    ['Page not found', '/no-such-page']
 ]
 
 for (const theme of ['light', 'dark'] as const) {

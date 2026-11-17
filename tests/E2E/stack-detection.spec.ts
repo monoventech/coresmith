@@ -141,6 +141,24 @@ const REACT = {
     blockers: []
 }
 
+const STATIC_BUN = {
+    id: 's8wq8mz9xw4hpbn6tq8rjf3ylc5ds0gj',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'ready',
+    fields: { type: 'static', framework: '', js_runtime: null, web_directory: '/dist', version: null },
+    sources: { type: 'From index.html', web_directory: 'The build writes to dist' },
+    unsettled: {},
+    blockers: [],
+    builds_with: { tool: 'Bun', lockfile: 'bun.lock' }
+}
+
+const STATIC_UNLOCKED = {
+    ...STATIC_BUN,
+    id: 's9wq8mz9xw4hpbn6tq8rjf3ylc5ds0gk',
+    builds_with: { tool: 'npm', lockfile: null }
+}
+
 async function answer(page: Page, answers: object[]): Promise<string[]> {
     const asked: string[] = []
 
@@ -401,6 +419,27 @@ test.describe('Stack detection on Add an app', () => {
         await expect(detection(page)).toContainText(
             'Coresmith reads the repository once bench-01 is ready. You can add the app now and check it before the first deploy.'
         )
+    })
+
+    test('a static site says which tool builds it, and how to build with Bun when it has no lockfile', async ({
+        page
+    }) => {
+        const asked = await answer(page, [STATIC_BUN, STATIC_UNLOCKED])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/site.git')
+
+        await expect(page.getByLabel('Language')).toHaveValue('static')
+        await expect(page.getByTestId('build-tool')).toHaveText('Builds with Bun, from bun.lock.')
+
+        await page.getByLabel('Branch', { exact: true }).fill('release')
+        await expect.poll(() => asked.length).toBe(2)
+        await expect(page.getByTestId('build-tool')).toHaveText(
+            'Builds with npm, since the repository has no lockfile. To build with Bun, commit its bun.lock.'
+        )
+
+        await page.getByLabel('Language').selectOption('php')
+        await expect(page.getByTestId('build-tool')).toHaveCount(0)
     })
 
     test('a field changed by hand stays when the repository is read again', async ({ page }) => {
