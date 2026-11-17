@@ -31,6 +31,8 @@ asMember.describe('what a member may do', () => {
         await expect(page.getByRole('button', { name: 'Rename' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Reboot server' })).toHaveCount(0)
         await expect(page.getByRole('button', { name: 'Detach' })).toHaveCount(0)
+        await expect(page.getByTestId('runtimes-card')).toBeVisible()
+        await expect(page.getByRole('button', { name: /^Update to/ })).toHaveCount(0)
     })
 
     asMember('a member sees the command that connects a server, but no password sign-in or test', async ({ page }) => {
