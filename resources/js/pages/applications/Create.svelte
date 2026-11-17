@@ -110,12 +110,12 @@
     const SERVES_FILES = ['php', 'static']
 
     const STEPS = [
-        { name: 'Clone release', desc: 'fetched with a one-hour token or a read-only deploy key' },
-        { name: 'Install dependencies', desc: 'composer, bun, bundler, uv, go, maven or gradle' },
-        { name: 'Build assets', desc: 'into a new timestamped directory' },
-        { name: 'Run migrations', desc: 'against the new release' },
+        { name: 'Clone release', desc: 'the latest commit on the branch, with its submodules' },
+        { name: 'Install dependencies', desc: "with the package manager the app's lockfile names" },
+        { name: 'Build assets', desc: 'when the app has a build script' },
+        { name: 'Run migrations', desc: 'for frameworks that have them' },
         { name: 'Health check', desc: 'before anything goes live' },
-        { name: 'Symlink swap', desc: 'atomic, the old release kept for rollback' }
+        { name: 'Go live', desc: 'visitors move to the new release in one step, and the old one is kept for rollback' }
     ]
 
     let type = $state('php')
