@@ -5,6 +5,7 @@ import SettingsLayout from '@/layouts/settings/Layout.svelte'
 import { initializeFlashToast } from '@/lib/flash-toast'
 import { startSentry } from '@/lib/sentry'
 import { initializeTheme } from '@/lib/theme.svelte'
+import { replaceOnRefresh } from '@/lib/visits'
 import { createInertiaApp } from '@inertiajs/svelte'
 
 const appName = import.meta.env.VITE_APP_NAME || 'Coresmith'
@@ -32,6 +33,9 @@ createInertiaApp({
     },
     progress: {
         color: 'oklch(0.74 0.16 45)'
+    },
+    defaults: {
+        visitOptions: replaceOnRefresh
     }
 })
 
