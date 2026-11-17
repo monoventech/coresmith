@@ -42,7 +42,7 @@ function releasesShipped(Application $application, string $release, int $hoursAg
 
 function releasesUrl(Application $application, array $query = []): string
 {
-    return route('servers.applications.releases.index', [$application->server_id, $application, ...$query]);
+    return route('servers.applications.releases.index', [$application->server, $application, ...$query]);
 }
 
 function releasesRollback(Application $application, string $description, int $minutesAgo, string $to = '20260912090000'): void
@@ -343,9 +343,9 @@ test('the page links the application and lists the team applications to switch b
         ->assertInertia(fn($page) => $page
             ->where('application.id', $application->id)
             ->where('application.server', 'web-1')
-            ->where('application.href', route('servers.applications.show', [$application->server_id, $application]))
-            ->where('application.deploy_href', route('servers.applications.deploy', [$application->server_id, $application]))
-            ->where('application.rollback_href', route('servers.applications.rollback', [$application->server_id, $application]))
+            ->where('application.href', route('servers.applications.show', [$application->server, $application]))
+            ->where('application.deploy_href', route('servers.applications.deploy', [$application->server, $application]))
+            ->where('application.rollback_href', route('servers.applications.rollback', [$application->server, $application]))
             ->where('applications', [
                 ['id' => $blog->id, 'name' => 'Blog', 'server' => 'web-1', 'project' => null, 'tags' => [], 'href' => releasesUrl($blog), 'current' => false],
                 ['id' => $application->id, 'name' => 'Shop', 'server' => 'web-1', 'project' => null, 'tags' => [], 'href' => releasesUrl($application), 'current' => true],
@@ -360,7 +360,7 @@ test('another team cannot see an applications releases', function () {
 
     $this->actingAs(releasesMember(Team::factory()->create(), TeamRole::Owner))
         ->get(releasesUrl($application))
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 test('releases addressed through another server are a not found', function () {

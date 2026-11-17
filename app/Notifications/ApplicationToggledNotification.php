@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Application;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -40,6 +41,6 @@ final class ApplicationToggledNotification extends Notification implements Shoul
         return (new MailMessage)
             ->subject("{$this->change} · {$this->application->name}")
             ->line(($this->actor ?? 'Someone') . ' made the change in Coresmith.' . ($this->withoutDeployment ? ' No deployment was needed.' : ''))
-            ->action('Open ' . $this->application->name, route('servers.applications.show', [$this->application->server_id, $this->application]));
+            ->action('Open ' . $this->application->name, app(TeamLinks::class)->application($this->application));
     }
 }

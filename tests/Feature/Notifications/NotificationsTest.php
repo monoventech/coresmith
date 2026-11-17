@@ -152,7 +152,7 @@ test('a failure before the swap is emailed as having changed nothing', function 
             'The current release kept serving the whole time, so no one saw an error page.',
         ])
         ->and($mail->actionText)->toBe('Read the log')
-        ->and($mail->actionUrl)->toBe(route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment]));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $team->slug . '/servers/web-1/applications/shop/deployments/' . $deployment->getRouteKey());
 });
 
 test('a failure after the swap is emailed as live and needing a look', function () {
@@ -189,7 +189,7 @@ test('a disk pressure email names the server, the level and what pruning keeps',
             'Pruning keeps the last 5 releases of each app, plus the live one.',
         ])
         ->and($mail->actionText)->toBe('Open web-1')
-        ->and($mail->actionUrl)->toBe(route('servers.show', $server));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $server->team->slug . '/servers/web-1');
 });
 
 test('a toggle email says what changed, who changed it and links to the application', function (?string $actor, string $line) {
@@ -200,7 +200,7 @@ test('a toggle email says what changed, who changed it and links to the applicat
     expect($mail->subject)->toBe('The app was stopped · Shop')
         ->and($mail->introLines)->toBe([$line])
         ->and($mail->actionText)->toBe('Open Shop')
-        ->and($mail->actionUrl)->toBe(route('servers.applications.show', [$application->server_id, $application]));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $application->team->slug . '/servers/' . $application->server->handle . '/applications/shop');
 })->with([
     'a named person' => ['Ada Lovelace', 'Ada Lovelace made the change in Coresmith. No deployment was needed.'],
     'nobody named' => [null, 'Someone made the change in Coresmith. No deployment was needed.'],
@@ -234,7 +234,7 @@ test('a failed provider task mail says what failed and why, and links to the ser
         ->and($mail->subject)->toBe($subject)
         ->and($mail->introLines)->toBe(['Hetzner Cloud refused the request.'])
         ->and($mail->actionText)->toBe('Open outpost-02')
-        ->and($mail->actionUrl)->toBe(route('servers.show', $server));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $server->team->slug . '/servers/outpost-02');
 })->with([
     'a creation' => [CloudTask::CREATE, 'Creating outpost-02 at Hetzner Cloud failed'],
     'a destroy' => [CloudTask::DESTROY, 'Destroying outpost-02 at Hetzner Cloud failed'],

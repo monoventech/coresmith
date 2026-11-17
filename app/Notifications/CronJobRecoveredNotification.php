@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Application;
+use App\Services\Teams\TeamLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -51,6 +52,6 @@ final class CronJobRecoveredNotification extends Notification implements ShouldQ
         return (new MailMessage)
             ->subject("{$name}: {$this->job} ran without an error")
             ->line("It ran on {$when} and took {$took}.")
-            ->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
+            ->action('Open ' . $name, app(TeamLinks::class)->application($this->application));
     }
 }

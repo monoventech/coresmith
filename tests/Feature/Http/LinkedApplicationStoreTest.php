@@ -689,7 +689,7 @@ test('the links on the add an app page carry the team address', function () {
     [$owner, $server, $connection] = linkedStoreTeam();
     $server->team->forceFill(['slug' => 'monoven'])->save();
 
-    $this->actingAs($owner)->get('/monoven/servers/' . $server->id . '/applications/create')
+    $this->actingAs($owner)->get('/monoven/servers/' . $server->handle . '/applications/create')
         ->assertInertia(fn($page) => $page
             ->where('github.connections.0.repositories_href', 'http://localhost/monoven/settings/source-providers/' . $connection->id . '/repositories')
             ->where('github.settings_href', 'http://localhost/monoven/settings/git'));

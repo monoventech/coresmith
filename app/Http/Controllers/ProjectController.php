@@ -9,12 +9,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Project\ProjectNameRequest;
+use App\Http\Responses\BackAfterRename;
 use App\Models\Application;
 use App\Models\Project;
 use App\Models\Server;
 use App\Services\Panel\FleetSnapshot;
 use App\Services\Panel\ProjectPresenter;
 use App\Services\Projects\Projects;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -45,7 +47,7 @@ final class ProjectController extends Controller
                 'id' => $application->getKey(),
                 'name' => $application->name,
                 'server' => $application->server?->name,
-                'href' => route('servers.applications.show', [$application->server_id, $application]),
+                'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
             ])->values(),
             'narrowed' => !$access->seesEverything($user, $team),
             'can' => ['create' => $user->can('create', [Project::class, $team])],
@@ -74,7 +76,7 @@ final class ProjectController extends Controller
     {
         $projects->rename($project, $request->string('name')->value(), $request->user());
 
-        return back()->with('success', 'Saved.');
+        return ($project->wasChanged('handle') ? app(BackAfterRename::class)->to($request, 'project', $project) : back())->with('success', 'Saved.');
     }
 
     public function destroy(Request $request, Project $project, Projects $projects): RedirectResponse

@@ -26,10 +26,12 @@ test('an app is renamed from its page, and nothing on the server changes', async
     await expect(dialog(page)).toHaveCount(0)
     await expect(page.getByRole('heading', { level: 1, name: renamed })).toBeVisible()
     await expect(page).toHaveTitle(new RegExp(`^${renamed}`))
+    await expect(page).toHaveURL(new RegExp(`/servers/bench-01/applications/${renamed}$`))
 
     await main(page).getByRole('button', { name: 'Rename', exact: true }).click()
     await dialog(page).getByLabel('App name').fill(app)
     await dialog(page).getByRole('button', { name: 'Save' }).click()
 
     await expect(page.getByRole('heading', { level: 1, name: app, exact: true })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/servers/bench-01/applications/${app}$`))
 })

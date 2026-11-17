@@ -39,7 +39,7 @@ function screenApp(Team $team, array $attributes = []): Application
 
 function screenUrl(Deployment $deployment, array $query = []): string
 {
-    return route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment, ...$query]);
+    return route('servers.applications.deployments.show', [$deployment->application->server, $deployment->application, $deployment, ...$query]);
 }
 
 function screenPrivate(object $job, string $property): mixed
@@ -58,7 +58,7 @@ test('deploying records who asked and which branch, queues the build and opens t
     $user = screenMember($team);
 
     $response = $this->actingAs($user)
-        ->post(route('servers.applications.deploy', [$application->server_id, $application]), ['from' => 'releases']);
+        ->post(route('servers.applications.deploy', [$application->server, $application]), ['from' => 'releases']);
 
     $deployment = Deployment::query()->sole();
 
@@ -79,7 +79,7 @@ test('the deploy screen remembers every known origin', function (string $from) {
     $application = screenApp($team);
 
     $response = $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.deploy', [$application->server_id, $application]), ['from' => $from]);
+        ->post(route('servers.applications.deploy', [$application->server, $application]), ['from' => $from]);
 
     $response->assertRedirect(screenUrl(Deployment::query()->sole(), ['from' => $from]));
 })->with(['fleet', 'deployments', 'app', 'releases', 'setup', 'project']);
@@ -90,7 +90,7 @@ test('a missing or unknown origin sends the deploy screen back to the fleet', fu
     $application = screenApp($team);
 
     $response = $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.deploy', [$application->server_id, $application]), $payload);
+        ->post(route('servers.applications.deploy', [$application->server, $application]), $payload);
 
     $response->assertRedirect(screenUrl(Deployment::query()->sole(), ['from' => 'fleet']));
 })->with([
@@ -103,8 +103,8 @@ test('another team cannot deploy and nothing is created', function () {
     $application = screenApp(Team::factory()->create());
 
     $this->actingAs(screenMember(Team::factory()->create(), TeamRole::Owner))
-        ->post(route('servers.applications.deploy', [$application->server_id, $application]))
-        ->assertForbidden();
+        ->post(route('servers.applications.deploy', [$application->server, $application]))
+        ->assertNotFound();
 
     expect(Deployment::count())->toBe(0);
 
@@ -151,10 +151,10 @@ test('the deploy screen carries the phases, the failure and the release details'
         ->assertOk()
         ->assertInertia(fn($page) => $page
             ->component('deployments/Show')
-            ->where('server', ['id' => $application->server_id, 'name' => 'web-1', 'href' => route('servers.show', $application->server_id)])
+            ->where('server', ['id' => $application->server_id, 'name' => 'web-1', 'href' => route('servers.show', $application->server)])
             ->where('application.name', 'Shop')
             ->where('application.current_release', '20260912-090000')
-            ->where('application.releases_href', route('servers.applications.releases.index', [$application->server_id, $application]))
+            ->where('application.releases_href', route('servers.applications.releases.index', [$application->server, $application]))
             ->where('deployment.id', $deployment->id)
             ->where('deployment.status', 'failed')
             ->where('deployment.state.label', 'Failed, no impact')
@@ -277,8 +277,8 @@ test('the back link follows where the deploy was started from', function (?strin
     $application = screenApp($team);
     $deployment = Deployment::factory()->for($application)->create();
     $expected = match ($route) {
-        'app' => route('servers.applications.show', [$application->server_id, $application]),
-        'releases' => route('servers.applications.releases.index', [$application->server_id, $application]),
+        'app' => route('servers.applications.show', [$application->server, $application]),
+        'releases' => route('servers.applications.releases.index', [$application->server, $application]),
         'deployments' => route('deployments.index'),
         default => route('dashboard'),
     };
@@ -301,7 +301,7 @@ test('a deploy started from a project goes back to it, or to the app when the pe
     $project = Project::factory()->for($team)->create(['name' => 'Storefront']);
     $application = screenApp($team, ['project_id' => $project->id]);
     $deployment = Deployment::factory()->for($application)->create();
-    $appPage = ['label' => 'Shop', 'href' => route('servers.applications.show', [$application->server_id, $application])];
+    $appPage = ['label' => 'Shop', 'href' => route('servers.applications.show', [$application->server, $application])];
     $outsider = screenMember($team, TeamRole::Admin);
     $team->members()->updateExistingPivot($outsider->id, ['sees_everything' => false]);
     app(TeamAccess::class)->grant($team, $outsider->fresh(), $application);
@@ -324,8 +324,8 @@ test('a deploy offers a way to fix the setup and the deploy script to people who
 
     $this->actingAs(screenMember($team, TeamRole::Admin))->get(screenUrl($deployment))
         ->assertInertia(fn($page) => $page
-            ->where('application.setup_href', route('servers.applications.setup.edit', [$application->server_id, $application]))
-            ->where('application.script_href', route('servers.applications.show', [$application->server_id, $application, 'script' => 'edit'])));
+            ->where('application.setup_href', route('servers.applications.setup.edit', [$application->server, $application]))
+            ->where('application.script_href', route('servers.applications.show', [$application->server, $application, 'script' => 'edit'])));
     $this->actingAs(screenMember($team))->get(screenUrl($deployment))
         ->assertInertia(fn($page) => $page->where('application.setup_href', null)->where('application.script_href', null));
 });
@@ -352,11 +352,11 @@ test('a deploy screen for another application or server is a not found', functio
     $member = screenMember($team, TeamRole::Owner);
 
     $this->actingAs($member)
-        ->get(route('servers.applications.deployments.show', [$application->server_id, $application, $deployment]))
+        ->get(route('servers.applications.deployments.show', [$application->server, $application, $deployment]))
         ->assertNotFound();
 
     $this->actingAs($member)
-        ->get(route('servers.applications.deployments.show', [$application->server_id, $sibling, $deployment]))
+        ->get(route('servers.applications.deployments.show', [$application->server, $sibling, $deployment]))
         ->assertNotFound();
 });
 
@@ -365,7 +365,7 @@ test('another team cannot open a deploy screen', function () {
 
     $this->actingAs(screenMember(Team::factory()->create(), TeamRole::Owner))
         ->get(screenUrl($deployment))
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 test('rolling back to a release of this application queues exactly that release', function (string $release, string $shown) {
@@ -375,7 +375,7 @@ test('rolling back to a release of this application queues exactly that release'
     Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => $release]);
 
     $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]), ['release' => $release])
+        ->post(route('servers.applications.rollback', [$application->server, $application]), ['release' => $release])
         ->assertSessionHasNoErrors()
         ->assertSessionHas('success', "Rolling back to releases/{$shown}. Nothing is rebuilt.");
 
@@ -392,7 +392,7 @@ test('rolling back without a release goes to the previous one', function () {
     $application = screenApp($team);
 
     $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]))
+        ->post(route('servers.applications.rollback', [$application->server, $application]))
         ->assertSessionHas('success', 'Rolling back to the previous release. Nothing is rebuilt.');
 
     Queue::assertPushed(RollbackApplication::class, fn(RollbackApplication $job): bool => screenPrivate($job, 'release') === null);
@@ -405,7 +405,7 @@ test('a release that does not belong to this application is refused', function (
     Deployment::factory()->for(screenApp($team, ['name' => 'Blog']))->create(['status' => DeploymentStatus::Succeeded, 'release' => '20260912090000']);
 
     $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]), ['release' => $release])
+        ->post(route('servers.applications.rollback', [$application->server, $application]), ['release' => $release])
         ->assertSessionHasErrors('release');
 
     Queue::assertNothingPushed();
@@ -424,7 +424,7 @@ test('a release name ending in a newline is refused by its format, even when the
 
     $this->withoutMiddleware(TrimStrings::class)
         ->actingAs(screenMember($team))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]), ['release' => "20261019-120000\n"])
+        ->post(route('servers.applications.rollback', [$application->server, $application]), ['release' => "20261019-120000\n"])
         ->assertSessionHasErrors(['release' => 'The release field format is invalid.']);
 
     Queue::assertNothingPushed();
@@ -437,8 +437,8 @@ test('another team cannot roll back, and a rollback through another server is a 
     $other = Server::factory()->for($team)->create();
 
     $this->actingAs(screenMember(Team::factory()->create(), TeamRole::Owner))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]))
-        ->assertForbidden();
+        ->post(route('servers.applications.rollback', [$application->server, $application]))
+        ->assertNotFound();
 
     $this->actingAs(screenMember($team, TeamRole::Owner))
         ->post(route('servers.applications.rollback', [$other, $application]))
@@ -460,7 +460,7 @@ test('a deploy waits while the server is being resized', function (string $type,
     cloudScreenBusy($application->server, $type);
 
     $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.deploy', [$application->server_id, $application]))
+        ->post(route('servers.applications.deploy', [$application->server, $application]))
         ->assertSessionHas('error', $message);
 
     expect(Deployment::query()->count())->toBe(0);
@@ -478,7 +478,7 @@ test('a rollback waits while the server is being resized', function () {
     cloudScreenBusy($application->server);
 
     $this->actingAs(screenMember($team))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]))
+        ->post(route('servers.applications.rollback', [$application->server, $application]))
         ->assertSessionHas('error', "Coresmith is resizing web-1 at Hetzner Cloud. Roll back once it's back.");
 
     Queue::assertNotPushed(RollbackApplication::class);

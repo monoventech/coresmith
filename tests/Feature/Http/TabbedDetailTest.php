@@ -167,7 +167,7 @@ test('another teams application pages are refused', function (string $method, st
 
     $this->actingAs(tabUser(Team::factory()->create(), TeamRole::Owner))
         ->{$method}(route($name, [$application->server_id, $application, ...$extra]))
-        ->assertForbidden();
+        ->assertNotFound();
 
     Queue::assertNothingPushed();
 })->with([
@@ -180,7 +180,7 @@ test('another teams server tabs are refused', function (string $name) {
 
     $this->actingAs(tabUser(Team::factory()->create(), TeamRole::Owner))
         ->get(route($name, $server))
-        ->assertForbidden();
+        ->assertNotFound();
 })->with(['servers.show', 'servers.databases.index', 'servers.hardening', 'servers.activity']);
 
 test('the activity tab lists only what happened on that server', function () {

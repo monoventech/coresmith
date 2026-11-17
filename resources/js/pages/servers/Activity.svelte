@@ -18,8 +18,8 @@
     }: { server: ServerHeader; activity: ActivityItem[]; show?: 'everything' | 'alerts' } = $props()
 
     const filters = $derived([
-        { key: 'everything', label: 'Everything', href: route('servers.activity', { server: server.id }) },
-        { key: 'alerts', label: 'Alerts', href: route('servers.activity', { server: server.id, show: 'alerts' }) }
+        { key: 'everything', label: 'Everything', href: route('servers.activity', { server: server.key }) },
+        { key: 'alerts', label: 'Alerts', href: route('servers.activity', { server: server.key, show: 'alerts' }) }
     ])
 </script>
 
@@ -28,7 +28,7 @@
 <ServerHeaderView
     {server}
     primary={server.active && server.can.createApplication
-        ? { label: 'Add an app', href: route('servers.applications.create', server.id) }
+        ? { label: 'Add an app', href: route('servers.applications.create', server.key) }
         : null}
 />
 

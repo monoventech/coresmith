@@ -20,6 +20,7 @@ use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\ServerPresenter;
 use App\Services\Panel\SetupProgress;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -74,7 +75,7 @@ final class SetupController extends Controller
                 'kind' => ApplicationPresenter::kind($application),
                 'runtime' => ApplicationPresenter::runtime($application),
                 'server' => $application->server?->name,
-                'deploy_href' => route('servers.applications.deploy', [$application->server_id, $application]),
+                'deploy_href' => route('servers.applications.deploy', [app(RouteKeys::class)->server($application->server_id), $application]),
             ] : null,
             'create_application_href' => $server instanceof Server && $server->status === ServerStatus::Active
                 ? route('servers.applications.create', $server)

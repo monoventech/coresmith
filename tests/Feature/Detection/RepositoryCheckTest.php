@@ -62,7 +62,7 @@ function repositoryCheckAnswer(string $fixture): void
 
 function repositoryCheckPost(User $user, Application $application): TestResponse
 {
-    return test()->actingAs($user)->post(route('servers.applications.repository-check', [$application->server_id, $application]));
+    return test()->actingAs($user)->post(route('servers.applications.repository-check', [$application->server, $application]));
 }
 
 test('an app waiting for its check cannot be deployed from its page, and the guard everything asks says why', function () {
@@ -70,7 +70,7 @@ test('an app waiting for its check cannot be deployed from its page, and the gua
 
     expect(app(DeployGuard::class)->refusal($application))->toBe(DeployGuard::UNCHECKED);
 
-    test()->actingAs($owner)->post(route('servers.applications.deploy', [$application->server_id, $application]))
+    test()->actingAs($owner)->post(route('servers.applications.deploy', [$application->server, $application]))
         ->assertSessionHas('error', DeployGuard::UNCHECKED);
 
     expect(Deployment::query()->where('application_id', $application->id)->count())->toBe(0);
@@ -129,7 +129,7 @@ test('using the proposal changes the stack and clears the gate', function () {
     repositoryCheckAnswer('slim-skeleton');
     repositoryCheckPost($owner, $application);
 
-    test()->actingAs($owner)->put(route('servers.applications.repository-check.apply', [$application->server_id, $application]))
+    test()->actingAs($owner)->put(route('servers.applications.repository-check.apply', [$application->server, $application]))
         ->assertRedirect()
         ->assertSessionHas('success', 'Saved.');
 
@@ -144,7 +144,7 @@ test('using the proposal changes the stack and clears the gate', function () {
 test('there is nothing to use when no proposal stands', function () {
     [$owner, $application] = repositoryCheckApp();
 
-    test()->actingAs($owner)->put(route('servers.applications.repository-check.apply', [$application->server_id, $application]))
+    test()->actingAs($owner)->put(route('servers.applications.repository-check.apply', [$application->server, $application]))
         ->assertSessionHas('error');
 
     expect($application->fresh()->repository_check_pending)->toBeTrue();
@@ -180,7 +180,7 @@ test('only someone who can deploy the app can check it', function () {
     [, $application] = repositoryCheckApp();
     $member = User::factory()->create();
     $application->team->members()->attach($member, ['role' => TeamRole::Member->value, 'sees_everything' => false]);
-    $deploy = test()->actingAs($member->fresh())->post(route('servers.applications.deploy', [$application->server_id, $application]))->status();
+    $deploy = test()->actingAs($member->fresh())->post(route('servers.applications.deploy', [$application->server, $application]))->status();
 
     expect($deploy)->toBeGreaterThanOrEqual(400);
     repositoryCheckPost($member->fresh(), $application)->assertStatus($deploy);
@@ -189,13 +189,13 @@ test('only someone who can deploy the app can check it', function () {
 test('the app page carries the check while the app waits for it, and drops it once it passed', function () {
     [$owner, $application] = repositoryCheckApp(['repository_url' => 'git@gitlab.com:acme/shop.git']);
 
-    test()->actingAs($owner)->get(route('servers.applications.show', [$application->server_id, $application]))
+    test()->actingAs($owner)->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page
             ->where('application.repository_check.access', 'key')
-            ->where('application.repository_check.check_href', route('servers.applications.repository-check', [$application->server_id, $application])));
+            ->where('application.repository_check.check_href', route('servers.applications.repository-check', [$application->server, $application])));
 
     $application->forceFill(['repository_check_pending' => false])->save();
 
-    test()->actingAs($owner)->get(route('servers.applications.show', [$application->server_id, $application]))
+    test()->actingAs($owner)->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page->where('application.repository_check', null));
 });

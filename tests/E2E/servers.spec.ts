@@ -71,7 +71,7 @@ test.describe('a server', () => {
             ['Databases', /\/databases$/],
             ['Hardening', /\/hardening$/],
             ['Activity', /\/activity$/],
-            ['Apps', /\/servers\/[A-Za-z0-9]+$/]
+            ['Apps', /\/servers\/[\w.-]+$/]
         ] as const) {
             await sections.getByRole('link', { name: label, exact: true }).click()
             await page.waitForURL(url)

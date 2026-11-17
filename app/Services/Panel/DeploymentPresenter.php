@@ -10,6 +10,7 @@ namespace App\Services\Panel;
 
 use App\Enums\DeploymentStatus;
 use App\Models\Deployment;
+use App\Services\Teams\RouteKeys;
 
 final class DeploymentPresenter
 {
@@ -53,7 +54,7 @@ final class DeploymentPresenter
             'full' => Formats::absolute($deployment->started_at ?? $deployment->created_at),
             'duration' => $deployment->status === DeploymentStatus::Running ? null : Formats::duration($deployment->started_at, $deployment->finished_at),
             'state' => self::state($deployment),
-            'href' => $application === null ? null : route('servers.applications.deployments.show', [$application->server_id, $application, $deployment]),
+            'href' => $application === null ? null : route('servers.applications.deployments.show', [app(RouteKeys::class)->server($application->server_id), $application, $deployment]),
         ];
     }
 }

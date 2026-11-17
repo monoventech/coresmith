@@ -36,7 +36,7 @@ function autoDeployToggleApp(Team $team, array $attributes = []): Application
 
 function autoDeployToggleUrl(Application $application): string
 {
-    return route('servers.applications.toggles.update', [$application->server_id, $application, 'auto_deploy']);
+    return route('servers.applications.toggles.update', [$application->server, $application, 'auto_deploy']);
 }
 
 beforeEach(function () {
@@ -105,7 +105,7 @@ test('the email for auto deploy does not say no deployment was needed, other tog
     $teammate = autoDeployToggleMember($team, TeamRole::Member);
 
     $this->actingAs(autoDeployToggleMember($team, TeamRole::Admin, ['name' => 'Ada Lovelace']))
-        ->put(route('servers.applications.toggles.update', [$application->server_id, $application, $toggle]), ['on' => true])
+        ->put(route('servers.applications.toggles.update', [$application->server, $application, $toggle]), ['on' => true])
         ->assertSessionHas('success');
 
     Notification::assertSentTo($teammate, ApplicationToggledNotification::class, fn(ApplicationToggledNotification $notification): bool => $notification->toMail($teammate)->introLines === [$line]);

@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -58,10 +59,10 @@ final class Breadcrumbs
         $name = $route instanceof Route ? (string) $route->getName() : '';
         $fleet = self::crumb('Fleet', route('dashboard'));
         $settings = self::crumb('Settings', route('settings.general'));
-        $project = $this->bound($route, Project::class);
-        $server = $this->bound($route, Server::class);
-        $application = $this->bound($route, Application::class);
-        $database = $this->bound($route, ManagedDatabase::class);
+        $project = $this->bound($route, Project::class, $user);
+        $server = $this->bound($route, Server::class, $user);
+        $application = $this->bound($route, Application::class, $user);
+        $database = $this->bound($route, ManagedDatabase::class, $user);
 
         return [self::crumb($team->name, route('dashboard')), ...match (true) {
             $name === 'dashboard' => [self::crumb('Fleet')],
@@ -75,7 +76,7 @@ final class Breadcrumbs
             $name === 'settings.removal.show' => [$settings, self::crumb('General', route('settings.general')), self::crumb('Remove Coresmith')],
             isset(self::ACCOUNT[$name]) => [self::crumb('Your account', route('profile.edit')), self::crumb(self::ACCOUNT[$name])],
             $name === 'projects.show' && $project instanceof Project => [self::crumb('Projects', route('projects.index')), self::crumb($project->name, switch: self::switchTo($project))],
-            $application instanceof Application => $this->application($user, $application, $name, $this->bound($route, Deployment::class), $fleet),
+            $application instanceof Application => $this->application($user, $application, $name, $this->bound($route, Deployment::class, $user), $fleet),
             $database instanceof ManagedDatabase => [...$this->place($user, $database, $fleet), self::crumb($database->name, null, true)],
             $server instanceof Server => $this->server($server, $name, $fleet),
             default => [],
@@ -88,11 +89,11 @@ final class Breadcrumbs
      * @param  class-string<T>  $class
      * @return T|null
      */
-    private function bound(?Route $route, string $class): ?object
+    private function bound(?Route $route, string $class, User $user): ?object
     {
         foreach ($route?->parameters() ?? [] as $value) {
             if ($value instanceof $class) {
-                return $value;
+                return $user->can('view', $value) ? $value : null;
             }
         }
 
@@ -130,7 +131,7 @@ final class Breadcrumbs
             return [...$place, self::crumb($application->name, null, true, self::switchTo($application))];
         }
 
-        $trail = [...$place, self::crumb($application->name, route('servers.applications.show', [$application->server_id, $application->getKey()]), true, self::switchTo($application))];
+        $trail = [...$place, self::crumb($application->name, route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]), true, self::switchTo($application))];
         $release = $deployment instanceof Deployment ? Formats::release($deployment->release) : null;
 
         return match (true) {

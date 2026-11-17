@@ -18,6 +18,7 @@ use App\Enums\ServerStatus;
 use App\Exceptions\PortExhaustedException;
 use App\Http\Requests\Application\StoreApplicationRequest;
 use App\Http\Requests\Application\UpdateApplicationRequest;
+use App\Http\Responses\BackAfterRename;
 use App\Jobs\CheckCertificates;
 use App\Jobs\CheckDomainReach;
 use App\Jobs\DetachApplication;
@@ -374,7 +375,7 @@ final class ApplicationController extends Controller
             array_diff($domains, $before) === [] ? dispatch($route) : Bus::chain([$route, new CheckDomainReach($application)])->dispatch();
         }
 
-        return back()->with('success', 'Saved.');
+        return ($application->wasChanged('handle') ? app(BackAfterRename::class)->to($request, 'application', $application) : back())->with('success', 'Saved.');
     }
 
     /**

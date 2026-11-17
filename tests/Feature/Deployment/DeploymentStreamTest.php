@@ -185,7 +185,7 @@ test('another teams deployment page is refused', function () {
             $deployment->application,
             $deployment,
         ]))
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 test('a deployment belonging to a different application is a not found', function () {

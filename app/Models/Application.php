@@ -13,6 +13,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Enums\SourceProviderType;
+use App\Models\Concerns\HasHandle;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Models\Concerns\RecordsWhoAdded;
 use App\Services\Deployment\CrontabBuilder;
@@ -32,7 +33,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Application extends Model
 {
     /** @use HasFactory<ApplicationFactory> */
-    use HasFactory, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes;
+    use HasFactory, HasHandle, HasUlids, IgnoresJsonKeyOrder, RecordsWhoAdded, SoftDeletes {
+        HasHandle::resolveRouteBindingQuery insteadof HasUlids;
+    }
 
     public const ADDRESS_PORTS = 20000;
 
@@ -240,5 +243,15 @@ class Application extends Model
             'answered_at' => 'datetime',
             'failed_checks' => 'integer',
         ];
+    }
+
+    protected function handleFallback(): string
+    {
+        return 'app';
+    }
+
+    protected function handleAlsoBy(): ?string
+    {
+        return 'slug';
     }
 }

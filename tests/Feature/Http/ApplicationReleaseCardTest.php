@@ -43,7 +43,7 @@ function releaseCardDeploy(Application $application, string $release, CarbonInte
 
 function releaseCardPage(User $user, Application $application): TestResponse
 {
-    return test()->actingAs($user)->get(route('servers.applications.show', [$application->server_id, $application]));
+    return test()->actingAs($user)->get(route('servers.applications.show', [$application->server, $application]));
 }
 
 test('the current release card names the commit, its branch and author, and when it went live', function () {
@@ -105,7 +105,7 @@ test('roll back opens the releases page on the previous successful release', fun
     releaseCardDeploy($application, '20261112091400', now()->subHours(2));
 
     releaseCardPage($user, $application)->assertInertia(fn(AssertableInertia $page) => $page
-        ->where('application.rollback_href', route('servers.applications.releases.index', [$application->server_id, $application, 'rollback' => '20261111080000'])));
+        ->where('application.rollback_href', route('servers.applications.releases.index', [$application->server, $application, 'rollback' => '20261111080000'])));
 });
 
 test('an app whose only release is live has nothing to roll back to', function () {

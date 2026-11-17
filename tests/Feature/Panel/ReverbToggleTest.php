@@ -66,11 +66,11 @@ function reverbRow(Application $application): ?array
 
 function reverbPut(Application $application, bool $on): TestResponse
 {
-    $show = route('servers.applications.show', [$application->server_id, $application]);
+    $show = route('servers.applications.show', [$application->server, $application]);
 
     return test()->actingAs(reverbAdmin($application))
         ->from($show)
-        ->put(route('servers.applications.toggles.update', [$application->server_id, $application, SmartToggles::REVERB]), ['on' => $on]);
+        ->put(route('servers.applications.toggles.update', [$application->server, $application, SmartToggles::REVERB]), ['on' => $on]);
 }
 
 test('reverb is offered only to laravel apps that install it', function (array $attributes, bool $offered) {

@@ -63,7 +63,7 @@ test('stopping an application queues the stop and the route change and logs it',
     [$team, $actor] = powerNotifyTeam();
     $application = powerNotifyApp($team, ['power_state' => PowerState::Active]);
 
-    $this->actingAs($actor)->post(route('servers.applications.stop', [$application->server_id, $application]));
+    $this->actingAs($actor)->post(route('servers.applications.stop', [$application->server, $application]));
 
     expect($application->fresh()->power_state)->toBe(PowerState::Stopped)
         ->and(Activity::query()->where('description', 'application_stopped')->where('subject_id', $application->id)->exists())->toBeTrue();
@@ -97,7 +97,7 @@ test('a member cannot change power and nobody is told anything', function () {
     $application = powerNotifyApp($team);
 
     $this->actingAs($teammate)
-        ->post(route('servers.applications.stop', [$application->server_id, $application]))
+        ->post(route('servers.applications.stop', [$application->server, $application]))
         ->assertForbidden();
 
     Notification::assertNothingSent();

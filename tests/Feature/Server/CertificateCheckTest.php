@@ -329,7 +329,7 @@ test('opening the app page queues a check only when needed', function (string $c
     }
 
     $this->actingAs($application->team->members()->first())
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertOk();
 
     $queued ? Queue::assertPushed(CheckCertificates::class, 1) : Queue::assertNotPushed(CheckCertificates::class);
@@ -348,7 +348,7 @@ test('the app page carries the states', function () {
     ]], now()->addDays(3));
 
     $this->actingAs($application->team->members()->first())
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page->where('application.certificates', fn($certificates): bool => $certificates['domains']['a.example.com']['state'] === 'expiring'
             && $certificates['domains']['a.example.com']['label'] === 'Expires in 3 days'
             && $certificates['domains']['b.example.com']['state'] === 'none'
@@ -360,7 +360,7 @@ test('an app page with nothing checked yet carries no states', function () {
     $application = certificateApp();
 
     $this->actingAs($application->team->members()->first())
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page->where('application.certificates', null));
 });
 
@@ -424,7 +424,7 @@ test('the attention list and feed name an expiring certificate', function (int $
     $attention = collect((new FleetSnapshot($application->team))->attention())->firstWhere('subject', 'Shop');
     $row = collect(app(ActivityFeed::class)->forTeam($application->team))->sole();
 
-    expect($attention)->toBe(['severity' => 'warning', 'subject' => 'Shop', 'summary' => $summary, 'href' => route('servers.applications.show', [$application->server_id, $application])])
+    expect($attention)->toBe(['severity' => 'warning', 'subject' => 'Shop', 'summary' => $summary, 'href' => route('servers.applications.show', [$application->server, $application])])
         ->and(implode('', array_column($row['parts'], 'text')))->toBe($feed)
         ->and(array_column(array_filter($row['parts'], fn(array $part): bool => $part['mono']), 'text'))->toBe(['a.example.com', 'Shop']);
 })->with([
@@ -454,7 +454,7 @@ test('the mail names the domain and what to check', function (int $days, string 
             'Check that a.example.com still points at 203.0.113.9 and that ports 80 and 443 are open.',
         ])
         ->and($mail->actionText)->toBe('Open Shop')
-        ->and($mail->actionUrl)->toBe(route('servers.applications.show', [$application->server_id, $application]));
+        ->and($mail->actionUrl)->toBe('http://localhost/' . $application->team->slug . '/servers/web-1/applications/shop');
 })->with([
     'days ahead' => [5, 'The certificate for a.example.com expires in 5 days'],
     'tomorrow' => [1, 'The certificate for a.example.com expires tomorrow'],

@@ -18,6 +18,7 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\BillingPresenter;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 
 final class CommandPalette
@@ -39,7 +40,7 @@ final class CommandPalette
                 'label' => 'Watch the running deploy',
                 'icon' => 'rocket',
                 'hint' => implode(' · ', array_filter([$running->application->name, $running->branch, $running->commit_hash === null ? null : substr($running->commit_hash, 0, 7)])),
-                'href' => route('servers.applications.deployments.show', [$running->application->server_id, $running->application_id, $running]),
+                'href' => route('servers.applications.deployments.show', [app(RouteKeys::class)->server($running->application->server_id), $running->application, $running]),
             ];
         }
 
@@ -81,7 +82,7 @@ final class CommandPalette
                 'label' => 'Open ' . $application->name,
                 'icon' => 'layers',
                 'hint' => implode(' · ', [...$application->tags, 'on ' . $application->server?->name]),
-                'href' => route('servers.applications.show', [$application->server_id, $application]),
+                'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
             ];
         }
 
@@ -154,7 +155,7 @@ final class CommandPalette
             'label' => 'Roll back ' . $application->name,
             'icon' => 'undo-2',
             'hint' => 'to ' . Formats::release($previous->release),
-            'href' => route('servers.applications.releases.index', [$application->server_id, $application, 'rollback' => $previous->release]),
+            'href' => route('servers.applications.releases.index', [app(RouteKeys::class)->server($application->server_id), $application, 'rollback' => $previous->release]),
         ];
     }
 }

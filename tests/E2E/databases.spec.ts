@@ -24,7 +24,7 @@ async function showPassword(page: Page): Promise<string> {
 }
 
 async function databaseShowing(page: Page, database: Record<string, unknown>) {
-    await withProps(page, /\/databases\/[A-Za-z0-9]+$/, (props) => {
+    await withProps(page, /\/databases\/[\w.-]+$/, (props) => {
         props.database = { ...(props.database as Record<string, unknown>), ...database }
     })
 }
@@ -278,7 +278,7 @@ test.describe('database passwords', () => {
                 page
             }) => {
                 await useTheme(page, theme)
-                await withInertia(page, /\/databases\/[A-Za-z0-9]+$/, (body) => {
+                await withInertia(page, /\/databases\/[\w.-]+$/, (body) => {
                     body.flash = { ...body.flash, databasePassword: 'Kq3vX9pLm2Rt7Yw4Zb8Nc1Hd' }
                 })
                 await gotoDatabase(page, 'forge-01', 'atlas_production')
@@ -326,7 +326,7 @@ test.describe('backups and restore', () => {
     }
 
     async function backupsShowing(page: Page, props: Record<string, unknown> = {}) {
-        await withProps(page, /\/databases\/[A-Za-z0-9]+$/, (current) => {
+        await withProps(page, /\/databases\/[\w.-]+$/, (current) => {
             current.backups = { rows, server_error: null, s3_error: null }
             current.offsite = { sent: 'today 02:30', error: null }
             current.restore = null

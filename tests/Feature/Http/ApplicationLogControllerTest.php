@@ -33,7 +33,7 @@ function logRouteApp(Team $team): Application
 
 function logRouteUrl(Application $application): string
 {
-    return route('servers.applications.logs', [$application->server_id, $application]);
+    return route('servers.applications.logs', [$application->server, $application]);
 }
 
 function logRouteRead(Application $application, FakeSSHTransport $transport): void
@@ -127,7 +127,7 @@ test('another team cannot read the logs and nothing is queued', function () {
 
     $this->actingAs(logRouteMember(Team::factory()->create(), TeamRole::Owner))
         ->get(logRouteUrl($application))
-        ->assertForbidden();
+        ->assertNotFound();
 
     Queue::assertNothingPushed();
 });

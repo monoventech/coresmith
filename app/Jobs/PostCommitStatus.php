@@ -19,7 +19,7 @@ use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Providers\GitHubAppClient;
 use App\Services\Panel\DeploymentPresenter;
 use App\Services\Panel\Formats;
-use App\Services\Teams\TeamUrls;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -65,13 +65,13 @@ final class PostCommitStatus implements ShouldQueue
         return [10, 60];
     }
 
-    public function handle(GitProviderFactory $providers, TeamUrls $urls): void
+    public function handle(GitProviderFactory $providers, TeamLinks $links): void
     {
         Cache::lock('commit-status:' . $this->deployment->getKey(), self::LOCK_SECONDS)
-            ->block(self::LOCK_WAIT_SECONDS, fn() => $this->post($providers, $urls));
+            ->block(self::LOCK_WAIT_SECONDS, fn() => $this->post($providers, $links));
     }
 
-    private function post(GitProviderFactory $providers, TeamUrls $urls): void
+    private function post(GitProviderFactory $providers, TeamLinks $links): void
     {
         $deployment = $this->deployment->fresh();
         $application = $deployment?->application;
@@ -96,7 +96,7 @@ final class PostCommitStatus implements ShouldQueue
                 $repository,
                 $deployment->commit_hash,
                 $state,
-                $urls->canonical(route('servers.applications.deployments.show', [$server, $application, $deployment], false)),
+                $links->deployment($application, $deployment),
                 $this->description($deployment, $application, $server, $state),
                 'coresmith/' . $application->slug,
             );
