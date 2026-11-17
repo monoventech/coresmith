@@ -10,7 +10,6 @@
     import CloudConnectFields from '@/components/cloud/CloudConnectFields.svelte'
     import CloudServerFields from '@/components/cloud/CloudServerFields.svelte'
     import FieldError from '@/components/FieldError.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import { Button } from '@/components/ui/button'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
@@ -140,7 +139,7 @@
 
 <BackLink href={route('dashboard')} label="Fleet" />
 
-<h1 class="type-h1 m-0 mb-1.5">Provision a <MarkerUnderline>server</MarkerUnderline></h1>
+<h1 class="type-h1 m-0 mb-1.5">Provision a server</h1>
 <p class="type-body-sm mb-7 text-muted-foreground">
     About six minutes from blank VM to hardened, ready-to-deploy host. Every phase is logged.
 </p>

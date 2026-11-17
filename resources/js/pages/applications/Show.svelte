@@ -20,7 +20,6 @@
     import BackLink from '@/components/BackLink.svelte'
     import DnsRecords from '@/components/DnsRecords.svelte'
     import FieldError from '@/components/FieldError.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import TagEditor from '@/components/projects/TagEditor.svelte'
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
@@ -487,7 +486,7 @@
     <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3 max-sm:gap-2.5">
             <h1 class="type-h1 m-0 font-mono font-medium wrap-anywhere max-sm:text-[24px]">
-                <MarkerUnderline markClass="max-sm:hidden">{application.name}</MarkerUnderline>
+                {application.name}
             </h1>
             <Badge variant={application.state.tone} dot pulse={application.state.key === 'deploying'}
                 >{application.state.label}</Badge

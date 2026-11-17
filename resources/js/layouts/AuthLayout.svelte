@@ -1,5 +1,4 @@
 <script lang="ts">
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
     import MonovenMark from '@/components/MonovenMark.svelte'
     import Toast from '@/components/panel/Toast.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
@@ -9,19 +8,12 @@
     let {
         title = '',
         description = '',
-        mark = '',
         children
     }: {
         title?: string
         description?: string
-        mark?: string
         children?: Snippet
     } = $props()
-
-    const word = $derived(mark || title.split(' ').at(-1) || '')
-    const index = $derived(word ? title.lastIndexOf(word) : -1)
-    const before = $derived(index >= 0 ? title.slice(0, index) : title)
-    const after = $derived(index >= 0 ? title.slice(index + word.length) : '')
 </script>
 
 <div class="panel grain relative flex min-h-dvh flex-col bg-background font-sans text-foreground">
@@ -38,9 +30,7 @@
     <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
         <div class="max-w-105">
             {#if title}
-                <h1 class="type-h1 m-0 mb-1.5">
-                    {before}{#if index >= 0}<MarkerUnderline>{word}</MarkerUnderline>{/if}{after}
-                </h1>
+                <h1 class="type-h1 m-0 mb-1.5">{title}</h1>
             {/if}
             {#if description}
                 <p class="type-body-sm mb-7 text-muted-foreground">{description}</p>
