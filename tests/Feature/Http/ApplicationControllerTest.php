@@ -557,7 +557,7 @@ test('renaming an app changes only its name, so its slug and linux user stay, an
     expect($fresh->name)->toBe('After')
         ->and($fresh->slug)->toBe($application->slug)
         ->and($fresh->system_user)->toBe($application->system_user)
-        ->and(Activity::query()->where('description', 'application_renamed')->sole()->properties->all())->toBe(['from' => 'Before', 'to' => 'After']);
+        ->and(Activity::query()->where('description', 'application_renamed')->sole()->properties->all())->toEqual(['from' => 'Before', 'to' => 'After']);
 });
 
 test('saving an app under the name it already has logs no rename', function () {
