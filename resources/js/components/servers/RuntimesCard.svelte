@@ -48,7 +48,9 @@
 
     function open(row: RuntimeRow) {
         picked = row
-        chosen = Object.fromEntries(movable(row).map((application) => [application.id, true]))
+        chosen = Object.fromEntries(
+            row.applications.map((application) => [application.id, movable(row).includes(application)])
+        )
         error = null
     }
 
@@ -97,7 +99,11 @@
             data-testid="runtime-update"
         >
             <span class="mt-1.5"
-                ><StateDot tone={installing ? 'accent' : 'destructive'} state={installing ? 'running' : ''} size="sm" /></span
+                ><StateDot
+                    tone={installing ? 'accent' : 'destructive'}
+                    state={installing ? 'running' : ''}
+                    size="sm"
+                /></span
             >
             <span>
                 {#if installing}
@@ -113,7 +119,7 @@
 
     {#each runtimes.rows as row (`${row.runtime}@${row.version}`)}
         <div
-            class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 border-b border-border px-5.5 py-3.5 last:border-b-0 sm:grid-cols-[minmax(11rem,14rem)_1fr_auto]"
+            class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 border-b border-border px-5.5 py-3.5 last:border-b-0 sm:grid-cols-[minmax(14rem,18rem)_1fr_auto]"
             data-testid="runtime-row"
         >
             <div class="flex min-w-0 flex-wrap items-center gap-2">
