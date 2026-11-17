@@ -700,7 +700,10 @@ test.describe('adding an application', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
         await expect(page.getByRole('main')).toContainText('What a deploy does')
         await expect(page.getByRole('main')).toContainText(
-            'Clone release, fetched with a one-hour token or a read-only deploy key'
+            'Clone release, the latest commit on the branch, with its submodules'
+        )
+        await expect(page.getByRole('main')).toContainText(
+            'Go live, visitors move to the new release in one step, and the old one is kept for rollback'
         )
     })
 

@@ -80,7 +80,7 @@
         script: 'Your deploy script failed',
         migrate: 'The migration failed',
         health: 'The health check failed',
-        swap: 'The deploy failed after the swap',
+        swap: 'The deploy failed after going live',
         watch: 'The processes did not start'
     }
 
@@ -349,10 +349,9 @@
                     {` ${live.failure_reason}`}
                 {:else if application.current_release}
                     <span class="max-sm:hidden">
-                        The symlink still points at <span class="font-mono text-[12.5px]"
-                            >{application.current_release}</span
-                        >, users never saw an error page. Fix {FIXES[live.failed_step ?? live.failed_phase ?? ''] ??
-                            'it'} and push again, or retry.
+                        <span class="font-mono text-[12.5px]">{application.current_release}</span> is still live, so
+                        visitors saw no error page. Fix {FIXES[live.failed_step ?? live.failed_phase ?? ''] ?? 'it'} and push
+                        again, or retry.
                     </span>
                     <span class="sm:hidden">The old release is still live, so visitors saw no error page.</span>
                 {:else}
@@ -375,9 +374,8 @@
             >
             {#if application.current_release}
                 <span
-                    >The symlink still points at <span class="font-mono text-[12.5px]"
-                        >{application.current_release}</span
-                    >, users never saw a difference.</span
+                    ><span class="font-mono text-[12.5px]">{application.current_release}</span> is still live, so visitors
+                    saw no change.</span
                 >
             {:else}
                 <span>Nothing was live yet.</span>
@@ -414,7 +412,7 @@
         {/each}
         <p class="mt-2.5 mb-0.5 text-[12px] leading-normal text-muted-foreground max-sm:hidden">
             {live.reached_users
-                ? 'Every phase finished and the swap went through, so this release is the one being served.'
+                ? "Every phase finished and this release went live, so it's the one being served."
                 : 'The current release keeps serving traffic until the new one goes live. If any phase fails, nothing changes.'}
         </p>
     </div>

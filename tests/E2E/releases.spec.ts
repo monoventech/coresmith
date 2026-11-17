@@ -164,9 +164,9 @@ test.describe('releases', () => {
         await rows(page).filter({ hasText: 'v2.13.2' }).getByRole('button', { name: 'Roll back to this' }).click()
 
         await expect(dialog(page)).toContainText('Roll back to v2.13.2?')
-        await expect(dialog(page)).toContainText('It takes about a second, and nothing is rebuilt.')
+        await expect(dialog(page)).toContainText('goes live again in about a second, and nothing is rebuilt.')
         await expect(dialog(page).getByText(/^releases\/\d{8}-\d{6}$/)).toHaveCSS('white-space', 'nowrap')
-        await expect(dialog(page)).toContainText('Migrations already applied are not reversed.')
+        await expect(dialog(page)).toContainText('Migrations that already ran are not undone.')
 
         await dialog(page).getByRole('button', { name: 'Cancel' }).click()
         await expect(dialog(page)).toHaveCount(0)
