@@ -203,6 +203,11 @@ test('tokens and codes in the address are filtered', function (array $request, s
         'url',
         'https://panel.example.com/email/verify/7/%5BFiltered%5D?expires=1760000000&signature=%5BFiltered%5D',
     ],
+    'a verification link without an account id' => [
+        ['url' => 'https://panel.example.com/email/verify/1f2e3d4c5b6a79881706f5e4d3c2b1a0aabbccdd?expires=1760000000&signature=ab12cd34'],
+        'url',
+        'https://panel.example.com/email/verify/%5BFiltered%5D?expires=1760000000&signature=%5BFiltered%5D',
+    ],
     'an invitation link in the request' => [
         ['url' => 'https://panel.example.com/join/acme/pLJ7Eqytz3QN70fIliQD'],
         'url',

@@ -13,6 +13,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -40,6 +41,12 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+
+        VerifyEmail::createUrlUsing(fn(object $notifiable): string => URL::temporarySignedRoute(
+            'verification.confirm',
+            now()->addMinutes((int) config('auth.verification.expire', 60)),
+            ['hash' => sha1((string) $notifiable->getEmailForVerification())],
+        ));
 
         VerifyEmail::toMailUsing(fn(object $notifiable, string $url): MailMessage => (new MailMessage)
             ->subject('Confirm your email for Coresmith')

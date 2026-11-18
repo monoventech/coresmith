@@ -339,7 +339,7 @@ final class SentryScrubber
         $subject = (string) preg_replace(
             [
                 '~(/reset-password/)' . $segment . '~i',
-                '~(/(?:verify-email|email/verify)/' . $segment . '/)' . $segment . '~i',
+                '~(/(?:verify-email|email/verify)/(?:' . $segment . '/)?)' . $segment . '~i',
                 '~(/invitations/)' . $segment . '~i',
                 '~(/join/' . $segment . '/)' . $segment . '~i',
             ],
