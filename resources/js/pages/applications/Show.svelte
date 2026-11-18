@@ -15,6 +15,7 @@
     import type { DeployScript } from '@/components/applications/DeployScriptCard.svelte'
     import PhpLimitsCard from '@/components/applications/PhpLimitsCard.svelte'
     import type { PhpLimits } from '@/components/applications/PhpLimitsCard.svelte'
+    import ExpectedDatabaseBanner from '@/components/applications/ExpectedDatabaseBanner.svelte'
     import RepositoryCheckBanner from '@/components/applications/RepositoryCheckBanner.svelte'
     import RuntimeVersionPicker from '@/components/applications/RuntimeVersionPicker.svelte'
     import BackLink from '@/components/BackLink.svelte'
@@ -29,6 +30,7 @@
     import { Label } from '@/components/ui/label'
     import { Textarea } from '@/components/ui/textarea'
     import type { CronCard, CronSend } from '@/lib/cron'
+    import type { ExpectedDatabase } from '@/lib/databases'
     import type { DnsRecord, DnsTarget } from '@/lib/dns'
     import { namedTargets } from '@/lib/dns'
     import type { EntityState } from '@/lib/fleet'
@@ -137,6 +139,9 @@
                 settings_href: string
             } | null
             environment: { key: string; value: string; secret: boolean }[]
+            databases: { name: string; href: string; status: string }[]
+            expected_databases: ExpectedDatabase[]
+            databases_href: string
             env: string | null
             latest_deployment: { state: EntityState; href: string | null; when: string | null } | null
             running_href: string | null
@@ -626,6 +631,10 @@
     </div>
 {/if}
 
+{#each application.expected_databases as banner (banner.key)}
+    <ExpectedDatabaseBanner {banner} href={application.databases_href} />
+{/each}
+
 {#each failedToggles as toggle (toggle.key)}
     <div
         class="tint-destructive mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-4.5 py-3 max-sm:mb-3 max-sm:px-3.5"
@@ -1017,6 +1026,24 @@
                     </div>
                 {:else}
                     <p class="text-[12.5px] text-muted-foreground">No variables yet.</p>
+                {/if}
+                {#if application.databases.length > 0}
+                    <p class="mt-3 text-[12.5px] text-muted-foreground" data-testid="connected-databases">
+                        Connected to {#each application.databases as database, index (database.href)}{index === 0
+                                ? ''
+                                : index === application.databases.length - 1
+                                  ? ' and '
+                                  : ', '}<Link
+                                href={database.href}
+                                class="focus-ring rounded-sm font-mono text-primary-strong underline-offset-4 hover:underline"
+                                >{database.name}</Link
+                            >{database.status === 'creating'
+                                ? ' (being created)'
+                                : database.status === 'failed'
+                                  ? ' (not created)'
+                                  : ''}{/each}. Coresmith updates {application.databases.length === 1 ? 'its' : 'their'} settings
+                        here when {application.databases.length === 1 ? 'its' : 'a'} password or port changes.
+                    </p>
                 {/if}
                 {#if can.manageEnvironment}
                     <div class="mt-auto pt-3">

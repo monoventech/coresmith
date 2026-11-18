@@ -203,6 +203,43 @@ test.describe('Stack detection on Add an app', () => {
         expect(new URL(asked[0]).searchParams.get('repository_branch')).toBe('main')
     })
 
+    test('a repository whose .env.example names PostgreSQL and a Redis queue gets both picked, with where each came from', async ({
+        page
+    }) => {
+        await answer(page, [
+            { ...READY, environment: { example: '.env.example', database: 'postgresql', redis: true } }
+        ])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Database', { exact: true })).toHaveValue('new:postgresql')
+        await expect(page.getByText('Picked from DB_CONNECTION in .env.example.')).toBeVisible()
+        await expect(page.getByLabel('Redis', { exact: true })).toHaveValue('new')
+        await expect(page.getByText('Picked because .env.example uses Redis.')).toBeVisible()
+
+        await page.getByLabel('Database', { exact: true }).selectOption('none')
+
+        await expect(page.getByText('Picked from DB_CONNECTION in .env.example.')).toHaveCount(0)
+    })
+
+    test('a repository without an example file is asked for one, and a Laravel app starts on SQLite', async ({
+        page
+    }) => {
+        await answer(page, [{ ...READY, environment: { example: null, database: null, redis: false } }])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Database', { exact: true })).toHaveValue('sqlite')
+        await expect(page.getByTestId('env-example-hint')).toHaveText(
+            "Add a .env.example to your repository and Coresmith starts the app's variables from it."
+        )
+        await expect(page.getByLabel('Redis', { exact: true })).toHaveValue('none')
+    })
+
     for (const theme of ['light', 'dark'] as const) {
         test(`a repository that installs from private registries names them and links to where credentials go, in ${theme}`, async ({
             page

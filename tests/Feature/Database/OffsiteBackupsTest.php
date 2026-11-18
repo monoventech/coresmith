@@ -369,15 +369,18 @@ test('on cloud the nightly run covers business teams only', function () {
     Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->offsite && $job->timestamp === '20261018023000');
 });
 
-test('self-hosted teams with a destination are backed up', function () {
+test('self-hosted teams with a destination are backed up, except databases Coresmith has not finished creating', function () {
     Queue::fake();
     $team = Team::factory()->owned()->create();
     $database = offsiteDatabase($team);
+    $creating = offsiteDatabase($team, server: ['name' => 'forge-03'], attributes: ['name' => 'fresh_db', 'status' => ManagedDatabase::CREATING]);
+    $failed = offsiteDatabase($team, server: ['name' => 'forge-04'], attributes: ['name' => 'stuck_db', 'status' => ManagedDatabase::FAILED]);
     offsiteDestination($team);
 
     $this->artisan('coresmith:backup-databases')->assertSuccessful();
 
     Queue::assertPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($database) && $job->offsite);
+    Queue::assertNotPushed(BackupDatabase::class, fn(BackupDatabase $job): bool => $job->database->is($creating) || $job->database->is($failed));
 });
 
 test('the nightly run is scheduled', function () {

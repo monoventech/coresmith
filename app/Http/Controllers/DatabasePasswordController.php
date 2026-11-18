@@ -10,6 +10,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Services\Database\DatabaseConnections;
 use App\Services\Database\DatabaseManager;
 use App\Services\SSH\SSHConnectionManager;
 use Illuminate\Http\RedirectResponse;
@@ -56,33 +57,37 @@ final class DatabasePasswordController extends Controller
             $lock->release();
         }
 
-        if (!$rotated) {
+        if ($rotated === null) {
             return back()->with('error', "Coresmith couldn't change the password on {$server->name}, so the old one still works. Check the server is online, then try again.");
         }
 
         return back()->with([
-            'success' => 'Password rotated. Give the apps that use it the new one, then deploy.',
+            'success' => $rotated === [] ? 'Password rotated. Give the apps that use it the new one, then deploy.' : 'Password rotated, and ' . DatabaseConnections::handedTo($rotated, 'one'),
             'databasePassword' => $password,
         ]);
     }
 
-    private function rotate(SSHConnectionManager $connections, DatabaseManager $databases, Server $server, ManagedDatabase $database, #[\SensitiveParameter] string $password): bool
+    /**
+     * @return list<string>|null
+     */
+    private function rotate(SSHConnectionManager $connections, DatabaseManager $databases, Server $server, ManagedDatabase $database, #[\SensitiveParameter] string $password): ?array
     {
         try {
             $databases->changePassword($connections->for($server), $database, $password);
         } catch (RuntimeException $e) {
             report($e);
 
-            return false;
+            return null;
         } finally {
             $connections->disconnect($server);
         }
 
         $database->forceFill(['db_password' => $password, 'credentials_shown_at' => now()])->save();
+        $connected = app(DatabaseConnections::class)->refresh($database);
 
         activity()->performedOn($database)->log('database_password_rotated');
 
-        return true;
+        return $connected;
     }
 
     private function assertHasPassword(Server $server, ManagedDatabase $database): void

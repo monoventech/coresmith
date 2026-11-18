@@ -265,6 +265,20 @@ test.describe('an application', () => {
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
     })
 
+    test('the environment card links the databases the app is connected to', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'The environment card only renders from 640px, as in the phone prototype')
+
+        await gotoApplication(page, 'forge-01', 'atlas')
+
+        const line = page.getByTestId('connected-databases')
+
+        await expect(line).toHaveText(
+            'Connected to atlas_production. Coresmith updates its settings here when its password or port changes.'
+        )
+        await line.getByRole('link', { name: 'atlas_production', exact: true }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'atlas_production', exact: true })).toBeVisible()
+    })
+
     test('on a phone the app page keeps deploy, the toggles and the current release', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'The compact app page only renders below 640px')
 
@@ -706,7 +720,7 @@ test.describe('adding an application', () => {
         const targets = page.getByTestId('domain-targets')
 
         await expect(page.getByRole('main')).toContainText(
-            'Point the domain at this server with these records. The certificate is issued on the first visit.'
+            'Point the domain at this server with these records. Coresmith asks for its certificate when the app first goes live.'
         )
         await page.getByLabel('Domain').fill('shop.example.com')
         await expect(targets).toContainText('shop.example.com')
@@ -719,7 +733,7 @@ test.describe('adding an application', () => {
         await openAddApp(page)
 
         await expect(page.getByRole('main')).toContainText(
-            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. Once the app is live, Coresmith checks the domain from outside and shows the record it needs.'
+            'Point the domain at the server first: an A record for its IPv4 address, or an AAAA record for IPv6. Once the app is live, Coresmith checks the domain from outside, shows the record it needs and asks for its certificate.'
         )
         await expect(page.getByTestId('domain-targets')).toHaveCount(0)
     })

@@ -4,8 +4,10 @@
         custom: boolean
         from_deploy: boolean
         migrations: boolean
+        migration_commands: string[]
         update_href: string | null
         reset_href: string | null
+        migrations_href: string | null
     }
 </script>
 
@@ -14,6 +16,7 @@
     // Licensed under the Elastic License v2 (ELv2).
     // See LICENSE file in the project root.
     import FieldError from '@/components/FieldError.svelte'
+    import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
@@ -33,10 +36,12 @@
     let error = $state<string | undefined>()
     let saving = $state(false)
     let resetting = $state(false)
+    let migrating = $state(false)
     let gutter = $state<HTMLDivElement | null>(null)
 
     const lines = $derived(script.script === '' ? [] : script.script.replace(/\n$/, '').split('\n'))
     const shown = $derived(lines.slice(0, PREVIEW))
+    const migrate = $derived(script.migration_commands.join(' and '))
     const numbers = $derived(Array.from({ length: Math.max(1, draft.split('\n').length) }, (_, index) => index + 1))
 
     function edit() {
@@ -72,6 +77,19 @@
                 onError: (errors: Record<string, string>) => (error = errors.script),
                 onFinish: () => (saving = false)
             }
+        )
+    }
+
+    function setMigrations(on: boolean) {
+        if (script.migrations_href === null) {
+            return
+        }
+
+        migrating = true
+        router.put(
+            script.migrations_href,
+            { run_migrations: on },
+            { preserveScroll: true, onFinish: () => (migrating = false) }
         )
     }
 
@@ -140,6 +158,22 @@
         <p class="m-0 mt-2 text-[12px] text-muted-foreground">
             Your script decides whether migrations run, so add them to it if the app needs them.
         </p>
+    {/if}
+    {#if !script.custom && script.migration_commands.length > 0}
+        <div class="mt-3">
+            <ToggleRow
+                label="Run migrations"
+                description={script.migrations
+                    ? `Each deploy runs ${migrate} before the new release goes live.`
+                    : `Deploys skip ${migrate}. Run ${script.migration_commands.length === 1 ? 'it' : 'them'} yourself when the schema changes.`}
+                checked={script.migrations}
+                busy={migrating}
+                busyDescription={script.migrations ? 'Turning migrations off…' : 'Turning migrations on…'}
+                disabled={script.migrations_href === null}
+                onchange={setMigrations}
+                testid="toggle-run-migrations"
+            />
+        </div>
     {/if}
     {#if script.update_href}
         <div class="mt-auto flex flex-wrap gap-x-4 pt-3">

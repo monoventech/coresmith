@@ -10,6 +10,8 @@
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
     import * as Dialog from '@/components/ui/dialog'
+    import { databaseState } from '@/lib/databases'
+    import { toneText } from '@/lib/fleet'
     import type { ServerHeader } from '@/lib/servers'
     import { cn } from '@/lib/utils'
 
@@ -133,13 +135,14 @@
                 <span
                     class={cn(
                         'inline-flex items-center gap-1.5 text-[12.5px] font-medium',
-                        database.status === 'active' ? 'text-success-strong' : 'text-muted-foreground'
+                        toneText(databaseState(database.status).tone)
                     )}
                 >
                     <StateDot
-                        tone={database.status === 'active' ? 'success' : 'default'}
+                        tone={databaseState(database.status).tone}
+                        state={databaseState(database.status).key}
                         size="sm"
-                    />{database.status === 'active' ? 'Ready' : database.status}
+                    />{databaseState(database.status).label}
                 </span>
             </Link>
         {/each}

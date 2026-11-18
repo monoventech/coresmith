@@ -137,7 +137,7 @@ test.describe('databases', () => {
         await gotoDatabase(page, 'forge-01', 'atlas_production')
 
         await expect(page.getByRole('heading', { name: 'Connection' })).toBeVisible()
-        await expect(page.getByRole('main')).toContainText('PostgreSQL · on forge-01 · localhost only')
+        await expect(page.getByRole('main')).toContainText('PostgreSQL · on forge-01 · localhost only · Atlas')
         await expect(page.getByRole('main')).toContainText('postgresql://atlas_app@')
 
         const html = await pageData(page)
@@ -257,6 +257,66 @@ test.describe('database passwords', () => {
         )
     })
 
+    test('a database lists the apps connected to it, and rotating names the ones Coresmith updates', async ({
+        page
+    }) => {
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        const connected = page.getByTestId('connected-apps')
+
+        await expect(connected).toContainText(
+            'Their variables hold its password, so anyone who can edit their variables can read it.'
+        )
+
+        await page.getByRole('button', { name: 'Rotate password' }).click()
+        await expect(dialog(page)).toContainText(
+            "Coresmith gives the new password to atlas, which can't reach the database until you deploy it."
+        )
+        await dialog(page).getByRole('button', { name: 'Keep it' }).click()
+
+        await connected.getByRole('link', { name: 'atlas', exact: true }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'atlas', exact: true })).toBeVisible()
+    })
+
+    test('moving off the shared Redis names the connected apps that switch over once deployed', async ({ page }) => {
+        await databaseShowing(page, { type: 'redis', port: 6379, has_password: false, shared_redis: true })
+        await gotoDatabase(page, 'forge-01', 'atlas_production')
+
+        await page.getByRole('button', { name: 'Give it its own Redis' }).click()
+
+        await expect(dialog(page)).toContainText(
+            'Coresmith gives the new port and password to atlas, which keeps using the shared Redis until you deploy it.'
+        )
+    })
+
+    test('a database Coresmith could not create says so, and trying again starts it over', async ({
+        page
+    }, testInfo) => {
+        const name = own(testInfo, 'stuck', '_')
+
+        await gotoDatabase(page, 'bench-01', name)
+
+        const banner = page.getByTestId('database-not-created')
+
+        await expect(banner).toContainText(
+            `Coresmith couldn't create ${name} on bench-01. Check the server is online, then try again.`
+        )
+        await banner.getByRole('button', { name: 'Try again' }).click()
+
+        await expect(toast(page)).toContainText(`Creating ${name} again.`)
+        await expect(banner).toHaveCount(0)
+        await expect(page.getByTestId('database-creating')).toHaveText(
+            "Coresmith is creating it on bench-01. This page updates when it's ready."
+        )
+    })
+
+    test('the databases tab says which databases are still being created and which could not be', async ({ page }) => {
+        await gotoServerTab(page, 'bench-01', 'Databases')
+
+        await expect(databaseRow(page, 'fresh_db')).toContainText('Creating')
+        await expect(databaseRow(page, 'broken_db')).toContainText('Not created')
+    })
+
     test('a Redis database on the shared instance says it has no password and offers none', async ({ page }) => {
         await databaseShowing(page, { type: 'redis', port: 6379, has_password: false, shared_redis: true })
         await gotoDatabase(page, 'forge-01', 'atlas_production')
@@ -288,6 +348,16 @@ test.describe('database passwords', () => {
                 await page.getByRole('button', { name: 'Rotate password' }).click()
                 await expect(dialog(page)).toBeVisible()
                 expect(await blockingViolations(page), `rotate dialog in ${theme}`).toEqual([])
+            })
+
+            test(`a database Coresmith could not create has no serious or critical violations in ${theme}`, async ({
+                page
+            }) => {
+                await useTheme(page, theme)
+                await gotoDatabase(page, 'bench-01', 'broken_db')
+                await expect(page.getByTestId('database-not-created')).toBeVisible()
+
+                expect(await blockingViolations(page), `not created banner in ${theme}`).toEqual([])
             })
 
             test(`creating a Redis database has no serious or critical violations in ${theme}`, async ({ page }) => {
