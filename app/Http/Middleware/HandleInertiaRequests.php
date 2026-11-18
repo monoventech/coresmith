@@ -16,9 +16,12 @@ use App\Services\Panel\Realtime;
 use App\Services\Panel\SetupProgress;
 use App\Services\Panel\TopBarDeploy;
 use App\Services\Teams\TeamContext;
+use Closure;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Middleware;
+use Symfony\Component\HttpFoundation\Response;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -42,6 +45,15 @@ class HandleInertiaRequests extends Middleware
     public function version(Request $request): ?string
     {
         return parent::version($request);
+    }
+
+    public function handle(Request $request, Closure $next): Response
+    {
+        $response = parent::handle($request, $next);
+
+        return StartSession::refreshes($request) && $response instanceof RedirectResponse && $request->hasSession() && $request->session()->get('_flash.new', []) !== []
+            ? Inertia::location($response)
+            : $response;
     }
 
     /**
