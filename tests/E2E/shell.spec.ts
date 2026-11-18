@@ -46,11 +46,10 @@ test.describe('the shell', () => {
 test.describe('the rail', () => {
     test.skip(({ isMobile }) => isMobile, 'The rail starts at 640px; phones navigate with the bottom tabs')
 
-    test('it carries the Coresmith mark, and every page the Monoven mark', async ({ page }) => {
+    test('it carries the Coresmith mark', async ({ page }) => {
         await page.goto('/dashboard')
 
         await expect(nav(page).getByRole('link', { name: 'Coresmith', exact: true })).toBeVisible()
-        await expect(main(page).getByRole('link', { name: 'Made by Monoven' })).toBeVisible()
     })
 
     test('it starts dark, flips the theme and keeps it across a reload', async ({ page }) => {

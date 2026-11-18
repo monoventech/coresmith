@@ -86,6 +86,31 @@
     )
 
     let inviting = $state(false)
+    let renaming = $state(false)
+    let renamingWorking = $state(false)
+    let teamName = $state('')
+    let teamNameError = $state<string | null>(null)
+
+    function openRename() {
+        teamName = team.name
+        teamNameError = null
+        renaming = true
+    }
+
+    function saveTeamName(event: SubmitEvent) {
+        event.preventDefault()
+        renamingWorking = true
+        router.put(
+            route('settings.team-name.update'),
+            { name: teamName },
+            {
+                preserveScroll: true,
+                onSuccess: () => (renaming = false),
+                onError: (errors) => (teamNameError = errors.name ?? Object.values(errors)[0] ?? null),
+                onFinish: () => (renamingWorking = false)
+            }
+        )
+    }
     let removing = $state<Member | null>(null)
     let removeOpen = $state(false)
     let sharing = $state<Member | null>(null)
@@ -132,12 +157,14 @@
             <h3 class="type-h3 m-0">{team.name}</h3>
             <p class="mt-0.5 text-[12.5px] text-muted-foreground">Everyone with access to this team.</p>
         </div>
-        {#if can.manageMembers}
-            <span class="ml-auto"
-                ><Button size="sm" disabled={!!memberNote} onclick={() => (inviting = true)}>Invite someone</Button
-                ></span
-            >
-        {/if}
+        <span class="ml-auto flex flex-wrap gap-2">
+            {#if can.update}
+                <Button variant="ghost" size="sm" onclick={openRename}>Rename</Button>
+            {/if}
+            {#if can.manageMembers}
+                <Button size="sm" disabled={!!memberNote} onclick={() => (inviting = true)}>Invite someone</Button>
+            {/if}
+        </span>
         {#if memberNote}
             <div class="basis-full"><PlanNote note={memberNote} /></div>
         {/if}
@@ -318,5 +345,35 @@
             <Button variant="ghost" onclick={() => (removeOpen = false)}>Keep them</Button>
             <Button variant="destructive" onclick={remove}>Remove from the team</Button>
         </Dialog.Footer>
+    </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={renaming}>
+    <Dialog.Content>
+        <form onsubmit={saveTeamName}>
+            <Dialog.Header>
+                <Dialog.Title>Rename team</Dialog.Title>
+                <Dialog.Description
+                    >Everyone in the team sees the new name. Its address stays the same.</Dialog.Description
+                >
+            </Dialog.Header>
+            <div class="mt-4">
+                <Label for="team-name" class="mb-1.5">Team name</Label>
+                <Input
+                    id="team-name"
+                    bind:value={teamName}
+                    oninput={() => (teamNameError = null)}
+                    required
+                    maxlength={255}
+                    autocomplete="off"
+                    aria-invalid={teamNameError ? true : undefined}
+                />
+                <FieldError message={teamNameError} />
+            </div>
+            <Dialog.Footer>
+                <Button variant="ghost" type="button" onclick={() => (renaming = false)}>Cancel</Button>
+                <Button type="submit" disabled={renamingWorking}>Save</Button>
+            </Dialog.Footer>
+        </form>
     </Dialog.Content>
 </Dialog.Root>

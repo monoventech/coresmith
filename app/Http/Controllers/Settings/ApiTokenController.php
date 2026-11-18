@@ -29,10 +29,14 @@ final class ApiTokenController extends Controller
         Ability::ViewDatabase->value,
     ];
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $user = $request->user();
         $team = $this->currentTeam();
+
+        if ($this->startsTeamFirst($team)) {
+            return to_route('start.show');
+        }
 
         abort_if($team === null, 404);
 

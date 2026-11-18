@@ -51,12 +51,12 @@ final class ProvisionServer implements ShouldQueue
         $this->onQueue('provisioning');
     }
 
-    public static function begin(Server $server): void
+    public static function begin(Server $server): bool
     {
         $waiting = $server->status;
 
         if (!$waiting->isBeforeProvisioning() || !self::move($server, $waiting, ServerStatus::Provisioning)) {
-            return;
+            return false;
         }
 
         try {
@@ -66,6 +66,8 @@ final class ProvisionServer implements ShouldQueue
 
             throw $e;
         }
+
+        return true;
     }
 
     public static function again(Server $server, bool $fromScratch = false): bool

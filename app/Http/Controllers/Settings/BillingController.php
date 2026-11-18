@@ -22,9 +22,13 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 final class BillingController extends Controller
 {
-    public function show(Request $request, BillingPresenter $billing): Response
+    public function show(Request $request, BillingPresenter $billing): Response|RedirectResponse
     {
         $team = $this->currentTeam();
+
+        if ($this->startsTeamFirst($team)) {
+            return to_route('start.show');
+        }
 
         abort_if($team === null, 404);
 

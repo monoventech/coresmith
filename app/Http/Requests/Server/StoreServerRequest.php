@@ -10,6 +10,7 @@ namespace App\Http\Requests\Server;
 
 use App\Enums\Ability;
 use App\Enums\Edition;
+use App\Models\Server;
 use App\Models\Team;
 use App\Services\Network\OwnAddress;
 use App\Services\SafeName;
@@ -54,6 +55,20 @@ final class StoreServerRequest extends FormRequest
             }
 
             $validator->errors()->add('ip_address', $this->ownMachine());
+        }, function (Validator $validator): void {
+            if ($validator->errors()->hasAny(['ip_address', 'ssh_port', 'team_id'])) {
+                return;
+            }
+
+            $existing = Server::query()
+                ->where('team_id', $this->input('team_id'))
+                ->where('ssh_port', (int) $this->input('ssh_port'))
+                ->get()
+                ->first(fn(Server $server): bool => $server->hasAddress((string) $this->input('ip_address')));
+
+            if ($existing !== null) {
+                $validator->errors()->add('ip_address', "{$existing->name} already uses this address and SSH port. Open it from the fleet instead.");
+            }
         }];
     }
 

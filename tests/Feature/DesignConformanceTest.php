@@ -75,11 +75,11 @@ test('no heading carries the hand-drawn marker underline', function () {
     expect($offenders)->toBe([], 'Headings in Coresmith carry no hand-drawn underline. Offenders: ' . implode(', ', $offenders));
 });
 
-test('every full bleed page carries the Monoven mark', function () {
+test('every full bleed page carries the Coresmith logo', function () {
     $missing = [];
 
     foreach (fullBleedPages() as $path => $source) {
-        if (!str_contains($source, 'MonovenMark')) {
+        if (!str_contains($source, 'CoresmithLogo')) {
             $missing[] = $path;
         }
     }
@@ -88,6 +88,18 @@ test('every full bleed page carries the Monoven mark', function () {
         [],
         'A page with no layout inherits no branding, so it has to carry its own. ' . json_encode($missing),
     );
+});
+
+test('no page or layout says Made by Monoven', function () {
+    $offenders = [];
+
+    foreach (svelteSources() as $path => $source) {
+        if (str_contains($source, 'Made by Monoven') || str_contains($source, 'MonovenMark')) {
+            $offenders[] = $path;
+        }
+    }
+
+    expect($offenders)->toBe([], "Coresmith's footers carry no Made by Monoven mark. Offenders: " . implode(', ', $offenders));
 });
 
 test('the interface avoids the anti-patterns the design language names', function (string $pattern, string $why) {

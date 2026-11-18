@@ -18,6 +18,8 @@
         "shadcn:update": "bunx shadcn-svelte update --all",
         "test:e2e": "playwright test",
         "ci": "bash scripts/ci-local.sh",
+        "ci:merge": "bash scripts/ci-local.sh static pest",
+        "ci:browser": "bash scripts/ci-local.sh browser",
         "test:e2e:ui": "playwright test --ui",
         "corpus:report": "bun tests/Corpus/report.ts",
         "corpus:run": "bun tests/Corpus/run.ts",

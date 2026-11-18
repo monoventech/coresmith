@@ -79,7 +79,7 @@ final class GeneralSettingsController extends Controller
                 'fingerprint' => $key->fingerprint,
                 'added' => $key->created_at?->format('M Y'),
             ])->values(),
-            'updates' => $updates->present($request->user()),
+            'updates' => $cloud ? null : $updates->present($request->user()),
             'moves' => $moves->forUser($request->user()),
             'can' => [
                 'manageInstance' => $this->managesInstance($request),

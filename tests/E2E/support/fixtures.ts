@@ -497,28 +497,3 @@ export async function noSidewaysScroll(page: Page) {
 
     expect(overflow).toBeLessThanOrEqual(1)
 }
-
-export const MONOVEN = 'https://monoven.com/'
-
-export async function opensMonovenInNewTab(page: Page, scope: Locator) {
-    const mark = scope.getByRole('link', { name: 'Made by Monoven' })
-    const context = page.context()
-    const before = page.url()
-
-    await context.route(`${MONOVEN}**`, (route) =>
-        route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Monoven</title>' })
-    )
-    await expect(mark).toBeVisible()
-    await expect(mark).toContainText('Made by Monoven')
-    await expect(mark.locator('svg')).toHaveCount(0)
-
-    const opened = context.waitForEvent('page')
-    await mark.click()
-    const tab = await opened
-
-    await expect(tab).toHaveURL(MONOVEN)
-    expect(await tab.evaluate(() => window.opener)).toBeNull()
-    expect(page.url()).toBe(before)
-
-    await tab.close()
-}

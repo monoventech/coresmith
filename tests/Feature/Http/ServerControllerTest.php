@@ -415,6 +415,33 @@ test('an admin can provision a server whose recent check found nothing blocking'
     Queue::assertPushed(ProvisionServer::class);
 });
 
+test('a second press of Provision says it is already running, or already done, without starting again', function (ServerStatus $status, string $message) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => $status]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provision', $server))
+        ->assertRedirect()
+        ->assertSessionHas('success', $message);
+
+    expect($server->fresh()->status)->toBe($status);
+    Queue::assertNotPushed(ProvisionServer::class);
+})->with([
+    'running' => [ServerStatus::Provisioning, 'Provisioning is already running. Every phase is logged on this page.'],
+    'done' => [ServerStatus::Active, 'web-1 is already provisioned.'],
+]);
+
+test('a press that loses the race to an earlier one says provisioning is already running', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = checkedServer($team);
+    Server::query()->whereKey($server->getKey())->update(['status' => ServerStatus::Provisioning->value]);
+
+    expect(ProvisionServer::begin($server))->toBeFalse();
+    Queue::assertNotPushed(ProvisionServer::class);
+});
+
 test('provisioning waits for blockers to be resolved', function () {
     Queue::fake();
     $team = Team::factory()->create();
@@ -467,18 +494,6 @@ test('a stale running check is presented as one that did not finish', function (
 
     expect($audit['state'])->toBe('failed')
         ->and($audit['error'])->toBe('The check stopped before it finished. Check again.');
-});
-
-test('provisioning a server that is already active is not found', function () {
-    Queue::fake();
-    $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
-
-    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route('servers.provision', $server))->assertNotFound();
-
-    expect($server->fresh()->status)->toBe(ServerStatus::Active);
-
-    Queue::assertNotPushed(ProvisionServer::class);
 });
 
 test('an admin can check a pending server and a member cannot', function () {
