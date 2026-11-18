@@ -9,7 +9,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 export type Expectation =
-    | { verdict: 'ready'; type: string; framework: string; js_runtime?: string | null; web_directory?: string | null }
+    | {
+          verdict: 'ready'
+          type: string
+          framework: string
+          js_runtime?: string | null
+          web_directory?: string | null
+          server?: string
+      }
     | { verdict: 'blocked' | 'unsure'; reason: string }
 
 export type Entry = {
@@ -135,10 +142,12 @@ function verdictOf(text: string): string {
 async function fieldsOf(page: Page): Promise<Record<string, string | null>> {
     const runtime = page.getByLabel('Runtime', { exact: true })
     const webRoot = page.getByLabel('Web root', { exact: true })
+    const framework = page.getByLabel('Framework', { exact: true })
 
     return {
         type: await page.getByLabel('Language', { exact: true }).inputValue(),
-        framework: await page.getByLabel('Framework', { exact: true }).inputValue(),
+        framework: await framework.inputValue(),
+        framework_label: (await framework.locator('option:checked').textContent())?.trim() ?? null,
         js_runtime: (await runtime.count()) > 0 ? await runtime.inputValue() : null,
         web_directory: (await webRoot.count()) > 0 ? await webRoot.inputValue() : null
     }
@@ -161,7 +170,8 @@ function matches(entry: Entry, result: Result): boolean | null {
         (expected.js_runtime === undefined || result.fields.js_runtime === expected.js_runtime) &&
         (expected.web_directory === undefined ||
             expected.web_directory === null ||
-            result.fields.web_directory === expected.web_directory)
+            result.fields.web_directory === expected.web_directory) &&
+        (expected.server === undefined || result.fields.framework_label === expected.server)
     const live = result.deploy?.live ?? null
     const answered = live === null || !/\b5\d\d\b/.test(live)
 
