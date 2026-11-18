@@ -244,7 +244,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('ssh-keys', SshKeyController::class)->only(['store', 'destroy']);
 
     Route::put('current-team', [CurrentTeamController::class, 'update'])->name('current-team.update');
-    Route::get('teams/{team}', [TeamController::class, 'show'])->name('teams.show');
+    Route::get('teams/{team:slug}', [TeamController::class, 'show'])->name('teams.show');
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');

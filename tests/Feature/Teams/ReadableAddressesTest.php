@@ -63,7 +63,8 @@ test('addresses use handles, database names and deploy numbers', function () {
         ->and(route('servers.applications.show', [$server, $application], false))->toBe('/servers/vps-1/applications/ledger')
         ->and(route('servers.databases.show', [$server, $database], false))->toBe('/servers/vps-1/databases/ledger_production')
         ->and(route('servers.applications.deployments.show', [$server, $application, $deployment], false))->toBe('/servers/vps-1/applications/ledger/deployments/1')
-        ->and(route('projects.show', $project, false))->toBe('/projects/side-quests');
+        ->and(route('projects.show', $project, false))->toBe('/projects/side-quests')
+        ->and(route('teams.show', $team, false))->toBe("/teams/{$team->slug}");
 });
 
 test("an old address with an id, or an app's slug, takes you to the readable address", function () {
