@@ -56,6 +56,8 @@ final class SmartToggles
 
     public const START_WINDOW_SECONDS = 180;
 
+    private const LOG_CHARACTERS = 8000;
+
     public const CHANGED = 'toggle_changed';
 
     public const STARTED = 'toggle_started';
@@ -391,13 +393,13 @@ final class SmartToggles
             ->log(self::STARTED);
     }
 
-    public function failedToStart(Application $application, string $key, string $process, string $error): void
+    public function failedToStart(Application $application, string $key, string $process, string $error, string $log = ''): void
     {
         $this->replaceProcess($application, $process);
 
         activity()
             ->performedOn($application)
-            ->withProperties(['toggle' => $key, 'label' => $this->label($key), 'error' => $error])
+            ->withProperties(['toggle' => $key, 'label' => $this->label($key), 'error' => $error, 'log' => mb_substr(trim($log), -self::LOG_CHARACTERS)])
             ->log(self::START_FAILED);
     }
 
@@ -563,12 +565,12 @@ final class SmartToggles
     }
 
     /**
-     * @return array{starting: bool, failure: string|null}
+     * @return array{starting: bool, failure: string|null, failure_log: string|null}
      */
     private function outcome(Application $application, string $key): array
     {
         if ($this->process($key) === null || !$application->exists) {
-            return ['starting' => false, 'failure' => null];
+            return ['starting' => false, 'failure' => null, 'failure_log' => null];
         }
 
         $latest = Activity::query()
@@ -581,6 +583,8 @@ final class SmartToggles
             ->first();
 
         $running = !in_array($application->power_state, [PowerState::Stopped, PowerState::Sleeping], true);
+        $failed = $latest?->description === self::START_FAILED && $latest->created_at?->greaterThanOrEqualTo(now()->subDay()) === true;
+        $log = $failed ? trim((string) ($latest->properties['log'] ?? '')) : '';
 
         return [
             'starting' => !in_array($key, [self::INERTIA_SSR, self::REVERB], true)
@@ -589,9 +593,8 @@ final class SmartToggles
                 && $latest->created_at?->greaterThanOrEqualTo(now()->subSeconds(self::START_WINDOW_SECONDS)) === true
                 && $running
                 && $this->isOn($application, $key),
-            'failure' => $latest?->description === self::START_FAILED && $latest->created_at?->greaterThanOrEqualTo(now()->subDay()) === true
-                ? (string) ($latest->properties['error'] ?? '')
-                : null,
+            'failure' => $failed ? (string) ($latest->properties['error'] ?? '') : null,
+            'failure_log' => $log === '' ? null : $log,
         ];
     }
 

@@ -60,6 +60,7 @@ test('auto deploy is offered on apps with a repository', function () {
         'disabled' => false,
         'starting' => false,
         'failure' => null,
+        'failure_log' => null,
     ])
         ->and(collect($toggles->describe(autoDeployToggleApp($team, ['repository_url' => null])->fresh()))->pluck('key')->all())->not->toContain('auto_deploy');
 });
