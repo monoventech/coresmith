@@ -42,6 +42,7 @@ final class StartSession extends LaravelStartSession
             && self::refreshes($request)
             && $request->user() !== null
             && $request->cookies->get($session->getName()) === $session->getId()
+            && $session->get('_flash.new', []) === []
         ) {
             $handler->keepAlive($session->getId());
 
