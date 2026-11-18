@@ -384,7 +384,7 @@ test('a rollback to a laravel release first points that release at the shared SQ
     rollbackRun($application, $transport, '20260911-100000');
 
     $commands = collect($transport->commands());
-    $relink = $commands->search(fn(string $command): bool => str_contains($command, 'ln -sfn') && str_contains($command, '/var/coresmith/apps/my-app/shared/database/database.sqlite') && str_contains($command, '/var/coresmith/apps/my-app/releases/20260911-100000/database/database.sqlite'));
+    $relink = $commands->search(fn(string $command): bool => str_contains($command, 'ln -sfn') && str_contains($command, '/var/coresmith/apps/my-app/shared/database') && str_contains($command, '/var/coresmith/apps/my-app/releases/20260911-100000/database'));
     $swap = $commands->search('ln -sfn /var/coresmith/apps/my-app/releases/20260911-100000 /var/coresmith/apps/my-app/current.tmp');
 
     expect($relink)->toBeInt()

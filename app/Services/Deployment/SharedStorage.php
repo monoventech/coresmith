@@ -21,6 +21,8 @@ final class SharedStorage
 
     public const SEEDED_DATABASE = '@@shared-database-seeded';
 
+    public const COPIED = '.copied-from-live';
+
     public const PRIVATE_MODES = 'u+rwX,g-rwx,o-rwx';
 
     private const SEED_FROM_LIVE = <<<'BASH'
@@ -47,14 +49,14 @@ final class SharedStorage
     private const LINK = 'if [ -d {shared} ]; then rm -rf {local} && ln -sfn {shared} {local}; fi';
 
     private const DATABASE = <<<'BASH'
-    mkdir -p {folder} {shared} && chmod 700 {shared} || exit 1
+    mkdir -p {folder} {shared} && chmod 700 {shared} && rm -f {copied} || exit 1
     made=() seeded= seed=
-    fail() { rm -f "${made[@]}" "$seed"; echo "$1" >&2; exit 1; }
+    fail() { rm -f "${made[@]}" "$seed" {copied}; echo "$1" >&2; exit 1; }
     names=database.sqlite
     for dir in {live} {shared} {folder}; do
       for file in "$dir"/*.sqlite; do
         name=${file##*/}
-        if [ -f "$file" ] && [[ $name =~ ^[A-Za-z0-9._-]+\.sqlite$ ]] && [[ " $names " != *" $name "* ]]; then names="$names $name"; fi
+        case "$name" in *[!A-Za-z0-9._-]*) ;; *.sqlite) if [ -f "$file" ] && [[ " $names " != *" $name "* ]]; then names="$names $name"; fi ;; esac
       done
     done
     for name in $names; do
@@ -63,7 +65,7 @@ final class SharedStorage
         if [ -f "$live" ] && [ ! -L "$live" ]; then
           rm -f "$seed" && statement=".backup \"$seed\"" || fail "Could not copy database/$name from the live release."
           if version=$(sqlite3 -version 2>/dev/null) && printf '%s\n' 3.27.0 "${version%% *}" | sort -C -V; then statement="VACUUM INTO '$seed'"; fi
-          { sqlite3 "$live" "$statement" && chmod 600 "$seed" && mv -f "$seed" "$database"; } || fail "Could not copy database/$name from the live release into shared/database, so nothing was changed. Fix the error above, then deploy again."
+          { sqlite3 "$live" "$statement" && chmod 600 "$seed" && mv -f "$seed" "$database" && ( umask 077 && printf '%s\n' "$name" >> {copied} ); } || fail "Could not copy database/$name from the live release into shared/database, so nothing was changed. Fix the error above, then deploy again."
           seeded=1
         elif [ -f "$link" ] && [ ! -L "$link" ]; then
           { cp "$link" "$seed" && chmod 600 "$seed" && mv -f "$seed" "$database"; } || fail "Could not copy database/$name from the release into shared/database, so nothing was changed. Fix the error above, then deploy again."
@@ -126,6 +128,7 @@ final class SharedStorage
             '{folder}' => escapeshellarg($paths->appDirectory($release) . '/database'),
             '{shared}' => escapeshellarg($paths->shared() . '/database'),
             '{live}' => escapeshellarg($paths->appDirectory($paths->current()) . '/database'),
+            '{copied}' => escapeshellarg($paths->shared() . '/database/' . self::COPIED),
             '{seeded}' => self::SEEDED_DATABASE,
         ]);
     }
@@ -157,8 +160,26 @@ final class SharedStorage
         }
 
         if ($deployment->seeded_shared_database) {
-            $this->remove($connection, $deployment, $shared . '/database', 'seeded_shared_database', 'the live SQLite database');
+            $this->removeCopiedDatabases($connection, $deployment, $shared . '/database');
         }
+    }
+
+    private function removeCopiedDatabases(SSHConnection $connection, Deployment $deployment, string $folder): void
+    {
+        $log = app(DeploymentLog::class);
+        $quoted = escapeshellarg($folder);
+        $copied = escapeshellarg($folder . '/' . self::COPIED);
+
+        try {
+            $connection->execute("if [ -f {$copied} ]; then while IFS= read -r name; do case \"\$name\" in *[!A-Za-z0-9._-]*) ;; *.sqlite) rm -f {$quoted}/\"\$name\" || exit 1 ;; esac; done < {$copied} && rm -f {$copied}; fi", sudo: true)->throw();
+        } catch (Throwable) {
+            $log->append($deployment, "Could not remove the SQLite files this deploy copied from the live release into {$folder}. They are listed in {$folder}/" . self::COPIED . '. Remove those files by hand before deploying again, or the next deploy will use the copies instead of the live data.');
+
+            return;
+        }
+
+        $deployment->forceFill(['seeded_shared_database' => false])->save();
+        $log->append($deployment, 'storage: removed the copies of the live SQLite files this deploy made, so the next deploy copies them again.');
     }
 
     private function remove(SSHConnection $connection, Deployment $deployment, string $path, string $flag, string $what): void
