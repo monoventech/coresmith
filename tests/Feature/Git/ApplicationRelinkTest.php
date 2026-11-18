@@ -345,7 +345,7 @@ test('after a transfer between two linked accounts a push from the new account d
     $githubApp = GitHubApp::factory()->for($team)->create();
     $from = relinkConnection($team, $githubApp);
     $to = relinkConnection($team, $githubApp, ['name' => 'monoven-labs', 'installation_id' => '61842']);
-    $application = relinkApp($from, ['quick_deploy' => true]);
+    $application = relinkApp($from, ['quick_deploy' => true, 'current_release' => '20261001-120000']);
     $events = app(GitHubEventHandler::class);
     $credentials = app(GitHubApps::class)->fromModel($githubApp);
 
@@ -376,7 +376,7 @@ test('a push through a second app on the same account leaves an app on a working
     $second = GitHubApp::factory()->for($team)->create();
     $current = relinkConnection($team, $first);
     relinkConnection($team, $second, ['installation_id' => '61842']);
-    $application = relinkApp($current, ['quick_deploy' => true]);
+    $application = relinkApp($current, ['quick_deploy' => true, 'current_release' => '20261001-120000']);
 
     app(GitHubEventHandler::class)->push(app(GitHubApps::class)->fromModel($second), relinkPush('61842', 'monoventech/atlas'), 'delivery-1');
 
@@ -390,7 +390,7 @@ test('a push moves an app off a connection that is gone even on the same account
     $githubApp = GitHubApp::factory()->for($team)->create();
     $removed = relinkConnection($team, $githubApp);
     $linked = relinkConnection($team, $githubApp, ['installation_id' => '61842']);
-    $application = relinkApp($removed, ['quick_deploy' => true]);
+    $application = relinkApp($removed, ['quick_deploy' => true, 'current_release' => '20261001-120000']);
     $removed->markUninstalled();
 
     app(GitHubEventHandler::class)->push(app(GitHubApps::class)->fromModel($githubApp), relinkPush('61842', 'monoventech/atlas'), 'delivery-1');
@@ -406,7 +406,7 @@ test('a connection of another team is never used', function () {
     $team = Team::factory()->create();
     $githubApp = GitHubApp::factory()->for($team)->create();
     $removed = relinkConnection($team, $githubApp);
-    $application = relinkApp($removed, ['quick_deploy' => true]);
+    $application = relinkApp($removed, ['quick_deploy' => true, 'current_release' => '20261001-120000']);
     $removed->markUninstalled();
     $elsewhere = Team::factory()->create();
     $theirApp = GitHubApp::factory()->for($elsewhere)->create();
@@ -540,7 +540,7 @@ test('after an account rename two apps on that account settle the app on the lin
     $after = GitHubApp::factory()->for($team)->create();
     $linkedBeforeRename = relinkConnection($team, $before, ['name' => 'monoventech-old']);
     $linkedAfterRename = relinkConnection($team, $after, ['installation_id' => '61842']);
-    $application = relinkApp($startsOn === 'the stale name' ? $linkedBeforeRename : $linkedAfterRename, ['quick_deploy' => true]);
+    $application = relinkApp($startsOn === 'the stale name' ? $linkedBeforeRename : $linkedAfterRename, ['quick_deploy' => true, 'current_release' => '20261001-120000']);
     $events = app(GitHubEventHandler::class);
     $pushes = [
         [$after, '61842'], [$before, '51842'], [$before, '51842'], [$after, '61842'], [$before, '51842'],

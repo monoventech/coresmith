@@ -40,6 +40,7 @@ function remoteHeadsApp(array $attributes = []): Application
         'repository_url' => 'https://github.com/monoven/site.git',
         'repository_branch' => 'main',
         'quick_deploy' => true,
+        'current_release' => '20261001-120000',
     ], $attributes));
 }
 
