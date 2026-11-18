@@ -155,6 +155,11 @@ class Application extends Model
         return $this->hasMany(Deployment::class);
     }
 
+    public function deployedBefore(): bool
+    {
+        return $this->current_release !== null || $this->deployments()->exists();
+    }
+
     public function webhookEndpoints(): HasMany
     {
         return $this->hasMany(WebhookEndpoint::class);

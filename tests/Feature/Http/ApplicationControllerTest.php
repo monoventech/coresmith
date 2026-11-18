@@ -70,6 +70,29 @@ test('an admin creating an app gets a slug, a system user and a port block', fun
         ->and($application->team_id)->toBe($team->id);
 });
 
+test('an app added from a repository has auto deploy on, waiting for its first deploy, and one without a repository has it off', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $admin = appTeamMember($team, TeamRole::Admin);
+
+    $this->actingAs($admin)
+        ->post(route('servers.applications.store', $server), payload(['name' => 'shop', 'repository_url' => 'https://github.com/acme/shop.git']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', "App added. Deploy it when you're ready. After that, pushes to main deploy on their own.");
+
+    $this->actingAs($admin)
+        ->post(route('servers.applications.store', $server), payload(['name' => 'notes']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', "App added. Deploy it when you're ready.");
+
+    expect(Application::firstWhere('name', 'shop')->quick_deploy)->toBeTrue()
+        ->and(Application::firstWhere('name', 'notes')->quick_deploy)->toBeFalse()
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNotPushed(DeployApplication::class);
+});
+
 test('a JavaScript or Ruby app is added without a web root, which it never uses', function (string $type, ?string $framework) {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();

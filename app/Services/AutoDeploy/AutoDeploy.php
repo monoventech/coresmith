@@ -24,6 +24,8 @@ final class AutoDeploy
 
     public const UNCHECKABLE_BRANCH = "This app's branch name is not one Coresmith can check. Change it in the app's settings.";
 
+    public const WAITING = "Auto deploy starts after the app's first deploy.";
+
     public function checked(Application $application, ?string $sha, ?string $error): ?Deployment
     {
         $current = $application->fresh();
@@ -80,7 +82,7 @@ final class AutoDeploy
 
     public function reconcile(Application $application): ?Deployment
     {
-        if (!$application->quick_deploy || $application->repository_head === null || $application->trashed()) {
+        if (!$application->quick_deploy || $application->repository_head === null || $application->trashed() || !$application->deployedBefore()) {
             return null;
         }
 

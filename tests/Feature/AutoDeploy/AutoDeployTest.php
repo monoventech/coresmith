@@ -37,6 +37,7 @@ function autoDeployApp(array $attributes = []): Application
         'repository_url' => 'https://github.com/monoven/site.git',
         'repository_branch' => 'main',
         'quick_deploy' => true,
+        'current_release' => '20261001-120000',
     ], $attributes));
 }
 
@@ -119,6 +120,29 @@ test('a new head is deployed once', function () {
         ->and(Deployment::count())->toBe(1);
 
     Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('a new app waits for its first deploy, which someone starts, before a new head deploys it', function () {
+    $application = autoDeployApp(['current_release' => null]);
+
+    expect(app(AutoDeploy::class)->observe($application, autoDeploySha('a'), 'push'))->toBeNull()
+        ->and($application->fresh()->repository_head)->toBe(autoDeploySha('a'))
+        ->and(Deployment::count())->toBe(0);
+
+    Queue::assertNothingPushed();
+
+    Deployment::factory()->for($application)->succeeded()->create(['commit_hash' => autoDeploySha('a')]);
+
+    expect(app(AutoDeploy::class)->observe($application->fresh(), autoDeploySha('b'), 'push')?->requested_commit)->toBe(autoDeploySha('b'));
+
+    Queue::assertPushed(DeployApplication::class, 1);
+});
+
+test('an app that went live before it moved here deploys a new head without waiting', function () {
+    $application = autoDeployApp(['current_release' => '20261001-120000']);
+
+    expect($application->deployments()->exists())->toBeFalse()
+        ->and(app(AutoDeploy::class)->observe($application, autoDeploySha('a'), 'push'))->toBeInstanceOf(Deployment::class);
 });
 
 test('a head that already shipped is left alone', function () {

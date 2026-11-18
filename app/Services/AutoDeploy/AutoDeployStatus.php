@@ -26,6 +26,8 @@ final class AutoDeployStatus
 
     private const SUSPENDED = 'Its GitHub installation is suspended, so pushes are not delivered here.';
 
+    private const FIRST_DEPLOY = "It starts after the app's first deploy.";
+
     public function __construct(
         private readonly GitHubApps $apps,
         private readonly GitHubAppHealth $health,
@@ -64,7 +66,7 @@ final class AutoDeployStatus
             default => "Checks {$branch} for new commits {$this->every('poll_minutes')}.",
         };
 
-        return $lead . ' ' . ($this->failure($application, $branch) ?? $mode?->sentence ?? $this->reason($application));
+        return $lead . ' ' . ($this->failure($application, $branch) ?? ($application->deployedBefore() ? $mode?->sentence ?? $this->reason($application) : self::FIRST_DEPLOY));
     }
 
     private function mode(Application $application): ?WebhookMode

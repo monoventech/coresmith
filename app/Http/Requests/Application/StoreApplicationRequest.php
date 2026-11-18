@@ -211,9 +211,23 @@ class StoreApplicationRequest extends FormRequest
             return;
         }
 
-        foreach (app(AppDatabaseChoice::class)->problems($server, $this->user(), $this->input('database'), $this->input('redis')) as $field => $message) {
+        foreach (app(AppDatabaseChoice::class)->problems($server, $this->user(), $this->databaseChoice(), $this->redisChoice()) as $field => $message) {
             $validator->errors()->add($field, $message);
         }
+    }
+
+    public function databaseChoice(): ?string
+    {
+        $choice = $this->input('database');
+
+        return is_string($choice) ? $choice : null;
+    }
+
+    public function redisChoice(): ?string
+    {
+        $choice = $this->input('redis');
+
+        return is_string($choice) ? $choice : null;
     }
 
     public function checkedRead(): ?RepositoryRead

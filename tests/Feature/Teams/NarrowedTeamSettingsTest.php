@@ -39,7 +39,8 @@ test("a narrowed admin can't change or export what covers the whole team", funct
     ])->assertForbidden();
 
     $this->actingAs($admin)->get(route('teams.index'))->assertInertia(fn(AssertableInertia $page) => $page
-        ->where('can.update', false)
+        ->where('can.update', false));
+    $this->actingAs($admin)->get(route('cloud-providers.index'))->assertInertia(fn(AssertableInertia $page) => $page
         ->where('cloud.can_manage', false));
 });
 

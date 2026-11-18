@@ -78,6 +78,9 @@
             main_package: string | null
             app_size: string
             runtime_version: string | null
+            database: string
+            redis: string
+            horizon: boolean
         }
     }
 
@@ -187,8 +190,8 @@
     const read = $derived(detection?.state === 'read' ? detection : null)
 
     const ENGINES: Record<string, string> = { postgresql: 'PostgreSQL', mysql: 'MySQL', redis: 'Redis' }
-    let pickedDatabase = $state<string | null>(null)
-    let pickedRedis = $state<string | null>(null)
+    let pickedDatabase = $state<string | null>(editing?.application.database ?? null)
+    let pickedRedis = $state<string | null>(editing?.application.redis ?? null)
     const databaseOptions = $derived([
         ...(databases.can_create
             ? [
@@ -213,6 +216,10 @@
             .map((choice) => ({ value: choice.value, label: `${choice.name}, Redis` }))
     ])
     const suggestedDatabase = $derived.by(() => {
+        if (editing) {
+            return 'none'
+        }
+
         const wanted = read?.environment?.database
         const existing = databases.choices.find((choice) => choice.type === wanted)
 
@@ -222,8 +229,9 @@
 
         return existing?.value ?? (framework === 'laravel' ? 'sqlite' : 'none')
     })
+    const horizonWantsRedis = $derived(!editing && framework === 'laravel' && read?.environment?.horizon === true)
     const suggestedRedis = $derived(
-        read?.environment?.redis
+        !editing && (read?.environment?.redis || horizonWantsRedis)
             ? databases.can_create
                 ? 'new'
                 : (databases.choices.find((choice) => choice.type === 'redis')?.value ?? 'none')
@@ -239,6 +247,25 @@
             ? pickedRedis
             : suggestedRedis
     )
+    const switchNote = $derived.by(() => {
+        const before = editing?.application.database ?? 'none'
+
+        if (before === 'none' || database === before) {
+            return null
+        }
+
+        if (before === 'sqlite') {
+            return database === 'none'
+                ? 'The app keeps using SQLite until you change DB_CONNECTION in its variables.'
+                : "The SQLite database keeps its data. Coresmith doesn't copy it to the database you picked."
+        }
+
+        const name = databases.choices.find((choice) => choice.value === before)?.name ?? 'The old database'
+
+        return database === 'none'
+            ? `The app's variables still point at ${name} until you change them.`
+            : `${name} keeps its data. Coresmith doesn't copy it to the database you picked.`
+    })
     const changedStack = $derived(STACK_FIELDS.some((field) => touched[field]))
     const current = $derived<Record<string, string | null>>({
         type,
@@ -820,50 +847,63 @@
                             </div>
                         {/if}
                     </div>
-                    {#if !editing}
-                        <div class="grid gap-3" data-testid="app-databases">
-                            <div>
-                                <Label for="database" class="mb-1.5">Database</Label>
-                                <NativeSelect
-                                    id="database"
-                                    name="database"
-                                    bind:value={() => database, (value: string) => (pickedDatabase = value)}
-                                    options={databaseOptions}
-                                    aria-invalid={errors.database ? true : undefined}
-                                />
-                                {#if read?.environment?.database && pickedDatabase === null}
-                                    <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
-                                        Picked from DB_CONNECTION in {read.environment.example}.
-                                    </p>
-                                {:else if read && !read.environment?.example}
-                                    <p
-                                        class="mt-1.5 mb-0 text-[12px] text-muted-foreground"
-                                        data-testid="env-example-hint"
-                                    >
-                                        Add a .env.example to your repository and Coresmith starts the app's variables
-                                        from it.
-                                    </p>
-                                {/if}
-                                <FieldError message={errors.database} />
-                            </div>
-                            <div>
-                                <Label for="redis" class="mb-1.5">Redis</Label>
-                                <NativeSelect
-                                    id="redis"
-                                    name="redis"
-                                    bind:value={() => redis, (value: string) => (pickedRedis = value)}
-                                    options={redisOptions}
-                                    aria-invalid={errors.redis ? true : undefined}
-                                />
-                                {#if read?.environment?.redis && pickedRedis === null}
-                                    <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
-                                        Picked because {read.environment.example} uses Redis.
-                                    </p>
-                                {/if}
-                                <FieldError message={errors.redis} />
-                            </div>
+                    <div class="grid gap-3" data-testid="app-databases">
+                        <div>
+                            <Label for="database" class="mb-1.5">Database</Label>
+                            <NativeSelect
+                                id="database"
+                                name="database"
+                                bind:value={() => database, (value: string) => (pickedDatabase = value)}
+                                options={databaseOptions}
+                                aria-invalid={errors.database ? true : undefined}
+                            />
+                            {#if switchNote}
+                                <p
+                                    class="mt-1.5 mb-0 text-[12px] text-warning-strong"
+                                    data-testid="database-switch-note"
+                                >
+                                    {switchNote}
+                                </p>
+                            {:else if !editing && read?.environment?.database && pickedDatabase === null}
+                                <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                                    Picked from DB_CONNECTION in {read.environment.example}.
+                                </p>
+                            {:else if !editing && read && !read.environment?.example}
+                                <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground" data-testid="env-example-hint">
+                                    Add a .env.example to your repository and Coresmith starts the app's variables from
+                                    it.
+                                </p>
+                            {/if}
+                            <FieldError message={errors.database} />
                         </div>
-                    {/if}
+                        <div>
+                            <Label for="redis" class="mb-1.5">Redis</Label>
+                            <NativeSelect
+                                id="redis"
+                                name="redis"
+                                bind:value={() => redis, (value: string) => (pickedRedis = value)}
+                                options={redisOptions}
+                                aria-invalid={errors.redis ? true : undefined}
+                            />
+                            {#if !editing && read?.environment?.redis && pickedRedis === null}
+                                <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                                    Picked because {read.environment.example} uses Redis.
+                                </p>
+                            {:else if horizonWantsRedis && pickedRedis === null}
+                                <p
+                                    class="mt-1.5 mb-0 text-[12px] text-muted-foreground"
+                                    data-testid="horizon-redis-note"
+                                >
+                                    Picked because Horizon needs Redis for the queue.
+                                </p>
+                            {:else if editing?.application.horizon && redis === 'none'}
+                                <p class="mt-1.5 mb-0 text-[12px] text-warning-strong" data-testid="horizon-redis-note">
+                                    Horizon needs Redis, so the queue worker can't start without one.
+                                </p>
+                            {/if}
+                            <FieldError message={errors.redis} />
+                        </div>
+                    </div>
                     {#if !editing}
                         <ProjectSelect {projects} value={project} error={errors.project_id} />
                         <div>

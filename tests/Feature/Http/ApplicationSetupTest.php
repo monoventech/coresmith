@@ -3,19 +3,24 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
+use App\Enums\DatabaseType;
+use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
 use App\Enums\TeamRole;
 use App\Http\Controllers\ApplicationSetupController;
 use App\Models\Application;
+use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Deployment\DeployGuard;
+use App\Services\Deployment\EnvironmentFile;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
 use App\Services\Panel\ActivityFeed;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\RepositoryFixture;
@@ -86,7 +91,129 @@ test("Edit setup opens Add an app's form filled in with the app's setup", functi
                 'main_package' => null,
                 'app_size' => 'small',
                 'runtime_version' => '8.4',
+                'database' => 'none',
+                'redis' => 'none',
+                'horizon' => false,
             ]));
+});
+
+/**
+ * @return array<string, string>
+ */
+function setupVariables(Application $application): array
+{
+    return app(EnvironmentFile::class)->parse((string) $application->fresh()->env_variables);
+}
+
+test('Edit setup offers the databases on the server, with the ones the app uses picked', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture(['stack' => ['packages' => ['horizon' => true]]]);
+    $ledger = ManagedDatabase::factory()->for($server)->for($server->team)->postgres()->create(['name' => 'ledger', 'db_user' => 'ledger']);
+    $cache = ManagedDatabase::factory()->for($server)->for($server->team)->redis()->create(['name' => 'shop_redis']);
+    $shop->databases()->attach([$ledger->getKey(), $cache->getKey()]);
+
+    $this->actingAs($owner)->get(route('servers.applications.setup.edit', [$server, $shop]))
+        ->assertOk()
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('setup.application.database', 'existing:' . $ledger->getKey())
+            ->where('setup.application.redis', 'existing:' . $cache->getKey())
+            ->where('setup.application.horizon', true)
+            ->has('databases.choices', 2)
+            ->has('databases.can_create'));
+});
+
+test('a Laravel app on SQLite reads as SQLite on Edit setup', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture(['env_variables' => "DB_CONNECTION=sqlite\n"]);
+
+    $this->actingAs($owner)->get(route('servers.applications.setup.edit', [$server, $shop]))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('setup.application.database', 'sqlite'));
+});
+
+test('a new Redis picked on Edit setup is created and connected, and a Horizon app queues on it', function () {
+    Queue::fake();
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture(['stack' => ['packages' => ['horizon' => true]], 'env_variables' => "QUEUE_CONNECTION=database\n"]);
+    $server->forceFill(['status' => ServerStatus::Active])->save();
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['redis' => 'new']))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('servers.applications.show', [$server, $shop]))
+        ->assertSessionHas('success', "Saved. Coresmith is creating a Redis database for shop. Its settings are in the variables, so deploy once it's ready.");
+
+    $redis = ManagedDatabase::query()->where('type', DatabaseType::Redis->value)->sole();
+
+    expect($shop->fresh()->databases->modelKeys())->toBe([$redis->getKey()])
+        ->and(setupVariables($shop))->toMatchArray(['REDIS_PORT' => (string) $redis->port, 'QUEUE_CONNECTION' => 'redis']);
+});
+
+test('switching to another database connects it and lets go of the old one, whose data stays there', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture();
+    $old = ManagedDatabase::factory()->for($server)->for($server->team)->postgres()->create(['name' => 'shop_old', 'db_user' => 'shop_old']);
+    $new = ManagedDatabase::factory()->for($server)->for($server->team)->postgres()->create(['name' => 'shop_new', 'db_user' => 'shop_new']);
+    $shop->databases()->attach($old->getKey());
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['database' => 'existing:' . $new->getKey()]))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved. shop now uses shop_new, and shop_old keeps its data. Deploy to switch over.');
+
+    expect($shop->fresh()->databases->modelKeys())->toBe([$new->getKey()])
+        ->and(setupVariables($shop))->toMatchArray(['DB_DATABASE' => 'shop_new', 'DB_USERNAME' => 'shop_new'])
+        ->and(Activity::query()->where('description', 'database_disconnected')->sole()->properties->all())->toMatchArray(['database' => 'shop_old']);
+});
+
+test('picking none lets go of the database and leaves its variables for you to manage', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture(['env_variables' => "DB_CONNECTION=pgsql\nDB_DATABASE=ledger\n"]);
+    $ledger = ManagedDatabase::factory()->for($server)->for($server->team)->postgres()->create(['name' => 'ledger', 'db_user' => 'ledger']);
+    $shop->databases()->attach($ledger->getKey());
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['database' => 'none']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved. ledger is no longer connected to shop. Its variables stay as they are until you change them.');
+
+    expect($shop->fresh()->databases)->toBeEmpty()
+        ->and(setupVariables($shop))->toMatchArray(['DB_CONNECTION' => 'pgsql', 'DB_DATABASE' => 'ledger']);
+});
+
+test('a Laravel app moved to SQLite on Edit setup gets DB_CONNECTION for the next deploy', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture(['env_variables' => "APP_NAME=Shop\n"]);
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['database' => 'sqlite']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved. shop now uses SQLite, kept across deploys. Deploy to switch over.');
+
+    expect(setupVariables($shop))->toMatchArray(['APP_NAME' => 'Shop', 'DB_CONNECTION' => 'sqlite']);
+});
+
+test('an app on SQLite that picks no database keeps its variables, and the message says what still points at SQLite', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture(['env_variables' => "DB_CONNECTION=sqlite\n"]);
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['database' => 'none']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'Saved. shop keeps using SQLite until you change DB_CONNECTION in its variables.');
+
+    expect(setupVariables($shop))->toBe(['DB_CONNECTION' => 'sqlite']);
+});
+
+test('keeping the same database and Redis changes nothing on them', function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture();
+    $ledger = ManagedDatabase::factory()->for($server)->for($server->team)->postgres()->create(['name' => 'ledger', 'db_user' => 'ledger']);
+    $shop->databases()->attach($ledger->getKey());
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['database' => 'existing:' . $ledger->getKey(), 'redis' => 'none']))
+        ->assertSessionHasNoErrors()
+        ->assertSessionMissing('success');
+
+    expect($shop->fresh()->databases->modelKeys())->toBe([$ledger->getKey()])
+        ->and(Activity::query()->whereIn('description', ['database_connected', 'database_disconnected'])->count())->toBe(0);
+});
+
+test("a database from another server can't be picked on Edit setup, and nothing changes", function () {
+    ['owner' => $owner, 'server' => $server, 'shop' => $shop] = setupFixture();
+    $elsewhere = ManagedDatabase::factory()->postgres()->create(['name' => 'elsewhere']);
+
+    $this->actingAs($owner)->put(route('servers.applications.setup.update', [$server, $shop]), setupPayload(['database' => 'existing:' . $elsewhere->getKey(), 'repository_branch' => 'release']))
+        ->assertSessionHasErrors(['database' => "That database isn't on web. Pick another one."]);
+
+    expect($shop->fresh()->repository_branch)->toBe('main')
+        ->and($shop->fresh()->databases)->toBeEmpty();
 });
 
 test('saving the setup changes it for the next deploy and records what changed', function () {

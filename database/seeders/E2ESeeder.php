@@ -544,7 +544,7 @@ final class E2ESeeder extends Seeder
         $removed = $this->removedConnection();
 
         $this->linkedApplication('linked-app', 8070);
-        $this->linkedApplication('pushing-app', 8080, ['quick_deploy' => true, 'polled_at' => now()->subSeconds(30)]);
+        $this->linkedApplication('pushing-app', 8080, ['quick_deploy' => true, 'polled_at' => now()->subSeconds(30), 'current_release' => '20261001-120000']);
         $this->linkedApplication('orphaned-app', 8090, ['source_provider_id' => $removed->id]);
         $this->logAt($atlas, 'application_relinked', ['from' => $removed->id, 'to' => $this->github->id, 'repository' => 'monoventech/atlas'], CarbonImmutable::now()->subHours(6));
 

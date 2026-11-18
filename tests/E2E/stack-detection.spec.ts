@@ -204,7 +204,9 @@ test.describe('Stack detection on Add an app', () => {
         await openAddApp(page)
         await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
 
-        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(detection(page)).toContainText(
+            'Filled in from the repository at 9f3c2e1. Check it, then add the app.'
+        )
         await expect(page.getByLabel('Language')).toHaveValue('php')
         await expect(page.getByLabel('Framework')).toHaveValue('laravel')
         await expect(page.getByLabel('Web root')).toHaveValue('/public')
@@ -284,6 +286,23 @@ test.describe('Stack detection on Add an app', () => {
         await page.getByLabel('Database', { exact: true }).selectOption('none')
 
         await expect(page.getByText('Picked from DB_CONNECTION in .env.example.')).toHaveCount(0)
+    })
+
+    test('a Laravel repository with Horizon gets a new Redis picked, since its queue worker needs one', async ({
+        page
+    }) => {
+        await answer(page, [
+            { ...READY, environment: { example: '.env.example', database: null, redis: false, horizon: true } }
+        ])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Redis', { exact: true })).toHaveValue('new')
+        await expect(page.getByTestId('horizon-redis-note')).toHaveText(
+            'Picked because Horizon needs Redis for the queue.'
+        )
     })
 
     test('a repository without an example file is asked for one, and a Laravel app starts on SQLite', async ({
