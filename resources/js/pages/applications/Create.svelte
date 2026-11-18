@@ -81,24 +81,6 @@
         }
     }
 
-    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
-        php: [
-            { value: 'laravel', label: 'Laravel' },
-            { value: 'symfony', label: 'Symfony' },
-            { value: '', label: 'Plain PHP' }
-        ],
-        js: [...js_frameworks, { value: '', label: 'Other server' }],
-        ruby: [
-            { value: 'rails', label: 'Rails' },
-            { value: 'sinatra', label: 'Sinatra' },
-            { value: 'rack', label: 'Rack' }
-        ],
-        python: [...python_frameworks, { value: '', label: 'Other framework' }],
-        go: go_frameworks,
-        java: java_frameworks,
-        static: [{ value: '', label: 'No framework' }]
-    })
-
     const GIT_URL = 'url'
 
     const DEFAULT_BRANCH = 'main'
@@ -185,6 +167,24 @@
     }
 
     const read = $derived(detection?.state === 'read' ? detection : null)
+
+    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
+        php: [
+            { value: 'laravel', label: 'Laravel' },
+            { value: 'symfony', label: 'Symfony' },
+            { value: '', label: 'Plain PHP' }
+        ],
+        js: [...js_frameworks, { value: '', label: read?.server ?? 'Other server' }],
+        ruby: [
+            { value: 'rails', label: 'Rails' },
+            { value: 'sinatra', label: 'Sinatra' },
+            { value: 'rack', label: 'Rack' }
+        ],
+        python: [...python_frameworks, { value: '', label: 'Other framework' }],
+        go: go_frameworks,
+        java: java_frameworks,
+        static: [{ value: '', label: 'No framework' }]
+    })
 
     const ENGINES: Record<string, string> = { postgresql: 'PostgreSQL', mysql: 'MySQL', redis: 'Redis' }
     let pickedDatabase = $state<string | null>(null)
@@ -648,7 +648,7 @@
                                 ]}
                                 aria-invalid={errors.framework ? true : undefined}
                             />
-                            {#if type === 'js' && framework === ''}
+                            {#if type === 'js' && framework === '' && !read?.server}
                                 <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground" data-testid="server-hint">
                                     Express, Hono, Elysia or any server its start script runs.
                                 </p>

@@ -8,7 +8,9 @@ declare(strict_types=1);
 
 namespace App\Services\Runtime;
 
+use App\Enums\ApplicationType;
 use App\Models\Application;
+use App\Stacks\JsServers;
 
 final class FrameworkVersion
 {
@@ -30,6 +32,11 @@ final class FrameworkVersion
     {
         $framework = strtolower((string) $application->framework);
         $source = self::SOURCES[$framework] ?? null;
+
+        if ($source === null && $framework === '' && $application->type === ApplicationType::Js) {
+            $framework = (string) JsServers::in($facts);
+            $source = $framework === '' ? null : ['npm', $framework];
+        }
 
         if ($source === null) {
             return null;

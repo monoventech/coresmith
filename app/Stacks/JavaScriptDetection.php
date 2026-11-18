@@ -18,19 +18,11 @@ final readonly class JavaScriptDetection
 
     public const MAIN_ONLY = 'package.json names a main file but no start script, so it looks like a library, not a server. Add a start script if it is an app.';
 
-    public const NO_START = "There is no start script in package.json, so Coresmith can't tell how the app starts. Add one, for example \"start\": \"node server.js\".";
-
     public const NO_SERVER = "The start script doesn't use a server package Coresmith knows, such as Express, Fastify, Hono, Koa or NestJS, so it can't tell the app listens on a port. Pick Other server if it does.";
 
     public const DENO_LIBRARY = 'deno.json publishes exports and has no start task, so it looks like a library, not an app.';
 
     public const DENO_NO_START = "There is no start task in deno.json and no main.ts, so Coresmith can't tell how the app starts. Add a start task, for example \"start\": \"deno run --allow-net main.ts\".";
-
-    private const SERVER_PACKAGES = [
-        'express', 'fastify', 'hono', '@hono/node-server', 'koa', '@nestjs/core', '@hapi/hapi', 'restify', 'polka', '@adonisjs/core', 'h3', 'elysia',
-        'socket.io', 'ws', '@feathersjs/feathers', '@loopback/core', 'sails', '@remix-run/serve', '@react-router/serve', 'json-server', '@strapi/strapi',
-        '@keystone-6/core', 'payload', '@medusajs/medusa', 'micro', '@tinyhttp/app', 'hyper-express', 'srvx',
-    ];
 
     private const DEVELOPMENT_TOOLS = [
         'electron', 'react-scripts start', 'vite', 'vite dev', 'vite preview', 'webpack serve', 'webpack-dev-server', 'parcel', 'gatsby develop', 'nodemon',
@@ -42,6 +34,11 @@ final readonly class JavaScriptDetection
     private const JS_LOCKFILES = ['bun.lock' => 'bun', 'bun.lockb' => 'bun', 'package-lock.json' => 'node', 'pnpm-lock.yaml' => 'node', 'yarn.lock' => 'node'];
 
     public function __construct(private JsPresets $presets) {}
+
+    public static function startExample(RepositoryFacts $facts): string
+    {
+        return (self::JS_LOCKFILES[(string) $facts->lockfile()] ?? 'node') === 'bun' ? '"start": "bun server.ts"' : '"start": "node server.js"';
+    }
 
     /**
      * @return array{type: ?string, framework: ?string, js_runtime: ?string, web: ?string, sources: array<string, string>, unsettled: array<string, string>, fields?: array<string, ?string>, options?: array<string, list<string>>}|null
@@ -91,12 +88,12 @@ final readonly class JavaScriptDetection
         $start = $name === null ? '' : trim((string) ($facts->json('package.json')['scripts'][$name] ?? ''));
 
         if ($start === '') {
-            return Proposal::make('js', null, $runtime, null, $sources, ['framework' => isset($facts->json('package.json')['main']) ? self::MAIN_ONLY : self::NO_START]);
+            return Proposal::make('js', null, $runtime, null, $sources, ['framework' => isset($facts->json('package.json')['main']) ? self::MAIN_ONLY : "There is no start script in package.json, so Coresmith can't tell how the app starts. Add one, for example " . self::startExample($facts) . '.']);
         }
 
         foreach (self::DEVELOPMENT_TOOLS as $tool) {
             if (preg_match('/(^|[\s;&|(])' . preg_quote($tool, '/') . '(\s|$)/', $start) === 1) {
-                return Proposal::make('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$tool}, which isn't a production server. Add a start script that runs the app, for example \"start\": \"node server.js\"."]);
+                return Proposal::make('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$tool}, which isn't a production server. Add a start script that runs the app, for example " . self::startExample($facts) . '.']);
             }
         }
 
@@ -109,10 +106,10 @@ final readonly class JavaScriptDetection
         $background = JsTooling::backgroundCommand($facts, (string) $name);
 
         if ($background !== null) {
-            return Proposal::make('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$background}, which puts the app in the background, where Coresmith can't keep it running. Start it in the foreground instead, for example \"start\": \"node server.js\" or \"pm2-runtime server.js\"."]);
+            return Proposal::make('js', null, $runtime, null, $sources, ['framework' => "The {$name} script runs {$background}, which puts the app in the background, where Coresmith can't keep it running. Start it in the foreground instead, for example " . self::startExample($facts) . ($runtime === 'node' ? ' or "pm2-runtime server.js".' : '.')]);
         }
 
-        $server = array_values(array_filter(self::SERVER_PACKAGES, fn(string $package): bool => $facts->dependency($package) !== null))[0] ?? null;
+        $server = JsServers::in($facts);
 
         return $server === null
             ? Proposal::make('js', null, $runtime, null, $sources, ['framework' => self::NO_SERVER])

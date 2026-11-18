@@ -11,6 +11,7 @@ namespace App\Services\Detection;
 use App\Enums\ApplicationType;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\Stack;
+use App\Stacks\JsServers;
 
 final readonly class DetectedStack
 {
@@ -20,15 +21,6 @@ final readonly class DetectedStack
         'ruby' => ['rails' => 'Rails', 'sinatra' => 'Sinatra', 'rack' => 'Rack'],
         'python' => ['' => 'Other framework'],
         'go' => ['' => 'net/http'],
-    ];
-
-    private const SERVER_LABELS = [
-        'express' => 'Express', 'fastify' => 'Fastify', 'hono' => 'Hono', '@hono/node-server' => 'Hono', 'koa' => 'Koa', '@nestjs/core' => 'NestJS',
-        '@hapi/hapi' => 'hapi', 'restify' => 'Restify', 'polka' => 'Polka', '@adonisjs/core' => 'AdonisJS', 'h3' => 'h3', 'elysia' => 'Elysia',
-        'socket.io' => 'Socket.IO', 'ws' => 'ws', '@feathersjs/feathers' => 'Feathers', '@loopback/core' => 'LoopBack', 'sails' => 'Sails',
-        '@remix-run/serve' => 'Remix', '@react-router/serve' => 'React Router', 'json-server' => 'JSON Server', '@strapi/strapi' => 'Strapi',
-        '@keystone-6/core' => 'Keystone', 'payload' => 'Payload', '@medusajs/medusa' => 'Medusa', 'micro' => 'Micro', '@tinyhttp/app' => 'tinyhttp',
-        'hyper-express' => 'HyperExpress', 'srvx' => 'srvx',
     ];
 
     /**
@@ -70,7 +62,7 @@ final readonly class DetectedStack
     {
         $version = $this->version();
         $runtime = $this->runtime === null || $version === null ? null : $catalog->label($this->runtime) . ' ' . $version;
-        $framework = ($this->type === 'js' && $this->framework === '' && $this->serverPackage !== null ? (self::SERVER_LABELS[$this->serverPackage] ?? $this->serverPackage) : null)
+        $framework = ($this->type === 'js' && $this->framework === '' && $this->serverPackage !== null ? JsServers::label($this->serverPackage) : null)
             ?? ApplicationType::tryFrom((string) $this->type)?->language()->frameworkLabel((string) $this->framework) ?? self::FRAMEWORKS[(string) $this->type][(string) $this->framework] ?? (string) $this->framework;
 
         return match ($this->type) {
@@ -95,7 +87,7 @@ final readonly class DetectedStack
     }
 
     /**
-     * @return array{verdict: string, fields: array<string, ?string>, sources: array<string, string>, unsettled: array<string, string>, blockers: list<array{field: string, reason: string, fix: string}>}
+     * @return array{verdict: string, fields: array<string, ?string>, server: ?string, options: array<string, list<string>>, sources: array<string, string>, unsettled: array<string, string>, blockers: list<array{field: string, reason: string, fix: string}>}
      */
     public function toArray(): array
     {
@@ -109,6 +101,7 @@ final readonly class DetectedStack
                 'main_package' => $this->mainPackage,
                 'version' => $this->version(),
             ],
+            'server' => $this->serverPackage === null ? null : JsServers::label($this->serverPackage),
             'options' => $this->options,
             'sources' => $this->sources,
             'unsettled' => $this->unsettled,
