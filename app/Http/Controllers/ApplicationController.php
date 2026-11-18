@@ -55,6 +55,7 @@ use App\Services\Panel\SmartToggles;
 use App\Services\Php\PhpLimitsCard;
 use App\Services\Projects\AppTags;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\FrameworkVersion;
 use App\Services\Runtime\ResolvedRuntime;
 use App\Services\Runtime\RuntimeDetector;
 use App\Services\Runtime\RuntimeLifecycle;
@@ -116,7 +117,9 @@ final class ApplicationController extends Controller
         $connection = $request->githubConnection();
         $repository = $request->githubRepository();
         $checked = $request->checkedRead();
-        $initial = app(StartingEnvironment::class)->variables($checked?->facts, ApplicationType::tryFrom($request->string('type')->value()), $request->input('framework'), $request->validated('domain'));
+        $type = ApplicationType::tryFrom($request->string('type')->value());
+        $initial = app(StartingEnvironment::class)->variables($checked?->facts, $type, $request->input('framework'), $request->validated('domain'));
+        $framework = $checked?->facts === null ? null : app(FrameworkVersion::class)->detect(new Application(['type' => $type, 'framework' => $request->input('framework')]), $checked->facts);
 
         try {
             $port = $ports->allocate($server);
@@ -134,6 +137,7 @@ final class ApplicationController extends Controller
             ]),
             'runtime_pins' => $line === null ? null : [$runtime => $line],
             'env_variables' => $initial === [] ? null : app(EnvironmentFile::class)->render($initial),
+            'stack' => $framework === null ? null : ['framework' => $framework],
             'repository_checked_at' => $checked === null ? null : now(),
             'repository_check_pending' => $request->hasRepository() && $checked === null,
             'server_id' => $server->id,

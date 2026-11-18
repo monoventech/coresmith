@@ -11,6 +11,7 @@ use App\Services\Deployment\EnvironmentFile;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
+use App\Services\Panel\ApplicationPresenter;
 use App\Services\Runtime\RepositoryFacts;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\RepositoryFixture;
@@ -52,6 +53,18 @@ function storeDetectionApp(): ?Application
 {
     return Application::query()->where('name', 'Shop')->first();
 }
+
+test('an app added from its repository is named after its framework and version before its first deploy', function (string $fixture, array $attributes, string $named) {
+    [$owner, $server] = storeDetectionServer();
+    $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts($fixture), installed: ['php' => ['8.5.10'], 'nodejs' => ['24.11.1']], extensions: ['8.5.10' => ['ctype', 'mbstring', 'pdo_sqlite', 'openssl', 'tokenizer', 'xml', 'fileinfo', 'curl']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, ...$attributes])->assertRedirect();
+
+    expect(ApplicationPresenter::kind(storeDetectionApp()))->toBe($named);
+})->with([
+    'a start-script server' => ['express-api', ['type' => ApplicationType::Js->value, 'framework' => '', 'js_runtime' => 'node', 'web_directory' => null], 'Express 5'],
+    'a framework' => ['laravel-13', [], 'Laravel 13'],
+]);
 
 test('the store refuses a PHP extension the server\'s PHP lacks', function () {
     [$owner, $server] = storeDetectionServer();
