@@ -147,7 +147,9 @@ async function fieldsOf(page: Page): Promise<Record<string, string | null>> {
     return {
         type: await page.getByLabel('Language', { exact: true }).inputValue(),
         framework: await framework.inputValue(),
-        framework_label: (await framework.locator('option:checked').textContent())?.trim() ?? null,
+        framework_label: await framework.evaluate(
+            (select) => (select as HTMLSelectElement).selectedOptions[0]?.textContent?.trim() ?? null
+        ),
         js_runtime: (await runtime.count()) > 0 ? await runtime.inputValue() : null,
         web_directory: (await webRoot.count()) > 0 ? await webRoot.inputValue() : null
     }
