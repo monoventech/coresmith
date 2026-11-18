@@ -294,9 +294,11 @@ final class ServerController extends Controller
             }
         }
 
-        abort_unless($server->status->isBeforeProvisioning(), 404);
-
-        ProvisionServer::begin($server);
+        if (!$server->status->isBeforeProvisioning() || !ProvisionServer::begin($server)) {
+            return back()->with('success', $server->fresh()?->status === ServerStatus::Provisioning
+                ? 'Provisioning is already running. Every phase is logged on this page.'
+                : "{$server->name} is already provisioned.");
+        }
 
         return back()->with('success', 'Provisioning started. Every phase is logged, and it keeps going if you close this page.');
     }

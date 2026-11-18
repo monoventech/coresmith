@@ -145,7 +145,7 @@ return [
     */
 
     'features' => array_values(array_filter([
-        env('CORESMITH_ALLOW_REGISTRATION', true) ? Features::registration() : null,
+        env('CORESMITH_ALLOW_REGISTRATION', env('CORESMITH_EDITION', 'self-hosted') === 'cloud') ? Features::registration() : null,
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([

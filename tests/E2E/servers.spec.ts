@@ -558,6 +558,19 @@ test.describe('provisioning a server', () => {
         await expect(page.getByText("That doesn't look like an IP address. Try 203.0.113.40.")).toBeVisible()
     })
 
+    test('an address the team already has is refused next to the field, naming the server', async ({ page }) => {
+        await page.goto('/servers/create')
+        await page.getByLabel('Provider').selectOption('manual')
+        await page.getByLabel('Server name').fill('forge-copy')
+        await page.getByLabel('IP address').fill('203.0.113.14')
+        await page.getByRole('button', { name: 'Add server' }).click()
+
+        await expect(page.getByLabel('IP address')).toHaveAttribute('aria-invalid', 'true')
+        await expect(
+            page.getByText('forge-01 already uses this address and SSH port. Open it from the fleet instead.')
+        ).toBeVisible()
+    })
+
     test("the machine Coresmith runs on isn't taken as a VM, and the form says it's already a server", async ({
         page
     }) => {

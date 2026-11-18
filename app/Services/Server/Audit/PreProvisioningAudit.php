@@ -236,9 +236,11 @@ final class PreProvisioningAudit
         $findings = [];
 
         if (in_array('coresmith', $users, true)) {
+            $detached = $this->detached($server);
             $findings[] = match (true) {
                 (bool) $server->runs_coresmith => new AuditFinding('user_coresmith', AuditSeverity::Info, "The coresmith user is Coresmith's own here", 'Apps get users of their own, and runtimes belong to coresmith-runtime.'),
                 (int) ($server->provisioning_phase ?? 0) > 0 => new AuditFinding('user_coresmith', AuditSeverity::Info, 'The coresmith user exists from an earlier run', 'Provisioning keeps using it.'),
+                $detached !== null => new AuditFinding('user_coresmith', AuditSeverity::Info, "Coresmith set this server up before, as {$detached->name}", "Your team detached it, so provisioning reuses the coresmith user and keeps what's there."),
                 default => new AuditFinding('user_coresmith', AuditSeverity::Blocker, 'A coresmith user already exists', 'Coresmith creates and owns a user with that name. Rename or remove the existing user, then check again.'),
             };
         }
@@ -250,6 +252,16 @@ final class PreProvisioningAudit
         }
 
         return $findings;
+    }
+
+    private function detached(Server $server): ?Server
+    {
+        return Server::onlyTrashed()
+            ->where('team_id', $server->team_id)
+            ->where('ssh_port', $server->ssh_port)
+            ->latest('deleted_at')
+            ->get()
+            ->first(fn(Server $earlier): bool => $earlier->hasAddress((string) $server->ip_address));
     }
 
     /**

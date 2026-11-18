@@ -1,5 +1,4 @@
 <script lang="ts">
-    import MonovenMark from '@/components/MonovenMark.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
     import AccountDialog from '@/components/panel/AccountDialog.svelte'
     import BillingBanner from '@/components/panel/BillingBanner.svelte'
@@ -130,10 +129,6 @@
                 {/if}
 
                 {@render children?.()}
-
-                <footer class="mt-auto flex justify-end pt-12 max-sm:pt-8">
-                    <MonovenMark />
-                </footer>
             </div>
         </main>
     </div>

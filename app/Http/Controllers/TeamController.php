@@ -25,15 +25,20 @@ use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamDomains;
 use App\Services\Teams\TeamInvitations;
 use App\Services\Teams\TeamUrls;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class TeamController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $team = $this->currentTeam();
+
+        if ($this->startsTeamFirst($team)) {
+            return to_route('start.show');
+        }
 
         abort_if($team === null, 404);
 

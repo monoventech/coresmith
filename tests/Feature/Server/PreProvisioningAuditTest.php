@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Server;
+use App\Models\Team;
 use App\Services\Network\LocalAddresses;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\SSH\SSHConnection;
@@ -118,6 +119,20 @@ test('a coresmith user blocks a fresh server but not one Coresmith already start
     expect(auditFinding(auditFindings($probe), 'user_coresmith')['severity'])->toBe('blocker')
         ->and(auditFinding(auditFindings($probe, ['provisioning_phase' => 3]), 'user_coresmith')['severity'])->toBe('info')
         ->and(auditFinding(auditFindings($probe), 'app_users')['title'])->toBe('1 app account from an earlier Coresmith setup');
+});
+
+test('a coresmith user left on a server the same team detached is reused, while anyone else still has to clear it', function () {
+    $probe = auditProbe(['users' => ['coresmith', 'coresmith-app-atlas']]);
+    $team = Team::factory()->create();
+    Server::factory()->for($team)->create(['name' => 'web-1', 'ip_address' => '2001:db8::0001', 'ssh_port' => 22])->delete();
+    Server::factory()->create(['ip_address' => '203.0.113.50', 'ssh_port' => 22])->delete();
+
+    $readded = auditFinding(auditFindings($probe, ['team_id' => $team->id, 'ip_address' => '2001:db8::1', 'ssh_port' => 22]), 'user_coresmith');
+
+    expect($readded['severity'])->toBe('info')
+        ->and($readded['title'])->toBe('Coresmith set this server up before, as web-1')
+        ->and(auditFinding(auditFindings($probe, ['team_id' => $team->id, 'ip_address' => '2001:db8::1', 'ssh_port' => 2222]), 'user_coresmith')['severity'])->toBe('blocker')
+        ->and(auditFinding(auditFindings($probe, ['ip_address' => '203.0.113.50', 'ssh_port' => 22]), 'user_coresmith')['severity'])->toBe('blocker');
 });
 
 test("the panel's own host is refused with one blocker and none of the advice that would break the panel", function (array $panel, array $server) {

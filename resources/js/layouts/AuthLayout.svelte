@@ -1,5 +1,4 @@
 <script lang="ts">
-    import MonovenMark from '@/components/MonovenMark.svelte'
     import Toast from '@/components/panel/Toast.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
     import { Link } from '@inertiajs/svelte'
@@ -44,7 +43,6 @@
     <footer class="relative z-10 border-t border-border">
         <div class="mx-auto flex w-full max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
             <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
-            <MonovenMark class="ml-auto" />
         </div>
     </footer>
 
