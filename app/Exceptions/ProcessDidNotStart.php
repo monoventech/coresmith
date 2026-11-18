@@ -19,8 +19,13 @@ final class ProcessDidNotStart extends RuntimeException
         public readonly string $journal,
         public readonly string $advice,
     ) {
-        $process = Str::afterLast($unit, '-');
+        parent::__construct($this->describe($advice));
+    }
 
-        parent::__construct('The ' . ($process === 'fpm' ? 'PHP' : $process) . " process didn't start ({$state}). {$advice}");
+    public function describe(string $advice): string
+    {
+        $process = Str::afterLast($this->unit, '-');
+
+        return 'The ' . ($process === 'fpm' ? 'PHP' : $process) . " process didn't start ({$this->state}). {$advice}";
     }
 }

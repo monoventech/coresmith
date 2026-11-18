@@ -186,7 +186,7 @@ test('a new app starts with the variables its framework needs', function (string
 
     expect(array_keys(app(EnvironmentFile::class)->parse((string) storeDetectionApp()?->env_variables)))->toBe($names);
 })->with([
-    'laravel' => ['php', 'laravel', ['APP_KEY']],
+    'laravel' => ['php', 'laravel', ['APP_NAME', 'LOG_CHANNEL', 'LOG_LEVEL', 'APP_KEY', 'APP_ENV', 'APP_DEBUG']],
     'symfony' => ['php', 'symfony', ['APP_ENV', 'APP_SECRET']],
     'rails' => ['ruby', 'rails', ['SECRET_KEY_BASE']],
     'sinatra' => ['ruby', 'sinatra', []],

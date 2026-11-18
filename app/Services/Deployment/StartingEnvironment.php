@@ -85,9 +85,12 @@ final readonly class StartingEnvironment
     /**
      * @return array<string, string>
      */
-    public function variables(?RepositoryFacts $facts, ?ApplicationType $type, ?string $framework, ?string $domain): array
+    public function variables(?RepositoryFacts $facts, ?ApplicationType $type, ?string $framework, ?string $domain, ?string $name = null): array
     {
-        $variables = [];
+        $laravel = strtolower((string) $framework) === 'laravel';
+        $variables = $laravel && $this->example($facts) === null
+            ? array_filter(['APP_NAME' => trim((string) $name), 'LOG_CHANNEL' => 'stack', 'LOG_LEVEL' => 'error'], fn(string $value): bool => $value !== '')
+            : [];
 
         foreach (array_diff_key($this->exampleVariables($facts), array_flip([...self::CONNECTION, ...self::MODES, ...self::MANAGED, ...$this->stackKeys($type, $framework)])) as $name => $value) {
             $variables[$name] = preg_match(self::SECRET, $name) === 1 ? '' : $value;
@@ -95,7 +98,7 @@ final readonly class StartingEnvironment
 
         $variables = [...$variables, ...$this->defaults->initial($type, $framework)];
 
-        if ($this->example($facts) !== null && strtolower((string) $framework) === 'laravel') {
+        if ($laravel) {
             $variables = [...$variables, 'APP_ENV' => 'production', 'APP_DEBUG' => 'false', ...($domain === null || $domain === '' ? [] : ['APP_URL' => 'https://' . $domain])];
         }
 

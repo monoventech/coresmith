@@ -119,6 +119,10 @@ test('a unit that is not running fails with its journal and advice for what the 
     'sandbox not set up' => ['coresmith-app-shop-queue.service: Failed to set up mount namespacing: /home/coresmith-app-shop: No such file or directory', "The server couldn't set up the app's sandbox."],
     'rails in development' => ["*  Environment: development\n! Unable to load application: LoadError: cannot load such file -- debug/prelude", 'This Rails app started in development mode. Set RAILS_ENV=production in its environment variables, then deploy again.'],
     'a missing ruby file in production' => ["*  Environment: production\n! Unable to load application: LoadError: cannot load such file -- stripe", 'The process log says why.'],
+    'redis wants a password' => ['RedisException: NOAUTH Authentication required.', "Redis asked for a password and the app didn't send one. Pick a Redis on Edit setup, which writes its address and password into the variables, then deploy again."],
+    'redis refuses the password' => ['WRONGPASS invalid username-password pair or user is disabled.', 'Redis refused the password the app sent. Pick a Redis on Edit setup, which writes its address and password into the variables, then deploy again.'],
+    'redis is not there' => ['Predis\\Connection\\ConnectionException: Connection refused [tcp://127.0.0.1:6379]', "The app couldn't reach Redis. Pick a Redis on Edit setup, which writes its address and password into the variables, then deploy again."],
+    'a node app without redis' => ['Error: connect ECONNREFUSED 127.0.0.1:6379', "The app couldn't reach Redis."],
     'anything else' => ['Killed', 'The process log says why.'],
 ]);
 
