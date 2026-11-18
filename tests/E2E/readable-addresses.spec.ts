@@ -31,11 +31,12 @@ test('the address bar reads the names of the server, app and database you opened
     )
 })
 
-test('a deploy is addressed by its release', async ({ page }, testInfo) => {
+test('a deploy is addressed by its number, and its release name still leads there', async ({ page }, testInfo) => {
     const app = own(testInfo, 'held')
 
     await page.goto(`/servers/bench-01/applications/${app}/deployments/20261112-091400`)
 
+    await expect(page).toHaveURL(new RegExp(`/servers/bench-01/applications/${app}/deployments/\\d+$`))
     await expect(page.getByRole('heading', { level: 1, name: `Deploying ${app}` })).toBeVisible()
 })
 
