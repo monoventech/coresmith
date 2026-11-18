@@ -237,6 +237,34 @@ test.describe('Stack detection on Add an app', () => {
         await expect(page.getByTestId('server-hint')).toBeHidden()
     })
 
+    test("the repository's notes leave when the language changes, so a Bun version never shows a PHP source", async ({
+        page
+    }) => {
+        await answer(page, [READY])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
+
+        const language = page.getByLabel('Language')
+        const laravel = page.getByText('laravel/framework 12.38.1 in composer.lock')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(laravel).toBeVisible()
+
+        await language.selectOption('js')
+
+        await expect(laravel).toHaveCount(0)
+        await expect(page.getByRole('radiogroup', { name: 'Bun version' })).toBeVisible()
+        await expect(page.getByRole('radiogroup', { name: 'Bun version' })).not.toContainText('PHP')
+
+        await language.selectOption('php')
+
+        await expect(laravel).toBeVisible()
+        await expect(
+            page.getByRole('radiogroup', { name: 'PHP version' }).getByRole('radio', { name: /From the repository/ })
+        ).toHaveAccessibleName(/PHP 8\.4\.25/)
+    })
+
     test('a repository whose .env.example names PostgreSQL and a Redis queue gets both picked, with where each came from', async ({
         page
     }) => {
