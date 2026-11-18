@@ -136,6 +136,7 @@ test('someone who cannot open the Add an app form cannot read repositories throu
 });
 
 test('a person can read twenty repositories a minute through the form', function () {
+    $this->freezeTime();
     [$owner, $server] = stackEndpointServer();
     stackEndpointAnswer('static-html');
 
