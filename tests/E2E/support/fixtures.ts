@@ -40,6 +40,10 @@ export const asCloudMember = suite.extend({
     storageState: 'tests/E2E/.auth/cloud-member.json'
 })
 
+export const asCloudDeveloper = suite.extend({
+    storageState: 'tests/E2E/.auth/cloud-developer.json'
+})
+
 export const asMover = suite.extend({
     // eslint-disable-next-line no-empty-pattern
     storageState: async ({}, use, testInfo) => {
