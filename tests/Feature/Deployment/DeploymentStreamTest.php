@@ -12,7 +12,9 @@ use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Testing\TestResponse;
 
 function watcher(Team $team, TeamRole $role): User
 {
@@ -29,6 +31,44 @@ function deploymentFor(Team $team): Deployment
 
     return Deployment::factory()->for($application)->create();
 }
+
+function deploymentStreamAuthorize(User $user, string $channel): TestResponse
+{
+    config([
+        'broadcasting.default' => 'reverb',
+        'broadcasting.connections.reverb.key' => 'stream-key',
+        'broadcasting.connections.reverb.secret' => 'stream-secret',
+        'broadcasting.connections.reverb.app_id' => 'stream-app',
+    ]);
+    Broadcast::forgetDrivers();
+    require base_path('routes/channels.php');
+
+    return test()->actingAs($user)->post('/broadcasting/auth', ['socket_id' => '1234.5678', 'channel_name' => $channel]);
+}
+
+test('the deploy page is let into its deployment channel through the broadcasting endpoint', function (TeamRole $role) {
+    $team = Team::factory()->create();
+    $deployment = deploymentFor($team);
+
+    deploymentStreamAuthorize(watcher($team, $role), 'private-deployments.' . $deployment->getKey())
+        ->assertOk()
+        ->assertJsonStructure(['auth']);
+})->with([TeamRole::Owner, TeamRole::Member]);
+
+test('the broadcasting endpoint keeps someone outside the team out of a deployment channel', function () {
+    $deployment = deploymentFor(Team::factory()->create());
+
+    deploymentStreamAuthorize(watcher(Team::factory()->create(), TeamRole::Owner), 'private-deployments.' . $deployment->getKey())
+        ->assertForbidden();
+});
+
+test('the broadcasting endpoint lets a team member into the team channel', function () {
+    $team = Team::factory()->create();
+
+    deploymentStreamAuthorize(watcher($team, TeamRole::Member), 'private-teams.' . $team->getKey())
+        ->assertOk()
+        ->assertJsonStructure(['auth']);
+});
 
 test('the update is broadcast on a channel private to that deployment', function () {
     $deployment = deploymentFor(Team::factory()->create());

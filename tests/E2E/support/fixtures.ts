@@ -416,11 +416,15 @@ export async function streamFleet(page: Page, change: (props: FleetProps) => voi
     }
 }
 
-export async function fakeReverb(page: Page) {
+export async function fakeReverb(page: Page, options: { refuse?: RegExp } = {}) {
     const channels: string[] = []
     let send: ((message: string) => void) | null = null
 
-    await page.route('**/broadcasting/auth', (route) => route.fulfill({ json: { auth: 'coresmith-local:signature' } }))
+    await page.route('**/broadcasting/auth', (route) =>
+        options.refuse?.test(route.request().postData() ?? '')
+            ? route.fulfill({ status: 403, contentType: 'text/html', body: 'Forbidden' })
+            : route.fulfill({ json: { auth: 'coresmith-local:signature' } })
+    )
     await page.routeWebSocket(/\/app\//, (socket) => {
         send = (message) => socket.send(message)
         socket.send(

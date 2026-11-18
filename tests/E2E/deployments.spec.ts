@@ -33,7 +33,7 @@ function rows(page: Page) {
 
 type Pushed = Record<string, unknown> & { id: string; log: string }
 
-async function streamDeploys(page: Page) {
+async function streamDeploys(page: Page, options: { refuse?: RegExp } = {}) {
     let shown: Pushed | null = null
 
     await page.route(
@@ -52,7 +52,7 @@ async function streamDeploys(page: Page) {
         }
     )
 
-    const reverb = await fakeReverb(page)
+    const reverb = await fakeReverb(page, options)
 
     return {
         async push(change: (deployment: Pushed) => Record<string, unknown>) {
@@ -189,6 +189,17 @@ test.describe('a deploy', () => {
         await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
         await expect(output).toContainText('migrate: running migrations')
         await expect(output).not.toContainText('build: compiling assets')
+    })
+
+    test('a deploy whose live channel is refused refreshes every few seconds instead of freezing', async ({ page }) => {
+        await streamDeploys(page, { refuse: /channel_name=private-deployments/ })
+
+        await page.goto('/dashboard')
+        await page.getByTestId('live-deploy').click()
+
+        await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
+        await expect(page.getByTestId('log-transport')).toHaveText('Refreshing every 3s')
+        await expect(page.getByLabel('Deployment output')).toContainText('migrate: running migrations')
     })
 
     test('a failed deploy says which phase failed and that nothing changed', async ({ page }) => {
