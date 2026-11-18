@@ -204,7 +204,9 @@ test.describe('Stack detection on Add an app', () => {
         await openAddApp(page)
         await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/shop.git')
 
-        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(detection(page)).toContainText(
+            'Filled in from the repository at 9f3c2e1. Check it, then add the app.'
+        )
         await expect(page.getByLabel('Language')).toHaveValue('php')
         await expect(page.getByLabel('Framework')).toHaveValue('laravel')
         await expect(page.getByLabel('Web root')).toHaveValue('/public')
