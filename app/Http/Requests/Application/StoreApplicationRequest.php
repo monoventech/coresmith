@@ -19,6 +19,7 @@ use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Rules\DomainAvailable;
 use App\Rules\FillableProject;
+use App\Services\Database\AppDatabaseChoice;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryRead;
 use App\Services\Detection\StackChecks;
@@ -99,6 +100,8 @@ class StoreApplicationRequest extends FormRequest
             'project_id' => ['nullable', 'string', new FillableProject($server?->team, $this->user())],
             ...AppTags::rules(),
             'detection' => ['nullable', 'string', 'max:64'],
+            'database' => ['nullable', 'string', 'regex:' . AppDatabaseChoice::DATABASE],
+            'redis' => ['nullable', 'string', 'regex:' . AppDatabaseChoice::REDIS],
         ];
     }
 
@@ -194,7 +197,23 @@ class StoreApplicationRequest extends FormRequest
             function (Validator $validator): void {
                 $this->checkStack($validator);
             },
+            function (Validator $validator): void {
+                $this->checkDatabases($validator);
+            },
         ];
+    }
+
+    private function checkDatabases(Validator $validator): void
+    {
+        $server = $this->route('server');
+
+        if (!$server instanceof Server || $validator->errors()->hasAny(['database', 'redis'])) {
+            return;
+        }
+
+        foreach (app(AppDatabaseChoice::class)->problems($server, $this->user(), $this->input('database'), $this->input('redis')) as $field => $message) {
+            $validator->errors()->add($field, $message);
+        }
     }
 
     public function checkedRead(): ?RepositoryRead

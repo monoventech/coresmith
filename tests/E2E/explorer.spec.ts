@@ -92,6 +92,37 @@ test.describe('the explorer', () => {
         }
     })
 
+    test('app rows show their tags and never the server, which the tooltip names, and sections fold', async ({
+        page
+    }) => {
+        await page.goto('/dashboard')
+
+        const others = explorer(page).getByTestId('explorer-apps')
+        const ledger = others.getByRole('link', { name: /^ledger,/ })
+
+        await expect(ledger).not.toContainText('forge-01')
+        await expect(ledger).toHaveAttribute('title', /on forge-01$/)
+
+        await others.getByRole('button', { name: 'Apps' }).click()
+
+        await expect(others.getByRole('button', { name: 'Apps' })).toHaveAttribute('aria-expanded', 'false')
+        await expect(ledger).toHaveCount(0)
+
+        await page.reload()
+        await expect(
+            explorer(page)
+                .getByTestId('explorer-apps')
+                .getByRole('link', { name: /^ledger,/ })
+        ).toHaveCount(0)
+
+        await explorer(page).getByTestId('explorer-apps').getByRole('button', { name: 'Apps' }).click()
+        await expect(
+            explorer(page)
+                .getByTestId('explorer-apps')
+                .getByRole('link', { name: /^ledger,/ })
+        ).toBeVisible()
+    })
+
     test('an app opens from it and is marked as the current page', async ({ page }) => {
         await page.goto('/dashboard')
 

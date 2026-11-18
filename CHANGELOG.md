@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.22 (2026-11-18)
+
+### Changed
+- New apps start from .env.example with a database picked for them, databases know their apps, and Run migrations can be turned off (#125)
+- A refresh in one tab no longer takes another tab's toast or undoes what it saved (#124)
+- Fleet cards list only the apps that need attention, and explorer rows show tags, never the server (#123)
+
 ## v0.8.21 (2026-11-18)
 
 ### Changed

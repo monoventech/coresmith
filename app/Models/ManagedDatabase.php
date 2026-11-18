@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
 
@@ -30,11 +31,19 @@ class ManagedDatabase extends Model
 
     public const SHARED_REDIS_PORT = 6379;
 
+    public const READY = 'active';
+
+    public const CREATING = 'creating';
+
+    public const FAILED = 'failed';
+
     protected $table = 'databases';
 
     protected $guarded = ['id'];
 
     protected $hidden = ['db_password'];
+
+    protected $attributes = ['host' => '127.0.0.1'];
 
     public function server(): BelongsTo
     {
@@ -44,6 +53,11 @@ class ManagedDatabase extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function applications(): BelongsToMany
+    {
+        return $this->belongsToMany(Application::class, 'application_database', 'database_id', 'application_id')->withTimestamps();
     }
 
     public function project(): BelongsTo

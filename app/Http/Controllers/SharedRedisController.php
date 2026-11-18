@@ -10,6 +10,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Services\Database\DatabaseConnections;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\RedisInstance;
 use App\Services\Database\RedisPorts;
@@ -42,6 +43,7 @@ final class SharedRedisController extends Controller
 
                 return $port;
             });
+            $connected = app(DatabaseConnections::class)->refresh($database);
         } catch (RuntimeException $e) {
             report($e);
 
@@ -54,7 +56,7 @@ final class SharedRedisController extends Controller
         activity()->performedOn($database)->withProperties(['port' => $port])->log('database_moved_off_shared_redis');
 
         return back()->with([
-            'success' => "Moved {$database->name} to a Redis of its own on port {$port}. Give the apps that use it the new port and password, then deploy.",
+            'success' => $connected === [] ? "Moved {$database->name} to a Redis of its own on port {$port}. Give the apps that use it the new port and password, then deploy." : "Moved {$database->name} to a Redis of its own on port {$port}, and " . DatabaseConnections::handedTo($connected, 'port and password'),
             'databasePassword' => $password,
         ]);
     }

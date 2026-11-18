@@ -37,7 +37,7 @@ final class StoreDatabaseRequest extends FormRequest
     {
         return [
             'type' => ['required', Rule::enum(DatabaseType::class)],
-            'name' => ['required', 'string', 'regex:' . SafeName::DATABASE_PATTERN, Rule::unique('databases', 'name')],
+            'name' => ['required', 'string', 'regex:' . SafeName::DATABASE_PATTERN, Rule::unique('databases', 'name')->where('team_id', $this->route('server')?->team_id)],
             'db_user' => ['required_unless:type,redis', 'nullable', 'string', 'regex:' . SafeName::DATABASE_PATTERN],
             'privilege_level' => ['required_unless:type,redis', 'nullable', Rule::enum(PrivilegeLevel::class)],
             'extensions' => ['nullable', 'array'],

@@ -39,6 +39,7 @@
         python_frameworks = [],
         go_frameworks = [],
         java_frameworks = [],
+        databases = { choices: [], can_create: false },
         setup = null
     }: {
         server: {
@@ -56,6 +57,7 @@
         python_frameworks: { value: string; label: string }[]
         go_frameworks: { value: string; label: string }[]
         java_frameworks: { value: string; label: string }[]
+        databases?: { choices: { value: string; name: string; type: string }[]; can_create: boolean }
         setup?: Setup | null
     } = $props()
 
@@ -183,6 +185,60 @@
     }
 
     const read = $derived(detection?.state === 'read' ? detection : null)
+
+    const ENGINES: Record<string, string> = { postgresql: 'PostgreSQL', mysql: 'MySQL', redis: 'Redis' }
+    let pickedDatabase = $state<string | null>(null)
+    let pickedRedis = $state<string | null>(null)
+    const databaseOptions = $derived([
+        ...(databases.can_create
+            ? [
+                  { value: 'new:postgresql', label: 'New PostgreSQL database' },
+                  { value: 'new:mysql', label: 'New MySQL database' }
+              ]
+            : []),
+        ...databases.choices
+            .filter((choice) => choice.type !== 'redis')
+            .map((choice) => ({
+                value: choice.value,
+                label: `${choice.name}, ${ENGINES[choice.type] ?? choice.type}`
+            })),
+        ...(framework === 'laravel' ? [{ value: 'sqlite', label: 'SQLite, kept across deploys' }] : []),
+        { value: 'none', label: "None, I'll set it up myself" }
+    ])
+    const redisOptions = $derived([
+        { value: 'none', label: 'None' },
+        ...(databases.can_create ? [{ value: 'new', label: 'New Redis database' }] : []),
+        ...databases.choices
+            .filter((choice) => choice.type === 'redis')
+            .map((choice) => ({ value: choice.value, label: `${choice.name}, Redis` }))
+    ])
+    const suggestedDatabase = $derived.by(() => {
+        const wanted = read?.environment?.database
+        const existing = databases.choices.find((choice) => choice.type === wanted)
+
+        if (wanted && databases.can_create) {
+            return `new:${wanted}`
+        }
+
+        return existing?.value ?? (framework === 'laravel' ? 'sqlite' : 'none')
+    })
+    const suggestedRedis = $derived(
+        read?.environment?.redis
+            ? databases.can_create
+                ? 'new'
+                : (databases.choices.find((choice) => choice.type === 'redis')?.value ?? 'none')
+            : 'none'
+    )
+    const database = $derived(
+        pickedDatabase !== null && databaseOptions.some((option) => option.value === pickedDatabase)
+            ? pickedDatabase
+            : suggestedDatabase
+    )
+    const redis = $derived(
+        pickedRedis !== null && redisOptions.some((option) => option.value === pickedRedis)
+            ? pickedRedis
+            : suggestedRedis
+    )
     const changedStack = $derived(STACK_FIELDS.some((field) => touched[field]))
     const refused = $derived(
         (read?.verdict === 'blocked' && !changedStack) || (detection?.state === 'failed' && detection.definitive)
@@ -722,7 +778,8 @@
                                     <p class="m-0 mb-1 text-[12px] text-muted-foreground">
                                         Point the domain at this server with {server.dns_targets.length === 1
                                             ? 'this record'
-                                            : 'these records'}. The certificate is issued on the first visit.
+                                            : 'these records'}. Coresmith asks for its certificate when the app first
+                                        goes live.
                                     </p>
                                     <DnsRecords
                                         records={namedTargets(server.dns_targets, domainName)}
@@ -732,13 +789,56 @@
                                     <p class="m-0 text-[12px] text-muted-foreground">
                                         Point the domain at the server first: an A record for its IPv4 address, or an
                                         AAAA record for IPv6. Once the app is live, Coresmith checks the domain from
-                                        outside and shows the record it needs. The certificate is issued on the first
-                                        visit.
+                                        outside, shows the record it needs and asks for its certificate.
                                     </p>
                                 {/if}
                             </div>
                         {/if}
                     </div>
+                    {#if !editing}
+                        <div class="grid gap-3" data-testid="app-databases">
+                            <div>
+                                <Label for="database" class="mb-1.5">Database</Label>
+                                <NativeSelect
+                                    id="database"
+                                    name="database"
+                                    bind:value={() => database, (value: string) => (pickedDatabase = value)}
+                                    options={databaseOptions}
+                                    aria-invalid={errors.database ? true : undefined}
+                                />
+                                {#if read?.environment?.database && pickedDatabase === null}
+                                    <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                                        Picked from DB_CONNECTION in {read.environment.example}.
+                                    </p>
+                                {:else if read && !read.environment?.example}
+                                    <p
+                                        class="mt-1.5 mb-0 text-[12px] text-muted-foreground"
+                                        data-testid="env-example-hint"
+                                    >
+                                        Add a .env.example to your repository and Coresmith starts the app's variables
+                                        from it.
+                                    </p>
+                                {/if}
+                                <FieldError message={errors.database} />
+                            </div>
+                            <div>
+                                <Label for="redis" class="mb-1.5">Redis</Label>
+                                <NativeSelect
+                                    id="redis"
+                                    name="redis"
+                                    bind:value={() => redis, (value: string) => (pickedRedis = value)}
+                                    options={redisOptions}
+                                    aria-invalid={errors.redis ? true : undefined}
+                                />
+                                {#if read?.environment?.redis && pickedRedis === null}
+                                    <p class="mt-1.5 mb-0 text-[12px] text-muted-foreground">
+                                        Picked because {read.environment.example} uses Redis.
+                                    </p>
+                                {/if}
+                                <FieldError message={errors.redis} />
+                            </div>
+                        </div>
+                    {/if}
                     {#if !editing}
                         <ProjectSelect {projects} value={project} error={errors.project_id} />
                         <div>

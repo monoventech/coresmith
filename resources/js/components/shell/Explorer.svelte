@@ -32,6 +32,11 @@
     })
 
     const elapsed = $derived(elapsedSince(explorer.running?.started_at ?? null, now))
+    const opened = $derived({
+        projects: !shell.folded.includes('section:projects'),
+        apps: !shell.folded.includes('section:apps'),
+        servers: !shell.folded.includes('section:servers')
+    })
 
     function current(href: string): boolean {
         const target = pathOf(href)
@@ -71,6 +76,22 @@
         return phase.charAt(0).toUpperCase() + phase.slice(1)
     }
 </script>
+
+{#snippet sectionToggle(key: string, label: string, open: boolean)}
+    <button
+        type="button"
+        class="focus-ring -ml-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md bg-transparent px-1 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground hover:text-foreground"
+        aria-expanded={open}
+        onclick={() => toggleProject(`section:${key}`)}
+    >
+        {#if open}
+            <ChevronDown class="size-3" aria-hidden="true" />
+        {:else}
+            <ChevronRight class="size-3" aria-hidden="true" />
+        {/if}
+        <span id="explorer-{key}-label">{label}</span>
+    </button>
+{/snippet}
 
 <aside
     aria-label="Explorer"
@@ -130,10 +151,7 @@
         {#if explorer.projects.length > 0}
             <div class="flex flex-col gap-0.5" role="group" aria-labelledby="explorer-projects-label">
                 <div class="flex h-7 items-center justify-between px-2">
-                    <span
-                        id="explorer-projects-label"
-                        class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Projects</span
-                    >
+                    {@render sectionToggle('projects', 'Projects', opened.projects)}
                     {#if explorer.can.createProject}
                         <Link
                             href={route('projects.index', { create: 1 })}
@@ -143,7 +161,7 @@
                         >
                     {/if}
                 </div>
-                {#each explorer.projects as project (project.id)}
+                {#each opened.projects ? explorer.projects : [] as project (project.id)}
                     {@const open = !shell.folded.includes(project.id)}
                     <div class="flex flex-col gap-px" data-testid="explorer-project">
                         <div class="flex h-8 items-center gap-1.5 pr-2">
@@ -184,11 +202,9 @@
                                     <ExplorerRow
                                         href={app.href}
                                         name={app.name}
-                                        detail={app.state.label}
+                                        detail="{app.state.label} on {app.server}"
                                         tone={app.state.tone}
                                         tags={app.tags}
-                                        aside={app.server}
-                                        asideClass="font-mono"
                                         indent
                                         current={current(app.href)}
                                     />
@@ -198,7 +214,6 @@
                                         href={database.href}
                                         name={database.name}
                                         detail={ENGINES[database.engine] ?? database.engine}
-                                        aside={ENGINES[database.engine] ?? database.engine}
                                         database
                                         indent
                                         current={current(database.href)}
@@ -224,10 +239,7 @@
                 data-testid="explorer-apps"
             >
                 <div class="flex h-7 items-center justify-between px-2">
-                    <span
-                        id="explorer-apps-label"
-                        class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Apps</span
-                    >
+                    {@render sectionToggle('apps', 'Apps', opened.apps)}
                     {#if explorer.can.createApplication}
                         <Link
                             href={route('applications.new')}
@@ -237,15 +249,13 @@
                         >
                     {/if}
                 </div>
-                {#each explorer.unfiled as app (app.id)}
+                {#each opened.apps ? explorer.unfiled : [] as app (app.id)}
                     <ExplorerRow
                         href={app.href}
                         name={app.name}
-                        detail={app.state.label}
+                        detail="{app.state.label} on {app.server}"
                         tone={app.state.tone}
                         tags={app.tags}
-                        aside={app.server}
-                        asideClass="font-mono"
                         current={current(app.href)}
                     />
                 {/each}
@@ -260,10 +270,7 @@
                 data-testid="explorer-servers"
             >
                 <div class="flex h-7 items-center justify-between px-2">
-                    <span
-                        id="explorer-servers-label"
-                        class="text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">Servers</span
-                    >
+                    {@render sectionToggle('servers', 'Servers', opened.servers)}
                     {#if explorer.can.createServer}
                         <Link
                             href={route('servers.create')}
@@ -273,7 +280,7 @@
                         >
                     {/if}
                 </div>
-                {#each explorer.servers as server (server.id)}
+                {#each opened.servers ? explorer.servers : [] as server (server.id)}
                     <ExplorerRow
                         href={server.href}
                         name={server.name}

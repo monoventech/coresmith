@@ -10,6 +10,7 @@
     import * as Dialog from '@/components/ui/dialog'
     import type { CronCard, CronJob, CronSend } from '@/lib/cron'
     import { cn } from '@/lib/utils'
+    import { REFRESH_HEADERS } from '@/lib/visits'
 
     let {
         cron,
@@ -60,7 +61,7 @@
         async function read() {
             try {
                 const response = await fetch(href, {
-                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...REFRESH_HEADERS }
                 })
                 const body = (await response.json()) as { lines?: string[]; error?: string | null; pending?: boolean }
 

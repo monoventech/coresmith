@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Enums\DatabaseType;
 use App\Enums\TeamRole;
+use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Deployment\EnvironmentFile;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
 use Spatie\Activitylog\Models\Activity;
@@ -135,6 +137,27 @@ test('rotating sets a new password on the server, seals it, and shows it once', 
         ->and(implode("\n", $transport->commands()))->not->toContain($password)
         ->and(json_encode($command->properties))->not->toContain($password)
         ->and(Activity::query()->where('description', 'database_password_rotated')->sole()->subject?->is($database))->toBeTrue();
+});
+
+test('rotating gives the new password to the apps connected to the database, and says to deploy them', function () {
+    databasePasswordTransport();
+    [$server, $database, $admin] = databasePasswordSetup();
+    $shop = Application::factory()->for($server->team)->for($server)->create(['name' => 'shop', 'framework' => 'laravel', 'env_variables' => "DB_PASSWORD=Old5ecretPasswordValue\n"]);
+    $blog = Application::factory()->for($server->team)->for($server)->create(['name' => 'blog', 'framework' => 'laravel', 'env_variables' => null]);
+    $other = Application::factory()->for($server->team)->for($server)->create(['name' => 'other', 'framework' => 'laravel', 'env_variables' => "DB_PASSWORD=Old5ecretPasswordValue\n"]);
+    $shop->databases()->attach($database);
+    $blog->databases()->attach($database);
+
+    $this->actingAs($admin)
+        ->put(route('servers.databases.password.update', [$server, $database]))
+        ->assertSessionHas('success', 'Password rotated, and blog and shop have the new one. Deploy them to switch over.');
+
+    $password = (string) $database->fresh()->db_password;
+    $environment = app(EnvironmentFile::class);
+
+    expect($environment->parse((string) $shop->fresh()->env_variables))->toHaveKey('DB_PASSWORD', $password)
+        ->and($environment->parse((string) $blog->fresh()->env_variables))->toHaveKey('DB_PASSWORD', $password)
+        ->and($other->fresh()->env_variables)->toBe("DB_PASSWORD=Old5ecretPasswordValue\n");
 });
 
 test('a rotation the server refuses keeps the old password and says so', function () {

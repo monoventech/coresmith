@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\TeamRole;
+use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\Team;
@@ -66,6 +67,21 @@ test('a database on the shared Redis moves to a Redis of its own, whose password
         ->and(session('databasePassword'))->toBe($fresh->db_password)
         ->and($transport->commands())->toContain('systemctl daemon-reload && systemctl enable coresmith-redis-6380.service && systemctl restart coresmith-redis-6380.service')
         ->and(Activity::query()->where('description', 'database_moved_off_shared_redis')->sole()->subject_id)->toBe($database->id);
+});
+
+test('a move gives the new port and password to the app connected to the database', function () {
+    sharedRedisTransport((new FakeSSHTransport)->respondTo('redis-cli -p 6380 ping', "PONG\n"));
+    $server = sharedRedisServer();
+    $database = sharedRedisDatabase($server);
+    $shop = Application::factory()->for($server->team)->for($server)->create(['name' => 'shop', 'framework' => 'laravel', 'env_variables' => "REDIS_PORT=6379\nREDIS_PASSWORD=null\n"]);
+    $shop->databases()->attach($database);
+
+    $this->actingAs(sharedRedisUser($server->team))
+        ->post(route('servers.databases.own-redis', [$server, $database]))
+        ->assertSessionHas('success', 'Moved cache to a Redis of its own on port 6380, and shop has the new port and password. Deploy shop to switch over.');
+
+    expect($shop->fresh()->env_variables)->toContain('REDIS_PORT="6380"')
+        ->and($shop->fresh()->env_variables)->toContain('REDIS_PASSWORD="' . $database->fresh()->db_password . '"');
 });
 
 test('a move skips a port another program listens on', function () {

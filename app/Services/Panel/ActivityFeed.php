@@ -338,6 +338,9 @@ final class ActivityFeed
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
+            'migrations_changed' => ($properties['on'] ?? false)
+                ? [$this->text('Migrations turned on for '), $this->mono($application?->name), $this->text(', from the next deploy')]
+                : [$this->text('Migrations turned off for '), $this->mono($application?->name), $this->text(', deploys skip them')],
             'application_filed' => [$this->mono($application?->name), $this->text($this->filing($properties))],
             ApplicationSetupController::CHANGED => [$this->text('Setup changed on '), $this->mono($application?->name), $this->text(': ' . Str::of(collect((array) ($properties['changed'] ?? []))->map(fn(mixed $field): string => ApplicationSetupController::LABELS[(string) $field] ?? (string) $field)->join(', ', ' and '))->value())],
             ApplicationDeployScriptController::CHANGED => [$this->text('Deploy script for '), $this->mono($application?->name), $this->text(($properties['custom'] ?? false) ? ' changed, the next deploy runs it' : " is back to Coresmith's default")],
@@ -357,6 +360,8 @@ final class ActivityFeed
             'port_block_moved' => [$this->mono($application?->name), $this->text(' moved to ports ' . (int) ($properties['to'] ?? 0) . '–' . ((int) ($properties['to'] ?? 0) + 9) . ', ' . ($properties['process'] ?? 'another process') . ' already listens on ' . (int) ($properties['port'] ?? 0))],
             'webhook_signature_rejected' => [$this->text((int) ($properties['count'] ?? 1) > 1 ? ((int) $properties['count']) . ' webhooks with a bad signature were rejected' : 'A webhook with a bad signature was rejected')],
             'database_created' => [$this->text('Database '), $this->mono($database?->name), $this->text(' created')],
+            'database_creation_failed' => [$this->text("Couldn't create "), $this->mono($database?->name)],
+            'database_connected' => [$this->mono($application?->name), $this->text(' connected to '), $this->mono((string) ($properties['database'] ?? ''))],
             'database_backed_up' => [$this->text('Backup taken of '), $this->mono($database?->name)],
             'database_deleted' => [$this->text('Database '), $this->mono($database?->name), $this->text(' deleted')],
             'database_filed' => [$this->text('Database '), $this->mono($database?->name), $this->text($this->filing($properties))],

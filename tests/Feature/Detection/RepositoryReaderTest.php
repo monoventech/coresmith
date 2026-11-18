@@ -73,6 +73,7 @@ test('a public repository is read with a sparse checkout of just the probe\'s fi
         ->and($script)->toContain("sparse-checkout set --no-cone '/.tool-versions'")
         ->and($script)->toContain("'/composer.json'")
         ->and($script)->toContain("'/artisan'")
+        ->and($script)->toContain("'/.env.example' '/.env.sample' '/.env.dist' '/.env.template'")
         ->and($script)->toContain('git -c core.symlinks=false checkout')
         ->and($script)->toContain('export GIT_TERMINAL_PROMPT=0')
         ->and($script)->toContain("limit='timeout 120'")

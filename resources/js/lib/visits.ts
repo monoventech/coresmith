@@ -4,7 +4,9 @@
 
 import type { VisitOptions } from '@inertiajs/core'
 
-export function replaceOnRefresh(href: string, options: VisitOptions): VisitOptions {
+export const REFRESH_HEADERS = { 'X-Coresmith-Refresh': '1' } as const
+
+export function refreshVisit(href: string, options: VisitOptions): VisitOptions {
     const target = new URL(href, window.location.href)
     const data = options.data
 
@@ -15,5 +17,5 @@ export function replaceOnRefresh(href: string, options: VisitOptions): VisitOpti
         target.pathname === window.location.pathname &&
         target.search === window.location.search
 
-    return refresh ? { replace: true } : {}
+    return refresh ? { replace: true, headers: { ...options.headers, ...REFRESH_HEADERS } } : {}
 }
