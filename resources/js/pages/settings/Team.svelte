@@ -2,7 +2,6 @@
     import AppHead from '@/components/AppHead.svelte'
     import AuditLogCard from '@/components/settings/AuditLogCard.svelte'
     import FieldError from '@/components/FieldError.svelte'
-    import CloudProvidersCard from '@/components/settings/CloudProvidersCard.svelte'
     import CustomDomainCard from '@/components/settings/CustomDomainCard.svelte'
     import type { Invitation } from '@/components/settings/InvitationsCard.svelte'
     import type { MemberAccess, Shareable } from '@/components/settings/MemberAccessDialog.svelte'
@@ -20,7 +19,6 @@
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
     import { NativeSelect } from '@/components/ui/native-select'
-    import type { CloudAccounts } from '@/lib/cloud'
     import { getInitials } from '@/lib/initials'
     import { Form, page, router } from '@inertiajs/svelte'
     import { X } from '@lucide/svelte'
@@ -59,7 +57,6 @@
         can,
         shareable = null,
         sso,
-        cloud,
         offsite = null
     }: {
         team: { id: string; name: string; slug: string }
@@ -71,7 +68,6 @@
         can: { update: boolean; manageMembers: boolean; grantOwner: boolean; shareAccess: boolean }
         shareable?: Shareable | null
         sso: SingleSignOn
-        cloud: CloudAccounts
         offsite?: OffsiteDestination | null
     } = $props()
 
@@ -258,10 +254,6 @@
 
 <div class="mt-4">
     <SingleSignOnCard {sso} planNote={billing?.notes.single_sign_on} />
-</div>
-
-<div class="mt-4">
-    <CloudProvidersCard {cloud} />
 </div>
 
 {#if can.update}

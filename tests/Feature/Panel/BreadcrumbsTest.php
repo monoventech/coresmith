@@ -92,6 +92,7 @@ test('every page knows its trail', function (Closure $url, Closure $trail) {
     'general settings' => [fn() => route('settings.general'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('General')]],
     'the team tab' => [fn() => route('teams.index'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('Team')]],
     'git' => [fn() => route('source-providers.index'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('Git')]],
+    'cloud providers' => [fn() => route('cloud-providers.index'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('Cloud providers')]],
     'notifications' => [fn() => route('settings.notifications'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('Notifications')]],
     'api tokens' => [fn() => route('api-tokens.index'), fn() => [breadcrumb('Settings', route('settings.general')), breadcrumb('API tokens')]],
     'your profile' => [fn() => route('profile.edit'), fn() => [breadcrumb('Your account', route('profile.edit')), breadcrumb('Profile')]],

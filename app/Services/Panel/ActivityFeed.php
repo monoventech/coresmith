@@ -198,7 +198,7 @@ final class ActivityFeed
             default => null,
         };
 
-        return $parts === null ? null : $this->row($activity->created_at, $parts, route('teams.index'));
+        return $parts === null ? null : $this->row($activity->created_at, $parts, route('cloud-providers.index'));
     }
 
     /**

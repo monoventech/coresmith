@@ -63,9 +63,9 @@ test('an admin connects an account once the provider accepts its token', functio
     $fake->api->account(new CloudAccount('Monoven project'));
 
     $this->actingAs($user)
-        ->from(route('teams.index'))
+        ->from(route('cloud-providers.index'))
         ->post(route('cloud-providers.store'), ['type' => 'hetzner', 'name' => 'Hetzner Cloud', 'api_token' => 'tok-1'])
-        ->assertRedirect(route('teams.index'))
+        ->assertRedirect(route('cloud-providers.index'))
         ->assertSessionHas('success', 'Connected.');
 
     $account = CloudProvider::query()->sole();
@@ -339,7 +339,7 @@ test('removing an account forgets its token first', function () {
         ->and(Activity::query()->where('description', 'cloud_provider_removed')->sole()->properties->toArray())->toBeInAnyKeyOrder(['provider' => 'Hetzner Cloud', 'name' => $account->name]);
 });
 
-test('the team page lists accounts without ever sending a token', function () {
+test('the cloud providers tab lists accounts without ever sending a token', function () {
     [$team, $owner] = cloudAccountsOwner();
     $user = User::factory()->create();
     $team->members()->attach($user, ['role' => TeamRole::Member->value]);
@@ -348,11 +348,12 @@ test('the team page lists accounts without ever sending a token', function () {
     Server::factory()->fromProvider($account)->create()->delete();
     CloudProvider::factory()->for($team)->create(['name' => 'Gone'])->delete();
 
-    $response = $this->actingAs($owner)->get(route('teams.index'));
+    $response = $this->actingAs($owner)->get(route('cloud-providers.index'));
 
     $response->assertOk()
         ->assertDontSee('tok-secret-1')
         ->assertInertia(fn($page) => $page
+            ->component('settings/CloudProviders')
             ->has('cloud.accounts', 1)
             ->where('cloud.accounts.0.id', $account->id)
             ->where('cloud.accounts.0.type', 'hetzner')
@@ -370,5 +371,14 @@ test('the team page lists accounts without ever sending a token', function () {
             ->where('cloud.types.0.permission', CloudProviderType::Hetzner->permissionHint())
             ->where('cloud.can_manage', true));
 
-    $this->actingAs($user)->get(route('teams.index'))->assertInertia(fn($page) => $page->where('cloud.can_manage', false));
+    $this->actingAs($user)->get(route('cloud-providers.index'))->assertInertia(fn($page) => $page->where('cloud.can_manage', false));
+});
+
+test('the team page no longer carries the cloud accounts, which have a tab of their own', function () {
+    [$team, $owner] = cloudAccountsOwner();
+    CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
+
+    $this->actingAs($owner)->get(route('teams.index'))
+        ->assertOk()
+        ->assertInertia(fn($page) => $page->component('settings/Team')->missing('cloud'));
 });

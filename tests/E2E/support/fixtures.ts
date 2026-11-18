@@ -274,7 +274,7 @@ export async function gotoDatabase(page: Page, server: string, name: string) {
 
 export async function gotoSettings(
     page: Page,
-    tab: 'General' | 'Team' | 'Git' | 'Notifications' | 'API tokens' | 'Billing'
+    tab: 'General' | 'Team' | 'Git' | 'Cloud providers' | 'Notifications' | 'API tokens' | 'Billing'
 ) {
     await page.goto('/dashboard')
     await nav(page).getByRole('link', { name: 'Settings' }).click()

@@ -18,6 +18,11 @@
         },
         { label: 'Git', href: route('source-providers.index'), current: path.startsWith('/settings/git') },
         {
+            label: 'Cloud providers',
+            href: route('cloud-providers.index'),
+            current: path.startsWith('/settings/cloud-providers')
+        },
+        {
             label: 'Notifications',
             href: route('settings.notifications'),
             current: path.startsWith('/settings/notifications')
@@ -31,6 +36,10 @@
     const description = $derived.by(() => {
         if (path.startsWith('/settings/git')) {
             return 'A GitHub App, installed only on the repositories you choose.'
+        }
+
+        if (path.startsWith('/settings/cloud-providers')) {
+            return 'Accounts at Hetzner Cloud, DigitalOcean, Vultr and Linode that Coresmith can create servers in.'
         }
 
         if (path.startsWith('/settings/billing')) {

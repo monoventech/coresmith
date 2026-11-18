@@ -349,7 +349,7 @@ test('a server feed shows up to twenty five entries by default', function () {
     expect((new ActivityFeed)->forServer($server))->toHaveCount(25);
 });
 
-test('cloud account events are described and link to the team page', function (string $description, string $sentence) {
+test('cloud account events are described and link to the Cloud providers tab', function (string $description, string $sentence) {
     [$team] = feedFixture();
     $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
 
@@ -358,7 +358,7 @@ test('cloud account events are described and link to the team page', function (s
     $row = (new ActivityFeed)->forTeam($team)[0];
 
     expect(feedSentence($row))->toBe($sentence)
-        ->and($row['href'])->toBe(route('teams.index'))
+        ->and($row['href'])->toBe(route('cloud-providers.index'))
         ->and(array_column(array_values(array_filter($row['parts'], fn(array $part): bool => $part['mono'])), 'text'))->toBe(['Hetzner production']);
 })->with([
     'connected' => ['cloud_provider_connected', 'Hetzner Cloud connected as Hetzner production'],

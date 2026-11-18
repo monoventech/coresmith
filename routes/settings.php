@@ -92,6 +92,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('settings.offsite-backups.update');
     Route::delete('settings/team/offsite-backups', [OffsiteBackupController::class, 'destroy'])->name('settings.offsite-backups.destroy');
 
+    Route::get('settings/cloud-providers', [CloudProviderController::class, 'index'])->name('cloud-providers.index');
     Route::post('settings/cloud-providers', [CloudProviderController::class, 'store'])
         ->middleware('throttle:10,1,cloud-provider-connect')
         ->name('cloud-providers.store');

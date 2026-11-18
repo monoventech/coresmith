@@ -307,6 +307,7 @@ const PAGES: [string, Visit][] = [
     ['Setup', direct('/setup')],
     ['General settings', direct('/settings')],
     ['Team settings', direct('/settings/team')],
+    ['Cloud providers settings', direct('/settings/cloud-providers')],
     [
         'Team settings right after an invitation is sent',
         async (page) => {
@@ -360,7 +361,7 @@ const PAGES: [string, Visit][] = [
     [
         'Add a provider dialog',
         async (page) => {
-            await page.goto('/settings/team')
+            await page.goto('/settings/cloud-providers')
             await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Add a provider' }).click()
             await dialog(page).waitFor()
         }
@@ -368,7 +369,7 @@ const PAGES: [string, Visit][] = [
     [
         'Replace token dialog',
         async (page) => {
-            await page.goto('/settings/team')
+            await page.goto('/settings/cloud-providers')
             await page
                 .getByTestId('cloud-account-row')
                 .filter({ hasText: 'Linode' })
@@ -380,7 +381,7 @@ const PAGES: [string, Visit][] = [
     [
         'Rename account dialog',
         async (page) => {
-            await page.goto('/settings/team')
+            await page.goto('/settings/cloud-providers')
             await page
                 .getByTestId('cloud-account-row')
                 .filter({ hasText: 'Linode' })
@@ -392,7 +393,7 @@ const PAGES: [string, Visit][] = [
     [
         'Remove account dialog',
         async (page) => {
-            await page.goto('/settings/team')
+            await page.goto('/settings/cloud-providers')
             await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Remove DigitalOcean' }).click()
             await dialog(page).getByRole('button', { name: 'Remove account' }).waitFor()
         }
