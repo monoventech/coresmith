@@ -58,6 +58,13 @@ final readonly class DatabaseConnections
         activity()->performedOn($application)->withProperties(['database' => $database->name, 'type' => $database->type?->value])->log('database_connected');
     }
 
+    public function disconnect(Application $application, ManagedDatabase $database): void
+    {
+        $application->databases()->detach($database->getKey());
+
+        activity()->performedOn($application)->withProperties(['database' => $database->name, 'type' => $database->type?->value])->log('database_disconnected');
+    }
+
     /**
      * @return list<string>
      */

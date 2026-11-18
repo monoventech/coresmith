@@ -6,6 +6,7 @@ import {
     dialog,
     expect,
     gotoServer,
+    gotoSettings,
     noSidewaysScroll,
     own,
     test,
@@ -36,8 +37,8 @@ test.describe('provider accounts', () => {
         await backToMonoven(page)
     })
 
-    test('the team lists its provider accounts and the state of each', async ({ page }) => {
-        await page.goto('/settings/team')
+    test("the Cloud providers tab lists the team's accounts and the state of each", async ({ page }) => {
+        await page.goto('/settings/cloud-providers')
 
         const card = page.getByTestId('cloud-providers-card')
 
@@ -55,8 +56,33 @@ test.describe('provider accounts', () => {
         await expect(card).not.toContainText('never-sent')
     })
 
+    test('Settings has a Cloud providers tab after Git, and the Team tab no longer lists the accounts', async ({
+        page
+    }) => {
+        await gotoSettings(page, 'Cloud providers')
+
+        await expect(page).toHaveURL(/\/settings\/cloud-providers$/)
+        await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link')).toContainText([
+            'General',
+            'Team',
+            'Git',
+            'Cloud providers',
+            'Notifications',
+            'API tokens'
+        ])
+        await expect(page.getByTestId('cloud-providers-card')).toBeVisible()
+
+        await page
+            .getByRole('navigation', { name: 'Settings' })
+            .getByRole('link', { name: 'Team', exact: true })
+            .click()
+
+        await expect(page.getByTestId('team-card')).toBeVisible()
+        await expect(page.getByTestId('cloud-providers-card')).toHaveCount(0)
+    })
+
     test('a provider is only added once its token is checked', async ({ page }) => {
-        await page.goto('/settings/team')
+        await page.goto('/settings/cloud-providers')
         await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Add a provider' }).click()
         await dialog(page).getByLabel('Provider').selectOption('vultr')
         await dialog(page).getByLabel('API token').fill('   ')
@@ -71,7 +97,7 @@ test.describe('provider accounts', () => {
     })
 
     test('an account a server still uses cannot be removed', async ({ page }) => {
-        await page.goto('/settings/team')
+        await page.goto('/settings/cloud-providers')
         await page.getByTestId('cloud-providers-card').getByRole('button', { name: 'Remove DigitalOcean' }).click()
         await dialog(page).getByRole('button', { name: 'Remove account' }).click()
 
@@ -79,7 +105,7 @@ test.describe('provider accounts', () => {
     })
 
     test('an unused account is removed after asking', async ({ page }, testInfo) => {
-        await page.goto(`/${own(testInfo, 'lab')}/settings/team`)
+        await page.goto(`/${own(testInfo, 'lab')}/settings/cloud-providers`)
 
         const card = page.getByTestId('cloud-providers-card')
 
@@ -96,7 +122,7 @@ test.describe('provider accounts', () => {
         const name = own(testInfo, 'Sandbox', ' ')
         const renamed = own(testInfo, 'Renamed', ' ')
 
-        await page.goto('/stray/settings/team')
+        await page.goto('/stray/settings/cloud-providers')
         await page
             .getByTestId('cloud-account-row')
             .filter({ hasText: name })
@@ -114,7 +140,7 @@ test.describe('provider accounts', () => {
     })
 
     test('a token is replaced only once the new one is checked', async ({ page }) => {
-        await page.goto('/settings/team')
+        await page.goto('/settings/cloud-providers')
         await page
             .getByTestId('cloud-account-row')
             .filter({ hasText: 'Linode' })
@@ -137,7 +163,7 @@ asMember('a deployer sees why a destroy failed but cannot detach the server', as
 })
 
 asMember('a deployer sees the accounts but cannot change them', async ({ page }) => {
-    await page.goto('/settings/team')
+    await page.goto('/settings/cloud-providers')
 
     const card = page.getByTestId('cloud-providers-card')
 
@@ -256,7 +282,10 @@ test.describe('provisioning through a provider', () => {
         await provider(page).selectOption({ label: 'Linode, token refused' })
 
         await expect(page.getByRole('main')).toContainText("Linode refused this account's token on")
-        await expect(page.getByRole('link', { name: 'Open team settings' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Open cloud providers' })).toHaveAttribute(
+            'href',
+            /\/settings\/cloud-providers$/
+        )
         await expect(page.getByLabel('Region')).toHaveCount(0)
     })
 
@@ -536,7 +565,7 @@ test.describe('provider servers on a phone', () => {
     })
 
     test('the cloud providers card can be tapped', async ({ page }) => {
-        await page.goto('/settings/team')
+        await page.goto('/settings/cloud-providers')
         await noSidewaysScroll(page)
 
         const card = page.getByTestId('cloud-providers-card')

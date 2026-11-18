@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ApplicationType;
+use App\Enums\ServerStatus;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\Team;
@@ -13,6 +14,7 @@ use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Runtime\RepositoryFacts;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\RepositoryFixture;
 
@@ -232,3 +234,28 @@ test('a Go app needs a main package, named as a folder inside the module', funct
     'none' => [null, 'Pick the package that answers web requests.'],
     'outside the module' => ['../secrets', 'Use the folder of a package in the module, like cmd/server, or a dot for the module root.'],
 ]);
+
+test('a Laravel app with Horizon added with a new Redis queues on it from the start', function () {
+    Queue::fake();
+    [$owner, $server] = storeDetectionServer();
+    $server->forceFill(['status' => ServerStatus::Active])->save();
+    $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts('laravel-horizon'), installed: ['php' => ['8.5.10'], 'nodejs' => ['24.11.1']], extensions: ['8.5.10' => ['ctype', 'mbstring', 'pdo_sqlite', 'openssl', 'tokenizer', 'xml', 'fileinfo', 'curl']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, 'database' => 'sqlite', 'redis' => 'new'])->assertSessionHasNoErrors();
+
+    $variables = app(EnvironmentFile::class)->parse((string) storeDetectionApp()->env_variables);
+
+    expect($variables)->toMatchArray(['QUEUE_CONNECTION' => 'redis', 'DB_CONNECTION' => 'sqlite'])
+        ->and($variables)->toHaveKey('REDIS_PORT');
+});
+
+test('a Laravel app without Horizon keeps the queue its example names when a Redis is picked', function () {
+    Queue::fake();
+    [$owner, $server] = storeDetectionServer();
+    $server->forceFill(['status' => ServerStatus::Active])->save();
+    $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts('laravel-env-example'), installed: ['php' => ['8.5.10'], 'nodejs' => ['24.11.1']], extensions: ['8.5.10' => ['ctype', 'mbstring', 'pdo_sqlite', 'pdo_pgsql', 'openssl', 'tokenizer', 'xml', 'fileinfo', 'curl']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, 'database' => 'none', 'redis' => 'new'])->assertSessionHasNoErrors();
+
+    expect(app(EnvironmentFile::class)->parse((string) storeDetectionApp()->env_variables))->toHaveKey('QUEUE_CONNECTION', 'database');
+});

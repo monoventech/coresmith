@@ -198,7 +198,7 @@ final class ActivityFeed
             default => null,
         };
 
-        return $parts === null ? null : $this->row($activity->created_at, $parts, route('teams.index'));
+        return $parts === null ? null : $this->row($activity->created_at, $parts, route('cloud-providers.index'));
     }
 
     /**
@@ -362,6 +362,7 @@ final class ActivityFeed
             'database_created' => [$this->text('Database '), $this->mono($database?->name), $this->text(' created')],
             'database_creation_failed' => [$this->text("Couldn't create "), $this->mono($database?->name)],
             'database_connected' => [$this->mono($application?->name), $this->text(' connected to '), $this->mono((string) ($properties['database'] ?? ''))],
+            'database_disconnected' => [$this->mono($application?->name), $this->text(' no longer connected to '), $this->mono((string) ($properties['database'] ?? ''))],
             'database_backed_up' => [$this->text('Backup taken of '), $this->mono($database?->name)],
             'database_deleted' => [$this->text('Database '), $this->mono($database?->name), $this->text(' deleted')],
             'database_filed' => [$this->text('Database '), $this->mono($database?->name), $this->text($this->filing($properties))],

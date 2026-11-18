@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\BillingState;
 use App\Enums\Plan;
+use App\Enums\TeamRole;
 use App\Models\ManagedDatabase;
 use App\Models\Team;
 use App\Models\TeamInvitation;
@@ -12,10 +13,26 @@ use App\Services\Billing\TeamBilling;
 use App\Services\Billing\TrialHistory;
 use App\Services\Cloud\Tasks\CreateServerTask;
 use App\Services\Teams\AuditLog;
+use App\Services\Teams\TeamAccess;
 use App\Services\Teams\TeamDeletion;
 use Database\Seeders\CloudE2ESeeder;
 use Illuminate\Support\Facades\Hash;
 use Tests\Support\CloudBilling;
+
+test('the cloud browser seed has a Developer on the Pro team who sees one shared server, a server of their own and their own app', function () {
+    CloudBilling::enable();
+
+    $this->seed(CloudE2ESeeder::class);
+
+    $team = Team::query()->where('slug', 'monoven')->firstOrFail();
+    $developer = User::query()->where('email', CloudE2ESeeder::DEVELOPER_EMAIL)->firstOrFail();
+    $access = app(TeamAccess::class);
+
+    expect($team->members()->whereKey($developer->id)->firstOrFail()->pivot->role)->toBe(TeamRole::Developer->value)
+        ->and(app(TeamBilling::class)->status($team)->plan)->toBe(Plan::Pro)
+        ->and($access->servers($developer, $team)->orderBy('name')->pluck('name')->all())->toBe(['forge-02', 'lena-01'])
+        ->and($access->applications($developer, $team)->pluck('name')->all())->toBe(['side-notes']);
+});
 
 test('the cloud browser seed has a team on an older price', function () {
     CloudBilling::enable();

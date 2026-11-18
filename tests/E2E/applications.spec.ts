@@ -1247,7 +1247,11 @@ test.describe('adding an application from GitHub', () => {
         expect(sent).not.toHaveProperty('source_provider_id')
         expect(sent).not.toHaveProperty('repository_id')
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
-        await expect(toast(page)).toContainText('App added.')
+        await expect(toast(page)).toContainText(
+            "App added. Deploy it when you're ready. After that, pushes to main deploy on their own."
+        )
+        await expect(toggle(page, 'Auto deploy')).toBeChecked()
+        await expect(toggleRow(page, 'auto_deploy')).toContainText("It starts after the app's first deploy.")
     })
 
     test('adding an app from GitHub without picking a repository asks for one', async ({ page }) => {

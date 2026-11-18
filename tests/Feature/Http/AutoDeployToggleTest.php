@@ -31,6 +31,7 @@ function autoDeployToggleApp(Team $team, array $attributes = []): Application
     return Application::factory()->for($team)->for($server)->create(array_merge([
         'repository_url' => 'https://github.com/monoven/site.git',
         'repository_branch' => 'main',
+        'current_release' => '20261001-120000',
     ], $attributes));
 }
 
@@ -124,4 +125,16 @@ test('a member cannot change auto deploy', function () {
 
     expect($application->fresh()->quick_deploy)->toBeFalse()
         ->and(Activity::query()->where('description', 'toggle_changed')->exists())->toBeFalse();
+});
+
+test("turning auto deploy on for an app that hasn't deployed yet says it starts after the first deploy", function () {
+    $team = Team::factory()->create();
+    $application = autoDeployToggleApp($team, ['current_release' => null, 'repository_head' => str_repeat('b', 40)]);
+
+    $this->actingAs(autoDeployToggleMember($team, TeamRole::Admin))
+        ->put(autoDeployToggleUrl($application), ['on' => true])
+        ->assertSessionHas('success', "Saved. Auto deploy is on. It starts after the app's first deploy.");
+
+    expect($application->fresh()->quick_deploy)->toBeTrue();
+    Queue::assertNotPushed(DeployApplication::class);
 });

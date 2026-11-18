@@ -10,6 +10,7 @@ namespace App\Http\Requests\Application;
 
 use App\Models\Application;
 use App\Models\SourceProvider;
+use App\Services\Database\AppDatabaseState;
 use App\Services\SafeName;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Validator;
@@ -42,6 +43,22 @@ final class UpdateApplicationSetupRequest extends StoreApplicationRequest
     public function messages(): array
     {
         return [...parent::messages(), 'repository_url.missing' => self::LINKED];
+    }
+
+    public function databaseChoice(): ?string
+    {
+        $choice = parent::databaseChoice();
+        $application = $this->application();
+
+        return $application === null || $choice === null || $choice === app(AppDatabaseState::class)->database($application) ? null : $choice;
+    }
+
+    public function redisChoice(): ?string
+    {
+        $choice = parent::redisChoice();
+        $application = $this->application();
+
+        return $application === null || $choice === null || $choice === app(AppDatabaseState::class)->redis($application) ? null : $choice;
     }
 
     public function linked(): bool

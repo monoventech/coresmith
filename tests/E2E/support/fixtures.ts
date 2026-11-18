@@ -40,6 +40,10 @@ export const asCloudMember = suite.extend({
     storageState: 'tests/E2E/.auth/cloud-member.json'
 })
 
+export const asCloudDeveloper = suite.extend({
+    storageState: 'tests/E2E/.auth/cloud-developer.json'
+})
+
 export const asMover = suite.extend({
     // eslint-disable-next-line no-empty-pattern
     storageState: async ({}, use, testInfo) => {
@@ -274,7 +278,7 @@ export async function gotoDatabase(page: Page, server: string, name: string) {
 
 export async function gotoSettings(
     page: Page,
-    tab: 'General' | 'Team' | 'Git' | 'Notifications' | 'API tokens' | 'Billing'
+    tab: 'General' | 'Team' | 'Git' | 'Cloud providers' | 'Notifications' | 'API tokens' | 'Billing'
 ) {
     await page.goto('/dashboard')
     await nav(page).getByRole('link', { name: 'Settings' }).click()

@@ -31,6 +31,7 @@ function statusLinkedApp(array $app = [], array $provider = []): Application
         'source_provider_id' => $connection->id,
         'repository_id' => '70000001',
         'quick_deploy' => true,
+        'current_release' => '20261001-120000',
     ], $app));
 }
 
@@ -42,6 +43,7 @@ function statusUnlinkedApp(array $attributes = []): Application
         'repository_url' => 'https://github.com/monoven/site.git',
         'repository_branch' => 'main',
         'quick_deploy' => true,
+        'current_release' => '20261001-120000',
     ], $attributes));
 }
 
@@ -197,4 +199,9 @@ test('the auto deploy columns are nullable, carry no foreign key and reverse cle
     $migration->up();
 
     expect(Schema::hasColumns('applications', $added))->toBeTrue();
+});
+
+test("an app that hasn't deployed yet says auto deploy starts after its first deploy", function () {
+    expect(statusOf(statusUnlinkedApp(['current_release' => null]))[0])
+        ->toBe("Checks main for new commits every 5 minutes from forge-01. It starts after the app's first deploy.");
 });

@@ -109,6 +109,40 @@ test.describe("an app's setup", () => {
         await expect(detection).not.toContainText('add the app')
     })
 
+    test('shows the database the app uses, and warns that switching leaves its data behind', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+        await setupCard(page).getByRole('link', { name: 'Edit setup' }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'Edit setup' })).toBeVisible()
+
+        const database = page.getByLabel('Database', { exact: true })
+
+        await expect(database.locator('option:checked')).toHaveText('atlas_production, PostgreSQL')
+        await expect(page.getByTestId('database-switch-note')).toHaveCount(0)
+
+        await database.selectOption({ label: 'New MySQL database' })
+
+        await expect(page.getByTestId('database-switch-note')).toHaveText(
+            "atlas_production keeps its data. Coresmith doesn't copy it to the database you picked."
+        )
+
+        await database.selectOption({ label: "None, I'll set it up myself" })
+
+        await expect(page.getByTestId('database-switch-note')).toHaveText(
+            "The app's variables still point at atlas_production until you change them."
+        )
+    })
+
+    test('a Horizon app without Redis is told its queue worker needs one', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'reverb-unset')
+        await setupCard(page).getByRole('link', { name: 'Edit setup' }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'Edit setup' })).toBeVisible()
+
+        await expect(page.getByLabel('Redis', { exact: true })).toHaveValue('none')
+        await expect(page.getByTestId('horizon-redis-note')).toHaveText(
+            "Horizon needs Redis, so the queue worker can't start without one."
+        )
+    })
+
     test('a failed deploy links to the setup from the app and from its log', async ({ page }) => {
         await gotoApplication(page, 'forge-01', 'storefront')
 

@@ -293,7 +293,7 @@ test('detaching a server works while read-only', function () {
 test("a push to a read-only team's webhook is refused and can be delivered again later", function () {
     $team = readOnlyTeam();
     $application = readOnlyApplication($team);
-    $application->forceFill(['quick_deploy' => true])->save();
+    $application->forceFill(['quick_deploy' => true, 'current_release' => '20261001-120000'])->save();
     $endpoint = WebhookEndpoint::factory()->for($application)->create(['secret' => 'shhh-secret', 'provider' => 'github', 'active' => true]);
     $payload = ['ref' => 'refs/heads/main', 'after' => str_repeat('b', 40)];
     $headers = ['X-GitHub-Event' => 'push', 'X-GitHub-Delivery' => 'push-while-read-only'];
@@ -314,7 +314,7 @@ test("a push to a read-only team's webhook is refused and can be delivered again
 test('a read-only team is not auto-deployed', function () {
     $team = readOnlyTeam();
     $application = readOnlyApplication($team);
-    $application->forceFill(['quick_deploy' => true])->save();
+    $application->forceFill(['quick_deploy' => true, 'current_release' => '20261001-120000'])->save();
 
     expect(app(AutoDeploy::class)->observe($application->fresh(), str_repeat('c', 40), 'push'))->toBeNull()
         ->and(Deployment::query()->count())->toBe(0);

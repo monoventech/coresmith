@@ -26,6 +26,7 @@ final class Breadcrumbs
         'settings.general' => 'General',
         'teams.index' => 'Team',
         'source-providers.index' => 'Git',
+        'cloud-providers.index' => 'Cloud providers',
         'settings.notifications' => 'Notifications',
         'api-tokens.index' => 'API tokens',
         'settings.billing' => 'Billing',

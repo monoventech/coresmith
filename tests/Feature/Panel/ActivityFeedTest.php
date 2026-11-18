@@ -184,15 +184,18 @@ test('showing and rotating a database password are described, never with the pas
     'rotated' => ['database_password_rotated', 'Password of shop_production rotated'],
 ]);
 
-test('connecting a database to an app, and a database Coresmith could not create, are described', function () {
+test('connecting a database to an app, letting go of it, and a database Coresmith could not create, are described', function () {
     [$team, $server, $application] = feedFixture();
     $database = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'ledger']);
 
     feedLog($application, 'database_connected', ['database' => 'ledger', 'type' => 'mysql']);
     $this->travel(1)->second();
     feedLog($database, 'database_creation_failed');
+    $this->travel(1)->second();
+    feedLog($application, 'database_disconnected', ['database' => 'ledger', 'type' => 'mysql']);
 
     expect(array_map(feedSentence(...), (new ActivityFeed)->forTeam($team)))->toBe([
+        'shop no longer connected to ledger',
         "Couldn't create ledger",
         'shop connected to ledger',
     ]);
@@ -346,7 +349,7 @@ test('a server feed shows up to twenty five entries by default', function () {
     expect((new ActivityFeed)->forServer($server))->toHaveCount(25);
 });
 
-test('cloud account events are described and link to the team page', function (string $description, string $sentence) {
+test('cloud account events are described and link to the Cloud providers tab', function (string $description, string $sentence) {
     [$team] = feedFixture();
     $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner production']);
 
@@ -355,7 +358,7 @@ test('cloud account events are described and link to the team page', function (s
     $row = (new ActivityFeed)->forTeam($team)[0];
 
     expect(feedSentence($row))->toBe($sentence)
-        ->and($row['href'])->toBe(route('teams.index'))
+        ->and($row['href'])->toBe(route('cloud-providers.index'))
         ->and(array_column(array_values(array_filter($row['parts'], fn(array $part): bool => $part['mono'])), 'text'))->toBe(['Hetzner production']);
 })->with([
     'connected' => ['cloud_provider_connected', 'Hetzner Cloud connected as Hetzner production'],
