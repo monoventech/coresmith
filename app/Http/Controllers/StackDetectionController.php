@@ -17,6 +17,7 @@ use App\Models\Application;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\User;
+use App\Services\Database\AppDatabaseChoice;
 use App\Services\Deployment\StartingEnvironment;
 use App\Services\Deployment\Submodules;
 use App\Services\Detection\DetectionStore;
@@ -87,7 +88,7 @@ final class StackDetectionController extends Controller
             'packages_href' => $server->team !== null && $request->user()->can('update', $server->team) ? route('source-providers.index') : null,
             'submodules' => $this->submodules((string) $read->facts->file('.gitmodules'), $access instanceof RepositoryAccess ? $access->url : ''),
             'builds_with' => $this->buildsWith($read->facts),
-            'environment' => app(StartingEnvironment::class)->suggestion($read->facts),
+            'environment' => [...app(StartingEnvironment::class)->suggestion($read->facts), 'horizon' => AppDatabaseChoice::horizon($read->facts)],
         ]);
     }
 

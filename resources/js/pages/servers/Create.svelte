@@ -207,7 +207,7 @@
                                                     class="mt-2.5"
                                                     variant="outline"
                                                     size="sm"
-                                                    href={route('teams.index')}>Open team settings</Button
+                                                    href={route('cloud-providers.index')}>Open cloud providers</Button
                                                 >
                                             {:else}
                                                 <Button

@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Enums\ApplicationStatus;
+use App\Enums\ApplicationType;
 use App\Enums\DatabaseType;
 use App\Enums\Plan;
 use App\Enums\ServerStatus;
@@ -25,6 +27,7 @@ use App\Models\TeamInvoice;
 use App\Models\User;
 use App\Services\Billing\TrialHistory;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Teams\TeamAccess;
 use Database\Seeders\Support\MonovenTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -36,6 +39,8 @@ final class CloudE2ESeeder extends Seeder
     public const ADMIN_EMAIL = 'admin@cloud.test';
 
     public const MEMBER_EMAIL = 'member@cloud.test';
+
+    public const DEVELOPER_EMAIL = 'developer@cloud.test';
 
     public const PASSWORD = 'password-for-e2e';
 
@@ -64,6 +69,7 @@ final class CloudE2ESeeder extends Seeder
         Subscription::factory()->for($tenant->team, 'owner')->plan(Plan::Pro)->create(['renews_at' => now()->addDays(13)]);
         $this->invoices($tenant->team);
         $this->invitations($tenant->team, $tenant->owner);
+        $this->developer($tenant);
 
         $this->trialTeam($tenant->owner);
         $this->lapsedTeam($tenant->owner, $tenant->member);
@@ -89,6 +95,42 @@ final class CloudE2ESeeder extends Seeder
         $this->movingTeam($tenant->owner, 'Moved Away', 'moved-away');
 
         $tenant->owner->forceFill(['current_team_id' => $tenant->team->getKey()])->save();
+    }
+
+    private function developer(MonovenTenant $tenant): void
+    {
+        $developer = User::factory()->create(['name' => 'Lena Brandt', 'email' => self::DEVELOPER_EMAIL, 'password' => Hash::make(self::PASSWORD)]);
+        $tenant->team->members()->attach($developer, ['role' => TeamRole::Developer->value, 'sees_everything' => false]);
+        app(TeamAccess::class)->grant($tenant->team, $developer, $tenant->servers['forge-02']);
+
+        Application::factory()->for($tenant->team)->for($tenant->servers['forge-02'])->create([
+            'name' => 'side-notes',
+            'slug' => 'side-notes',
+            'system_user' => 'coresmith-app-side-notes',
+            'type' => ApplicationType::Php,
+            'framework' => 'laravel',
+            ...MonovenTenant::stack(['php' => ['8.5.10', 'composer.json', '^8.4']], ['name' => 'laravel', 'major' => 13]),
+            'domain' => 'side-notes.lena.dev',
+            'repository_url' => 'https://github.com/monoventech/side-notes',
+            'repository_branch' => 'main',
+            'base_port' => 9620,
+            'status' => ApplicationStatus::Active,
+            'created_by' => $developer->id,
+        ]);
+
+        Server::factory()->for($tenant->team)->create([
+            'name' => 'lena-01',
+            'region' => 'ams3',
+            'ip_address' => '198.51.100.44',
+            'status' => ServerStatus::Active,
+            'os_name' => 'ubuntu',
+            'os_version' => '24.04',
+            'meta' => ['cpu_cores' => 2, 'memory_mb' => 4096, 'disk_gb' => 80],
+            'provisioning_phase' => 8,
+            'host_key_fingerprint' => 'SHA256:' . substr(base64_encode(hash('sha256', 'lena-01', true)), 0, 43),
+            'last_connected_at' => now(),
+            'created_by' => $developer->id,
+        ]);
     }
 
     private function moveTeams(User $owner, string $code): void

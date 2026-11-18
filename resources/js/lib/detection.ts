@@ -41,7 +41,7 @@ export type DetectionRead = {
     packages_href?: string | null
     submodules?: { path: string; source: string; refused: string | null }[]
     builds_with?: { tool: string; lockfile: string | null } | null
-    environment?: { example: string | null; database: 'postgresql' | 'mysql' | null; redis: boolean }
+    environment?: { example: string | null; database: 'postgresql' | 'mysql' | null; redis: boolean; horizon: boolean }
 }
 
 export type Detection =

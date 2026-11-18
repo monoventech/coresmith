@@ -96,6 +96,7 @@ function githubHookLinkedTo(SourceProvider $connection, array $attributes = []):
         'source_provider_id' => $connection->id,
         'repository_id' => '70000001',
         'quick_deploy' => true,
+        'current_release' => '20261001-120000',
         ...$attributes,
     ]);
 }

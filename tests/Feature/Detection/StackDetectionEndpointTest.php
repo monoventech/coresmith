@@ -136,6 +136,7 @@ test('someone who cannot open the Add an app form cannot read repositories throu
 });
 
 test('a person can read twenty repositories a minute through the form', function () {
+    $this->freezeTime();
     [$owner, $server] = stackEndpointServer();
     stackEndpointAnswer('static-html');
 
@@ -214,7 +215,17 @@ test('detection names the env example and the database and Redis it asks for, so
 
     stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/shop.git', 'repository_branch' => 'main'])
         ->assertOk()
-        ->assertJsonPath('environment', ['example' => '.env.example', 'database' => 'postgresql', 'redis' => true]);
+        ->assertJsonPath('environment', ['example' => '.env.example', 'database' => 'postgresql', 'redis' => true, 'horizon' => false]);
+});
+
+test('a Laravel repository with Horizon says so, so the form can pick a Redis for its queue', function () {
+    [$owner, $server] = stackEndpointServer();
+    stackEndpointAnswer('laravel-horizon');
+
+    stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/acme/jobs.git', 'repository_branch' => 'main'])
+        ->assertOk()
+        ->assertJsonPath('environment.horizon', true)
+        ->assertJsonPath('environment.redis', false);
 });
 
 test('a repository without an env example suggests no database', function () {
@@ -223,5 +234,5 @@ test('a repository without an env example suggests no database', function () {
 
     stackEndpointGet($owner, $server, ['repository_url' => 'https://github.com/laravel/laravel.git', 'repository_branch' => '13.x'])
         ->assertOk()
-        ->assertJsonPath('environment', ['example' => null, 'database' => null, 'redis' => false]);
+        ->assertJsonPath('environment', ['example' => null, 'database' => null, 'redis' => false, 'horizon' => false]);
 });

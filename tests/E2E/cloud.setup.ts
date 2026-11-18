@@ -14,6 +14,15 @@ setup('authenticate as the cloud member', async ({ browser }) => {
     await context.close()
 })
 
+setup('authenticate as the cloud developer', async ({ browser }) => {
+    const context = await browser.newContext()
+    const page = await context.newPage()
+
+    await signIn(page, 'developer@cloud.test', 'tests/E2E/.auth/cloud-developer.json')
+
+    await context.close()
+})
+
 for (const code of ['chr', 'ffx', 'wbk', 'mch', 'msf']) {
     setup(`authenticate as the owner who leaves on ${code}`, async ({ browser }) => {
         const context = await browser.newContext()

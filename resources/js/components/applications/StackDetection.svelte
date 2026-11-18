@@ -52,8 +52,9 @@
         <p class="m-0 text-[12.5px] text-muted-foreground">
             {#if detection.verdict === 'ready'}
                 Filled in from the repository{#if detection.commit}&#32;at
-                    <span class="font-mono text-[12px]">{detection.commit.slice(0, 7)}</span>{/if}. Check it, then add
-                the app.
+                    <span class="font-mono text-[12px]">{detection.commit.slice(0, 7)}</span>{/if}. Check it, then {editing
+                    ? 'save the setup'
+                    : 'add the app'}.
             {:else}
                 Filled in what the repository settles. The fields marked below need you.
             {/if}

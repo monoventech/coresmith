@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Enums\Ability;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\AppSize;
@@ -89,13 +88,7 @@ final class ApplicationController extends Controller
             'projects' => $choices,
             'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
             'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
-            'databases' => [
-                'choices' => ManagedDatabase::query()->where('server_id', $server->getKey())->where('status', '!=', ManagedDatabase::FAILED)->orderBy('name')->get()
-                    ->filter(fn(ManagedDatabase $database): bool => $request->user()->can('viewCredentials', $database))
-                    ->map(fn(ManagedDatabase $database): array => ['value' => 'existing:' . $database->getKey(), 'name' => (string) $database->name, 'type' => (string) $database->type?->value])
-                    ->values(),
-                'can_create' => $server->status === ServerStatus::Active && $request->user()->hasTeamAbility($server->team, Ability::CreateDatabase),
-            ],
+            'databases' => $form->databases($request->user(), $server),
         ]);
     }
 
@@ -146,11 +139,13 @@ final class ApplicationController extends Controller
             'system_user' => $slugs->systemUser($slug),
             'base_port' => $port,
             'status' => ApplicationStatus::Pending,
+            'quick_deploy' => $request->hasRepository(),
         ]);
 
         activity()->performedOn($application)->log('application_created');
 
-        app(AppDatabaseChoice::class)->apply($application, $request->validated('database'), $request->validated('redis'));
+        $horizon = $type === ApplicationType::Php && strtolower((string) $request->input('framework')) === 'laravel' && AppDatabaseChoice::horizon($checked?->facts);
+        app(AppDatabaseChoice::class)->apply($application, $request->validated('database'), $request->validated('redis'), $horizon);
         $access->grant($server->team, $request->user(), $application);
 
         if ($line !== null && $request->isEndOfLife((string) $runtime, $line)) {
@@ -164,7 +159,9 @@ final class ApplicationController extends Controller
         app(DomainTwins::class)->owners($application->allDomains(), $application)->each(fn(Application $other) => SyncApplicationRoute::dispatch($other));
 
         return to_route('servers.applications.show', [$server, $application])
-            ->with('success', "App added. Deploy it when you're ready.");
+            ->with('success', $application->quick_deploy
+                ? "App added. Deploy it when you're ready. After that, pushes to {$application->repository_branch} deploy on their own."
+                : "App added. Deploy it when you're ready.");
     }
 
     public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks, CertificateCheck $certificates, CronJobs $cron): Response

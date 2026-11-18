@@ -40,6 +40,10 @@ export const asCloudMember = suite.extend({
     storageState: 'tests/E2E/.auth/cloud-member.json'
 })
 
+export const asCloudDeveloper = suite.extend({
+    storageState: 'tests/E2E/.auth/cloud-developer.json'
+})
+
 export const asMover = suite.extend({
     // eslint-disable-next-line no-empty-pattern
     storageState: async ({}, use, testInfo) => {
@@ -274,7 +278,7 @@ export async function gotoDatabase(page: Page, server: string, name: string) {
 
 export async function gotoSettings(
     page: Page,
-    tab: 'General' | 'Team' | 'Git' | 'Notifications' | 'API tokens' | 'Billing'
+    tab: 'General' | 'Team' | 'Git' | 'Cloud providers' | 'Notifications' | 'API tokens' | 'Billing'
 ) {
     await page.goto('/dashboard')
     await nav(page).getByRole('link', { name: 'Settings' }).click()
@@ -416,11 +420,15 @@ export async function streamFleet(page: Page, change: (props: FleetProps) => voi
     }
 }
 
-export async function fakeReverb(page: Page) {
+export async function fakeReverb(page: Page, options: { refuse?: RegExp } = {}) {
     const channels: string[] = []
     let send: ((message: string) => void) | null = null
 
-    await page.route('**/broadcasting/auth', (route) => route.fulfill({ json: { auth: 'coresmith-local:signature' } }))
+    await page.route('**/broadcasting/auth', (route) =>
+        options.refuse?.test(route.request().postData() ?? '')
+            ? route.fulfill({ status: 403, contentType: 'text/html', body: 'Forbidden' })
+            : route.fulfill({ json: { auth: 'coresmith-local:signature' } })
+    )
     await page.routeWebSocket(/\/app\//, (socket) => {
         send = (message) => socket.send(message)
         socket.send(

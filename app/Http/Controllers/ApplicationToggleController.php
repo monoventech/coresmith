@@ -56,6 +56,7 @@ final class ApplicationToggleController extends Controller
         $message = match (true) {
             $toggle === SmartToggles::MAINTENANCE && $on => 'Maintenance page is on. Visitors see it now, your processes keep running.',
             $toggle === SmartToggles::MAINTENANCE => 'Maintenance page is off. Traffic reaches the app again.',
+            $toggle === SmartToggles::AUTO_DEPLOY && $on && !$application->deployedBefore() => "Auto deploy is on. It starts after the app's first deploy.",
             $toggle === SmartToggles::AUTO_DEPLOY && $on => "Auto deploy is on, {$application->repository_branch} deploys whenever it changes.",
             $toggle === SmartToggles::AUTO_DEPLOY => 'Auto deploy is off. Deploy from this page when you\'re ready.',
             in_array($toggle, [SmartToggles::REVERB, SmartToggles::INERTIA_SSR], true) && $on => "{$label} starts with the next deploy.",

@@ -6,10 +6,22 @@ import {
     gotoApplication,
     main,
     own,
+    REPOSITORY_READS,
     test,
     toast,
     useTheme
 } from './support/fixtures'
+
+const READ = {
+    id: 'q4wz8nx2kd7vjc5bt3hmrf9ylp6sga0e',
+    state: 'read',
+    commit: '4b1d9e7c2a3f5e6d7c8b9a0f1e2d3c4b5a6f7e8d',
+    verdict: 'ready',
+    fields: { type: 'php', framework: 'laravel', js_runtime: null, web_directory: '/public', version: '8.4.25' },
+    sources: { type: 'From composer.json', framework: 'laravel/framework 12.38.1 in composer.lock' },
+    unsettled: {},
+    blockers: []
+}
 
 function setupCard(page: Page) {
     return page.getByTestId('setup-card')
@@ -80,6 +92,55 @@ test.describe("an app's setup", () => {
         )
         await expect(page.getByRole('textbox', { name: 'Repository', exact: true })).toHaveCount(0)
         await expect(branch(page)).toHaveValue('trunk')
+    })
+
+    test('a repository it reads asks you to check the setup and save it, not to add the app', async ({
+        page
+    }, testInfo) => {
+        await page.route(REPOSITORY_READS, (route) => route.fulfill({ json: READ }))
+        await gotoApplication(page, 'bench-01', own(testInfo, 'setup'))
+        await setupCard(page).getByRole('link', { name: 'Edit setup' }).click()
+
+        const detection = page.getByTestId('stack-detection')
+
+        await expect(detection).toContainText(
+            'Filled in from the repository at 4b1d9e7. Check it, then save the setup.'
+        )
+        await expect(detection).not.toContainText('add the app')
+    })
+
+    test('shows the database the app uses, and warns that switching leaves its data behind', async ({ page }) => {
+        await gotoApplication(page, 'forge-01', 'atlas')
+        await setupCard(page).getByRole('link', { name: 'Edit setup' }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'Edit setup' })).toBeVisible()
+
+        const database = page.getByLabel('Database', { exact: true })
+
+        await expect(database.locator('option:checked')).toHaveText('atlas_production, PostgreSQL')
+        await expect(page.getByTestId('database-switch-note')).toHaveCount(0)
+
+        await database.selectOption({ label: 'New MySQL database' })
+
+        await expect(page.getByTestId('database-switch-note')).toHaveText(
+            "atlas_production keeps its data. Coresmith doesn't copy it to the database you picked."
+        )
+
+        await database.selectOption({ label: "None, I'll set it up myself" })
+
+        await expect(page.getByTestId('database-switch-note')).toHaveText(
+            "The app's variables still point at atlas_production until you change them."
+        )
+    })
+
+    test('a Horizon app without Redis is told its queue worker needs one', async ({ page }) => {
+        await gotoApplication(page, 'bench-01', 'reverb-unset')
+        await setupCard(page).getByRole('link', { name: 'Edit setup' }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'Edit setup' })).toBeVisible()
+
+        await expect(page.getByLabel('Redis', { exact: true })).toHaveValue('none')
+        await expect(page.getByTestId('horizon-redis-note')).toHaveText(
+            "Horizon needs Redis, so the queue worker can't start without one."
+        )
     })
 
     test('a failed deploy links to the setup from the app and from its log', async ({ page }) => {

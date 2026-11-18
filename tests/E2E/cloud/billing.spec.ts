@@ -22,7 +22,7 @@ test.describe('the billing tab on coresmith cloud', () => {
         await expect(plan).toContainText('Pro')
         await expect(plan).toContainText('Active')
         await expect(plan).toContainText('$19 per month · renews')
-        await expect(plan).toContainText('4 servers')
+        await expect(plan).toContainText('5 servers')
         await expect(page.getByTestId('payment-card')).toContainText('Visa •••• 4242')
         await expect(page.getByTestId('payment-card')).toContainText('expires 08/28')
 

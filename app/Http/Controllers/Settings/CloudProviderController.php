@@ -17,11 +17,31 @@ use App\Http\Requests\Settings\UpdateCloudProviderRequest;
 use App\Models\CloudProvider;
 use App\Services\Cloud\CloudCatalog;
 use App\Services\Cloud\Contracts\CloudApiFactory;
+use App\Services\Panel\CloudPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
 
 final class CloudProviderController extends Controller
 {
+    public function index(Request $request, CloudPresenter $presenter): Response|RedirectResponse
+    {
+        $team = $this->currentTeam();
+
+        if ($this->startsTeamFirst($team)) {
+            return to_route('start.show');
+        }
+
+        abort_if($team === null, 404);
+
+        $this->authorize('view', $team);
+
+        return Inertia::render('settings/CloudProviders', [
+            'cloud' => $presenter->accounts($team, $request->user()),
+        ]);
+    }
+
     public function store(StoreCloudProviderRequest $request, CloudApiFactory $apis): RedirectResponse
     {
         $team = $this->currentTeam();

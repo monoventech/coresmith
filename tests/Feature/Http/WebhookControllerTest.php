@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\DeploymentStatus;
 use App\Jobs\DeployApplication;
 use App\Models\Application;
 use App\Models\CloudProvider;
@@ -18,6 +19,7 @@ function endpointFor(array $applicationAttributes = [], array $endpointAttribute
     $application = Application::factory()->create(array_merge([
         'repository_branch' => 'main',
         'quick_deploy' => true,
+        'current_release' => '20261001-120000',
     ], $applicationAttributes));
 
     return WebhookEndpoint::factory()->for($application)->create(array_merge([
@@ -293,4 +295,24 @@ test('a push is acknowledged but not deployed while auto deploy is off', functio
 
     expect(Deployment::query()->count())->toBe(0);
     Queue::assertNothingPushed();
+});
+
+test("a push to an app that hasn't deployed yet waits for its first deploy", function () {
+    Queue::fake();
+    $endpoint = endpointFor(['current_release' => null]);
+
+    signedPost($endpoint, ['ref' => 'refs/heads/main', 'after' => str_repeat('a', 40)])
+        ->assertStatus(202)
+        ->assertJsonPath('message', "Auto deploy starts after the app's first deploy.");
+
+    expect(Deployment::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
+
+    Deployment::factory()->for($endpoint->application)->create(['status' => DeploymentStatus::Failed]);
+
+    signedPost($endpoint, ['ref' => 'refs/heads/main', 'after' => str_repeat('b', 40)])
+        ->assertStatus(202)
+        ->assertJsonPath('message', 'Deployment queued.');
+
+    Queue::assertPushed(DeployApplication::class, 1);
 });

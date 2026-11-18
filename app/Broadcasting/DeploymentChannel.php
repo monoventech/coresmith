@@ -13,9 +13,9 @@ use App\Models\User;
 
 final class DeploymentChannel
 {
-    public function join(User $user, string $deployment): bool
+    public function join(User $user, string $deploymentId): bool
     {
-        $record = Deployment::with('application')->find($deployment);
+        $record = Deployment::with('application')->find($deploymentId);
 
         return $record !== null && $user->can('view', $record->application);
     }
