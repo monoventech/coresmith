@@ -203,6 +203,11 @@ test('tokens and codes in the address are filtered', function (array $request, s
         'url',
         'https://panel.example.com/email/verify/7/%5BFiltered%5D?expires=1760000000&signature=%5BFiltered%5D',
     ],
+    'an invitation link in the request' => [
+        ['url' => 'https://panel.example.com/join/acme/pLJ7Eqytz3QN70fIliQD'],
+        'url',
+        'https://panel.example.com/join/acme/%5BFiltered%5D',
+    ],
     'a verification link under a team prefix' => [
         ['url' => 'https://panel.example.com/acme/verify-email/7/1f2e3d4c5b6a79881706f5e4d3c2b1a0aabbccdd?expires=1760000000&signature=ab12cd34'],
         'url',
@@ -286,6 +291,14 @@ test('query values and reset links inside text are filtered', function (string $
     'a reset link' => [
         'Could not open https://panel.example.com/acme/reset-password/9f8e7d6c5b4a39281706f5e4d3c2b1a0?email=maya%40monoven.io again',
         'Could not open https://panel.example.com/acme/reset-password/%5BFiltered%5D?email=%5BFiltered%5D again',
+    ],
+    'an invitation link' => [
+        'Could not open https://panel.example.com/join/acme/pLJ7Eqytz3QN70fIliQD/accept twice',
+        'Could not open https://panel.example.com/join/acme/%5BFiltered%5D/accept twice',
+    ],
+    'an invitation link from before 0.8.26' => [
+        'Could not open https://panel.example.com/invitations/aB3dE5fG7hJ9kL1mN3pQ5rS7tV9wX1yZ3aB5cD7e now',
+        'Could not open https://panel.example.com/invitations/%5BFiltered%5D now',
     ],
     'a verification link' => [
         'Rejected https://panel.example.com/email/verify/7/1f2e3d4c5b6a79881706f5e4d3c2b1a0aabbccdd?expires=1760000000&signature=ab12cd34 now',

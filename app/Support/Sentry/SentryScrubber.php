@@ -340,6 +340,8 @@ final class SentryScrubber
             [
                 '~(/reset-password/)' . $segment . '~i',
                 '~(/(?:verify-email|email/verify)/' . $segment . '/)' . $segment . '~i',
+                '~(/invitations/)' . $segment . '~i',
+                '~(/join/' . $segment . '/)' . $segment . '~i',
             ],
             '$1' . $filtered,
             $subject,

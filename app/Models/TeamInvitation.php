@@ -24,7 +24,7 @@ class TeamInvitation extends Model
 
     public const VALID_DAYS = 7;
 
-    public const TOKEN_LENGTH = 40;
+    public const TOKEN_LENGTH = 20;
 
     protected $fillable = ['team_id', 'email', 'role', 'token_hash', 'link_offered', 'invited_by', 'expires_at', 'accepted_at', 'sees_everything'];
 

@@ -50,7 +50,7 @@ final class TeamInvitations
         activity()->performedOn($team)->causedBy($inviter)->withProperties(['email' => $invitation->email, 'role' => $role->value])->log('member_invited');
 
         if (!$invitation->link_offered) {
-            Notification::route('mail', $invitation->email)->notify(new TeamInvitationNotification((string) $team->name, (string) $inviter->name, $this->link($token)));
+            Notification::route('mail', $invitation->email)->notify(new TeamInvitationNotification((string) $team->name, (string) $inviter->name, $this->link($invitation, $token)));
         }
 
         return [$invitation, $token];
@@ -61,9 +61,9 @@ final class TeamInvitations
         return Edition::current()->isSelfHosted() && !Mailer::delivers();
     }
 
-    public function link(string $token): string
+    public function link(TeamInvitation $invitation, string $token): string
     {
-        return $this->urls->canonical(route('invitations.show', $token, false));
+        return $this->urls->canonical(route('invitations.show', ['slug' => (string) $invitation->team?->slug, 'token' => $token], false));
     }
 
     public function issuedLink(TeamInvitation $invitation, mixed $issued): ?string
@@ -72,7 +72,7 @@ final class TeamInvitations
             return null;
         }
 
-        return hash_equals((string) $invitation->token_hash, TeamInvitation::hash($issued['token'])) ? $this->link($issued['token']) : null;
+        return hash_equals((string) $invitation->token_hash, TeamInvitation::hash($issued['token'])) ? $this->link($invitation, $issued['token']) : null;
     }
 
     public function join(TeamInvitation $invitation, User $user): bool

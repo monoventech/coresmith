@@ -251,11 +251,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('teams/{team}/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('teams.invitations.destroy');
 });
 
-Route::get('invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
-Route::post('invitations/{token}', [InvitationController::class, 'register'])
+Route::get('invitations/{token}', [InvitationController::class, 'legacy'])->name('invitations.legacy');
+Route::get('join/{slug}/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+Route::post('join/{slug}/{token}', [InvitationController::class, 'register'])
     ->middleware(['guest', 'throttle:10,1,invitation-register'])
     ->name('invitations.register');
-Route::post('invitations/{token}/accept', [InvitationController::class, 'accept'])
+Route::post('join/{slug}/{token}/accept', [InvitationController::class, 'accept'])
     ->middleware(['auth', 'throttle:10,1,invitation-accept'])
     ->name('invitations.accept');
 
