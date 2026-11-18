@@ -80,7 +80,7 @@
 {#snippet sectionToggle(key: string, label: string, open: boolean)}
     <button
         type="button"
-        class="focus-ring -ml-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md bg-transparent px-1 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground hover:text-foreground"
+        class="focus-ring -ml-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md bg-transparent px-1 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground hover:text-foreground pointer-coarse:h-11"
         aria-expanded={open}
         onclick={() => toggleProject(`section:${key}`)}
     >
@@ -101,7 +101,7 @@
     <div class="flex items-center gap-1.5">
         <button
             type="button"
-            class="focus-ring flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg bg-transparent px-2 text-left transition-colors duration-(--dur-fast) hover:bg-muted"
+            class="focus-ring flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg bg-transparent px-2 text-left transition-colors duration-(--dur-fast) hover:bg-muted pointer-coarse:h-11"
             onclick={onAccount}
         >
             <span
@@ -116,7 +116,7 @@
         </button>
         <button
             type="button"
-            class="focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted"
+            class="focus-ring inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted pointer-coarse:size-11"
             aria-label="Hide the explorer"
             title="Hide the explorer"
             onclick={hideExplorer}
@@ -127,7 +127,7 @@
 
     <button
         type="button"
-        class="focus-ring flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-left text-[13px] text-muted-foreground"
+        class="focus-ring flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-left text-[13px] text-muted-foreground pointer-coarse:h-11"
         onclick={onSearch}
     >
         <Search class="size-3.75 shrink-0" />
@@ -150,12 +150,12 @@
 
         {#if explorer.projects.length > 0}
             <div class="flex flex-col gap-0.5" role="group" aria-labelledby="explorer-projects-label">
-                <div class="flex h-7 items-center justify-between px-2">
+                <div class="flex h-7 items-center justify-between px-2 pointer-coarse:h-11">
                     {@render sectionToggle('projects', 'Projects', opened.projects)}
                     {#if explorer.can.createProject}
                         <Link
                             href={route('projects.index', { create: 1 })}
-                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted pointer-coarse:size-11"
                             aria-label="Create a project"
                             title="Create a project"><Plus class="size-3.5" /></Link
                         >
@@ -164,10 +164,10 @@
                 {#each opened.projects ? explorer.projects : [] as project (project.id)}
                     {@const open = !shell.folded.includes(project.id)}
                     <div class="flex flex-col gap-px" data-testid="explorer-project">
-                        <div class="flex h-8 items-center gap-1.5 pr-2">
+                        <div class="flex h-8 items-center gap-1.5 pr-2 pointer-coarse:h-11">
                             <button
                                 type="button"
-                                class="focus-ring inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-muted"
+                                class="focus-ring inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground hover:bg-muted pointer-coarse:size-11"
                                 aria-label="What's in {project.name}"
                                 aria-expanded={open}
                                 aria-controls="explorer-project-{project.id}"
@@ -183,7 +183,7 @@
                             <Link
                                 href={project.href}
                                 aria-current={path === pathOf(project.href) ? 'page' : undefined}
-                                class="focus-ring min-w-0 flex-1 truncate rounded-sm text-[13.5px] font-medium text-foreground no-underline"
+                                class="focus-ring min-w-0 flex-1 truncate rounded-sm text-[13.5px] font-medium text-foreground no-underline pointer-coarse:leading-11"
                                 >{project.name}</Link
                             >
                             {#if project.deploying}
@@ -238,12 +238,12 @@
                 aria-labelledby="explorer-apps-label"
                 data-testid="explorer-apps"
             >
-                <div class="flex h-7 items-center justify-between px-2">
+                <div class="flex h-7 items-center justify-between px-2 pointer-coarse:h-11">
                     {@render sectionToggle('apps', 'Apps', opened.apps)}
                     {#if explorer.can.createApplication}
                         <Link
                             href={route('applications.new')}
-                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted pointer-coarse:size-11"
                             aria-label="Add an app"
                             title="Add an app"><Plus class="size-3.5" /></Link
                         >
@@ -269,12 +269,12 @@
                 aria-labelledby="explorer-servers-label"
                 data-testid="explorer-servers"
             >
-                <div class="flex h-7 items-center justify-between px-2">
+                <div class="flex h-7 items-center justify-between px-2 pointer-coarse:h-11">
                     {@render sectionToggle('servers', 'Servers', opened.servers)}
                     {#if explorer.can.createServer}
                         <Link
                             href={route('servers.create')}
-                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            class="focus-ring inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted pointer-coarse:size-11"
                             aria-label="Add a server"
                             title="Add a server"><Plus class="size-3.5" /></Link
                         >

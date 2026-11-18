@@ -36,7 +36,7 @@
     title={[name, ...tags, detail].join(' · ')}
     aria-current={current ? 'page' : undefined}
     class={cn(
-        'focus-ring flex h-7.5 min-w-0 items-center gap-2 rounded-md pr-2 no-underline transition-colors duration-(--dur-fast)',
+        'focus-ring flex h-7.5 min-w-0 items-center gap-2 rounded-md pr-2 no-underline transition-colors duration-(--dur-fast) pointer-coarse:h-11',
         indent ? 'pl-9.5' : 'pl-3.5',
         current ? 'bg-accent text-foreground' : 'text-foreground hover:bg-muted'
     )}

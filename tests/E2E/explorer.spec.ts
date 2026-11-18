@@ -5,6 +5,7 @@ import {
     blockingViolations,
     expect,
     gotoServer,
+    isMobile,
     nav,
     streamFleet,
     test,
@@ -186,6 +187,49 @@ test.describe('the explorer', () => {
         await expect(explorer(page)).toBeVisible()
         await page.keyboard.press('Escape')
         await expect(explorer(page)).toBeHidden()
+    })
+
+    test('on a touch screen every control in the explorer is at least 44 pixels tall', async ({
+        browser
+    }, testInfo) => {
+        const context = await browser.newContext({
+            storageState: 'tests/E2E/.auth/user.json',
+            baseURL: testInfo.project.use.baseURL,
+            viewport: { width: 1024, height: 768 },
+            hasTouch: true,
+            isMobile: true
+        })
+        const page = await context.newPage()
+
+        await page.goto('/dashboard')
+        await page.getByRole('button', { name: 'Show the explorer' }).click()
+        await expect(explorer(page)).toBeVisible()
+
+        const heights = await explorer(page)
+            .locator('a, button')
+            .evaluateAll((controls) =>
+                controls
+                    .filter((control) => control.getClientRects().length > 0)
+                    .map((control) => Math.round(control.getBoundingClientRect().height))
+            )
+
+        expect(heights.length).toBeGreaterThan(10)
+        expect(Math.min(...heights)).toBeGreaterThanOrEqual(44)
+        await context.close()
+    })
+
+    test('with a mouse the explorer keeps its compact rows', async ({ page }, testInfo) => {
+        test.skip(
+            isMobile(testInfo),
+            'Phones show the bottom tabs instead of the explorer, as the phone prototype does'
+        )
+
+        await page.goto('/dashboard')
+
+        const row = explorer(page).getByRole('link', { name: /^ledger,/ })
+
+        await expect(row).toBeVisible()
+        expect(Math.round((await row.boundingBox())?.height ?? 0)).toBe(30)
     })
 
     test('the jump button opens the command palette', async ({ page }) => {
