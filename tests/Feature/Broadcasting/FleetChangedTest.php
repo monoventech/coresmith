@@ -205,7 +205,7 @@ test('the team channel is registered under its name', function () {
 });
 
 test('only the deploy and team channels can be joined', function () {
-    expect(Broadcast::getChannels()->keys()->sort()->values()->all())->toBe(['deployments.{deployment}', 'teams.{team}']);
+    expect(Broadcast::getChannels()->keys()->sort()->values()->all())->toBe(['deployments.{deploymentId}', 'teams.{team}']);
 });
 
 test('the ping carries only a kind and an id', function () {
