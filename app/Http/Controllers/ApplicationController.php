@@ -550,7 +550,7 @@ final class ApplicationController extends Controller
     }
 
     /**
-     * @return list<array{key: string, value: string, secret: bool}>
+     * @return list<array{key: string, value: string, secret: bool, empty: bool}>
      */
     private function environmentPreview(string $env, bool $reveal): array
     {
@@ -558,11 +558,13 @@ final class ApplicationController extends Controller
 
         foreach (array_slice(app(EnvironmentFile::class)->parse($env), 0, 4, true) as $key => $value) {
             $secret = preg_match(self::SECRET_KEYS, $key) === 1;
+            $empty = $reveal && $value === '';
 
             $lines[] = [
                 'key' => $key,
-                'value' => $secret || !$reveal ? '••••••••' : $value,
+                'value' => $empty ? '' : ($secret || !$reveal ? '••••••••' : $value),
                 'secret' => $secret,
+                'empty' => $empty,
             ];
         }
 

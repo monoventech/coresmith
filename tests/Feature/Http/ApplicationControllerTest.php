@@ -420,6 +420,26 @@ test('a member cannot read or write environment variables', function () {
     expect($application->fresh()->env_variables)->not->toContain('leak');
 });
 
+test('a variable with no value says it is not set to someone who can fill it in, and stays masked for a member', function () {
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $application = Application::factory()->for($team)->for($server)->create([
+        'env_variables' => "EIA_API_KEY=\nLOG_LEVEL=info",
+    ]);
+    $show = route('servers.applications.show', [$server, $application]);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->get($show)
+        ->assertInertia(fn($page) => $page
+            ->where('application.environment.0', ['key' => 'EIA_API_KEY', 'value' => '', 'secret' => true, 'empty' => true])
+            ->where('application.environment.1', ['key' => 'LOG_LEVEL', 'value' => 'info', 'secret' => false, 'empty' => false]));
+
+    $this->actingAs(appTeamMember($team, TeamRole::Member))
+        ->get($show)
+        ->assertInertia(fn($page) => $page
+            ->where('application.environment.0', ['key' => 'EIA_API_KEY', 'value' => '••••••••', 'secret' => true, 'empty' => false]));
+});
+
 test('an admin can save environment variables and they are encrypted at rest', function () {
     $team = Team::factory()->create();
     $server = Server::factory()->for($team)->create();

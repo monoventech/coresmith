@@ -138,7 +138,7 @@
                 problem: 'removed' | 'suspended' | null
                 settings_href: string
             } | null
-            environment: { key: string; value: string; secret: boolean }[]
+            environment: { key: string; value: string; secret: boolean; empty: boolean }[]
             databases: { name: string; href: string; status: string }[]
             expected_databases: ExpectedDatabase[]
             databases_href: string
@@ -1020,7 +1020,9 @@
                     <div class="font-mono text-[12.5px] leading-[1.8] text-muted-foreground" data-testid="env-preview">
                         {#each application.environment as line (line.key)}
                             <div class="truncate">
-                                {line.key}={line.value}{line.secret ? ' · redacted in logs' : ''}
+                                {line.key}={line.value}{#if line.empty}<span class="text-warning-strong"
+                                        >&nbsp;· not set</span
+                                    >{:else if line.secret}<span>&nbsp;· redacted in logs</span>{/if}
                             </div>
                         {/each}
                     </div>
