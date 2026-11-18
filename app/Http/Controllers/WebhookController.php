@@ -77,6 +77,10 @@ final class WebhookController extends Controller
             return $this->respond($webhook, $request, 202, 'Auto deploy is off.');
         }
 
+        if (!$application->deployedBefore()) {
+            return $this->respond($webhook, $request, 202, AutoDeploy::WAITING);
+        }
+
         $refusal = app(DeployGuard::class)->refusal($application);
 
         if ($refusal !== null) {

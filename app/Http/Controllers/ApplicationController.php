@@ -139,6 +139,7 @@ final class ApplicationController extends Controller
             'system_user' => $slugs->systemUser($slug),
             'base_port' => $port,
             'status' => ApplicationStatus::Pending,
+            'quick_deploy' => $request->hasRepository(),
         ]);
 
         activity()->performedOn($application)->log('application_created');
@@ -158,7 +159,9 @@ final class ApplicationController extends Controller
         app(DomainTwins::class)->owners($application->allDomains(), $application)->each(fn(Application $other) => SyncApplicationRoute::dispatch($other));
 
         return to_route('servers.applications.show', [$server, $application])
-            ->with('success', "App added. Deploy it when you're ready.");
+            ->with('success', $application->quick_deploy
+                ? "App added. Deploy it when you're ready. After that, pushes to {$application->repository_branch} deploy on their own."
+                : "App added. Deploy it when you're ready.");
     }
 
     public function show(Request $request, Server $server, Application $application, DeployKeyManager $keys, SmartToggles $toggles, RollbackHistory $rollbacks, CertificateCheck $certificates, CronJobs $cron): Response
