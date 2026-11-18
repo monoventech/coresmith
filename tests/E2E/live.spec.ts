@@ -127,4 +127,46 @@ test.describe('live pages', () => {
         await expect(toast(page)).toContainText('That page is gone.')
         await expect(page.locator('iframe')).toHaveCount(0)
     })
+
+    test("a change's toast stays in its own tab when another tab refreshes meanwhile", async ({ page }) => {
+        const fleet = await streamFleet(page)
+
+        await gotoServer(page, 'forge-01')
+        await fleet.subscribed()
+
+        const other = await page.context().newPage()
+        let answer: () => void = () => undefined
+        const answered = new Promise<void>((resolve) => (answer = resolve))
+
+        await other.goto('/settings/profile')
+        await other.route('**/settings/profile', async (route) => {
+            if (route.request().method() !== 'PATCH') {
+                return route.fallback()
+            }
+
+            const saved = await route.fetch({ maxRedirects: 0 })
+            const refreshed = page.waitForResponse(
+                (response) => response.request().headers()['x-inertia-partial-data'] !== undefined
+            )
+
+            fleet.changed()
+            await refreshed
+
+            const headers = Object.fromEntries(
+                Object.entries(route.request().headers()).filter(
+                    ([name]) => name.startsWith('x-inertia') || name === 'x-requested-with' || name === 'accept'
+                )
+            )
+
+            await route.fulfill({ response: await other.request.get(saved.headers().location, { headers }) })
+            answer()
+        })
+
+        await other.getByRole('button', { name: 'Save' }).click()
+        await answered
+
+        await expect(toast(other)).toContainText('Saved.')
+        await expect(toast(page)).toHaveCount(0)
+        await other.close()
+    })
 })

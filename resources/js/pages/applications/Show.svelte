@@ -35,6 +35,7 @@
     import type { RuntimeChoices } from '@/lib/runtimes'
     import { follow } from '@/lib/live.svelte'
     import { cn } from '@/lib/utils'
+    import { REFRESH_HEADERS } from '@/lib/visits'
 
     type Toggle = {
         key: string
@@ -455,7 +456,7 @@
     async function loadLog() {
         try {
             const response = await fetch(application.logs_href, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...REFRESH_HEADERS }
             })
             const body = (await response.json()) as { lines?: LogLine[]; error?: string | null; pending?: boolean }
 

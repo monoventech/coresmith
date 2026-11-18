@@ -288,8 +288,10 @@ test.describe('hardening', () => {
         const request = page.waitForRequest(
             (sent) => sent.url().endsWith('/protections/fail2ban') && sent.method() === 'POST'
         )
+        const reloaded = page.waitForEvent('load')
         await row.getByRole('button', { name: 'Turn it back on' }).click()
         await request
+        await reloaded
     })
 
     test('a firewall that blocks HTTP/3 says browsers fall back, and opens it on request', async ({ page }) => {
@@ -314,8 +316,10 @@ test.describe('hardening', () => {
         const request = page.waitForRequest(
             (sent) => sent.url().endsWith('/protections/http3') && sent.method() === 'POST'
         )
+        const reloaded = page.waitForEvent('load')
         await row.getByRole('button', { name: 'Open it' }).click()
         await request
+        await reloaded
     })
 
     test('a fix that is running says so, with nothing to press', async ({ page }) => {

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License v2 (ELv2).
 // See LICENSE file in the project root.
 import { notify } from '@/lib/toast.svelte'
+import { REFRESH_HEADERS } from '@/lib/visits'
 import { router } from '@inertiajs/svelte'
 
 export type UpdateRunState =
@@ -75,7 +76,7 @@ export function createUpdatePoller(href: string, initial: UpdateRun | null) {
 
         try {
             const response = await fetch(href, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...REFRESH_HEADERS }
             })
 
             if (!response.ok) {
