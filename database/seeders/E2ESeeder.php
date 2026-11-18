@@ -550,7 +550,7 @@ final class E2ESeeder extends Seeder
         $this->logAt($atlas, 'application_relinked', ['from' => $removed->id, 'to' => $this->github->id, 'repository' => 'monoventech/atlas'], CarbonImmutable::now()->subHours(6));
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
-            $this->linkedApplication("linked-{$code}", 8400 + $index * 10);
+            $this->linkedApplication("linked-{$code}", 8400 + $index * 10, ['current_release' => '20261001-120000']);
         }
     }
 
