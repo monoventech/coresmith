@@ -16,6 +16,10 @@ final class ProcessStartAdvice
 {
     private const GENERAL = 'The process log says why. Fix it and deploy again, or roll back to the previous release.';
 
+    private const SWITCH = 'The log below says why. Fix it, then turn the switch on again.';
+
+    private const REDIS_ON_EDIT_SETUP = 'Pick a Redis on Edit setup, which writes its address and password into the variables, then deploy again.';
+
     private const SPRING_DATABASE = 'SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME and SPRING_DATASOURCE_PASSWORD';
 
     private const DATABASE_VARIABLES = [
@@ -30,6 +34,13 @@ final class ProcessStartAdvice
         return $this->specific($application, $output) ?? self::GENERAL;
     }
 
+    public function forSwitch(Application $application, string $output): string
+    {
+        $specific = $this->specific($application, $output);
+
+        return $specific === null ? self::SWITCH : $specific . ' Then turn the switch on again.';
+    }
+
     public function specific(Application $application, string $output): ?string
     {
         $port = $application->base_port;
@@ -39,6 +50,9 @@ final class ProcessStartAdvice
 
         return match (true) {
             str_contains($output, 'Failed to load environment files') => "The app's environment file is missing from the server. Deploy again to write it.",
+            str_contains($output, 'NOAUTH') => "Redis asked for a password and the app didn't send one. " . self::REDIS_ON_EDIT_SETUP,
+            str_contains($output, 'WRONGPASS') => 'Redis refused the password the app sent. ' . self::REDIS_ON_EDIT_SETUP,
+            preg_match('/redis|:6379\b/i', $output) === 1 && preg_match('/Connection refused|ECONNREFUSED/', $output) === 1 => "The app couldn't reach Redis. " . self::REDIS_ON_EDIT_SETUP,
             str_contains($output, 'Failed to determine user credentials') || str_contains($output, 'status=217/USER') => "The app's account on the server is missing. Deploy again to create it.",
             str_contains($output, 'Failed to set up mount namespacing') || str_contains($output, 'status=226/NAMESPACE') => "The server couldn't set up the app's sandbox. Check the app's folders exist under /var/coresmith/apps/{$slug}/, then deploy again.",
             $railsEnv !== null && str_contains($output, 'cannot load such file') => "This Rails app runs with RAILS_ENV={$railsEnv}, but its gems were installed for production only. Set RAILS_ENV=production in its environment variables, then deploy again.",

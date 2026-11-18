@@ -15,6 +15,7 @@ use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\LogSanitizer;
 use App\Services\Panel\SmartToggles;
 use App\Services\Process\ProcessManager;
+use App\Services\Process\ProcessStartAdvice;
 use App\Services\Process\SystemdUnitBuilder;
 use App\Services\SSH\SSHConnection;
 use App\Services\SSH\SSHConnectionManager;
@@ -90,7 +91,14 @@ final class SyncApplicationProcesses implements ShouldQueue
         } catch (ProcessDidNotStart $e) {
             $this->remove($connection, $units, $application, $process);
             $connection->execute('systemctl daemon-reload', sudo: true)->throw();
-            $toggles->failedToStart($application, $toggle, $process, app(LogSanitizer::class)->sanitize($e->getMessage(), $application));
+            $sanitizer = app(LogSanitizer::class);
+            $toggles->failedToStart(
+                $application,
+                $toggle,
+                $process,
+                $sanitizer->sanitize($e->describe(app(ProcessStartAdvice::class)->forSwitch($application, $e->journal)), $application),
+                $sanitizer->sanitize($e->journal, $application),
+            );
 
             return;
         }

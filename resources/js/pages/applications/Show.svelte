@@ -5,7 +5,7 @@
 <script lang="ts">
     import type { RepositoryCheck } from '@/lib/detection'
     import { Form, Link, page, router } from '@inertiajs/svelte'
-    import { CircleArrowUp, OctagonAlert, TriangleAlert } from '@lucide/svelte'
+    import { ChevronRight, CircleArrowUp, OctagonAlert, TriangleAlert } from '@lucide/svelte'
     import { onDestroy, onMount } from 'svelte'
     import AppHead from '@/components/AppHead.svelte'
     import CronJobsCard from '@/components/applications/CronJobsCard.svelte'
@@ -25,6 +25,7 @@
     import ToggleRow from '@/components/ToggleRow.svelte'
     import { Badge } from '@/components/ui/badge'
     import { Button, buttonVariants } from '@/components/ui/button'
+    import * as Collapsible from '@/components/ui/collapsible'
     import * as Dialog from '@/components/ui/dialog'
     import { Input } from '@/components/ui/input'
     import { Label } from '@/components/ui/label'
@@ -50,6 +51,7 @@
         disabled: boolean
         starting: boolean
         failure: string | null
+        failure_log: string | null
     }
     type LogLine = { time: string; text: string }
     type Release = {
@@ -645,6 +647,26 @@
             <span class="font-semibold">{`${toggle.label} did not start.`}</span>
             {` ${toggle.failure}`}
         </span>
+        {#if toggle.failure_log}
+            <Collapsible.Root class="basis-full pl-7.5 max-sm:pl-7">
+                <Collapsible.Trigger
+                    class="group focus-ring inline-flex min-h-8 items-center gap-1 rounded-md text-[12.5px] font-medium max-sm:min-h-11"
+                    data-testid="toggle-failed-log-trigger"
+                >
+                    <ChevronRight
+                        class="size-3.5 transition-transform duration-150 group-data-[state=open]:rotate-90 motion-reduce:transition-none"
+                        aria-hidden="true"
+                    />
+                    <span class="group-data-[state=open]:hidden">Show the log</span>
+                    <span class="hidden group-data-[state=open]:inline">Hide the log</span>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                    <pre
+                        class="terminal mt-2 max-h-72 overflow-auto text-[11.5px] leading-[1.6] wrap-anywhere whitespace-pre-wrap"
+                        data-testid="toggle-failed-log">{toggle.failure_log}</pre>
+                </Collapsible.Content>
+            </Collapsible.Root>
+        {/if}
     </div>
 {/each}
 

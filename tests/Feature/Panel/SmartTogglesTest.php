@@ -377,6 +377,18 @@ test('a worker that did not start is described with the reason until its toggle 
     expect(togglesDescribed($application, SmartToggles::QUEUE))->toMatchArray(['on' => true, 'starting' => true, 'failure' => null]);
 });
 
+test('a worker that did not start shows the log it left, and an older failure kept without a log shows none', function () {
+    $application = togglesApp(['power_state' => PowerState::Active]);
+
+    togglesActivity($application, 'toggle_start_failed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'error' => 'Recorded before logs were kept.'], secondsAgo: 30);
+
+    expect(togglesDescribed($application, SmartToggles::QUEUE))->toMatchArray(['failure' => 'Recorded before logs were kept.', 'failure_log' => null]);
+
+    togglesActivity($application, 'toggle_start_failed', ['toggle' => 'queue_worker', 'label' => 'Queue worker', 'error' => "The queue process didn't start (activating).", 'log' => "NOAUTH Authentication required.\n"], secondsAgo: 10);
+
+    expect(togglesDescribed($application, SmartToggles::QUEUE))->toMatchArray(['failure' => "The queue process didn't start (activating).", 'failure_log' => 'NOAUTH Authentication required.']);
+});
+
 test('a worker that did not start more than a day ago is no longer described as failing', function () {
     $application = togglesApp();
 

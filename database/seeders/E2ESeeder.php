@@ -42,6 +42,7 @@ use App\Services\Moves\MoveCodes;
 use App\Services\Moves\MoveFile;
 use App\Services\Panel\CronJobs;
 use App\Services\Panel\SmartToggles;
+use App\Services\Process\ProcessStartAdvice;
 use App\Services\Runtime\JsTooling;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\CertificateCheck;
@@ -549,7 +550,7 @@ final class E2ESeeder extends Seeder
         $this->logAt($atlas, 'application_relinked', ['from' => $removed->id, 'to' => $this->github->id, 'repository' => 'monoventech/atlas'], CarbonImmutable::now()->subHours(6));
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
-            $this->linkedApplication("linked-{$code}", 8400 + $index * 10);
+            $this->linkedApplication("linked-{$code}", 8400 + $index * 10, ['current_release' => '20261001-120000']);
         }
     }
 
@@ -1434,10 +1435,12 @@ final class E2ESeeder extends Seeder
     {
         $this->succeeded($application, 3 * 24 * 60, 'v0.4.0');
 
-        $error = (new ProcessDidNotStart("coresmith-app-{$application->slug}-jobs", 'activating', '', 'The entry point was not found. Check the build produced the file the process starts, then deploy again.'))->getMessage();
+        $journal = "coresmith-app-{$application->slug}-jobs.service: Main process exited, code=exited, status=127/n/a\nbin/jobs: No such file or directory";
+        $failure = new ProcessDidNotStart("coresmith-app-{$application->slug}-jobs", 'activating', $journal, '');
+        $error = $failure->describe(app(ProcessStartAdvice::class)->forSwitch($application, $journal));
 
         $this->logAt($application, 'toggle_changed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'on' => true], CarbonImmutable::now()->subMinutes(35));
-        $this->logAt($application, 'toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => $error], CarbonImmutable::now()->subMinutes(34));
+        $this->logAt($application, 'toggle_start_failed', ['toggle' => 'solid_queue', 'label' => 'Solid Queue', 'error' => $error, 'log' => $journal], CarbonImmutable::now()->subMinutes(34));
     }
 
     /**

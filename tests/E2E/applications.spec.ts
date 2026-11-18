@@ -1742,9 +1742,15 @@ test.describe('an app whose processes did not start', () => {
         await expect(banner).toHaveCount(1)
         await expect(banner).toContainText('Solid Queue did not start.')
         await expect(banner).toContainText(
-            'The entry point was not found. Check the build produced the file the process starts, then deploy again.'
+            'The entry point was not found. Check the build produced the file the process starts, then deploy again. Then turn the switch on again.'
         )
         await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
+
+        await expect(page.getByTestId('toggle-failed-log')).toHaveCount(0)
+        await banner.getByRole('button', { name: 'Show the log' }).click()
+        await expect(page.getByTestId('toggle-failed-log')).toContainText('bin/jobs: No such file or directory')
+        await banner.getByRole('button', { name: 'Hide the log' }).click()
+        await expect(page.getByTestId('toggle-failed-log')).toHaveCount(0)
     })
 })
 
