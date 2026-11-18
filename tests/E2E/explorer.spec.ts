@@ -192,11 +192,6 @@ test.describe('the explorer', () => {
     test('on a touch screen every control in the explorer is at least 44 pixels tall', async ({
         browser
     }, testInfo) => {
-        test.skip(
-            testInfo.project.name === 'firefox',
-            'Firefox has no mobile emulation, so its pointer is never coarse'
-        )
-
         const context = await browser.newContext({
             storageState: 'tests/E2E/.auth/user.json',
             baseURL: testInfo.project.use.baseURL,
