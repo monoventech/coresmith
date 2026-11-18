@@ -252,7 +252,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('teams/{team}/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('teams.invitations.destroy');
 });
 
-Route::get('email/verify/{hash}', ConfirmEmailController::class)->middleware(['auth', 'signed', 'throttle:6,1'])->name('verification.confirm');
+Route::get('email/verify/{hash}', ConfirmEmailController::class)->middleware(['auth', 'signed', 'throttle:6,1,verification-confirm'])->name('verification.confirm');
 Route::get('invitations/{token}', [InvitationController::class, 'legacy'])->name('invitations.legacy');
 Route::get('join/{slug}/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 Route::post('join/{slug}/{token}', [InvitationController::class, 'register'])

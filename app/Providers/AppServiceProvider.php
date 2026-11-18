@@ -157,7 +157,10 @@ class AppServiceProvider extends ServiceProvider
             return Deployment::query()
                 ->when($application, fn(Builder $query, Application $owner) => $query
                     ->where('application_id', $owner->getKey())
-                    ->where(fn(Builder $match) => $match->where('release', $value)->orWhere('id', Str::lower($value))))
+                    ->where(fn(Builder $match) => $match
+                        ->where('release', $value)
+                        ->orWhere('id', Str::lower($value))
+                        ->when(ctype_digit($value) && strlen($value) <= 9, fn(Builder $number) => $number->orWhere('number', (int) $value))))
                 ->unless($application, fn(Builder $query) => $query->whereKey(Str::lower($value)))
                 ->firstOrFail();
         });
