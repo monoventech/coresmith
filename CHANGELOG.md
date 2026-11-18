@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.21 (2026-11-18)
+
+### Changed
+- Teams can be renamed, tabs name the installation, the footer loses Made by Monoven, Cloud loses the updates card, and servers can be added back (#121)
+- Back leaves a deploy whose address changed while it was open, and the fixed set swaps a recipe deleted upstream (#120)
+- www answers beside every apex domain, one domain belongs to one app, and Ruby apps run one Puma process by default (#119)
+- A route cache the app can't load is removed and explained, so the deploy goes on (#118)
+- Headings lose the hand-drawn underline everywhere in the app (#117)
+- A domain still without a certificate gets Caddy to ask again once it points at the server (#116)
+- The last deploy step is called Go live, and deploy copy stops mentioning symlinks (#115)
+- Addresses use names instead of IDs, and old links still lead there (#114)
+- A server lists its runtime versions and updates them to the newest patch (#113)
+
 ## v0.8.20 (2026-11-17)
 
 ### Changed
