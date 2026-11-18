@@ -46,7 +46,7 @@ test.describe('an admin Storefront is shared with, holding back its production a
         await page.getByTestId('project-app').getByRole('link', { name: 'storefront-staging', exact: true }).click()
         await expect(page.getByRole('heading', { level: 1, name: 'storefront-staging' })).toBeVisible()
 
-        const server = /\/servers\/([A-Za-z0-9]+)\/applications\//.exec(page.url())?.[1]
+        const server = /\/servers\/([\w.-]+)\/applications\//.exec(page.url())?.[1]
 
         expect(server).toBeTruthy()
         expect((await page.goto(`/servers/${server}`))?.status()).toBe(404)

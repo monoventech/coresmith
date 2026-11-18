@@ -19,6 +19,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Server\CertificateCheck;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -194,6 +195,7 @@ final class FleetSnapshot
 
         return [
             'id' => $server->getKey(),
+            'key' => (string) $server->getRouteKey(),
             'name' => $server->name,
             'state' => $this->state($server),
             'meta' => $this->meta($server),
@@ -205,7 +207,7 @@ final class FleetSnapshot
             'memory_trend' => $this->trend($server, 'memory_percent'),
             'href' => route('servers.show', $server),
             'logs_href' => route('servers.activity', $server),
-            'watch_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $running->application_id, $running]),
+            'watch_href' => $running === null ? null : route('servers.applications.deployments.show', [$server, $server->applications->find($running->application_id) ?? $running->application_id, $running]),
             'applications' => $server->applications->map(fn(Application $application): array => [
                 'id' => $application->getKey(),
                 'name' => $application->name,
@@ -260,7 +262,7 @@ final class FleetSnapshot
 
         foreach ($this->sharedApplications() as $application) {
             if ($application->power_state === PowerState::Stopped) {
-                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => route('servers.applications.show', [$application->server_id, $application])];
+                $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'stopped', 'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application])];
             }
         }
 
@@ -278,7 +280,7 @@ final class FleetSnapshot
                 'severity' => 'warning',
                 'subject' => $deployment->application->name,
                 'summary' => 'last deploy failed',
-                'href' => route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment]),
+                'href' => route('servers.applications.deployments.show', [app(RouteKeys::class)->server($deployment->application->server_id), $deployment->application, $deployment]),
             ];
         }
 
@@ -298,7 +300,7 @@ final class FleetSnapshot
                 continue;
             }
 
-            $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'killed for memory', 'href' => route('servers.applications.show', [$application->server_id, $application])];
+            $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => 'killed for memory', 'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application])];
         }
 
         $expiring = Activity::query()
@@ -319,7 +321,7 @@ final class FleetSnapshot
 
             $days = (int) ($alert->properties['days'] ?? 0);
 
-            $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => $days < 0 ? 'certificate expired' : 'certificate ' . CertificateCheck::expiry($days), 'href' => route('servers.applications.show', [$application->server_id, $application])];
+            $items[] = ['severity' => 'warning', 'subject' => $application->name, 'summary' => $days < 0 ? 'certificate expired' : 'certificate ' . CertificateCheck::expiry($days), 'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application])];
         }
 
         usort($items, static fn(array $a, array $b): int => ($a['severity'] === 'critical' ? 0 : 1) <=> ($b['severity'] === 'critical' ? 0 : 1));

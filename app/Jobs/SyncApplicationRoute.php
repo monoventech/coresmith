@@ -24,7 +24,7 @@ final class SyncApplicationRoute implements ShouldQueue
 
     public int $timeout = 120;
 
-    public function __construct(private readonly Application $application, public readonly bool $unroute = false)
+    public function __construct(public readonly Application $application, public readonly bool $unroute = false)
     {
         $this->onQueue('server-tasks');
     }

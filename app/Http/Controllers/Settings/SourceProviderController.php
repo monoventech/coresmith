@@ -19,6 +19,7 @@ use App\Services\Git\GitProviderFactory;
 use App\Services\Git\Repository;
 use App\Services\Packages\PackageCredentialPresenter;
 use App\Services\SSH\HostKeyFingerprint;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -55,7 +56,7 @@ final class SourceProviderController extends Controller
                     'name' => $application->name,
                     'fingerprint' => HostKeyFingerprint::fromPublicKey((string) $application->deploy_key_public),
                     'repository' => Repository::slug((string) $application->repository_url),
-                    'href' => route('servers.applications.show', [$application->server_id, $application]),
+                    'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
                 ])->values(),
             'webhooks' => [
                 'count' => $applications->sum(fn(Application $application): int => $application->webhookEndpoints->where('active', true)->count()),

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Edition;
 use App\Models\Server;
 use App\Models\Team;
 use App\Services\Cloud\Tasks\CloudTask;
@@ -16,6 +17,11 @@ abstract class Controller
     protected function currentTeam(): ?Team
     {
         return app(TeamContext::class)->team();
+    }
+
+    protected function startsTeamFirst(?Team $team): bool
+    {
+        return $team === null && Edition::current()->isCloud();
     }
 
     protected function destroyedServer(Server $server): RedirectResponse

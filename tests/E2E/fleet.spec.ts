@@ -22,7 +22,7 @@ test.describe('the fleet', () => {
         await expect(live).toContainText('atlas-staging is deploying')
         await live.click()
 
-        await page.waitForURL(/\/deployments\/[A-Za-z0-9]+/)
+        await page.waitForURL(/\/deployments\/[\w.-]+/)
         await expect(page.getByRole('heading', { level: 1, name: 'Deploying atlas-staging' })).toBeVisible()
         await expectWayBack(page, 'Fleet')
     })
@@ -60,7 +60,7 @@ test.describe('the fleet', () => {
         await expect(forge.getByRole('link', { name: 'atlas, Live', exact: true })).toBeVisible()
 
         await forge.getByRole('link', { name: 'ledger, Live', exact: true }).click()
-        await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+        await page.waitForURL(/\/applications\/[\w.-]+$/)
         await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
     })
 
@@ -76,7 +76,7 @@ test.describe('the fleet', () => {
         await expect(projects.getByRole('button', { name: /^Apps/ })).toBeVisible()
 
         await projects.getByRole('link', { name: /^Atlas/ }).click()
-        await page.waitForURL(/\/projects\/[A-Za-z0-9]+$/)
+        await page.waitForURL(/\/projects\/[\w.-]+$/)
     })
 
     test('every server card opens its server', async ({ page }) => {
@@ -84,7 +84,7 @@ test.describe('the fleet', () => {
 
         await card(page, 'forge-01').getByRole('link', { name: 'forge-01', exact: true }).click()
 
-        await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+        await page.waitForURL(/\/servers\/[\w.-]+$/)
         await expect(page.getByRole('heading', { level: 1, name: 'forge-01' })).toBeVisible()
     })
 
@@ -160,7 +160,7 @@ test.describe('the fleet', () => {
 
         await expect(attention).toContainText('Needs attention')
         await attention.click()
-        await page.waitForURL(/\/servers\/[A-Za-z0-9]+/)
+        await page.waitForURL(/\/servers\/[\w.-]+/)
     })
 
     test('recent activity is listed and each entry leads somewhere', async ({ page }, testInfo) => {

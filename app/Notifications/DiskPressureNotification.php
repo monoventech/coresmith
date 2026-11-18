@@ -11,6 +11,7 @@ namespace App\Notifications;
 use App\Jobs\DeployApplication;
 use App\Models\Server;
 use App\Services\Deployment\ReleasePaths;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -44,6 +45,6 @@ final class DiskPressureNotification extends Notification implements ShouldQueue
                 ? 'Coresmith stops deploying to a server whose disk is ' . DeployApplication::DISK_ABORT_PERCENT . '% full, so deploys there fail until space is freed.'
                 : 'Deploys stop at 95%, so there is still room, but not much.')
             ->line('Pruning keeps the last ' . ReleasePaths::KEEP_RELEASES . ' releases of each app, plus the live one.')
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->action('Open ' . $this->server->name, app(TeamLinks::class)->server($this->server));
     }
 }

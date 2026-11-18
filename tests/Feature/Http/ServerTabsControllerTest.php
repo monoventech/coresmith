@@ -190,7 +190,7 @@ test('another team cannot open a servers tabs', function (string $route) {
 
     $this->actingAs(serverTabMember(Team::factory()->create(), TeamRole::Owner))
         ->get(route($route, $server))
-        ->assertForbidden();
+        ->assertNotFound();
 })->with(['servers.hardening', 'servers.activity', 'servers.under-the-hood']);
 
 test('the server tabs require authentication', function (string $route) {

@@ -45,7 +45,7 @@ test.describe('team addresses', () => {
         )
 
         await page.getByTestId('deployment-row').filter({ hasText: 'ledger' }).first().click()
-        await page.waitForURL(/\/monoven\/servers\/[A-Za-z0-9]+\/applications\/[A-Za-z0-9]+\/deployments\/[A-Za-z0-9]+/)
+        await page.waitForURL(/\/monoven\/servers\/[\w.-]+\/applications\/[\w.-]+\/deployments\/[\w.-]+/)
 
         await goWayBack(page, 'Deployments')
         await page.waitForURL(/\/monoven\/deployments$/)

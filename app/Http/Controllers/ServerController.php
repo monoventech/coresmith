@@ -15,11 +15,13 @@ use App\Exceptions\ServerConnectionFailed;
 use App\Exceptions\ThisMachineRefused;
 use App\Http\Requests\Server\StoreServerRequest;
 use App\Http\Requests\Server\UpdateServerRequest;
+use App\Http\Responses\BackAfterRename;
 use App\Jobs\AuditServer;
 use App\Jobs\FixAuditFinding;
 use App\Jobs\ProvisionServer;
 use App\Jobs\PruneReleases;
 use App\Jobs\RebootServer;
+use App\Jobs\UpdateServerRuntime;
 use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\Server;
@@ -36,6 +38,7 @@ use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\Server\CoresmithKey;
 use App\Services\Server\ServerConnector;
+use App\Services\Server\ServerRuntimes;
 use App\Services\Server\ThisMachine;
 use App\Services\SSH\KeyPairGenerator;
 use App\Services\Teams\TeamAccess;
@@ -112,7 +115,7 @@ final class ServerController extends Controller
         return to_route('servers.show', $server)->with('success', $added);
     }
 
-    public function show(Request $request, Server $server, ServerPresenter $presenter, TeamAccess $access): Response|RedirectResponse
+    public function show(Request $request, Server $server, ServerPresenter $presenter, TeamAccess $access, ServerRuntimes $runtimes): Response|RedirectResponse
     {
         if ($server->trashed()) {
             return $this->destroyedServer($server);
@@ -146,6 +149,12 @@ final class ServerController extends Controller
                     : ApplicationPresenter::state($application),
                 'href' => route('servers.applications.show', [$server, $application]),
             ])->values(),
+            'runtimes' => [
+                'rows' => $runtimes->rows($server, $request->user()),
+                'update' => UpdateServerRuntime::state($server),
+                'can_update' => $request->user()->can('update', $server),
+                'href' => route('servers.runtimes.update', $server),
+            ],
         ]);
     }
 
@@ -159,7 +168,7 @@ final class ServerController extends Controller
             activity()->performedOn($server)->log('server_renamed');
         }
 
-        return back()->with('success', 'Saved.');
+        return ($server->wasChanged('handle') ? app(BackAfterRename::class)->to($request, 'server', $server) : back())->with('success', 'Saved.');
     }
 
     public function destroy(Server $server, ThisMachine $machine, CoresmithKey $keys): RedirectResponse
@@ -285,9 +294,11 @@ final class ServerController extends Controller
             }
         }
 
-        abort_unless($server->status->isBeforeProvisioning(), 404);
-
-        ProvisionServer::begin($server);
+        if (!$server->status->isBeforeProvisioning() || !ProvisionServer::begin($server)) {
+            return back()->with('success', $server->fresh()?->status === ServerStatus::Provisioning
+                ? 'Provisioning is already running. Every phase is logged on this page.'
+                : "{$server->name} is already provisioned.");
+        }
 
         return back()->with('success', 'Provisioning started. Every phase is logged, and it keeps going if you close this page.');
     }

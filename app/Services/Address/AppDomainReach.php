@@ -20,6 +20,7 @@ final class AppDomainReach
         private readonly SSHConnectionManager $connections,
         private readonly AddressResolver $resolver,
         private readonly ServerAddresses $addresses,
+        private readonly DomainTwins $twins,
     ) {}
 
     /**
@@ -28,7 +29,8 @@ final class AppDomainReach
     public function check(Application $application): array
     {
         $server = $application->server;
-        $domains = $application->allDomains();
+        $twins = $this->twins->for($application);
+        $domains = [...$application->allDomains(), ...array_keys($twins)];
 
         if ($server === null || $domains === []) {
             return [];
@@ -42,9 +44,19 @@ final class AppDomainReach
         $reports = [];
 
         foreach ($domains as $domain) {
-            $reports[$domain] = $reachability->check($domain);
+            $report = $reachability->check($domain);
+            $reports[$domain] = isset($twins[$domain]) ? self::optional($report, $domain, $twins[$domain]) : $report;
         }
 
         return $reports;
+    }
+
+    private static function optional(ReachReport $report, string $twin, string $target): ReachReport
+    {
+        if ($report->ready === true) {
+            return $report;
+        }
+
+        return new ReachReport($report->ready, [], ["{$twin} sends visitors to {$target} once it points at this server.", ...$report->problems, ...$report->notes], $report->records);
     }
 }

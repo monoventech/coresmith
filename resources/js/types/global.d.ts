@@ -23,6 +23,7 @@ declare module '@inertiajs/core' {
     export interface InertiaConfig {
         sharedPageProps: {
             name: string
+            appName?: string
             auth: Auth
             edition: 'self-hosted' | 'cloud'
             billing: BillingSummary | null

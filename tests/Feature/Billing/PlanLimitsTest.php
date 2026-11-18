@@ -321,7 +321,7 @@ test('a paying team named from a lapsed team\'s context gets its server', functi
 
     expect($pro->servers()->count())->toBe(1)
         ->and($lapsed->servers()->count())->toBe(0)
-        ->and(parse_url((string) $response->headers->get('Location'), PHP_URL_PATH))->toBe('/servers/' . $pro->servers()->sole()->id);
+        ->and(parse_url((string) $response->headers->get('Location'), PHP_URL_PATH))->toBe('/servers/' . $pro->servers()->sole()->handle);
 });
 
 test('a lapsed team named from a paying team\'s context is refused for the lapsed team', function () {
@@ -342,10 +342,10 @@ test('a server added on another team\'s address opens on its own team\'s address
     $response = $this->actingAs($owner)->post("/{$lapsed->slug}/servers", planLimitsServer($pro));
     $server = $pro->servers()->sole();
 
-    $response->assertRedirect(url("/{$pro->slug}/servers/{$server->id}"))
+    $response->assertRedirect(url("/{$pro->slug}/servers/{$server->handle}"))
         ->assertSessionHas('success', 'Server added. Run the command below on it to connect.');
 
-    $this->get("/{$pro->slug}/servers/{$server->id}")->assertOk();
+    $this->get("/{$pro->slug}/servers/{$server->handle}")->assertOk();
 });
 
 test('an inertia form follows the move to the other team\'s address with a full visit', function () {
@@ -354,7 +354,7 @@ test('an inertia form follows the move to the other team\'s address with a full 
     $response = $this->actingAs($owner)->withHeaders(['X-Inertia' => 'true', 'X-Requested-With' => 'XMLHttpRequest'])->post("/{$lapsed->slug}/servers", planLimitsServer($pro));
     $server = $pro->servers()->sole();
 
-    $response->assertStatus(409)->assertHeader('X-Inertia-Location', url("/{$pro->slug}/servers/{$server->id}"));
+    $response->assertStatus(409)->assertHeader('X-Inertia-Location', url("/{$pro->slug}/servers/{$server->handle}"));
 });
 
 test('a server added on its own team\'s address stays there', function () {
@@ -365,7 +365,7 @@ test('a server added on its own team\'s address stays there', function () {
 
     $response->assertStatus(302);
 
-    expect(parse_url((string) $response->headers->get('Location'), PHP_URL_PATH))->toBe("/{$pro->slug}/servers/{$server->id}");
+    expect(parse_url((string) $response->headers->get('Location'), PHP_URL_PATH))->toBe("/{$pro->slug}/servers/{$server->handle}");
 });
 
 test('a form naming no team the user can use is still refused', function () {

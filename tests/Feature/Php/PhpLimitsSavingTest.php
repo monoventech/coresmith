@@ -48,8 +48,8 @@ function phpSavingMember(Application $application, TeamRole $role = TeamRole::Ow
 function phpSavingSend(Application $application, array $values, TeamRole $role = TeamRole::Owner)
 {
     return test()->actingAs(phpSavingMember($application, $role))
-        ->from(route('servers.applications.show', [$application->server_id, $application]))
-        ->put(route('servers.applications.php-limits.update', [$application->server_id, $application]), $values);
+        ->from(route('servers.applications.show', [$application->server, $application]))
+        ->put(route('servers.applications.php-limits.update', [$application->server, $application]), $values);
 }
 
 test('an owner saves new PHP limits, which are kept, logged and applied without a deploy', function () {

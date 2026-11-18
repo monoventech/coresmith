@@ -62,7 +62,7 @@
 <ServerHeaderView
     {server}
     primary={databases.length > 0 && can.create && server.active
-        ? { label: 'Create a database', href: route('servers.databases.create', server.id) }
+        ? { label: 'Create a database', href: route('servers.databases.create', server.key) }
         : null}
 />
 
@@ -97,7 +97,7 @@
     >
         {#snippet action()}
             {#if can.create && server.active}
-                <Button href={route('servers.databases.create', server.id)}>Create a database</Button>
+                <Button href={route('servers.databases.create', server.key)}>Create a database</Button>
             {/if}
         {/snippet}
     </EmptyState>

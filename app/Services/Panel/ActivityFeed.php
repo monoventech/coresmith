@@ -25,6 +25,7 @@ use App\Models\User;
 use App\Services\Php\PhpLimits;
 use App\Services\Runtime\Catalog;
 use App\Services\Server\CertificateCheck;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use App\Services\Updates\UpdateStatus;
 use Carbon\CarbonInterface;
@@ -206,7 +207,7 @@ final class ActivityFeed
     private function deployment(Deployment $deployment, Application $application): array
     {
         $release = Formats::release($deployment->release);
-        $href = route('servers.applications.deployments.show', [$application->server_id, $application->getKey(), $deployment]);
+        $href = route('servers.applications.deployments.show', [app(RouteKeys::class)->server($application->server_id), $application, $deployment]);
 
         return match ($deployment->status) {
             DeploymentStatus::Succeeded => $this->row($deployment->finished_at ?? $deployment->started_at, [
@@ -256,7 +257,7 @@ final class ActivityFeed
         $database = $databases->get($activity->subject_id);
 
         $serverHref = $server !== null && !$server->trashed() ? route('servers.show', $server) : null;
-        $applicationHref = $application !== null && !$application->trashed() ? route('servers.applications.show', [$application->server_id, $application]) : null;
+        $applicationHref = $application !== null && !$application->trashed() ? route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]) : null;
 
         $parts = match ($activity->description) {
             'server_added' => [$this->mono($server?->name), $this->text(' added to Coresmith, waiting for its key')],
@@ -267,6 +268,16 @@ final class ActivityFeed
             'server_destroy_failed' => [$this->text('Destroying '), $this->mono($server?->name), $this->text(' at ' . ($properties['provider'] ?? 'its provider') . ' failed')],
             'server_provisioned' => [$this->mono($server?->name), $this->text(' provisioned and hardened' . $this->took($properties['duration_seconds'] ?? null))],
             'server_renamed' => [$this->text('Server renamed to '), $this->mono($server?->name)],
+            'runtime_updated' => [
+                $this->text(($properties['runtime'] ?? 'A runtime') . ' ' . ($properties['from'] ?? '') . ' updated to ' . ($properties['to'] ?? '') . ' on '),
+                $this->mono($server?->name),
+                $this->text((int) ($properties['apps'] ?? 0) === 1 ? ', 1 app deploying' : ', ' . (int) ($properties['apps'] ?? 0) . ' apps deploying'),
+            ],
+            'runtime_update_failed' => [
+                $this->text(($properties['runtime'] ?? 'A runtime') . ' ' . ($properties['to'] ?? '') . " couldn't be installed on "),
+                $this->mono($server?->name),
+                $this->text(is_string($properties['reason'] ?? null) ? ': ' . $properties['reason'] : ', so no app was deployed'),
+            ],
             'server_rebooted' => [$this->mono($server?->name), $this->text(' rebooted, and its apps started again')],
             'server_reboot_requested' => [$this->text(($properties['via'] ?? 'Its provider') . ' accepted a reboot of '), $this->mono($server?->name)],
             'server_reboot_failed' => [$this->mono($server?->name), $this->text(' did not reboot. ' . ($properties['reason'] ?? 'The provider did not answer.'))],

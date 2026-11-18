@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Server;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -35,6 +36,6 @@ final class ServerReachableNotification extends Notification implements ShouldQu
         return (new MailMessage)
             ->subject("{$this->server->name} is answering again")
             ->line("Coresmith reached {$this->server->name} again after {$this->downFor} without an answer.")
-            ->action('Open ' . $this->server->name, route('servers.show', $this->server));
+            ->action('Open ' . $this->server->name, app(TeamLinks::class)->server($this->server));
     }
 }

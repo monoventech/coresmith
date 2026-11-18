@@ -91,4 +91,9 @@ class ManagedDatabase extends Model
             'restore' => 'array',
         ];
     }
+
+    public function getRouteKey(): mixed
+    {
+        return $this->name ?? $this->getKey();
+    }
 }

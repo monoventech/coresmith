@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\Application;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -44,6 +45,6 @@ final class AppNotAnsweringNotification extends Notification implements ShouldQu
             ->subject("{$name} isn't answering")
             ->line("{$this->domain} {$what} {$times} checks in a row, 5 minutes apart.")
             ->line("The live log on the app's page shows what it printed. You'll get one more email when it answers again.")
-            ->action('Open ' . $name, route('servers.applications.show', [$this->application->server_id, $this->application]));
+            ->action('Open ' . $name, app(TeamLinks::class)->application($this->application));
     }
 }

@@ -1,7 +1,5 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
-    import MonovenMark from '@/components/MonovenMark.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
 
     type Status = {
@@ -78,8 +76,7 @@
 
     <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-12 pb-12 max-sm:px-5 max-sm:pt-6">
         <h1 class="type-h1 m-0 mb-1.5" data-testid="removal-heading">
-            {gone ? 'Coresmith is' : 'Removing'}
-            <MarkerUnderline>{gone ? 'gone' : 'Coresmith'}</MarkerUnderline>
+            {gone ? 'Coresmith is gone' : 'Removing Coresmith'}
         </h1>
         {#if gone}
             <div class="type-body-sm flex max-w-[64ch] flex-col gap-3 text-muted-foreground" data-testid="removal-gone">
@@ -142,7 +139,6 @@
     <footer class="relative z-10 border-t border-border">
         <div class="mx-auto flex w-full max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
             <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
-            <MonovenMark class="ml-auto" />
         </div>
     </footer>
 </div>

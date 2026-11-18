@@ -169,7 +169,7 @@ test('an application cannot be created on another teams server', function () {
 
     $this->actingAs($outsider)
         ->post(route('servers.applications.store', $server), payload())
-        ->assertForbidden();
+        ->assertNotFound();
 
     expect(Application::count())->toBe(0);
 });
@@ -210,7 +210,7 @@ test('another teams application cannot be viewed', function () {
 
     $this->actingAs($outsider)
         ->get(route('servers.applications.show', [$server, $application]))
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 test('the app page knows when the last failed deploy had already gone live', function (string $log, bool $live) {
@@ -219,7 +219,7 @@ test('the app page knows when the last failed deploy had already gone live', fun
     Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Failed, 'log' => $log]);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page->where('application.last_failed', true)->where('application.last_failed_live', $live));
 })->with([
     'after the swap' => ["[14:03:11] swap: current → releases/20260914-140211\n[14:03:40] deploy failed after the symlink swap.", true],
@@ -237,7 +237,7 @@ test('the app page gives the reason a release that went live is not serving, whi
         'log' => "[14:03:11] swap: current → releases/20260914-140211\n[14:03:40] deploy failed after the symlink swap.",
     ]);
     $member = appTeamMember($team, TeamRole::Member);
-    $show = route('servers.applications.show', [$application->server_id, $application]);
+    $show = route('servers.applications.show', [$application->server, $application]);
 
     $this->actingAs($member)->get($show)
         ->assertInertia(fn($page) => $page->where('application.last_failed_live', true)->where('application.last_failed_reason', $reason));
@@ -260,7 +260,7 @@ test('a worker that did not start after going live leaves the app live, with the
     ]);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page
             ->where('application.state.label', 'Live')
             ->where('application.last_failed_live', true)
@@ -278,7 +278,7 @@ test('a deploy that failed before going live gives no serving reason', function 
     ]);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page->where('application.last_failed', true)->where('application.last_failed_reason', null));
 });
 
@@ -306,7 +306,7 @@ test('the app page says a rollback did not start the app, with the reason it sto
     $application = appWithFailedRollback($team);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page
             ->where('application.state.label', 'Failed')
             ->where('application.rollback_failed', [
@@ -328,7 +328,7 @@ test('the app page names the worker that did not start after a rollback, and the
     ]);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page
             ->where('application.state.label', 'Live')
             ->where('application.rollback_failed', [
@@ -344,7 +344,7 @@ test('the failed rollback stays on the app page until a deploy or rollback start
     $after($application);
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $shown ? $page->whereNot('application.rollback_failed', null) : $page->where('application.rollback_failed', null));
 })->with([
     'a deploy that went live' => [fn(Application $application) => Deployment::factory()->for($application)->create(['status' => DeploymentStatus::Succeeded, 'release' => '20260913-150000', 'finished_at' => now()->subMinutes(10)]), false],
@@ -375,7 +375,7 @@ test('an outsider cannot deploy and nothing is queued', function () {
 
     $this->actingAs($outsider)
         ->post(route('servers.applications.deploy', [$server, $application]))
-        ->assertForbidden();
+        ->assertNotFound();
 
     Queue::assertNothingPushed();
 });
@@ -693,7 +693,7 @@ test('the app page explains a recent out of memory kill', function () {
     activity()->performedOn($application)->withProperties(['process' => 'queue', 'at' => now()->toIso8601String(), 'limit_mb' => 256])->log('app_oom_killed');
 
     $this->actingAs(appTeamMember($team, TeamRole::Member))
-        ->get(route('servers.applications.show', [$application->server_id, $application]))
+        ->get(route('servers.applications.show', [$application->server, $application]))
         ->assertInertia(fn($page) => $page
             ->where('application.oom.process', 'queue')
             ->where('application.oom.limit_mb', 256)
@@ -777,4 +777,17 @@ test('environment text the server could not read is refused with the line and wh
         ->assertSessionHasErrors(['env' => 'Line 2 opens a quote that never closes. Close it or remove it.']);
 
     expect($application->fresh()->env_variables)->toBe("APP_ENV=production\n");
+});
+
+test("adding an app on another app's www name reroutes that app at once, so it lets go before the new app's first deploy", function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create();
+    $apex = Application::factory()->for($team)->for($server)->create(['domain' => 'example.com', 'additional_domains' => [], 'current_release' => '20261117-120000']);
+
+    $this->actingAs(appTeamMember($team, TeamRole::Admin))
+        ->post(route('servers.applications.store', $server), payload(['name' => 'www', 'domain' => 'www.example.com']))
+        ->assertRedirect();
+
+    Queue::assertPushed(SyncApplicationRoute::class, fn(SyncApplicationRoute $job): bool => $job->application->is($apex));
 });

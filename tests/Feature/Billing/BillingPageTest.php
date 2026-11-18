@@ -230,8 +230,12 @@ test('without invoices the page says when the first arrives', function () {
         ->and(billingPagePlan($none)['invoices_note'])->toBe('No invoices yet. The first one arrives when you choose a plan.');
 });
 
-test('a user without a team has no billing page', function () {
-    $this->actingAs(User::factory()->create())->get(route('settings.billing'))->assertNotFound();
+test('a user without a team is sent to start one from the billing, team and token pages', function () {
+    $user = User::factory()->create();
+
+    foreach (['settings.billing', 'teams.index', 'api-tokens.index'] as $page) {
+        $this->actingAs($user)->get(route($page))->assertRedirect(route('start.show'));
+    }
 });
 
 test('the plan dialog lists each plan with what blocks it', function () {

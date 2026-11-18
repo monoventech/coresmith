@@ -70,7 +70,7 @@ test('another teams server cannot be viewed', function () {
     $user = teamMember(Team::factory()->create(), TeamRole::Owner);
     $server = Server::factory()->for(Team::factory()->create())->create();
 
-    $this->actingAs($user)->get(route('servers.show', $server))->assertForbidden();
+    $this->actingAs($user)->get(route('servers.show', $server))->assertNotFound();
 });
 
 test('a member of the owning team can view the server', function () {
@@ -395,7 +395,7 @@ test('provisioning another teams server is refused and queues nothing', function
     $outsider = teamMember(Team::factory()->create(), TeamRole::Owner);
     $server = Server::factory()->for(Team::factory()->create())->create();
 
-    $this->actingAs($outsider)->post(route('servers.provision', $server))->assertForbidden();
+    $this->actingAs($outsider)->post(route('servers.provision', $server))->assertNotFound();
 
     Queue::assertNothingPushed();
 });
@@ -413,6 +413,33 @@ test('an admin can provision a server whose recent check found nothing blocking'
     expect($server->fresh()->status)->toBe(ServerStatus::Provisioning);
 
     Queue::assertPushed(ProvisionServer::class);
+});
+
+test('a second press of Provision says it is already running, or already done, without starting again', function (ServerStatus $status, string $message) {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'web-1', 'status' => $status]);
+
+    $this->actingAs(teamMember($team, TeamRole::Admin))
+        ->post(route('servers.provision', $server))
+        ->assertRedirect()
+        ->assertSessionHas('success', $message);
+
+    expect($server->fresh()->status)->toBe($status);
+    Queue::assertNotPushed(ProvisionServer::class);
+})->with([
+    'running' => [ServerStatus::Provisioning, 'Provisioning is already running. Every phase is logged on this page.'],
+    'done' => [ServerStatus::Active, 'web-1 is already provisioned.'],
+]);
+
+test('a press that loses the race to an earlier one says provisioning is already running', function () {
+    Queue::fake();
+    $team = Team::factory()->create();
+    $server = checkedServer($team);
+    Server::query()->whereKey($server->getKey())->update(['status' => ServerStatus::Provisioning->value]);
+
+    expect(ProvisionServer::begin($server))->toBeFalse();
+    Queue::assertNotPushed(ProvisionServer::class);
 });
 
 test('provisioning waits for blockers to be resolved', function () {
@@ -467,18 +494,6 @@ test('a stale running check is presented as one that did not finish', function (
 
     expect($audit['state'])->toBe('failed')
         ->and($audit['error'])->toBe('The check stopped before it finished. Check again.');
-});
-
-test('provisioning a server that is already active is not found', function () {
-    Queue::fake();
-    $team = Team::factory()->create();
-    $server = Server::factory()->for($team)->create(['status' => ServerStatus::Active]);
-
-    $this->actingAs(teamMember($team, TeamRole::Admin))->post(route('servers.provision', $server))->assertNotFound();
-
-    expect($server->fresh()->status)->toBe(ServerStatus::Active);
-
-    Queue::assertNotPushed(ProvisionServer::class);
 });
 
 test('an admin can check a pending server and a member cannot', function () {
@@ -549,7 +564,7 @@ test('applying a fix on another teams server is refused and queues nothing', fun
     $outsider = teamMember(Team::factory()->create(), TeamRole::Owner);
     $server = checkedServer(Team::factory()->create(), [['key' => 'port_80', 'severity' => 'blocker', 'title' => 'Port 80 is in use by nginx', 'detail' => '', 'fix' => 'stop-nginx']]);
 
-    $this->actingAs($outsider)->post(route('servers.audit.fix', [$server, 'stop-nginx']))->assertForbidden();
+    $this->actingAs($outsider)->post(route('servers.audit.fix', [$server, 'stop-nginx']))->assertNotFound();
 
     Queue::assertNothingPushed();
 });

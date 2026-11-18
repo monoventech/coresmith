@@ -57,7 +57,7 @@
         team_deletion?: TeamDeletion | null
         timezones: string[]
         keys: Key[]
-        updates: PanelUpdates
+        updates: PanelUpdates | null
         moves?: Moves | null
         removal?: Removal | null
         can: { manageInstance: boolean }
@@ -76,7 +76,7 @@
             none: "Coresmith installs only owners', admins' and developers' keys on servers, so these aren't on any of them."
         }[key_reach]
     )
-    const cardsBeforeDanger = $derived(3 + (moves ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0))
+    const cardsBeforeDanger = $derived(2 + (updates ? 1 : 0) + (moves ? 1 : 0) + (cloud ? 0 : 1) + (address ? 1 : 0))
 
     let dialog = $state<'key' | 'delete' | 'team' | null>(null)
     let removing = $state(false)
@@ -131,7 +131,9 @@
 <AppHead title="Settings" />
 
 <div class="grid grid-cols-2 items-stretch gap-4 max-[900px]:grid-cols-1">
-    <PanelUpdatesCard {updates} canManage={can.manageInstance} />
+    {#if updates}
+        <PanelUpdatesCard {updates} canManage={can.manageInstance} />
+    {/if}
 
     <div class="flex h-full flex-col rounded-xl border border-border bg-card px-5.5 py-5" data-testid="backups-card">
         <div class="mb-1 flex items-center gap-2.5">

@@ -94,7 +94,7 @@ test('an address in the path picks the team and every link keeps it', function (
             ->where('panel.team.slug', 'acme')
             ->where('panel.base', '/acme')
             ->where('servers.0.name', 'acme-web')
-            ->where('servers.0.href', 'http://localhost/acme/servers/' . $server->id));
+            ->where('servers.0.href', 'http://localhost/acme/servers/acme-web'));
 
     expect($user->fresh()->current_team_id)->toBe($acme->id);
 });
@@ -182,7 +182,8 @@ test('a server from another team is not found under a team address, even for som
     $server = $monoven->servers()->first();
 
     $this->actingAs($user)->get('/acme/servers/' . $server->id)->assertNotFound();
-    $this->actingAs($user)->get('/monoven/servers/' . $server->id)->assertOk();
+    $this->actingAs($user)->get('/acme/servers/' . $server->handle)->assertNotFound();
+    $this->actingAs($user)->get('/monoven/servers/' . $server->handle)->assertOk();
 });
 
 test('without an address a server opens in its own team and that team becomes current', function () {
@@ -190,9 +191,15 @@ test('without an address a server opens in its own team and that team becomes cu
     $user->forceFill(['current_team_id' => $monoven->id])->save();
 
     $this->actingAs($user)
-        ->get('/servers/' . $acme->servers()->first()->id)
+        ->get('/servers/acme-web')
         ->assertOk()
         ->assertInertia(fn($page) => $page->where('panel.team.slug', 'acme'));
+
+    expect($user->fresh()->current_team_id)->toBe($acme->id);
+
+    $user->forceFill(['current_team_id' => $monoven->id])->save();
+
+    $this->actingAs($user->fresh())->get('/servers/' . $acme->servers()->first()->id)->assertRedirect('/servers/acme-web');
 
     expect($user->fresh()->current_team_id)->toBe($acme->id);
 });
@@ -253,7 +260,7 @@ test('a team subdomain picks the team when the instance has a tenant domain', fu
             ->where('panel.team.slug', 'acme')
             ->where('panel.base', '')
             ->where('panel.viaHost', true)
-            ->where('servers.0.href', 'http://acme.coresmith.test/servers/' . $server->id));
+            ->where('servers.0.href', 'http://acme.coresmith.test/servers/acme-web'));
 });
 
 test('a subdomain means nothing when no tenant domain is configured', function () {

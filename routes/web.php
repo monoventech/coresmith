@@ -35,6 +35,7 @@ use App\Http\Controllers\ServerController;
 use App\Http\Controllers\ServerFirewallController;
 use App\Http\Controllers\ServerHostKeyController;
 use App\Http\Controllers\ServerProtectionController;
+use App\Http\Controllers\ServerRuntimeController;
 use App\Http\Controllers\ServerTabsController;
 use App\Http\Controllers\ServerTakeoverController;
 use App\Http\Controllers\SetupController;
@@ -120,6 +121,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.reboot');
     Route::post('servers/{server}/prune-releases', [ServerController::class, 'prune'])
         ->name('servers.prune-releases');
+    Route::post('servers/{server}/runtimes', [ServerRuntimeController::class, 'update'])
+        ->middleware('throttle:10,1,runtime-update')
+        ->name('servers.runtimes.update');
 
     Route::get('servers/{server}/hardening', [ServerTabsController::class, 'hardening'])
         ->withTrashed()

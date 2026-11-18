@@ -19,13 +19,11 @@
             deleted
                 ? {
                       title: 'Your team was deleted',
-                      mark: 'deleted',
                       description:
                           'Its servers keep running, detached from Coresmith. Start a team to manage servers again, or close your account.'
                   }
                 : {
                       title: "You're not on a team",
-                      mark: 'team',
                       description: 'Start a team to manage servers, or close your account.'
                   }
         )

@@ -36,7 +36,7 @@ test.describe('read-only teams on coresmith cloud', () => {
             .getByTestId('server-card')
             .getByRole('link', { name: own(testInfo, 'lapsed-rekeyed'), exact: true })
             .click()
-        await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+        await page.waitForURL(/\/servers\/[\w.-]+$/)
 
         const alert = page.getByTestId('host-key-alert')
 

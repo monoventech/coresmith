@@ -51,6 +51,7 @@ final class ServerPresenter
 
         return [
             'id' => $server->getKey(),
+            'key' => (string) $server->getRouteKey(),
             'name' => $server->name,
             'region' => $server->region,
             'state' => $state,

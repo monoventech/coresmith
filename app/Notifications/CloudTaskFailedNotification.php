@@ -10,6 +10,7 @@ namespace App\Notifications;
 
 use App\Models\Server;
 use App\Services\Cloud\Tasks\CloudTask;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -48,6 +49,6 @@ final class CloudTaskFailedNotification extends Notification implements ShouldQu
                 default => "Coresmith's work on {$name} at {$provider} failed",
             })
             ->line($this->reason)
-            ->action("Open {$name}", route('servers.show', $this->server));
+            ->action("Open {$name}", app(TeamLinks::class)->server($this->server));
     }
 }

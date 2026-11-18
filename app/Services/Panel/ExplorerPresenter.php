@@ -19,6 +19,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Billing\TeamBilling;
 use App\Services\Deployment\DeploymentPhases;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as BaseCollection;
@@ -83,7 +84,7 @@ final class ExplorerPresenter
             'databases' => $databases->where('project_id', $project->getKey())->map(fn(ManagedDatabase $database): array => [
                 'id' => $database->getKey(),
                 'name' => $database->name,
-                'href' => route('servers.databases.show', [$database->server_id, $database->getKey()]),
+                'href' => route('servers.databases.show', [app(RouteKeys::class)->server($database->server_id), $database]),
                 'engine' => $database->type->value,
             ])->values()->all(),
         ];
@@ -98,7 +99,7 @@ final class ExplorerPresenter
             'id' => $application->getKey(),
             'name' => $application->name,
             'tags' => $application->tags,
-            'href' => route('servers.applications.show', [$application->server_id, $application->getKey()]),
+            'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
             'state' => ApplicationPresenter::state($application),
             'server' => $application->server?->name,
         ];
@@ -137,7 +138,7 @@ final class ExplorerPresenter
         return [
             'application' => $application->name,
             'server' => $application->server?->name,
-            'href' => route('servers.applications.deployments.show', [$application->server_id, $application->getKey(), $deployment->getKey()]),
+            'href' => route('servers.applications.deployments.show', [app(RouteKeys::class)->server($application->server_id), $application, $deployment]),
             'phase' => $this->phases->progress($deployment) ?? 'starting',
             'states' => array_column($this->phases->states($deployment), 'state'),
             'started_at' => $deployment->started_at?->toISOString(),

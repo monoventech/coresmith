@@ -13,6 +13,7 @@ use App\Models\Application;
 use App\Notifications\CertificateExpiringNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
+use App\Services\Address\DomainTwins;
 use App\Services\Panel\Formats;
 use App\Services\SafeName;
 use App\Services\SSH\SSHConnection;
@@ -32,6 +33,8 @@ final class CertificateCheck
     private const STALE_HOURS = 6;
 
     private const MISSING_STALE_MINUTES = 10;
+
+    public const RETRY_AFTER_MINUTES = 2;
 
     public function __construct(private readonly CertificateProbe $probe) {}
 
@@ -56,17 +59,26 @@ final class CertificateCheck
     public static function domains(Application $application): array
     {
         return array_values(array_filter(
-            $application->allDomains(),
+            [...$application->allDomains(), ...array_keys(app(DomainTwins::class)->for($application))],
             fn(string $domain): bool => !str_starts_with($domain, '*.') && SafeName::isDomain($domain),
         ));
     }
 
-    public function run(SSHConnection $connection): void
+    /**
+     * @param  list<string>|null  $only
+     * @return list<string>
+     */
+    public function run(SSHConnection $connection, ?array $only = null): array
     {
         $applications = $connection->server()->applications()->get()
             ->filter(fn(Application $application): bool => self::domains($application) !== [])
             ->values();
         $domains = array_values(array_unique($applications->flatMap(fn(Application $application): array => self::domains($application))->all()));
+
+        if ($only !== null) {
+            $domains = array_values(array_intersect($domains, $only));
+        }
+
         $started = CarbonImmutable::now();
         $found = [];
 
@@ -85,6 +97,29 @@ final class CertificateCheck
                 }
             }
         }
+
+        return $this->waiting($applications->all(), array_keys(array_filter($found, fn(?CarbonImmutable $expires): bool => $expires === null)));
+    }
+
+    /**
+     * @param  list<Application>  $applications
+     * @param  list<string>  $missing
+     * @return list<string>
+     */
+    private function waiting(array $applications, array $missing): array
+    {
+        $since = now()->subMinutes(self::RETRY_AFTER_MINUTES);
+        $waiting = [];
+
+        foreach ($applications as $application) {
+            foreach ($this->stored($application) as $domain => $entry) {
+                if (in_array($domain, $missing, true) && isset($entry['missing_since']) && CarbonImmutable::parse($entry['missing_since'])->lte($since)) {
+                    $waiting[] = $domain;
+                }
+            }
+        }
+
+        return array_values(array_unique($waiting));
     }
 
     /**
@@ -143,7 +178,13 @@ final class CertificateCheck
 
         foreach (self::domains($application) as $domain) {
             if (array_key_exists($domain, $found)) {
-                $entries[$domain] = ['expires_at' => $found[$domain]?->toIso8601String(), 'checked_at' => $now->toIso8601String()];
+                $previous = $entries[$domain] ?? null;
+                $missingSince = match (true) {
+                    $found[$domain] !== null => null,
+                    $previous !== null && $previous['expires_at'] === null => $previous['missing_since'] ?? $previous['checked_at'],
+                    default => $now->toIso8601String(),
+                };
+                $entries[$domain] = ['expires_at' => $found[$domain]?->toIso8601String(), 'checked_at' => $now->toIso8601String(), ...($missingSince === null ? [] : ['missing_since' => $missingSince])];
                 $reached[] = $domain;
             }
         }
@@ -196,7 +237,7 @@ final class CertificateCheck
     }
 
     /**
-     * @param  array{expires_at: ?string, checked_at: string}  $entry
+     * @param  array{expires_at: ?string, checked_at: string, missing_since?: string}  $entry
      * @return array{state: string, expires_at: ?string, days: ?int, label: string, title: string}
      */
     private function describe(string $domain, array $entry, string $ip): array
@@ -205,7 +246,7 @@ final class CertificateCheck
         $renew = "This should have renewed by now. Check {$domain} still points at {$ip}.";
 
         [$state, $label, $title] = match (true) {
-            $days === null => ['none', 'No certificate', "There's no certificate for this name yet. Point its DNS at {$ip} and one is requested."],
+            $days === null => ['none', 'No certificate', "There's no certificate for this name yet. Point the name at this server, then press Check again and Coresmith asks for one."],
             $days < 0 => ['expired', 'Expired', $renew],
             $days <= self::WARN_DAYS => ['expiring', ucfirst(self::expiry($days)), $renew],
             default => ['valid', 'TLS', 'Valid until ' . Formats::absolute($this->moment((string) $entry['expires_at'])) . ', checked ' . Formats::when($this->moment($entry['checked_at']))],
@@ -225,7 +266,7 @@ final class CertificateCheck
     }
 
     /**
-     * @return array<string, array{expires_at: ?string, checked_at: string}>
+     * @return array<string, array{expires_at: ?string, checked_at: string, missing_since?: string}>
      */
     private function stored(Application $application): array
     {

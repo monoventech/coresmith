@@ -27,6 +27,7 @@ export type ServerAudit = {
 
 export type ServerHeader = {
     id: string
+    key: string
     name: string
     region: string | null
     state: EntityState

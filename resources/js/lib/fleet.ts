@@ -8,6 +8,7 @@ export type EntityState = {
 
 export type ServerCard = {
     id: string
+    key: string
     name: string
     state: EntityState
     meta: string

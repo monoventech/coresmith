@@ -34,8 +34,8 @@ test('process defaults sit before EnvironmentFile so the app\'s environment over
 })->with([
     'sveltekit' => [['type' => ApplicationType::Js, 'framework' => 'sveltekit', 'js_runtime' => 'bun'], ['NODE_ENV' => 'production', 'PROTOCOL_HEADER' => 'x-forwarded-proto', 'HOST_HEADER' => 'x-forwarded-host', 'ADDRESS_HEADER' => 'x-forwarded-for'], ['RAILS_ENV']],
     'next.js' => [['type' => ApplicationType::Js, 'framework' => 'nextjs', 'js_runtime' => 'bun'], ['NODE_ENV' => 'production'], ['PROTOCOL_HEADER', 'RAILS_ENV']],
-    'rails' => [['type' => ApplicationType::Ruby, 'framework' => 'rails'], ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1'], ['NODE_ENV']],
-    'sinatra' => [['type' => ApplicationType::Ruby, 'framework' => 'sinatra'], ['RACK_ENV' => 'production'], ['RAILS_SERVE_STATIC_FILES', 'NODE_ENV']],
+    'rails' => [['type' => ApplicationType::Ruby, 'framework' => 'rails'], ['RAILS_ENV' => 'production', 'RACK_ENV' => 'production', 'WEB_CONCURRENCY' => '0', 'RAILS_SERVE_STATIC_FILES' => '1', 'RAILS_LOG_TO_STDOUT' => '1'], ['NODE_ENV']],
+    'sinatra' => [['type' => ApplicationType::Ruby, 'framework' => 'sinatra'], ['RACK_ENV' => 'production', 'WEB_CONCURRENCY' => '0'], ['RAILS_SERVE_STATIC_FILES', 'NODE_ENV']],
     'php' => [['type' => ApplicationType::Php, 'framework' => 'laravel', 'php_version' => '8.4.13'], [], ['NODE_ENV', 'RAILS_ENV', 'RACK_ENV']],
 ]);
 

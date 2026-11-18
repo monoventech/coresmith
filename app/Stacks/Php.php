@@ -20,7 +20,15 @@ use App\Services\Runtime\VersionConstraint;
 
 final readonly class Php implements Language
 {
-    public const LARAVEL_CACHES = ['php artisan config:cache', 'php artisan route:cache', 'php artisan view:cache'];
+    public const ROUTE_CACHE = 'php artisan route:cache';
+
+    public const LARAVEL_CACHES = ['php artisan config:cache', self::ROUTE_CACHE, 'php artisan view:cache'];
+
+    public const ROUTE_CACHE_CHECK = 'php artisan --version';
+
+    public const ROUTE_CACHE_CLEAR = 'rm -f bootstrap/cache/routes-v7.php';
+
+    public const ROUTE_CACHE_UNLOADABLE = "php artisan route:cache saved routes the app can't load, so Coresmith removed that cache. The app runs without it. This happens when a route holds data, such as query results passed to Route::inertia or Route::view. Load that data in a controller to bring the cache back.";
 
     public const LIBRARY = 'composer.json names no framework and there is no index.php at /, /public or /web, so this looks like a library, not an app.';
 

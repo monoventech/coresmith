@@ -1,7 +1,5 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
-    import MonovenMark from '@/components/MonovenMark.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
 
     let { command }: { command: string } = $props()
@@ -16,7 +14,7 @@
 
     <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-16 pb-12 max-sm:px-5 max-sm:pt-8">
         <div class="max-w-130">
-            <h1 class="type-h1 m-0 mb-1.5">Installed, not yet <MarkerUnderline>configured</MarkerUnderline></h1>
+            <h1 class="type-h1 m-0 mb-1.5">Installed, not yet configured</h1>
             <p class="type-body-sm mb-7 text-muted-foreground">
                 No account exists here yet. Open the one-time link the installer printed at the end of the install to
                 create the owner account. This page can't create one without it.
@@ -34,7 +32,6 @@
     <footer class="relative z-10 border-t border-border">
         <div class="mx-auto flex w-full max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
             <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
-            <MonovenMark class="ml-auto" />
         </div>
     </footer>
 </div>

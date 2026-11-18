@@ -16,6 +16,7 @@ use App\Models\Server;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\ActivityFeed;
 use App\Services\Panel\FleetSnapshot;
+use App\Services\Teams\RouteKeys;
 use App\Services\Teams\TeamAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -99,7 +100,7 @@ final class DashboardController extends Controller
                 'id' => $application->id,
                 'name' => $application->name,
                 'server' => $application->server?->name,
-                'href' => route('servers.applications.show', [$application->server_id, $application]),
+                'href' => route('servers.applications.show', [app(RouteKeys::class)->server($application->server_id), $application]),
             ])->values(),
             'narrowed' => !app(TeamAccess::class)->seesEverything($user, $team),
             'activity' => $feed->forTeam($team, viewer: $user),
@@ -126,7 +127,7 @@ final class DashboardController extends Controller
             'server' => (string) $application->server?->name,
             'phase' => $phases->progress($deployment) ?? 'starting',
             'states' => array_column($phases->states($deployment), 'state'),
-            'href' => route('servers.applications.deployments.show', [$application->server_id, $application, $deployment]),
+            'href' => route('servers.applications.deployments.show', [app(RouteKeys::class)->server($application->server_id), $application, $deployment]),
         ];
     }
 }

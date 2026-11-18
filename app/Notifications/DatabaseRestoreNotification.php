@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\ManagedDatabase;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -43,6 +44,6 @@ final class DatabaseRestoreNotification extends Notification implements ShouldQu
         return (new MailMessage)
             ->subject($this->succeeded ? "Restored {$name} from {$this->when}" : "Restoring {$name} failed")
             ->line($this->succeeded ? "{$name} on {$server?->name} now holds the backup from {$this->when}." : (string) $this->error)
-            ->action("Open {$name}", route('servers.databases.show', [$this->database->server_id, $this->database]));
+            ->action("Open {$name}", app(TeamLinks::class)->database($this->database));
     }
 }

@@ -11,6 +11,7 @@ namespace App\Notifications;
 use App\Models\Deployment;
 use App\Services\Deployment\DeploymentPhases;
 use App\Services\Panel\DeploymentPresenter;
+use App\Services\Teams\TeamLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -45,6 +46,6 @@ final class DeploymentFailedNotification extends Notification implements ShouldQ
             ->line($reached
                 ? 'It failed after the switch to the new release, so that release is live. Check its processes.'
                 : 'The current release kept serving the whole time, so no one saw an error page.')
-            ->action('Read the log', route('servers.applications.deployments.show', [$application->server_id, $application, $this->deployment]));
+            ->action('Read the log', app(TeamLinks::class)->deployment($application, $this->deployment));
     }
 }

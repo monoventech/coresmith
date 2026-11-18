@@ -88,7 +88,7 @@ test('a rollback is refused while a deploy runs or waits', function (DeploymentS
     Deployment::factory()->for($application)->create(['status' => $status]);
 
     $this->actingAs(guardMember($application))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]))
+        ->post(route('servers.applications.rollback', [$application->server, $application]))
         ->assertSessionHas('error', 'A deploy is running for Shop. Cancel it or let it finish, then roll back.');
 
     Queue::assertNotPushed(RollbackApplication::class);
@@ -105,7 +105,7 @@ test('a rollback is queued once every deploy of the app has finished, whatever a
     Deployment::factory()->for($neighbour)->create(['status' => DeploymentStatus::Running]);
 
     $this->actingAs(guardMember($application))
-        ->post(route('servers.applications.rollback', [$application->server_id, $application]))
+        ->post(route('servers.applications.rollback', [$application->server, $application]))
         ->assertSessionHas('success', 'Rolling back to the previous release. Nothing is rebuilt.');
 
     Queue::assertPushed(RollbackApplication::class, 1);
@@ -133,7 +133,7 @@ test("a rollback that meets a deploy's lock does nothing and says so", function 
             ['text' => 'Shop', 'mono' => true],
             ['text' => ' wasn\'t rolled back, because a deploy was running. Roll back again once it finishes.', 'mono' => false],
         ])
-        ->and($row['href'])->toBe(route('servers.applications.show', [$application->server_id, $application]))
+        ->and($row['href'])->toBe(route('servers.applications.show', [$application->server, $application]))
         ->and(guardLockFree($application))->toBeFalse()
         ->and(guardPings())->toBe([['application', $application->id]]);
 });

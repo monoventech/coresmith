@@ -233,6 +233,38 @@ test.describe('an application', () => {
         await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
     })
 
+    test("the browser's back button leaves a deploy whose address changed while it was open", async ({
+        page
+    }, testInfo) => {
+        const name = own(testInfo, 'scratch')
+        let moved = false
+
+        await page.route(/\/deployments\//, async (route) => {
+            if (moved || route.request().headers()['x-inertia-partial-data'] === undefined) {
+                await route.continue()
+
+                return
+            }
+
+            moved = true
+
+            const response = await route.fetch()
+            const body = (await response.json()) as { url: string }
+
+            await route.fulfill({ response, json: { ...body, url: `${body.url}&release=named` } })
+        })
+
+        await gotoApplication(page, 'bench-01', name)
+        await page.getByRole('button', { name: 'Deploy', exact: true }).click()
+
+        await expect(page.getByRole('heading', { level: 1, name: `Deploying ${name}` })).toBeVisible()
+        await expect(page).toHaveURL(/release=named$/, { timeout: 15_000 })
+
+        await page.goBack()
+
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
+    })
+
     test('on a phone the app page keeps deploy, the toggles and the current release', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'The compact app page only renders below 640px')
 
@@ -492,7 +524,7 @@ test.describe('what the full app page adds on a wider screen', () => {
     }) => {
         const domains = ['atlas.monoven.io', 'www.atlas.monoven.io', 'shop.atlas.monoven.io']
 
-        await withProps(page, /\/applications\/[A-Za-z0-9]+$/, (props) => {
+        await withProps(page, /\/applications\/[\w.-]+$/, (props) => {
             const application = props.application as Record<string, unknown>
 
             application.additional_domains = domains.slice(1)
@@ -700,7 +732,10 @@ test.describe('adding an application', () => {
         await expect(page.getByRole('heading', { level: 1, name: 'Add an app' })).toBeVisible()
         await expect(page.getByRole('main')).toContainText('What a deploy does')
         await expect(page.getByRole('main')).toContainText(
-            'Clone release, fetched with a one-hour token or a read-only deploy key'
+            'Clone release, the latest commit on the branch, with its submodules'
+        )
+        await expect(page.getByRole('main')).toContainText(
+            'Go live, visitors move to the new release in one step, and the old one is kept for rollback'
         )
     })
 
@@ -1028,7 +1063,7 @@ test.describe('adding an application', () => {
         await gotoServer(page, 'bench-01')
         await main(page).getByRole('link', { name: 'Add an app' }).click()
         await page.getByLabel('Language').selectOption('js')
-        await page.getByLabel('Runtime').selectOption('node')
+        await page.getByLabel('Runtime', { exact: true }).selectOption('node')
 
         await expect(
             page

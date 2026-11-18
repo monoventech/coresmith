@@ -760,11 +760,11 @@ test('the mails say what happened and what to check', function () {
             'Its apps may still be serving. Coresmith checks every minute and emails again when it answers.',
         ])
         ->and($down->actionText)->toBe('Open web-1')
-        ->and($down->actionUrl)->toBe(route('servers.show', $server))
+        ->and($down->actionUrl)->toBe('http://localhost/' . $server->team->slug . '/servers/web-1')
         ->and($up->subject)->toBe('web-1 is answering again')
         ->and($up->introLines)->toBe(['Coresmith reached web-1 again after 47m 00s without an answer.'])
         ->and($up->actionText)->toBe('Open web-1')
-        ->and($up->actionUrl)->toBe(route('servers.show', $server));
+        ->and($up->actionUrl)->toBe('http://localhost/' . $server->team->slug . '/servers/web-1');
 });
 
 test('the unreachable mail says how often it stopped answering since the last mail', function (int $outages, ?int $mailedHoursAgo, ?string $line) {

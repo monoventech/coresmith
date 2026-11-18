@@ -121,7 +121,7 @@ test('another team\'s server is refused', function () {
     [, $server] = stackEndpointServer();
     [$stranger] = stackEndpointServer();
 
-    stackEndpointGet($stranger, $server, ['repository_url' => 'https://github.com/laravel/laravel.git', 'repository_branch' => '13.x'])->assertForbidden();
+    test()->actingAs($stranger)->getJson(route('servers.repository-stack', [$server->id, 'repository_url' => 'https://github.com/laravel/laravel.git', 'repository_branch' => '13.x']))->assertForbidden();
 });
 
 test('someone who cannot open the Add an app form cannot read repositories through it either', function () {

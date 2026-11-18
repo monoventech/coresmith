@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Models\Application;
+use App\Models\Server;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
@@ -89,4 +92,18 @@ test('other statuses keep their plain pages', function () {
 
     expect($response->headers->get('X-Inertia'))->toBeNull()
         ->and((string) $response->getContent())->not->toContain('"component":"Error"')->not->toContain('&quot;component&quot;:&quot;Error&quot;');
+});
+
+test("a refused page names nothing the person can't see", function () {
+    $team = Team::factory()->owned()->create();
+    $server = Server::factory()->for(Team::factory()->owned()->create())->create(['name' => 'secret-box']);
+    $application = Application::factory()->for($server->team)->for($server)->create(['name' => 'secret-shop']);
+
+    foreach (["/servers/{$server->id}", "/servers/{$server->id}/applications/{$application->id}"] as $address) {
+        $response = $this->actingAs($team->owner)->get($address)->assertForbidden();
+
+        expect($response->headers->get('Location'))->toBeNull()
+            ->and($response->getContent())->not->toContain('secret-box')
+            ->and($response->getContent())->not->toContain('secret-shop');
+    }
 });

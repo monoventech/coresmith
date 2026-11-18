@@ -7,6 +7,8 @@
     import AppHead from '@/components/AppHead.svelte'
     import EmptyState from '@/components/EmptyState.svelte'
     import ProvisioningPanel from '@/components/servers/ProvisioningPanel.svelte'
+    import RuntimesCard from '@/components/servers/RuntimesCard.svelte'
+    import type { Runtimes } from '@/components/servers/RuntimesCard.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import ServerMovePanel from '@/components/servers/ServerMovePanel.svelte'
     import StateDot from '@/components/StateDot.svelte'
@@ -27,7 +29,11 @@
         href: string
     }
 
-    let { server, applications = [] }: { server: ServerHeader; applications: AppRow[] } = $props()
+    let {
+        server,
+        applications = [],
+        runtimes
+    }: { server: ServerHeader; applications: AppRow[]; runtimes: Runtimes } = $props()
 
     const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
@@ -41,7 +47,7 @@
 <ServerHeaderView
     {server}
     primary={applications.length > 0 && server.active && server.can.createApplication
-        ? { label: 'Add an app', href: route('servers.applications.create', server.id) }
+        ? { label: 'Add an app', href: route('servers.applications.create', server.key) }
         : null}
 />
 
@@ -58,7 +64,7 @@
     >
         {#snippet action()}
             {#if server.can.createApplication}
-                <Button href={route('servers.applications.create', server.id)}>Add an app</Button>
+                <Button href={route('servers.applications.create', server.key)}>Add an app</Button>
             {/if}
         {/snippet}
     </EmptyState>
@@ -106,11 +112,14 @@
                 This server runs {stackText}, each app walled off from the others with its own environment and database
                 credentials.
                 <Link
-                    href={route('servers.under-the-hood', server.id)}
+                    href={route('servers.under-the-hood', server.key)}
                     class="whitespace-nowrap text-foreground underline underline-offset-2"
                     >What Coresmith runs here</Link
                 >
             </p>
         </div>
     </div>
+    {#if runtimes.rows.length > 0}
+        <RuntimesCard server={server.name} {runtimes} />
+    {/if}
 {/if}

@@ -231,7 +231,7 @@ export async function useTheme(page: Page, theme: 'light' | 'dark') {
 export async function gotoServer(page: Page, name: string) {
     await page.goto('/dashboard')
     await page.getByTestId('server-card').getByRole('link', { name, exact: true }).click()
-    await page.waitForURL(/\/servers\/[A-Za-z0-9]+$/)
+    await page.waitForURL(/\/servers\/[\w.-]+$/)
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
 }
 
@@ -261,14 +261,14 @@ export function databaseRow(page: Page, name: string): Locator {
 export async function gotoApplication(page: Page, server: string, name: string) {
     await gotoServer(page, server)
     await applicationRow(page, name).click()
-    await page.waitForURL(/\/applications\/[A-Za-z0-9]+$/)
+    await page.waitForURL(/\/applications\/[\w.-]+$/)
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
 }
 
 export async function gotoDatabase(page: Page, server: string, name: string) {
     await gotoServerTab(page, server, 'Databases')
     await databaseRow(page, name).click()
-    await page.waitForURL(/\/databases\/[A-Za-z0-9]+$/)
+    await page.waitForURL(/\/databases\/[\w.-]+$/)
     await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
 }
 
@@ -496,29 +496,4 @@ export async function noSidewaysScroll(page: Page) {
     })
 
     expect(overflow).toBeLessThanOrEqual(1)
-}
-
-export const MONOVEN = 'https://monoven.com/'
-
-export async function opensMonovenInNewTab(page: Page, scope: Locator) {
-    const mark = scope.getByRole('link', { name: 'Made by Monoven' })
-    const context = page.context()
-    const before = page.url()
-
-    await context.route(`${MONOVEN}**`, (route) =>
-        route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Monoven</title>' })
-    )
-    await expect(mark).toBeVisible()
-    await expect(mark).toContainText('Made by Monoven')
-    await expect(mark.locator('svg')).toHaveCount(0)
-
-    const opened = context.waitForEvent('page')
-    await mark.click()
-    const tab = await opened
-
-    await expect(tab).toHaveURL(MONOVEN)
-    expect(await tab.evaluate(() => window.opener)).toBeNull()
-    expect(page.url()).toBe(before)
-
-    await tab.close()
 }

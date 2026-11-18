@@ -228,7 +228,7 @@ test('another teams host key cannot be accepted', function () {
 
     $this->actingAs(hostKeyUser(Team::factory()->create(), TeamRole::Owner))
         ->post(route('servers.host-key.accept', $server), ['fingerprint' => FakeSSHTransport::fingerprintOf('new')])
-        ->assertForbidden();
+        ->assertNotFound();
 
     expect($server->fresh()->host_key_fingerprint)->toBe(FakeSSHTransport::fingerprintOf('old'));
 });

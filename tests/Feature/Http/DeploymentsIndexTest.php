@@ -135,7 +135,7 @@ test('each row links to its deploy screen', function () {
         ->get(route('deployments.index'))
         ->assertInertia(fn($page) => $page
             ->where('deployments.0.release', '20260913-140000')
-            ->where('deployments.0.href', route('servers.applications.deployments.show', [$application->server_id, $application, $deployment])));
+            ->where('deployments.0.href', route('servers.applications.deployments.show', [$application->server, $application, $deployment])));
 });
 
 test('the deployments page requires authentication', function () {

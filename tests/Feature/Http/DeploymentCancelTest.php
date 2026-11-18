@@ -25,12 +25,12 @@ use Spatie\Activitylog\Models\Activity;
 
 function cancelEndpoint(Deployment $deployment): string
 {
-    return route('servers.applications.deployments.cancel', [$deployment->application->server_id, $deployment->application_id, $deployment]);
+    return route('servers.applications.deployments.cancel', [$deployment->application->server, $deployment->application, $deployment]);
 }
 
 function cancelScreenUrl(Deployment $deployment): string
 {
-    return route('servers.applications.deployments.show', [$deployment->application->server_id, $deployment->application_id, $deployment]);
+    return route('servers.applications.deployments.show', [$deployment->application->server, $deployment->application, $deployment]);
 }
 
 function cancelScreenMember(Team $team, TeamRole $role = TeamRole::Member, string $name = 'Maya Lindqvist'): User
@@ -246,7 +246,7 @@ test('members may cancel what they may deploy, another team is refused and a mis
 
     $this->actingAs(cancelScreenMember(Team::factory()->create(), TeamRole::Owner, 'Eve Outsider'))
         ->post(cancelEndpoint($deployment))
-        ->assertForbidden();
+        ->assertNotFound();
 
     foreach ([
         [$otherServer, $application, $deployment],
@@ -315,7 +315,7 @@ test('the deploy page offers a cancel until the migrations start', function (arr
 test('the cancel link keeps the team address the page was opened under', function () {
     $team = Team::factory()->create(['slug' => 'acme']);
     $deployment = cancelScreenRunning($team);
-    $path = '/servers/' . $deployment->application->server_id . '/applications/' . $deployment->application_id . '/deployments/' . $deployment->id;
+    $path = route('servers.applications.deployments.show', [$deployment->application->server, $deployment->application, $deployment], false);
 
     $this->actingAs(cancelScreenMember($team))
         ->get('/acme' . $path)
@@ -375,7 +375,7 @@ test('the feed says who cancelled a deploy and that nothing changed', function (
         ['text' => 'Deploy cancelled, ', 'mono' => false],
         ['text' => 'Shop', 'mono' => true],
         ['text' => ', by Maya Lindqvist, nothing changed', 'mono' => false],
-    ])->and($row['href'])->toBe(route('servers.applications.show', [$deployment->application->server_id, $deployment->application_id]));
+    ])->and($row['href'])->toBe(route('servers.applications.show', [$deployment->application->server, $deployment->application]));
 });
 
 test('the feed leaves out a name it no longer knows', function () {

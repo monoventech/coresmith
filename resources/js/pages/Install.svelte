@@ -2,8 +2,6 @@
     import { Form } from '@inertiajs/svelte'
     import AppHead from '@/components/AppHead.svelte'
     import InputError from '@/components/InputError.svelte'
-    import MarkerUnderline from '@/components/MarkerUnderline.svelte'
-    import MonovenMark from '@/components/MonovenMark.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
     import PasswordInput from '@/components/PasswordInput.svelte'
     import { Button } from '@/components/ui/button'
@@ -30,7 +28,7 @@
     </header>
 
     <main class="relative z-10 mx-auto w-full max-w-300 flex-1 px-10 pt-12 pb-12 max-sm:px-5 max-sm:pt-6">
-        <h1 class="type-h1 m-0 mb-1.5">Create the <MarkerUnderline>owner</MarkerUnderline> account</h1>
+        <h1 class="type-h1 m-0 mb-1.5">Create the owner account</h1>
         <p class="type-body-sm mb-7 max-w-[60ch] text-muted-foreground" data-testid="install-intro">
             This is the only account that can be created from this page. Once it exists, the setup link stops working
             for good.
@@ -142,7 +140,6 @@
     <footer class="relative z-10 border-t border-border">
         <div class="mx-auto flex w-full max-w-300 flex-wrap items-center gap-6 px-10 py-8 max-sm:px-5">
             <span class="text-[12.5px] text-muted-foreground">© 2026 Monoven Ltd · coresmith.io · ELv2 licensed</span>
-            <MonovenMark class="ml-auto" />
         </div>
     </footer>
 </div>
