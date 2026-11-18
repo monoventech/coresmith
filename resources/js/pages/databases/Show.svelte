@@ -66,7 +66,7 @@
     let polls = $state(0)
 
     const LISTING_POLLS = 15
-    const state = $derived(databaseState(database.status))
+    const badge = $derived(databaseState(database.status))
     const creating = $derived(database.status === 'creating')
 
     $effect(() => {
@@ -170,12 +170,12 @@
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="type-h1 m-0 font-mono font-medium">{database.name}</h1>
             <Badge
-                variant={state.tone === 'success'
+                variant={badge.tone === 'success'
                     ? 'success'
-                    : state.tone === 'destructive'
+                    : badge.tone === 'destructive'
                       ? 'destructive'
                       : 'default'}
-                dot>{state.label}</Badge
+                dot>{badge.label}</Badge
             >
         </div>
         <p class="type-body-sm mt-1.5 text-muted-foreground">
