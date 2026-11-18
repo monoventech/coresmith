@@ -192,14 +192,28 @@ function withSecrets(lines: string): string {
     })
 }
 
+function variableName(line: string): string {
+    return line
+        .replace(/^\s*export\s+/, '')
+        .split('=')[0]
+        .trim()
+}
+
+function mergedEnvironment(current: string, lines: string): string {
+    const given = lines.split('\n').filter((line) => line.trim() !== '')
+    const names = new Set(given.map(variableName))
+    const kept = current.split('\n').filter((line) => line.trim() !== '' && !names.has(variableName(line)))
+
+    return [...kept, ...given].join('\n')
+}
+
 async function setEnvironment(page: Page, lines: string): Promise<void> {
     await page.getByRole('button', { name: 'Edit variables' }).click()
 
     const dialog = page.getByRole('dialog')
     const editor = dialog.getByRole('textbox', { name: 'Environment variables' })
-    const current = (await editor.inputValue()).trim()
 
-    await editor.fill(current === '' ? lines : `${current}\n${lines}`)
+    await editor.fill(mergedEnvironment(await editor.inputValue(), lines))
     await dialog.getByRole('button', { name: 'Save' }).click()
     await dialog.waitFor({ state: 'detached', timeout: 30_000 })
 }
