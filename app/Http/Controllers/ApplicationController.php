@@ -111,7 +111,7 @@ final class ApplicationController extends Controller
         $repository = $request->githubRepository();
         $checked = $request->checkedRead();
         $type = ApplicationType::tryFrom($request->string('type')->value());
-        $initial = app(StartingEnvironment::class)->variables($checked?->facts, $type, $request->input('framework'), $request->validated('domain'));
+        $initial = app(StartingEnvironment::class)->variables($checked?->facts, $type, $request->input('framework'), $request->validated('domain'), $request->string('name')->value());
         $framework = $checked?->facts === null ? null : app(FrameworkVersion::class)->detect(new Application(['type' => $type, 'framework' => $request->input('framework')]), $checked->facts);
 
         try {
