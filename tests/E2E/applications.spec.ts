@@ -646,6 +646,18 @@ test.describe('what the full app page adds on a wider screen', () => {
         await expect(page.getByTestId('env-preview')).toContainText(`${run}=yes`)
     })
 
+    test('a variable with no value says it is not set instead of looking masked', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
+
+        await page.getByRole('button', { name: 'Edit variables' }).click()
+        await dialog(page).getByRole('textbox', { name: 'Environment variables' }).fill('APP_ENV=staging\nAPI_TOKEN=')
+        await dialog(page).getByRole('button', { name: 'Save' }).click()
+
+        await expect(toast(page)).toContainText('Saved.')
+        await expect(page.getByTestId('env-preview')).toContainText(/API_TOKEN=\s*· not set/)
+        await expect(page.getByTestId('env-preview')).not.toContainText('API_TOKEN=••••••••')
+    })
+
     test('environment text the server could not read is refused with the line to fix', async ({ page }, testInfo) => {
         await gotoApplication(page, 'bench-01', own(testInfo, 'scratch'))
 
