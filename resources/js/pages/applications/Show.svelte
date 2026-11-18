@@ -662,7 +662,7 @@
                 </Collapsible.Trigger>
                 <Collapsible.Content>
                     <pre
-                        class="terminal mt-2 max-h-72 overflow-auto text-[11.5px] leading-[1.6] break-all whitespace-pre-wrap"
+                        class="terminal mt-2 max-h-72 overflow-auto text-[11.5px] leading-[1.6] wrap-anywhere whitespace-pre-wrap"
                         data-testid="toggle-failed-log">{toggle.failure_log}</pre>
                 </Collapsible.Content>
             </Collapsible.Root>
