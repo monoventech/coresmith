@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.23 (2026-11-18)
+
+### Changed
+- A start-script server is named after its server package, and Bun apps get Bun start examples (#129)
+- Explorer controls are full touch targets on touch screens, and an empty variable reads not set (#128)
+- A refresh that ends on a message, like a finished destroy, keeps it and shows it on the page it lands on (#127)
+
 ## v0.8.22 (2026-11-18)
 
 ### Changed
