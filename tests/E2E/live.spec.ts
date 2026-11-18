@@ -127,4 +127,34 @@ test.describe('live pages', () => {
         await expect(toast(page)).toContainText('That page is gone.')
         await expect(page.locator('iframe')).toHaveCount(0)
     })
+
+    test("a change's toast stays in its own tab when another tab refreshes meanwhile", async ({ page }) => {
+        await page.clock.install()
+        await page.goto('/dashboard')
+        await expect(card(page, 'forge-01')).toBeVisible()
+
+        const other = await page.context().newPage()
+
+        await other.goto('/settings/profile')
+        await other.route('**/settings/profile', async (route) => {
+            if (route.request().method() !== 'PATCH') {
+                return route.fallback()
+            }
+
+            const saved = await route.fetch({ maxRedirects: 0 })
+            const refreshed = page.waitForResponse(
+                (response) => response.request().headers()['x-inertia-partial-data'] !== undefined
+            )
+
+            await page.clock.runFor(61_000)
+            await refreshed
+            await route.fulfill({ response: saved })
+        })
+
+        await other.getByRole('button', { name: 'Save' }).click()
+
+        await expect(toast(other)).toContainText('Saved.')
+        await expect(toast(page)).toHaveCount(0)
+        await other.close()
+    })
 })

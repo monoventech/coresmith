@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Sessions;
 
 use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Session\CacheBasedSessionHandler;
 use Illuminate\Session\ExistenceAwareInterface;
 use SessionHandlerInterface;
 
@@ -25,6 +26,25 @@ final class EndedSessions implements ExistenceAwareInterface, SessionHandlerInte
     public function ended(string $id): bool
     {
         return $id !== '' && $this->cache->has(self::KEY . $id);
+    }
+
+    public function keepAlive(string $id): void
+    {
+        if ($this->ended($id)) {
+            return;
+        }
+
+        if ($this->handler instanceof CacheBasedSessionHandler) {
+            $this->handler->getCache()->touch($id, $this->minutes * 60);
+
+            return;
+        }
+
+        $data = $this->handler->read($id);
+
+        if (is_string($data) && $data !== '') {
+            $this->handler->write($id, $data);
+        }
     }
 
     public function open(string $path, string $name): bool
