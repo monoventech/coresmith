@@ -14,6 +14,7 @@ use App\Enums\PowerState;
 use App\Models\Application;
 use App\Services\Runtime\Catalog;
 use App\Services\Runtime\RuntimeLifecycle;
+use App\Stacks\JsServers;
 
 final class ApplicationPresenter
 {
@@ -33,10 +34,14 @@ final class ApplicationPresenter
     public static function kind(Application $application): string
     {
         $framework = strtolower((string) $application->framework);
-
+        $detected = ((array) $application->stack)['framework'] ?? null;
+        $server = $application->type === ApplicationType::Js && $framework === '' && is_array($detected) && JsServers::knows((string) ($detected['name'] ?? '')) ? (string) $detected['name'] : null;
         $preset = $application->type?->language()->frameworkLabel($framework);
 
-        if ($preset !== null) {
+        if ($server !== null) {
+            $label = JsServers::label($server);
+            $framework = $server;
+        } elseif ($preset !== null) {
             $label = $preset;
         } elseif ($framework !== '' && isset(self::FRAMEWORKS[$framework])) {
             $label = self::FRAMEWORKS[$framework];
@@ -53,8 +58,6 @@ final class ApplicationPresenter
                 default => 'API',
             };
         }
-
-        $detected = ((array) $application->stack)['framework'] ?? null;
 
         return is_array($detected) && ($detected['name'] ?? null) === $framework && isset($detected['major'])
             ? $label . ' ' . (int) $detected['major']

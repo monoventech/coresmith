@@ -31,6 +31,7 @@ export type DetectionRead = {
     commit: string | null
     verdict: 'ready' | 'unsure' | 'blocked'
     fields: DetectionFields
+    server?: string | null
     sources: Record<string, string>
     unsettled: Record<string, string>
     blockers: DetectionBlocker[]

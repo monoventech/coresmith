@@ -19,6 +19,22 @@ const READY = {
     blockers: []
 }
 
+const EXPRESS = {
+    id: 'e4vq2mz9xw4hpbn6tq8rjf3ylc5ds0gh',
+    state: 'read',
+    commit: COMMIT,
+    verdict: 'ready',
+    fields: { type: 'js', framework: '', js_runtime: 'node', web_directory: null, version: '22.12.0' },
+    server: 'Express',
+    sources: {
+        type: 'From package.json',
+        js_runtime: 'From package-lock.json',
+        framework: 'The start script in package.json, with express'
+    },
+    unsettled: {},
+    blockers: []
+}
+
 const UNSURE = {
     id: 'p2wq8mz9xw4hpbn6tq8rjf3ylc5ds0gb',
     state: 'read',
@@ -201,6 +217,24 @@ test.describe('Stack detection on Add an app', () => {
         expect(asked).toHaveLength(1)
         expect(new URL(asked[0]).searchParams.get('repository_url')).toBe('https://github.com/acme/shop.git')
         expect(new URL(asked[0]).searchParams.get('repository_branch')).toBe('main')
+    })
+
+    test('a start-script server is named after the server package Coresmith found, instead of Other server', async ({
+        page
+    }) => {
+        await answer(page, [EXPRESS])
+
+        await openAddApp(page)
+        await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/api.git')
+
+        const framework = page.getByLabel('Framework')
+
+        await expect(detection(page)).toContainText('Filled in from the repository at 9f3c2e1.')
+        await expect(page.getByLabel('Language')).toHaveValue('js')
+        await expect(framework).toHaveValue('')
+        await expect(framework.locator('option:checked')).toHaveText('Express')
+        await expect(framework.getByRole('option', { name: 'Other server' })).toHaveCount(0)
+        await expect(page.getByTestId('server-hint')).toBeHidden()
     })
 
     test('a repository whose .env.example names PostgreSQL and a Redis queue gets both picked, with where each came from', async ({

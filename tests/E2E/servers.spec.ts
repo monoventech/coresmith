@@ -134,6 +134,14 @@ test.describe('a server', () => {
         await expect(applicationRow(page, 'atlas')).toContainText('PHP 8.5')
     })
 
+    test('a start-script server is named after the server package its last deploy recorded', async ({ page }) => {
+        await gotoServer(page, 'forge-01')
+        await expect(applicationRow(page, 'relay')).toContainText('relay · Hono 4')
+
+        await gotoServer(page, 'outpost-01')
+        await expect(applicationRow(page, 'relay-edge')).toContainText('relay-edge · API')
+    })
+
     test('a server with a nearly full disk says so and offers to prune', async ({ page }) => {
         await gotoServer(page, 'outpost-01')
 
