@@ -901,9 +901,98 @@ test('a live SQLite database that cannot be copied stops the deploy and leaves n
         $run = sharedStorageRun($script, $root, sharedStorageSqlite($root, '3.45.1', vacuumFails: true));
 
         expect($run->getExitCode())->toBe(1)
-            ->and($run->getErrorOutput())->toContain("Could not copy the live release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again.")
+            ->and($run->getErrorOutput())->toContain('Could not copy database/database.sqlite from the live release into shared/database, so nothing was changed. Fix the error above, then deploy again.')
             ->and(sharedStorageEntries($root . '/shop/shared/database'))->toBe([])
             ->and(is_link($root . '/shop/releases/20261019-120000/database/database.sqlite'))->toBeFalse();
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
+test('a laravel app that keeps several SQLite files under database/ keeps every one in shared and links each into the release', function () {
+    if ((new ExecutableFinder)->find('sqlite3') === null) {
+        $this->markTestSkipped('sqlite3 is not installed on this machine, so the copy cannot run for real.');
+    }
+
+    $script = sharedStorageScript(sharedStorageCommandFor(sharedStorageLaravelApp()));
+    $root = sharedStorageLaravelRoot();
+    $live = dirname(sharedStorageLive($root));
+    File::ensureDirectoryExists($live . '/database');
+    sharedStorageDatabase($live . '/database/shop.sqlite', ['account']);
+    sharedStorageDatabase($live . '/database/shop_queue.sqlite', ['job']);
+
+    try {
+        $run = sharedStorageRun($script, $root);
+        $release = $root . '/shop/releases/20261019-120000/database';
+
+        expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
+            ->and($run->getOutput())->toBe(SharedStorage::SEEDED_DATABASE . "\n")
+            ->and(sharedStorageModes($root . '/shop/shared/database'))->toBe(['' => '700', 'database.sqlite' => '600', 'shop.sqlite' => '600', 'shop_queue.sqlite' => '600'])
+            ->and(sharedStorageRows($root . '/shop/shared/database/shop.sqlite'))->toBe(['account'])
+            ->and(sharedStorageRows($root . '/shop/shared/database/shop_queue.sqlite'))->toBe(['job'])
+            ->and(sharedStorageLink($release . '/shop.sqlite'))->toBe($root . '/shop/shared/database/shop.sqlite')
+            ->and(sharedStorageLink($release . '/shop_queue.sqlite'))->toBe($root . '/shop/shared/database/shop_queue.sqlite')
+            ->and(sharedStorageLink($release . '/database.sqlite'))->toBe($root . '/shop/shared/database/database.sqlite');
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
+test('a SQLite file kept in shared is linked into every later release, even when the live release no longer has it', function () {
+    $script = sharedStorageScript(sharedStorageCommandFor(sharedStorageLaravelApp()));
+    $root = sharedStorageLaravelRoot();
+    File::ensureDirectoryExists($root . '/shop/shared/database');
+    sharedStorageDatabase($root . '/shop/shared/database/shop_cache.sqlite', ['kept']);
+
+    try {
+        $run = sharedStorageRun($script, $root);
+
+        expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
+            ->and($run->getOutput())->toBe('')
+            ->and(sharedStorageRows($root . '/shop/shared/database/shop_cache.sqlite'))->toBe(['kept'])
+            ->and(sharedStorageLink($root . '/shop/releases/20261019-120000/database/shop_cache.sqlite'))->toBe($root . '/shop/shared/database/shop_cache.sqlite');
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
+test('a SQLite file that cannot be copied takes back the files this deploy already put in shared, so none of them goes stale', function () {
+    if ((new ExecutableFinder)->find('sqlite3') === null) {
+        $this->markTestSkipped('sqlite3 is not installed on this machine, so the copy cannot run for real.');
+    }
+
+    $script = sharedStorageScript(sharedStorageCommandFor(sharedStorageLaravelApp()));
+    $root = sharedStorageLaravelRoot();
+    $live = dirname(sharedStorageLive($root));
+    File::ensureDirectoryExists($live . '/database');
+    sharedStorageDatabase($live . '/database/database.sqlite', ['first']);
+    file_put_contents($live . '/database/shop.sqlite', 'not a database');
+
+    try {
+        $run = sharedStorageRun($script, $root);
+
+        expect($run->getExitCode())->toBe(1)
+            ->and($run->getErrorOutput())->toContain('Could not copy database/shop.sqlite from the live release into shared/database, so nothing was changed.')
+            ->and(sharedStorageEntries($root . '/shop/shared/database'))->toBe([]);
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
+test('a rollback links every SQLite file kept in shared into the release it goes back to', function () {
+    $command = (string) app(SharedStorage::class)->relinkDatabase(sharedStorageLaravelApp(), ReleasePaths::ROOT . '/shop/releases/20261019-120000');
+    $root = sharedStorageLaravelRoot();
+    File::ensureDirectoryExists($root . '/shop/shared/database');
+    touch($root . '/shop/shared/database/database.sqlite');
+    touch($root . '/shop/shared/database/shop_queue.sqlite');
+    file_put_contents($root . '/shop/releases/20261019-120000/database/shop_queue.sqlite', 'an old copy');
+
+    try {
+        $run = sharedStorageRun($command, $root);
+
+        expect($run->getExitCode())->toBe(0, $run->getErrorOutput())
+            ->and(sharedStorageLink($root . '/shop/releases/20261019-120000/database/database.sqlite'))->toBe($root . '/shop/shared/database/database.sqlite')
+            ->and(sharedStorageLink($root . '/shop/releases/20261019-120000/database/shop_queue.sqlite'))->toBe($root . '/shop/shared/database/shop_queue.sqlite');
     } finally {
         File::deleteDirectory($root);
     }
@@ -912,12 +1001,12 @@ test('a live SQLite database that cannot be copied stops the deploy and leaves n
 test('a laravel deploy that copied the live SQLite database says so once and records it', function (bool $seeded, int $lines) {
     $deployment = Deployment::factory()->for(sharedStorageLaravelApp())->create();
 
-    sharedStorageDeploy($deployment, sharedStorageTransport()->respondTo('/var/coresmith/apps/shop/current/database/database.sqlite', $seeded ? SharedStorage::SEEDED_DATABASE . "\n" : ''));
+    sharedStorageDeploy($deployment, sharedStorageTransport()->respondTo('/var/coresmith/apps/shop/current/database', $seeded ? SharedStorage::SEEDED_DATABASE . "\n" : ''));
 
     expect($deployment->fresh()->status)->toBe(DeploymentStatus::Succeeded)
         ->and($deployment->fresh()->seeded_shared_database)->toBe($seeded)
         ->and($deployment->fresh()->seeded_shared_storage)->toBeFalse()
-        ->and(substr_count((string) $deployment->fresh()->log, "storage: copied the live release's SQLite database into shared/database. Changes made while this deploy runs stay in the previous release."))->toBe($lines);
+        ->and(substr_count((string) $deployment->fresh()->log, "storage: copied the live release's SQLite files into shared/database. Changes made while this deploy runs stay in the previous release."))->toBe($lines);
 })->with([
     'copied' => [true, 1],
     'not copied' => [false, 0],

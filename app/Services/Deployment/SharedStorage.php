@@ -48,20 +48,33 @@ final class SharedStorage
 
     private const DATABASE = <<<'BASH'
     mkdir -p {folder} {shared} && chmod 700 {shared} || exit 1
-    if [ ! -e {database} ]; then
-      if [ -f {live} ] && [ ! -L {live} ]; then
-        {
-          rm -f {seed} && statement={backup} &&
-          { if version=$(sqlite3 -version 2>/dev/null) && printf '%s\n' 3.27.0 "${version%% *}" | sort -C -V; then statement={vacuum}; fi; } &&
-          sqlite3 {live} "$statement" && chmod 600 {seed} && mv -f {seed} {database} && echo {seeded}
-        } || { rm -f {seed}; echo "Could not copy the live release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again." >&2; exit 1; }
-      elif [ -f {local} ] && [ ! -L {local} ]; then
-        { cp {local} {seed} && chmod 600 {seed} && mv -f {seed} {database}; } || { rm -f {seed}; echo "Could not copy the release's SQLite database into shared/database, so nothing was changed. Fix the error above, then deploy again." >&2; exit 1; }
-      else
-        ( umask 077 && : > {database} ) || exit 1
+    made=() seeded= seed=
+    fail() { rm -f "${made[@]}" "$seed"; echo "$1" >&2; exit 1; }
+    names=database.sqlite
+    for dir in {live} {shared} {folder}; do
+      for file in "$dir"/*.sqlite; do
+        name=${file##*/}
+        if [ -f "$file" ] && [[ $name =~ ^[A-Za-z0-9._-]+\.sqlite$ ]] && [[ " $names " != *" $name "* ]]; then names="$names $name"; fi
+      done
+    done
+    for name in $names; do
+      database={shared}/$name live={live}/$name link={folder}/$name seed={shared}/$name.seed
+      if [ ! -e "$database" ]; then
+        if [ -f "$live" ] && [ ! -L "$live" ]; then
+          rm -f "$seed" && statement=".backup \"$seed\"" || fail "Could not copy database/$name from the live release."
+          if version=$(sqlite3 -version 2>/dev/null) && printf '%s\n' 3.27.0 "${version%% *}" | sort -C -V; then statement="VACUUM INTO '$seed'"; fi
+          { sqlite3 "$live" "$statement" && chmod 600 "$seed" && mv -f "$seed" "$database"; } || fail "Could not copy database/$name from the live release into shared/database, so nothing was changed. Fix the error above, then deploy again."
+          seeded=1
+        elif [ -f "$link" ] && [ ! -L "$link" ]; then
+          { cp "$link" "$seed" && chmod 600 "$seed" && mv -f "$seed" "$database"; } || fail "Could not copy database/$name from the release into shared/database, so nothing was changed. Fix the error above, then deploy again."
+        else
+          ( umask 077 && : > "$database" ) || fail "Could not create shared/database/$name."
+        fi
+        made+=("$database")
       fi
-    fi
-    ln -sfn {database} {local}
+      ln -sfn "$database" "$link" || fail "Could not link shared/database/$name into the release."
+    done
+    if [ -n "$seeded" ]; then echo {seeded}; fi
     BASH;
 
     public function script(Application $application, string $release): string
@@ -91,11 +104,10 @@ final class SharedStorage
         }
 
         $paths = new ReleasePaths($application);
-        $database = escapeshellarg($paths->shared() . '/database/database.sqlite');
-        $folder = $paths->appDirectory($release) . '/database';
-        $local = escapeshellarg($folder . '/database.sqlite');
+        $shared = escapeshellarg($paths->shared() . '/database');
+        $folder = escapeshellarg($paths->appDirectory($release) . '/database');
 
-        return "if [ -e {$database} ] && [ ! -L {$local} ]; then mkdir -p " . escapeshellarg($folder) . " && ln -sfn {$database} {$local}; fi";
+        return "if [ -d {$shared} ]; then for file in {$shared}/*.sqlite; do if [ -f \"\$file\" ] && [ ! -L {$folder}/\"\${file##*/}\" ]; then mkdir -p {$folder} && ln -sfn \"\$file\" {$folder}/\"\${file##*/}\" || exit 1; fi; done; fi";
     }
 
     public function seededDatabase(string $output): bool
@@ -110,18 +122,10 @@ final class SharedStorage
 
     private function database(ReleasePaths $paths, string $release): string
     {
-        $shared = $paths->shared() . '/database';
-        $seed = $shared . '/database.sqlite.seed';
-
         return strtr(self::DATABASE, [
             '{folder}' => escapeshellarg($paths->appDirectory($release) . '/database'),
-            '{shared}' => escapeshellarg($shared),
-            '{database}' => escapeshellarg($shared . '/database.sqlite'),
-            '{live}' => escapeshellarg($paths->appDirectory($paths->current()) . '/database/database.sqlite'),
-            '{local}' => escapeshellarg($paths->appDirectory($release) . '/database/database.sqlite'),
-            '{seed}' => escapeshellarg($seed),
-            '{backup}' => escapeshellarg('.backup "' . addcslashes($seed, '\\"') . '"'),
-            '{vacuum}' => escapeshellarg("VACUUM INTO '" . str_replace("'", "''", $seed) . "'"),
+            '{shared}' => escapeshellarg($paths->shared() . '/database'),
+            '{live}' => escapeshellarg($paths->appDirectory($paths->current()) . '/database'),
             '{seeded}' => self::SEEDED_DATABASE,
         ]);
     }
