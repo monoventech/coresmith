@@ -81,6 +81,24 @@
         }
     }
 
+    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
+        php: [
+            { value: 'laravel', label: 'Laravel' },
+            { value: 'symfony', label: 'Symfony' },
+            { value: '', label: 'Plain PHP' }
+        ],
+        js: [...js_frameworks, { value: '', label: 'Other server' }],
+        ruby: [
+            { value: 'rails', label: 'Rails' },
+            { value: 'sinatra', label: 'Sinatra' },
+            { value: 'rack', label: 'Rack' }
+        ],
+        python: [...python_frameworks, { value: '', label: 'Other framework' }],
+        go: go_frameworks,
+        java: java_frameworks,
+        static: [{ value: '', label: 'No framework' }]
+    })
+
     const GIT_URL = 'url'
 
     const DEFAULT_BRANCH = 'main'
@@ -167,24 +185,6 @@
     }
 
     const read = $derived(detection?.state === 'read' ? detection : null)
-
-    const FRAMEWORKS: Record<string, { value: string; label: string }[]> = $derived({
-        php: [
-            { value: 'laravel', label: 'Laravel' },
-            { value: 'symfony', label: 'Symfony' },
-            { value: '', label: 'Plain PHP' }
-        ],
-        js: [...js_frameworks, { value: '', label: read?.server ?? 'Other server' }],
-        ruby: [
-            { value: 'rails', label: 'Rails' },
-            { value: 'sinatra', label: 'Sinatra' },
-            { value: 'rack', label: 'Rack' }
-        ],
-        python: [...python_frameworks, { value: '', label: 'Other framework' }],
-        go: go_frameworks,
-        java: java_frameworks,
-        static: [{ value: '', label: 'No framework' }]
-    })
 
     const ENGINES: Record<string, string> = { postgresql: 'PostgreSQL', mysql: 'MySQL', redis: 'Redis' }
     let pickedDatabase = $state<string | null>(null)
@@ -665,7 +665,11 @@
                                     ...(framework === UNSET || type === UNSET
                                         ? [{ value: UNSET, label: 'Pick one', disabled: true }]
                                         : []),
-                                    ...(FRAMEWORKS[type] ?? [])
+                                    ...(FRAMEWORKS[type] ?? []).map((choice) =>
+                                        type === 'js' && choice.value === '' && read?.server
+                                            ? { ...choice, label: read.server }
+                                            : choice
+                                    )
                                 ]}
                                 aria-invalid={errors.framework ? true : undefined}
                             />
