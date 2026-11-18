@@ -53,6 +53,9 @@
         can: { createServer: boolean; createApplication: boolean }
     } = $props()
 
+    const ATTENTION = ['destructive', 'warning']
+    const ATTENTION_SHOWN = 3
+
     const explorer = $derived(page.props.explorer as ExplorerProps | null)
     const listed = $derived(explorer !== null && (explorer.projects.length > 0 || explorer.unfiled.length > 0))
 
@@ -183,6 +186,9 @@
         {/if}
         <div class="mb-7 grid grid-cols-2 gap-4 max-[900px]:grid-cols-1 max-sm:gap-2.5">
             {#each servers as server (server.id)}
+                {@const attention = server.applications.filter((application) =>
+                    ATTENTION.includes(application.state.tone)
+                )}
                 <article
                     class="hover-card group relative rounded-xl border border-border bg-card px-5.5 py-5 text-foreground has-[.card-link:focus-visible]:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--ring)] max-sm:p-4"
                     data-testid="server-card"
@@ -219,21 +225,33 @@
                         <MetricTrend label="Memory" value={server.memory} trend={server.memory_trend} />
                         <MetricBar label="Disk" value={server.disk} warnAt={80} tall />
                     </div>
-                    {#if server.applications.length > 0}
-                        <div class="relative z-10 mt-3.5 flex flex-wrap gap-1.5 max-sm:hidden">
-                            {#each server.applications as application (application.id)}
+                    {#if attention.length > 0}
+                        <div
+                            class="relative z-10 mt-3.5 flex flex-wrap items-center gap-1.5 max-sm:hidden"
+                            data-testid="server-attention"
+                        >
+                            {#each attention.slice(0, ATTENTION_SHOWN) as application (application.id)}
                                 <Link
                                     href={application.href}
-                                    aria-label="{application.name}, {application.state.label}"
-                                    class="focus-ring flex h-6.5 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-foreground no-underline hover:bg-muted"
+                                    class="focus-ring flex h-6.5 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-foreground no-underline hover:bg-muted"
                                 >
                                     <span
                                         class={cn('size-1.75 shrink-0 rounded-full', statusDot(application.state.tone))}
                                         aria-hidden="true"
                                     ></span>
-                                    <span class="font-mono text-[12px]">{application.name}</span>
+                                    <span class="min-w-0 truncate font-mono text-[12px]">{application.name}</span>
+                                    <span class={cn('shrink-0 text-[11.5px]', toneText(application.state.tone))}
+                                        >{application.state.label}</span
+                                    >
                                 </Link>
                             {/each}
+                            {#if attention.length > ATTENTION_SHOWN}
+                                <Link
+                                    href={server.href}
+                                    class="focus-ring rounded-sm px-1 text-[12px] text-muted-foreground no-underline hover:text-foreground"
+                                    >and {attention.length - ATTENTION_SHOWN} more</Link
+                                >
+                            {/if}
                         </div>
                     {/if}
                     <div class="relative z-10 mt-4 flex gap-2 border-t border-border pt-3 max-sm:hidden">
