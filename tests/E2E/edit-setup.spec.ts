@@ -6,10 +6,22 @@ import {
     gotoApplication,
     main,
     own,
+    REPOSITORY_READS,
     test,
     toast,
     useTheme
 } from './support/fixtures'
+
+const READ = {
+    id: 'q4wz8nx2kd7vjc5bt3hmrf9ylp6sga0e',
+    state: 'read',
+    commit: '4b1d9e7c2a3f5e6d7c8b9a0f1e2d3c4b5a6f7e8d',
+    verdict: 'ready',
+    fields: { type: 'php', framework: 'laravel', js_runtime: null, web_directory: '/public', version: '8.4.25' },
+    sources: { type: 'From composer.json', framework: 'laravel/framework 12.38.1 in composer.lock' },
+    unsettled: {},
+    blockers: []
+}
 
 function setupCard(page: Page) {
     return page.getByTestId('setup-card')
@@ -80,6 +92,21 @@ test.describe("an app's setup", () => {
         )
         await expect(page.getByRole('textbox', { name: 'Repository', exact: true })).toHaveCount(0)
         await expect(branch(page)).toHaveValue('trunk')
+    })
+
+    test('a repository it reads asks you to check the setup and save it, not to add the app', async ({
+        page
+    }, testInfo) => {
+        await page.route(REPOSITORY_READS, (route) => route.fulfill({ json: READ }))
+        await gotoApplication(page, 'bench-01', own(testInfo, 'setup'))
+        await setupCard(page).getByRole('link', { name: 'Edit setup' }).click()
+
+        const detection = page.getByTestId('stack-detection')
+
+        await expect(detection).toContainText(
+            'Filled in from the repository at 4b1d9e7. Check it, then save the setup.'
+        )
+        await expect(detection).not.toContainText('add the app')
     })
 
     test('a failed deploy links to the setup from the app and from its log', async ({ page }) => {
