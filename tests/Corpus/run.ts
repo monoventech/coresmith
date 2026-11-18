@@ -9,7 +9,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 export type Expectation =
-    | { verdict: 'ready'; type: string; framework: string; js_runtime?: string | null; web_directory?: string | null }
+    | {
+          verdict: 'ready'
+          type: string
+          framework: string
+          js_runtime?: string | null
+          web_directory?: string | null
+          server?: string
+      }
     | { verdict: 'blocked' | 'unsure'; reason: string }
 
 export type Entry = {
@@ -135,10 +142,14 @@ function verdictOf(text: string): string {
 async function fieldsOf(page: Page): Promise<Record<string, string | null>> {
     const runtime = page.getByLabel('Runtime', { exact: true })
     const webRoot = page.getByLabel('Web root', { exact: true })
+    const framework = page.getByLabel('Framework', { exact: true })
 
     return {
         type: await page.getByLabel('Language', { exact: true }).inputValue(),
-        framework: await page.getByLabel('Framework', { exact: true }).inputValue(),
+        framework: await framework.inputValue(),
+        framework_label: await framework.evaluate(
+            (select) => (select as HTMLSelectElement).selectedOptions[0]?.textContent?.trim() ?? null
+        ),
         js_runtime: (await runtime.count()) > 0 ? await runtime.inputValue() : null,
         web_directory: (await webRoot.count()) > 0 ? await webRoot.inputValue() : null
     }
@@ -161,7 +172,8 @@ function matches(entry: Entry, result: Result): boolean | null {
         (expected.js_runtime === undefined || result.fields.js_runtime === expected.js_runtime) &&
         (expected.web_directory === undefined ||
             expected.web_directory === null ||
-            result.fields.web_directory === expected.web_directory)
+            result.fields.web_directory === expected.web_directory) &&
+        (expected.server === undefined || result.fields.framework_label === expected.server)
     const live = result.deploy?.live ?? null
     const answered = live === null || !/\b5\d\d\b/.test(live)
 
@@ -180,14 +192,28 @@ function withSecrets(lines: string): string {
     })
 }
 
+function variableName(line: string): string {
+    return line
+        .replace(/^\s*export\s+/, '')
+        .split('=')[0]
+        .trim()
+}
+
+function mergedEnvironment(current: string, lines: string): string {
+    const given = lines.split('\n').filter((line) => line.trim() !== '')
+    const names = new Set(given.map(variableName))
+    const kept = current.split('\n').filter((line) => line.trim() !== '' && !names.has(variableName(line)))
+
+    return [...kept, ...given].join('\n')
+}
+
 async function setEnvironment(page: Page, lines: string): Promise<void> {
     await page.getByRole('button', { name: 'Edit variables' }).click()
 
     const dialog = page.getByRole('dialog')
     const editor = dialog.getByRole('textbox', { name: 'Environment variables' })
-    const current = (await editor.inputValue()).trim()
 
-    await editor.fill(current === '' ? lines : `${current}\n${lines}`)
+    await editor.fill(mergedEnvironment(await editor.inputValue(), lines))
     await dialog.getByRole('button', { name: 'Save' }).click()
     await dialog.waitFor({ state: 'detached', timeout: 30_000 })
 }

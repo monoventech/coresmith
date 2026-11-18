@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Services\Detection\DetectedStack;
 use App\Services\Panel\ApplicationPresenter;
 use App\Services\Runtime\Catalog;
+use App\Services\Runtime\FrameworkVersion;
 use App\Services\Runtime\RepositoryFacts;
 use App\Stacks\JavaScriptDetection;
 use App\Stacks\JsPresets\JsPreset;
@@ -79,6 +80,39 @@ test('a start-script server is called by the server package it uses, and an unli
         ->and((new DetectedStack('js', '', 'node', null, serverPackage: '@nestjs/core'))->label(app(Catalog::class)))->toBe('NestJS')
         ->and((new DetectedStack('js', '', 'bun', null, serverPackage: 'elysia'))->label(app(Catalog::class)))->toBe('Elysia')
         ->and((new DetectedStack('js', '', 'node', null, serverPackage: 'some-server'))->label(app(Catalog::class)))->toBe('some-server');
+});
+
+test('the detection result names the server a start-script app uses, so Add an app can show it', function () {
+    expect((new DetectedStack('js', '', 'node', null, serverPackage: 'fastify'))->toArray()['server'])->toBe('Fastify')
+        ->and((new DetectedStack('js', '', 'node', null))->toArray()['server'])->toBeNull();
+});
+
+test('a start-script server app is called by its server and major version once a deploy records them', function () {
+    $facts = new RepositoryFacts(['package.json' => (string) json_encode(['scripts' => ['start' => 'node server.js'], 'dependencies' => ['koa' => '^2.15.0']])], complete: true);
+    $application = new Application(['type' => ApplicationType::Js, 'framework' => '']);
+
+    expect(app(FrameworkVersion::class)->detect($application, $facts))->toBe(['name' => 'koa', 'major' => 2])
+        ->and(ApplicationPresenter::kind($application))->toBe('API');
+
+    $application->stack = ['framework' => ['name' => 'koa', 'major' => 2]];
+
+    expect(ApplicationPresenter::kind($application))->toBe('Koa 2');
+});
+
+test('a recorded package that is not a server leaves a start-script app called API', function () {
+    $application = new Application(['type' => ApplicationType::Js, 'framework' => '', 'stack' => ['framework' => ['name' => 'left-pad', 'major' => 1]]]);
+
+    expect(ApplicationPresenter::kind($application))->toBe('API');
+});
+
+test('a Bun app without a start script is shown a Bun start command, and a Node app a Node one', function () {
+    $package = (string) json_encode(['name' => 'api']);
+    $bun = ApplicationType::Js->language()->detect(new RepositoryFacts(['package.json' => $package], lockfiles: ['bun.lock'], complete: true));
+    $node = ApplicationType::Js->language()->detect(new RepositoryFacts(['package.json' => $package], lockfiles: ['package-lock.json'], complete: true));
+
+    expect($bun['unsettled']['framework'])->toContain('"start": "bun server.ts"')
+        ->and($bun['unsettled']['framework'])->not->toContain('node server.js')
+        ->and($node['unsettled']['framework'])->toContain('"start": "node server.js"');
 });
 
 test('detection names the generic JavaScript entry Other server, as Add an app does', function () {

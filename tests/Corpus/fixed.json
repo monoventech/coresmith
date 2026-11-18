@@ -477,7 +477,8 @@
             "verdict": "ready",
             "type": "js",
             "framework": "",
-            "js_runtime": "node"
+            "js_runtime": "node",
+            "server": "Express"
         },
         "why": "Express with a start script."
     },
@@ -489,9 +490,34 @@
             "verdict": "ready",
             "type": "js",
             "framework": "",
-            "js_runtime": "bun"
+            "js_runtime": "bun",
+            "server": "Hono"
         },
         "why": "Hono with Inertia React, served by Bun."
+    },
+    {
+        "name": "elysia-bun",
+        "url": "https://github.com/maxoliverbr/eia-api-ts.git",
+        "branch": "main",
+        "environment": "EIA_API_KEY=DEMO_KEY",
+        "expect": {
+            "verdict": "ready",
+            "type": "js",
+            "framework": "",
+            "js_runtime": "bun",
+            "server": "Elysia"
+        },
+        "why": "Elysia on Bun with a start script. It needs an EIA key in production, and the public demo key will do."
+    },
+    {
+        "name": "elysia-no-start",
+        "url": "https://github.com/amorriscode/elysia-starter.git",
+        "branch": "main",
+        "expect": {
+            "verdict": "unsure",
+            "reason": "\"start\": \"bun server.ts\""
+        },
+        "why": "An Elysia starter on Bun with only a dev script, so Coresmith asks for a start script and gives a Bun example."
     },
     {
         "name": "nest-api",
@@ -501,7 +527,8 @@
             "verdict": "ready",
             "type": "js",
             "framework": "",
-            "js_runtime": "node"
+            "js_runtime": "node",
+            "server": "NestJS"
         },
         "why": "NestJS's official starter, started with nest start."
     },

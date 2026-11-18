@@ -19,6 +19,14 @@ import {
     withProps
 } from './support/fixtures'
 
+const NEW_SERVER_ADDRESSES: Record<string, string> = {
+    chromium: '198.51.100.201',
+    firefox: '198.51.100.202',
+    webkit: '198.51.100.203',
+    'mobile-chrome': '198.51.100.204',
+    'mobile-safari': '198.51.100.205'
+}
+
 test.describe('a server', () => {
     test('the header names it, says how it is doing and what it is', async ({ page }) => {
         await gotoServer(page, 'forge-01')
@@ -124,6 +132,14 @@ test.describe('a server', () => {
         await expect(applicationRow(page, 'relay')).toContainText('Deno 2.9')
         await expect(applicationRow(page, 'storefront')).toContainText('Bun 1.4')
         await expect(applicationRow(page, 'atlas')).toContainText('PHP 8.5')
+    })
+
+    test('a start-script server is named after the server package its last deploy recorded', async ({ page }) => {
+        await gotoServer(page, 'forge-01')
+        await expect(applicationRow(page, 'relay')).toContainText('relay · Hono 4')
+
+        await gotoServer(page, 'outpost-01')
+        await expect(applicationRow(page, 'relay-edge')).toContainText('relay-edge · API')
     })
 
     test('a server with a nearly full disk says so and offers to prune', async ({ page }) => {
@@ -528,14 +544,17 @@ test.describe('provisioning a server', () => {
         await expect(page.getByRole('main')).toContainText('What happens next')
     })
 
-    test('a new server is added without a password and offers the command that connects it', async ({ page }) => {
+    test('a new server is added without a password and offers the command that connects it', async ({
+        page
+    }, testInfo) => {
         const name = `e2e-${Date.now().toString(36)}`
+        const address = NEW_SERVER_ADDRESSES[testInfo.project.name] ?? '198.51.100.209'
 
         await page.goto('/servers/create')
         await page.getByLabel('Provider').selectOption('manual')
         await expect(page.locator('input[type="password"]')).toHaveCount(0)
         await page.getByLabel('Server name').fill(name)
-        await page.getByLabel('IP address').fill('198.51.100.7')
+        await page.getByLabel('IP address').fill(address)
         await page.getByLabel('Region').fill('lon1')
         await page.getByRole('button', { name: 'Add server' }).click()
 

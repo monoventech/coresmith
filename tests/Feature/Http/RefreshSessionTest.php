@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Enums\ServerStatus;
 use App\Enums\TeamRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\StartSession;
+use App\Models\CloudProvider;
+use App\Models\Server;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Cloud\Tasks\CloudTask;
 use App\Services\Sessions\EndedSessions;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -89,6 +93,34 @@ test("a refresh from another tab leaves a change's message for the page that mad
         ->assertInertia(fn($page) => $page->hasFlash('success', 'Saved.'));
 });
 
+test('a refresh that lands on a message, like a finished destroy, hands over to a full page that shows it', function () {
+    $team = Team::factory()->create();
+    $user = User::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Admin->value]);
+    $account = CloudProvider::factory()->for($team)->create(['name' => 'Hetzner Cloud', 'api_token' => 'tok-1']);
+    $server = Server::factory()->fromProvider($account)->create(['name' => 'outpost-02', 'status' => ServerStatus::Active]);
+    CloudTask::start($server, CloudTask::DESTROY, 'delete');
+    CloudTask::finish($server);
+    $server->delete();
+    $id = refreshSessionSignedIn($user->fresh());
+
+    $this->withCookie(config('session.cookie'), $id)
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)->version(Request::create('/')),
+            'X-Inertia-Partial-Component' => 'servers/Show',
+            'X-Inertia-Partial-Data' => 'server',
+            StartSession::REFRESH => '1',
+        ])
+        ->get(route('servers.show', $server))
+        ->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', route('dashboard'));
+
+    $this->flushHeaders()
+        ->get(route('dashboard'))
+        ->assertInertia(fn($page) => $page->hasFlash('success', 'Destroyed. outpost-02 was deleted at Hetzner Cloud, and billing for it stopped.'));
+});
+
 test('a refresh never writes back the copy of the session it read', function () {
     $user = User::factory()->create();
     $id = refreshSessionSignedIn($user);
@@ -117,6 +149,15 @@ test('a session is saved as usual unless a signed-in page asks to refresh', func
     'a form' => ['POST', true, true],
     'a refresh while signed out' => ['GET', true, false],
 ]);
+
+test('a refresh that leaves a message saves the session, so the message is kept', function () {
+    $user = User::factory()->create();
+    $id = refreshSessionSignedIn($user);
+
+    refreshSessionInBetween(refreshSessionRequest($id, user: $user), fn(Request $request) => $request->session()->flash('success', 'Destroyed.'));
+
+    expect(refreshSessionStored($id)->get('success'))->toBe('Destroyed.');
+});
 
 test('a refresh that renews the session saves the new one', function () {
     $user = User::factory()->create();
