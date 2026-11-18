@@ -25,7 +25,7 @@ test('an owner or admin renames the team, and the rename is recorded', function 
     $activity = Activity::query()->where('description', 'team_renamed')->sole();
 
     expect($team->fresh()->name)->toBe('Monoven Ops')
-        ->and($activity->properties->toArray())->toBe(['from' => 'Coresmith', 'to' => 'Monoven Ops']);
+        ->and($activity->properties->toArray())->toEqual(['from' => 'Coresmith', 'to' => 'Monoven Ops']);
 })->with([TeamRole::Owner, TeamRole::Admin]);
 
 test('saving the same name changes nothing and records nothing, and a blank name says what to do', function () {
