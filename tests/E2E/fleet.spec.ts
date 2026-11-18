@@ -47,7 +47,7 @@ test.describe('the fleet', () => {
         await expect(page.getByTestId('tile-uptime').getByTestId('uptime-strip').locator('span')).toHaveCount(30)
     })
 
-    test('a server card draws the last hour of CPU and memory and lists its apps by state', async ({
+    test('a server card draws the last hour of CPU and memory, and lists only the apps that need attention', async ({
         page
     }, testInfo) => {
         test.skip(isMobile(testInfo), 'Below 640px a card keeps its readings to one line of text')
@@ -57,11 +57,19 @@ test.describe('the fleet', () => {
         const forge = card(page, 'forge-01')
 
         await expect(forge.getByTestId('sparkline')).toHaveCount(2)
-        await expect(forge.getByRole('link', { name: 'atlas, Live', exact: true })).toBeVisible()
+        await expect(forge.getByTestId('server-attention')).toHaveCount(0)
 
-        await forge.getByRole('link', { name: 'ledger, Live', exact: true }).click()
+        const attention = card(page, 'bench-01').getByTestId('server-attention')
+        const first = attention.getByRole('link').first()
+
+        await expect(first).toContainText('Failed')
+        expect(await attention.getByRole('link').count()).toBeLessThanOrEqual(4)
+
+        const name = (await first.locator('.font-mono').innerText()).trim()
+
+        await first.click()
         await page.waitForURL(/\/applications\/[\w.-]+$/)
-        await expect(page.getByRole('heading', { level: 1, name: 'ledger' })).toBeVisible()
+        await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible()
     })
 
     test('on a phone the fleet opens with the projects above the servers', async ({ page }, testInfo) => {

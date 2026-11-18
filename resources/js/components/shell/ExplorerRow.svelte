@@ -33,6 +33,7 @@
 <Link
     {href}
     aria-label={[name, ...tags, detail].join(', ')}
+    title={[name, ...tags, detail].join(' · ')}
     aria-current={current ? 'page' : undefined}
     class={cn(
         'focus-ring flex h-7.5 min-w-0 items-center gap-2 rounded-md pr-2 no-underline transition-colors duration-(--dur-fast)',
