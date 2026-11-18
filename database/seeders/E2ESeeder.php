@@ -191,6 +191,9 @@ final class E2ESeeder extends Seeder
         ]);
         $this->succeeded($legacy, 3 * 24 * 60, 'v2.3.0');
         $this->scriptFailedLatest($this->application('scripted', 9930, ['custom_blueprint' => "bun install --frozen-lockfile\nbun run check\n"]));
+        ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => 'fresh_db', 'db_user' => 'fresh_db', 'db_password' => null, 'status' => ManagedDatabase::CREATING]);
+        ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => 'broken_db', 'db_user' => 'broken_db', 'db_password' => null, 'status' => ManagedDatabase::FAILED]);
+        $this->application('forge-copy', 9970, ['env_variables' => "APP_ENV=production\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=forge\nDB_USERNAME=forge\nDB_PASSWORD=copied-from-forge"]);
 
         foreach (array_values(self::PROJECTS) as $index => $code) {
             User::factory()->create(['name' => 'Invitee ' . $code, 'email' => "invitee-{$code}@coresmith.test", 'password' => $password]);
@@ -207,12 +210,15 @@ final class E2ESeeder extends Seeder
             $this->application("filed-{$code}", 9400 + $index * 10);
             $this->application("setup-{$code}", 9650 + $index * 10);
             $this->application("named-{$code}", 9550 + $index * 10);
+            $this->application("copied-{$code}", 9850 + $index * 10, ['env_variables' => "APP_ENV=production\nDB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=forge\nDB_USERNAME=forge\nDB_PASSWORD=" . bin2hex(random_bytes(8))]);
+            $this->application("migrate-{$code}", 9750 + $index * 10);
             $runtimes = $this->server("runtimes-{$code}", '198.51.100.' . (70 + $index), ServerStatus::Active);
             $this->application("rt-{$code}", 8000, MonovenTenant::stack(['php' => ['8.4.1', 'composer.json', '^8.4']], ['name' => 'laravel', 'major' => 13]), $runtimes);
             $this->application("rt-pin-{$code}", 8010, MonovenTenant::stack(['php' => ['8.4.1', '.tool-versions', '8.4.1']], ['name' => 'laravel', 'major' => 13]), $runtimes);
 
             ManagedDatabase::factory()->redis()->for($this->team)->for($this->bench)->create(['name' => "doomed_{$code}", 'db_user' => "doomed_{$code}"]);
             ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "reveal_{$code}", 'db_user' => "reveal_{$code}"]);
+            ManagedDatabase::factory()->for($this->team)->for($this->bench)->create(['name' => "stuck_{$code}", 'db_user' => "stuck_{$code}", 'db_password' => null, 'status' => ManagedDatabase::FAILED]);
 
             $this->server("rename-{$code}", '198.51.100.' . (50 + $index), ServerStatus::Active);
             $this->server("detach-{$code}", '127.0.0.1', ServerStatus::Active)->forceFill(['ssh_port' => 1])->save();

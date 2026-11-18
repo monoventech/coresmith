@@ -38,7 +38,7 @@ final class DeployScript
 
     public function default(Application $application): string
     {
-        $stack = Stack::fromArray($this->lastStack($application) ?? (array) $application->stack);
+        $stack = $this->stack($application);
 
         return implode("\n", [
             ...$this->commands->dependencies($application, $stack),
@@ -48,7 +48,7 @@ final class DeployScript
     }
 
     /**
-     * @return array{script: string, custom: bool, from_deploy: bool, migrations: bool}
+     * @return array{script: string, custom: bool, from_deploy: bool, migrations: bool, migration_commands: list<string>}
      */
     public function present(Application $application): array
     {
@@ -59,7 +59,13 @@ final class DeployScript
             'custom' => $custom,
             'from_deploy' => $this->lastStack($application) !== null,
             'migrations' => (bool) $application->run_migrations,
+            'migration_commands' => array_values($application->type->language()->migrations($application, $this->stack($application))),
         ];
+    }
+
+    private function stack(Application $application): Stack
+    {
+        return Stack::fromArray($this->lastStack($application) ?? (array) $application->stack);
     }
 
     /**

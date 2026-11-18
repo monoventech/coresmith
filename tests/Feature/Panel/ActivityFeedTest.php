@@ -184,6 +184,20 @@ test('showing and rotating a database password are described, never with the pas
     'rotated' => ['database_password_rotated', 'Password of shop_production rotated'],
 ]);
 
+test('connecting a database to an app, and a database Coresmith could not create, are described', function () {
+    [$team, $server, $application] = feedFixture();
+    $database = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'ledger']);
+
+    feedLog($application, 'database_connected', ['database' => 'ledger', 'type' => 'mysql']);
+    $this->travel(1)->second();
+    feedLog($database, 'database_creation_failed');
+
+    expect(array_map(feedSentence(...), (new ActivityFeed)->forTeam($team)))->toBe([
+        "Couldn't create ledger",
+        'shop connected to ledger',
+    ]);
+});
+
 test('a deleted database is still named in the activity', function () {
     [$team, $server] = feedFixture();
     $database = ManagedDatabase::factory()->for($team)->for($server)->create(['name' => 'shop_production']);

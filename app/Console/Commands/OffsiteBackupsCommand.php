@@ -39,6 +39,7 @@ final class OffsiteBackupsCommand extends Command
             ManagedDatabase::query()
                 ->where('team_id', $team->getKey())
                 ->whereIn('type', [DatabaseType::Mysql, DatabaseType::Postgresql])
+                ->where('status', ManagedDatabase::READY)
                 ->whereHas('server', fn(Builder $server) => $server->where('status', ServerStatus::Active))
                 ->each(function (ManagedDatabase $database) use ($timestamp, &$queued): void {
                     BackupDatabase::dispatch($database, $timestamp, offsite: true);

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ApplicationType;
 use App\Enums\DeploymentStatus;
 use App\Enums\TeamRole;
 use App\Http\Controllers\ApplicationDeployScriptController;
@@ -61,8 +62,10 @@ test("the app page shows Coresmith's default deploy script, read from what the l
             'custom' => false,
             'from_deploy' => true,
             'migrations' => true,
+            'migration_commands' => ['php artisan migrate --force'],
             'update_href' => route('servers.applications.deploy-script.update', [$server, $shop]),
             'reset_href' => route('servers.applications.deploy-script.destroy', [$server, $shop]),
+            'migrations_href' => route('servers.applications.update', [$server, $shop]),
         ]));
 });
 
@@ -134,10 +137,38 @@ test('deployers read the script but cannot change it, and another server is not 
     $elsewhere = Server::factory()->for($team)->create();
 
     $this->actingAs($deployer)->get(route('servers.applications.show', [$server, $shop]))
-        ->assertInertia(fn(AssertableInertia $page) => $page->where('deploy_script.update_href', null)->where('deploy_script.reset_href', null));
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('deploy_script.update_href', null)->where('deploy_script.reset_href', null)->where('deploy_script.migrations_href', null));
+    $this->actingAs($deployer)->put(route('servers.applications.update', [$server, $shop]), ['run_migrations' => false])->assertForbidden();
     $this->actingAs($deployer)->put(route('servers.applications.deploy-script.update', [$server, $shop]), ['script' => "echo hi\n"])->assertForbidden();
     $this->actingAs($deployer)->delete(route('servers.applications.deploy-script.destroy', [$server, $shop]))->assertForbidden();
     $this->actingAs($owner)->put(route('servers.applications.deploy-script.update', [$elsewhere, $shop]), ['script' => "echo hi\n"])->assertNotFound();
 
     expect($shop->fresh()->custom_blueprint)->toBeNull();
+});
+
+test('turning migrations off drops them from the default script, is recorded, and says what deploys skip', function () {
+    ['team' => $team, 'owner' => $owner, 'server' => $server, 'shop' => $shop] = deployScriptFixture();
+
+    $this->actingAs($owner)->put(route('servers.applications.update', [$server, $shop]), ['run_migrations' => false])->assertSessionHas('success', 'Saved.');
+
+    $this->actingAs($owner)->get(route('servers.applications.show', [$server, $shop]))
+        ->assertInertia(fn(AssertableInertia $page) => $page
+            ->where('deploy_script.migrations', false)
+            ->where('deploy_script.migration_commands', ['php artisan migrate --force'])
+            ->where('deploy_script.script', fn(string $script): bool => !str_contains($script, 'migrate')));
+
+    $this->actingAs($owner)->put(route('servers.applications.update', [$server, $shop]), ['run_migrations' => true]);
+    $this->actingAs($owner)->put(route('servers.applications.update', [$server, $shop]), ['run_migrations' => true]);
+
+    expect(Activity::query()->where('description', 'migrations_changed')->count())->toBe(2)
+        ->and(array_map(fn(array $row): string => implode('', array_column($row['parts'], 'text')), array_slice((new ActivityFeed)->forTeam($team), 0, 2)))
+        ->toBe(['Migrations turned on for shop, from the next deploy', 'Migrations turned off for shop, deploys skip them']);
+});
+
+test('a stack without migrations offers no switch', function () {
+    ['owner' => $owner, 'server' => $server, 'team' => $team] = deployScriptFixture();
+    $site = Application::factory()->for($team)->for($server)->create(['name' => 'site', 'type' => ApplicationType::Js, 'framework' => null, 'js_runtime' => 'node']);
+
+    $this->actingAs($owner)->get(route('servers.applications.show', [$server, $site]))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('deploy_script.migration_commands', []));
 });

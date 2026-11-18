@@ -4,6 +4,7 @@ use App\Http\Controllers\AddApplicationController;
 use App\Http\Controllers\ApplicationAddressController;
 use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\ApplicationCronJobController;
+use App\Http\Controllers\ApplicationDatabaseController;
 use App\Http\Controllers\ApplicationDeployScriptController;
 use App\Http\Controllers\ApplicationDomainCheckController;
 use App\Http\Controllers\ApplicationLogController;
@@ -182,6 +183,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.applications.rollback');
     Route::put('servers/{server}/applications/{application}/env', [EnvController::class, 'update'])
         ->name('servers.applications.env.update');
+    Route::post('servers/{server}/applications/{application}/databases', [ApplicationDatabaseController::class, 'store'])
+        ->name('servers.applications.databases.store');
     Route::put('servers/{server}/applications/{application}/addresses', [ApplicationAddressController::class, 'update'])
         ->name('servers.applications.addresses.update');
     Route::put('servers/{server}/applications/{application}/php-limits', [ApplicationPhpLimitsController::class, 'update'])
@@ -219,6 +222,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('servers.databases', DatabaseController::class)->except(['edit', 'update'])->withTrashed(['index']);
     Route::post('servers/{server}/databases/{database}/backup', [DatabaseController::class, 'backup'])
         ->name('servers.databases.backup');
+    Route::post('servers/{server}/databases/{database}/retry', [DatabaseController::class, 'retry'])
+        ->name('servers.databases.retry');
     Route::post('servers/{server}/databases/{database}/restore', [DatabaseRestoreController::class, 'store'])
         ->middleware('throttle:6,1,database-restore')
         ->name('servers.databases.restore');

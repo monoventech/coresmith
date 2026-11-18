@@ -8,9 +8,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\Ability;
 use App\Enums\DatabaseType;
 use App\Enums\PowerState;
-use App\Enums\PrivilegeLevel;
+use App\Enums\ServerStatus;
 use App\Http\Requests\Database\DestroyDatabaseRequest;
 use App\Http\Requests\Database\StoreDatabaseRequest;
 use App\Jobs\BackupDatabase;
@@ -19,13 +20,14 @@ use App\Jobs\ListDatabaseBackups;
 use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Database\Backup;
 use App\Services\Database\BackupListing;
 use App\Services\Database\DatabaseBackups;
+use App\Services\Database\DatabaseCreator;
 use App\Services\Database\DatabaseManager;
 use App\Services\Database\DatabaseUsage;
 use App\Services\Database\OffsiteBackups;
-use App\Services\Database\RedisPorts;
 use App\Services\Database\SharedRedis;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ProjectPresenter;
@@ -75,24 +77,13 @@ final class DatabaseController extends Controller
         ]);
     }
 
-    public function store(StoreDatabaseRequest $request, Server $server, RedisPorts $redisPorts): RedirectResponse
+    public function store(StoreDatabaseRequest $request, Server $server, DatabaseCreator $creator): RedirectResponse
     {
-        $attributes = [...$request->safe()->except([]), 'server_id' => $server->id, 'team_id' => $server->team_id];
-
         try {
-            $database = $request->safe()->string('type')->value() === DatabaseType::Redis->value
-                ? $redisPorts->lock($server)->block(RedisPorts::LOCK_SECONDS, fn(): ManagedDatabase => ManagedDatabase::create([
-                    ...$attributes,
-                    'db_user' => null,
-                    'privilege_level' => PrivilegeLevel::Standard->value,
-                    'port' => $redisPorts->next($server),
-                ]))
-                : ManagedDatabase::create([...$attributes, 'port' => $this->defaultPort($request->string('type')->value())]);
+            $creator->create($server, $request->safe()->except([]));
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
-
-        CreateDatabase::dispatch($database);
 
         return to_route('servers.databases.index', $server)
             ->with('success', 'Creating the database.');
@@ -115,6 +106,7 @@ final class DatabaseController extends Controller
                 'backup' => $user->can('backup', $database) && $database->takesBackups(),
                 'delete' => $user->can('delete', $database),
                 'restore' => $restore,
+                'retry' => $this->mayRetry($user, $server, $database),
             ],
             'offsite' => !$this->goesToS3($database) ? null : [
                 'sent' => Formats::when($database->last_offsite_at),
@@ -122,6 +114,10 @@ final class DatabaseController extends Controller
             ],
             'backups' => $this->listedBackups($database, $backups),
             'restore' => $this->restoreState($database),
+            'connected' => $database->applications()->orderBy('name')->get()
+                ->filter(fn(Application $application): bool => $access->canSeeApplication($user, $application))
+                ->map(fn(Application $application): array => ['name' => $application->name, 'href' => route('servers.applications.show', [$server, $application])])
+                ->values()->all(),
             'apps' => !$restore ? [] : $server->applications()->orderBy('name')->get()
                 ->filter(fn(Application $application): bool => $access->canSeeApplication($user, $application))
                 ->map(fn(Application $application): array => [
@@ -257,14 +253,26 @@ final class DatabaseController extends Controller
         return app(OffsiteBackups::class)->covers($database);
     }
 
+    public function retry(Request $request, Server $server, ManagedDatabase $database): RedirectResponse
+    {
+        $this->authorize('view', $database);
+        $this->assertBelongsTo($server, $database);
+        abort_unless($this->mayRetry($request->user(), $server, $database), 403);
+
+        $database->forceFill(['status' => ManagedDatabase::CREATING, 'creation_error' => null])->save();
+        CreateDatabase::dispatch($database);
+
+        return back()->with('success', "Creating {$database->name} again.");
+    }
+
+    private function mayRetry(User $user, Server $server, ManagedDatabase $database): bool
+    {
+        return $database->status === ManagedDatabase::FAILED && $server->status === ServerStatus::Active && $user->hasTeamAbility($server->team, Ability::CreateDatabase);
+    }
+
     private function assertBelongsTo(Server $server, ManagedDatabase $database): void
     {
         abort_unless($database->server_id === $server->id, 404);
-    }
-
-    private function defaultPort(string $type): int
-    {
-        return $type === DatabaseType::Postgresql->value ? 5432 : 3306;
     }
 
     /**
@@ -280,6 +288,7 @@ final class DatabaseController extends Controller
             'host' => $database->host,
             'port' => $database->port,
             'status' => $database->status,
+            'creation_error' => $database->creation_error,
             'privilege_level' => $database->privilege_level,
             'is_external' => (bool) $database->is_external,
             'has_password' => $database->hasPassword(),
