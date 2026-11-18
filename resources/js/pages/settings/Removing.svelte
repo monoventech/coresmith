@@ -1,6 +1,7 @@
 <script lang="ts">
     import AppHead from '@/components/AppHead.svelte'
     import CoresmithLogo from '@/components/brand/CoresmithLogo.svelte'
+    import { REFRESH_HEADERS } from '@/lib/visits'
 
     type Status = {
         stage: string | null
@@ -33,7 +34,7 @@
 
     async function poll() {
         const next = await fetch(route('settings.removal.status'), {
-            headers: { Accept: 'application/json' },
+            headers: { Accept: 'application/json', ...REFRESH_HEADERS },
             credentials: 'same-origin',
             cache: 'no-store'
         })

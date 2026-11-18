@@ -421,6 +421,7 @@ test.describe('backups and restore', () => {
             route.fulfill({ status: 409, headers: { 'x-inertia-location': page.url() } })
         )
         const sent = page.waitForRequest((request) => request.url().endsWith('/restore') && request.method() === 'POST')
+        const reloaded = page.waitForEvent('load')
         await restore.click()
 
         expect((await sent).postDataJSON()).toEqual({
@@ -428,6 +429,7 @@ test.describe('backups and restore', () => {
             name: 'atlas_production',
             stop: ['app-storefront', 'app-relay']
         })
+        await reloaded
     })
 
     test('cancelling either step restores nothing', async ({ page }) => {

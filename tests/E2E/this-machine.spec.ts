@@ -289,8 +289,10 @@ test.describe('this machine', () => {
         await gotoServerTab(page, 'outpost-01', 'Hardening')
 
         const request = page.waitForRequest((sent) => sent.url().endsWith('/ssh-check') && sent.method() === 'POST')
+        const reloaded = page.waitForEvent('load')
         await page.getByTestId('ssh-passwords-warning').getByRole('button', { name: 'Check again' }).click()
         await request
+        await reloaded
     })
 
     test('no warning once password login is off', async ({ page }) => {

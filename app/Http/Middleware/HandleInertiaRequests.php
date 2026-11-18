@@ -89,7 +89,7 @@ class HandleInertiaRequests extends Middleware
 
     private function forwardFlash(Request $request): void
     {
-        if (!$request->hasSession()) {
+        if (!$request->hasSession() || StartSession::refreshes($request)) {
             return;
         }
 
