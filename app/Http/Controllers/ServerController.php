@@ -59,7 +59,7 @@ final class ServerController extends Controller
         $this->authorize('create', Server::class);
 
         $team = $context->teamOrFail();
-        $requested = $request->query('account');
+        $requested = $request->query('account') ?? $request->session()->get('account');
         $requested = is_string($requested) ? $requested : null;
 
         return Inertia::render('servers/Create', [

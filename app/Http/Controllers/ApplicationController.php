@@ -28,6 +28,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\MonitorAlert;
+use App\Models\Project;
 use App\Models\Server;
 use App\Services\Address\DomainTwins;
 use App\Services\Billing\SubscriptionCheck;
@@ -82,11 +83,15 @@ final class ApplicationController extends Controller
         $this->authorize('create', Application::class);
 
         $choices = $projects->choices($request->user(), $server->team);
+        $wanted = $request->query('project');
+        $chosen = is_string($wanted) && $wanted !== ''
+            ? Project::query()->where('team_id', $server->team_id)->where(fn($match) => $match->where('handle', $wanted)->orWhere('id', strtolower($wanted)))->value('id')
+            : null;
 
         return Inertia::render('applications/Create', [
             ...$form->props($request->user(), $server),
             'projects' => $choices,
-            'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
+            'project' => collect($choices)->firstWhere('id', $chosen)['id'] ?? null,
             'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
             'databases' => $form->databases($request->user(), $server),
         ]);

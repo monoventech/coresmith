@@ -72,8 +72,8 @@ final class CloudProviderController extends Controller
             ->log('cloud_provider_connected');
 
         return match ($request->validated('return_to')) {
-            'provision' => redirect()->route('servers.create', ['account' => $account->getKey()])->with('success', 'Connected. Pick a region and a size.'),
-            'setup' => redirect()->route('setup.show', ['step' => 1, 'account' => $account->getKey()])->with('success', 'Connected. Pick a region and a size.'),
+            'provision' => redirect()->route('servers.create')->with('account', $account->getKey())->with('success', 'Connected. Pick a region and a size.'),
+            'setup' => redirect()->route('setup.show', ['step' => 1])->with('account', $account->getKey())->with('success', 'Connected. Pick a region and a size.'),
             default => back()->with('success', 'Connected.'),
         };
     }
