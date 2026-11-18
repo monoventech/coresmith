@@ -8,7 +8,10 @@ declare(strict_types=1);
 
 namespace App\Services\Panel;
 
+use App\Enums\Ability;
+use App\Enums\ServerStatus;
 use App\Enums\SourceProviderType;
+use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\SourceProvider;
 use App\Models\User;
@@ -24,6 +27,21 @@ use App\Stacks\PythonPresets\PythonPresets;
 final class AddAppForm
 {
     public function __construct(private readonly Catalog $catalog, private readonly RuntimeLifecycle $lifecycle) {}
+
+    /**
+     * @return array{choices: list<array{value: string, name: string, type: string}>, can_create: bool}
+     */
+    public function databases(User $user, Server $server): array
+    {
+        return [
+            'choices' => ManagedDatabase::query()->where('server_id', $server->getKey())->where('status', '!=', ManagedDatabase::FAILED)->orderBy('name')->get()
+                ->filter(fn(ManagedDatabase $database): bool => $user->can('viewCredentials', $database))
+                ->map(fn(ManagedDatabase $database): array => ['value' => 'existing:' . $database->getKey(), 'name' => (string) $database->name, 'type' => (string) $database->type?->value])
+                ->values()
+                ->all(),
+            'can_create' => $server->status === ServerStatus::Active && $user->hasTeamAbility($server->team, Ability::CreateDatabase),
+        ];
+    }
 
     /**
      * @return array<string, mixed>

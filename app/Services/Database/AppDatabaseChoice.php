@@ -17,6 +17,7 @@ use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\User;
 use App\Services\Deployment\StackDefaults;
+use App\Services\Runtime\RepositoryFacts;
 
 final readonly class AppDatabaseChoice
 {
@@ -27,6 +28,11 @@ final readonly class AppDatabaseChoice
     private const SQL = [DatabaseType::Postgresql, DatabaseType::Mysql];
 
     public function __construct(private DatabaseCreator $creator, private DatabaseConnections $connections, private StackDefaults $defaults) {}
+
+    public static function horizon(?RepositoryFacts $facts): bool
+    {
+        return $facts !== null && array_key_exists('laravel/horizon', (array) ($facts->json('composer.json')['require'] ?? []));
+    }
 
     /**
      * @return array<string, string>
@@ -57,7 +63,7 @@ final readonly class AppDatabaseChoice
     /**
      * @return list<ManagedDatabase>
      */
-    public function apply(Application $application, ?string $database, ?string $redis): array
+    public function apply(Application $application, ?string $database, ?string $redis, bool $horizon = false): array
     {
         $database ??= 'none';
         $redis ??= 'none';
@@ -70,6 +76,10 @@ final readonly class AppDatabaseChoice
 
         foreach ($chosen as $managed) {
             $this->connections->connect($application, $managed);
+        }
+
+        if ($horizon && array_filter($chosen, fn(ManagedDatabase $managed): bool => $managed->type === DatabaseType::Redis) !== []) {
+            $application->forceFill(['env_variables' => $this->defaults->fill((string) $application->env_variables, ['QUEUE_CONNECTION' => 'redis'])])->save();
         }
 
         return $chosen;
