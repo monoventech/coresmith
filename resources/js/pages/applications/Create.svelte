@@ -240,6 +240,17 @@
             : suggestedRedis
     )
     const changedStack = $derived(STACK_FIELDS.some((field) => touched[field]))
+    const current = $derived<Record<string, string | null>>({
+        type,
+        framework,
+        js_runtime: jsRuntime,
+        web_directory: webDirectory,
+        main_package: mainPackage
+    })
+    const readRuntime = $derived(
+        read?.fields.type ? pickerRuntime(read.fields.type, read.fields.js_runtime ?? '') : null
+    )
+    const runtimeAsRead = $derived(read !== null && picker === readRuntime)
     const refused = $derived(
         (read?.verdict === 'blocked' && !changedStack) || (detection?.state === 'failed' && detection.definitive)
     )
@@ -429,6 +440,16 @@
         }
     }
 
+    function asRead(field: string): boolean {
+        if (read === null || (read.fields.type !== null && type !== read.fields.type)) {
+            return false
+        }
+
+        const detected = (read.fields as Record<string, string | null | undefined>)[field]
+
+        return detected === null || detected === undefined || current[field] === detected
+    }
+
     function touch(field: string) {
         touched = { ...touched, [field]: true }
     }
@@ -442,7 +463,7 @@
 </script>
 
 {#snippet note(field: string)}
-    {#if read && !touched[field]}
+    {#if read && !touched[field] && asRead(field)}
         {#if read.unsettled[field]}
             <p class="mt-1.5 mb-0 text-[12px] text-warning-strong">{read.unsettled[field]}</p>
         {:else if read.sources[field]}
@@ -682,10 +703,10 @@
                                 runtime={runtimes[picker]}
                                 value={editing?.application.runtime_version ?? null}
                                 error={errors.runtime_version}
-                                detected={read?.sources.runtime_version ?? null}
+                                detected={runtimeAsRead ? (read?.sources.runtime_version ?? null) : null}
                             />
                         {/key}
-                        {#if read?.unsettled.runtime_version}
+                        {#if runtimeAsRead && read?.unsettled.runtime_version}
                             <p class="-mt-2.5 mb-0 text-[12px] text-warning-strong">{read.unsettled.runtime_version}</p>
                         {/if}
                     {/if}
