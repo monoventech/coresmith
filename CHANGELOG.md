@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.24 (2026-11-18)
+
+### Changed
+- Edit setup opens again, and Add an app's notes show only while the fields match the repository (#131)
+
 ## v0.8.23 (2026-11-18)
 
 ### Changed
