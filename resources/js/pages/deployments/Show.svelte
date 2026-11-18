@@ -225,7 +225,9 @@
         }
 
         try {
-            echo.private(`deployments.${deployment.id}`).listen('.deployment.updated', (event: Pushed) => apply(event))
+            echo.private(`deployments.${deployment.id}`)
+                .listen('.deployment.updated', (event: Pushed) => apply(event))
+                .error(() => ((downgraded = true), startPolling()))
 
             const socket = (
                 echo.connector as { pusher?: { connection?: { bind(event: string, handler: () => void): void } } }
