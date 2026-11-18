@@ -21,6 +21,33 @@ test.describe('the deploy script', () => {
         test.skip(isMobile(testInfo), 'The deploy script card is hidden on phones, like Environment and Cron jobs')
     })
 
+    test('migrations can be turned off and on, and the default script follows', async ({ page }, testInfo) => {
+        await gotoApplication(page, 'bench-01', own(testInfo, 'migrate'))
+
+        const toggle = card(page).getByTestId('toggle-run-migrations')
+        const preview = card(page).getByTestId('deploy-script-preview')
+
+        await expect(toggle).toContainText(
+            'Each deploy runs php artisan migrate --force before the new release goes live.'
+        )
+        await expect(preview).toContainText('php artisan migrate --force')
+
+        await toggle.getByRole('switch', { name: 'Run migrations' }).click()
+
+        await expect(toast(page)).toContainText('Saved.')
+        await expect(toggle).toContainText(
+            'Deploys skip php artisan migrate --force. Run it yourself when the schema changes.'
+        )
+        await expect(preview).not.toContainText('migrate')
+
+        await toggle.getByRole('switch', { name: 'Run migrations' }).click()
+
+        await expect(toggle).toContainText(
+            'Each deploy runs php artisan migrate --force before the new release goes live.'
+        )
+        await expect(preview).toContainText('php artisan migrate --force')
+    })
+
     test("shows Coresmith's default, takes a script of your own, and goes back to the default", async ({
         page
     }, testInfo) => {

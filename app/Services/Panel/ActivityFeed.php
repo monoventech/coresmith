@@ -338,6 +338,9 @@ final class ActivityFeed
             'maintenance_enabled' => [$this->text('Maintenance page turned on for '), $this->mono($application?->name)],
             'maintenance_disabled' => [$this->text('Maintenance page turned off for '), $this->mono($application?->name)],
             'environment_updated' => [$this->text('Environment updated on '), $this->mono($application?->name)],
+            'migrations_changed' => ($properties['on'] ?? false)
+                ? [$this->text('Migrations turned on for '), $this->mono($application?->name), $this->text(', from the next deploy')]
+                : [$this->text('Migrations turned off for '), $this->mono($application?->name), $this->text(', deploys skip them')],
             'application_filed' => [$this->mono($application?->name), $this->text($this->filing($properties))],
             ApplicationSetupController::CHANGED => [$this->text('Setup changed on '), $this->mono($application?->name), $this->text(': ' . Str::of(collect((array) ($properties['changed'] ?? []))->map(fn(mixed $field): string => ApplicationSetupController::LABELS[(string) $field] ?? (string) $field)->join(', ', ' and '))->value())],
             ApplicationDeployScriptController::CHANGED => [$this->text('Deploy script for '), $this->mono($application?->name), $this->text(($properties['custom'] ?? false) ? ' changed, the next deploy runs it' : " is back to Coresmith's default")],

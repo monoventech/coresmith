@@ -211,6 +211,7 @@ final class E2ESeeder extends Seeder
             $this->application("setup-{$code}", 9650 + $index * 10);
             $this->application("named-{$code}", 9550 + $index * 10);
             $this->application("copied-{$code}", 9850 + $index * 10, ['env_variables' => "APP_ENV=production\nDB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=forge\nDB_USERNAME=forge\nDB_PASSWORD=" . bin2hex(random_bytes(8))]);
+            $this->application("migrate-{$code}", 9750 + $index * 10);
             $runtimes = $this->server("runtimes-{$code}", '198.51.100.' . (70 + $index), ServerStatus::Active);
             $this->application("rt-{$code}", 8000, MonovenTenant::stack(['php' => ['8.4.1', 'composer.json', '^8.4']], ['name' => 'laravel', 'major' => 13]), $runtimes);
             $this->application("rt-pin-{$code}", 8010, MonovenTenant::stack(['php' => ['8.4.1', '.tool-versions', '8.4.1']], ['name' => 'laravel', 'major' => 13]), $runtimes);

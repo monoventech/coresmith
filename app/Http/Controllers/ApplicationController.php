@@ -295,6 +295,7 @@ final class ApplicationController extends Controller
                 ...app(DeployScript::class)->present($application),
                 'update_href' => $user->can('update', $application) ? route('servers.applications.deploy-script.update', [$server, $application]) : null,
                 'reset_href' => $user->can('update', $application) ? route('servers.applications.deploy-script.destroy', [$server, $application]) : null,
+                'migrations_href' => $user->can('update', $application) ? route('servers.applications.update', [$server, $application]) : null,
             ],
             'held' => $this->held($application, $live),
         ]);
@@ -384,6 +385,10 @@ final class ApplicationController extends Controller
 
         if ($application->name !== $name) {
             activity()->performedOn($application)->withProperties(['from' => $name, 'to' => $application->name])->log('application_renamed');
+        }
+
+        if ($application->wasChanged('run_migrations')) {
+            activity()->performedOn($application)->withProperties(['on' => (bool) $application->run_migrations])->log('migrations_changed');
         }
 
         $domains = $application->allDomains();
