@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.25 (2026-11-18)
+
+### Changed
+- Edit setup switches an app's database and Redis, new apps auto deploy after their first deploy, and cloud providers get their own tab (#135)
+- Edit setup asks you to save the setup after it reads the repository (#134)
+- The deploy page gets its live updates again (#133)
+
 ## v0.8.24 (2026-11-18)
 
 ### Changed
