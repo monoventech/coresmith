@@ -1082,8 +1082,16 @@ final class DeployApplication implements ShouldQueue
 
         $this->mark(DeploymentPhases::SWAP, 'current → releases/' . $this->timestamp);
 
+        $before = $application->current_release === null ? null : $paths->release((string) $application->current_release);
+
         $connection->execute("ln -sfn {$release} {$current}.tmp", sudo: true)->throw();
         $connection->execute("mv -Tf {$current}.tmp {$current}", sudo: true)->throw();
+
+        $keep = $paths->keepPrevious($before, $release);
+
+        if ($keep !== null && $connection->execute($keep, sudo: true)->successful()) {
+            $this->appendLog('symlink: previous → releases/' . basename((string) $before) . ', so pages opened before this deploy still find their files');
+        }
 
         $this->swapped = true;
         $application->forceFill(['current_release' => $this->timestamp, ...$stack->applicationAttributes()])->save();
