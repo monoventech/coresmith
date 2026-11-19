@@ -351,7 +351,7 @@ test('github\'s code becomes an app owned by the team, then the install begins',
 
     $this->actingAs($user)
         ->get(registrationCallback($intent['state']))
-        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => $intent['key']]));
+        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => GitHubApp::query()->findOrFail($intent['key'])->slug]));
 
     $app = GitHubApp::find($intent['key']);
 
@@ -415,7 +415,7 @@ test('an app whose webhook address cannot be read is still kept, so its one-time
 
     $this->actingAs($user)
         ->get(registrationCallback($intent['state']))
-        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => $intent['key']]));
+        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => GitHubApp::query()->findOrFail($intent['key'])->slug]));
 
     $app = GitHubApp::find($intent['key']);
 
@@ -444,7 +444,7 @@ test('a state is used once', function () {
     $intent = registrationIntentFor($team, $user);
     registrationFakeGitHub($intent['key']);
 
-    $this->actingAs($user)->get(registrationCallback($intent['state']))->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => $intent['key']]));
+    $this->actingAs($user)->get(registrationCallback($intent['state']))->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => GitHubApp::query()->findOrFail($intent['key'])->slug]));
 
     $this->actingAs($user)
         ->get(registrationCallback($intent['state']))
@@ -479,7 +479,7 @@ test('a state still counts a little short of the hour', function () {
 
     $this->actingAs($user)
         ->get(registrationCallback($intent['state']))
-        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => $intent['key']]));
+        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => GitHubApp::query()->findOrFail($intent['key'])->slug]));
 });
 
 test('a state another person started in this browser is refused and left alone', function () {

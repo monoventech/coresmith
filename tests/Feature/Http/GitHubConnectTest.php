@@ -1742,3 +1742,27 @@ test('cancelling the chooser forgets the choices, so it does not reopen', functi
         ->get(route('source-providers.index'))
         ->assertInertia(fn($page) => $page->where('github.choose', null));
 });
+
+test("the connect link names the app by its GitHub slug, and the session keeps the app's own id", function () {
+    [$team, $owner, $app] = githubConnectTeam();
+
+    $target = $this->actingAs($owner)
+        ->get(route('source-providers.connect', ['type' => 'github_app', 'app' => $app->slug]))
+        ->assertRedirect()
+        ->headers->get('Location');
+
+    expect((string) $target)->toStartWith('https://github.com/apps/' . $app->slug . '/installations/new?state=')
+        ->and(session(SourceProviderConnectController::STATE_KEY)['app'])->toBe($app->id)
+        ->and(session(SourceProviderConnectController::STATE_KEY)['team'])->toBe($team->id);
+});
+
+test("another team's app is not found by its slug either", function () {
+    [, $owner] = githubConnectTeam();
+    $other = GitHubApp::factory()->create(['slug' => 'someone-elses-app']);
+
+    $this->actingAs($owner)
+        ->get(route('source-providers.connect', ['type' => 'github_app', 'app' => $other->slug]))
+        ->assertNotFound();
+
+    expect(session(SourceProviderConnectController::STATE_KEY))->toBeNull();
+});

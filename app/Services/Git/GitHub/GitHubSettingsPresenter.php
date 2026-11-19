@@ -58,7 +58,7 @@ final class GitHubSettingsPresenter
             'organization' => $canManage && $this->apps->canRegister() && $available !== [] && !$viaHost ? $this->registration($team, $user) : null,
             'connections' => $connections->map(fn(SourceProvider $provider): array => $this->connection($provider, $connected[$provider->id]))->values()->all(),
             'apps' => $this->registered($available, $connections, $canManage),
-            'connect' => $canManage && $available !== [] ? $this->connectLinks($available[0]->key) : null,
+            'connect' => $canManage && $available !== [] ? $this->connectLinks($available[0]) : null,
             'choose' => $canManage ? $this->choice($team, $user, $available) : null,
             'webhook' => $this->webhooks($available, $connected, $canManage),
             'members' => $canManage ? $this->members($team) : [],
@@ -194,7 +194,7 @@ final class GitHubSettingsPresenter
                 'owner_type' => $app->ownerType,
                 'settings_url' => $app->settingsUrl(),
                 'installed' => $inUse,
-                ...$this->connectLinks($app->key),
+                ...$this->connectLinks($app),
                 'remove_href' => $canManage && !$inUse ? route('github-apps.destroy', $app->key) : null,
             ];
         }
@@ -251,11 +251,11 @@ final class GitHubSettingsPresenter
     /**
      * @return array{install_href: string, link_href: string}
      */
-    private function connectLinks(string $key): array
+    private function connectLinks(#[\SensitiveParameter] GitHubAppCredentials $app): array
     {
         return [
-            'install_href' => route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $key]),
-            'link_href' => route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $key, 'mode' => 'link']),
+            'install_href' => route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->address()]),
+            'link_href' => route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->address(), 'mode' => 'link']),
         ];
     }
 

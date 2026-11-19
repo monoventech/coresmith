@@ -91,7 +91,7 @@ test('a developer registers a GitHub App of its own, which it alone owns, and it
     ownGitHubFakeConversion($intent['key']);
 
     $this->get(route('github-apps.registered', ['code' => 'c0de', 'state' => $intent['state']]))
-        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => $intent['key']]));
+        ->assertRedirect(route('source-providers.connect', ['type' => 'github_app', 'app' => GitHubApp::query()->findOrFail($intent['key'])->slug]));
 
     expect(GitHubApp::find($intent['key']))->user_id->toBe($developer->id)->team_id->toBe($team->id);
 });

@@ -30,6 +30,11 @@ final readonly class GitHubAppCredentials
         return $this->key === GitHubApps::ENV_KEY;
     }
 
+    public function address(): string
+    {
+        return $this->isEnv() ? GitHubApps::ENV_KEY : $this->slug;
+    }
+
     public function installUrl(string $state): string
     {
         return 'https://github.com/apps/' . rawurlencode($this->slug) . '/installations/new?' . http_build_query(['state' => $state]);
