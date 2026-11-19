@@ -401,3 +401,16 @@ test('a rollback of an app that is not laravel touches no shared database', func
 
     expect(implode("\n", $transport->commands()))->not->toContain('shared/database');
 });
+
+test('a rollback points previous at the release it left, so pages opened on it still find their files', function () {
+    $application = rollbackApp();
+    $left = $application->current_release;
+    $transport = rollbackTransport();
+
+    rollbackRun($application, $transport, '20260911-100000');
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain("ln -sfn '/var/coresmith/apps/my-app/releases/{$left}' /var/coresmith/apps/my-app/previous.tmp && mv -Tf /var/coresmith/apps/my-app/previous.tmp /var/coresmith/apps/my-app/previous")
+        ->and(strpos($commands, 'previous.tmp'))->toBeGreaterThan(strpos($commands, 'mv -Tf /var/coresmith/apps/my-app/current.tmp'));
+});

@@ -943,3 +943,27 @@ test('a migration that fails for another reason keeps the plain step failure', f
 
     expect((string) $deployment->fresh()->failure_reason)->not->toContain("couldn't connect");
 });
+
+test('going live points previous at the release that was live, so pages opened before the deploy still find their files', function () {
+    Event::fake([DeploymentSucceeded::class]);
+    $deployment = Deployment::factory()->for(deployableApp(['current_release' => '20260101-090000']))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    $commands = implode("\n", $transport->commands());
+
+    expect($commands)->toContain("ln -sfn '/var/coresmith/apps/my-app/releases/20260101-090000' /var/coresmith/apps/my-app/previous.tmp && mv -Tf /var/coresmith/apps/my-app/previous.tmp /var/coresmith/apps/my-app/previous")
+        ->and(strpos($commands, 'previous.tmp'))->toBeGreaterThan(strpos($commands, 'mv -Tf /var/coresmith/apps/my-app/current.tmp'))
+        ->and($deployment->fresh()->log)->toContain('symlink: previous → releases/20260101-090000');
+});
+
+test('a first deploy has no release before it to point previous at', function () {
+    Event::fake([DeploymentSucceeded::class]);
+    $deployment = Deployment::factory()->for(deployableApp(['current_release' => null]))->create();
+    $transport = healthyDeployTransport();
+
+    deploy($deployment, $transport);
+
+    expect(implode("\n", $transport->commands()))->not->toContain('previous.tmp');
+});
