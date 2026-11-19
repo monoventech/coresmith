@@ -131,7 +131,7 @@ test('a domain the internet cannot reach is refused with what to fix, and nothin
 
     $this->actingAs(addressSettingsUser())
         ->put(route('settings.address.update'), ['address' => 'coresmith.example.com'])
-        ->assertSessionHasErrors(['address' => 'coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, this server needs IPv6 instead.']);
+        ->assertSessionHasErrors(['address' => 'coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server\'s page.']);
 
     expect(AddressChange::current())->toBeNull()
         ->and(file_exists(AddressRequest::file()))->toBeFalse();
@@ -308,7 +308,7 @@ test('checking a domain keeps what the check found, one problem at a time, and s
     expect(AddressCheck::current())->toMatchArray([
         'host' => 'coresmith.example.com',
         'ok' => false,
-        'problems' => ['coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, this server needs IPv6 instead.'],
+        'problems' => ['coresmith.example.com points at 151.226.169.196, which doesn\'t answer on ports 80 and 443 from the internet. Forward those ports on your router to 192.168.0.248, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server\'s page.'],
         'notes' => [],
         'records' => [],
     ])

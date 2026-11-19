@@ -16,6 +16,7 @@ use App\Models\Application;
 use App\Models\ManagedDatabase;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Deployment\ReleasePaths;
 use App\Services\Deployment\StackDefaults;
 use App\Services\Runtime\RepositoryFacts;
 
@@ -69,7 +70,7 @@ final readonly class AppDatabaseChoice
         $redis ??= 'none';
 
         if ($database === 'sqlite' && strtolower((string) $application->framework) === 'laravel') {
-            $application->forceFill(['env_variables' => $this->defaults->fill((string) $application->env_variables, ['DB_CONNECTION' => 'sqlite'])])->save();
+            $application->forceFill(['env_variables' => $this->defaults->fill((string) $application->env_variables, ['DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => (new ReleasePaths($application))->shared() . '/database/database.sqlite'])])->save();
         }
 
         $chosen = array_values(array_filter([$this->database($application, $database), $this->redis($application, $redis)]));

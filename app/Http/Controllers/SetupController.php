@@ -43,7 +43,7 @@ final class SetupController extends Controller
         $current = $progress->current();
         $requested = (int) $request->query('step', (string) $current);
         $step = max(0, min($requested, $current));
-        $account = $request->query('account');
+        $account = $request->query('account') ?? $request->session()->get('account');
         $account = is_string($account) ? $account : null;
 
         $access = app(TeamAccess::class);

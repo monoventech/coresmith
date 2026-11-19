@@ -34,6 +34,7 @@ use App\Services\Panel\ApplicationPresenter;
 use App\Services\Panel\CloudPresenter;
 use App\Services\Panel\Formats;
 use App\Services\Panel\ServerPresenter;
+use App\Services\Panel\ServerTunnelPresenter;
 use App\Services\Server\Audit\PreProvisioningAudit;
 use App\Services\Server\Audit\ServerAudit;
 use App\Services\Server\CoresmithKey;
@@ -59,7 +60,7 @@ final class ServerController extends Controller
         $this->authorize('create', Server::class);
 
         $team = $context->teamOrFail();
-        $requested = $request->query('account');
+        $requested = $request->query('account') ?? $request->session()->get('account');
         $requested = is_string($requested) ? $requested : null;
 
         return Inertia::render('servers/Create', [
@@ -155,6 +156,7 @@ final class ServerController extends Controller
                 'can_update' => $request->user()->can('update', $server),
                 'href' => route('servers.runtimes.update', $server),
             ],
+            'tunnel' => app(ServerTunnelPresenter::class)->present($server, $request->user()),
         ]);
     }
 

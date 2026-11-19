@@ -40,10 +40,17 @@ final class AppDomainReach
         $reading = $this->addresses->read($connection);
         $this->addresses->keep($server, $reading);
         $reachability = new Reachability($this->resolver, $reading, $reading, new RemoteReachProbe($connection, $reading->direct));
+        $tunnel = $server->tunnel()->first();
 
         $reports = [];
 
         foreach ($domains as $domain) {
+            if ($tunnel?->carries($domain) === true) {
+                $reports[$domain] = new ReachReport(true, [], ["{$domain} reaches this server through its Cloudflare tunnel."], []);
+
+                continue;
+            }
+
             $report = $reachability->check($domain);
             $reports[$domain] = isset($twins[$domain]) ? self::optional($report, $domain, $twins[$domain]) : $report;
         }

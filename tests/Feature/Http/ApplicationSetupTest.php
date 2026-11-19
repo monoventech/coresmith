@@ -16,6 +16,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Deployment\DeployGuard;
 use App\Services\Deployment\EnvironmentFile;
+use App\Services\Deployment\ReleasePaths;
 use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
@@ -179,7 +180,7 @@ test('a Laravel app moved to SQLite on Edit setup gets DB_CONNECTION for the nex
         ->assertSessionHasNoErrors()
         ->assertSessionHas('success', 'Saved. shop now uses SQLite, kept across deploys. Deploy to switch over.');
 
-    expect(setupVariables($shop))->toMatchArray(['APP_NAME' => 'Shop', 'DB_CONNECTION' => 'sqlite']);
+    expect(setupVariables($shop))->toMatchArray(['APP_NAME' => 'Shop', 'DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => (new ReleasePaths($shop))->shared() . '/database/database.sqlite']);
 });
 
 test('an app on SQLite that picks no database keeps its variables, and the message says what still points at SQLite', function () {

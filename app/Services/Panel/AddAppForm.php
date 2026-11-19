@@ -49,7 +49,7 @@ final class AddAppForm
     public function props(User $user, Server $server): array
     {
         return [
-            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targets($server->public_addresses)],
+            'server' => ['id' => $server->id, 'name' => $server->name, 'href' => route('servers.show', $server), 'dns_targets' => ServerAddresses::targetsFor($server)],
             'js_frameworks' => app(JsPresets::class)->choices(),
             'python_frameworks' => app(PythonPresets::class)->choices(),
             'go_frameworks' => GoFrameworks::options(),

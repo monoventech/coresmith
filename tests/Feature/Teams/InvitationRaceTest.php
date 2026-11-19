@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\InvitationLinks;
 
 /**
  * @return array{Team, TeamInvitation, string}
@@ -28,7 +29,7 @@ function invitationRaceInvite(): array
 
 function invitationRaceRegister(string $token): TestResponse
 {
-    return test()->from(route('invitations.show', $token))->post(route('invitations.register', $token), [
+    return test()->from(InvitationLinks::route('invitations.show', $token))->post(InvitationLinks::route('invitations.register', $token), [
         'name' => 'Noor Haddad',
         'password' => 'a-long-enough-passphrase',
         'password_confirmation' => 'a-long-enough-passphrase',
@@ -76,7 +77,7 @@ test('a new account is rolled back when the invitation is used up while it is ma
         TeamInvitation::query()->whereKey($invitation->id)->update(['accepted_at' => now()]);
     });
 
-    invitationRaceRegister($token)->assertRedirect(route('invitations.show', $token));
+    invitationRaceRegister($token)->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
     expect(User::query()->where('email', 'new@example.com')->exists())->toBeFalse();
 
@@ -88,7 +89,7 @@ test('a request that loses the race to make the account lands on the invitation'
 
     User::creating($race);
 
-    invitationRaceRegister($token)->assertRedirect(route('invitations.show', $token));
+    invitationRaceRegister($token)->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
     expect(User::query()->where('email', 'new@example.com')->exists())->toBeFalse();
 
@@ -112,7 +113,7 @@ test('a request that loses the race to join lands on the invitation', function (
         }
     });
 
-    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect(route('invitations.show', $token));
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
     expect($user->fresh()->belongsToTeam($team))->toBeFalse();
 });
@@ -125,7 +126,7 @@ test('any other database failure is not mistaken for a lost race', function () {
         throw invitationRaceFailure('SQLSTATE[HY000]: General error: 1 no such column: accepted_at');
     });
 
-    $this->actingAs($user)->post(route('invitations.accept', $token))->assertServerError();
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))->assertServerError();
 });
 
 test('a key sync that fails after joining is reported and the person still lands on the team', function (string $path) {
@@ -136,7 +137,7 @@ test('a key sync that fails after joining is reported and the person still lands
 
     if ($path === 'accept') {
         $this->actingAs(User::factory()->create(['email' => 'new@example.com']))
-            ->post(route('invitations.accept', $token))
+            ->post(InvitationLinks::route('invitations.accept', $token))
             ->assertRedirect('http://localhost/acme/dashboard');
     } else {
         invitationRaceRegister($token)->assertRedirect('http://localhost/acme/dashboard');

@@ -139,10 +139,12 @@ test('the create pages offer the projects the member can add to, and Add an app 
     $admin = createIntoAdmin($team, $server, $project);
     $everything = [['id' => $other->id, 'name' => 'Atlas'], ['id' => $project->id, 'name' => 'Storefront']];
 
-    $this->actingAs($owner)->get(route('servers.applications.create', [$server, 'project' => $project->id]))
+    $this->actingAs($owner)->get(route('servers.applications.create', [$server, 'project' => $project->handle]))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('projects', $everything)->where('project', $project->id));
+    $this->actingAs($owner)->get(route('servers.applications.create', [$server, 'project' => $project->id]))
+        ->assertInertia(fn(AssertableInertia $page) => $page->where('project', $project->id));
     $this->actingAs($owner)->get(route('servers.databases.create', $server))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('projects', $everything));
-    $this->actingAs($admin)->get(route('servers.applications.create', [$server, 'project' => $other->id]))
+    $this->actingAs($admin)->get(route('servers.applications.create', [$server, 'project' => $other->handle]))
         ->assertInertia(fn(AssertableInertia $page) => $page->where('projects', [['id' => $project->id, 'name' => 'Storefront']])->where('project', null));
 });

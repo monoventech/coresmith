@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace App\Services\Address;
 
+use App\Models\ServerTunnel;
 use App\Services\Network\ReachProbe;
 use App\Services\Network\StableAddresses;
 use RuntimeException;
@@ -26,6 +27,10 @@ final class PointAddress
 
         if ($token === null) {
             return 'Connect Cloudflare first.';
+        }
+
+        if (ServerTunnel::thisMachineOpen()) {
+            return "Visitors reach this machine through its Cloudflare tunnel, so Coresmith doesn't point {$host} at its own addresses. Turn the tunnel off on the server's page first.";
         }
 
         try {

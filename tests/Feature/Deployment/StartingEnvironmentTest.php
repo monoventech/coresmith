@@ -40,11 +40,18 @@ function startingLaravelExample(): string
     ]) . "\n";
 }
 
-test('without an example file a new app starts with only its generated secret, as before', function () {
-    $variables = app(StartingEnvironment::class)->variables(startingFacts([]), ApplicationType::Php, 'laravel', 'shop.example.com');
+test('a Laravel app without an example file starts with its name, its secret and the settings production needs', function () {
+    $variables = app(StartingEnvironment::class)->variables(startingFacts([]), ApplicationType::Php, 'laravel', 'shop.example.com', 'Shop');
 
-    expect(array_keys($variables))->toBe(['APP_KEY'])
+    expect(array_keys($variables))->toBe(['APP_NAME', 'LOG_CHANNEL', 'LOG_LEVEL', 'APP_KEY', 'APP_ENV', 'APP_DEBUG', 'APP_URL'])
+        ->and($variables)->toMatchArray(['APP_NAME' => 'Shop', 'LOG_CHANNEL' => 'stack', 'LOG_LEVEL' => 'error', 'APP_ENV' => 'production', 'APP_DEBUG' => 'false', 'APP_URL' => 'https://shop.example.com'])
         ->and($variables['APP_KEY'])->toStartWith('base64:');
+});
+
+test('another stack without an example file starts with only its generated secret, as before', function () {
+    $variables = app(StartingEnvironment::class)->variables(startingFacts([]), ApplicationType::Ruby, 'rails', 'shop.example.com', 'Shop');
+
+    expect(array_keys($variables))->toBe(['SECRET_KEY_BASE']);
 });
 
 test('a Laravel app starts from its .env.example, set for production, with its connection and Reverb settings left to Coresmith', function () {

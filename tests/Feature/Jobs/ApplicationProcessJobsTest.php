@@ -205,7 +205,9 @@ test('a worker that does not start is stopped, removed and its toggle turned bac
         ->and($activity->subject_id)->toBe($application->id)
         ->and($activity->properties['toggle'])->toBe('queue_worker')
         ->and($activity->properties['label'])->toBe('Queue worker')
-        ->and($activity->properties['error'])->toBe('The queue process didn\'t start (activating). The entry point was not found. Check the build produced the file the process starts, then deploy again.')
+        ->and($activity->properties['error'])->toBe('The queue process didn\'t start (activating). The entry point was not found. Check the build produced the file the process starts, then deploy again. Then turn the switch on again.')
+        ->and($activity->properties['log'])->toContain('Main process exited, code=exited, status=1/FAILURE')
+        ->and($activity->properties['log'])->toContain('Could not open input file: artisan')
         ->and(Activity::query()->where('description', 'processes_sync_failed')->exists())->toBeFalse()
         ->and(Activity::query()->where('description', 'toggle_started')->exists())->toBeFalse()
         ->and($transport->connected())->toBeFalse();
@@ -426,4 +428,18 @@ test('an application removed through another server is a not found', function ()
     expect(Application::find($application->id))->not->toBeNull();
 
     Queue::assertNotPushed(DetachApplication::class);
+});
+
+test('a worker that does not start for a reason Coresmith does not know points at its log and the switch', function () {
+    $application = processJobsWorker();
+    $transport = (new FakeSSHTransport)
+        ->respondTo("systemctl is-active 'coresmith-app-shop-queue'", "activating\n", 3)
+        ->respondTo("journalctl -u 'coresmith-app-shop-queue'", "coresmith-app-shop-queue.service: Main process exited, code=killed, status=9/KILL\n");
+
+    processJobsRun(new SyncApplicationProcesses($application, [], SmartToggles::QUEUE), $transport);
+
+    $activity = Activity::query()->where('description', 'toggle_start_failed')->sole();
+
+    expect($activity->properties['error'])->toBe("The queue process didn't start (activating). The log below says why. Fix it, then turn the switch on again.")
+        ->and($activity->properties['log'])->toContain('status=9/KILL');
 });

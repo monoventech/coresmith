@@ -28,6 +28,7 @@ use App\Models\Application;
 use App\Models\Deployment;
 use App\Models\ManagedDatabase;
 use App\Models\MonitorAlert;
+use App\Models\Project;
 use App\Models\Server;
 use App\Services\Address\DomainTwins;
 use App\Services\Billing\SubscriptionCheck;
@@ -82,11 +83,15 @@ final class ApplicationController extends Controller
         $this->authorize('create', Application::class);
 
         $choices = $projects->choices($request->user(), $server->team);
+        $wanted = $request->query('project');
+        $chosen = is_string($wanted) && $wanted !== ''
+            ? Project::query()->where('team_id', $server->team_id)->where(fn($match) => $match->where('handle', $wanted)->orWhere('id', strtolower($wanted)))->value('id')
+            : null;
 
         return Inertia::render('applications/Create', [
             ...$form->props($request->user(), $server),
             'projects' => $choices,
-            'project' => collect($choices)->firstWhere('id', $request->query('project'))['id'] ?? null,
+            'project' => collect($choices)->firstWhere('id', $chosen)['id'] ?? null,
             'tag_suggestions' => AppTags::suggestions($request->user(), $server->team),
             'databases' => $form->databases($request->user(), $server),
         ]);
@@ -111,7 +116,7 @@ final class ApplicationController extends Controller
         $repository = $request->githubRepository();
         $checked = $request->checkedRead();
         $type = ApplicationType::tryFrom($request->string('type')->value());
-        $initial = app(StartingEnvironment::class)->variables($checked?->facts, $type, $request->input('framework'), $request->validated('domain'));
+        $initial = app(StartingEnvironment::class)->variables($checked?->facts, $type, $request->input('framework'), $request->validated('domain'), $request->string('name')->value());
         $framework = $checked?->facts === null ? null : app(FrameworkVersion::class)->detect(new Application(['type' => $type, 'framework' => $request->input('framework')]), $checked->facts);
 
         try {
@@ -205,7 +210,7 @@ final class ApplicationController extends Controller
                 'domain_reach' => $this->domainReach($application),
                 'uptime' => app(AppUptime::class)->for($application),
                 'domain_check_href' => route('servers.applications.domains.check', [$server, $application]),
-                'dns_targets' => ServerAddresses::targets($server->public_addresses),
+                'dns_targets' => ServerAddresses::targetsFor($server),
                 'repository' => Repository::slug((string) $application->repository_url) ?? $application->repository_url,
                 'branch' => $application->repository_branch,
                 'current_release' => Formats::release($application->current_release),

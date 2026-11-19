@@ -119,7 +119,7 @@ test('a project chosen on the releases list keeps only its apps, and a narrowed 
 
     $this->actingAs($member)
         ->get(route('releases.index', ['project' => $project->id]))
-        ->assertInertia(fn($page) => $page->where('groups', [['name' => 'Storefront', 'apps' => [releasesRow($shop, query: ['project' => $project->id])]]])->where('scope', (string) $project->id));
+        ->assertInertia(fn($page) => $page->where('groups', [['name' => 'Storefront', 'apps' => [releasesRow($shop, query: ['project' => $project->handle])]]])->where('scope', (string) $project->handle));
 
     $this->actingAs($narrowed->fresh())
         ->get(route('releases.index'))

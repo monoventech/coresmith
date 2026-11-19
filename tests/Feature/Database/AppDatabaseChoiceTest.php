@@ -13,6 +13,7 @@ use App\Models\Server;
 use App\Models\User;
 use App\Services\Database\AppDatabaseChoice;
 use App\Services\Deployment\EnvironmentFile;
+use App\Services\Deployment\ReleasePaths;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
@@ -83,12 +84,14 @@ test('a new Redis database gets its own port, and an existing database on the se
         ->and(choiceVariables($application))->toMatchArray(['DB_CONNECTION' => 'mysql', 'DB_DATABASE' => 'ledger', 'REDIS_PORT' => (string) $redis->port]);
 });
 
-test('SQLite sets a Laravel app to SQLite and creates nothing', function () {
+test('SQLite sets a Laravel app to SQLite in the database file deploys keep, and creates nothing', function () {
     $server = choiceServer();
 
     choiceAdd($server, ['database' => 'sqlite'])->assertSessionHasNoErrors();
 
-    expect(choiceVariables(Application::query()->sole()))->toHaveKey('DB_CONNECTION', 'sqlite')
+    $application = Application::query()->sole();
+
+    expect(choiceVariables($application))->toMatchArray(['DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => (new ReleasePaths($application))->shared() . '/database/database.sqlite'])
         ->and(ManagedDatabase::query()->count())->toBe(0);
 });
 

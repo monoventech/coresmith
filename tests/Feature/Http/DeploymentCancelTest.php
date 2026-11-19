@@ -250,8 +250,8 @@ test('members may cancel what they may deploy, another team is refused and a mis
 
     foreach ([
         [$otherServer, $application, $deployment],
-        [$application->server_id, $sibling, $deployment],
-        [$application->server_id, $application, $siblingDeployment],
+        [$application->server_id, $sibling, $deployment->getKey()],
+        [$application->server_id, $application, $siblingDeployment->getKey()],
     ] as $address) {
         $this->actingAs($owner)
             ->post(route('servers.applications.deployments.cancel', $address))

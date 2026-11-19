@@ -15,6 +15,7 @@ use App\Http\Controllers\ApplicationSchedulerLogController;
 use App\Http\Controllers\ApplicationSetupController;
 use App\Http\Controllers\ApplicationTagsController;
 use App\Http\Controllers\ApplicationToggleController;
+use App\Http\Controllers\Auth\ConfirmEmailController;
 use App\Http\Controllers\CloudServerController;
 use App\Http\Controllers\CurrentTeamController;
 use App\Http\Controllers\DashboardController;
@@ -39,6 +40,7 @@ use App\Http\Controllers\ServerProtectionController;
 use App\Http\Controllers\ServerRuntimeController;
 use App\Http\Controllers\ServerTabsController;
 use App\Http\Controllers\ServerTakeoverController;
+use App\Http\Controllers\ServerTunnelController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\SharedRedisController;
 use App\Http\Controllers\SshKeyController;
@@ -137,6 +139,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('servers.under-the-hood');
     Route::post('servers/{server}/firewall', [ServerFirewallController::class, 'store'])
         ->name('servers.firewall.store');
+    Route::post('servers/{server}/tunnel', [ServerTunnelController::class, 'store'])
+        ->middleware('throttle:6,1,server-tunnel')
+        ->name('servers.tunnel.store');
+    Route::delete('servers/{server}/tunnel', [ServerTunnelController::class, 'destroy'])
+        ->middleware('throttle:6,1,server-tunnel')
+        ->name('servers.tunnel.destroy');
     Route::post('servers/{server}/ssh-check', [ThisMachineSshController::class, 'store'])
         ->middleware('throttle:6,1,ssh-check')
         ->name('servers.ssh-check');
@@ -243,7 +251,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('ssh-keys', SshKeyController::class)->only(['store', 'destroy']);
 
     Route::put('current-team', [CurrentTeamController::class, 'update'])->name('current-team.update');
-    Route::get('teams/{team}', [TeamController::class, 'show'])->name('teams.show');
+    Route::get('teams/{team:slug}', [TeamController::class, 'show'])->name('teams.show');
     Route::post('teams/{team}/members', [TeamMemberController::class, 'store'])->name('teams.members.store');
     Route::put('teams/{team}/members/{user}', [TeamMemberController::class, 'update'])->name('teams.members.update');
     Route::delete('teams/{team}/members/{user}', [TeamMemberController::class, 'destroy'])->name('teams.members.destroy');
@@ -251,11 +259,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('teams/{team}/invitations/{invitation}', [TeamInvitationController::class, 'destroy'])->name('teams.invitations.destroy');
 });
 
-Route::get('invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
-Route::post('invitations/{token}', [InvitationController::class, 'register'])
+Route::get('email/verify/{hash}', ConfirmEmailController::class)->middleware(['auth', 'signed', 'throttle:6,1,verification-confirm'])->name('verification.confirm');
+Route::get('invitations/{token}', [InvitationController::class, 'legacy'])->name('invitations.legacy');
+Route::get('join/{slug}/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+Route::post('join/{slug}/{token}', [InvitationController::class, 'register'])
     ->middleware(['guest', 'throttle:10,1,invitation-register'])
     ->name('invitations.register');
-Route::post('invitations/{token}/accept', [InvitationController::class, 'accept'])
+Route::post('join/{slug}/{token}/accept', [InvitationController::class, 'accept'])
     ->middleware(['auth', 'throttle:10,1,invitation-accept'])
     ->name('invitations.accept');
 

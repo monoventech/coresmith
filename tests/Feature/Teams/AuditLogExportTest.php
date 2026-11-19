@@ -25,6 +25,7 @@ use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\CloudBilling;
+use Tests\Support\InvitationLinks;
 
 function auditOwner(Team $team): User
 {
@@ -270,7 +271,7 @@ test('membership changes are recorded', function () {
         return true;
     });
 
-    $this->actingAs($newcomer)->post(route('invitations.accept', Str::afterLast($link, '/')))->assertRedirect();
+    $this->actingAs($newcomer)->post(InvitationLinks::route('invitations.accept', Str::afterLast($link, '/')))->assertRedirect();
     $this->actingAs($owner)->put(route('teams.members.update', [$team, $newcomer]), ['role' => TeamRole::Admin->value])->assertSessionHasNoErrors();
     $this->actingAs($owner)->delete(route('teams.members.destroy', [$team, $newcomer]))->assertSessionHasNoErrors();
 

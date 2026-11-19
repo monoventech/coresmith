@@ -25,12 +25,14 @@ const EMAIL =
 const RULES = {
     address: {
         reset: /(\/reset-password\/)[^/?#]+/gi,
-        verify: /(\/(?:verify-email|email\/verify)\/[^/?#]+\/)[^/?#]+/gi,
+        verify: /(\/(?:verify-email|email\/verify)\/(?:[^/?#]+\/)?)[^/?#]+/gi,
+        invite: /(\/(?:invitations|join\/[^/?#]+)\/)[^/?#]+/gi,
         query: /(^|[?&]|&amp;)((?:token|code|state|signature|email)|[^=&#]{0,64}signature)(\[[^\]=&#]{0,32}\]|%5B[^=&#]{0,32}?%5D)?=[^&#]*/gi
     },
     text: {
         reset: /(\/reset-password\/)[^/?#\s"'<>)]+/gi,
-        verify: /(\/(?:verify-email|email\/verify)\/[^/?#\s"'<>)]+\/)[^/?#\s"'<>)]+/gi,
+        verify: /(\/(?:verify-email|email\/verify)\/(?:[^/?#\s"'<>)]+\/)?)[^/?#\s"'<>)]+/gi,
+        invite: /(\/(?:invitations|join\/[^/?#\s"'<>)]+)\/)[^/?#\s"'<>)]+/gi,
         query: /([?&]|&amp;)((?:token|code|state|signature|email)|[^=&#\s"'<>)]{0,64}signature)(\[[^\]=&#]{0,32}\]|%5B[^=&#]{0,32}?%5D)?=[^&#\s"'<>)]*/gi
     }
 }
@@ -86,6 +88,7 @@ function mask(subject: string, text: boolean): string {
         .replace(EMAIL, (found, mailbox: string) => (KEPT_MAILBOXES.includes(mailbox.toLowerCase()) ? found : email))
         .replace(rules.reset, `$1${URL_MASK}`)
         .replace(rules.verify, `$1${URL_MASK}`)
+        .replace(rules.invite, `$1${URL_MASK}`)
         .replace(rules.query, `$1$2$3=${URL_MASK}`)
 }
 

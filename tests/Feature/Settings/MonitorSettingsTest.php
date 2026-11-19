@@ -185,7 +185,7 @@ test('a server gets its own limit, shown under the monitors, and loses it again'
         ->assertSessionHas('success', "Removed. forge-01 follows the team's limit again.");
 
     expect(ServerMonitor::query()->exists())->toBeFalse()
-        ->and(Activity::query()->whereIn('description', ['monitor_server_changed', 'monitor_server_removed'])->pluck('description')->all())->toBe(['monitor_server_changed', 'monitor_server_removed']);
+        ->and(Activity::query()->whereIn('description', ['monitor_server_changed', 'monitor_server_removed'])->orderBy('id')->pluck('description')->all())->toBe(['monitor_server_changed', 'monitor_server_removed']);
 });
 
 test('limits for one server need Pro or Business', function () {

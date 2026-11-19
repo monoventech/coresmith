@@ -24,5 +24,6 @@ export type Address = {
         checked_at: string
     } | null
     cloudflare: { connected: boolean; host: string | null; error: string | null; synced: string | null }
+    machine?: string | null
     follow: { github: string | null; sso: string | null } | null
 }

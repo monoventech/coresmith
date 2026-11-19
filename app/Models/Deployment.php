@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class Deployment extends Model
 {
@@ -72,11 +73,27 @@ class Deployment extends Model
             'seeded_shared_database' => 'boolean',
             'start_failed' => 'boolean',
             'stale_after' => 'datetime',
+            'number' => 'integer',
         ];
     }
 
     public function getRouteKey(): mixed
     {
-        return $this->release ?? $this->getKey();
+        return $this->number ?? $this->release ?? $this->getKey();
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (Deployment $deployment): void {
+            if ($deployment->number !== null || $deployment->application_id === null) {
+                return;
+            }
+
+            $deployment->number = DB::transaction(function () use ($deployment): int {
+                Application::withTrashed()->whereKey($deployment->application_id)->toBase()->increment('deploy_count');
+
+                return (int) Application::withTrashed()->whereKey($deployment->application_id)->value('deploy_count');
+            });
+        });
     }
 }

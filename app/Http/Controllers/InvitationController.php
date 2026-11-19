@@ -20,6 +20,7 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Database\DetectsConcurrencyErrors;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -34,12 +35,23 @@ final class InvitationController extends Controller
 
     public function __construct(private readonly TeamInvitations $invitations) {}
 
-    public function show(Request $request, string $token): Response
+    public function legacy(string $token): Response|RedirectResponse
+    {
+        $invitation = TeamInvitation::usable($token);
+
+        return $invitation instanceof TeamInvitation ? redirect()->to($this->invitations->link($invitation, $token)) : $this->expired();
+    }
+
+    public function show(Request $request, string $slug, string $token): Response|RedirectResponse
     {
         $invitation = TeamInvitation::usable($token);
 
         if (!$invitation instanceof TeamInvitation) {
-            return Inertia::render('auth/AcceptInvitation', ['state' => 'expired', 'invitation' => null, 'action' => null, 'trust_note' => false]);
+            return $this->expired();
+        }
+
+        if ($invitation->team?->slug !== $slug) {
+            return redirect()->to($this->invitations->link($invitation, $token));
         }
 
         $user = $request->user();
@@ -51,7 +63,7 @@ final class InvitationController extends Controller
         };
 
         if ($state === 'sign-in') {
-            redirect()->setIntendedUrl($this->invitations->link($token));
+            redirect()->setIntendedUrl($this->invitations->link($invitation, $token));
         }
 
         return Inertia::render('auth/AcceptInvitation', [
@@ -63,20 +75,20 @@ final class InvitationController extends Controller
                 'inviter' => $invitation->inviter?->name,
             ],
             'action' => match ($state) {
-                'register' => route('invitations.register', $token),
-                'join' => route('invitations.accept', $token),
+                'register' => route('invitations.register', ['slug' => $slug, 'token' => $token]),
+                'join' => route('invitations.accept', ['slug' => $slug, 'token' => $token]),
                 default => null,
             },
             'trust_note' => Edition::current()->isSelfHosted(),
         ]);
     }
 
-    public function register(Request $request, string $token): HttpResponse
+    public function register(Request $request, string $slug, string $token): HttpResponse
     {
         $invitation = TeamInvitation::usable($token);
 
         if (!$invitation instanceof TeamInvitation || User::findByEmail($invitation->email) instanceof User) {
-            return to_route('invitations.show', $token);
+            return to_route('invitations.show', ['slug' => $slug, 'token' => $token]);
         }
 
         $validated = $request->validate([
@@ -85,7 +97,7 @@ final class InvitationController extends Controller
         ]);
 
         try {
-            $user = DB::transaction(function () use ($invitation, $validated, $token): User {
+            $user = DB::transaction(function () use ($invitation, $validated, $slug, $token): User {
                 $user = new User;
                 $user->forceFill([
                     'name' => $validated['name'],
@@ -94,13 +106,13 @@ final class InvitationController extends Controller
                 ])->save();
 
                 if (!$this->invitations->join($invitation, $user)) {
-                    throw new HttpResponseException(to_route('invitations.show', $token));
+                    throw new HttpResponseException(to_route('invitations.show', ['slug' => $slug, 'token' => $token]));
                 }
 
                 return $user;
             });
         } catch (PDOException $exception) {
-            return $this->lostRace($exception, $token);
+            return $this->lostRace($exception, $slug, $token);
         }
 
         $this->invitations->syncKeys($invitation);
@@ -113,22 +125,22 @@ final class InvitationController extends Controller
         return $this->open($request, $invitation->team);
     }
 
-    public function accept(Request $request, string $token): HttpResponse
+    public function accept(Request $request, string $slug, string $token): HttpResponse
     {
         $invitation = TeamInvitation::usable($token);
 
         if (!$invitation instanceof TeamInvitation) {
-            return to_route('invitations.show', $token);
+            return to_route('invitations.show', ['slug' => $slug, 'token' => $token]);
         }
 
         try {
             $joined = $this->invitations->join($invitation, $request->user());
         } catch (PDOException $exception) {
-            return $this->lostRace($exception, $token);
+            return $this->lostRace($exception, $slug, $token);
         }
 
         if (!$joined) {
-            return to_route('invitations.show', $token);
+            return to_route('invitations.show', ['slug' => $slug, 'token' => $token]);
         }
 
         $this->invitations->syncKeys($invitation);
@@ -136,13 +148,18 @@ final class InvitationController extends Controller
         return $this->open($request, $invitation->team);
     }
 
-    private function lostRace(PDOException $exception, string $token): HttpResponse
+    private function expired(): Response
+    {
+        return Inertia::render('auth/AcceptInvitation', ['state' => 'expired', 'invitation' => null, 'action' => null, 'trust_note' => false]);
+    }
+
+    private function lostRace(PDOException $exception, string $slug, string $token): HttpResponse
     {
         if (!$exception instanceof UniqueConstraintViolationException && !$this->causedByConcurrencyError($exception)) {
             throw $exception;
         }
 
-        return to_route('invitations.show', $token);
+        return to_route('invitations.show', ['slug' => $slug, 'token' => $token]);
     }
 
     private function open(Request $request, ?Team $team): HttpResponse

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.26 (2026-11-19)
+
+### Changed
+- A server the internet can't reach on IPv4 can take visitors through a Cloudflare Tunnel (#139)
+- Invite links, deploy pages and project filters stop showing raw IDs (#138)
+- SQLite files survive every deploy, new Laravel apps start with production keys, and a failed switch shows its log (#137)
+
 ## v0.8.25 (2026-11-18)
 
 ### Changed
