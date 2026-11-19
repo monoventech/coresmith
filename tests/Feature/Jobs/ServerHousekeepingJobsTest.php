@@ -70,6 +70,21 @@ test('pruning keeps the newest releases and the live one even when the live one 
     }
 });
 
+test('pruning keeps the release previous points at, even when it is old', function () {
+    $names = ['20260901-000000', '20260902-000000', '20260903-000000', '20260904-000000', '20260905-000000', '20260906-000000', '20260907-000000', '20260908-000000'];
+    $root = housekeepingReleaseTree($names, live: '20260908-000000');
+    symlink($root . '/my-app/releases/20260902-000000', $root . '/my-app/previous');
+
+    try {
+        $removed = housekeepingPrune($root);
+
+        expect($removed)->toBe('2')
+            ->and(housekeepingRemaining($root))->toBe(['20260902-000000', '20260904-000000', '20260905-000000', '20260906-000000', '20260907-000000', '20260908-000000']);
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
 test('pruning removes every release beyond the newest five when the live one is among them', function () {
     $names = ['20260901-000000', '20260902-000000', '20260903-000000', '20260904-000000', '20260905-000000', '20260906-000000', '20260907-000000', '20260908-000000'];
     $root = housekeepingReleaseTree($names, live: '20260908-000000');
@@ -119,7 +134,8 @@ test('the prune command resolves the live release before deciding what to remove
 
     expect($command)->toStartWith('current=$(readlink -f /var/coresmith/apps/my-app/current 2>/dev/null || true); ')
         ->and($command)->toContain('tail -n +' . (ReleasePaths::KEEP_RELEASES + 1))
-        ->and($command)->toContain('[ "$dir" = "$current" ] || { rm -rf "$dir" && echo x; }');
+        ->and($command)->toContain('previous=$(readlink -f /var/coresmith/apps/my-app/previous 2>/dev/null || true); ')
+        ->and($command)->toContain('[ "$dir" = "$current" ] || [ "$dir" = "$previous" ] || { rm -rf "$dir" && echo x; }');
 });
 
 test('pruning a server runs once per application and logs the total removed', function () {

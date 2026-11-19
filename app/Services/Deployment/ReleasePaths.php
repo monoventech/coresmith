@@ -41,6 +41,22 @@ final class ReleasePaths
         return $this->base() . '/current';
     }
 
+    public function previous(): string
+    {
+        return $this->base() . '/previous';
+    }
+
+    public function keepPrevious(?string $before, string $now): ?string
+    {
+        if ($before === null || $before === '' || $before === $now) {
+            return null;
+        }
+
+        $previous = $this->previous();
+
+        return 'ln -sfn ' . escapeshellarg($before) . " {$previous}.tmp && mv -Tf {$previous}.tmp {$previous}";
+    }
+
     public function shared(): string
     {
         return $this->base() . '/shared';

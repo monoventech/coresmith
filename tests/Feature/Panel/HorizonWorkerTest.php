@@ -32,6 +32,7 @@ function horizonApp(bool $horizon, array $attributes = []): Application
         'run_migrations' => false,
         'base_port' => 8000,
         'stack' => horizonStack($horizon),
+        'env_variables' => "QUEUE_CONNECTION=redis\n",
         ...$attributes,
     ]);
 }
@@ -121,4 +122,24 @@ test('a rollback runs the worker its release had', function () {
     expect($application->fresh()->current_release)->toBe('20260912-090000')
         ->and(horizonWorker($application))->toBe(SmartToggles::QUEUE_COMMAND)
         ->and($transport->uploads()['/etc/systemd/system/coresmith-app-shop-queue.service'] ?? '')->toContain("\nExecStart=/usr/bin/env php artisan queue:work --sleep=3 --tries=3 --max-time=3600\n");
+});
+
+test('an app with horizon installed but a queue that is not on redis gets queue:work, and the switch says why', function (?string $variables) {
+    Queue::fake();
+    $application = horizonApp(true, ['env_variables' => $variables]);
+
+    app(SmartToggles::class)->apply($application, SmartToggles::QUEUE, true);
+
+    $row = collect(app(SmartToggles::class)->describe($application->fresh()))->firstWhere('key', SmartToggles::QUEUE);
+
+    expect(horizonWorker($application))->toBe(SmartToggles::QUEUE_COMMAND)
+        ->and($row['description'])->toBe('php artisan queue:work · Horizon runs once QUEUE_CONNECTION is redis')
+        ->and($row['busy_on'])->toBe('Starting the worker…');
+})->with([
+    'the database queue' => ["QUEUE_CONNECTION=database\n"],
+    'no queue connection set' => [null],
+]);
+
+test('horizon takes over once the queue connection is redis, whatever its case', function () {
+    expect(app(SmartToggles::class)->queueCommand(horizonApp(true, ['env_variables' => "QUEUE_CONNECTION=Redis\n"])))->toBe(SmartToggles::HORIZON_COMMAND);
 });

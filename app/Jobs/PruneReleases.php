@@ -60,7 +60,8 @@ final class PruneReleases implements ShouldQueue
         $keep = ReleasePaths::KEEP_RELEASES + 1;
 
         return "current=\$(readlink -f {$paths->current()} 2>/dev/null || true); "
+            . "previous=\$(readlink -f {$paths->previous()} 2>/dev/null || true); "
             . "ls -1dt {$releases}/*/ 2>/dev/null | sed 's:/\$::' | grep -E '/[0-9]{8}-?[0-9]{6}\$' | tail -n +{$keep} "
-            . '| while read -r dir; do [ "$dir" = "$current" ] || { rm -rf "$dir" && echo x; }; done | wc -l';
+            . '| while read -r dir; do [ "$dir" = "$current" ] || [ "$dir" = "$previous" ] || { rm -rf "$dir" && echo x; }; done | wc -l';
     }
 }

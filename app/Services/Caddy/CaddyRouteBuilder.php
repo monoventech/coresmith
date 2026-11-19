@@ -20,6 +20,16 @@ final class CaddyRouteBuilder
 {
     public const APPS_ROOT = '/var/coresmith/apps';
 
+    public const BUILT_FILES = ['*.js', '*.mjs', '*.css', '*.map', '*.json', '*.wasm', '*.woff', '*.woff2', '*.ttf', '*.otf', '*.eot', '*.svg', '*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.avif', '*.ico'];
+
+    public const REVALIDATE_PAGES = [
+        'handler' => 'headers',
+        'response' => [
+            'require' => ['headers' => ['Cache-Control' => null, 'Content-Type' => ['text/html*']]],
+            'set' => ['Cache-Control' => ['no-cache']],
+        ],
+    ];
+
     private const SECURITY_HEADERS = [
         'X-Frame-Options' => 'SAMEORIGIN',
         'X-Content-Type-Options' => 'nosniff',
@@ -242,6 +252,7 @@ final class CaddyRouteBuilder
                 'handle' => [
                     ...($route->servesFiles() ? [['handler' => 'vars', 'root' => $this->documentRoot($application)]] : []),
                     ...$this->securityHeaders(),
+                    ...(in_array($route, [Route::FileServer, Route::SinglePage], true) ? [self::REVALIDATE_PAGES] : []),
                     ['handler' => 'encode', 'encodings' => ['gzip' => (object) [], 'zstd' => (object) []], 'prefer' => ['gzip', 'zstd']],
                 ],
             ],
@@ -306,6 +317,7 @@ final class CaddyRouteBuilder
     {
         return match ($route) {
             Route::PhpFastcgi => [
+                $this->previousFiles($application),
                 [
                     'match' => [['file' => ['try_files' => ['{http.request.uri.path}/index.php']], 'not' => [['path' => ['*/']]]]],
                     'handle' => [[
@@ -338,6 +350,7 @@ final class CaddyRouteBuilder
                     'handle' => [['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}'], ['handler' => 'file_server']],
                     'terminal' => true,
                 ],
+                $this->previousFiles($application),
                 [
                     'match' => [['file' => ['try_files' => ['/404.html']]]],
                     'handle' => [['handler' => 'rewrite', 'uri' => '/404.html'], ['handler' => 'file_server', 'status_code' => 404]],
@@ -346,6 +359,7 @@ final class CaddyRouteBuilder
                 ['handle' => [['handler' => 'file_server']]],
             ],
             Route::SinglePage => [
+                $this->previousFiles($application),
                 [
                     'match' => [['file' => ['try_files' => ['{http.request.uri.path}', '{http.request.uri.path}/', '/index.html']]]],
                     'handle' => [['handler' => 'rewrite', 'uri' => '{http.matchers.file.relative}']],
@@ -368,9 +382,38 @@ final class CaddyRouteBuilder
         };
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function previousFiles(Application $application): array
+    {
+        $path = '{http.request.uri.path}';
+        $previous = $this->previousRoot($application);
+
+        return [
+            'match' => [[
+                'path' => self::BUILT_FILES,
+                'not' => [['file' => ['try_files' => [$path]]]],
+                'file' => ['root' => $previous, 'try_files' => [$path]],
+            ]],
+            'handle' => [['handler' => 'file_server', 'root' => $previous]],
+            'terminal' => true,
+        ];
+    }
+
     public function documentRoot(Application $application): string
     {
-        $base = self::APPS_ROOT . '/' . SafeName::assertSlug($application->slug) . '/current';
+        return $this->root($application, 'current');
+    }
+
+    public function previousRoot(Application $application): string
+    {
+        return $this->root($application, 'previous');
+    }
+
+    private function root(Application $application, string $release): string
+    {
+        $base = self::APPS_ROOT . '/' . SafeName::assertSlug($application->slug) . '/' . $release;
         $directory = trim((string) $application->directory, '/');
         $web = trim((string) $application->web_directory, '/');
 

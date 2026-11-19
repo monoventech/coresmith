@@ -98,6 +98,12 @@ final class RollbackApplication implements ShouldQueue
             $connection->execute("ln -sfn {$target} {$current}.tmp", sudo: true)->throw();
             $connection->execute("mv -Tf {$current}.tmp {$current}", sudo: true)->throw();
 
+            $keep = $paths->keepPrevious($previous === null ? null : $paths->release((string) $previous), $target);
+
+            if ($keep !== null) {
+                $connection->execute($keep, sudo: true);
+            }
+
             $name = basename($target);
             $stack = $this->stackFor($name);
             $before = $this->application->runtimeVersions();

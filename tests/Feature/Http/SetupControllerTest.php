@@ -135,7 +135,7 @@ test('a connected github installation is described', function () {
 
 test('setup offers the app\'s install page when an app exists', function (string $source) {
     $team = Team::factory()->create();
-    $key = $source === 'the environment' ? setupEnvironmentApp() : GitHubApp::factory()->for($team)->create()->id;
+    $key = $source === 'the environment' ? setupEnvironmentApp() : GitHubApp::factory()->for($team)->create()->slug;
 
     $this->actingAs(setupOwner($team))
         ->get(route('setup.show'))

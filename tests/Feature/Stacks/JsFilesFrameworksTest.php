@@ -46,7 +46,7 @@ test('Caddy serves the build and hands unknown paths to index.html, so client-si
     $application->save();
     $route = (new CaddyRouteBuilder)->build($application);
     $handlers = collect($route['handle'][0]['routes'])->flatMap(fn(array $subroute): array => $subroute['handle']);
-    $fallback = collect($route['handle'][0]['routes'])->first(fn(array $subroute): bool => isset($subroute['match'][0]['file']));
+    $fallback = collect($route['handle'][0]['routes'])->first(fn(array $subroute): bool => in_array('/index.html', $subroute['match'][0]['file']['try_files'] ?? [], true));
 
     expect($handlers->firstWhere('handler', 'vars')['root'])->toBe('/var/coresmith/apps/shop/current/dist')
         ->and($fallback['match'][0]['file']['try_files'])->toBe(['{http.request.uri.path}', '{http.request.uri.path}/', '/index.html'])

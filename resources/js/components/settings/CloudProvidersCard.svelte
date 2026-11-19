@@ -82,7 +82,9 @@
             <h3 class="type-h3 m-0">Cloud providers</h3>
             <span class="font-mono text-[12px] text-muted-foreground">{count}</span>
             {#if cloud.can_manage && cloud.accounts.length > 0}
-                <span class="ml-auto"><Button variant="ghost" size="sm" onclick={openAdd}>Add a provider</Button></span>
+                <span class="max-sm:-ml-3 max-sm:basis-full sm:ml-auto"
+                    ><Button variant="ghost" size="sm" onclick={openAdd}>Add a provider</Button></span
+                >
             {/if}
         </div>
         <p class="mt-1 mb-0 text-[12.5px] text-muted-foreground">
@@ -105,18 +107,21 @@
         <ul class="m-0 max-h-72 list-none overflow-y-auto p-0">
             {#each cloud.accounts as account (account.id)}
                 <li
-                    class="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-5.5 py-1.5 text-[13.5px]"
+                    class="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-5.5 py-1.5 text-[13.5px] max-sm:py-2.5"
                     data-testid="cloud-account-row"
                 >
-                    <span class="font-medium">{account.provider}</span>
-                    {#if account.name !== account.provider}
-                        <span class="min-w-0 truncate font-mono text-[12.5px]">{account.name}</span>
-                    {/if}
-                    {#if account.label}
-                        <span class="min-w-0 truncate font-mono text-[12px] text-muted-foreground">{account.label}</span
-                        >
-                    {/if}
-                    <span class="ml-auto flex flex-wrap items-center gap-2.5">
+                    <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <span class="font-medium whitespace-nowrap">{account.provider}</span>
+                        {#if account.name !== account.provider}
+                            <span class="min-w-0 truncate font-mono text-[12.5px]">{account.name}</span>
+                        {/if}
+                        {#if account.label}
+                            <span class="min-w-0 truncate font-mono text-[12px] text-muted-foreground"
+                                >{account.label}</span
+                            >
+                        {/if}
+                    </span>
+                    <span class="flex items-center gap-2.5">
                         {#if account.refused}
                             <Badge variant="destructive" title="Refused on {account.refused_on}">Token refused</Badge>
                         {:else}
@@ -125,20 +130,25 @@
                         <span class="text-[12.5px] text-muted-foreground"
                             >{account.servers === 1 ? '1 server' : `${account.servers} servers`}</span
                         >
-                        {#if cloud.can_manage}
+                    </span>
+                    {#if cloud.can_manage}
+                        <span
+                            class="flex items-center gap-1 max-sm:-ml-3 max-sm:basis-full"
+                            data-testid="cloud-account-actions"
+                        >
                             <Button variant="ghost" size="sm" onclick={() => askRename(account)}>Rename</Button>
                             <Button variant="ghost" size="sm" onclick={() => askReplace(account)}>Replace token</Button>
                             <button
                                 type="button"
-                                class="focus-ring inline-flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted max-sm:size-11"
+                                class="focus-ring inline-flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--dur-fast) hover:bg-muted max-sm:ml-auto max-sm:size-11"
                                 aria-label="Remove {account.name}"
                                 title="Remove {account.name}"
                                 onclick={() => askRemove(account)}
                             >
                                 <X class="size-4" />
                             </button>
-                        {/if}
-                    </span>
+                        </span>
+                    {/if}
                 </li>
             {/each}
         </ul>

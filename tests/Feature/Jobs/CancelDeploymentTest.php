@@ -325,7 +325,7 @@ test('a cancel that arrives as migrations start lets the deploy finish', functio
     $fresh = $deployment->fresh();
 
     expect($fresh->status)->toBe(DeploymentStatus::Succeeded)
-        ->and(cancelCommands($transport, 'mv -Tf'))->toHaveCount(1)
+        ->and(cancelCommands($transport, 'current.tmp /'))->toHaveCount(1)
         ->and($fresh->log)->toContain("\ncancel: asked after migrations started, so the deploy carried on\n")
         ->and($fresh->log)->toMatch('/\n\[\d{2}:\d{2}:\d{2}\] deployed\. previous release kept for instant rollback\.$/')
         ->and($deployment->application->fresh()->current_release)->toBe(CANCEL_RELEASE)

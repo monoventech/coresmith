@@ -295,8 +295,8 @@ test('a registered app with no installation is offered for install', function ()
                 'owner_type' => 'Organization',
                 'settings_url' => 'https://github.com/organizations/monoventech/settings/apps/coresmith-monoven',
                 'installed' => false,
-                'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->id]),
-                'link_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->id, 'mode' => 'link']),
+                'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->slug]),
+                'link_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->slug, 'mode' => 'link']),
                 'remove_href' => route('github-apps.destroy', $app),
             ]));
 });
@@ -339,8 +339,8 @@ test('with the environment app configured the team\'s own app is not offered', f
 test('connecting is offered to whoever can manage while an app is available', function (string $setup, string $role, bool $offered) {
     [$team, $user] = githubSettingsPropsTeam($role);
     $key = match ($setup) {
-        'an app with no connection' => githubSettingsPropsApp($team)->id,
-        'an app with a connection' => tap(githubSettingsPropsApp($team), fn(GitHubApp $app) => githubSettingsPropsConnection($team, $app))->id,
+        'an app with no connection' => githubSettingsPropsApp($team)->slug,
+        'an app with a connection' => tap(githubSettingsPropsApp($team), fn(GitHubApp $app) => githubSettingsPropsConnection($team, $app))->slug,
         'the environment app' => tap('env', fn() => githubSettingsPropsEnv()),
         'no app' => null,
     };

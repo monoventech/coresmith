@@ -1746,11 +1746,11 @@ test.describe('an app whose processes did not start', () => {
         )
         await expect(toggle(page, 'Solid Queue')).not.toBeChecked()
 
-        await expect(page.getByTestId('toggle-failed-log')).toHaveCount(0)
+        await expect(page.getByTestId('toggle-failed-log')).toBeHidden()
         await banner.getByRole('button', { name: 'Show the log' }).click()
         await expect(page.getByTestId('toggle-failed-log')).toContainText('bin/jobs: No such file or directory')
         await banner.getByRole('button', { name: 'Hide the log' }).click()
-        await expect(page.getByTestId('toggle-failed-log')).toHaveCount(0)
+        await expect(page.getByTestId('toggle-failed-log')).toBeHidden()
     })
 })
 

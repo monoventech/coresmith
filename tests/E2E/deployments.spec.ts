@@ -75,7 +75,7 @@ test.describe('the deployments list', () => {
         await page.waitForURL((url) => url.searchParams.has('project'))
         await expect(rows(page).first()).toBeVisible()
         await expect(rows(page).filter({ hasNotText: 'storefront' })).toHaveCount(0)
-        await expect(page.getByLabel('Project', { exact: true })).toHaveValue(/^[0-9a-z]{26}$/)
+        await expect(page.getByLabel('Project', { exact: true })).toHaveValue('storefront')
 
         await filters(page)
             .getByRole('link', { name: /^Deployed/ })
