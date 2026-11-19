@@ -10,6 +10,7 @@ namespace App\Services\Panel;
 
 use App\Enums\Edition;
 use App\Models\GitHubApp;
+use App\Models\Server;
 use App\Models\TeamSsoConnection;
 use App\Services\Address\AddressChange;
 use App\Services\Address\AddressCheck;
@@ -32,7 +33,7 @@ final class AddressPresenter
     ) {}
 
     /**
-     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, follow: ?array{github: ?string, sso: ?string}}|null
+     * @return array{host: string, url: string, certificate: string, managed: bool, ipv6_only: bool, change: ?array<string, mixed>, check: ?array<string, mixed>, reach: ?array<string, mixed>, cloudflare: array{connected: bool, host: ?string, error: ?string, synced: ?string}, machine: ?string, follow: ?array{github: ?string, sso: ?string}}|null
      */
     public function present(): ?array
     {
@@ -54,11 +55,19 @@ final class AddressPresenter
             'check' => AddressCheck::current(),
             'reach' => AddressReading::current($host),
             'cloudflare' => $this->cloudflare(),
+            'machine' => $this->machine(),
             'follow' => ($change['state'] ?? null) !== 'done' ? null : [
                 'github' => GitHubApp::query()->exists() ? route('source-providers.index') : null,
                 'sso' => TeamSsoConnection::query()->exists() ? $url . SignIn::CALLBACK_PATH : null,
             ],
         ];
+    }
+
+    private function machine(): ?string
+    {
+        $machine = Server::query()->where('runs_coresmith', true)->first();
+
+        return $machine === null ? null : route('servers.show', $machine);
     }
 
     private function ipv6Only(string $host): bool

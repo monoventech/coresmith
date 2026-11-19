@@ -11,6 +11,8 @@
     import type { Runtimes } from '@/components/servers/RuntimesCard.svelte'
     import ServerHeaderView from '@/components/servers/ServerHeader.svelte'
     import ServerMovePanel from '@/components/servers/ServerMovePanel.svelte'
+    import TunnelCard from '@/components/servers/TunnelCard.svelte'
+    import type { Tunnel } from '@/components/servers/TunnelCard.svelte'
     import StateDot from '@/components/StateDot.svelte'
     import { Button } from '@/components/ui/button'
     import type { EntityState } from '@/lib/fleet'
@@ -32,8 +34,9 @@
     let {
         server,
         applications = [],
-        runtimes
-    }: { server: ServerHeader; applications: AppRow[]; runtimes: Runtimes } = $props()
+        runtimes,
+        tunnel = null
+    }: { server: ServerHeader; applications: AppRow[]; runtimes: Runtimes; tunnel?: Tunnel | null } = $props()
 
     const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
@@ -53,6 +56,10 @@
 
 {#if server.move}
     <ServerMovePanel move={server.move} server={server.id} />
+{/if}
+
+{#if tunnel && !server.provisioning}
+    <TunnelCard {tunnel} server={server.key} name={server.name} />
 {/if}
 
 {#if server.provisioning}

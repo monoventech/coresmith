@@ -1,6 +1,6 @@
 export type DnsRecord = { type: string; name: string; value: string; note?: string | null }
 
-export type DnsTarget = { type: string; value: string; closed: boolean }
+export type DnsTarget = { type: string; value: string; closed: boolean; note?: string | null }
 
 export type DnsRow = { type: string; name?: string | null; value: string; closed?: boolean; note?: string | null }
 

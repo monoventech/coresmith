@@ -103,7 +103,7 @@ test.describe("Coresmith's address", () => {
         })
 
         await expect(card(page).getByTestId('address-ipv6-only')).toHaveText(
-            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. Turn on Cloudflare's proxy for it to fix that. If you can forward ports 80 and 443 to this server, an A record for its IPv4 address works too."
+            "coresmith.example.com has only an IPv6 address, so people without IPv6 can't open Coresmith. To fix that, turn on IPv4 through Cloudflare on this machine's page. If you can forward ports 80 and 443 to this server, an A record for its IPv4 address works too."
         )
         await expect(card(page).getByTestId('address-ipv6-records')).toHaveCount(0)
     })

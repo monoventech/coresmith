@@ -101,7 +101,7 @@ final class Reachability
         }
 
         return match (true) {
-            $lan !== null => "{$closed} Forward ports 80 and 443 on your router to {$lan}, then add an A record pointing at {$direct->address}. If your provider shares that address with other customers, this server needs IPv6 instead.",
+            $lan !== null => "{$closed} Forward ports 80 and 443 on your router to {$lan}, then add an A record pointing at {$direct->address}. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server's page.",
             $stable !== [] => "{$closed} Open ports 80 and 443 in your provider's firewall and add an A record pointing at {$direct->address}, or add an AAAA record pointing at {$stable[0]} for visitors with IPv6. Then check again.",
             default => "{$closed} Open ports 80 and 443 in your provider's firewall, then add an A record pointing at {$direct->address}.",
         };
@@ -175,7 +175,7 @@ final class Reachability
 
         $problems[] = match (true) {
             $lan === null => "{$problem} Open those ports in your provider's firewall, then check again.",
-            $stable === [] => "{$problem} Forward those ports on your router to {$lan}, then check again. If your provider shares that address with other customers, this server needs IPv6 instead.",
+            $stable === [] => "{$problem} Forward those ports on your router to {$lan}, then check again. If your provider shares that address with other customers, use IPv6, or turn on IPv4 through Cloudflare on the server's page.",
             default => "{$problem} Add an AAAA record pointing at {$stable[0]}, remove the A record and turn on Cloudflare's proxy for {$host}, so visitors without IPv6 reach it too. Keep the A record only if you can forward ports 80 and 443 to {$lan}. Then check again.",
         };
 
