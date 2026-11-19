@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.27 (2026-11-19)
+
+### Changed
+- A page opened before a deploy keeps loading its files from the release before (#143)
+- GitHub connect links use the app's slug, cloud accounts read cleanly on phones, and Horizon runs only on a Redis queue (#142)
+- Static apps' pages are checked again on every visit, and the browser specs catch up with 0.8.26 (#141)
+
 ## v0.8.26 (2026-11-19)
 
 ### Changed
