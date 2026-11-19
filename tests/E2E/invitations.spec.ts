@@ -135,6 +135,7 @@ test.describe('inviting someone without an account', () => {
 
     test('someone signed in with another account is told to sign out first', async ({ page }) => {
         await page.goto(`/invitations/${WAITING_INVITATION}`)
+        await expect(page).toHaveURL(new RegExp(`/join/[a-z0-9-]+/${WAITING_INVITATION}$`))
 
         await expect(
             page.getByText('This invitation is for waiting@coresmith.test. Sign out, then open the link again.')

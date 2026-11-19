@@ -120,7 +120,7 @@ final class ProjectPresenter
                 ->get()
                 ->map(fn(Deployment $deployment): array => DeploymentPresenter::row($deployment))
                 ->all(),
-            'deploys_href' => route('deployments.index', ['project' => $project->getKey()]),
+            'deploys_href' => route('deployments.index', ['project' => $project->handle ?? $project->getKey()]),
             'servers' => $servers->map(fn(Server $server): array => $this->server($fleet, $viewer, $server))->values()->all(),
             'people' => $shares ? $this->people($project) : null,
             'access_href' => $shares ? route('teams.index') : null,
@@ -330,7 +330,7 @@ final class ProjectPresenter
     private function addTargets(Project $project, User $viewer): array
     {
         return $this->access->servers($viewer, $project->team)->orderBy('name')->get()
-            ->map(fn(Server $server): array => ['name' => $server->name, 'href' => route('servers.applications.create', [$server, 'project' => $project->getKey()])])
+            ->map(fn(Server $server): array => ['name' => $server->name, 'href' => route('servers.applications.create', [$server, 'project' => $project->handle ?? $project->getKey()])])
             ->values()
             ->all();
     }

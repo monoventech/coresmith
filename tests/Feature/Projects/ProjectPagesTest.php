@@ -107,13 +107,13 @@ test('the project page shows each app with its stack, server, domain and last de
             ->where('databases.0.type', 'postgresql')
             ->where('databases.0.remove_href', route('projects.databases.destroy', [$fleet['project'], $fleet['shopDb']]))
             ->where('deploys.0.application', 'shop')
-            ->where('deploys_href', route('deployments.index', ['project' => $id]))
+            ->where('deploys_href', route('deployments.index', ['project' => $fleet['project']->handle]))
             ->where('servers', fn($servers): bool => collect($servers)->map(fn(array $server): array => [$server['name'], $server['href']])->all() === [['db', route('servers.show', $fleet['db'])], ['web', route('servers.show', $fleet['web'])]])
             ->where('people', [['name' => $fleet['owner']->name, 'role' => 'Owner', 'reach' => 'Sees everything']])
             ->where('access_href', route('teams.index'))
             ->where('add', [
-                ['name' => 'db', 'href' => route('servers.applications.create', [$fleet['db'], 'project' => $id])],
-                ['name' => 'web', 'href' => route('servers.applications.create', [$fleet['web'], 'project' => $id])],
+                ['name' => 'db', 'href' => route('servers.applications.create', [$fleet['db'], 'project' => $fleet['project']->handle])],
+                ['name' => 'web', 'href' => route('servers.applications.create', [$fleet['web'], 'project' => $fleet['project']->handle])],
             ])
             ->where('can', ['manage' => true, 'fill' => true])
             ->where('shared_part', false)

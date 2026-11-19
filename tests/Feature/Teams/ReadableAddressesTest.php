@@ -51,7 +51,7 @@ test('renaming changes the handle and remembers the old one, which takes you to 
     $this->get('/servers/edge')->assertOk()->assertInertia(fn($page) => $page->where('server.id', $server->id));
 });
 
-test('addresses use handles, database names and release names', function () {
+test('addresses use handles, database names and deploy numbers', function () {
     $team = Team::factory()->owned()->create();
     $server = Server::factory()->for($team)->create(['name' => 'vps-1']);
     $application = Application::factory()->for($team)->for($server)->create(['name' => 'ledger']);
@@ -62,8 +62,9 @@ test('addresses use handles, database names and release names', function () {
     expect(route('servers.show', $server, false))->toBe('/servers/vps-1')
         ->and(route('servers.applications.show', [$server, $application], false))->toBe('/servers/vps-1/applications/ledger')
         ->and(route('servers.databases.show', [$server, $database], false))->toBe('/servers/vps-1/databases/ledger_production')
-        ->and(route('servers.applications.deployments.show', [$server, $application, $deployment], false))->toBe('/servers/vps-1/applications/ledger/deployments/20261117-030400')
-        ->and(route('projects.show', $project, false))->toBe('/projects/side-quests');
+        ->and(route('servers.applications.deployments.show', [$server, $application, $deployment], false))->toBe('/servers/vps-1/applications/ledger/deployments/1')
+        ->and(route('projects.show', $project, false))->toBe('/projects/side-quests')
+        ->and(route('teams.show', $team, false))->toBe("/teams/{$team->slug}");
 });
 
 test("an old address with an id, or an app's slug, takes you to the readable address", function () {
@@ -80,8 +81,27 @@ test("an old address with an id, or an app's slug, takes you to the readable add
     $this->get("/servers/{$server->id}/applications/{$application->id}")->assertRedirect('/servers/vps-1/applications/ledger');
     $this->get('/servers/vps-1/applications/ledger-x1y')->assertRedirect('/servers/vps-1/applications/ledger');
     $this->get("/servers/{$server->id}/databases/{$database->id}")->assertRedirect('/servers/vps-1/databases/ledger_production');
-    $this->get("/servers/vps-1/applications/ledger/deployments/{$deployment->id}")->assertRedirect('/servers/vps-1/applications/ledger/deployments/20261117-030400');
+    $this->get("/servers/vps-1/applications/ledger/deployments/{$deployment->id}")->assertRedirect('/servers/vps-1/applications/ledger/deployments/1');
+    $this->get('/servers/vps-1/applications/ledger/deployments/20261117-030400')->assertRedirect('/servers/vps-1/applications/ledger/deployments/1');
     $this->get(route('servers.applications.show', [$server, $application]))->assertOk();
+});
+
+test('each app numbers its deploys from 1 as they are made, so a deploy has its address before it starts', function () {
+    $team = Team::factory()->owned()->create();
+    $server = Server::factory()->for($team)->create(['name' => 'vps-1']);
+    $ledger = Application::factory()->for($team)->for($server)->create(['name' => 'ledger']);
+    $blog = Application::factory()->for($team)->for($server)->create(['name' => 'blog']);
+
+    $first = Deployment::factory()->for($ledger)->create(['status' => DeploymentStatus::Pending, 'release' => null]);
+    $second = Deployment::factory()->for($ledger)->create(['status' => DeploymentStatus::Pending, 'release' => null]);
+    $other = Deployment::factory()->for($blog)->create(['status' => DeploymentStatus::Pending, 'release' => null]);
+
+    expect([$first->number, $second->number, $other->number])->toBe([1, 2, 1])
+        ->and($ledger->fresh()->deploy_count)->toBe(2)
+        ->and(route('servers.applications.deployments.show', [$server, $ledger, $second], false))->toBe('/servers/vps-1/applications/ledger/deployments/2');
+
+    $this->actingAs($team->owner)->get('/servers/vps-1/applications/ledger/deployments/2')->assertOk();
+    $this->get('/servers/vps-1/applications/blog/deployments/2')->assertNotFound();
 });
 
 test('a form sent to an old address still works', function () {

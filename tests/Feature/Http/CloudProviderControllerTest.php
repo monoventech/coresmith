@@ -237,11 +237,14 @@ test('connecting from the provision form goes back to it with the account picked
     $response = $this->actingAs($user)
         ->post(route('cloud-providers.store'), ['type' => 'hetzner', 'name' => 'Hetzner Cloud', 'api_token' => 'tok-1', 'return_to' => $from]);
 
-    $response->assertRedirect($target(CloudProvider::query()->sole()))
+    $account = CloudProvider::query()->sole();
+
+    $response->assertRedirect($target())
+        ->assertSessionHas('account', $account->id)
         ->assertSessionHas('success', 'Connected. Pick a region and a size.');
 })->with([
-    'the provision form' => ['provision', fn(CloudProvider $account): string => route('servers.create', ['account' => $account->id])],
-    'setup' => ['setup', fn(CloudProvider $account): string => route('setup.show', ['step' => 1, 'account' => $account->id])],
+    'the provision form' => ['provision', fn(): string => route('servers.create')],
+    'setup' => ['setup', fn(): string => route('setup.show', ['step' => 1])],
 ]);
 
 test('a replacement token must see the servers made with the account', function () {
