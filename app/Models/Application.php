@@ -13,6 +13,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationType;
 use App\Enums\PowerState;
 use App\Enums\SourceProviderType;
+use App\Jobs\SyncServerTunnel;
 use App\Models\Concerns\HasHandle;
 use App\Models\Concerns\IgnoresJsonKeyOrder;
 use App\Models\Concerns\RecordsWhoAdded;
@@ -79,7 +80,22 @@ class Application extends Model
             }
         });
 
-        static::deleted(fn(self $application) => MonitorAlert::closeAllFor($application));
+        static::created(function (self $application): void {
+            if ($application->allDomains() !== []) {
+                SyncServerTunnel::whenCarrying($application->server);
+            }
+        });
+
+        static::updated(function (self $application): void {
+            if ($application->wasChanged(['domain', 'additional_domains'])) {
+                SyncServerTunnel::whenCarrying($application->server);
+            }
+        });
+
+        static::deleted(function (self $application): void {
+            MonitorAlert::closeAllFor($application);
+            SyncServerTunnel::whenCarrying($application->server);
+        });
     }
 
     /**

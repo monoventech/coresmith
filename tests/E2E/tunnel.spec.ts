@@ -1,0 +1,128 @@
+import type { Page } from '@playwright/test'
+import { blockingViolations, dialog, expect, gotoServer, test, useTheme, withProps } from './support/fixtures'
+
+test.use({ reducedMotion: 'reduce' })
+
+const SERVER = 'forge-01'
+
+const CLOSED = {
+    state: 'off',
+    ipv4: '151.226.169.196',
+    hosts: [],
+    skipped: [],
+    error: null,
+    checked: null,
+    cloudflare: false,
+    can_manage: true
+}
+
+const OPEN = {
+    ...CLOSED,
+    state: 'open',
+    hosts: ['beelink.example.com', 'notes.example.com', 'www.notes.example.com'],
+    skipped: [{ host: 'shop.example.net', reason: 'shop.example.net points at 198.51.100.9, which isn\'t this server, so Coresmith left it alone.' }],
+    checked: '4 minutes ago',
+    cloudflare: true
+}
+
+async function serverShowing(page: Page, tunnel: Record<string, unknown>) {
+    await withProps(page, /\/servers\/[\w.-]+$/, (props) => {
+        props.tunnel = tunnel
+    })
+    await gotoServer(page, SERVER)
+
+    return page.getByTestId('tunnel-card')
+}
+
+test.describe('IPv4 through Cloudflare', () => {
+    test('a server the internet cannot reach on IPv4 says why and offers the tunnel, in light', async ({ page }) => {
+        await useTheme(page, 'light')
+        const card = await serverShowing(page, CLOSED)
+
+        await expect(card.getByRole('heading', { level: 2, name: 'IPv4 through Cloudflare' })).toBeVisible()
+        await expect(card.getByText('IPv4 closed', { exact: true })).toBeVisible()
+        await expect(card).toContainText(
+            "The internet can't reach 151.226.169.196 on ports 80 and 443, so people without IPv6 can't open the apps on this server."
+        )
+        expect(await blockingViolations(page)).toEqual([])
+
+        await card.getByRole('button', { name: 'Turn on' }).click()
+
+        await expect(dialog(page).getByRole('heading', { name: 'Turn on IPv4 through Cloudflare' })).toBeVisible()
+        await expect(dialog(page).getByLabel('Cloudflare API token')).toBeVisible()
+        await expect(dialog(page)).toContainText('Account, Cloudflare Tunnel, Edit and Zone, DNS, Edit')
+        expect(await blockingViolations(page)).toEqual([])
+
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('with the tunnel on, the card counts the domains, lists them on request and names those left alone, in dark', async ({
+        page
+    }) => {
+        await useTheme(page, 'dark')
+        const card = await serverShowing(page, OPEN)
+
+        await expect(card.getByText('On', { exact: true })).toBeVisible()
+        await expect(card.getByTestId('tunnel-summary')).toHaveText(
+            '3 domains reach this server through Cloudflare, over IPv4 and IPv6.'
+        )
+        await expect(card.getByTestId('tunnel-hosts')).toBeHidden()
+
+        await card.getByRole('button', { name: 'Show the domains' }).click()
+
+        await expect(card.getByTestId('tunnel-hosts').getByRole('listitem')).toHaveText([
+            'beelink.example.com',
+            'notes.example.com',
+            'www.notes.example.com'
+        ])
+        await expect(card.getByTestId('tunnel-skipped')).toContainText(
+            "shop.example.net points at 198.51.100.9, which isn't this server, so Coresmith left it alone."
+        )
+        await expect(card).toContainText('Checked 4 minutes ago.')
+        expect(await blockingViolations(page)).toEqual([])
+    })
+
+    test('turning off asks first and says what happens to the domains', async ({ page }) => {
+        const card = await serverShowing(page, OPEN)
+
+        await card.getByRole('button', { name: 'Turn off' }).click()
+
+        await expect(dialog(page).getByRole('heading', { name: 'Turn off the tunnel?' })).toBeVisible()
+        await expect(dialog(page)).toContainText(
+            `Coresmith points 3 domains back at ${SERVER}'s own addresses, then removes the tunnel and its connector. People without IPv6 can't reach them after that.`
+        )
+        expect(await blockingViolations(page)).toEqual([])
+
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('a tunnel that did not finish says why and offers to try again', async ({ page }) => {
+        const card = await serverShowing(page, {
+            ...CLOSED,
+            state: 'failed',
+            cloudflare: true,
+            error: "Cloudflare's connector is running on forge-01, but Cloudflare hasn't seen it connect after a minute. Check that forge-01 can reach the internet, then try again."
+        })
+
+        await expect(card.getByText("Didn't finish", { exact: true })).toBeVisible()
+        await expect(card.getByTestId('tunnel-error')).toContainText("Cloudflare hasn't seen it connect after a minute")
+        await expect(card.getByRole('button', { name: 'Try again' })).toBeVisible()
+        await expect(card.getByRole('button', { name: 'Turn off' })).toBeVisible()
+    })
+
+    test('while the tunnel is being set up, the card says what is happening and offers no buttons', async ({ page }) => {
+        const card = await serverShowing(page, { ...CLOSED, state: 'opening', cloudflare: true })
+
+        await expect(card.getByRole('status')).toContainText(`Installing Cloudflare's connector on ${SERVER}`)
+        await expect(card.getByRole('button')).toHaveCount(0)
+    })
+
+    test('people who do not manage Coresmith see the problem but no switch', async ({ page }) => {
+        const card = await serverShowing(page, { ...CLOSED, can_manage: false })
+
+        await expect(card).toContainText('Someone who manages Coresmith can turn this on.')
+        await expect(card.getByRole('button', { name: 'Turn on' })).toHaveCount(0)
+    })
+})

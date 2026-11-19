@@ -8,24 +8,20 @@ declare(strict_types=1);
 
 namespace App\Services\Address;
 
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use SensitiveParameter;
 
 final class CloudflareDns
 {
     public const COMMENT = 'Managed by Coresmith';
 
-    private const TIMEOUT_SECONDS = 15;
+    public function __construct(private readonly CloudflareApi $api) {}
 
-    private const UNREACHABLE = "Coresmith couldn't reach Cloudflare, so nothing changed. Try again in a minute.";
-
-    public function refusal(string $token): ?string
+    public function refusal(#[SensitiveParameter] string $token): ?string
     {
         try {
-            $verify = $this->get($token, '/user/tokens/verify');
-            $zones = ($verify['result']['status'] ?? null) === 'active' ? $this->get($token, '/zones', ['per_page' => 1]) : null;
+            $verify = $this->api->get($token, '/user/tokens/verify');
+            $zones = ($verify['result']['status'] ?? null) === 'active' ? $this->api->get($token, '/zones', ['per_page' => 1]) : null;
         } catch (RuntimeException) {
             $verify = null;
             $zones = null;
@@ -39,17 +35,17 @@ final class CloudflareDns
     }
 
     /**
-     * @return array{id: string, name: string}|null
+     * @return array{id: string, name: string, account: string}|null
      */
-    public function zone(string $token, string $host): ?array
+    public function zone(#[SensitiveParameter] string $token, string $host): ?array
     {
         $labels = explode('.', $host);
 
         while (count($labels) >= 2) {
-            $zone = $this->get($token, '/zones', ['name' => implode('.', $labels)])['result'][0] ?? null;
+            $zone = $this->api->get($token, '/zones', ['name' => implode('.', $labels)])['result'][0] ?? null;
 
             if (is_array($zone) && is_string($zone['id'] ?? null)) {
-                return ['id' => $zone['id'], 'name' => (string) ($zone['name'] ?? '')];
+                return ['id' => $zone['id'], 'name' => (string) ($zone['name'] ?? ''), 'account' => (string) ($zone['account']['id'] ?? '')];
             }
 
             array_shift($labels);
@@ -58,59 +54,119 @@ final class CloudflareDns
         return null;
     }
 
-    public function point(string $token, string $zone, string $host, string $type, string $content): void
+    public function point(#[SensitiveParameter] string $token, string $zone, string $host, string $type, string $content): void
     {
-        $records = array_values(array_filter((array) ($this->get($token, "/zones/{$zone}/dns_records", ['type' => $type, 'name' => $host])['result'] ?? []), is_array(...)));
+        $records = array_values(array_filter((array) ($this->api->get($token, "/zones/{$zone}/dns_records", ['type' => $type, 'name' => $host])['result'] ?? []), is_array(...)));
         $first = array_shift($records);
         $record = ['type' => $type, 'name' => $host, 'content' => $content, 'ttl' => 1, 'proxied' => false, 'comment' => self::COMMENT];
 
         if ($first === null) {
-            $this->send($token, 'post', "/zones/{$zone}/dns_records", $record);
+            $this->api->send($token, 'post', "/zones/{$zone}/dns_records", $record);
         } elseif (@inet_pton((string) ($first['content'] ?? '')) !== @inet_pton($content)) {
-            $this->send($token, 'patch', "/zones/{$zone}/dns_records/{$first['id']}", [...$record, 'proxied' => ($first['proxied'] ?? false) === true]);
+            $this->api->send($token, 'patch', "/zones/{$zone}/dns_records/{$first['id']}", [...$record, 'proxied' => ($first['proxied'] ?? false) === true]);
         }
 
         foreach ($records as $extra) {
-            $this->send($token, 'delete', "/zones/{$zone}/dns_records/{$extra['id']}");
+            $this->api->send($token, 'delete', "/zones/{$zone}/dns_records/{$extra['id']}");
         }
     }
 
     /**
-     * @param  array<string, scalar>  $query
-     * @return array<string, mixed>
+     * @param  list<string>  $own
      */
-    private function get(string $token, string $path, array $query = []): array
+    public function routeToTunnel(#[SensitiveParameter] string $token, string $zone, string $host, string $target, array $own, bool $create = true): ?string
     {
-        return $this->send($token, 'get', $path, $query);
-    }
+        $records = $this->records($token, $zone, $host);
+        $alias = array_values(array_filter($records, fn(array $record): bool => ($record['type'] ?? null) === 'CNAME'))[0] ?? null;
 
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    private function send(string $token, string $method, string $path, array $data = []): array
-    {
-        $api = rtrim((string) config('coresmith.address.cloudflare_api'), '/');
+        if ($alias !== null) {
+            if (self::sameName((string) ($alias['content'] ?? ''), $target)) {
+                if (($alias['proxied'] ?? false) !== true) {
+                    $this->api->send($token, 'patch', "/zones/{$zone}/dns_records/{$alias['id']}", ['proxied' => true]);
+                }
 
-        if ($api === '') {
-            throw new RuntimeException(self::UNREACHABLE);
+                return null;
+            }
+
+            return "{$host} points at {$alias['content']}, so Coresmith left it alone.";
+        }
+
+        $addresses = array_values(array_filter($records, fn(array $record): bool => in_array($record['type'] ?? null, ['A', 'AAAA'], true)));
+
+        foreach ($addresses as $record) {
+            if (!self::listed((string) ($record['content'] ?? ''), $own)) {
+                return "{$host} points at {$record['content']}, which isn't this server, so Coresmith left it alone.";
+            }
+        }
+
+        if ($addresses === [] && !$create) {
+            return '';
+        }
+
+        foreach ($addresses as $record) {
+            $this->api->send($token, 'delete', "/zones/{$zone}/dns_records/{$record['id']}");
         }
 
         try {
-            $response = Http::withToken($token)->acceptJson()->timeout(self::TIMEOUT_SECONDS)->{$method}($api . $path, $data);
-        } catch (ConnectionException) {
-            throw new RuntimeException(self::UNREACHABLE);
+            $this->api->send($token, 'post', "/zones/{$zone}/dns_records", ['type' => 'CNAME', 'name' => $host, 'content' => $target, 'ttl' => 1, 'proxied' => true, 'comment' => self::COMMENT]);
+        } catch (RuntimeException $refused) {
+            foreach ($addresses as $record) {
+                rescue(fn() => $this->api->send($token, 'post', "/zones/{$zone}/dns_records", [
+                    'type' => $record['type'],
+                    'name' => $host,
+                    'content' => $record['content'],
+                    'ttl' => $record['ttl'] ?? 1,
+                    'proxied' => ($record['proxied'] ?? false) === true,
+                    'comment' => $record['comment'] ?? self::COMMENT,
+                ]), report: false);
+            }
+
+            throw $refused;
         }
 
-        if (!$response->successful() || $response->json('success') !== true) {
-            throw new RuntimeException('Cloudflare refused the change: ' . $this->reason($response) . '.');
-        }
-
-        return (array) $response->json();
+        return null;
     }
 
-    private function reason(Response $response): string
+    /**
+     * @param  list<array{type: string, value: string}>  $restore
+     */
+    public function routeAway(#[SensitiveParameter] string $token, string $zone, string $host, string $target, array $restore): void
     {
-        return rtrim((string) ($response->json('errors.0.message') ?? "HTTP {$response->status()}"), '.');
+        foreach ($this->records($token, $zone, $host, 'CNAME') as $record) {
+            if (($record['type'] ?? null) !== 'CNAME' || !self::sameName((string) ($record['content'] ?? ''), $target)) {
+                continue;
+            }
+
+            $this->api->send($token, 'delete', "/zones/{$zone}/dns_records/{$record['id']}");
+
+            foreach ($restore as $address) {
+                $this->api->send($token, 'post', "/zones/{$zone}/dns_records", ['type' => $address['type'], 'name' => $host, 'content' => $address['value'], 'ttl' => 1, 'proxied' => false, 'comment' => self::COMMENT]);
+            }
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function records(#[SensitiveParameter] string $token, string $zone, string $host, ?string $type = null): array
+    {
+        $query = [...($type === null ? [] : ['type' => $type]), 'name' => $host, 'per_page' => 100];
+
+        return array_values(array_filter((array) ($this->api->get($token, "/zones/{$zone}/dns_records", $query)['result'] ?? []), is_array(...)));
+    }
+
+    /**
+     * @param  list<string>  $own
+     */
+    private static function listed(string $address, array $own): bool
+    {
+        $packed = @inet_pton($address);
+
+        return $packed !== false && array_filter($own, fn(string $mine): bool => @inet_pton($mine) === $packed) !== [];
+    }
+
+    private static function sameName(string $one, string $other): bool
+    {
+        return strtolower(rtrim($one, '.')) === strtolower(rtrim($other, '.'));
     }
 }

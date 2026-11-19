@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Server extends Model
@@ -132,6 +133,11 @@ class Server extends Model
     public function databases(): HasMany
     {
         return $this->hasMany(ManagedDatabase::class);
+    }
+
+    public function tunnel(): HasOne
+    {
+        return $this->hasOne(ServerTunnel::class);
     }
 
     public function metrics(): HasMany

@@ -49,6 +49,8 @@ final class CaddyApiClient
 
     public const STAGED_CONFIG_FILE = '/etc/caddy/caddy-config.staged.json';
 
+    public const LOOPBACK = ['127.0.0.1/32', '::1/128'];
+
     public const RETRIES = 3;
 
     public const RETRY_SECONDS = 2;
@@ -128,6 +130,21 @@ final class CaddyApiClient
         $this->changing($connection, function () use ($connection): void {
             $this->request($connection, 'POST', self::SERVER_PATH . '/read_timeout', CaddyInstaller::READ_TIMEOUT, retry: false);
             $this->delete($connection, self::SERVER_PATH . '/write_timeout');
+            $this->persistConfig($connection);
+        });
+    }
+
+    public function trustLoopback(SSHConnection $connection, bool $trust): void
+    {
+        $this->changing($connection, function () use ($connection, $trust): void {
+            $this->delete($connection, self::SERVER_PATH . '/trusted_proxies');
+            $this->delete($connection, self::SERVER_PATH . '/client_ip_headers');
+
+            if ($trust) {
+                $this->request($connection, 'PUT', self::SERVER_PATH . '/trusted_proxies', ['source' => 'static', 'ranges' => self::LOOPBACK], retry: false);
+                $this->request($connection, 'PUT', self::SERVER_PATH . '/client_ip_headers', ['Cf-Connecting-Ip', 'X-Forwarded-For'], retry: false);
+            }
+
             $this->persistConfig($connection);
         });
     }
