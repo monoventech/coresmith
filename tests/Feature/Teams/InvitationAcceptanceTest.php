@@ -19,6 +19,7 @@ use Illuminate\Testing\TestResponse;
 use Laravel\Fortify\Features;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\CloudBilling;
+use Tests\Support\InvitationLinks;
 
 /**
  * @return array{TeamInvitation, string}
@@ -42,7 +43,7 @@ function invitationAcceptanceInvite(array $attributes = [], ?Team $team = null):
 
 function invitationAcceptanceAccount(string $token, array $overrides = []): TestResponse
 {
-    return test()->from(route('invitations.show', $token))->post(route('invitations.register', $token), [
+    return test()->from(InvitationLinks::route('invitations.show', $token))->post(InvitationLinks::route('invitations.register', $token), [
         'name' => 'Noor Haddad',
         'password' => 'a-long-enough-passphrase',
         'password_confirmation' => 'a-long-enough-passphrase',
@@ -53,7 +54,7 @@ function invitationAcceptanceAccount(string $token, array $overrides = []): Test
 test('an invitation that cannot be used says so and names no team', function (Closure $make) {
     $token = $make();
 
-    $this->get(route('invitations.show', $token))
+    $this->get(InvitationLinks::route('invitations.show', $token))
         ->assertOk()
         ->assertInertia(fn($page) => $page
             ->component('auth/AcceptInvitation')
@@ -82,19 +83,34 @@ test('an invitation that cannot be used says so and names no team', function (Cl
 test('someone with no account is asked for a name and a password', function () {
     [, $token] = invitationAcceptanceInvite();
 
-    $this->get(route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page
         ->component('auth/AcceptInvitation')
         ->where('state', 'register')
         ->where('invitation', ['team' => 'Acme Labs', 'email' => 'newcomer@example.com', 'role' => 'Admin', 'inviter' => 'Maya Lindqvist'])
-        ->where('action', route('invitations.register', $token))
+        ->where('action', InvitationLinks::route('invitations.register', $token))
         ->where('trust_note', true));
+});
+
+test('the link reads join, the team and a short code, and a link from before 0.8.26 still opens it', function () {
+    [, $token] = invitationAcceptanceInvite();
+
+    expect(InvitationLinks::route('invitations.show', $token))->toBe("http://localhost/join/acme/{$token}");
+
+    $this->get("/invitations/{$token}")->assertRedirect("http://localhost/join/acme/{$token}");
+    $this->get('/invitations/' . Str::random(40))->assertOk()->assertInertia(fn($page) => $page->component('auth/AcceptInvitation')->where('state', 'expired')->where('invitation', null));
+});
+
+test('a link whose team has since changed its address goes to the address the team has now', function () {
+    [, $token] = invitationAcceptanceInvite();
+
+    $this->get("/join/old-acme/{$token}")->assertRedirect("http://localhost/join/acme/{$token}");
 });
 
 test('the trust note is for self-hosted panels only', function () {
     CloudBilling::enable();
     [, $token] = invitationAcceptanceInvite([], Team::factory()->subscribed(Plan::Pro)->create(['name' => 'Acme Labs', 'slug' => 'acme']));
 
-    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'register')->where('trust_note', false));
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'register')->where('trust_note', false));
 });
 
 test('creating the account joins the team with the invited role and opens its fleet', function () {
@@ -132,8 +148,8 @@ test('the team opens in a full page load, so its links carry the team address', 
     [, $second] = invitationAcceptanceInvite(['email' => 'second@example.com'], Team::query()->where('slug', 'acme')->sole());
 
     $this->withHeader('X-Inertia', 'true')
-        ->from(route('invitations.show', $second))
-        ->post(route('invitations.register', $second), ['name' => 'Sam Okafor', 'password' => 'a-long-enough-passphrase', 'password_confirmation' => 'a-long-enough-passphrase'])
+        ->from(InvitationLinks::route('invitations.show', $second))
+        ->post(InvitationLinks::route('invitations.register', $second), ['name' => 'Sam Okafor', 'password' => 'a-long-enough-passphrase', 'password_confirmation' => 'a-long-enough-passphrase'])
         ->assertStatus(409)
         ->assertHeader('X-Inertia-Location', 'http://localhost/acme/dashboard');
 });
@@ -168,7 +184,7 @@ test('an invitation works with public sign up turned off', function () {
 
     expect(Features::enabled(Features::registration()))->toBeFalse();
 
-    $this->get(route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page->where('state', 'register'));
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page->where('state', 'register'));
 
     invitationAcceptanceAccount($token)->assertRedirect('http://localhost/acme/dashboard');
 
@@ -198,18 +214,18 @@ test('someone who already has an account signs in and comes back to the invitati
     [, $token] = invitationAcceptanceInvite();
     User::factory()->create(['email' => 'newcomer@example.com', 'password' => 'the-real-password']);
 
-    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'sign-in')->where('action', null));
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'sign-in')->where('action', null));
 
-    invitationAcceptanceAccount($token)->assertRedirect(route('invitations.show', $token));
+    invitationAcceptanceAccount($token)->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
     expect(User::query()->where('email', 'newcomer@example.com')->count())->toBe(1);
 
     $this->post(route('login.store'), ['email' => 'newcomer@example.com', 'password' => 'the-real-password'])
-        ->assertRedirect(route('invitations.show', $token));
+        ->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
-    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page
         ->where('state', 'join')
-        ->where('action', route('invitations.accept', $token)));
+        ->where('action', InvitationLinks::route('invitations.accept', $token)));
 });
 
 test('the invited person, signed in, joins with one click and only once', function () {
@@ -217,16 +233,16 @@ test('the invited person, signed in, joins with one click and only once', functi
     [$invitation, $token] = invitationAcceptanceInvite();
     $user = User::factory()->create(['email' => 'NewComer@example.com']);
 
-    $this->actingAs($user)->get(route('invitations.show', $token))->assertInertia(fn($page) => $page
+    $this->actingAs($user)->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page
         ->where('state', 'join')
         ->where('invitation.email', 'newcomer@example.com')
-        ->where('action', route('invitations.accept', $token)));
+        ->where('action', InvitationLinks::route('invitations.accept', $token)));
 
-    $this->actingAs($user)->post(route('invitations.accept', $token))
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))
         ->assertRedirect('http://localhost/acme/dashboard')
         ->assertSessionHas('success', 'Welcome to Acme Labs.');
 
-    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect(route('invitations.show', $token));
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
     expect($user->fresh()->roleIn($invitation->team))->toBe(TeamRole::Admin)
         ->and($user->fresh()->current_team_id)->toBe($invitation->team_id)
@@ -238,13 +254,13 @@ test('someone signed in as another account is told to sign out first', function 
     [$invitation, $token] = invitationAcceptanceInvite();
     $other = User::factory()->create(['email' => 'other@example.com']);
 
-    $this->actingAs($other)->get(route('invitations.show', $token))->assertInertia(fn($page) => $page
+    $this->actingAs($other)->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page
         ->where('state', 'other')
         ->where('invitation.email', 'newcomer@example.com')
         ->where('action', null));
 
-    $this->actingAs($other)->post(route('invitations.accept', $token))->assertRedirect(route('invitations.show', $token));
-    $this->actingAs($other)->post(route('invitations.register', $token), [
+    $this->actingAs($other)->post(InvitationLinks::route('invitations.accept', $token))->assertRedirect(InvitationLinks::route('invitations.show', $token));
+    $this->actingAs($other)->post(InvitationLinks::route('invitations.register', $token), [
         'name' => 'Noor Haddad',
         'password' => 'a-long-enough-passphrase',
         'password_confirmation' => 'a-long-enough-passphrase',
@@ -262,9 +278,9 @@ test('an invitation creates one account only', function () {
 
     $this->post(route('logout'));
 
-    invitationAcceptanceAccount($token, ['name' => 'Someone Else'])->assertRedirect(route('invitations.show', $token));
+    invitationAcceptanceAccount($token, ['name' => 'Someone Else'])->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
-    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'expired'));
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'expired'));
 
     expect(User::query()->where('email', 'newcomer@example.com')->sole()->name)->toBe('Noor Haddad')
         ->and(Activity::query()->where('description', 'member_added')->count())->toBe(1);
@@ -275,14 +291,14 @@ test('an invitation stops working after seven days', function () {
 
     $this->travel(6)->days();
 
-    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'register'));
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'register'));
 
     $this->travel(1)->days();
     $this->travel(1)->minutes();
 
-    $this->get(route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'expired'));
+    $this->get(InvitationLinks::route('invitations.show', $token))->assertInertia(fn($page) => $page->where('state', 'expired'));
 
-    invitationAcceptanceAccount($token)->assertRedirect(route('invitations.show', $token));
+    invitationAcceptanceAccount($token)->assertRedirect(InvitationLinks::route('invitations.show', $token));
 
     expect(User::query()->where('email', 'newcomer@example.com')->exists())->toBeFalse();
 
@@ -294,7 +310,7 @@ test('on cloud the plan is checked again when the invitation is accepted', funct
     [$invitation, $token] = invitationAcceptanceInvite([], $team());
 
     invitationAcceptanceAccount($token)
-        ->assertRedirect(route('invitations.show', $token))
+        ->assertRedirect(InvitationLinks::route('invitations.show', $token))
         ->assertSessionHas('error', $message);
 
     expect(User::query()->where('email', 'newcomer@example.com')->exists())->toBeFalse()
@@ -312,9 +328,9 @@ test('on cloud a signed in person cannot join a team that is full', function () 
     $user = User::factory()->create(['email' => 'newcomer@example.com']);
 
     $this->actingAs($user)
-        ->from(route('invitations.show', $token))
-        ->post(route('invitations.accept', $token))
-        ->assertRedirect(route('invitations.show', $token))
+        ->from(InvitationLinks::route('invitations.show', $token))
+        ->post(InvitationLinks::route('invitations.accept', $token))
+        ->assertRedirect(InvitationLinks::route('invitations.show', $token))
         ->assertSessionHas('error', 'Starter is for one person. Ask an owner to change the plan.');
 
     expect($invitation->team->members()->whereKey($user->id)->exists())->toBeFalse()
@@ -329,7 +345,7 @@ test('a person whose own team is read-only can still join another team', functio
     [, $token] = invitationAcceptanceInvite(['email' => Str::lower($user->email)], $pro);
 
     $this->actingAs($user)
-        ->post(route('invitations.accept', $token))
+        ->post(InvitationLinks::route('invitations.accept', $token))
         ->assertRedirect('http://localhost/acme/dashboard')
         ->assertSessionMissing('error');
 
@@ -341,7 +357,7 @@ test('accepting when already on the team only opens it', function () {
     $user = User::factory()->create(['email' => 'newcomer@example.com']);
     $invitation->team->members()->attach($user, ['role' => TeamRole::Member->value]);
 
-    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
 
     expect($user->fresh()->roleIn($invitation->team))->toBe(TeamRole::Member)
         ->and($invitation->fresh()->accepted_at)->not->toBeNull()
@@ -364,8 +380,8 @@ test('on cloud accepting an emailed invitation confirms the address of an unconf
     [$invitation, $token] = invitationAcceptanceInvite([], Team::factory()->subscribed(Plan::Pro)->create(['name' => 'Acme Labs', 'slug' => 'acme']));
     $user = User::factory()->unverified()->create(['email' => 'newcomer@example.com']);
 
-    $this->actingAs($user)->get(route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page->where('state', 'join'));
-    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
+    $this->actingAs($user)->get(InvitationLinks::route('invitations.show', $token))->assertOk()->assertInertia(fn($page) => $page->where('state', 'join'));
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
 
     expect($user->fresh()->email_verified_at)->not->toBeNull()
         ->and($user->fresh()->roleIn($invitation->team))->toBe(TeamRole::Admin);
@@ -377,7 +393,7 @@ test('accepting a link that was offered for copying joins without confirming the
     [$invitation, $token] = invitationAcceptanceInvite(['link_offered' => true]);
     $user = User::factory()->unverified()->create(['email' => 'newcomer@example.com']);
 
-    $this->actingAs($user)->post(route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
+    $this->actingAs($user)->post(InvitationLinks::route('invitations.accept', $token))->assertRedirect('http://localhost/acme/dashboard');
 
     expect($user->fresh()->email_verified_at)->toBeNull()
         ->and($user->fresh()->roleIn($invitation->team))->toBe(TeamRole::Admin);

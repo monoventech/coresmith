@@ -58,6 +58,13 @@ const ADDRESSES: [string, string, string][] = [
         `${PANEL}/acme/verify-email/7/${HASH}?expires=1760000000&signature=ab12cd34`,
         `${PANEL}/acme/verify-email/7/${MASKED}?expires=1760000000&signature=${MASKED}`
     ],
+    [
+        'a verification link without an account id',
+        `${PANEL}/email/verify/${HASH}?expires=1760000000&signature=ab12cd34`,
+        `${PANEL}/email/verify/${MASKED}?expires=1760000000&signature=${MASKED}`
+    ],
+    ['an invitation link', `${PANEL}/join/acme/${TOKEN}`, `${PANEL}/join/acme/${MASKED}`],
+    ['an invitation link from before 0.8.26', `${PANEL}/invitations/${TOKEN}`, `${PANEL}/invitations/${MASKED}`],
     ['a verification query', 'expires=1760000000&signature=ab12cd34', `expires=1760000000&signature=${MASKED}`],
     ['a reset page with no token yet', `${PANEL}/reset-password`, `${PANEL}/reset-password`],
     [
@@ -123,6 +130,11 @@ const TEXTS: [string, string, string][] = [
         'a verification link',
         `Rejected ${PANEL}/email/verify/7/${HASH}?expires=1760000000&signature=ab12cd34 now`,
         `Rejected ${PANEL}/email/verify/7/${MASKED}?expires=1760000000&signature=${MASKED} now`
+    ],
+    [
+        'an invitation link',
+        `Could not open ${PANEL}/join/acme/${TOKEN}/accept twice`,
+        `Could not open ${PANEL}/join/acme/${MASKED}/accept twice`
     ],
     [
         'array style and signature names',

@@ -19,7 +19,7 @@ final class Handles
 {
     public const MAX = 60;
 
-    private const RESERVED = ['cloud', 'this-machine', 'create', 'new', 'edit'];
+    private const RESERVED = ['cloud', 'this-machine', 'create', 'new', 'edit', 'none'];
 
     public static function base(string $name, string $fallback): string
     {

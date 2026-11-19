@@ -20,7 +20,7 @@ final class ProjectScope
 {
     public const NONE = 'none';
 
-    private function __construct(private readonly ?string $project) {}
+    private function __construct(private readonly ?string $project, private readonly ?string $address = null) {}
 
     public static function from(Request $request, ?User $user, ?Team $team): self
     {
@@ -34,9 +34,11 @@ final class ProjectScope
             return new self(self::NONE);
         }
 
-        $chosen = app(TeamAccess::class)->projects($user, $team)->find($project);
+        $chosen = app(TeamAccess::class)->projects($user, $team)
+            ->where(fn(Builder $match) => $match->where('handle', $project)->orWhere('id', strtolower($project)))
+            ->first();
 
-        return new self($chosen instanceof Project ? $chosen->getKey() : null);
+        return $chosen instanceof Project ? new self($chosen->getKey(), (string) ($chosen->handle ?? $chosen->getKey())) : new self(null);
     }
 
     /**
@@ -59,12 +61,12 @@ final class ProjectScope
      */
     public function query(): array
     {
-        return $this->project === null ? [] : ['project' => $this->project];
+        return $this->project === null ? [] : ['project' => $this->address ?? $this->project];
     }
 
     public function value(): string
     {
-        return $this->project ?? '';
+        return $this->address ?? $this->project ?? '';
     }
 
     /**
@@ -85,7 +87,7 @@ final class ProjectScope
         return [
             ['value' => '', 'label' => 'All projects'],
             ['value' => self::NONE, 'label' => 'No project'],
-            ...$projects->map(fn(Project $project): array => ['value' => $project->getKey(), 'label' => $project->name])->values()->all(),
+            ...$projects->map(fn(Project $project): array => ['value' => (string) ($project->handle ?? $project->getKey()), 'label' => $project->name])->values()->all(),
         ];
     }
 }

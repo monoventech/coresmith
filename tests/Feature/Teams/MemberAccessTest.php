@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Support\InvitationLinks;
 
 beforeEach(function () {
     Notification::fake();
@@ -200,7 +201,7 @@ test('an invitation to only what I share narrows the member when they accept', f
 
     $newcomer = User::factory()->create(['email' => 'newcomer@example.test']);
 
-    $this->actingAs($newcomer)->post(route('invitations.accept', memberAccessInviteToken('newcomer@example.test')))->assertRedirect();
+    $this->actingAs($newcomer)->post(InvitationLinks::route('invitations.accept', memberAccessInviteToken('newcomer@example.test')))->assertRedirect();
 
     expect(app(TeamAccess::class)->summary($team, $newcomer->fresh()))->toBe(['everything' => false, 'servers' => [], 'applications' => [], 'databases' => [], 'projects' => [], 'withheld_applications' => [], 'withheld_databases' => []]);
 });

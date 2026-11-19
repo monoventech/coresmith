@@ -43,7 +43,7 @@ function projectFiltersNames(mixed $rows, string $key): array
 
 test('deploys filter by project, and the status chips keep the filter', function () {
     $fleet = projectFiltersFleet();
-    $id = $fleet['project']->id;
+    $id = $fleet['project']->handle;
 
     $this->actingAs($fleet['owner'])->get(route('deployments.index', ['project' => $id]))
         ->assertInertia(fn(AssertableInertia $page) => $page
@@ -89,7 +89,7 @@ test('a project the member cannot see is ignored, and no filter is offered', fun
 
 test('releases narrow the app list to a project, and switching apps keeps it', function () {
     $fleet = projectFiltersFleet();
-    $id = $fleet['project']->id;
+    $id = $fleet['project']->handle;
 
     $this->actingAs($fleet['owner'])->get(route('servers.applications.releases.index', [$fleet['web'], $fleet['shop'], 'project' => $id]))
         ->assertInertia(fn(AssertableInertia $page) => $page
