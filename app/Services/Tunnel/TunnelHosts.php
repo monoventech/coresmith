@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Services\Tunnel;
 
 use App\Models\Server;
+use App\Services\Address\AddressChange;
 use App\Services\Address\CertificateSource;
 use App\Services\Address\DomainTwins;
 use App\Services\Address\InstallationAddress;
@@ -27,6 +28,12 @@ final readonly class TunnelHosts
 
         if ($server->runs_coresmith && self::routable($panel = strtolower($this->address->host()))) {
             $hosts[$panel] = true;
+        }
+
+        $moved = AddressChange::current();
+
+        if ($server->runs_coresmith && ($moved['state'] ?? null) === 'done' && is_string($moved['from'] ?? null) && self::routable($from = strtolower($moved['from']))) {
+            $hosts[$from] ??= false;
         }
 
         foreach ($server->applications()->get() as $application) {

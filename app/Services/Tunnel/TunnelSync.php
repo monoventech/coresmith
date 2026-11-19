@@ -165,7 +165,7 @@ final class TunnelSync
         }
 
         $target = (string) $tunnel->target();
-        $own = self::own($server);
+        $own = self::ownAddresses($server);
         $routed = [];
 
         foreach ($zones as $host => $zone) {
@@ -277,7 +277,7 @@ final class TunnelSync
     /**
      * @return list<string>
      */
-    private static function own(Server $server): array
+    public static function ownAddresses(Server $server): array
     {
         $addresses = (array) $server->public_addresses;
 
