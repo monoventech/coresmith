@@ -43,7 +43,8 @@ test('a live reverb gets a websocket route and an api route before the app', fun
     expect($routes[2])->toBe(['match' => [['path' => ['/app/chat-key'], 'header' => ['Upgrade' => ['websocket']]]], 'handle' => $proxy])
         ->and($routes[3])->toBe(['match' => [['path' => ['/apps/chat-app/*']]], 'handle' => $proxy])
         ->and($routes[1]['handle'][0]['handler'])->toBe('vars')
-        ->and($routes[4]['handle'][0]['status_code'] ?? null)->toBe(308);
+        ->and($routes[4]['handle'][0]['root'] ?? null)->toBe((new CaddyRouteBuilder)->previousRoot($application))
+        ->and($routes[5]['handle'][0]['status_code'] ?? null)->toBe(308);
 
     (new RouteConfigValidator)->validate((new CaddyRouteBuilder)->build($application), $application);
 });
