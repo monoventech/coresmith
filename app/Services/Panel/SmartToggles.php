@@ -18,6 +18,7 @@ use App\Notifications\ApplicationToggledNotification;
 use App\Notifications\Preferences;
 use App\Notifications\TeamNotifier;
 use App\Services\AutoDeploy\AutoDeployStatus;
+use App\Services\Deployment\EnvironmentFile;
 use App\Services\Process\ProcessManager;
 use App\Services\Runtime\Stack;
 use App\Services\Server\PortAllocator;
@@ -149,7 +150,11 @@ final class SmartToggles
             self::QUEUE => [
                 'key' => $key,
                 'label' => 'Queue worker',
-                'description' => ($this->horizon($application) ? 'Detected: laravel/horizon' : 'php artisan queue:work'),
+                'description' => match (true) {
+                    $this->horizon($application) => 'Detected: laravel/horizon',
+                    $this->horizonInstalled($application) => 'php artisan queue:work · Horizon runs once QUEUE_CONNECTION is redis',
+                    default => 'php artisan queue:work',
+                },
                 'busy_on' => $this->horizon($application) ? 'Starting Horizon…' : 'Starting the worker…',
                 'busy_off' => 'Stopping the unit and removing it…',
                 'on' => $this->isOn($application, $key),
@@ -522,7 +527,17 @@ final class SmartToggles
 
     private function horizon(Application $application): bool
     {
+        return $this->horizonInstalled($application) && $this->queueConnection($application) === 'redis';
+    }
+
+    private function horizonInstalled(Application $application): bool
+    {
         return ($this->packages($application)['horizon'] ?? false) === true;
+    }
+
+    private function queueConnection(Application $application): string
+    {
+        return strtolower(trim((string) (app(EnvironmentFile::class)->parse((string) $application->env_variables)['QUEUE_CONNECTION'] ?? '')));
     }
 
     private function dropped(Application $application, string $package): bool

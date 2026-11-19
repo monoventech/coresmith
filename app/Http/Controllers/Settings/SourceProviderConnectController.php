@@ -120,6 +120,10 @@ final class SourceProviderConnectController extends Controller
 
         abort_unless($key === null || is_string($key), 404);
 
+        if (is_string($key) && $key !== GitHubApps::ENV_KEY) {
+            $key = (string) (GitHubApp::query()->where('slug', $key)->value('id') ?? $key);
+        }
+
         $own = is_string($key) ? GitHubApp::query()->whereKey($key)->whereNotNull('user_id')->first() : null;
 
         if ($own !== null) {
