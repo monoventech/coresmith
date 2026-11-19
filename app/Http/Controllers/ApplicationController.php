@@ -151,6 +151,12 @@ final class ApplicationController extends Controller
 
         $horizon = $type === ApplicationType::Php && strtolower((string) $request->input('framework')) === 'laravel' && AppDatabaseChoice::horizon($checked?->facts);
         app(AppDatabaseChoice::class)->apply($application, $request->validated('database'), $request->validated('redis'), $horizon);
+
+        if ($horizon) {
+            $application->forceFill(['stack' => [...(array) $application->stack, 'packages' => ['horizon' => true]]])->save();
+            app(SmartToggles::class)->preset($application, SmartToggles::QUEUE);
+        }
+
         $access->grant($server->team, $request->user(), $application);
 
         if ($line !== null && $request->isEndOfLife((string) $runtime, $line)) {
