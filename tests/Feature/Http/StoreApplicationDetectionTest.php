@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Enums\ServerStatus;
+use App\Jobs\SyncApplicationProcesses;
 use App\Models\Application;
 use App\Models\Server;
 use App\Models\Team;
@@ -13,6 +14,7 @@ use App\Services\Detection\DetectionStore;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Detection\RepositoryRead;
 use App\Services\Panel\ApplicationPresenter;
+use App\Services\Panel\SmartToggles;
 use App\Services\Runtime\RepositoryFacts;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
@@ -246,7 +248,26 @@ test('a Laravel app with Horizon added with a new Redis queues on it from the st
     $variables = app(EnvironmentFile::class)->parse((string) storeDetectionApp()->env_variables);
 
     expect($variables)->toMatchArray(['QUEUE_CONNECTION' => 'redis', 'DB_CONNECTION' => 'sqlite'])
-        ->and($variables)->toHaveKey('REDIS_PORT');
+        ->and($variables)->toHaveKey('REDIS_PORT')
+        ->and(storeDetectionApp()->processes)->toBe([['name' => 'queue', 'command' => SmartToggles::HORIZON_COMMAND]]);
+
+    $switch = collect(app(SmartToggles::class)->describe(storeDetectionApp()))->firstWhere('key', SmartToggles::QUEUE);
+
+    expect($switch['on'])->toBeTrue()
+        ->and($switch['description'])->toBe('Detected: laravel/horizon');
+    Queue::assertNotPushed(SyncApplicationProcesses::class);
+});
+
+test('a Laravel app with Horizon added without a Redis still gets its queue worker, on queue:work', function () {
+    Queue::fake();
+    [$owner, $server] = storeDetectionServer();
+    $server->forceFill(['status' => ServerStatus::Active])->save();
+    $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts('laravel-horizon'), installed: ['php' => ['8.5.10'], 'nodejs' => ['24.11.1']], extensions: ['8.5.10' => ['ctype', 'mbstring', 'pdo_sqlite', 'openssl', 'tokenizer', 'xml', 'fileinfo', 'curl']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, 'database' => 'sqlite', 'redis' => 'none'])->assertSessionHasNoErrors();
+
+    expect(storeDetectionApp()->processes)->toBe([['name' => 'queue', 'command' => SmartToggles::QUEUE_COMMAND]]);
+    Queue::assertNotPushed(SyncApplicationProcesses::class);
 });
 
 test('a Laravel app without Horizon keeps the queue its example names when a Redis is picked', function () {
@@ -257,5 +278,6 @@ test('a Laravel app without Horizon keeps the queue its example names when a Red
 
     storeDetectionPost($owner, $server, ['detection' => $id, 'database' => 'none', 'redis' => 'new'])->assertSessionHasNoErrors();
 
-    expect(app(EnvironmentFile::class)->parse((string) storeDetectionApp()->env_variables))->toHaveKey('QUEUE_CONNECTION', 'database');
+    expect(app(EnvironmentFile::class)->parse((string) storeDetectionApp()->env_variables))->toHaveKey('QUEUE_CONNECTION', 'database')
+        ->and(storeDetectionApp()->processes)->toBeNull();
 });
