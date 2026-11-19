@@ -44,7 +44,7 @@ final class AccountGitController extends Controller
             'app' => $app === null ? null : [
                 'name' => $app->name,
                 'url' => $app->html_url,
-                'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->getKey()]),
+                'install_href' => route('source-providers.connect', ['type' => 'github_app', 'app' => $app->slug]),
             ],
             'registration' => $app !== null || !$canConnect ? null : $settings->registration($team, $user, personal: true),
         ]);

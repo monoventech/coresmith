@@ -59,7 +59,7 @@ final class GitHubAppController extends Controller
             return $personal ? redirect()->route('account.git')->with('error', $e->getMessage()) : $this->refused($team, $request, $e->getMessage());
         }
 
-        return redirect()->route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->getKey()]);
+        return redirect()->route('source-providers.connect', ['type' => SourceProviderType::GitHubApp->value, 'app' => $app->slug]);
     }
 
     public function webhook(Request $request, GitHubApp $githubApp): RedirectResponse

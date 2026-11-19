@@ -199,12 +199,12 @@ test.describe('a GitHub App registered but not installed', () => {
         await expect(card).toContainText(`While the app is private, only ${lab} can install it.`)
         await expect(install).toHaveAttribute(
             'href',
-            new RegExp(`/${lab}/settings/source-providers/github_app/connect\\?app=[0-9a-z]{26}$`)
+            new RegExp(`/${lab}/settings/source-providers/github_app/connect\\?app=coresmith-${lab}$`)
         )
         await expect(install).toHaveAttribute('target', '_self')
         await expect(link).toHaveAttribute(
             'href',
-            new RegExp(`/${lab}/settings/source-providers/github_app/connect\\?app=[0-9a-z]{26}&mode=link$`)
+            new RegExp(`/${lab}/settings/source-providers/github_app/connect\\?app=coresmith-${lab}&mode=link$`)
         )
         await expect(link).toHaveAttribute('target', '_self')
         await expect(page.getByRole('link', { name: 'Install on GitHub' })).toHaveCount(1)
