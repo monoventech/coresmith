@@ -11,6 +11,7 @@ namespace App\Services\Runtime;
 use App\Models\Application;
 use App\Services\Deployment\AppShell;
 use App\Services\Deployment\StartingEnvironment;
+use App\Services\Detection\LaravelSchedule;
 use App\Services\SSH\SSHConnection;
 
 final class RepositoryProbe
@@ -27,6 +28,7 @@ final class RepositoryProbe
         '.java-version', '.sdkmanrc', 'system.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts', 'gradle/libs.versions.toml', '.yo-rc.json',
         '.npmrc', '.yarnrc.yml', 'bunfig.toml', '.gitmodules',
         ...StartingEnvironment::EXAMPLES,
+        ...LaravelSchedule::FILES,
     ];
 
     public const GLOBS = ['*/settings.py', '*/settings/*.py', '*/wsgi.py', '*/asgi.py', '*/main.py', '*/app.py', '*/__init__.py', '*/api.py', '*/server.py', '*/celery.py', 'requirements/*.txt', 'etc/*.yaml', 'etc/*.yml', '*/pom.xml', '*/build.gradle', '*/build.gradle.kts'];
