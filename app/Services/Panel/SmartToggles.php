@@ -392,11 +392,15 @@ final class SmartToggles
 
     public function preset(Application $application, string $key): void
     {
-        if ($key !== self::QUEUE || !in_array($key, $this->available($application), true)) {
+        if (!in_array($key, $this->available($application), true)) {
             return;
         }
 
-        $this->replaceProcess($application, self::WORKERS[$key][0], ['name' => self::WORKERS[$key][0], 'command' => $this->queueCommand($application)]);
+        match ($key) {
+            self::QUEUE => $this->replaceProcess($application, self::WORKERS[$key][0], ['name' => self::WORKERS[$key][0], 'command' => $this->queueCommand($application)]),
+            self::SCHEDULER => app(CronJobs::class)->presetScheduler($application),
+            default => null,
+        };
     }
 
     public function started(Application $application, string $key): void

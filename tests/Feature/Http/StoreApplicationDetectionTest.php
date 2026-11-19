@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ApplicationType;
 use App\Enums\ServerStatus;
+use App\Jobs\SyncApplicationCron;
 use App\Jobs\SyncApplicationProcesses;
 use App\Models\Application;
 use App\Models\Server;
@@ -270,6 +271,21 @@ test('a Laravel app with Horizon added without a Redis still gets its queue work
     Queue::assertNotPushed(SyncApplicationProcesses::class);
 });
 
+test('a Laravel app whose repository schedules work starts with its scheduler on', function () {
+    Queue::fake();
+    [$owner, $server] = storeDetectionServer();
+    $server->forceFill(['status' => ServerStatus::Active])->save();
+    $id = storeDetectionRead($owner, $server, new RepositoryRead(RepositoryFixture::facts('laravel-scheduled'), installed: ['php' => ['8.5.10'], 'nodejs' => ['24.11.1']], extensions: ['8.5.10' => ['ctype', 'mbstring', 'pdo_sqlite', 'openssl', 'tokenizer', 'xml', 'fileinfo', 'curl']]));
+
+    storeDetectionPost($owner, $server, ['detection' => $id, 'database' => 'sqlite', 'redis' => 'none'])->assertSessionHasNoErrors();
+
+    $switch = collect(app(SmartToggles::class)->describe(storeDetectionApp()))->firstWhere('key', SmartToggles::SCHEDULER);
+
+    expect(storeDetectionApp()->cron_jobs)->toEqual([['schedule' => '* * * * *', 'command' => SmartToggles::SCHEDULE_COMMAND]])
+        ->and($switch['on'])->toBeTrue();
+    Queue::assertNotPushed(SyncApplicationCron::class);
+});
+
 test('a Laravel app without Horizon keeps the queue its example names when a Redis is picked', function () {
     Queue::fake();
     [$owner, $server] = storeDetectionServer();
@@ -279,5 +295,6 @@ test('a Laravel app without Horizon keeps the queue its example names when a Red
     storeDetectionPost($owner, $server, ['detection' => $id, 'database' => 'none', 'redis' => 'new'])->assertSessionHasNoErrors();
 
     expect(app(EnvironmentFile::class)->parse((string) storeDetectionApp()->env_variables))->toHaveKey('QUEUE_CONNECTION', 'database')
-        ->and(storeDetectionApp()->processes)->toBeNull();
+        ->and(storeDetectionApp()->processes)->toBeNull()
+        ->and(storeDetectionApp()->cron_jobs)->toBeNull();
 });

@@ -39,6 +39,7 @@ use App\Services\Deployment\CrontabBuilder;
 use App\Services\Deployment\DeployScript;
 use App\Services\Deployment\EnvironmentFile;
 use App\Services\Deployment\StartingEnvironment;
+use App\Services\Detection\LaravelSchedule;
 use App\Services\Detection\RepositoryAccess;
 use App\Services\Git\DeployKeyManager;
 use App\Services\Git\Repository;
@@ -155,6 +156,10 @@ final class ApplicationController extends Controller
         if ($horizon) {
             $application->forceFill(['stack' => [...(array) $application->stack, 'packages' => ['horizon' => true]]])->save();
             app(SmartToggles::class)->preset($application, SmartToggles::QUEUE);
+        }
+
+        if ($type === ApplicationType::Php && strtolower((string) $request->input('framework')) === 'laravel' && LaravelSchedule::detected($checked?->facts)) {
+            app(SmartToggles::class)->preset($application, SmartToggles::SCHEDULER);
         }
 
         $access->grant($server->team, $request->user(), $application);
