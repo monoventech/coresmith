@@ -51,7 +51,7 @@ test("a host's zone is found by walking up its labels", function () {
         CLOUDFLARE_DNS_API . '/zones?name=coresmith.io' => Http::response(cloudflareDnsAnswer([['id' => 'z1', 'name' => 'coresmith.io']])),
     ]);
 
-    expect(app(CloudflareDns::class)->zone('a-token', 'beelink.home.coresmith.io'))->toBe(['id' => 'z1', 'name' => 'coresmith.io']);
+    expect(app(CloudflareDns::class)->zone('a-token', 'beelink.home.coresmith.io'))->toBe(['id' => 'z1', 'name' => 'coresmith.io', 'account' => '']);
 });
 
 test('a host in none of the zones the token sees has no zone', function () {
