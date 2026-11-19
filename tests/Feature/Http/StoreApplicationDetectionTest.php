@@ -281,7 +281,7 @@ test('a Laravel app whose repository schedules work starts with its scheduler on
 
     $switch = collect(app(SmartToggles::class)->describe(storeDetectionApp()))->firstWhere('key', SmartToggles::SCHEDULER);
 
-    expect(storeDetectionApp()->cron_jobs)->toBe([['schedule' => '* * * * *', 'command' => SmartToggles::SCHEDULE_COMMAND]])
+    expect(storeDetectionApp()->cron_jobs)->toEqual([['schedule' => '* * * * *', 'command' => SmartToggles::SCHEDULE_COMMAND]])
         ->and($switch['on'])->toBeTrue();
     Queue::assertNotPushed(SyncApplicationCron::class);
 });
