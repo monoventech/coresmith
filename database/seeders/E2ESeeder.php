@@ -235,7 +235,7 @@ final class E2ESeeder extends Seeder
             ]);
             $this->server("live-{$code}", '198.51.100.' . (80 + $index), ServerStatus::Active);
             $this->realtime("realtime-{$code}", 9120 + $index * 10, [
-                'env_variables' => "APP_ENV=staging\nREVERB_APP_ID=realtime-{$code}\nREVERB_APP_KEY=key-{$code}\nREVERB_APP_SECRET=" . bin2hex(random_bytes(16)),
+                'env_variables' => "APP_ENV=staging\nQUEUE_CONNECTION=redis\nREVERB_APP_ID=realtime-{$code}\nREVERB_APP_KEY=key-{$code}\nREVERB_APP_SECRET=" . bin2hex(random_bytes(16)),
                 'processes' => [['name' => 'queue', 'command' => SmartToggles::HORIZON_COMMAND]],
             ]);
         }
